@@ -85,7 +85,13 @@ export class PostgresFieldsService implements IServicelocatorfields {
                 "Fields fetched successfully."
             );
         } catch (error) {
-            console.log(error);
+        const errorMessage = error.message || "Internal server error";
+        return APIResponse.error(
+          response,
+          apiId,
+          "Internal Server Error",
+          errorMessage,
+          HttpStatus.INTERNAL_SERVER_ERROR)
         }
     }
 
@@ -152,7 +158,6 @@ export class PostgresFieldsService implements IServicelocatorfields {
 
     async getFieldData(whereClause): Promise<any> {
         let query = `select * from public."Fields" where ${whereClause}`
-        console.log(query);
         let result = await this.fieldsRepository.query(query);
         if (!result) {
             return false;

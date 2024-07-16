@@ -206,11 +206,14 @@ export class PostgresCohortService {
   `;
     let result = await this.cohortMembersRepository.query(query, [cohortId]);
     result = result.map(async (data) => {
+      const originalValue = data.value;
+      let processedValue = data.value;
+  
       if (data?.sourceDetails) {
         if (data.sourceDetails.source === "fieldparams") {
           data.fieldParams.options.forEach((option) => {
             if (data.value === option.value) {
-              data.value = option.label;
+              processedValue = option.label;
             }
           });
         } else if (data.sourceDetails.source === "table") {
@@ -219,17 +222,21 @@ export class PostgresCohortService {
             `value='${data.value}'`
           );
           if (labels && labels.length > 0) {
-            data.value = labels[0].label;
+            processedValue = labels[0].label;
           }
-        } else {
-          data.value = data.value;
         }
       }
+  
       delete data.fieldParams;
       delete data.sourceDetails;
-      return data;
+      
+      return {
+        ...data,
+        value: processedValue,
+        code: originalValue
+      };
     });
-
+  
     result = await Promise.all(result);
     return result;
   }

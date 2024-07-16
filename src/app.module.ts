@@ -19,6 +19,7 @@ import { AttendanceModule } from "./attendance/attendance.module";
 import { UserModule } from "./user/user.module";
 import { RbacModule } from "./rbac/rbac.module";
 import { AssignTenantModule } from './userTenantMapping/user-tenant-mapping.module';
+import { FormsModule } from './forms/forms.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { AssignTenantModule } from './userTenantMapping/user-tenant-mapping.modu
     AuthModule,
     AuthRbacModule,
     DatabaseModule,
+    FormsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
