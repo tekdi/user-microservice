@@ -18,4 +18,9 @@ jobs:
           port: ${{ secrets.PORT_TEKDI_QA }}
           script: |    
                cd ${{ secrets.TARGET_DIR_TEKDI_QA }}
+               if [ -f .env ]; then
+               rm .env
+               fi
+               echo "${{ secrets.QA_ENV }}" > .env
+               ls -ltra
                ./deploy.sh
