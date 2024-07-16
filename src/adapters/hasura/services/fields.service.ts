@@ -235,10 +235,10 @@ export class FieldsService {
   async searchFields(request: any, tenantId: string, fieldsSearchDto: FieldsSearchDto) {
     try {
       var axios = require("axios");
-      let offset = 0;
-      if (fieldsSearchDto.page > 1) {
-        offset = (fieldsSearchDto.limit) * (fieldsSearchDto.page - 1);
-      }
+
+      let { limit, offset } = fieldsSearchDto;
+      limit = limit ? limit : 20;
+      offset = offset ? offset : 0;
 
       let temp_filters = fieldsSearchDto.filters;
       //add tenantid

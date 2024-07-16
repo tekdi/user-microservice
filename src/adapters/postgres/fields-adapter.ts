@@ -159,12 +159,13 @@ export class PostgresFieldsService implements IServicelocatorfields {
 
     async getFieldData(whereClause): Promise<any> {
         let query = `select * from public."Fields" where ${whereClause}`
+
         let result = await this.fieldsRepository.query(query);
         if (!result) {
             return false;
         }
         for (let data of result) {
-            if (data?.dependsOn === false && data?.sourceDetails?.source === 'table' || data?.sourceDetails?.source === 'jsonfile') {
+            if ((data?.dependsOn == '' || data?.dependsOn == undefined || data?.dependsOn == null) && data?.sourceDetails?.source === 'table' || data?.sourceDetails?.source === 'jsonfile') {
                 let options = await this.findDynamicOptions(data.sourceDetails.table);
                 data.fieldParams = data.fieldParams || {};
                 data.fieldParams.options = options;
@@ -268,9 +269,6 @@ export class PostgresFieldsService implements IServicelocatorfields {
             const getSourceDetails = await this.fieldsRepository.findOne({
                 where: { fieldId: fieldId }
             });
-
-            console.log(getSourceDetails.dependsOn);
-
 
             fieldsData['type'] = fieldsData.type || getSourceDetails.type;
 
@@ -390,15 +388,10 @@ export class PostgresFieldsService implements IServicelocatorfields {
     ) {
         const apiId = APIID.FIELDS_SEARCH;
         try {
-            let { limit, page, filters } = fieldsSearchDto;
-            if (!limit) {
-                limit = 20;
-            }
+            let { limit, offset, filters } = fieldsSearchDto;
+            limit = limit ? limit : 20;
+            offset = offset ? offset : 0;
 
-            let offset = 0;
-            if (page > 1) {
-                offset = limit * (page - 1);
-            }
             const fieldKeys = this.fieldsRepository.metadata.columns.map(
                 (column) => column.propertyName
             );
@@ -440,7 +433,6 @@ export class PostgresFieldsService implements IServicelocatorfields {
                 "Fields fetched successfully."
             );
         } catch (error) {
-            console.log(error);
             const errorMessage = error.message || "Internal server error";
             return APIResponse.error(
                 response,
@@ -733,8 +725,6 @@ export class PostgresFieldsService implements IServicelocatorfields {
 
         if (whereClause) {
             query = `select * from public."${tableName}" where ${whereClause}`
-            console.log(query);
-
             result = await this.fieldsRepository.query(query);
             if (!result) {
                 return null;
@@ -746,7 +736,6 @@ export class PostgresFieldsService implements IServicelocatorfields {
         }
 
         query = `select * from public."${tableName}"`
-        console.log(query);
 
         result = await this.fieldsRepository.query(query);
         if (!result) {
