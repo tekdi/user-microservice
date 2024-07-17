@@ -21,7 +21,7 @@ jobs:
                if [ -f .env ]; then
                rm .env
                fi
-               echo ${{ secrets.QA_ENV }} > .env
+               echo "${{ secrets.QA_ENV }}" > .env
                ls -ltra
                cat .env
                ./deploy.sh
