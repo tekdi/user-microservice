@@ -22,10 +22,12 @@ import {
   Param,
   UsePipes,
   ValidationPipe,
+  Patch,
 } from "@nestjs/common";
 import { FieldsSearchDto } from "./dto/fields-search.dto";
 import { Request } from "@nestjs/common";
 import { FieldsDto } from "./dto/fields.dto";
+import { FieldsUpdateDto } from "./dto/fields-update.dto";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { diskStorage } from "multer";
 import { Response } from "express";
@@ -52,22 +54,29 @@ export class FieldsController {
   @ApiCreatedResponse({ description: "Fields has been created successfully." })
   @ApiBody({ type: FieldsDto })
   @ApiForbiddenResponse({ description: "Forbidden" })
-  // @UseInterceptors(ClassSerializerInterceptor)
-  @ApiHeader({
-    name: "tenantid",
-  })
   public async createFields(
     @Headers() headers,
     @Req() request: Request,
     @Body() fieldsDto: FieldsDto,
     @Res() response: Response
   ) {
-    let tenantid = headers["tenantid"];
-    const payload = {
-      tenantId: tenantid,
-    };
-    Object.assign(fieldsDto, payload);
     return await this.fieldsAdapter.buildFieldsAdapter().createFields(request, fieldsDto, response);
+  }
+
+  //create fields
+  @Patch("/update/:fieldId")
+  @ApiBasicAuth("access-token")
+  @ApiCreatedResponse({ description: "Fields has been created successfully." })
+  @ApiBody({ type: FieldsUpdateDto })
+  @ApiForbiddenResponse({ description: "Forbidden" })
+  public async updateFields(
+    @Param("fieldId") fieldId: string,
+    @Headers() headers,
+    @Req() request: Request,
+    @Body() fieldsUpdateDto: FieldsUpdateDto,
+    @Res() response: Response
+  ) {
+    return await this.fieldsAdapter.buildFieldsAdapter().updateFields(fieldId, request, fieldsUpdateDto, response);
   }
 
   //search

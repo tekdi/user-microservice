@@ -1,7 +1,7 @@
-import { 
-  Entity, 
-  Column, 
-  PrimaryColumn, 
+import {
+  Entity,
+  Column,
+  PrimaryColumn,
   CreateDateColumn,
   UpdateDateColumn,
   OneToMany,
@@ -51,7 +51,7 @@ export class Fields {
   type: FieldType;
 
   @Column('varchar', { nullable: true })
-  note?: string;  
+  note?: string;
 
   @Column('text', { nullable: true })
   description?: string;
@@ -110,10 +110,10 @@ export class Fields {
   )
   @JoinColumn({ name: 'fieldValuesId' })
   fieldValues: FieldValues[];
-  
+
   @Column({ type: 'jsonb', nullable: true })
   sourceDetails: any;
 
-  @Column({ type: 'boolean' })
-  dependsOn: boolean;
+  @Column({ type: 'varchar' })
+  dependsOn: string;
 }

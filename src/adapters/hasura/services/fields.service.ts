@@ -15,8 +15,8 @@ export class FieldsService {
     try {
       var axios = require("axios");
 
-      //add render json object
-      fieldsDto = await this.addRender(fieldsDto);
+      // //add render json object
+      // fieldsDto = await this.addRender(fieldsDto);
 
       let query = "";
       Object.keys(fieldsDto).forEach((e) => {
@@ -235,10 +235,10 @@ export class FieldsService {
   async searchFields(request: any, tenantId: string, fieldsSearchDto: FieldsSearchDto) {
     try {
       var axios = require("axios");
-      let offset = 0;
-      if (fieldsSearchDto.page > 1) {
-        offset = (fieldsSearchDto.limit) * (fieldsSearchDto.page - 1);
-      }
+
+      let { limit, offset } = fieldsSearchDto;
+      limit = limit ? limit : 20;
+      offset = offset ? offset : 0;
 
       let temp_filters = fieldsSearchDto.filters;
       //add tenantid
@@ -312,8 +312,8 @@ export class FieldsService {
   async updateFields(fieldsId: string, fieldsDto: FieldsDto) {
     var axios = require("axios");
 
-    //add render json object
-    fieldsDto = await this.addRender(fieldsDto);
+    // //add render json object
+    // fieldsDto = await this.addRender(fieldsDto);
 
     let query = "";
     Object.keys(fieldsDto).forEach((e) => {
@@ -363,16 +363,16 @@ export class FieldsService {
     return response;
   }
 
-  //required functions
-  public async addRender(fieldsDto: FieldsDto) {
-    let fieldsDtoTemp = fieldsDto;
-    if (fieldsDtoTemp?.render) {
-      let renderObj = await this.createFieldSchema(fieldsDtoTemp?.render);
-      fieldsDtoTemp.render = JSON.stringify(JSON.stringify(renderObj));
-    }
-    fieldsDto = fieldsDtoTemp;
-    return fieldsDto;
-  }
+  // //required functions
+  // public async addRender(fieldsDto: FieldsDto) {
+  //   let fieldsDtoTemp = fieldsDto;
+  //   if (fieldsDtoTemp?.render) {
+  //     let renderObj = await this.createFieldSchema(fieldsDtoTemp?.render);
+  //     fieldsDtoTemp.render = JSON.stringify(JSON.stringify(renderObj));
+  //   }
+  //   fieldsDto = fieldsDtoTemp;
+  //   return fieldsDto;
+  // }
 
   public async setTypeProperties(schema, payload) {
     switch (payload.type) {

@@ -31,7 +31,7 @@ export class FieldsFilterDto {
   tenantId?: string
 
 
-  [key: string]: any; 
+  [key: string]: any;
 }
 
 export class FieldsSearchDto {
@@ -48,7 +48,7 @@ export class FieldsSearchDto {
     type: Number,
     description: "number",
   })
-  page: number;
+  offset: number;
 
   @ApiPropertyOptional({
     type: FieldsFilterDto,

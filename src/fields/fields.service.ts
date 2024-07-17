@@ -56,22 +56,23 @@ export class FieldsService {
             });
         }
     }
+    async updateFields(request: any, fieldsDto: FieldsDto) { }
 
     async searchFields(tenantId: string, request: any, fieldsSearchDto: FieldsSearchDto) {
         try {
 
             const getConditionalData = APIResponse.search(fieldsSearchDto)
-            const offset = getConditionalData.offset ;
-            const limit = getConditionalData.limit ;
-            const whereClause = getConditionalData.whereClause ;
-            
+            const offset = getConditionalData.offset;
+            const limit = getConditionalData.limit;
+            const whereClause = getConditionalData.whereClause;
+
             const getFieldValue = await this.searchFieldData(offset, limit, whereClause)
 
 
             return new SuccessResponse({
                 statusCode: HttpStatus.OK,
                 message: 'Ok.',
-                totalCount : getFieldValue.totalCount,
+                totalCount: getFieldValue.totalCount,
                 data: getFieldValue.mappedResponse,
             });
 
@@ -83,7 +84,7 @@ export class FieldsService {
         }
     }
 
-    async searchFieldData(offset: number, limit: string, searchData:any){
+    async searchFieldData(offset: number, limit: string, searchData: any) {
         let queryOptions: any = {
             where: searchData,
         };
@@ -91,16 +92,16 @@ export class FieldsService {
         if (offset !== undefined) {
             queryOptions.skip = offset;
         }
-    
+
         if (limit !== undefined) {
             queryOptions.take = parseInt(limit);
         }
 
-        
+
         const [results, totalCount] = await this.fieldsRepository.findAndCount(queryOptions);
 
         const mappedResponse = await this.mappedResponseField(results);
-        return {mappedResponse, totalCount};
+        return { mappedResponse, totalCount };
     }
 
     async createFieldValues(request: any, fieldValuesDto: FieldValuesDto) {
@@ -116,7 +117,7 @@ export class FieldsService {
                     }
                 }
             });
-            
+
             let result = await this.fieldsValuesRepository.save(fieldsData);
             return new SuccessResponse({
                 statusCode: HttpStatus.CREATED,
@@ -126,7 +127,7 @@ export class FieldsService {
 
         } catch (e) {
             return new ErrorResponseTypeOrm({
-                statusCode:HttpStatus.INTERNAL_SERVER_ERROR,
+                statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
                 errorMessage: e,
             });
         }
@@ -135,9 +136,9 @@ export class FieldsService {
     async searchFieldValues(request: any, fieldValuesSearchDto: FieldValuesSearchDto) {
         try {
             const getConditionalData = APIResponse.search(fieldValuesSearchDto)
-            const offset = getConditionalData.offset ;
-            const limit = getConditionalData.limit ;
-            const whereClause = getConditionalData.whereClause ;
+            const offset = getConditionalData.offset;
+            const limit = getConditionalData.limit;
+            const whereClause = getConditionalData.whereClause;
 
             const getFieldValue = await this.getSearchFieldValueData(offset, limit, whereClause)
 
@@ -156,33 +157,33 @@ export class FieldsService {
         }
     }
 
-    async getSearchFieldValueData(offset: number, limit: string, searchData:any){
+    async getSearchFieldValueData(offset: number, limit: string, searchData: any) {
         let queryOptions: any = {
             where: searchData,
         };
-    
+
         if (offset !== undefined) {
             queryOptions.skip = offset;
         }
-    
+
         if (limit !== undefined) {
             queryOptions.take = parseInt(limit);
         }
-        
+
         const [results, totalCount] = await this.fieldsValuesRepository.findAndCount(queryOptions);
         const mappedResponse = await this.mappedResponse(results);
 
-        return {mappedResponse, totalCount};
+        return { mappedResponse, totalCount };
 
     }
 
-    async searchFieldValueId(cohortId: string, fieldId: string){            
+    async searchFieldValueId(cohortId: string, fieldId: string) {
         const response = await this.fieldsValuesRepository.findOne({
             where: { itemId: cohortId, fieldId: fieldId },
         });
         return response;
     }
-    
+
     async updateFieldValues(id: string, fieldValuesDto: FieldValuesDto) {
 
         try {
@@ -207,7 +208,7 @@ export class FieldsService {
         }
     }
 
-    public async getFieldsAndFieldsValues(cohortId:string){
+    public async getFieldsAndFieldsValues(cohortId: string) {
         let query = `SELECT FV."value",FV."itemId", FV."fieldId", F."name" AS fieldname, F."label", F."context",F."type", F."state", F."contextType", F."fieldParams" FROM public."FieldValues" FV 
         LEFT JOIN public."Fields" F
         ON FV."fieldId" = F."fieldId" where FV."itemId" =$1`;
@@ -237,7 +238,7 @@ export class FieldsService {
 
     public async mappedResponseField(result: any) {
         const fieldResponse = result.map((item: any) => {
-            
+
             const fieldMapping = {
                 fieldId: item?.fieldId ? `${item.fieldId}` : "",
                 assetId: item?.assetId ? `${item.assetId}` : "",

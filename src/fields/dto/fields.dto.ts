@@ -14,33 +14,6 @@ export class FieldsDto {
   @Expose()
   fieldId: string;
 
-  //assetId
-  @ApiProperty({
-    type: String,
-    description: "The assetId of the fields",
-    default: "",
-  })
-  @Expose()
-  assetId: string;
-
-  //context
-  @ApiProperty({
-    type: String,
-    description: "The context of the fields",
-    default: "",
-  })
-  @Expose()
-  context: string;
-
-  //groupId
-  @ApiProperty({
-    type: String,
-    description: "The groupId of the fields",
-    default: "",
-  })
-  @Expose()
-  groupId: string;
-
   //name
   @ApiProperty({
     type: String,
@@ -59,14 +32,23 @@ export class FieldsDto {
   @Expose()
   label: string;
 
-  //defaultValue
-  @ApiProperty({
+  //context
+  @ApiPropertyOptional({
     type: String,
-    description: "The defaultValue of the fields",
+    description: "The context of the fields",
     default: "",
   })
   @Expose()
-  defaultValue: string;
+  context: string;
+
+  //contextType
+  @ApiPropertyOptional({
+    type: String,
+    description: "The contextType of the fields",
+    default: "",
+  })
+  @Expose()
+  contextType: string;
 
   //type
   @ApiProperty({
@@ -78,42 +60,6 @@ export class FieldsDto {
   @Expose()
   type: string;
 
-  //note
-  @ApiProperty({
-    type: String,
-    description: "The note of the fields",
-    default: "",
-  })
-  @Expose()
-  note: string;
-
-  //description
-  @ApiProperty({
-    type: String,
-    description: "The description of the fields",
-    default: "",
-  })
-  @Expose()
-  description: string;
-
-  //state
-  @ApiProperty({
-    type: String,
-    description: "The state of the fields",
-    default: "",
-  })
-  @Expose()
-  state: string;
-
-  //required
-  @ApiProperty({
-    type: Boolean,
-    description: "The required of the fields",
-    default: true,
-  })
-  @Expose()
-  required: Boolean;
-
   //ordering
   @ApiProperty({
     type: Number,
@@ -123,102 +69,51 @@ export class FieldsDto {
   @Expose()
   ordering: Number;
 
-  //metadata
-  @ApiProperty({
+
+  //tenantId
+  @ApiPropertyOptional({
     type: String,
-    description: "The metadata of the fields",
+    description: "The tenantId of the fields",
     default: "",
   })
-  @Expose()
-  metadata: string;
-
-  //access
-  @ApiProperty({
-    type: String,
-    description: "The access of the fields",
-    default: "",
-  })
-  @Expose()
-  access: string;
-
-  //onlyUseInSubform
-  @ApiProperty({
-    type: Boolean,
-    description: "The onlyUseInSubform of the fields",
-    default: true,
-  })
-  @Expose()
-  onlyUseInSubform: Boolean;
-
   @Expose()
   tenantId: string;
 
-  @Expose()
-  createdAt: string;
-
-  @Expose()
-  updatedAt: string;
-
-  //createdBy
-  @ApiProperty({
-    type: String,
-    description: "The createdBy of the fields",
-    default: "",
-  })
-  @Expose()
-  createdBy: string;
-
-  //updatedBy
-  @ApiProperty({
-    type: String,
-    description: "The updatedBy of the fields",
-    default: "",
-  })
-  @Expose()
-  updatedBy: string;
-
-  //contextId
-  @ApiProperty({
-    type: String,
-    description: "The contextId of the fields",
-    default: "",
-  })
-  @Expose()
-  contextId: string;
-
-  //render
-  @ApiProperty({
-    type: Object,
-    description: "The form render json of the fields",
-  })
-  @Expose()
-  render: any;
-
-  //contextType
-  @ApiProperty({
-    type: String,
-    description: "The contextType of the fields",
-    default: "",
-  })
-  @Expose()
-  contextType: string;
-
   // fieldParams
-  @ApiProperty({
+  @ApiPropertyOptional({
     type: Object,
     description: "The fieldParams of the fields",
-    default: "",
+    default: {},
   })
   @Expose()
   fieldParams: object;
 
-  @ApiProperty({
+  //fieldAttributes
+  @ApiPropertyOptional({
     type: Object,
     description: "The fieldAttributes of the fields",
-    default: "",
+    default: {},
   })
   @Expose()
   fieldAttributes: object;
+
+  //sourceDetails
+  @ApiPropertyOptional({
+    type: Object,
+    description: "The sourceDetails of the fields",
+    default: {},
+  })
+  @Expose()
+  sourceDetails: object;
+
+  //dependsOn
+  @ApiPropertyOptional({
+    type: String,
+    description: "The dependsOn of the fields",
+    default: {},
+  })
+  @Expose()
+  dependsOn: string;
 
   constructor(obj: any) {
     Object.assign(this, obj);
