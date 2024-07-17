@@ -35,17 +35,10 @@ export class PostgresAttendanceService {
 
     async searchAttendance(tenantId: string, request: any, attendanceSearchDto: AttendanceSearchDto) {
         try {
-            let { limit, page, filters, facets, sort } = attendanceSearchDto;
-            // Set default limit to 0 if not provided
-            if (!limit) {
-                limit = 20;
-            }
-
-            let offset = 0;
-            // Calculate offset based on page number
-            if (page > 1) {
-                offset = (limit) * (page - 1);
-            }
+            let { limit, offset, filters, facets, sort } = attendanceSearchDto;
+            // Set default limit 0 and offset 20 if not provided
+            limit = limit ? limit : 20;
+            offset = offset ? offset : 0;
 
             // Get column names from metadata
             const attendanceKeys = this.attendanceRepository.metadata.columns.map((column) => column.propertyName);
@@ -684,17 +677,9 @@ export class PostgresAttendanceService {
         attendanceSearchDto: AttendanceDateDto
     ) {
         try {
-
-
-            let { limit, page } = attendanceSearchDto;
-            if (!limit) {
-                limit = '0';
-            }
-
-            let offset = 0;
-            if (page > 1) {
-                offset = parseInt(limit) * (page - 1);
-            }
+            let { limit, offset } = attendanceSearchDto;
+            limit = limit ? limit : 0;
+            offset = offset ? offset : 0;
 
             const fromDate = new Date(attendanceSearchDto.fromDate);
             const toDate = new Date(attendanceSearchDto.toDate);
@@ -713,7 +698,7 @@ export class PostgresAttendanceService {
 
             const [results, totalCount] = await this.attendanceRepository.findAndCount({
                 where: whereClause,
-                take: parseInt(limit),
+                take: limit,
                 skip: offset,
             });
 

@@ -1,4 +1,4 @@
-import { HttpStatus, Injectable } from "@nestjs/common";
+import { ConsoleLogger, HttpStatus, Injectable } from "@nestjs/common";
 import { FieldsDto } from "src/fields/dto/fields.dto";
 import { FieldsSearchDto } from "src/fields/dto/fields-search.dto";
 import { FieldValuesDto } from "src/fields/dto/field-values.dto";
@@ -8,13 +8,16 @@ import { ErrorResponse } from "src/error-response";
 import { Fields } from "../../fields/entities/fields.entity";
 import { FieldValues } from "../../fields/entities/fields-values.entity";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
-import { SuccessResponse } from "src/success-response";
-import { ErrorResponseTypeOrm } from "src/error-response-typeorm";
+import { In, IsNull, Repository } from "typeorm";
 import APIResponse from "src/common/responses/response";
 import { APIID } from "src/common/utils/api-id.config";
 import { IServicelocatorfields } from "../fieldsservicelocator";
 import { Response } from "express";
+import { readFileSync } from "fs";
+import path, { join } from 'path';
+import { FieldFactory } from "src/fields/fieldValidators/fieldFactory";
+import { FieldsUpdateDto } from "src/fields/dto/fields-update.dto";
+import { SchemaField, Option } from "src/fields/fieldValidators/fieldClass";
 
 @Injectable()
 export class PostgresFieldsService implements IServicelocatorfields {
@@ -25,7 +28,153 @@ export class PostgresFieldsService implements IServicelocatorfields {
         private fieldsValuesRepository: Repository<FieldValues>,
     ) { }
 
-    //fields
+    async getFormCustomField(requiredData, response) {
+        let apiId = 'FormData'
+        try {
+            let whereClause = '(context IS NULL AND "contextType" IS NULL)';
+            let fileread = readFileSync(join(process.cwd(), 'src/utils/corefield.json'), 'utf8');
+            let corefield = JSON.parse(fileread);
+            if (!requiredData.context && !requiredData.contextType) {
+                const result = [...corefield.users, ...corefield.cohort];
+                let data = await this.getFieldData(whereClause);
+                data.push(...result);
+                if (!data) {
+                    return APIResponse.error(
+                        response,
+                        apiId,
+                        "NOT_FOUND",
+                        `Fields not found for the search term`,
+                        HttpStatus.NOT_FOUND
+                    );
+                }
+                return APIResponse.success(
+                    response,
+                    apiId,
+                    data,
+                    HttpStatus.OK,
+                    "Fields fetched successfully."
+                );
+            }
+
+            if (requiredData.context) {
+                whereClause += ` OR context = '${requiredData.context}' AND "contextType" IS NULL`;
+            }
+
+            if (requiredData.contextType) {
+                whereClause += ` OR "contextType" = '${requiredData.contextType}'`;
+            }
+
+            let data = await this.getFieldData(whereClause);
+            if (!data) {
+                return APIResponse.error(
+                    response,
+                    apiId,
+                    "NOT_FOUND",
+                    `Fields not found for the search term`,
+                    HttpStatus.NOT_FOUND
+                );
+            }
+            if (requiredData.context === 'USERS' || requiredData.context === 'COHORT') {
+                let coreFields = corefield[requiredData.context.toLowerCase()];
+                data.push(...coreFields);
+            }
+            return APIResponse.success(
+                response,
+                apiId,
+                data,
+                HttpStatus.OK,
+                "Fields fetched successfully."
+            );
+        } catch (error) {
+            const errorMessage = error.message || "Internal server error";
+            return APIResponse.error(
+                response,
+                apiId,
+                "Internal Server Error",
+                errorMessage,
+                HttpStatus.INTERNAL_SERVER_ERROR)
+        }
+    }
+
+    //Check cohort Create API Custom field
+    public async validateCustomField(cohortCreateDto) {
+        let fieldValues = cohortCreateDto ? cohortCreateDto.customFields : [];
+        let encounteredKeys = [];
+        let invalidateFields = [];
+        let duplicateFieldKeys = [];
+
+        for (const fieldsData of fieldValues) {
+            const fieldId = fieldsData['fieldId'];
+            let getFieldDetails = await this.getFieldByIdes(fieldId);
+
+            if (encounteredKeys.includes(fieldId)) {
+                duplicateFieldKeys.push(`${fieldId} - ${getFieldDetails['name']}`);
+            } else {
+                encounteredKeys.push(fieldId);
+            }
+
+            let checkValidation = this.validateFieldValue(getFieldDetails, fieldsData['value']);
+
+            if (typeof checkValidation === 'object' && 'error' in checkValidation) {
+                invalidateFields.push(`${fieldId}: ${getFieldDetails['name']} - ${checkValidation?.error?.message}`);
+            }
+        }
+
+        // Validation for duplicate fields
+        if (duplicateFieldKeys.length > 0) {
+            return {
+                isValid: false,
+                error: `Duplicate fieldId detected: ${duplicateFieldKeys}`,
+            };
+        }
+
+        // Validation for fields values
+        if (invalidateFields.length > 0) {
+            return {
+                isValid: false,
+                error: `Invalid fields found: ${invalidateFields}`,
+            };
+        }
+
+        let contextType = cohortCreateDto.type
+        let context = 'COHORT';
+        let getFieldIds = await this.getFieldIds(context, contextType);
+
+        const validFieldIds = new Set(getFieldIds.map(field => field.fieldId));
+
+        const invalidFieldIds = cohortCreateDto.customFields
+            .filter(fieldValue => !validFieldIds.has(fieldValue.fieldId))
+            .map(fieldValue => fieldValue.fieldId);
+
+        if (invalidFieldIds.length > 0) {
+            return {
+                isValid: false,
+                error: `The following fields are not valid for this user: ${invalidFieldIds.join(', ')}.`,
+            };
+        }
+        return {
+            isValid: true,
+        };
+    }
+
+    async getFieldData(whereClause): Promise<any> {
+        let query = `select * from public."Fields" where ${whereClause}`
+
+        let result = await this.fieldsRepository.query(query);
+        if (!result) {
+            return false;
+        }
+        for (let data of result) {
+            if ((data?.dependsOn == '' || data?.dependsOn == undefined || data?.dependsOn == null) && data?.sourceDetails?.source === 'table' || data?.sourceDetails?.source === 'jsonfile') {
+                let options = await this.findDynamicOptions(data.sourceDetails.table);
+                data.fieldParams = data.fieldParams || {};
+                data.fieldParams.options = options;
+            }
+        }
+        let schema = this.mappedFields(result);
+        return schema;
+    }
+
     async createFields(request: any, fieldsDto: FieldsDto, response: Response,) {
         const apiId = APIID.FIELDS_CREATE;
         try {
@@ -42,10 +191,54 @@ export class PostgresFieldsService implements IServicelocatorfields {
                     }
                 }
             });
+            fieldsData['required'] = true;
+
+            let checkFieldExist = await this.fieldsRepository.find({
+                where: {
+                    "context": fieldsData.context,
+                    "contextType": fieldsData.contextType,
+                    "name": fieldsData.name
+                }
+            })
+            if (checkFieldExist.length > 0) {
+                APIResponse.error(
+                    response,
+                    apiId,
+                    `Fields already exist`,
+                    `CONFLICT`,
+                    (HttpStatus.CONFLICT)
+                )
+            }
+
+            let storeWithoutControllingField = [];
+            let error = '';
+            if (fieldsData.sourceDetails && fieldsData.sourceDetails.source == 'table') {
+
+                for (let sourceFieldName of fieldsData.fieldParams.options) {
+
+                    if (fieldsData.dependsOn && (!sourceFieldName['controllingfieldfk'] || sourceFieldName['controllingfieldfk'] === '')) {
+                        storeWithoutControllingField.push(sourceFieldName['name'])
+                    }
+                    let query = `SELECT COUNT(*) FROM public.${fieldsData.sourceDetails.table} WHERE value = '${sourceFieldName['value']}'`;
+                    const checkSourceData = await this.fieldsValuesRepository.query(query);
+
+                    if (checkSourceData[0].count == 0) {
+                        let createSourceField = await this.createSourceDetailsTableFields(fieldsData.sourceDetails.table, sourceFieldName['name'], sourceFieldName['value'], sourceFieldName['controllingfieldfk'], fieldsData?.dependsOn);
+                    } else {
+                        let updateSourceField = await this.updateSourceDetailsTableFields(fieldsData.sourceDetails.table, sourceFieldName['name'], sourceFieldName['value'], sourceFieldName['controllingfieldfk']);
+                    }
+                }
+                delete fieldsData.fieldParams;
+            }
+
+            if (storeWithoutControllingField.length > 0) {
+                let wrongControllingField = storeWithoutControllingField.join(',')
+                error = `Wrong Data: ${wrongControllingField} This field is dependent on another field and cannot be created without specifying the controllingfieldfk.`
+            }
 
             let result = await this.fieldsRepository.save(fieldsData);
-       
-            return await APIResponse.success(response, apiId, result,
+
+            return await APIResponse.success(response, apiId, { result, error },
                 HttpStatus.CREATED, 'Fields created successfully.')
 
         } catch (e) {
@@ -54,30 +247,200 @@ export class PostgresFieldsService implements IServicelocatorfields {
         }
     }
 
-    async searchFields(tenantId: string, request: any, fieldsSearchDto: FieldsSearchDto,response :Response) {
-        const apiId = APIID.FIELDS_SEARCH;
+    async updateFields(fieldId: any, request: any, fieldsUpdateDto: FieldsUpdateDto, response: Response) {
+        const apiId = APIID.FIELDS_CREATE;
         try {
+            const fieldsData: any = {}; // Define an empty object to store field data
+            let storeWithoutControllingField = [];
+            let error = '';
 
-            const getConditionalData = await this.search(fieldsSearchDto)
-            const offset = getConditionalData.offset;
-            const limit = getConditionalData.limit;
-            const whereClause = getConditionalData.whereClause;
+            Object.keys(fieldsUpdateDto).forEach((e) => {
+                if (fieldsUpdateDto[e] && fieldsUpdateDto[e] !== "") {
+                    if (e === "render") {
+                        fieldsData[e] = fieldsUpdateDto[e];
+                    } else if (Array.isArray(fieldsUpdateDto[e])) {
+                        fieldsData[e] = JSON.stringify(fieldsUpdateDto[e]);
+                    } else {
+                        fieldsData[e] = fieldsUpdateDto[e];
+                    }
+                }
+            });
 
-            const getFieldValue = await this.searchFieldData(offset, limit, whereClause)
+            const getSourceDetails = await this.fieldsRepository.findOne({
+                where: { fieldId: fieldId }
+            });
 
+            fieldsData['type'] = fieldsData.type || getSourceDetails.type;
 
-            const result = {
-                totalCount: getFieldValue.totalCount,
-                fields: getFieldValue.mappedResponse,
+            if (getSourceDetails.fieldParams && getSourceDetails.sourceDetails && getSourceDetails.sourceDetails.source == 'table') {
+                for (let sourceFieldName of fieldsData.fieldParams.options) {
+                    if (getSourceDetails.dependsOn && (!sourceFieldName['controllingfieldfk'] || sourceFieldName['controllingfieldfk'] === '')) {
+                        storeWithoutControllingField.push(sourceFieldName['name'])
+                    }
+                    let query = `SELECT COUNT(*) FROM public.${getSourceDetails.sourceDetails.table} WHERE value = '${sourceFieldName['value']}'`;
+                    const checkSourceData = await this.fieldsValuesRepository.query(query);
+
+                    if (checkSourceData[0].count == 0) {
+                        let createSourceField = await this.createSourceDetailsTableFields(getSourceDetails.sourceDetails.table, sourceFieldName['name'], sourceFieldName['value'], sourceFieldName['controllingfieldfk'], getSourceDetails.dependsOn);
+                    } else {
+                        let updateSourceField = await this.updateSourceDetailsTableFields(getSourceDetails.sourceDetails.table, sourceFieldName['name'], sourceFieldName['value'], sourceFieldName['controllingfieldfk']);
+                    }
+                }
+                delete fieldsData.fieldParams;
             }
 
+            if (storeWithoutControllingField.length > 0) {
+                let wrongControllingField = storeWithoutControllingField.join(',')
+                error = `Wrong Data: ${wrongControllingField} This field is dependent on another field and cannot be created without specifying the controllingfieldfk.`
+            }
+
+            let result = await this.fieldsRepository.update(fieldId, fieldsData);
             return await APIResponse.success(response, apiId, result,
-                HttpStatus.OK, 'Fields fetched successfully.')
+                HttpStatus.CREATED, 'Fields updated successfully.')
 
 
         } catch (e) {
             const errorMessage = e?.message || 'Something went wrong';
             return APIResponse.error(response, apiId, "Internal Server Error", `Error : ${errorMessage}`, HttpStatus.INTERNAL_SERVER_ERROR)
+        }
+    }
+
+    async createSourceDetailsTableFields(tableName: string, name: string, value: string, controllingfieldfk?: string, dependsOn?: string) {
+        let createSourceFields = `INSERT INTO public.${tableName} (name, value`;
+
+        // Add controllingfieldfk to the columns if it is defined
+        if (controllingfieldfk !== undefined && controllingfieldfk !== '') {
+            createSourceFields += `, controllingfieldfk`;
+        }
+
+        createSourceFields += `) VALUES ('${name}', '${value}'`;
+
+        // Add controllingfieldfk to the values if it is defined
+        if (controllingfieldfk !== undefined && controllingfieldfk !== '') {
+            createSourceFields += `, '${controllingfieldfk}'`;
+        }
+
+        createSourceFields += `);`;
+
+        if (dependsOn && (!controllingfieldfk || controllingfieldfk === '')) {
+            return false;
+        }
+        const checkSourceData = await this.fieldsValuesRepository.query(createSourceFields);
+        if (checkSourceData.length == 0) {
+            return false
+        }
+    }
+
+    async updateSourceDetailsTableFields(tableName: string, name: string, value: string, controllingfieldfk?: string) {
+
+        let updateSourceDetails = `UPDATE public.${tableName} SET name='${name}'`;
+
+        if (controllingfieldfk !== undefined) {
+            updateSourceDetails += `, controllingfieldfk='${controllingfieldfk}'`;
+        }
+
+        updateSourceDetails += ` WHERE value='${value}';`;
+        const updateSourceData = await this.fieldsValuesRepository.query(updateSourceDetails);
+        if (updateSourceData.length == 0) {
+            return false
+        }
+    }
+
+
+    async getFieldIds(context: string, contextType?: string) {
+
+        const condition: any = {
+            context: context,
+        };
+
+        if (contextType) {
+            condition.contextType = contextType;
+        } else {
+            condition.contextType = IsNull();
+        }
+
+        let result = await this.fieldsRepository.find({
+            where: condition,
+            select: ["fieldId"]
+        })
+        return result;
+    }
+
+    async getFieldByIdes(fieldId: string) {
+        try {
+            const response = await this.fieldsRepository.findOne({
+                where: { fieldId: fieldId }
+            });
+            return response;
+        } catch (e) {
+            return { error: e }
+        }
+    }
+
+
+
+
+    async searchFields(
+        tenantId: string,
+        request: any,
+        fieldsSearchDto: FieldsSearchDto,
+        response: Response
+    ) {
+        const apiId = APIID.FIELDS_SEARCH;
+        try {
+            let { limit, offset, filters } = fieldsSearchDto;
+            limit = limit ? limit : 20;
+            offset = offset ? offset : 0;
+
+            const fieldKeys = this.fieldsRepository.metadata.columns.map(
+                (column) => column.propertyName
+            );
+            let whereClause = `"tenantId" = '${tenantId}'`;
+            if (filters && Object.keys(filters).length > 0) {
+                Object.entries(filters).forEach(([key, value]) => {
+                    if (fieldKeys.includes(key)) {
+                        if (key === 'context' && (value === 'USERS' || value === 'COHORT')) {
+                            whereClause += ` AND "context" = '${value}'`;
+                        } else {
+                            whereClause += ` AND "${key}" = '${value}'`;
+                        }
+                    } else {
+                        return APIResponse.error(
+                            response,
+                            apiId,
+                            "BAD_REQUEST",
+                            `Invalid Filter Entered : ${key}`,
+                            HttpStatus.BAD_REQUEST
+                        );
+                    }
+                });
+            }
+            let fieldData = await this.getFieldData(whereClause);
+            if (!fieldData.length) {
+                return APIResponse.error(
+                    response,
+                    apiId,
+                    "NOT_FOUND",
+                    `Fields not found for the search term`,
+                    HttpStatus.NOT_FOUND
+                );
+            }
+            return APIResponse.success(
+                response,
+                apiId,
+                fieldData,
+                HttpStatus.OK,
+                "Fields fetched successfully."
+            );
+        } catch (error) {
+            const errorMessage = error.message || "Internal server error";
+            return APIResponse.error(
+                response,
+                apiId,
+                "Internal Server Error",
+                errorMessage,
+                HttpStatus.INTERNAL_SERVER_ERROR
+            );
         }
     }
 
@@ -101,28 +464,27 @@ export class PostgresFieldsService implements IServicelocatorfields {
         return { mappedResponse, totalCount };
     }
 
-    async createFieldValues(request: any, fieldValuesDto: FieldValuesDto,res:Response) {
+    async createFieldValues(request: any, fieldValuesDto: FieldValuesDto, res: Response) {
         const apiId = APIID.FIELDVALUES_CREATE;
 
-
         try {
-                let result = await this.findAndSaveFieldValues(fieldValuesDto);
-                if(!result){
-                    APIResponse.error(
-                        res,
-                        apiId,
-                        `Fields not found`,
-                        `Fields not found`,
-                        (HttpStatus.NOT_FOUND)
-                      )
+            let result = await this.findAndSaveFieldValues(fieldValuesDto);
+            if (!result) {
+                APIResponse.error(
+                    res,
+                    apiId,
+                    `Fields not found or already exist`,
+                    `Fields not found or already exist`,
+                    (HttpStatus.NOT_FOUND)
+                )
 
-                }
-               return APIResponse.success(res, apiId, result, (HttpStatus.CREATED), "Ok");
+            }
+            return APIResponse.success(res, apiId, result, (HttpStatus.CREATED), "Field Values created successfully");
 
 
         } catch (error) {
-            const errorMessage = error.message || 'Internal server error';
-           return APIResponse.error(res, apiId, "Internal Server Error",errorMessage, (HttpStatus.INTERNAL_SERVER_ERROR));   
+            const errorMessage = error.message || 'Something went wrong';
+            return APIResponse.error(res, apiId, "Internal Server Error", errorMessage, (HttpStatus.INTERNAL_SERVER_ERROR));
 
         }
     }
@@ -171,9 +533,15 @@ export class PostgresFieldsService implements IServicelocatorfields {
 
     }
 
-    async searchFieldValueId(itemId: string, fieldId: string) {
+
+    async searchFieldValueId(fieldId: string, itemId?: string) {
+        const whereClause: any = { fieldId: fieldId };
+        if (itemId) {
+            whereClause.itemId = itemId;
+        }
+
         const response = await this.fieldsValuesRepository.findOne({
-            where: { itemId: itemId, fieldId: fieldId },
+            where: whereClause,
         });
         return response;
     }
@@ -209,7 +577,6 @@ export class PostgresFieldsService implements IServicelocatorfields {
         const results = await this.fieldsValuesRepository.query(query, [cohortId]);
         return results;
     }
-
 
     public async mappedResponse(result: any) {
         const fieldValueResponse = result.map((item: any) => {
@@ -267,39 +634,310 @@ export class PostgresFieldsService implements IServicelocatorfields {
         return fieldResponse;
     }
 
-    public async findAndSaveFieldValues(fieldValuesDto: FieldValuesDto){
+    public async findAndSaveFieldValues(fieldValuesDto: FieldValuesDto) {
 
         const checkFieldValueExist = await this.fieldsValuesRepository.find({
             where: { itemId: fieldValuesDto.itemId, fieldId: fieldValuesDto.fieldId },
         });
-        
+
         if (checkFieldValueExist.length == 0) {
-            let result = await this.fieldsValuesRepository.save(fieldValuesDto);
-            return result
+
+            const result = await this.fieldsValuesRepository.save(fieldValuesDto);
+
+            return result;
         }
         return false;
     }
 
 
-    public async search(dtoFileName){
+    public async search(dtoFileName) {
         let { limit, page, filters } = dtoFileName;
-    
+
         let offset = 0;
         if (page > 1) {
             offset = parseInt(limit) * (page - 1);
         }
-        
+
         if (limit.trim() === '') {
             limit = '0';
         }
-    
+
         const whereClause = {};
         if (filters && Object.keys(filters).length > 0) {
             Object.entries(filters).forEach(([key, value]) => {
                 whereClause[key] = value;
             });
         }
-        return {offset,limit,whereClause};
-      }
+        return { offset, limit, whereClause };
+    }
 
+    public async getFieldOptions(request: any, fieldName: string, controllingfieldfk: string, context: string, contextType: string, response: Response) {
+        const apiId = APIID.FIELDVALUES_SEARCH;
+        let dynamicOptions;
+
+        const condition: any = {
+            name: fieldName,
+            context: context,
+        };
+
+        if (contextType) {
+            condition.contextType = contextType;
+        }
+
+        const fetchFieldParams = await this.fieldsRepository.findOne({
+            where: condition
+        })
+
+        if (fetchFieldParams?.sourceDetails?.source === 'table') {
+            let whereClause;
+            if (controllingfieldfk) {
+                whereClause = `"controllingfieldfk" = '${controllingfieldfk}'`;
+            }
+
+            dynamicOptions = await this.findDynamicOptions(fieldName, whereClause);
+        } else if (fetchFieldParams?.sourceDetails?.source === 'jsonFile') {
+            const filePath = path.join(
+                process.cwd(),
+                `${fetchFieldParams.sourceDetails.filePath}`,
+            );
+            let getFieldValuesFromJson = JSON.parse(readFileSync(filePath, 'utf-8'));
+
+            if (controllingfieldfk) {
+                dynamicOptions = getFieldValuesFromJson.options.filter(option => (option?.controllingfieldfk === controllingfieldfk))
+            } else {
+                dynamicOptions = getFieldValuesFromJson;
+            }
+
+        } else {
+            fetchFieldParams.fieldParams['options'] && controllingfieldfk ?
+                dynamicOptions = fetchFieldParams?.fieldParams['options'].filter((option: any) => option?.controllingfieldfk === controllingfieldfk) :
+                dynamicOptions = fetchFieldParams?.fieldParams['options'];
+        }
+
+        return await APIResponse.success(response, apiId, dynamicOptions,
+            HttpStatus.OK, 'Field Values fetched successfully.')
+    }
+
+
+    async findDynamicOptions(tableName, whereClause?: {}) {
+        let query: string;
+        let result;
+
+        if (whereClause) {
+            query = `select * from public."${tableName}" where ${whereClause}`
+            result = await this.fieldsRepository.query(query);
+            if (!result) {
+                return null;
+            }
+            return result.map(result => ({
+                value: result.value,
+                label: result.name
+            }));
+        }
+
+        query = `select * from public."${tableName}"`
+
+        result = await this.fieldsRepository.query(query);
+        if (!result) {
+            return null;
+        }
+
+        return result.map(result => ({
+            value: result.value,
+            label: result.name
+        }));
+    }
+    async findCustomFields(context: string, contextType?: string[], getFields?: string[]) {
+        const condition: any = {
+            context,
+            ...(contextType?.length ? { contextType: In(contextType.filter(Boolean)) } : {}),
+            ...(getFields?.includes('All') ? {} : getFields?.length ? { name: In(getFields.filter(Boolean)) } : {})
+        };
+
+        const validContextTypes = contextType?.filter(Boolean);
+        if (validContextTypes?.length) {
+            condition.contextType = In(validContextTypes);
+        } else {
+            condition.contextType = IsNull();
+        }
+
+        const customFields = await this.fieldsRepository.find({ where: condition });
+        return customFields;
+    }
+
+
+    async findFieldValues(contextId: string, context: string) {
+        let query = "";
+        if (context === "COHORT") {
+            query = `SELECT C."cohortId",F."fieldId",F."value" FROM public."Cohort" C 
+    LEFT JOIN public."FieldValues" F
+    ON C."cohortId" = F."itemId" where C."cohortId" =$1`;
+        } else if (context === "USERS") {
+            query = `SELECT U."userId",F."fieldId",F."value" FROM public."Users" U 
+    LEFT JOIN public."FieldValues" F
+    ON U."userId" = F."itemId" where U."userId" =$1`;
+        }
+
+        let result = await this.fieldsRepository.query(query, [contextId]);
+        return result;
+    }
+
+    async filterUserUsingCustomFields(stateDistBlockData: any) {
+        let searchKey = [];
+        let whereCondition = ` WHERE `;
+        let index = 0;
+
+        for (const [key, value] of Object.entries(stateDistBlockData)) {
+            searchKey.push(`'${key}'`);
+            if (index > 0) {
+                whereCondition += ` AND `
+            }
+            whereCondition += `fields->>'${key}' = '${value}'`
+            index++;
+        }
+
+        let query = `WITH user_fields AS (
+        SELECT
+            fv."itemId",
+            jsonb_object_agg(f."name", fv."value") AS fields
+        FROM "FieldValues" fv
+        JOIN "Fields" f ON fv."fieldId" = f."fieldId"
+        WHERE f."name" IN (${searchKey}) AND f.context = 'USERS'
+        GROUP BY fv."itemId"
+        )
+        SELECT "itemId"
+        FROM user_fields ${whereCondition}`
+
+        const queryData = await this.fieldsValuesRepository.query(query);
+        const result = queryData.map(item => item.itemId);
+        return result
+    }
+
+    async getFieldValuesData(id: string, context: string, contextType?: string, getFields?: string[], requiredFieldOptions?: Boolean) {
+        requiredFieldOptions = true;
+
+        let customField;
+        let fieldsArr = [];
+        const [filledValues, customFields] = await Promise.all([
+            this.findFieldValues(id, context),
+            this.findCustomFields(context, [contextType], getFields)
+        ]);
+        const filledValuesMap = new Map(filledValues.map(item => [item.fieldId, item.value]));
+        if (customFields) {
+            for (let data of customFields) {
+                const fieldValue = filledValuesMap.get(data?.fieldId);
+                customField = {
+                    fieldId: data?.fieldId,
+                    name: data?.name,
+                    label: data?.label,
+                    order: data?.ordering,
+                    isRequired: data?.fieldAttributes?.isRequired,
+                    isEditable: data?.fieldAttributes?.isEditable,
+                    isMultiSelect: data.fieldAttributes ? data.fieldAttributes['isMultiSelect'] : '',
+                    maxSelections: data.fieldAttributes ? data.fieldAttributes['maxSelections'] : '',
+                    type: data?.type || '',
+                    value: fieldValue || '',
+                };
+
+                if (requiredFieldOptions == true && (data?.dependsOn == '' || data?.dependsOn == undefined)) {
+                    if (data?.sourceDetails?.source === 'table') {
+                        let dynamicOptions = await this.findDynamicOptions(data?.sourceDetails?.table);
+                        customField.options = dynamicOptions;
+                    } else if (data?.sourceDetails?.source === 'jsonFile') {
+                        const filePath = path.join(
+                            process.cwd(),
+                            `${data?.sourceDetails?.filePath}`,
+                        );
+                        customField = JSON.parse(readFileSync(filePath, 'utf-8'));
+                    } else {
+                        customField.options = data?.fieldParams?.['options'] || null;
+                    }
+                } else {
+                    customField.options = null;
+                }
+                fieldsArr.push(customField);
+            }
+        }
+
+        return fieldsArr;
+    }
+
+    async getEditableFieldsAttributes() {
+        const getFieldsAttributesQuery = `
+          SELECT * 
+          FROM "public"."Fields" 
+          WHERE "fieldAttributes"->>'isEditable' = $1 
+        `;
+        const getFieldsAttributesParams = ['true'];
+        return await this.fieldsRepository.query(getFieldsAttributesQuery, getFieldsAttributesParams);
+    }
+
+    async updateCustomFields(itemId, data, fieldAttributesAndParams) {
+
+        if (Array.isArray(data.value)) {
+            data.value = data.value.join(',')
+        }
+
+        let result: any = await this.fieldsValuesRepository.update({ itemId, fieldId: data.fieldId }, { value: data.value });
+        let newResult;
+        if (result.affected === 0) {
+            newResult = await this.fieldsValuesRepository.save({
+                itemId,
+                fieldId: data.fieldId,
+                value: data.value
+            });
+        }
+        Object.assign(result, newResult);
+        result["correctValue"] = true;
+        return result;
+    }
+
+    validateFieldValue(field: any, value: any) {
+        try {
+            const fieldInstance = FieldFactory.createField(field.type, field.fieldAttributes, field.fieldParams);
+            const isValid = fieldInstance.validate(value);
+            return isValid;
+        } catch (e) {
+            return { error: e }
+        }
+    }
+
+    getFieldValueForMultiselect(isMultiSelect: boolean, fieldValue: any) {
+        if (isMultiSelect) {
+            return fieldValue.split(",");
+        }
+        return fieldValue;
+    }
+
+    mappedFields(fieldDataList) {
+        const mappedFields: SchemaField[] = fieldDataList.map((field) => {
+            const options = field.fieldParams?.options?.map((opt) => ({
+                label: opt.label,
+                value: opt.value,
+            })) || [];
+
+            return {
+                label: field.label,
+                name: field.name,
+                type: field.type,
+                coreField: 0,
+                isRequired: field?.fieldAttributes?.required,
+                isEditable: field.fieldAttributes?.isEditable ?? null,
+                isPIIField: field.fieldAttributes?.isPIIField ?? null,
+                placeholder: field.fieldAttributes?.placeholder ?? '',
+                validation: field.fieldAttributes?.validation || [],
+                options: options,
+                isMultiSelect: field.fieldAttributes?.isMultiSelect ?? false,
+                maxSelections: field.fieldAttributes?.maxSelections ?? null,
+                hint: field.fieldAttributes?.hint || null,
+                pattern: field?.fieldAttributes?.pattern ?? null,
+                maxLength: field.maxLength ?? null,
+                minLength: field.minLength ?? null,
+                fieldId: field.fieldId ?? null,
+                dependsOn: field.dependsOn ?? false,
+                sourceDetails: field.sourceDetails ?? null,
+            };
+        });
+        return mappedFields;
+    }
 }

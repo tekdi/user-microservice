@@ -6,7 +6,7 @@ import { HasuraModule } from "src/adapters/hasura/hasura.module";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { AttendanceEntity } from "./entities/attendance.entity";
 import { Repository } from "typeorm";
-import { PostgresModule } from "src/adapters/postgres/potsgres-module";
+import { PostgresModule } from "src/adapters/postgres/postgres-module";
 
 @Module({
   imports: [

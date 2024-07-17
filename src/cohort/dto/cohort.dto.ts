@@ -64,15 +64,15 @@ export class CohortDto {
   @Expose()
   type: string;
 
-  
+
   //status
   @ApiPropertyOptional({
-    type: Boolean,
+    type: String,
     description: "The status of the cohort",
     default: true,
   })
   @Expose()
-  status: boolean;
+  status: string;
 
   //image
   @Expose()
@@ -120,7 +120,7 @@ export class CohortDto {
   }
 }
 
-export class ReturnResponseBody{
+export class ReturnResponseBody {
   @Expose()
   cohortId: string;
   @Expose()
@@ -130,7 +130,7 @@ export class ReturnResponseBody{
   @Expose()
   type: string;
   @Expose()
-  status: boolean;
+  status: string;
   @Expose()
   tenantId: string;
 

@@ -57,7 +57,8 @@ export class AuthController {
     strategy: "excludeAll",
   })
   public async getUserByAuth(@Req() request, @Res() response: Response) {
-    return this.authService.getUserByAuth(request, response);
+    let tenantId = request?.headers["tenantid"];
+    return this.authService.getUserByAuth(request, tenantId,response);
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.REFRESH))

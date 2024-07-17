@@ -21,12 +21,15 @@ export class HasuraCohortService implements IServicelocatorcohort {
   constructor(
     private httpService: HttpService,
     private fieldsService: FieldsService
-  ) {}
-  public async  getCohortList(tenantid: any, id: any, request: any, response: any) {
+  ) { }
+  getCohortHierarchyData(requiredData: any, response: any) {
+    throw new Error("Method not implemented.");
+  }
+  public async getCohortList(tenantid: any, id: any, request: any, response: any) {
   }
 
   public async createCohort(request: any, cohortCreateDto: CohortCreateDto) {
-    try{
+    try {
       var axios = require("axios");
 
       let query = "";
@@ -77,28 +80,28 @@ export class HasuraCohortService implements IServicelocatorcohort {
         let fieldError = null;
         //create fields values
         let cohortId = result?.cohortId;
-        let field_value_array = cohortCreateDto.fieldValues.split("|");
+        let field_value_array = cohortCreateDto.customFields
 
-        if (field_value_array.length > 0) {
-          let field_values = [];
-          for (let i = 0; i < field_value_array.length; i++) {
-            let fieldValues = field_value_array[i].split(":");
-            field_values.push({
-              value: fieldValues[1] ? fieldValues[1] : "",
-              itemId: cohortId,
-              fieldId: fieldValues[0] ? fieldValues[0] : "",
-              createdBy: cohortCreateDto?.createdBy,
-              updatedBy: cohortCreateDto?.updatedBy,
-            });
-          }
+        // if (field_value_array.length > 0) {
+        //   let field_values = [];
+        //   for (let i = 0; i < field_value_array.length; i++) {
+        //     let fieldValues = field_value_array[i].split(":");
+        //     field_values.push({
+        //       value: fieldValues[1] ? fieldValues[1] : "",
+        //       itemId: cohortId,
+        //       fieldId: fieldValues[0] ? fieldValues[0] : "",
+        //       createdBy: cohortCreateDto?.createdBy,
+        //       updatedBy: cohortCreateDto?.updatedBy,
+        //     });
+        //   }
 
-          const response_field_values =
-            await this.fieldsService.createFieldValuesBulk(field_values);
-          if (response_field_values?.data?.errors) {
-            fieldCreate = false;
-            fieldError = response_field_values?.data;
-          }
-        }
+        //   const response_field_values =
+        //     await this.fieldsService.createFieldValuesBulk(field_values);
+        //   if (response_field_values?.data?.errors) {
+        //     fieldCreate = false;
+        //     fieldError = response_field_values?.data;
+        //   }
+        // }
 
         if (fieldCreate) {
           return new SuccessResponse({
@@ -113,7 +116,7 @@ export class HasuraCohortService implements IServicelocatorcohort {
           });
         }
       }
-    }catch (e) {
+    } catch (e) {
       console.error(e);
       return new ErrorResponse({
         errorCode: "401",
@@ -261,10 +264,10 @@ export class HasuraCohortService implements IServicelocatorcohort {
     }
   }
 
-  public async searchCohort(tenantId: string,request: any,cohortSearchDto: CohortSearchDto) {}
-  public async updateCohortStatus(cohortId: string, request: any) {}
-  public async getCohortsDetails(cohortId: string) {}
-  public async updateCohort(cohortId: string,request: any,cohortUpdateDto: CohortUpdateDto) {}
+  public async searchCohort(tenantId: string, request: any, cohortSearchDto: CohortSearchDto) { }
+  public async updateCohortStatus(cohortId: string, request: any) { }
+  public async getCohortsDetails(cohortId: string) { }
+  public async updateCohort(cohortId: string, request: any, cohortUpdateDto: CohortUpdateDto) { }
 
   public async mappedResponse(result: any) {
     const cohortResponse = result.map((item: any) => {
@@ -290,7 +293,7 @@ export class HasuraCohortService implements IServicelocatorcohort {
     return cohortResponse;
   }
 
-  public async searchCohortFields(request:any ,tenantId: string, cohorts: any) {
+  public async searchCohortFields(request: any, tenantId: string, cohorts: any) {
     let cohort_fields = [];
     for (let i = 0; i < cohorts.length; i++) {
       let new_obj = new Object(cohorts[i]);
@@ -312,8 +315,8 @@ export class HasuraCohortService implements IServicelocatorcohort {
     return cohort_fields;
   }
   public async searchCohortQuery(
-    request:any,
+    request: any,
     tenantId: string,
     cohortSearchDto: CohortSearchDto
-  ) {}
+  ) { }
 }

@@ -1,12 +1,16 @@
 import {
   BadRequestException,
+  HttpStatus,
   Injectable,
   UnauthorizedException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
 import { PostgresRoleService } from "src/adapters/postgres/rbac/role-adapter";
+import APIResponse from "src/common/responses/response";
 import { UserAdapter } from "src/user/useradapter";
+import { Response } from "express";
+import { APIID } from "src/common/utils/api-id.config";
 
 @Injectable()
 export class AuthRbacService {
@@ -35,15 +39,14 @@ export class AuthRbacService {
     return token;
   }
 
-  async signInRbac(username: string, tenantId: string): Promise<any> {
+  async signInRbac(username: string, tenantId: string, response: Response): Promise<any> {
+    const apiId = APIID.RBAC_TOKEN;
     let userData = await this.userAdapter
       .buildUserAdapter()
       .findUserDetails(null, username);
 
     if (!userData || !tenantId) {
-      throw new BadRequestException(
-        "User details or tenant not found for user"
-      );
+      return APIResponse.error(response, apiId, "Bad Request","User details or tenant not found for user", HttpStatus.BAD_REQUEST);
     }
 
     const userRoles = await this.postgresRoleService.findUserRoleData(
@@ -52,7 +55,7 @@ export class AuthRbacService {
     );
 
     if (!userRoles?.length) {
-      throw new BadRequestException("Roles not found for user");
+      return APIResponse.error(response, apiId, "Bad Request","Roles not found for user", HttpStatus.BAD_REQUEST);
     }
 
     userData["roles"] = userRoles.map(({ code }) => code);
@@ -68,9 +71,11 @@ export class AuthRbacService {
       aud: audience,
     };
 
-    return {
+    const result = {
       access_token: await this.generateToken(payload),
     };
+    return await APIResponse.success(response, apiId, result,
+      HttpStatus.OK, "User and related entries deleted Successfully.")
   }
 
   async getPrivileges(userRoleData) {

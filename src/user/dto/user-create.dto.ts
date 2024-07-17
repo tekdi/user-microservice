@@ -19,18 +19,19 @@ export class tenantRoleMappingDto {
     description: "Tenant Id",
   })
   @Expose()
+  @IsOptional()
   @IsUUID(undefined, { message: 'Tenant Id must be a valid UUID' })
-  @IsNotEmpty()
   tenantId: string;
 
   @ApiPropertyOptional({
-    type: String,
+    type: [String],
     description: "The cohort id of the user",
+    default: [],
   })
   @Expose()
-  @IsUUID(undefined, { message: 'Cohort Id must be a valid UUID' })
-  @IsNotEmpty()
-  cohortId: string;
+  @IsOptional()
+  @IsUUID(undefined, { each: true })
+  cohortId: string[];
 
   @ApiPropertyOptional({
     type: String,
@@ -42,8 +43,8 @@ export class tenantRoleMappingDto {
   roleId: string;
 }
 
-export class FieldValuesDto {
-  @ApiPropertyOptional({
+export class FieldValuesOptionDto {
+  @ApiProperty({
     type: String,
     description: "Field Id",
   })
@@ -51,7 +52,7 @@ export class FieldValuesDto {
   @IsUUID(undefined, { message: 'Field Id must be a valid UUID' })
   fieldId: string;
 
-  @ApiPropertyOptional({
+  @ApiProperty({
     type: String,
     description: "Field values",
   })
@@ -63,7 +64,7 @@ export class UserCreateDto {
   @Expose()
   userId: string;
 
-  @ApiProperty({ type: () => User })
+  @ApiProperty({ type: () => String })
   @Expose()
   @IsNotEmpty()
   username: string;
@@ -141,15 +142,6 @@ export class UserCreateDto {
   @Expose()
   updatedBy: string;
 
-  //fieldValues
-  @ApiPropertyOptional({
-    type: [FieldValuesDto],
-    description: "The fieldValues Object",
-  })
-  @ValidateNested({ each: true })
-  @Type(() => FieldValuesDto)
-  fieldValues: FieldValuesDto[];
-
   @ApiProperty({
     type: [tenantRoleMappingDto],
     description: 'List of user attendance details',
@@ -157,6 +149,17 @@ export class UserCreateDto {
   @ValidateNested({ each: true })
   @Type(() => tenantRoleMappingDto)
   tenantCohortRoleMapping: tenantRoleMappingDto[];
+
+  //fieldValues
+  @ApiPropertyOptional({
+    type: [FieldValuesOptionDto],
+    description: "The fieldValues Object",
+  })
+  @ValidateNested({ each: true })
+  @Type(() => FieldValuesOptionDto)
+  customFields: FieldValuesOptionDto[];
+
+
 
   constructor(partial: Partial<UserCreateDto>) {
     Object.assign(this, partial);

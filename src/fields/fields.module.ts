@@ -6,8 +6,7 @@ import { HasuraModule } from "src/adapters/hasura/hasura.module";
 import { Fields } from "./entities/fields.entity";
 import { FieldValues } from "./entities/fields-values.entity";
 import { TypeOrmModule } from "@nestjs/typeorm";
-import { FieldsService } from "./fields.service";
-import { PostgresModule } from "src/adapters/postgres/potsgres-module";
+import { PostgresModule } from "src/adapters/postgres/postgres-module";
 
 @Module({
   imports: [
@@ -18,6 +17,6 @@ import { PostgresModule } from "src/adapters/postgres/potsgres-module";
     PostgresModule
   ],
   controllers: [FieldsController],
-  providers: [FieldsAdapter, FieldsService],
+  providers: [FieldsAdapter],
 })
-export class FieldsModule {}
+export class FieldsModule { }

@@ -3,7 +3,7 @@ import { RoleController } from "./role.controller";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { Role } from "./entities/role.entity";
 import { HasuraModule } from "src/adapters/hasura/hasura.module";
-import { PostgresModule } from "src/adapters/postgres/potsgres-module";
+import { PostgresModule } from "src/adapters/postgres/postgres-module";
 import { PostgresRoleService } from "src/adapters/postgres/rbac/role-adapter";
 import { HasuraRoleService } from "src/adapters/hasura/rbac/role.adapter";
 import { HttpModule } from "@nestjs/axios";

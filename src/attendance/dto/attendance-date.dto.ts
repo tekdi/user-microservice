@@ -36,16 +36,16 @@ export class AttendanceDateDto {
   toDate: Date;
 
   @ApiProperty({
-    type: String,
+    type: Number,
     description: "Limit",
   })
-  limit: string;
+  limit: number;
 
   @ApiProperty({
     type: Number,
     description: "number",
   })
-  page: number;
+  offset: number;
 
   @ApiProperty({
     type: Object,

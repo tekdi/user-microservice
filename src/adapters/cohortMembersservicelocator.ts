@@ -8,6 +8,7 @@ export interface IServicelocatorcohortMembers {
     cohortMembersDto: CohortMembersDto,
     response: any,
     tenantId: string,
+    deviceId: string
   );
   getCohortMembers(cohortMemberId: string, tenantId: string, fieldvalue: string, response: Response);
   searchCohortMembers(cohortMembersSearchDto: CohortMembersSearchDto, tenantId: string, response: Response);
@@ -19,4 +20,5 @@ export interface IServicelocatorcohortMembers {
     response: any
   );
   deleteCohortMemberById(tenantid, cohortMembershipId, response);
+  createBulkCohortMembers(loginUser, cohortMembersDto, response, tenantId);
 }

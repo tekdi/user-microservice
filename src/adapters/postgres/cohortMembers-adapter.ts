@@ -22,6 +22,10 @@ import { Cohort } from "src/cohort/entities/cohort.entity";
 import APIResponse from "src/common/responses/response";
 import { Response } from "express";
 import { APIID } from 'src/common/utils/api-id.config';
+import { MemberStatus } from "src/cohortMembers/entities/cohort-member.entity";
+import { NotificationRequest } from "@utils/notification.axios";
+
+
 @Injectable()
 export class PostgresCohortMembersService {
   constructor(
@@ -32,7 +36,9 @@ export class PostgresCohortMembersService {
     @InjectRepository(User)
     private usersRepository: Repository<User>,
     @InjectRepository(Cohort)
-    private cohortRepository: Repository<Cohort>
+    private cohortRepository: Repository<Cohort>,
+    private readonly notificationRequest: NotificationRequest
+
   ) { }
 
   //Get cohort member 
@@ -110,6 +116,8 @@ export class PostgresCohortMembersService {
 
     return results;
   }
+
+
   async findFilledValues(userId: string) {
     let query = `SELECT U."userId",F."fieldId",F."value" FROM public."Users" U
     LEFT JOIN public."FieldValues" F
@@ -117,6 +125,8 @@ export class PostgresCohortMembersService {
     let result = await this.usersRepository.query(query, [userId]);
     return result;
   }
+
+
   async findcohortData(cohortId: any) {
     let whereClause: any = { cohortId: cohortId };
     let userDetails = await this.cohortMembersRepository.find({
@@ -128,6 +138,8 @@ export class PostgresCohortMembersService {
       return false;
     }
   }
+
+
   async findCustomFields(role) {
     let customFields = await this.fieldsRepository.find({
       where: {
@@ -174,11 +186,10 @@ export class PostgresCohortMembersService {
         return APIResponse.error(res, apiId, "Bad Request", "Invalid input: TenantId must be a valid UUID.", HttpStatus.BAD_REQUEST);
       }
 
-      let { limit, page, filters } = cohortMembersSearchDto;
-      let offset = 0;
-      if (page > 1) {
-        offset = limit * (page - 1);
-      }
+      let { limit, sort, offset, filters } = cohortMembersSearchDto;
+
+      offset = offset ? offset : 0;
+      limit = limit ? limit : 0;
 
       const whereClause = {};
       if (filters && Object.keys(filters).length > 0) {
@@ -214,7 +225,6 @@ export class PostgresCohortMembersService {
         }
       }
 
-      // console.log("USER DATA ",userData)
       let results = {};
       let where = [];
       if (whereClause["cohortId"]) {
@@ -226,6 +236,9 @@ export class PostgresCohortMembersService {
       if (whereClause["role"]) {
         where.push(["role", whereClause["role"]]);
       }
+      if (whereClause["status"] && Array.isArray(whereClause["status"])) {
+        where.push(["status", whereClause["status"]]);
+      }
       let options = [];
       if (limit) {
         options.push(['limit', limit]);
@@ -234,20 +247,24 @@ export class PostgresCohortMembersService {
         options.push(['offset', offset]);
       }
 
+      const order = {};
+      if (sort) {
+        const [sortField, sortOrder] = sort;
+        order[sortField] = sortOrder;
+      }
+
       results = await this.getCohortMemberUserDetails(
         where,
         "true",
-        options
+        options,
+        order
       );
-      const totalCount = results['userDetails'].length;
-
 
       if (results['userDetails'].length == 0) {
         return APIResponse.error(res, apiId, "Not Found", "Invalid input: No data found.", HttpStatus.NOT_FOUND);
       }
 
-      return APIResponse.success(res, apiId, { totalCount, results }, HttpStatus.OK, "Cohort members details fetched successfully.");
-
+      return APIResponse.success(res, apiId, results, HttpStatus.OK, "Cohort members details fetched successfully.");
 
     } catch (e) {
       const errorMessage = e.message || 'Internal server error';
@@ -255,30 +272,24 @@ export class PostgresCohortMembersService {
     }
   }
 
-  async getCohortMemberUserDetails(where: any, fieldShowHide: any, options: any) {
+  async getCohortMemberUserDetails(where: any, fieldShowHide: any, options: any, order: any) {
     let results = {
-      userDetails: [],
+      totalCount: 0,
+      userDetails: []
     };
 
-    let getUserDetails = await this.getUsers(where, options);
+    let getUserDetails = await this.getUsers(where, options, order);
 
-    for (let data of getUserDetails) {
-      let userDetails = {
-        userId: data?.userId,
-        userName: data?.userName,
-        name: data?.name,
-        role: data?.role,
-        district: data?.district,
-        state: data?.state,
-        mobile: data?.mobile
-      };
-
-      if (fieldShowHide === "false") {
-        results.userDetails.push(userDetails);
-      } else {
-        const fieldValues = await this.getFieldandFieldValues(data.userId);
-        userDetails['customField'] = fieldValues;
-        results.userDetails.push(userDetails);
+    if (getUserDetails.length > 0) {
+      results.totalCount = parseInt(getUserDetails[0].total_count, 10);
+      for (let data of getUserDetails) {
+        if (fieldShowHide === "false") {
+          results.userDetails.push(data);
+        } else {
+          const fieldValues = await this.getFieldandFieldValues(data.userId);
+          data['customField'] = fieldValues;
+          results.userDetails.push(data);
+        }
       }
     }
 
@@ -289,13 +300,13 @@ export class PostgresCohortMembersService {
     loginUser: any,
     cohortMembers: CohortMembersDto,
     res: Response,
-    tenantId: string
+    tenantId: string,
+    deviceId: string
   ) {
     const apiId = APIID.COHORT_MEMBER_CREATE;
     try {
       cohortMembers.createdBy = loginUser;
       cohortMembers.updatedBy = loginUser;
-
       const existCohort = await this.cohortRepository.find({
         where: {
           cohortId: cohortMembers.cohortId
@@ -329,6 +340,19 @@ export class PostgresCohortMembersService {
         cohortMembers
       );
 
+      if (deviceId) {
+        // Prepare the notification payload
+        const notificationPayload = {
+          isQueue: false,
+          context: 'COHORT',
+          replacements: [cohortMembers.cohortId],
+          push: {
+            receipients: [deviceId],
+            // to: deviceId,
+          },
+        };
+        await this.notificationRequest.sendNotification(notificationPayload);
+      }
       return APIResponse.success(res, apiId, savedCohortMember, HttpStatus.OK, "Cohort member has been successfully assigned.");
 
     } catch (e) {
@@ -337,55 +361,68 @@ export class PostgresCohortMembersService {
     }
   }
 
-  async getUsers(where: any, options: any) {
+  async getUsers(where: any, options: any, order: any) {
     let query = ``;
     let whereCase = ``;
-    let optionsCase = ``;
-    let isRoleCondition = 0;
+    let limit, offset;
+
     if (where.length > 0) {
-      whereCase = `where `;
+      whereCase = `WHERE `;
       where.forEach((value, index) => {
-        if (value[0] == "role") {
-          isRoleCondition = 1;
-          whereCase += `R."name"='${value[1]}' `;
-        } else {
-          whereCase += `CM."${value[0]}"='${value[1]}' `;
+        if (value[0] === "role") {
+          whereCase += `R."name"='${value[1]}'`;
         }
-        if (index != (where.length - 1)) {
-          whereCase += ` AND `
+        else {
+          if (value[0] === "status") {
+            const statusValues = value[1].map(status => `'${status}'`).join(', ');
+            whereCase += `CM."status" IN (${statusValues})`;
+          } else {
+            whereCase += `CM."${value[0]}"='${value[1]}'`;
+          }
         }
-      })
+        if (index !== where.length - 1) {
+          whereCase += ` AND `;
+        }
+      });
     }
 
-    if (options.length > 0) {
-      options.forEach((value, index) => {
-        optionsCase = `${value[0]} ${value[1]} `;
-      })
-    }
 
-    if (isRoleCondition == 0) {
-      query = `SELECT U."userId", U.username, U.name, R.name AS role, U.district, U.state,U.mobile FROM public."CohortMembers" CM
+    query = `SELECT U."userId", U.username, U.name, R.name AS role, U.district, U.state,U.mobile, 
+      CM."status", CM."statusReason",CM."cohortMembershipId", COUNT(*) OVER() AS total_count  FROM public."CohortMembers" CM
       INNER JOIN public."Users" U
       ON CM."userId" = U."userId"
       INNER JOIN public."UserRolesMapping" UR
       ON UR."userId" = U."userId"
       INNER JOIN public."Roles" R
-      ON R."roleId" = UR."roleId" ${whereCase} ${optionsCase}`;
+      ON R."roleId" = UR."roleId" ${whereCase}`;
+
+    options.forEach(option => {
+      if (option[0] === 'limit') {
+        limit = option[1];
+      }
+      if (option[0] === 'offset') {
+        offset = option[1];
+      }
+    });
+
+    if (order && Object.keys(order).length > 0) {
+      const orderField = Object.keys(order)[0];
+      const orderDirection = order[orderField].toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+      query += ` ORDER BY ${orderField} ${orderDirection}`;
     }
-    else {
-      query = `SELECT U."userId", U.username, U.name, R.name AS role, U.district, U.state,U.mobile FROM public."CohortMembers" CM
-      INNER JOIN public."Users" U
-      ON CM."userId" = U."userId"
-      INNER JOIN public."UserRolesMapping" UR
-      ON UR."userId" = U."userId"
-      INNER JOIN public."Roles" R
-      ON R."roleId" = UR."roleId" ${whereCase} ${optionsCase}`;
+
+    if (limit !== undefined) {
+      query += ` LIMIT ${limit}`;
     }
+
+    if (offset !== undefined) {
+      query += ` OFFSET ${offset}`;
+    }
+
     let result = await this.usersRepository.query(query);
+
     return result;
-
   }
-
 
   public async updateCohortMembers(
     cohortMembershipId: string,
@@ -398,21 +435,21 @@ export class PostgresCohortMembersService {
     try {
       cohortMembersUpdateDto.updatedBy = loginUser;
       if (!isUUID(cohortMembershipId)) {
-        return APIResponse.error(res, apiId, "Bad Request", "Invalid input: Please Enter a valid UUID for cohortMemberId.", HttpStatus.BAD_REQUEST);
+        return APIResponse.error(res, apiId, "Bad Request", "Invalid input: Please Enter a valid UUID for cohortMembershipId.", HttpStatus.BAD_REQUEST);
       }
 
-      const cohortMemberToUpdate = await this.cohortMembersRepository.findOne({
+      const cohortMembershipToUpdate = await this.cohortMembersRepository.findOne({
         where: { cohortMembershipId: cohortMembershipId },
       });
 
-      if (!cohortMemberToUpdate) {
+      if (!cohortMembershipToUpdate) {
         return APIResponse.error(res, apiId, "Not Found", "Invalid input: Cohort member not found.", HttpStatus.NOT_FOUND);
       }
 
-      Object.assign(cohortMemberToUpdate, cohortMembersUpdateDto);
+      Object.assign(cohortMembershipToUpdate, cohortMembersUpdateDto);
 
       const updatedCohortMember = await this.cohortMembersRepository.save(
-        cohortMemberToUpdate
+        cohortMembershipToUpdate
       );
 
       return APIResponse.success(res, apiId, updatedCohortMember, HttpStatus.OK, "Cohort Member Updated successfully.");
@@ -422,7 +459,6 @@ export class PostgresCohortMembersService {
       return APIResponse.error(res, apiId, "Internal Server Error", errorMessage, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
-
 
   public async deleteCohortMemberById(
     tenantid: any,
@@ -451,5 +487,124 @@ export class PostgresCohortMembersService {
       const errorMessage = e.message || 'Internal server error';
       return APIResponse.error(res, apiId, "Internal Server Error", errorMessage, HttpStatus.INTERNAL_SERVER_ERROR);
     }
+  }
+
+  public async checkUserExist(userId) {
+    const existUser = await this.usersRepository.findOne({
+      where: {
+        userId: userId,
+      }
+    })
+    if (!existUser) {
+      return false;
+    }
+    return existUser;
+  }
+
+  public async checkCohortExist(cohortId) {
+
+    const existCohort = await this.cohortRepository.findOne({
+      where: {
+        cohortId: cohortId
+      }
+    })
+    if (!existCohort) {
+      return false;
+    }
+    return existCohort;
+  }
+
+  public async cohortUserMapping(userId, cohortId) {
+    const mappingExist = await this.cohortMembersRepository.findOne({
+      where: {
+        userId: userId,
+        cohortId: cohortId,
+      }
+    })
+    if (!mappingExist) {
+      return false;
+    }
+    return mappingExist;
+  }
+
+  public async createBulkCohortMembers(
+    loginUser: any,
+    cohortMembersDto: { userId: string[], cohortId: string[], removeCohortId?: string[] },
+    response: Response,
+    tenantId: string
+  ) {
+    const results = [];
+    const errors = [];
+    const cohortMembersBase = {
+      createdBy: loginUser,
+      updatedBy: loginUser,
+      tenantId: tenantId
+    };
+
+    for (let userId of cohortMembersDto.userId) {
+      const userExists = await this.checkUserExist(userId);
+      if (!userExists) {
+        errors.push(`User with userId ${userId} does not exist.`);
+        continue;
+      }
+
+      // Handling of Removing Cohort from user
+      if (cohortMembersDto.removeCohortId && cohortMembersDto.removeCohortId.length > 0) {
+        for (let removeCohortId of cohortMembersDto.removeCohortId) {
+          try {
+            const cohortExists = await this.checkCohortExist(removeCohortId);
+            if (!cohortExists) {
+              errors.push(`Cohort with cohortId ${removeCohortId} does not exist.`);
+              continue;
+            }
+            const updateCohort = await this.cohortMembersRepository.update({ userId, cohortId: removeCohortId }, { status: MemberStatus.ARCHIVED });
+            if (updateCohort.affected === 0) {
+              results.push({ message: `Cohort Id ${removeCohortId} is not mapped to user Id${userId}} ` });
+            } else {
+              results.push({ message: `Cohort Id ${removeCohortId} status updated for This user Id${userId}} ` });
+            }
+          } catch (error) {
+            errors.push(`Error updating cohort member with userId ${userId} and cohortId ${removeCohortId}: ${error.message}`);
+          }
+        }
+      }
+
+      // Handling of Addition of User in Cohort
+      for (let cohortId of cohortMembersDto.cohortId) {
+        const cohortMembers = {
+          ...cohortMembersBase,
+          userId: userId,
+          cohortId: cohortId
+        };
+        try {
+          const cohortExists = await this.checkCohortExist(cohortId);
+          if (!cohortExists) {
+            errors.push(`Cohort with cohortId ${cohortId} does not exist.`);
+            continue;
+          }
+          const mappingExists = await this.cohortUserMapping(userId, cohortId);
+          if (mappingExists) {
+            if (mappingExists.status === MemberStatus.ACTIVE) {
+              errors.push(`Mapping already exists for userId ${userId} and cohortId ${cohortId}.`);
+              continue;
+            } else if (mappingExists.status === MemberStatus.ARCHIVED) {
+              const updateCohort = await this.cohortMembersRepository.update({ userId, cohortId }, { status: MemberStatus.ACTIVE });
+              results.push(updateCohort);
+              continue;
+            }
+          }
+          const result = await this.cohortMembersRepository.save(cohortMembers);
+          results.push(result);
+        } catch (error) {
+          errors.push(`Error saving cohort member with userId ${userId} and cohortId ${cohortId}: ${error.message}`);
+        }
+      }
+    }
+
+    if (errors.length > 0) {
+      return APIResponse.success(response, APIID.COHORT_MEMBER_CREATE, { results, errors }, HttpStatus.CREATED, "Cohort Members Created with some errors");
+    }
+
+    return APIResponse.success(response, APIID.COHORT_MEMBER_CREATE, results, HttpStatus.CREATED, "Cohort Members Created Successfully");
   }
 }

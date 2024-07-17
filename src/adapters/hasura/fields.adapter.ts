@@ -10,7 +10,6 @@ import { FieldValuesSearchDto } from "src/fields/dto/field-values-search.dto";
 import { IServicelocatorfields } from "../fieldsservicelocator";
 import { UserDto } from "src/user/dto/user.dto";
 export const HasuraFieldsToken = "HasuraFields";
-
 import { FieldsService } from "./services/fields.service";
 
 @Injectable()
@@ -18,11 +17,14 @@ export class HasuraFieldsService implements IServicelocatorfields {
   constructor(
     private httpService: HttpService,
     private fieldsService: FieldsService
-  ) {}
+  ) { }
+  getFormCustomField(requiredData: any, response: any) {
+    throw new Error("Method not implemented.");
+  }
 
   //fields
   public async createFields(request: any, fieldsDto: FieldsDto) {
-    const response = await this.fieldsService.createFields(request,fieldsDto);
+    const response = await this.fieldsService.createFields(request, fieldsDto);
     if (response?.data?.errors) {
       return new ErrorResponse({
         errorCode: response?.data?.errors[0]?.extensions?.code,
@@ -107,7 +109,7 @@ export class HasuraFieldsService implements IServicelocatorfields {
 
   //field values
   public async createFieldValues(request: any, fieldValuesDto: FieldValuesDto) {
-    const response = await this.fieldsService.createFieldValues(request,fieldValuesDto);
+    const response = await this.fieldsService.createFieldValues(request, fieldValuesDto);
     if (response?.data?.errors) {
       return new ErrorResponse({
         errorCode: response?.data?.errors[0]?.extensions?.code,
@@ -240,4 +242,6 @@ export class HasuraFieldsService implements IServicelocatorfields {
 
     return fieldValuesResponse;
   }
+
+  public async getFieldOptions() { }
 }

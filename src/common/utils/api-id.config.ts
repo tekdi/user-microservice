@@ -37,5 +37,6 @@ export const APIID = {
     LOGIN: "api.login",
     LOGOUT: "api.logout",
     REFRESH: "api.refresh",
-    USER_AUTH: "api.user.auth"
+    USER_AUTH: "api.user.auth",
+    RBAC_TOKEN: "api.rbac.token"
 }

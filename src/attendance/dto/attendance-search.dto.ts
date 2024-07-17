@@ -101,7 +101,7 @@ export class AttendanceSearchDto {
     type: Number,
     description: "number",
   })
-  page: number;
+  offset: number;
 
   @ApiPropertyOptional({
     type: AttendanceFiltersDto,

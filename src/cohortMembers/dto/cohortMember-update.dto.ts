@@ -1,7 +1,7 @@
 import { Exclude, Expose } from "class-transformer";
 import { ApiProperty } from "@nestjs/swagger";
-import { IsOptional } from "class-validator";
-
+import { IsEnum, IsOptional, IsString, ValidateIf } from "class-validator";
+import { MemberStatus } from "../entities/cohort-member.entity";
 export class CohortMembersUpdateDto {
   @Expose()
   tenantId: string;
@@ -20,7 +20,6 @@ export class CohortMembersUpdateDto {
   @ApiProperty({
     type: String,
     description: "The cohortId of the cohort members",
-    default: "",
   })
   @Expose()
   @IsOptional() // Marking as optional
@@ -29,24 +28,21 @@ export class CohortMembersUpdateDto {
   @ApiProperty({
     type: String,
     description: "The userId of the cohort members",
-    default: "",
   })
   @Expose()
   @IsOptional()
   userId?: string;
 
   @ApiProperty({
-    type: String,
-    description: "The role of the cohort members",
-    default: "",
+    enum: MemberStatus,
+    description: "The status of the cohort members",
   })
-  @Expose()
-  role: string;
+  @IsEnum(MemberStatus)
+  status: string;
 
   @ApiProperty({
     type: String,
     description: "The createdBy of the cohort members",
-    default: "",
   })
   @Expose()
   @IsOptional()
@@ -55,11 +51,18 @@ export class CohortMembersUpdateDto {
   @ApiProperty({
     type: String,
     description: "The updatedBy of the cohort members",
-    default: "",
   })
   @Expose()
   @IsOptional()
   updatedBy?: string;
+
+  @ApiProperty({
+    type: String,
+    description: "The status change reason",
+  })
+  @ValidateIf(o => o.status === MemberStatus.DROPOUT)
+  @IsString({ message: 'Reason is mandatory while dropping out a member' })
+  statusReason?: string;
 
   constructor(obj: any) {
     Object.assign(this, obj);

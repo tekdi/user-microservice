@@ -56,12 +56,12 @@ export class AuthService {
   
 
 
-  public async getUserByAuth(request: any, response:Response) {
+  public async getUserByAuth(request: any, tenantId,response:Response) {
     let apiId = APIID.USER_AUTH;
     try {
       const decoded: any = jwt_decode(request.headers.authorization);
       const username = decoded.preferred_username;
-      const data = await this.useradapter.buildUserAdapter().findUserDetails(null, username); 
+      const data = await this.useradapter.buildUserAdapter().findUserDetails(null, username,tenantId); 
 
       return APIResponse.success(response, apiId, data,
         HttpStatus.OK, "User fetched by auth token Successfully.")

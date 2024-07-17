@@ -12,11 +12,10 @@ export interface IServicelocator {
   //   accessRole?: string,
   //   request?: any,
   // );
-  getUsersDetailsById(userData: UserData, response:any);
-  getUsersDetailsByCohortId(userData: Record<string, string>, response:any);
-  updateUser(userDto?: any,response?: any);
+  getUsersDetailsById(userData: UserData, response: any);
+  updateUser(userDto?: any, response?: any);
   createUser(request: any, userDto: UserCreateDto, response: Response);
-  findUserDetails(userID:any,username:String)
+  findUserDetails(userID: any, username: String,tenantId?: string)
   searchUser(
     tenantId: string,
     request: any,
@@ -24,7 +23,7 @@ export interface IServicelocator {
     userSearchDto: UserSearchDto
   );
   resetUserPassword(request: any, username: string, newPassword: string, response: Response);
-  checkUser(body:any,response);
+  checkUser(body: any, response);
   deleteUserById(userId: string, response: Response): Promise<any>;
 
 }

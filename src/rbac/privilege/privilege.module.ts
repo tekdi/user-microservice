@@ -3,7 +3,7 @@ import { PrivilegeController } from './privilege.controller';
 import { Privilege } from './entities/privilege.entity';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { HttpModule } from '@nestjs/axios';
-import { PostgresModule } from 'src/adapters/postgres/potsgres-module';
+import { PostgresModule } from 'src/adapters/postgres/postgres-module';
 import { HasuraModule } from 'src/adapters/hasura/hasura.module';
 import { PrivilegeAdapter } from './privilegeadapter';
 import { HasuraPrivilegeService } from 'src/adapters/hasura/rbac/privilege.adapter';

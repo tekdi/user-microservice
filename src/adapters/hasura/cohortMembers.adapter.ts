@@ -13,6 +13,9 @@ export class HasuraCohortMembersService
   implements IServicelocatorcohortMembers
 {
   constructor(private httpService: HttpService) {}
+  createBulkCohortMembers(loginUser: any, cohortMembersDto: any, response: any, tenantId: any) {
+    throw new Error("Method not implemented.");
+  }
 
   public async createCohortMembers(
     request: any,

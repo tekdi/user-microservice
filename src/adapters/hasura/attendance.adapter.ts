@@ -16,12 +16,12 @@ export const ShikshaAttendanceToken = "ShikshaAttendance";
 export class AttendanceHasuraService implements IServicelocator {
   axios = require("axios");
 
-  constructor(private httpService: HttpService) {}
+  constructor(private httpService: HttpService) { }
   public async attendanceReport(attendanceStatsDto: any) {
-    
+
   }
   public async updateAttendanceRecord(request: any, attendanceDto: any) {
-    
+
   }
   public async getAttendance(
     tenantId: string,
@@ -77,7 +77,7 @@ export class AttendanceHasuraService implements IServicelocator {
   }
 
   public async createAttendance(request: any, attendanceDto: AttendanceDto) {
-    try{
+    try {
       let query = "";
       Object.keys(attendanceDto).forEach((e) => {
         if (attendanceDto[e] && attendanceDto[e] != "") {
@@ -122,7 +122,7 @@ export class AttendanceHasuraService implements IServicelocator {
         message: "Ok.",
         data: result,
       });
-    }catch (e) {
+    } catch (e) {
       console.error(e);
       return e;
     }
@@ -133,7 +133,7 @@ export class AttendanceHasuraService implements IServicelocator {
     request: any,
     attendanceDto: AttendanceDto
   ) {
-    try{
+    try {
       const attendanceSchema = new AttendanceDto(attendanceDto);
 
       let query = "";
@@ -188,7 +188,7 @@ export class AttendanceHasuraService implements IServicelocator {
         message: "Ok. Updated Successfully",
         data: result,
       });
-    }catch (e) {
+    } catch (e) {
       console.error(e);
       return e;
     }
@@ -199,12 +199,15 @@ export class AttendanceHasuraService implements IServicelocator {
     request: any,
     attendanceSearchDto: AttendanceSearchDto
   ) {
-    try{
-      let offset = 0;
-      if (attendanceSearchDto.page > 1) {
-        offset =
-          (attendanceSearchDto.limit) * (attendanceSearchDto.page - 1);
-      }
+    try {
+      let { limit, offset, filters, facets, sort } = attendanceSearchDto;
+      // let offset = 0;
+      limit = limit ? limit : 20;
+      offset = offset ? offset : 0;
+      // if (attendanceSearchDto.page > 1) {
+      //   offset =
+      //     (attendanceSearchDto.limit) * (attendanceSearchDto.page - 1);
+      // }
 
       attendanceSearchDto.filters["tenantId"] = tenantId ? tenantId : "";
       Object.keys(attendanceSearchDto.filters).forEach((item) => {
@@ -286,7 +289,7 @@ export class AttendanceHasuraService implements IServicelocator {
         data: mappedResponse,
       });
 
-    }catch (e) {
+    } catch (e) {
       console.error(e);
       return e;
     }
@@ -298,12 +301,12 @@ export class AttendanceHasuraService implements IServicelocator {
     request: any,
     attendanceSearchDto: AttendanceDateDto
   ) {
-    try{
+    try {
       let offset = 0;
-      if (attendanceSearchDto.page > 1) {
-        offset =
-          parseInt(attendanceSearchDto.limit) * (attendanceSearchDto.page - 1);
-      }
+      // if (attendanceSearchDto.page > 1) {
+      //   offset =
+      //     parseInt(attendanceSearchDto.limit) * (attendanceSearchDto.page - 1);
+      // }
 
       const filters = attendanceSearchDto.filters;
 
@@ -346,7 +349,7 @@ export class AttendanceHasuraService implements IServicelocator {
           fromDate: attendanceSearchDto.fromDate,
           toDate: attendanceSearchDto.toDate,
           filters: filters,
-          limit: parseInt(attendanceSearchDto.limit),
+          limit: attendanceSearchDto.limit,
           offset: offset,
         },
       };
@@ -380,7 +383,7 @@ export class AttendanceHasuraService implements IServicelocator {
         totalCount: mappedResponse?.length,
         data: mappedResponse,
       });
-    }catch (e) {
+    } catch (e) {
       console.error(e);
       return e;
     }

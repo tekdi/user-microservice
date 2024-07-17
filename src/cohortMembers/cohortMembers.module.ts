@@ -5,7 +5,7 @@ import { CohortMembersAdapter } from "./cohortMembersadapter";
 import { HasuraModule } from "src/adapters/hasura/hasura.module";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { CohortMembers } from "./entities/cohort-member.entity";
-import { PostgresModule } from "src/adapters/postgres/potsgres-module";
+import { PostgresModule } from "src/adapters/postgres/postgres-module";
 import { PostgresCohortMembersService } from "src/adapters/postgres/cohortMembers-adapter";
 import { HasuraCohortMembersService } from "src/adapters/hasura/cohortMembers.adapter";
 import { Fields } from "src/fields/entities/fields.entity";

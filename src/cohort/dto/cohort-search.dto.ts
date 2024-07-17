@@ -1,13 +1,13 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { IsBoolean, IsNotEmpty, IsNumber, IsNumberString, IsObject, IsOptional, IsString, IsUUID, ValidationArguments, ValidationOptions, registerDecorator } from "class-validator";
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsEnum, IsNotEmpty, IsNumber, IsNumberString, IsObject, IsOptional, IsString, IsUUID, ValidateIf, ValidationArguments, ValidationOptions, registerDecorator } from "class-validator";
 import { CohortDto } from "./cohort.dto";
 import { Expose } from "class-transformer";
 
-export class setFilters {
+export class filtersProperty {
   //userIdBy
   @ApiProperty({
     type: String,
-    description: "The cohort is createdBy",
+    description: "User Id",
     default: "",
   })
   @Expose()
@@ -19,7 +19,7 @@ export class setFilters {
   //cohortIdBy
   @ApiProperty({
     type: String,
-    description: "The cohort is createdBy",
+    description: "Cohort Id",
     default: "",
   })
   @Expose()
@@ -39,9 +39,26 @@ export class setFilters {
   @IsString()
   @IsNotEmpty()
   name?: string;
-}
 
+  //parentId
+  @ApiProperty({
+    type: [String],
+    description: "Parent Id",
+    default: [],
+  })
+  @Expose()
+  @IsOptional()
+  @IsArray()
+  @IsNotEmpty({ each: true })
+  @IsUUID(undefined, { each: true })
+  parentId?: string[];
+}
+enum SortDirection {
+  ASC = 'asc',
+  DESC = 'desc',
+}
 export class CohortSearchDto {
+
   @ApiProperty({
     type: Number,
     description: "Limit",
@@ -51,17 +68,33 @@ export class CohortSearchDto {
 
   @ApiProperty({
     type: Number,
-    description: "Page",
+    description: "Offset",
   })
   @IsNumber()
-  page: number;
+  offset: number;
 
   @ApiProperty({
-    type: setFilters,
+    type: filtersProperty,
     description: "Filters",
   })
   @IsObject()
-  filters: setFilters;
+  filters: filtersProperty;
+
+  @ApiPropertyOptional({
+    description: "Sort",
+    example: ["name", "asc"]
+  })
+  @IsArray()
+  @IsOptional()
+  @ArrayMinSize(2, { message: 'Sort array must contain exactly two elements' })
+  @ArrayMaxSize(2, { message: 'Sort array must contain exactly two elements' })
+  sort: [string, string];
+
+  @ValidateIf((o) => o.sort !== undefined)
+  @IsEnum(SortDirection, { each: true, message: 'Sort[1] must be either asc or desc' })
+  get sortDirection(): string | undefined {
+    return this.sort ? this.sort[1] : undefined;
+  }
 
   constructor(partial: Partial<CohortSearchDto>) {
     Object.assign(this, partial);

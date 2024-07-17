@@ -10,7 +10,7 @@ import {
 
 @Entity({ name: "Cohort" })
 export class Cohort {
-  @PrimaryGeneratedColumn('uuid')  
+  @PrimaryGeneratedColumn('uuid')
   cohortId: string;
 
   @Column({ nullable: true })
@@ -22,8 +22,8 @@ export class Cohort {
   @Column({ nullable: true })
   type: string;
 
-  @Column({ nullable: true })
-  status: boolean;
+  @Column()
+  status: string;
 
   @Column({ nullable: true })
   image: string;
