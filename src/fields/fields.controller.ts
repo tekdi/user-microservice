@@ -147,7 +147,8 @@ export class FieldsController {
 
 
   //Get Field Option
-  @Get("/getOptions/:fieldName")
+  // user/v1/fieldOptions / read / { fieldName }
+  @Get("/options/read/:fieldName")
   @UseGuards(JwtAuthGuard)
   @ApiBasicAuth("access-token")
   @ApiCreatedResponse({ description: "Field Options list." })
@@ -189,6 +190,6 @@ export class FieldsController {
       context: context || false,
       contextType: contextType || false
     }
-    return await this.fieldsAdapter.buildFieldsAdapter().getFormCustomField(requiredData ,response);
+    return await this.fieldsAdapter.buildFieldsAdapter().getFormCustomField(requiredData, response);
   }
 } 
