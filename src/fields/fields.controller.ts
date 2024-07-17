@@ -147,7 +147,6 @@ export class FieldsController {
 
 
   //Get Field Option
-  // user/v1/fieldOptions / read / { fieldName }
   @Get("/options/read/:fieldName")
   @UseGuards(JwtAuthGuard)
   @ApiBasicAuth("access-token")
