@@ -110,7 +110,11 @@ export class PostgresUserService implements IServicelocator {
           whereCondition += ` AND `
         }
         if (userKeys.includes(key)) {
-          whereCondition += ` U."${key}" = '${value}'`;
+          if (key === 'name') {
+            whereCondition += ` U."${key}" LIKE '%${value}%'`;
+          } else {
+            whereCondition += ` U."${key}" = '${value}  '`;
+          }
           index++;
         } else {
           if (key == 'role') {
@@ -122,8 +126,6 @@ export class PostgresUserService implements IServicelocator {
         }
       };
     }
-
-
 
     if (exclude && Object.keys(exclude).length > 0) {
       Object.entries(exclude).forEach(([key, value]) => {
