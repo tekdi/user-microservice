@@ -192,6 +192,7 @@ export class PostgresCohortService {
   ) {
     const query = `
     SELECT DISTINCT 
+      f."fieldId",
       f."label", 
       fv."value", 
       f."type", 
