@@ -16,6 +16,7 @@ import {
   getConnection,
   getRepository,
   In,
+  Like,
 } from "typeorm";
 import { Cohort } from "src/cohort/entities/cohort.entity";
 import { Fields } from "src/fields/entities/fields.entity";
@@ -208,7 +209,7 @@ export class PostgresCohortService {
     result = result.map(async (data) => {
       const originalValue = data.value;
       let processedValue = data.value;
-  
+
       if (data?.sourceDetails) {
         if (data.sourceDetails.source === "fieldparams") {
           data.fieldParams.options.forEach((option) => {
@@ -226,17 +227,17 @@ export class PostgresCohortService {
           }
         }
       }
-  
+
       delete data.fieldParams;
       delete data.sourceDetails;
-      
+
       return {
         ...data,
         value: processedValue,
         code: originalValue
       };
     });
-  
+
     result = await Promise.all(result);
     return result;
   }
@@ -565,7 +566,11 @@ export class PostgresCohortService {
             if (value === "") {
               emptyValueKeys[key] = value;
               emptyKeysString += (emptyKeysString ? ", " : "") + key;
-            } else {
+            }
+            else if (key === 'name') {
+              whereClause[key] = Like(`%${value}%`);
+            }
+            else {
               whereClause[key] = value;
             }
           }
@@ -642,7 +647,8 @@ export class PostgresCohortService {
           cohortAllData["customFields"] = customFieldsData;
           results.cohortDetails.push(cohortAllData);
         }
-      } else {
+      }
+      else {
         const [data, totalcount] = await this.cohortRepository.findAndCount({
           where: whereClause,
           skip: offset,
