@@ -112,8 +112,9 @@ export class PostgresUserService implements IServicelocator {
         if (userKeys.includes(key)) {
           if (key === 'name') {
             whereCondition += ` U."${key}" LIKE '%${value}%'`;
-          } else {
-            whereCondition += ` U."${key}" = '${value}  '`;
+          }
+          else {
+            whereCondition += ` U."${key}" = '${value}'`;
           }
           index++;
         } else {
