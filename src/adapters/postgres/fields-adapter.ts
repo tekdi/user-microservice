@@ -919,7 +919,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
                 name: field.name,
                 type: field.type,
                 coreField: 0,
-                isRequired: field?.fieldAttributes?.required,
+                isRequired: field?.fieldAttributes?.isRequired || false,
                 isEditable: field.fieldAttributes?.isEditable ?? null,
                 isPIIField: field.fieldAttributes?.isPIIField ?? null,
                 placeholder: field.fieldAttributes?.placeholder ?? '',
