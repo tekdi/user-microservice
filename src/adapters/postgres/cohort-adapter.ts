@@ -338,7 +338,6 @@ export class PostgresCohortService {
         "Cohort Created Successfully."
       );
     } catch (error) {
-      console.log(error, "error");
       const errorMessage = error.message || "Internal server error";
       return APIResponse.error(
         res,

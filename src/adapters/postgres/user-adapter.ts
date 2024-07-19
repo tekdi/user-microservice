@@ -449,9 +449,15 @@ export class PostgresUserService implements IServicelocator {
           : ['email']
       })
 
+      let customFieldError;
       if (userCreateDto.customFields && userCreateDto.customFields.length > 0) {
-        await this.validateCustomField(userCreateDto, response, apiId);
+        customFieldError = await this.validateCustomField(userCreateDto, response, apiId);
+
+        if (customFieldError) {
+          return APIResponse.error(response, apiId, "BAD_REQUEST", `${customFieldError}`, HttpStatus.BAD_REQUEST);
+        }
       }
+
 
 
       // check and validate all fields
@@ -867,10 +873,14 @@ export class PostgresUserService implements IServicelocator {
     let encounteredKeys = [];
     let invalidateFields = [];
     let duplicateFieldKeys = [];
-
+    let error = '';
     for (const fieldsData of fieldValues) {
       const fieldId = fieldsData['fieldId'];
       let getFieldDetails: any = await this.fieldsService.getFieldByIdes(fieldId)
+
+      if (getFieldDetails == null) {
+        return error = 'Field not found';
+      }
 
       if (encounteredKeys.includes(fieldId)) {
         duplicateFieldKeys.push(`${fieldId} - ${getFieldDetails['name']}`)
@@ -890,7 +900,6 @@ export class PostgresUserService implements IServicelocator {
       } else {
         getFieldDetails['fieldParams'] = getFieldDetails.fieldParams;
       }
-      console.log(getFieldDetails);
 
       let checkValidation = this.fieldsService.validateFieldValue(getFieldDetails, fieldsData['value'])
 
@@ -902,12 +911,12 @@ export class PostgresUserService implements IServicelocator {
 
     //Validation for duplicate fields
     if (duplicateFieldKeys.length > 0) {
-      return APIResponse.error(response, apiId, "Bad Request", `Duplicate fieldId detected: ${duplicateFieldKeys}`, HttpStatus.BAD_REQUEST);
+      return error = `Duplicate fieldId detected: ${duplicateFieldKeys}`;
     }
 
     //Validation for fields values
     if (invalidateFields.length > 0) {
-      return APIResponse.error(response, apiId, "Bad Request", `Invalid fields found: ${invalidateFields}`, HttpStatus.BAD_REQUEST);
+      return error = `Invalid fields found: ${invalidateFields}`;
     }
 
     //Verifying whether these fields correspond to their respective roles.
@@ -934,9 +943,7 @@ export class PostgresUserService implements IServicelocator {
 
 
     if (invalidFieldIds.length > 0) {
-      return APIResponse.error(response, apiId, 'Bad Request', `The following fields are not valid for this user: ${invalidFieldIds.join(', ')}.`,
-        HttpStatus.BAD_REQUEST
-      );
+      return error = `The following fields are not valid for this user: ${invalidFieldIds.join(', ')}.`;
     }
 
   }

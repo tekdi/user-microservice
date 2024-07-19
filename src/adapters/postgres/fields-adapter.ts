@@ -102,10 +102,18 @@ export class PostgresFieldsService implements IServicelocatorfields {
         let encounteredKeys = [];
         let invalidateFields = [];
         let duplicateFieldKeys = [];
+        let error = '';
 
         for (const fieldsData of fieldValues) {
             const fieldId = fieldsData['fieldId'];
             let getFieldDetails: any = await this.getFieldByIdes(fieldId);
+
+            if (getFieldDetails == null) {
+                return {
+                    isValid: false,
+                    error: `Field not found`,
+                }
+            }
 
             if (encounteredKeys.includes(fieldId)) {
                 duplicateFieldKeys.push(`${fieldId} - ${getFieldDetails['name']}`);
