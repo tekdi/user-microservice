@@ -461,7 +461,6 @@ export class PostgresUserService implements IServicelocator {
         return APIResponse.error(response, apiId, "BAD_REQUEST", `${validatedRoles}`, HttpStatus.BAD_REQUEST);
       }
 
-      // if (validatedRoles.length) {
       userCreateDto.username = userCreateDto.username.toLocaleLowerCase();
       const userSchema = new UserCreateDto(userCreateDto);
 
