@@ -449,15 +449,24 @@ export class PostgresUserService implements IServicelocator {
           : ['email']
       })
 
+      let customFieldError;
       if (userCreateDto.customFields && userCreateDto.customFields.length > 0) {
-        await this.validateCustomField(userCreateDto, response, apiId);
+        customFieldError = await this.validateCustomField(userCreateDto, response, apiId);
+
+        if (customFieldError) {
+          return APIResponse.error(response, apiId, "BAD_REQUEST", `${customFieldError}`, HttpStatus.BAD_REQUEST);
+        }
       }
 
 
-      // check and validate all fields
-      let validatedRoles = await this.validateRequestBody(userCreateDto, response, apiId)
 
-      // if (validatedRoles.length) {
+      // check and validate all fields
+      let validatedRoles = await this.validateRequestBody(userCreateDto)
+
+      if (validatedRoles) {
+        return APIResponse.error(response, apiId, "BAD_REQUEST", `${validatedRoles}`, HttpStatus.BAD_REQUEST);
+      }
+
       userCreateDto.username = userCreateDto.username.toLocaleLowerCase();
       const userSchema = new UserCreateDto(userCreateDto);
 
@@ -539,29 +548,31 @@ export class PostgresUserService implements IServicelocator {
     }
   }
 
-  async validateRequestBody(userCreateDto, response, apiId) {
+
+  async validateRequestBody(userCreateDto) {
     const roleData = [];
     let duplicateTenet = [];
 
+    let error = [];
     for (const [key, value] of Object.entries(userCreateDto)) {
       if (key === 'email') {
         const checkValidEmail = CustomFieldsValidation.validate('email', userCreateDto.email);
         if (!checkValidEmail) {
-          return APIResponse.error(response, apiId, "BAD_REQUEST", `Invalid email address`, HttpStatus.BAD_REQUEST);
+          error.push(`Invalid email address`);
         }
       }
 
       if (key === 'mobile') {
         const checkValidMobile = CustomFieldsValidation.validate('mobile', userCreateDto.mobile);
         if (!checkValidMobile) {
-          return APIResponse.error(response, apiId, "BAD_REQUEST", `Mobile number must be 10 digits long`, HttpStatus.BAD_REQUEST);
+          error.push(`Mobile number must be 10 digits long`);
         }
       }
 
       if (key === 'dob') {
         const checkValidDob = CustomFieldsValidation.validate('date', userCreateDto.dob);
         if (!checkValidDob) {
-          return APIResponse.error(response, apiId, "BAD_REQUEST", `Date of birth must be in the format yyyy-mm-dd`, HttpStatus.BAD_REQUEST);
+          error.push(`Date of birth must be in the format yyyy-mm-dd`);
         }
       }
     }
@@ -573,11 +584,11 @@ export class PostgresUserService implements IServicelocator {
         const { tenantId, cohortId, roleId } = tenantCohortRoleMapping;
 
         if (duplicateTenet.includes(tenantId)) {
-          return APIResponse.error(response, apiId, "Bad Request", "Duplicate tenantId detected. Please ensure each tenantId is unique and correct your data.", HttpStatus.BAD_REQUEST);
+          error.push("Duplicate tenantId detected. Please ensure each tenantId is unique and correct your data.");
         }
 
         if ((tenantId && !roleId) || (!tenantId && roleId)) {
-          return APIResponse.error(response, apiId, "Bad Request", "Invalid parameters provided. Please ensure that tenantId, roleId, and cohortId (if applicable) are correctly provided.", HttpStatus.BAD_REQUEST);
+          error.push("Invalid parameters provided. Please ensure that tenantId, roleId, and cohortId (if applicable) are correctly provided.");
         }
 
         const [tenantExists, cohortExists, roleExists] = await Promise.all([
@@ -587,21 +598,19 @@ export class PostgresUserService implements IServicelocator {
         ]);
 
         if (tenantExists.length === 0) {
-          return APIResponse.error(response, apiId, "Bad Request", `Tenant Id '${tenantId}' does not exist.`, HttpStatus.BAD_REQUEST);
+          error.push(`Tenant Id '${tenantId}' does not exist.`);
         }
 
         if (cohortExists) {
-          return APIResponse.error(response, apiId, "Bad Request", `Cohort Id '${cohortExists}' does not exist for this tenant '${tenantId}'.`, HttpStatus.BAD_REQUEST);
+          error.push(`Cohort Id '${cohortExists}' does not exist for this tenant '${tenantId}'.`);
         }
 
-        if (roleExists.length === 0) {
-          return APIResponse.error(response, apiId, "Bad Request", `Role Id '${roleId}' does not exist for this tenant '${tenantId}'.`, HttpStatus.BAD_REQUEST);
+        if (roleExists && roleExists?.length === 0) {
+          error.push(`Role Id '${roleId}' does not exist for this tenant '${tenantId}'.`);
         }
-        duplicateTenet.push(tenantId);
-        roleData.push(...roleExists)
       }
-      if (roleData.length > 0) {
-        return roleData;
+      if (error.length > 0) {
+        return error;
       }
     } else {
       return false;
@@ -864,15 +873,32 @@ export class PostgresUserService implements IServicelocator {
     let encounteredKeys = [];
     let invalidateFields = [];
     let duplicateFieldKeys = [];
-
+    let error = '';
     for (const fieldsData of fieldValues) {
       const fieldId = fieldsData['fieldId'];
-      let getFieldDetails = await this.fieldsService.getFieldByIdes(fieldId)
+      let getFieldDetails: any = await this.fieldsService.getFieldByIdes(fieldId)
+
+      if (getFieldDetails == null) {
+        return error = 'Field not found';
+      }
 
       if (encounteredKeys.includes(fieldId)) {
         duplicateFieldKeys.push(`${fieldId} - ${getFieldDetails['name']}`)
       } else {
         encounteredKeys.push(fieldId)
+      }
+
+      if (getFieldDetails.sourceDetails.source == 'table') {
+        let getOption = await this.fieldsService.findDynamicOptions(getFieldDetails.sourceDetails.table);
+
+        const transformedFieldParams = {
+          options: getOption.map(param => ({ value: param.value, label: param.label }))
+        };
+        getFieldDetails['fieldParams'] = transformedFieldParams
+
+        // getFieldDetails['fieldParams'] = getOption
+      } else {
+        getFieldDetails['fieldParams'] = getFieldDetails.fieldParams;
       }
 
       let checkValidation = this.fieldsService.validateFieldValue(getFieldDetails, fieldsData['value'])
@@ -885,12 +911,12 @@ export class PostgresUserService implements IServicelocator {
 
     //Validation for duplicate fields
     if (duplicateFieldKeys.length > 0) {
-      return APIResponse.error(response, apiId, "Bad Request", `Duplicate fieldId detected: ${duplicateFieldKeys}`, HttpStatus.BAD_REQUEST);
+      return error = `Duplicate fieldId detected: ${duplicateFieldKeys}`;
     }
 
     //Validation for fields values
     if (invalidateFields.length > 0) {
-      return APIResponse.error(response, apiId, "Bad Request", `Invalid fields found: ${invalidateFields}`, HttpStatus.BAD_REQUEST);
+      return error = `Invalid fields found: ${invalidateFields}`;
     }
 
     //Verifying whether these fields correspond to their respective roles.
@@ -917,9 +943,7 @@ export class PostgresUserService implements IServicelocator {
 
 
     if (invalidFieldIds.length > 0) {
-      return APIResponse.error(response, apiId, 'Bad Request', `The following fields are not valid for this user: ${invalidFieldIds.join(', ')}.`,
-        HttpStatus.BAD_REQUEST
-      );
+      return error = `The following fields are not valid for this user: ${invalidFieldIds.join(', ')}.`;
     }
 
   }

@@ -102,15 +102,33 @@ export class PostgresFieldsService implements IServicelocatorfields {
         let encounteredKeys = [];
         let invalidateFields = [];
         let duplicateFieldKeys = [];
+        let error = '';
 
         for (const fieldsData of fieldValues) {
             const fieldId = fieldsData['fieldId'];
-            let getFieldDetails = await this.getFieldByIdes(fieldId);
+            let getFieldDetails: any = await this.getFieldByIdes(fieldId);
+
+            if (getFieldDetails == null) {
+                return {
+                    isValid: false,
+                    error: `Field not found`,
+                }
+            }
 
             if (encounteredKeys.includes(fieldId)) {
                 duplicateFieldKeys.push(`${fieldId} - ${getFieldDetails['name']}`);
             } else {
                 encounteredKeys.push(fieldId);
+            }
+
+            if (getFieldDetails.sourceDetails.source == 'table') {
+                let getOption = await this.findDynamicOptions(getFieldDetails.sourceDetails.table);
+                const transformedFieldParams = {
+                    options: getOption.map(param => ({ value: param.value, label: param.label }))
+                };
+                getFieldDetails['fieldParams'] = transformedFieldParams
+            } else {
+                getFieldDetails['fieldParams'] = getFieldDetails.fieldParams;
             }
 
             let checkValidation = this.validateFieldValue(getFieldDetails, fieldsData['value']);
