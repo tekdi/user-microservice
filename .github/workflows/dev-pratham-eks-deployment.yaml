@@ -16,6 +16,8 @@ jobs:
       uses: prompt/actions-commit-hash@v2
     - name: Check out code
       uses: actions/checkout@v2
+      with:
+        fetch-depth: 0 
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v1
       with:
@@ -34,6 +36,9 @@ jobs:
       run: |
            echo "Fetching all branches to ensure complete history"
            git fetch --all
+           echo "Checking out the current branch"
+           git checkout ${{ github.ref_name }}
+           echo "Git Branch cloned"
            git branch
            echo "Current 3 merge commits are:"
            git log --merges -n 3
