@@ -7,7 +7,6 @@ env:
   AWS_REGION: ${{ secrets.AWS_REGION_NAME }}
 jobs:
   build:
-    if: github.ref == 'refs/heads/release-1.0.0'
     name: Deployment
     runs-on: ubuntu-latest
     steps:
