@@ -32,8 +32,11 @@ jobs:
       run: echo "$ENV_FILE_CONTENT" > manifest/configmap.yaml
     - name: Show PWD and list content and Latest 3 commits 
       run: |
-           echo "Current 3 Commits are : "
-           git log -n 3
+           echo "Fetching all branches to ensure complete history"
+           git fetch --all
+           git branch
+           echo "Current 3 merge commits are:"
+           git log --merges -n 3
            pwd
            ls -ltra
     - name: Configure AWS credentials
