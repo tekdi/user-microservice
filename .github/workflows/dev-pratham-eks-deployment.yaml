@@ -33,7 +33,7 @@ jobs:
     - name: Show PWD and list content and Latest 3 commits 
       run: |
            echo "Current 3 Commits are : "
-           git log --merges -n 3
+           git log -n 3
            pwd
            ls -ltra
     - name: Configure AWS credentials
