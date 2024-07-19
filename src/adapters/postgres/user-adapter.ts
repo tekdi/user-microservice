@@ -867,13 +867,27 @@ export class PostgresUserService implements IServicelocator {
 
     for (const fieldsData of fieldValues) {
       const fieldId = fieldsData['fieldId'];
-      let getFieldDetails = await this.fieldsService.getFieldByIdes(fieldId)
+      let getFieldDetails: any = await this.fieldsService.getFieldByIdes(fieldId)
 
       if (encounteredKeys.includes(fieldId)) {
         duplicateFieldKeys.push(`${fieldId} - ${getFieldDetails['name']}`)
       } else {
         encounteredKeys.push(fieldId)
       }
+
+      if (getFieldDetails.sourceDetails.source == 'table') {
+        let getOption = await this.fieldsService.findDynamicOptions(getFieldDetails.sourceDetails.table);
+
+        const transformedFieldParams = {
+          options: getOption.map(param => ({ value: param.value, label: param.label }))
+        };
+        getFieldDetails['fieldParams'] = transformedFieldParams
+
+        // getFieldDetails['fieldParams'] = getOption
+      } else {
+        getFieldDetails['fieldParams'] = getFieldDetails.fieldParams;
+      }
+      console.log(getFieldDetails);
 
       let checkValidation = this.fieldsService.validateFieldValue(getFieldDetails, fieldsData['value'])
 
