@@ -888,7 +888,7 @@ export class PostgresUserService implements IServicelocator {
         encounteredKeys.push(fieldId)
       }
 
-      if (getFieldDetails.sourceDetails.source == 'table') {
+      if ((getFieldDetails.type == 'checkbox' || getFieldDetails.type == 'drop_down' || getFieldDetails.type == 'radio') && getFieldDetails.sourceDetails.source == 'table') {
         let getOption = await this.fieldsService.findDynamicOptions(getFieldDetails.sourceDetails.table);
 
         const transformedFieldParams = {
