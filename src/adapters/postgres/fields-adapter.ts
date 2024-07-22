@@ -121,7 +121,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
                 encounteredKeys.push(fieldId);
             }
 
-            if (getFieldDetails.sourceDetails.source == 'table') {
+            if ((getFieldDetails.type == 'checkbox' || getFieldDetails.type == 'drop_down' || getFieldDetails.type == 'radio') && getFieldDetails.sourceDetails.source == 'table') {
                 let getOption = await this.findDynamicOptions(getFieldDetails.sourceDetails.table);
                 const transformedFieldParams = {
                     options: getOption.map(param => ({ value: param.value, label: param.label }))
