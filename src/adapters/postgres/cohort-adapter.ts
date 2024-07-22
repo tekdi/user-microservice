@@ -17,6 +17,7 @@ import {
   getRepository,
   In,
   Like,
+  ILike
 } from "typeorm";
 import { Cohort } from "src/cohort/entities/cohort.entity";
 import { Fields } from "src/fields/entities/fields.entity";
@@ -556,7 +557,7 @@ export class PostgresCohortService {
               emptyKeysString += (emptyKeysString ? ", " : "") + key;
             }
             else if (key === 'name') {
-              whereClause[key] = Like(`%${value}%`);
+              whereClause[key] = ILike(`%${value}%`);
             }
             else {
               whereClause[key] = value;
