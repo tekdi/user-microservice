@@ -247,15 +247,6 @@ export class PostgresFieldsService implements IServicelocatorfields {
                 delete fieldsData.fieldParams;
             }
 
-            if (fieldsData.sourceDetails && fieldsData?.sourceDetails?.source == 'fieldparams') {
-                for (let sourceFieldName of fieldsData.fieldParams.options) {
-                    if (fieldsData.dependsOn && (!sourceFieldName['controllingfieldfk'] || sourceFieldName['controllingfieldfk'] === '')) {
-                        storeWithoutControllingField.push(sourceFieldName['name'])
-                    }
-
-                }
-            }
-
             if (storeWithoutControllingField.length > 0) {
                 let wrongControllingField = storeWithoutControllingField.join(',')
                 error = `Wrong Data: ${wrongControllingField} This field is dependent on another field and cannot be created without specifying the controllingfieldfk.`
@@ -312,6 +303,25 @@ export class PostgresFieldsService implements IServicelocatorfields {
                     }
                 }
                 delete fieldsData.fieldParams;
+            }
+
+            if (fieldsData.sourceDetails && fieldsData?.sourceDetails?.source == 'fieldparams') {
+                // console.log("hii");
+
+                for (let sourceFieldName of fieldsData.fieldParams.options) {
+                    if (fieldsData.dependsOn && (!sourceFieldName['controllingfieldfk'] || sourceFieldName['controllingfieldfk'] === '')) {
+                        storeWithoutControllingField.push(sourceFieldName['name'])
+                    }
+
+
+                    const query = `SELECT COUNT(*) FROM public."Fields" WHERE "fieldParams" -> 'options' @> '[{"value": "${sourceFieldName['value']}"}]' `;
+                    let checkSourceData = await this.fieldsRepository.query(query);
+
+                    if (checkSourceData[0].count == 0) {
+                        let addFieldParamsValue = await this.  
+                    }
+
+                }
             }
 
             if (storeWithoutControllingField.length > 0) {
