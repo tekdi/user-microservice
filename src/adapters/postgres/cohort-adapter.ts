@@ -537,7 +537,7 @@ export class PostgresCohortService {
         );
       }
 
-      const allowedKeys = ["userId", "cohortId", "name", "parentId"];
+      const allowedKeys = ["userId", "cohortId", "name", "parentId", "type"];
       const whereClause = {};
 
       if (filters && Object.keys(filters).length > 0) {
@@ -617,23 +617,25 @@ export class PostgresCohortService {
           await this.cohortMembersRepository.findAndCount({
             where: whereClause,
             skip: offset,
-            order,
           });
         const userExistCohortGroup = data.slice(offset, offset + limit);
         count = totalCount;
 
-        for (let data of userExistCohortGroup) {
-          let cohortAllData = await this.cohortRepository.findOne({
-            where: {
-              cohortId: data?.cohortId,
-            },
-          });
+        let cohortIds = userExistCohortGroup.map(cohortId => cohortId.cohortId);
 
+        let cohortAllData = await this.cohortRepository.find({
+          where: {
+            cohortId: In(cohortIds),
+          },
+          order,
+        });
+
+        for (let data of cohortAllData) {
           let customFieldsData = await this.getCohortDataWithCustomfield(
             data.cohortId
           );
-          cohortAllData["customFields"] = customFieldsData;
-          results.cohortDetails.push(cohortAllData);
+          data["customFields"] = customFieldsData;
+          results.cohortDetails.push(data);
         }
       }
       else {

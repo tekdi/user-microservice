@@ -52,6 +52,18 @@ export class filtersProperty {
   @IsNotEmpty({ each: true })
   @IsUUID(undefined, { each: true })
   parentId?: string[];
+
+  //type
+  @ApiProperty({
+    type: String,
+    description: "The type of the cohort",
+    default: "",
+  })
+  @Expose()
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  type?: string;
 }
 enum SortDirection {
   ASC = 'asc',
