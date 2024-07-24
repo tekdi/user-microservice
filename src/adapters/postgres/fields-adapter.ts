@@ -363,28 +363,6 @@ export class PostgresFieldsService implements IServicelocatorfields {
 
     }
 
-    async deleteOptionsInFieldParams(fieldId: string, newParams: any) {
-        const existingField: any = await this.fieldsRepository.findOne({
-            where: { fieldId },
-        });
-
-
-        if (existingField) {
-            // Directly manipulate the fieldParams assuming it's already parsed JSON (handled by TypeORM)
-            if (existingField.fieldParams.options) {
-                existingField.fieldParams.options = existingField.fieldParams.options.filter(option => option.name !== newParams);
-            }
-
-            // Save the updated field back to the repository
-            await this.fieldsRepository.save(existingField);
-
-            console.log(existingField.fieldParams);
-        } else {
-            console.log('Field not found');
-        }
-
-    }
-
     async createSourceDetailsTableFields(tableName: string, name: string, value: string, controllingfieldfk?: string, dependsOn?: string) {
         let createSourceFields = `INSERT INTO public.${tableName} (name, value`;
 
@@ -801,12 +779,10 @@ export class PostgresFieldsService implements IServicelocatorfields {
     public async deleteFieldOptions(requiredData, response) {
         const apiId = APIID.FIELD_OPTIONS_DELETE;
         try {
-
-            const result = requiredData
+            let result;
             const condition: any = {
                 name: requiredData.fieldName,
             };
-
 
             let removeOption = requiredData.option !== null ? requiredData.option : null;
             condition.context = requiredData.context !== null ? requiredData.context : In([null, 'null', 'NULL']);
@@ -837,7 +813,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
                         }
                         fieldParamsData = fieldParamsOptions.length > 0 ? { options: fieldParamsOptions } : null
 
-                        await this.fieldsRepository.update({ fieldId: getField.fieldId }, { fieldParams: fieldParamsData });
+                        result = await this.fieldsRepository.update({ fieldId: getField.fieldId }, { fieldParams: fieldParamsData });
 
                     } else {
                         return await APIResponse.error(response, apiId, `Fields option not found`, `Fields option not found`, (HttpStatus.NOT_FOUND))
@@ -845,9 +821,8 @@ export class PostgresFieldsService implements IServicelocatorfields {
 
                 }
             }
-
             return await APIResponse.success(response, apiId, result,
-                HttpStatus.OK, 'Field Values deleted successfully.')
+                HttpStatus.OK, 'Field Options deleted successfully.')
         } catch (e) {
             const errorMessage = e?.message || 'Something went wrong';
             return APIResponse.error(response, apiId, "Internal Server Error", `Error : ${errorMessage}`, HttpStatus.INTERNAL_SERVER_ERROR)
