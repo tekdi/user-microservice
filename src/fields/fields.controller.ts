@@ -23,6 +23,7 @@ import {
   UsePipes,
   ValidationPipe,
   Patch,
+  Delete,
 } from "@nestjs/common";
 import { FieldsSearchDto } from "./dto/fields-search.dto";
 import { Request } from "@nestjs/common";
@@ -177,6 +178,36 @@ export class FieldsController {
     @Res() response: Response
   ) {
     return await this.fieldsAdapter.buildFieldsAdapter().getFieldOptions(request, fieldName, controllingfieldfk, context, contextType, response);
+  }
+
+  //Delete Field Option
+  @Delete("/options/delete/:fieldName")
+  @UseGuards(JwtAuthGuard)
+  @ApiBasicAuth("access-token")
+  @ApiCreatedResponse({ description: "Field Options Delete." })
+  @ApiForbiddenResponse({ description: "Forbidden" })
+  @SerializeOptions({
+    strategy: "excludeAll",
+  })
+  @ApiQuery({ name: 'context', required: null })
+  @ApiQuery({ name: 'option', required: null })
+  @ApiQuery({ name: 'contextType', required: null })
+  public async deleteFieldOptions(
+    @Headers() headers,
+    @Req() request: Request,
+    @Param('fieldName') fieldName: string,
+    @Query("option") option: string | null = null,
+    @Query("context") context: string | null = null,
+    @Query("contextType") contextType: string | null = null,
+    @Res() response: Response
+  ) {
+    let requiredData = {
+      fieldName: fieldName || null,
+      option: option || null,
+      context: context || null,
+      contextType: contextType || null
+    }
+    return await this.fieldsAdapter.buildFieldsAdapter().deleteFieldOptions(requiredData, response);
   }
 
   @Get("/formFields")

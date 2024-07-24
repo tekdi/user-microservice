@@ -244,4 +244,5 @@ export class HasuraFieldsService implements IServicelocatorfields {
   }
 
   public async getFieldOptions() { }
+  public async deleteFieldOptions() { }
 }
