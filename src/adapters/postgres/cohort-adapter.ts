@@ -539,7 +539,7 @@ export class PostgresCohortService {
       }
 
       //Get all cohorts fields
-      const userAllKeys = this.cohortRepository.metadata.columns.map(
+      const cohortAllKeys = this.cohortRepository.metadata.columns.map(
         (column) => column.propertyName,
       );
 
@@ -550,11 +550,15 @@ export class PostgresCohortService {
         },
         select: ["fieldId", "name", "label"]
       });
-      // let addition
-      console.log(getCustomFields);
 
+      // Extract custom field names
+      const customFieldsKeys = getCustomFields.map(customFields => customFields.name);
 
-      const allowedKeys = ["userId", "cohortId", "name", "parentId", "type", "status", "states", "districts", "blocks"];
+      // Combine the arrays
+      const allowedKeys = [...cohortAllKeys, ...customFieldsKeys];
+
+      // console.log(allowedKeys);
+
       const whereClause = {};
       const searchCustomFields = {};
 
@@ -575,13 +579,15 @@ export class PostgresCohortService {
             }
             else if (key === 'name') {
               whereClause[key] = ILike(`%${value}%`);
-            }
-            else {
+            } else if (cohortAllKeys.includes(key)) {
               whereClause[key] = value;
+            } else if (customFieldsKeys.includes(key)) {
+              searchCustomFields[key] = value;
             }
           }
         });
       }
+
 
       if (whereClause["parentId"]) {
         whereClause["parentId"] = In(whereClause["parentId"]);
@@ -660,6 +666,27 @@ export class PostgresCohortService {
         }
       }
       else {
+        let getCohortIdUsingCustomFields;
+
+        //If source config in source details from fields table is not exist then return false 
+        if (Object.keys(searchCustomFields).length > 0) {
+          let context = 'COHORT'
+          getCohortIdUsingCustomFields = await this.fieldsService.filterUserUsingCustomFields(context, searchCustomFields);
+
+          if (getCohortIdUsingCustomFields == null) {
+            return APIResponse.error(response, apiId, "No data found", "NOT FOUND", HttpStatus.NOT_FOUND);
+          }
+        }
+        console.log(getCohortIdUsingCustomFields);
+        // console.log(whereClause);
+
+        if (getCohortIdUsingCustomFields && getCohortIdUsingCustomFields.length > 0) {
+          const cohortIdsDependsOnCustomFields = getCohortIdUsingCustomFields.map(userId => `${userId}`).join(',');
+          whereClause['cohortId'] = cohortIdsDependsOnCustomFields;
+        }
+
+        console.log(whereClause);
+
         const [data, totalcount] = await this.cohortRepository.findAndCount({
           where: whereClause,
           skip: offset,

@@ -798,7 +798,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         return result;
     }
 
-    async filterUserUsingCustomFields(stateDistBlockData: any) {
+    async filterUserUsingCustomFields(context: string, stateDistBlockData: any) {
         let searchKey = [];
         let whereCondition = ` WHERE `;
         let index = 0;
@@ -818,14 +818,15 @@ export class PostgresFieldsService implements IServicelocatorfields {
             jsonb_object_agg(f."name", fv."value") AS fields
         FROM "FieldValues" fv
         JOIN "Fields" f ON fv."fieldId" = f."fieldId"
-        WHERE f."name" IN (${searchKey}) AND f.context = 'USERS'
+        WHERE f."name" IN (${searchKey}) AND f.context = '${context}'
         GROUP BY fv."itemId"
         )
         SELECT "itemId"
         FROM user_fields ${whereCondition}`
 
         const queryData = await this.fieldsValuesRepository.query(query);
-        const result = queryData.map(item => item.itemId);
+        const result = queryData.length > 0 ? queryData.map(item => item.itemId) : null;
+
         return result
     }
 
