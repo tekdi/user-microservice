@@ -1,6 +1,6 @@
 import { ConsoleLogger, HttpStatus, Injectable } from "@nestjs/common";
 import { FieldsDto } from "src/fields/dto/fields.dto";
-import { FieldsSearchDto } from "src/fields/dto/fields-search.dto";
+import { FieldsOptionsSearchDto, FieldsSearchDto } from "src/fields/dto/fields-search.dto";
 import { FieldValuesDto } from "src/fields/dto/field-values.dto";
 import { FieldValuesUpdateDto } from "src/fields/dto/field-values-update.dto";
 import { FieldValuesSearchDto } from "src/fields/dto/field-values-search.dto";
@@ -729,51 +729,73 @@ export class PostgresFieldsService implements IServicelocatorfields {
         return { offset, limit, whereClause };
     }
 
-    public async getFieldOptions(request: any, fieldName: string, controllingfieldfk: string, context: string, contextType: string, response: Response) {
+    //Get all fields options
+    public async getFieldOptions(fieldsOptionsSearchDto: FieldsOptionsSearchDto, response: Response) {
+
         const apiId = APIID.FIELDVALUES_SEARCH;
-        let dynamicOptions;
+        try {
+            let dynamicOptions;
+            let { fieldName, controllingfieldfk, context, contextType, offset, limit, sort, optionName } = fieldsOptionsSearchDto
 
-        const condition: any = {
-            name: fieldName,
-            context: context,
-        };
+            offset = offset ? offset : 0;
+            limit = limit ? limit : 200;
 
-        if (contextType) {
-            condition.contextType = contextType;
-        }
+            const condition: any = {
+                name: fieldName
+            };
 
-        const fetchFieldParams = await this.fieldsRepository.findOne({
-            where: condition
-        })
-
-        if (fetchFieldParams?.sourceDetails?.source === 'table') {
-            let whereClause;
-            if (controllingfieldfk) {
-                whereClause = `"controllingfieldfk" = '${controllingfieldfk}'`;
+            if (context) {
+                condition.context = context;
             }
 
-            dynamicOptions = await this.findDynamicOptions(fieldName, whereClause);
-        } else if (fetchFieldParams?.sourceDetails?.source === 'jsonFile') {
-            const filePath = path.join(
-                process.cwd(),
-                `${fetchFieldParams.sourceDetails.filePath}`,
-            );
-            let getFieldValuesFromJson = JSON.parse(readFileSync(filePath, 'utf-8'));
+            if (contextType) {
+                condition.contextType = contextType;
+            }
 
-            if (controllingfieldfk) {
-                dynamicOptions = getFieldValuesFromJson.options.filter(option => (option?.controllingfieldfk === controllingfieldfk))
+            const fetchFieldParams = await this.fieldsRepository.findOne({
+                where: condition
+            })
+
+            let order;
+            if (sort && sort.length) {
+                order = `ORDER BY ${sort[0]} ${sort[1]}`
             } else {
-                dynamicOptions = getFieldValuesFromJson;
+                order = `ORDER BY name ASC`
             }
 
-        } else {
-            fetchFieldParams.fieldParams['options'] && controllingfieldfk ?
-                dynamicOptions = fetchFieldParams?.fieldParams['options'].filter((option: any) => option?.controllingfieldfk === controllingfieldfk) :
-                dynamicOptions = fetchFieldParams?.fieldParams['options'];
+            if (fetchFieldParams?.sourceDetails?.source === 'table') {
+                let whereClause;
+                if (controllingfieldfk) {
+                    whereClause = `"controllingfieldfk" = '${controllingfieldfk}'`;
+                }
+
+                dynamicOptions = await this.findDynamicOptions(fieldName, offset, limit, order, whereClause, optionName);
+            } else if (fetchFieldParams?.sourceDetails?.source === 'jsonFile') {
+                const filePath = path.join(
+                    process.cwd(),
+                    `${fetchFieldParams.sourceDetails.filePath}`,
+                );
+                let getFieldValuesFromJson = JSON.parse(readFileSync(filePath, 'utf-8'));
+
+                if (controllingfieldfk) {
+                    dynamicOptions = getFieldValuesFromJson.options.filter(option => (option?.controllingfieldfk === controllingfieldfk))
+                } else {
+                    dynamicOptions = getFieldValuesFromJson;
+                }
+
+            } else {
+                fetchFieldParams.fieldParams['options'] && controllingfieldfk ?
+                    dynamicOptions = fetchFieldParams?.fieldParams['options'].filter((option: any) => option?.controllingfieldfk === controllingfieldfk) :
+                    dynamicOptions = fetchFieldParams?.fieldParams['options'];
+            }
+
+            return await APIResponse.success(response, apiId, dynamicOptions,
+                HttpStatus.OK, 'Field Values fetched successfully.')
+        } catch (e) {
+            const errorMessage = e?.message || 'Something went wrong';
+            return APIResponse.error(response, apiId, "Internal Server Error", `Error : ${errorMessage}`, HttpStatus.INTERNAL_SERVER_ERROR)
         }
 
-        return await APIResponse.success(response, apiId, dynamicOptions,
-            HttpStatus.OK, 'Field Values fetched successfully.')
     }
 
     public async deleteFieldOptions(requiredData, response) {
@@ -796,7 +818,6 @@ export class PostgresFieldsService implements IServicelocatorfields {
                 if (getField?.sourceDetails?.source == 'table') {
                     let whereCond = requiredData.option ? `WHERE "value"='${requiredData.option}'` : '';
                     let query = `DELETE FROM public.${getField?.sourceDetails?.table} ${whereCond}`
-                    console.log(query);
                     let deleteData = await this.fieldsRepository.query(query);
                 }
                 if (getField?.sourceDetails?.source == 'fieldparams') {
@@ -829,23 +850,27 @@ export class PostgresFieldsService implements IServicelocatorfields {
         }
     }
 
-    async findDynamicOptions(tableName, whereClause?: {}) {
+    async findDynamicOptions(tableName, offset?: {}, limit?: {}, order?: {}, whereClause?: {}, optionName?: {}) {
         let query: string;
         let result;
 
-        if (whereClause) {
-            query = `select * from public."${tableName}" where ${whereClause}`
-            result = await this.fieldsRepository.query(query);
-            if (!result) {
-                return null;
+        let orderCond = order ? order : '';
+        let offsetCond = offset ? `offset ${offset}` : '';
+        let limitCond = limit ? `limit ${limit}` : '';
+        let whereCond = `WHERE`;
+        whereCond = whereClause ? whereCond += `${whereClause}` : '';
+
+        if (optionName) {
+            if (whereCond) {
+                whereCond += `name ILike '%${optionName}%'`
+            } else {
+                whereCond += `WHERE "name" ILike '%${optionName}%'`
             }
-            return result.map(result => ({
-                value: result.value,
-                label: result.name
-            }));
+        } else {
+            whereCond += ''
         }
 
-        query = `select * from public."${tableName}"`
+        query = `SELECT * FROM public."${tableName}" ${whereCond} ${orderCond} ${offsetCond} ${limitCond}`
 
         result = await this.fieldsRepository.query(query);
         if (!result) {

@@ -25,7 +25,7 @@ import {
   Patch,
   Delete,
 } from "@nestjs/common";
-import { FieldsSearchDto } from "./dto/fields-search.dto";
+import { FieldsOptionsSearchDto, FieldsSearchDto } from "./dto/fields-search.dto";
 import { Request } from "@nestjs/common";
 import { FieldsDto } from "./dto/fields.dto";
 import { FieldsUpdateDto } from "./dto/fields-update.dto";
@@ -157,27 +157,24 @@ export class FieldsController {
 
 
   //Get Field Option
-  @Get("/options/read/:fieldName")
+  @Post("/options/read")
+  @UsePipes(new ValidationPipe())
   @UseGuards(JwtAuthGuard)
   @ApiBasicAuth("access-token")
   @ApiCreatedResponse({ description: "Field Options list." })
+  @ApiBody({ type: FieldsOptionsSearchDto })
   @ApiForbiddenResponse({ description: "Forbidden" })
   @SerializeOptions({
     strategy: "excludeAll",
   })
-  @ApiQuery({ name: 'controllingfieldfk', required: false })
-  @ApiQuery({ name: 'contextType', required: false })
 
   public async getFieldOptions(
     @Headers() headers,
     @Req() request: Request,
-    @Param('fieldName') fieldName: string,
-    @Query("controllingfieldfk") controllingfieldfk: string | null = null,
-    @Query("context") context: string | null = null,
-    @Query("contextType") contextType: string | null = null,
+    @Body() fieldsOptionsSearchDto: FieldsOptionsSearchDto,
     @Res() response: Response
   ) {
-    return await this.fieldsAdapter.buildFieldsAdapter().getFieldOptions(request, fieldName, controllingfieldfk, context, contextType, response);
+    return await this.fieldsAdapter.buildFieldsAdapter().getFieldOptions(fieldsOptionsSearchDto, response);
   }
 
   //Delete Field Option
