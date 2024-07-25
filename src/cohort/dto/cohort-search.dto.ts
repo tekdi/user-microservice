@@ -64,6 +64,50 @@ export class filtersProperty {
   @IsString()
   @IsNotEmpty()
   type?: string;
+
+  //type
+  @ApiProperty({
+    type: [String],
+    description: "The status of the cohort",
+    default: [],
+  })
+  @Expose()
+  @IsOptional()
+  @IsArray()
+  @IsNotEmpty({ each: true })
+  @IsUUID(undefined, { each: true })
+  status?: string[];
+
+  @ApiPropertyOptional({
+    type: String,
+    description: "State",
+  })
+  states: string;
+
+  @ApiPropertyOptional({
+    type: String,
+    description: "District",
+  })
+  districts: string;
+
+  @ApiPropertyOptional({
+    type: String,
+    description: "Block",
+  })
+  blocks: string;
+
+  //customFieldsName
+  @ApiProperty({
+    type: [String],
+    description: "The customFieldsName of the cohort",
+    default: [],
+  })
+  @Expose()
+  @IsOptional()
+  @IsArray()
+  @IsNotEmpty({ each: true })
+  @IsUUID(undefined, { each: true })
+  customFieldsName?: string[];
 }
 enum SortDirection {
   ASC = 'asc',

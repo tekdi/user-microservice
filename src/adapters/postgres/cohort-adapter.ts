@@ -538,8 +538,25 @@ export class PostgresCohortService {
         );
       }
 
-      const allowedKeys = ["userId", "cohortId", "name", "parentId", "type", "status"];
+      //Get all cohorts fields
+      const userAllKeys = this.cohortRepository.metadata.columns.map(
+        (column) => column.propertyName,
+      );
+
+      //Get custom fields
+      const getCustomFields = await this.fieldsRepository.find({
+        where: {
+          context: In(['COHORT', null, 'null', 'NULL'])
+        },
+        select: ["fieldId", "name", "label"]
+      });
+      // let addition
+      console.log(getCustomFields);
+
+
+      const allowedKeys = ["userId", "cohortId", "name", "parentId", "type", "status", "states", "districts", "blocks"];
       const whereClause = {};
+      const searchCustomFields = {};
 
       if (filters && Object.keys(filters).length > 0) {
         Object.entries(filters).forEach(([key, value]) => {
@@ -568,6 +585,9 @@ export class PostgresCohortService {
 
       if (whereClause["parentId"]) {
         whereClause["parentId"] = In(whereClause["parentId"]);
+      }
+      if (whereClause["status"]) {
+        whereClause["status"] = In(whereClause["status"]);
       }
 
       let results = {
