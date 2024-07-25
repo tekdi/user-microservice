@@ -288,14 +288,19 @@ export class PostgresFieldsService implements IServicelocatorfields {
 
             fieldsData['type'] = fieldsData.type || getSourceDetails.type;
 
+            //Update field options
+            //Update data in source table
             if (getSourceDetails.sourceDetails && getSourceDetails.sourceDetails.source == 'table') {
                 for (let sourceFieldName of fieldsData.fieldParams.options) {
                     if (getSourceDetails.dependsOn && (!sourceFieldName['controllingfieldfk'] || sourceFieldName['controllingfieldfk'] === '')) {
                         storeWithoutControllingField.push(sourceFieldName['name'])
                     }
+
+                    // check options exits in source table column or not
                     let query = `SELECT COUNT(*) FROM public.${getSourceDetails.sourceDetails.table} WHERE value = '${sourceFieldName['value']}'`;
                     const checkSourceData = await this.fieldsValuesRepository.query(query);
 
+                    //If not exist then create that column else update that data
                     if (checkSourceData[0].count == 0) {
                         let createSourceField = await this.createSourceDetailsTableFields(getSourceDetails.sourceDetails.table, sourceFieldName['name'], sourceFieldName['value'], sourceFieldName['controllingfieldfk'], getSourceDetails.dependsOn);
                     } else {
@@ -305,15 +310,19 @@ export class PostgresFieldsService implements IServicelocatorfields {
                 delete fieldsData.fieldParams;
             }
 
+            //Update data in field params
             if (getSourceDetails.sourceDetails && getSourceDetails.sourceDetails.source == 'fieldparams') {
                 for (let sourceFieldName of fieldsData.fieldParams.options) {
+                    //Store those fields is depends on another fields but did not provide controlling field foreign key
                     if (fieldsData.dependsOn && (!sourceFieldName['controllingfieldfk'] || sourceFieldName['controllingfieldfk'] === '')) {
                         storeWithoutControllingField.push(sourceFieldName['name'])
                     }
 
+                    // check options exits in fieldParams column or not
                     const query = `SELECT COUNT(*) FROM public."Fields" WHERE "fieldId"='${fieldId}' AND "fieldParams" -> 'options' @> '[{"value": "${sourceFieldName['value']}"}]' `;
                     let checkSourceData = await this.fieldsRepository.query(query);
 
+                    //If fields is not present then create a new options
                     if (checkSourceData[0].count == 0) {
                         let addFieldParamsValue = await this.addOptionsInFieldParams(fieldId, sourceFieldName)
                         if (addFieldParamsValue !== true) {
@@ -323,6 +332,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
                 }
             }
 
+            //If fields is depends on another fields but did not provide controlling field foreign key
             if (storeWithoutControllingField.length > 0) {
                 let wrongControllingField = storeWithoutControllingField.join(',')
                 error = `Wrong Data: ${wrongControllingField} This field is dependent on another field and cannot be created without specifying the controllingfieldfk.`
@@ -346,8 +356,11 @@ export class PostgresFieldsService implements IServicelocatorfields {
                 where: { fieldId },
             });
 
+            //get existing fields which are present in out database
             const existingOptions = existingField.fieldParams !== null ? existingField.fieldParams['options'] : [];
             const newOption = newParams;
+
+            //merge new fields and old fields 
             const updatedOptions = [...existingOptions, newOption];
             let fieldParams = { options: updatedOptions };
             existingField.fieldParams = fieldParams;
@@ -383,6 +396,8 @@ export class PostgresFieldsService implements IServicelocatorfields {
         if (dependsOn && (!controllingfieldfk || controllingfieldfk === '')) {
             return false;
         }
+
+        //Insert data into source table 
         const checkSourceData = await this.fieldsValuesRepository.query(createSourceFields);
         if (checkSourceData.length == 0) {
             return false
@@ -806,6 +821,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
                 name: requiredData.fieldName,
             };
 
+            // If `context` and `contextType` are not provided, in that case check those fields where both `context` and `contextType` are null.
             let removeOption = requiredData.option !== null ? requiredData.option : null;
             condition.context = requiredData.context !== null ? requiredData.context : In([null, 'null', 'NULL']);
             condition.contextType = requiredData.contextType !== null ? requiredData.contextType : In([null, 'null', 'NULL']);
@@ -815,13 +831,16 @@ export class PostgresFieldsService implements IServicelocatorfields {
             })
 
             if (getField) {
+                //Delete data from source table
                 if (getField?.sourceDetails?.source == 'table') {
                     let whereCond = requiredData.option ? `WHERE "value"='${requiredData.option}'` : '';
                     let query = `DELETE FROM public.${getField?.sourceDetails?.table} ${whereCond}`
                     let deleteData = await this.fieldsRepository.query(query);
                 }
+                //Delete data from fieldParams column
                 if (getField?.sourceDetails?.source == 'fieldparams') {
 
+                    // check options exits in fieldParams column or not
                     const query = `SELECT * FROM public."Fields" WHERE "fieldId"='${getField.fieldId}' AND "fieldParams" -> 'options' @> '[{"value": "${removeOption}"}]' `;
                     let checkSourceData = await this.fieldsRepository.query(query);
 
@@ -841,6 +860,8 @@ export class PostgresFieldsService implements IServicelocatorfields {
                     }
 
                 }
+            } else {
+                return await APIResponse.error(response, apiId, `Fields not found.`, `NOT FOUND`, (HttpStatus.NOT_FOUND))
             }
             return await APIResponse.success(response, apiId, result,
                 HttpStatus.OK, 'Field Options deleted successfully.')
