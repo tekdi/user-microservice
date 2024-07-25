@@ -236,6 +236,10 @@ export class PostgresCohortMembersService {
       if (whereClause["role"]) {
         where.push(["role", whereClause["role"]]);
       }
+      if (whereClause["name"]) {
+        where.push(["name", whereClause["name"]]);
+      }
+
       if (whereClause["status"] && Array.isArray(whereClause["status"])) {
         where.push(["status", whereClause["status"]]);
       }
@@ -277,7 +281,6 @@ export class PostgresCohortMembersService {
       totalCount: 0,
       userDetails: []
     };
-
     let getUserDetails = await this.getUsers(where, options, order);
 
     if (getUserDetails.length > 0) {
@@ -376,6 +379,8 @@ export class PostgresCohortMembersService {
           if (value[0] === "status") {
             const statusValues = value[1].map(status => `'${status}'`).join(', ');
             whereCase += `CM."status" IN (${statusValues})`;
+          } else if (value[0] === "name") {
+            whereCase += `U."name" ILIKE '%${value[1]}%'`;
           } else {
             whereCase += `CM."${value[0]}"='${value[1]}'`;
           }
@@ -385,7 +390,6 @@ export class PostgresCohortMembersService {
         }
       });
     }
-
 
     query = `SELECT U."userId", U.username, U.name, R.name AS role, U.district, U.state,U.mobile, 
       CM."status", CM."statusReason",CM."cohortMembershipId", COUNT(*) OVER() AS total_count  FROM public."CohortMembers" CM
