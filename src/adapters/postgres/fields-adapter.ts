@@ -882,7 +882,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         let orderCond = order ? order : '';
         let offsetCond = offset ? `offset ${offset}` : '';
         let limitCond = limit ? `limit ${limit}` : '';
-        let whereCond = `WHERE`;
+        let whereCond = `WHERE `;
         whereCond = whereClause ? whereCond += `${whereClause}` : '';
 
         if (optionName) {
@@ -967,8 +967,6 @@ export class PostgresFieldsService implements IServicelocatorfields {
         )
         SELECT "itemId"
         FROM user_fields ${whereCondition}`
-
-        console.log(query);
 
         const queryData = await this.fieldsValuesRepository.query(query);
         const result = queryData.length > 0 ? queryData.map(item => item.itemId) : null;
