@@ -1,6 +1,6 @@
 import { ConsoleLogger, HttpStatus, Injectable } from "@nestjs/common";
 import { FieldsDto } from "src/fields/dto/fields.dto";
-import { FieldsSearchDto } from "src/fields/dto/fields-search.dto";
+import { FieldsOptionsSearchDto, FieldsSearchDto } from "src/fields/dto/fields-search.dto";
 import { FieldValuesDto } from "src/fields/dto/field-values.dto";
 import { FieldValuesUpdateDto } from "src/fields/dto/field-values-update.dto";
 import { FieldValuesSearchDto } from "src/fields/dto/field-values-search.dto";
@@ -228,7 +228,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
 
             let storeWithoutControllingField = [];
             let error = '';
-            if (fieldsData.sourceDetails && fieldsData.sourceDetails.source == 'table') {
+            if (fieldsData.sourceDetails && fieldsData.sourceDetails.source == 'table' && fieldsData.fieldParams) {
 
                 for (let sourceFieldName of fieldsData.fieldParams.options) {
 
@@ -288,14 +288,19 @@ export class PostgresFieldsService implements IServicelocatorfields {
 
             fieldsData['type'] = fieldsData.type || getSourceDetails.type;
 
-            if (getSourceDetails.fieldParams && getSourceDetails.sourceDetails && getSourceDetails.sourceDetails.source == 'table') {
+            //Update field options
+            //Update data in source table
+            if (getSourceDetails.sourceDetails && getSourceDetails.sourceDetails.source == 'table') {
                 for (let sourceFieldName of fieldsData.fieldParams.options) {
                     if (getSourceDetails.dependsOn && (!sourceFieldName['controllingfieldfk'] || sourceFieldName['controllingfieldfk'] === '')) {
                         storeWithoutControllingField.push(sourceFieldName['name'])
                     }
+
+                    // check options exits in source table column or not
                     let query = `SELECT COUNT(*) FROM public.${getSourceDetails.sourceDetails.table} WHERE value = '${sourceFieldName['value']}'`;
                     const checkSourceData = await this.fieldsValuesRepository.query(query);
 
+                    //If not exist then create that column else update that data
                     if (checkSourceData[0].count == 0) {
                         let createSourceField = await this.createSourceDetailsTableFields(getSourceDetails.sourceDetails.table, sourceFieldName['name'], sourceFieldName['value'], sourceFieldName['controllingfieldfk'], getSourceDetails.dependsOn);
                     } else {
@@ -305,6 +310,29 @@ export class PostgresFieldsService implements IServicelocatorfields {
                 delete fieldsData.fieldParams;
             }
 
+            //Update data in field params
+            if (getSourceDetails.sourceDetails && getSourceDetails.sourceDetails.source == 'fieldparams') {
+                for (let sourceFieldName of fieldsData.fieldParams.options) {
+                    //Store those fields is depends on another fields but did not provide controlling field foreign key
+                    if (fieldsData.dependsOn && (!sourceFieldName['controllingfieldfk'] || sourceFieldName['controllingfieldfk'] === '')) {
+                        storeWithoutControllingField.push(sourceFieldName['name'])
+                    }
+
+                    // check options exits in fieldParams column or not
+                    const query = `SELECT COUNT(*) FROM public."Fields" WHERE "fieldId"='${fieldId}' AND "fieldParams" -> 'options' @> '[{"value": "${sourceFieldName['value']}"}]' `;
+                    let checkSourceData = await this.fieldsRepository.query(query);
+
+                    //If fields is not present then create a new options
+                    if (checkSourceData[0].count == 0) {
+                        let addFieldParamsValue = await this.addOptionsInFieldParams(fieldId, sourceFieldName)
+                        if (addFieldParamsValue !== true) {
+                            return APIResponse.error(response, apiId, "Internal Server Error", `Error : ${addFieldParamsValue}`, HttpStatus.INTERNAL_SERVER_ERROR)
+                        }
+                    }
+                }
+            }
+
+            //If fields is depends on another fields but did not provide controlling field foreign key
             if (storeWithoutControllingField.length > 0) {
                 let wrongControllingField = storeWithoutControllingField.join(',')
                 error = `Wrong Data: ${wrongControllingField} This field is dependent on another field and cannot be created without specifying the controllingfieldfk.`
@@ -319,6 +347,33 @@ export class PostgresFieldsService implements IServicelocatorfields {
             const errorMessage = e?.message || 'Something went wrong';
             return APIResponse.error(response, apiId, "Internal Server Error", `Error : ${errorMessage}`, HttpStatus.INTERNAL_SERVER_ERROR)
         }
+    }
+
+
+    async addOptionsInFieldParams(fieldId: string, newParams: any) {
+        try {
+            const existingField = await this.fieldsRepository.findOne({
+                where: { fieldId },
+            });
+
+            //get existing fields which are present in out database
+            const existingOptions = existingField.fieldParams !== null ? existingField.fieldParams['options'] : [];
+            const newOption = newParams;
+
+            //merge new fields and old fields 
+            const updatedOptions = [...existingOptions, newOption];
+            let fieldParams = { options: updatedOptions };
+            existingField.fieldParams = fieldParams;
+
+            await this.fieldsRepository.update(fieldId, {
+                fieldParams: existingField.fieldParams,
+            });
+            return true;
+        } catch (e) {
+            const errorMessage = e?.message || 'Something went wrong';
+            return errorMessage
+        }
+
     }
 
     async createSourceDetailsTableFields(tableName: string, name: string, value: string, controllingfieldfk?: string, dependsOn?: string) {
@@ -341,6 +396,8 @@ export class PostgresFieldsService implements IServicelocatorfields {
         if (dependsOn && (!controllingfieldfk || controllingfieldfk === '')) {
             return false;
         }
+
+        //Insert data into source table 
         const checkSourceData = await this.fieldsValuesRepository.query(createSourceFields);
         if (checkSourceData.length == 0) {
             return false
@@ -691,71 +748,154 @@ export class PostgresFieldsService implements IServicelocatorfields {
         return { offset, limit, whereClause };
     }
 
-    public async getFieldOptions(request: any, fieldName: string, controllingfieldfk: string, context: string, contextType: string, response: Response) {
+    //Get all fields options
+    public async getFieldOptions(fieldsOptionsSearchDto: FieldsOptionsSearchDto, response: Response) {
+
         const apiId = APIID.FIELDVALUES_SEARCH;
-        let dynamicOptions;
+        try {
+            let dynamicOptions;
+            let { fieldName, controllingfieldfk, context, contextType, offset, limit, sort, optionName } = fieldsOptionsSearchDto
 
-        const condition: any = {
-            name: fieldName,
-            context: context,
-        };
+            offset = offset ? offset : 0;
+            limit = limit ? limit : 200;
 
-        if (contextType) {
-            condition.contextType = contextType;
-        }
+            const condition: any = {
+                name: fieldName
+            };
 
-        const fetchFieldParams = await this.fieldsRepository.findOne({
-            where: condition
-        })
-
-        if (fetchFieldParams?.sourceDetails?.source === 'table') {
-            let whereClause;
-            if (controllingfieldfk) {
-                whereClause = `"controllingfieldfk" = '${controllingfieldfk}'`;
+            if (context) {
+                condition.context = context;
             }
 
-            dynamicOptions = await this.findDynamicOptions(fieldName, whereClause);
-        } else if (fetchFieldParams?.sourceDetails?.source === 'jsonFile') {
-            const filePath = path.join(
-                process.cwd(),
-                `${fetchFieldParams.sourceDetails.filePath}`,
-            );
-            let getFieldValuesFromJson = JSON.parse(readFileSync(filePath, 'utf-8'));
+            if (contextType) {
+                condition.contextType = contextType;
+            }
 
-            if (controllingfieldfk) {
-                dynamicOptions = getFieldValuesFromJson.options.filter(option => (option?.controllingfieldfk === controllingfieldfk))
+            const fetchFieldParams = await this.fieldsRepository.findOne({
+                where: condition
+            })
+
+            let order;
+            if (sort && sort.length) {
+                order = `ORDER BY ${sort[0]} ${sort[1]}`
             } else {
-                dynamicOptions = getFieldValuesFromJson;
+                order = `ORDER BY name ASC`
             }
 
-        } else {
-            fetchFieldParams.fieldParams['options'] && controllingfieldfk ?
-                dynamicOptions = fetchFieldParams?.fieldParams['options'].filter((option: any) => option?.controllingfieldfk === controllingfieldfk) :
-                dynamicOptions = fetchFieldParams?.fieldParams['options'];
+            if (fetchFieldParams?.sourceDetails?.source === 'table') {
+                let whereClause;
+                if (controllingfieldfk) {
+                    whereClause = `"controllingfieldfk" = '${controllingfieldfk}'`;
+                }
+
+                dynamicOptions = await this.findDynamicOptions(fieldName, offset, limit, order, whereClause, optionName);
+            } else if (fetchFieldParams?.sourceDetails?.source === 'jsonFile') {
+                const filePath = path.join(
+                    process.cwd(),
+                    `${fetchFieldParams.sourceDetails.filePath}`,
+                );
+                let getFieldValuesFromJson = JSON.parse(readFileSync(filePath, 'utf-8'));
+
+                if (controllingfieldfk) {
+                    dynamicOptions = getFieldValuesFromJson.options.filter(option => (option?.controllingfieldfk === controllingfieldfk))
+                } else {
+                    dynamicOptions = getFieldValuesFromJson;
+                }
+
+            } else {
+                fetchFieldParams.fieldParams['options'] && controllingfieldfk ?
+                    dynamicOptions = fetchFieldParams?.fieldParams['options'].filter((option: any) => option?.controllingfieldfk === controllingfieldfk) :
+                    dynamicOptions = fetchFieldParams?.fieldParams['options'];
+            }
+
+            return await APIResponse.success(response, apiId, dynamicOptions,
+                HttpStatus.OK, 'Field Values fetched successfully.')
+        } catch (e) {
+            const errorMessage = e?.message || 'Something went wrong';
+            return APIResponse.error(response, apiId, "Internal Server Error", `Error : ${errorMessage}`, HttpStatus.INTERNAL_SERVER_ERROR)
         }
 
-        return await APIResponse.success(response, apiId, dynamicOptions,
-            HttpStatus.OK, 'Field Values fetched successfully.')
     }
 
+    public async deleteFieldOptions(requiredData, response) {
+        const apiId = APIID.FIELD_OPTIONS_DELETE;
+        try {
+            let result;
+            const condition: any = {
+                name: requiredData.fieldName,
+            };
 
-    async findDynamicOptions(tableName, whereClause?: {}) {
+            // If `context` and `contextType` are not provided, in that case check those fields where both `context` and `contextType` are null.
+            let removeOption = requiredData.option !== null ? requiredData.option : null;
+            condition.context = requiredData.context !== null ? requiredData.context : In([null, 'null', 'NULL']);
+            condition.contextType = requiredData.contextType !== null ? requiredData.contextType : In([null, 'null', 'NULL']);
+
+            let getField = await this.fieldsRepository.findOne({
+                where: condition
+            })
+
+            if (getField) {
+                //Delete data from source table
+                if (getField?.sourceDetails?.source == 'table') {
+                    let whereCond = requiredData.option ? `WHERE "value"='${requiredData.option}'` : '';
+                    let query = `DELETE FROM public.${getField?.sourceDetails?.table} ${whereCond}`
+                    let deleteData = await this.fieldsRepository.query(query);
+                }
+                //Delete data from fieldParams column
+                if (getField?.sourceDetails?.source == 'fieldparams') {
+
+                    // check options exits in fieldParams column or not
+                    const query = `SELECT * FROM public."Fields" WHERE "fieldId"='${getField.fieldId}' AND "fieldParams" -> 'options' @> '[{"value": "${removeOption}"}]' `;
+                    let checkSourceData = await this.fieldsRepository.query(query);
+
+                    if (checkSourceData.length > 0) {
+                        let fieldParamsOptions = checkSourceData[0].fieldParams.options;
+
+                        let fieldParamsData: any = {}
+                        if (fieldParamsOptions) {
+                            fieldParamsOptions = fieldParamsOptions.filter(option => option.name !== removeOption);
+                        }
+                        fieldParamsData = fieldParamsOptions.length > 0 ? { options: fieldParamsOptions } : null
+
+                        result = await this.fieldsRepository.update({ fieldId: getField.fieldId }, { fieldParams: fieldParamsData });
+
+                    } else {
+                        return await APIResponse.error(response, apiId, `Fields option not found`, `Fields option not found`, (HttpStatus.NOT_FOUND))
+                    }
+
+                }
+            } else {
+                return await APIResponse.error(response, apiId, `Fields not found.`, `NOT FOUND`, (HttpStatus.NOT_FOUND))
+            }
+            return await APIResponse.success(response, apiId, result,
+                HttpStatus.OK, 'Field Options deleted successfully.')
+        } catch (e) {
+            const errorMessage = e?.message || 'Something went wrong';
+            return APIResponse.error(response, apiId, "Internal Server Error", `Error : ${errorMessage}`, HttpStatus.INTERNAL_SERVER_ERROR)
+        }
+    }
+
+    async findDynamicOptions(tableName, offset?: {}, limit?: {}, order?: {}, whereClause?: {}, optionName?: {}) {
         let query: string;
         let result;
 
-        if (whereClause) {
-            query = `select * from public."${tableName}" where ${whereClause}`
-            result = await this.fieldsRepository.query(query);
-            if (!result) {
-                return null;
+        let orderCond = order ? order : '';
+        let offsetCond = offset ? `offset ${offset}` : '';
+        let limitCond = limit ? `limit ${limit}` : '';
+        let whereCond = `WHERE`;
+        whereCond = whereClause ? whereCond += `${whereClause}` : '';
+
+        if (optionName) {
+            if (whereCond) {
+                whereCond += `name ILike '%${optionName}%'`
+            } else {
+                whereCond += `WHERE "name" ILike '%${optionName}%'`
             }
-            return result.map(result => ({
-                value: result.value,
-                label: result.name
-            }));
+        } else {
+            whereCond += ''
         }
 
-        query = `select * from public."${tableName}"`
+        query = `SELECT * FROM public."${tableName}" ${whereCond} ${orderCond} ${offsetCond} ${limitCond}`
 
         result = await this.fieldsRepository.query(query);
         if (!result) {

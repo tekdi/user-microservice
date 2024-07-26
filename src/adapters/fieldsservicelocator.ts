@@ -1,9 +1,10 @@
-import { FieldsSearchDto } from "src/fields/dto/fields-search.dto";
+import { FieldsOptionsSearchDto, FieldsSearchDto } from "src/fields/dto/fields-search.dto";
 import { FieldsDto } from "src/fields/dto/fields.dto";
 import { FieldValuesDto } from "src/fields/dto/field-values.dto";
 import { FieldValuesSearchDto } from "src/fields/dto/field-values-search.dto";
 import { Response } from "express";
 import { FieldsUpdateDto } from "src/fields/dto/fields-update.dto";
+
 export interface IServicelocatorfields {
   //fields
   createFields(request: any, fieldsDto: FieldsDto, response: Response);
@@ -17,7 +18,8 @@ export interface IServicelocatorfields {
   // getFieldValues(id, request);
   searchFieldValues(request: any, fieldValuesSearchDto: FieldValuesSearchDto, response: Response);
   updateFieldValues(id: string, request: any, fieldValuesDto: FieldValuesDto);
-  getFieldOptions(request: any, fieldName: string, controllingfieldfk: string, context: string, contextType: string, response: Response);
+  getFieldOptions(fieldsOptionsSearchDto: FieldsOptionsSearchDto, response: Response);
+  deleteFieldOptions(requiredData, response)
   getFormCustomField(requiredData, response);
 
 }
