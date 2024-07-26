@@ -418,29 +418,29 @@ export class PostgresFieldsService implements IServicelocatorfields {
             return false
         }
     }
-       
+
     // Changing this function to fetch Fields for Context and contextType to be null
     async getFieldIds(context: string, contextType?: string) {
 
         const condition: any = [
             // Condition from function parameters
             {
-              context: context,
-              contextType: contextType ? contextType : IsNull()
+                context: context,
+                contextType: contextType ? contextType : IsNull()
             },
             // Always include this condition to fetch  Values with context and contextType as Null
             {
-              context: IsNull(),
-              contextType: IsNull()
+                context: IsNull(),
+                contextType: IsNull()
             }
-          ];
-        
-          let result = await this.fieldsRepository.find({
+        ];
+
+        let result = await this.fieldsRepository.find({
             where: condition,
             select: ["fieldId"]
-          });
-        
-          return result;
+        });
+
+        return result;
     }
 
     async getFieldByIdes(fieldId: string) {
@@ -788,7 +788,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
                     whereClause = `"controllingfieldfk" = '${controllingfieldfk}'`;
                 }
 
-                dynamicOptions = await this.findDynamicOptions(fieldName, offset, limit, order, whereClause, optionName);
+                dynamicOptions = await this.findDynamicOptions(fieldName, whereClause, offset, limit, order, optionName);
             } else if (fetchFieldParams?.sourceDetails?.source === 'jsonFile') {
                 const filePath = path.join(
                     process.cwd(),
@@ -875,7 +875,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         }
     }
 
-    async findDynamicOptions(tableName, offset?: {}, limit?: {}, order?: {}, whereClause?: {}, optionName?: {}) {
+    async findDynamicOptions(tableName, whereClause?: {}, offset?: {}, limit?: {}, order?: {}, optionName?: {}) {
         let query: string;
         let result;
 
@@ -967,6 +967,8 @@ export class PostgresFieldsService implements IServicelocatorfields {
         )
         SELECT "itemId"
         FROM user_fields ${whereCondition}`
+
+        console.log(query);
 
         const queryData = await this.fieldsValuesRepository.query(query);
         const result = queryData.length > 0 ? queryData.map(item => item.itemId) : null;

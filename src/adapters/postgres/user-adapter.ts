@@ -150,13 +150,14 @@ export class PostgresUserService implements IServicelocator {
     if (Object.keys(searchCustomFields).length > 0) {
       let context = 'USERS'
       getUserIdUsingCustomFields = await this.fieldsService.filterUserUsingCustomFields(context, searchCustomFields);
-      if (getUserIdUsingCustomFields.length == null) {
+
+      if (getUserIdUsingCustomFields == null) {
         return false;
       }
     }
 
-
     if (getUserIdUsingCustomFields && getUserIdUsingCustomFields.length > 0) {
+
       const userIdsDependsOnCustomFields = getUserIdUsingCustomFields.map(userId => `'${userId}'`).join(',');
       whereCondition += `${index > 0 ? ' AND ' : ''} U."userId" IN (${userIdsDependsOnCustomFields})`;
       index++;
@@ -176,7 +177,7 @@ export class PostgresUserService implements IServicelocator {
       whereCondition = '';
     }
 
-    let query = `SELECT U."userId", U.username, U.name, R.name AS role, U.mobile, U.createdBy,U.updatedBy, U.createdAt, U.updatedAt COUNT(*) OVER() AS total_count 
+    let query = `SELECT U."userId", U."username", U."name", R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", COUNT(*) OVER() AS total_count 
       FROM  public."Users" U
       LEFT JOIN public."CohortMembers" CM 
       ON CM."userId" = U."userId"
@@ -184,6 +185,7 @@ export class PostgresUserService implements IServicelocator {
       ON UR."userId" = U."userId"
       LEFT JOIN public."Roles" R
       ON R."roleId" = UR."roleId" ${whereCondition} GROUP BY U."userId", R."name" ${orderingCondition} ${offset} ${limit}`
+
 
     let userDetails = await this.usersRepository.query(query);
 
