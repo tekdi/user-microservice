@@ -361,25 +361,29 @@ export class PostgresFieldsService implements IServicelocatorfields {
             return false
         }
     }
-
-
+       
+    // Changing this function to fetch Fields for Context and contextType to be null
     async getFieldIds(context: string, contextType?: string) {
 
-        const condition: any = {
-            context: context,
-        };
-
-        if (contextType) {
-            condition.contextType = contextType;
-        } else {
-            condition.contextType = IsNull();
-        }
-
-        let result = await this.fieldsRepository.find({
+        const condition: any = [
+            // Condition from function parameters
+            {
+              context: context,
+              contextType: contextType ? contextType : IsNull()
+            },
+            // Always include this condition to fetch  Values with context and contextType as Null
+            {
+              context: IsNull(),
+              contextType: IsNull()
+            }
+          ];
+        
+          let result = await this.fieldsRepository.find({
             where: condition,
             select: ["fieldId"]
-        })
-        return result;
+          });
+        
+          return result;
     }
 
     async getFieldByIdes(fieldId: string) {
