@@ -418,29 +418,29 @@ export class PostgresFieldsService implements IServicelocatorfields {
             return false
         }
     }
-       
+
     // Changing this function to fetch Fields for Context and contextType to be null
     async getFieldIds(context: string, contextType?: string) {
 
         const condition: any = [
             // Condition from function parameters
             {
-              context: context,
-              contextType: contextType ? contextType : IsNull()
+                context: context,
+                contextType: contextType ? contextType : IsNull()
             },
             // Always include this condition to fetch  Values with context and contextType as Null
             {
-              context: IsNull(),
-              contextType: IsNull()
+                context: IsNull(),
+                contextType: IsNull()
             }
-          ];
-        
-          let result = await this.fieldsRepository.find({
+        ];
+
+        let result = await this.fieldsRepository.find({
             where: condition,
             select: ["fieldId"]
-          });
-        
-          return result;
+        });
+
+        return result;
     }
 
     async getFieldByIdes(fieldId: string) {
@@ -788,7 +788,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
                     whereClause = `"controllingfieldfk" = '${controllingfieldfk}'`;
                 }
 
-                dynamicOptions = await this.findDynamicOptions(fieldName, offset, limit, order, whereClause, optionName);
+                dynamicOptions = await this.findDynamicOptions(fieldName, whereClause, offset, limit, order, optionName);
             } else if (fetchFieldParams?.sourceDetails?.source === 'jsonFile') {
                 const filePath = path.join(
                     process.cwd(),
@@ -875,14 +875,14 @@ export class PostgresFieldsService implements IServicelocatorfields {
         }
     }
 
-    async findDynamicOptions(tableName, offset?: {}, limit?: {}, order?: {}, whereClause?: {}, optionName?: {}) {
+    async findDynamicOptions(tableName, whereClause?: {}, offset?: {}, limit?: {}, order?: {}, optionName?: {}) {
         let query: string;
         let result;
 
         let orderCond = order ? order : '';
         let offsetCond = offset ? `offset ${offset}` : '';
         let limitCond = limit ? `limit ${limit}` : '';
-        let whereCond = `WHERE`;
+        let whereCond = `WHERE `;
         whereCond = whereClause ? whereCond += `${whereClause}` : '';
 
         if (optionName) {
