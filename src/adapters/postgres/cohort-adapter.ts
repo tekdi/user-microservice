@@ -557,8 +557,6 @@ export class PostgresCohortService {
       // Combine the arrays
       const allowedKeys = [...cohortAllKeys, ...customFieldsKeys];
 
-      // console.log(allowedKeys);
-
       const whereClause = {};
       const searchCustomFields = {};
 
@@ -677,15 +675,10 @@ export class PostgresCohortService {
             return APIResponse.error(response, apiId, "No data found", "NOT FOUND", HttpStatus.NOT_FOUND);
           }
         }
-        console.log(getCohortIdUsingCustomFields);
-        // console.log(whereClause);
 
         if (getCohortIdUsingCustomFields && getCohortIdUsingCustomFields.length > 0) {
-          const cohortIdsDependsOnCustomFields = getCohortIdUsingCustomFields.map(userId => `${userId}`).join(',');
-          whereClause['cohortId'] = cohortIdsDependsOnCustomFields;
+          whereClause['cohortId'] = In(getCohortIdUsingCustomFields)
         }
-
-        console.log(whereClause);
 
         const [data, totalcount] = await this.cohortRepository.findAndCount({
           where: whereClause,
