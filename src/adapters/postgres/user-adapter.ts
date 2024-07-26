@@ -176,7 +176,7 @@ export class PostgresUserService implements IServicelocator {
       whereCondition = '';
     }
 
-    let query = `SELECT U."userId", U.username, U.name, R.name AS role, U.mobile, COUNT(*) OVER() AS total_count 
+    let query = `SELECT U."userId", U.username, U.name, R.name AS role, U.mobile, U.createdBy,U.updatedBy, U.createdAt, U.updatedAt COUNT(*) OVER() AS total_count 
       FROM  public."Users" U
       LEFT JOIN public."CohortMembers" CM 
       ON CM."userId" = U."userId"
