@@ -555,7 +555,7 @@ export class PostgresCohortService {
       const customFieldsKeys = getCustomFields.map(customFields => customFields.name);
 
       // Combine the arrays
-      const allowedKeys = [...cohortAllKeys, ...customFieldsKeys];
+      const allowedKeys = ['userId', ...cohortAllKeys, ...customFieldsKeys];
 
       const whereClause = {};
       const searchCustomFields = {};
@@ -641,7 +641,6 @@ export class PostgresCohortService {
         const [data, totalCount] =
           await this.cohortMembersRepository.findAndCount({
             where: whereClause,
-            skip: offset,
           });
         const userExistCohortGroup = data.slice(offset, offset + limit);
         count = totalCount;
@@ -682,7 +681,6 @@ export class PostgresCohortService {
 
         const [data, totalcount] = await this.cohortRepository.findAndCount({
           where: whereClause,
-          skip: offset,
           order,
         });
 
