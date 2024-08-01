@@ -17,8 +17,8 @@ spec:
       labels:
         app: backend
     spec:
-      containers:
       terminationGracePeriodSeconds: 0
+      containers:
       - image: ${ECR_REPOSITORY}:${IMAGE_TAG}
         imagePullPolicy: "Always"
         name: backend-pratham
