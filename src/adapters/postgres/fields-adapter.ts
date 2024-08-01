@@ -587,6 +587,8 @@ export class PostgresFieldsService implements IServicelocatorfields {
 
             const getFieldValue = await this.getSearchFieldValueData(offset, limit, whereClause)
 
+            console.log("hii");
+
             const result = {
                 totalCount: getFieldValue.totalCount,
                 fields: getFieldValue.mappedResponse,
@@ -784,6 +786,8 @@ export class PostgresFieldsService implements IServicelocatorfields {
             const fetchFieldParams = await this.fieldsRepository.findOne({
                 where: condition
             })
+            console.log();
+
 
             let order;
             if (sort && sort.length) {
@@ -791,6 +795,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
             } else {
                 order = `ORDER BY name ASC`
             }
+
 
             if (fetchFieldParams?.sourceDetails?.source === 'table') {
                 let whereClause;
@@ -817,8 +822,10 @@ export class PostgresFieldsService implements IServicelocatorfields {
                     dynamicOptions = fetchFieldParams?.fieldParams['options'].filter((option: any) => option?.controllingfieldfk === controllingfieldfk) :
                     dynamicOptions = fetchFieldParams?.fieldParams['options'];
             }
+            let fieldDetails = { fieldId: fetchFieldParams.fieldId }
+            const result = [fieldDetails, ...dynamicOptions]
 
-            return await APIResponse.success(response, apiId, dynamicOptions,
+            return await APIResponse.success(response, apiId, result,
                 HttpStatus.OK, 'Field Values fetched successfully.')
         } catch (e) {
             const errorMessage = e?.message || 'Something went wrong';
