@@ -587,8 +587,6 @@ export class PostgresFieldsService implements IServicelocatorfields {
 
             const getFieldValue = await this.getSearchFieldValueData(offset, limit, whereClause)
 
-            console.log("hii");
-
             const result = {
                 totalCount: getFieldValue.totalCount,
                 fields: getFieldValue.mappedResponse,
@@ -786,8 +784,6 @@ export class PostgresFieldsService implements IServicelocatorfields {
             const fetchFieldParams = await this.fieldsRepository.findOne({
                 where: condition
             })
-            console.log();
-
 
             let order;
             if (sort && sort.length) {
