@@ -28,6 +28,8 @@ spec:
         - configMapRef:
             name: backend-service-config
         resources: {}
+        logGroup: /aws/ecs/user-service
+        region: ap-south-1
       restartPolicy: Always
 status: {}
 
