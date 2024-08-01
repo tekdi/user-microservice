@@ -764,7 +764,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         const apiId = APIID.FIELDVALUES_SEARCH;
         try {
             let dynamicOptions;
-            let { fieldName, controllingfieldfk, context, contextType, offset, limit, sort, optionName } = fieldsOptionsSearchDto
+            let { fieldName, controllingfieldfk, context, contextType, offset, limit, sort, optionName } = fieldsOptionsSearchDto;
 
             offset = offset ? offset : 0;
             limit = limit ? limit : 200;
@@ -783,13 +783,13 @@ export class PostgresFieldsService implements IServicelocatorfields {
 
             const fetchFieldParams = await this.fieldsRepository.findOne({
                 where: condition
-            })
+            });
 
             let order;
             if (sort && sort.length) {
-                order = `ORDER BY ${sort[0]} ${sort[1]}`
+                order = `ORDER BY ${sort[0]} ${sort[1]}`;
             } else {
-                order = `ORDER BY name ASC`
+                order = `ORDER BY name ASC`;
             }
 
             if (fetchFieldParams?.sourceDetails?.source === 'table') {
@@ -807,24 +807,30 @@ export class PostgresFieldsService implements IServicelocatorfields {
                 let getFieldValuesFromJson = JSON.parse(readFileSync(filePath, 'utf-8'));
 
                 if (controllingfieldfk) {
-                    dynamicOptions = getFieldValuesFromJson.options.filter(option => (option?.controllingfieldfk === controllingfieldfk))
+                    dynamicOptions = getFieldValuesFromJson.options.filter(option => (option?.controllingfieldfk === controllingfieldfk));
                 } else {
                     dynamicOptions = getFieldValuesFromJson;
                 }
 
             } else {
-                fetchFieldParams.fieldParams['options'] && controllingfieldfk ?
-                    dynamicOptions = fetchFieldParams?.fieldParams['options'].filter((option: any) => option?.controllingfieldfk === controllingfieldfk) :
+                if (fetchFieldParams.fieldParams['options'] && controllingfieldfk) {
+                    dynamicOptions = fetchFieldParams?.fieldParams['options'].filter((option: any) => option?.controllingfieldfk === controllingfieldfk);
+                } else {
                     dynamicOptions = fetchFieldParams?.fieldParams['options'];
+                }
             }
 
-            return await APIResponse.success(response, apiId, dynamicOptions,
-                HttpStatus.OK, 'Field Values fetched successfully.')
+            const result = {
+                fieldId: fetchFieldParams.fieldId,
+                values: dynamicOptions
+            };
+
+            return await APIResponse.success(response, apiId, result,
+                HttpStatus.OK, 'Field Values fetched successfully.');
         } catch (e) {
             const errorMessage = e?.message || 'Something went wrong';
-            return APIResponse.error(response, apiId, "Internal Server Error", `Error : ${errorMessage}`, HttpStatus.INTERNAL_SERVER_ERROR)
+            return APIResponse.error(response, apiId, "Internal Server Error", `Error : ${errorMessage}`, HttpStatus.INTERNAL_SERVER_ERROR);
         }
-
     }
 
     public async deleteFieldOptions(requiredData, response) {
