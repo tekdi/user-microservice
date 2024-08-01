@@ -17,6 +17,7 @@ spec:
       labels:
         app: backend
     spec:
+      terminationGracePeriodSeconds: 0
       containers:
       - image: ${ECR_REPOSITORY}:${IMAGE_TAG}
         imagePullPolicy: ""
