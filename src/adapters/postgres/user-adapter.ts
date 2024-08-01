@@ -69,8 +69,8 @@ export class PostgresUserService implements IServicelocator {
     try {
       let findData = await this.findAllUserDetails(userSearchDto);
 
-      if (!findData) {
-        return APIResponse.error(response, apiId, "Not Found", `No Data Found`, HttpStatus.NOT_FOUND);
+      if (findData['totalCount'] == 0) {
+        return APIResponse.error(response, apiId, "No Data Found", "Not Found", HttpStatus.NOT_FOUND);
       }
 
       return await APIResponse.success(response, apiId, findData,
@@ -96,7 +96,7 @@ export class PostgresUserService implements IServicelocator {
 
     let whereCondition = `WHERE`;
     let index = 0;
-    const searchCustomFields = {};
+    const searchCustomFields: any = {};
 
     const userAllKeys = this.usersRepository.metadata.columns.map(
       (column) => column.propertyName,
@@ -114,7 +114,14 @@ export class PostgresUserService implements IServicelocator {
             whereCondition += ` U."${key}" ILIKE '%${value}%'`;
           }
           else {
-            whereCondition += ` U."${key}" = '${value}'`;
+            if (key === 'status') {
+              if (Array.isArray(value) && value.every(item => typeof item === 'string')) {
+                const status = value.map(item => `'${item.trim().toLowerCase()}'`).join(',');
+                whereCondition += ` U."${key}" IN(${status})`;
+              }
+            } else {
+              whereCondition += ` U."${key}" = '${value}'`;
+            }
           }
           index++;
         } else {
@@ -177,7 +184,7 @@ export class PostgresUserService implements IServicelocator {
       whereCondition = '';
     }
 
-    let query = `SELECT U."userId", U."username", U."name", R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", COUNT(*) OVER() AS total_count 
+    let query = `SELECT U."userId", U."username", U."name", R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", U.status, COUNT(*) OVER() AS total_count 
       FROM  public."Users" U
       LEFT JOIN public."CohortMembers" CM 
       ON CM."userId" = U."userId"
@@ -315,7 +322,7 @@ export class PostgresUserService implements IServicelocator {
     }
     let userDetails = await this.usersRepository.findOne({
       where: whereClause,
-      select: ["userId", "username", "name", "mobile","email"]
+      select: ["userId", "username", "name", "mobile", "email"]
     })
     if (!userDetails) {
       return false;
