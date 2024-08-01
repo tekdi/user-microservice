@@ -75,9 +75,6 @@ jobs:
         envsubst < manifest/backend.yaml > manifest/backend-updated.yaml
         cat manifest/backend-updated.yaml
         rm -rf manifest/backend-service.yaml
-        #kubectl delete deployment backend
-        #kubectl delete service backend
-        #kubectl delete cm backend-service-config
         kubectl apply -f manifest/backend-updated.yaml
         kubectl apply -f manifest/configmap.yaml
         sleep 10
