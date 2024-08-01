@@ -315,7 +315,7 @@ export class PostgresUserService implements IServicelocator {
     }
     let userDetails = await this.usersRepository.findOne({
       where: whereClause,
-      select: ["userId", "username", "name", "mobile"]
+      select: ["userId", "username", "name", "mobile","email"]
     })
     if (!userDetails) {
       return false;
