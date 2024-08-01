@@ -392,7 +392,7 @@ export class PostgresCohortMembersService {
     }
 
     query = `SELECT U."userId", U.username, U.name, R.name AS role, U.district, U.state,U.mobile, 
-      CM."status", CM."statusReason",CM."cohortMembershipId", COUNT(*) OVER() AS total_count  FROM public."CohortMembers" CM
+      CM."status", CM."statusReason",CM."cohortMembershipId",CM."status",CM."createdAt", COUNT(*) OVER() AS total_count  FROM public."CohortMembers" CM
       INNER JOIN public."Users" U
       ON CM."userId" = U."userId"
       INNER JOIN public."UserRolesMapping" UR
