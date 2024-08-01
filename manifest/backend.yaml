@@ -28,10 +28,15 @@ spec:
         - configMapRef:
             name: backend-service-config
         resources: {}
-        logging:
-          image: ${ECR_REPOSITORY}:${IMAGE_TAG}
-          logGroup: /aws/ecs/user-service
-          region: ap-south-1
+      - name: cloudwatch-logs-agent
+        image: amazon/aws-for-fluent-bit:latest
+        imagePullPolicy: Always
+        env:
+          - name: REGION
+            value: ap-south-1
+          - name: LOG_GROUP
+            value: /aws/ecs/user-service
+        resources: {}
       restartPolicy: Always
 status: {}
 
