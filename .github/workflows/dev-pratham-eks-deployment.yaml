@@ -74,6 +74,9 @@ jobs:
         export ECR_IMAGE=${{ secrets.ECR_IMAGE }}
         envsubst < manifest/backend.yaml > manifest/backend-updated.yaml
         cat manifest/backend-updated.yaml
+        kubectl delete deployment backend
+        kubectl delete service backend
+        kubectl delete cm backend-service-config
         rm -rf manifest/backend-service.yaml
         kubectl apply -f manifest/backend-updated.yaml
         kubectl apply -f manifest/configmap.yaml
