@@ -17,9 +17,10 @@ spec:
       labels:
         app: backend
     spec:
+      terminationGracePeriodSeconds: 0
       containers:
       - image: ${ECR_REPOSITORY}:${IMAGE_TAG}
-        imagePullPolicy: ""
+        imagePullPolicy: "Always"
         name: backend-pratham
         ports:
         - containerPort: 3000
