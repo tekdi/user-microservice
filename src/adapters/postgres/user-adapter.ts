@@ -69,7 +69,7 @@ export class PostgresUserService implements IServicelocator {
     try {
       let findData = await this.findAllUserDetails(userSearchDto);
 
-      if (findData['totalCount'] == 0) {
+      if (findData === false) {
         return APIResponse.error(response, apiId, "No Data Found", "Not Found", HttpStatus.NOT_FOUND);
       }
 
@@ -212,6 +212,8 @@ export class PostgresUserService implements IServicelocator {
       } else {
         result.getUserDetails.push(...userDetails);
       }
+    } else {
+      return false;
     }
     return result;
   }
@@ -263,7 +265,7 @@ export class PostgresUserService implements IServicelocator {
         let context = 'USERS';
         let contextType = roleInUpper;
         // customFields = await this.fieldsService.getFieldValuesData(userData.userId, context, contextType, ['All'], true);
-        customFields= await this.fieldsService.getUserCustomFieldDetails(userData.userId)
+        customFields = await this.fieldsService.getUserCustomFieldDetails(userData.userId)
       }
 
       result.userData = userDetails;
