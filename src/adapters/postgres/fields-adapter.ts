@@ -966,6 +966,17 @@ export class PostgresFieldsService implements IServicelocatorfields {
         let searchKey = [];
         let whereCondition = ` WHERE `;
         let index = 0;
+        let tableName = '';
+        let joinCond = '';
+
+        if (context === 'COHORT') {
+            joinCond = `JOIN "Cohort" u ON fv."itemId" = u."cohortId"`
+        } else if (context === 'USERS') {
+            joinCond = `JOIN "Users" u ON fv."itemId" = u."userId"`
+        } else {
+            joinCond = ``
+        }
+
 
         for (const [key, value] of Object.entries(stateDistBlockData)) {
             searchKey.push(`'${key}'`);
@@ -982,11 +993,14 @@ export class PostgresFieldsService implements IServicelocatorfields {
             jsonb_object_agg(f."name", fv."value") AS fields
         FROM "FieldValues" fv
         JOIN "Fields" f ON fv."fieldId" = f."fieldId"
-        WHERE f."name" IN (${searchKey}) AND f.context = '${context}'
+        ${joinCond}
+        WHERE f."name" IN (${searchKey}) AND (f.context IN('${context}', 'NULL', 'null', '') OR f.context IS NULL)
         GROUP BY fv."itemId"
         )
         SELECT "itemId"
         FROM user_fields ${whereCondition}`
+        console.log(query);
+
 
         const queryData = await this.fieldsValuesRepository.query(query);
         const result = queryData.length > 0 ? queryData.map(item => item.itemId) : null;

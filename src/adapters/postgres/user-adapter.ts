@@ -69,14 +69,15 @@ export class PostgresUserService implements IServicelocator {
     try {
       let findData = await this.findAllUserDetails(userSearchDto);
 
-      if (findData['totalCount'] == 0) {
+      if (findData === false) {
         return APIResponse.error(response, apiId, "No Data Found", "Not Found", HttpStatus.NOT_FOUND);
       }
 
       return await APIResponse.success(response, apiId, findData,
         HttpStatus.OK, 'User List fetched.')
     } catch (e) {
-      return APIResponse.error(response, apiId, "Internal Server Error", "Something went wrong", HttpStatus.INTERNAL_SERVER_ERROR);
+      const errorMessage = e.message || "Internal server error";
+      return APIResponse.error(response, apiId, "Internal Server Error", errorMessage, HttpStatus.INTERNAL_SERVER_ERROR)
     }
   }
 
@@ -211,6 +212,8 @@ export class PostgresUserService implements IServicelocator {
       } else {
         result.getUserDetails.push(...userDetails);
       }
+    } else {
+      return false;
     }
     return result;
   }
@@ -262,7 +265,7 @@ export class PostgresUserService implements IServicelocator {
         let context = 'USERS';
         let contextType = roleInUpper;
         // customFields = await this.fieldsService.getFieldValuesData(userData.userId, context, contextType, ['All'], true);
-        customFields= await this.fieldsService.getUserCustomFieldDetails(userData.userId)
+        customFields = await this.fieldsService.getUserCustomFieldDetails(userData.userId)
       }
 
       result.userData = userDetails;
