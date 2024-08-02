@@ -1122,4 +1122,65 @@ export class PostgresFieldsService implements IServicelocatorfields {
         return mappedFields;
     }
 
+    /* This function Fetches the Custom Field Enteres By User. Here
+       Here It convert the Value into Real Option.
+       Used in getUserDetails API as of Now.
+    */
+    public async getUserCustomFieldDetails(
+        userId: string,
+        fieldOption?: boolean
+      ) {
+        const query = `
+        SELECT DISTINCT 
+          f."fieldId",
+          f."label", 
+          fv."value", 
+          f."type", 
+          f."fieldParams",
+          f."sourceDetails"
+        FROM public."Users" u
+        LEFT JOIN (
+          SELECT DISTINCT ON (fv."fieldId", fv."itemId") fv.*
+          FROM public."FieldValues" fv
+        ) fv ON fv."itemId" = u."userId"
+        INNER JOIN public."Fields" f ON fv."fieldId" = f."fieldId"
+        WHERE u."userId" = $1;
+      `;
+        let result = await this.fieldsRepository.query(query, [userId]);
+        result = result.map(async (data) => {
+          const originalValue = data.value;
+          let processedValue = data.value;
+    
+          if (data?.sourceDetails) {
+            if (data.sourceDetails.source === "fieldparams") {
+              data.fieldParams.options.forEach((option) => {
+                if (data.value === option.value) {
+                  processedValue = option.label;
+                }
+              });
+            } else if (data.sourceDetails.source === "table") {
+              let labels = await this.findDynamicOptions(
+                data.sourceDetails.table,
+                `value='${data.value}'`
+              );
+              if (labels && labels.length > 0) {
+                processedValue = labels[0].label;
+              }
+            }
+          }
+    
+          delete data.fieldParams;
+          delete data.sourceDetails;
+    
+          return {
+            ...data,
+            value: processedValue,
+            code: originalValue
+          };
+        });
+    
+        result = await Promise.all(result);
+        return result;
+      }
+
 }
