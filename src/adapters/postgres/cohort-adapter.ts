@@ -162,10 +162,10 @@ export class PostgresCohortService {
   }
 
   public async findCohortName(userId: any) {
-    let query = `SELECT c."name",c."cohortId",c."parentId",c."type"
+    let query = `SELECT c."name",c."cohortId",c."parentId",c."type",cm."status"
     FROM public."CohortMembers" AS cm
     LEFT JOIN public."Cohort" AS c ON cm."cohortId" = c."cohortId"
-    WHERE cm."userId"=$1 AND c.status='active'`;
+    WHERE cm."userId"=$1 AND c.status='active' `;
     let result = await this.cohortMembersRepository.query(query, [userId]);
     return result;
   }
@@ -550,7 +550,7 @@ export class PostgresCohortService {
         },
         select: ["fieldId", "name", "label"]
       });
-
+    
       // Extract custom field names
       const customFieldsKeys = getCustomFields.map(customFields => customFields.name);
 
@@ -853,6 +853,7 @@ export class PostgresCohortService {
             name: data.name,
             parentId: data.parentId,
             type: data.type,
+            status:data.status,
             customField: {},
           };
           const getDetails = await this.getCohortCustomFieldDetails(
@@ -899,6 +900,7 @@ export class PostgresCohortService {
             cohortName: cohort.name,
             cohortId: cohort.cohortId,
             parentID: cohort.parentId,
+            status:cohort.status,
             type: cohort.type,
           };
           if (requiredData.customField) {
