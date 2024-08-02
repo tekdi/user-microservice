@@ -519,8 +519,8 @@ export class PostgresCohortService {
     try {
       let { limit, sort, offset, filters } = cohortSearchDto;
 
-      offset = offset ? offset : 0;
-      limit = limit ? limit : 200;
+      offset = offset || 0;
+      limit = limit || 200;
 
       const emptyValueKeys = {};
       let emptyKeysString = "";
@@ -545,10 +545,11 @@ export class PostgresCohortService {
 
       //Get custom fields
       const getCustomFields = await this.fieldsRepository.find({
-        where: {
-          context: In(['COHORT', null, 'null', 'NULL'])
-        },
-        select: ["fieldId", "name", "label"]
+        where: [
+          { context: In(['COHORT', null, 'null', 'NULL']), contextType: null },
+          { context: IsNull(), contextType: IsNull() }
+        ],
+        select: ["fieldId", "name", "label", "contextType"]
       });
 
       // Extract custom field names
@@ -563,25 +564,19 @@ export class PostgresCohortService {
       if (filters && Object.keys(filters).length > 0) {
         Object.entries(filters).forEach(([key, value]) => {
           if (!allowedKeys.includes(key)) {
-            return APIResponse.error(
-              response,
-              apiId,
-              `${key} Invalid key`,
-              `Invalid filter key`,
-              HttpStatus.BAD_REQUEST
+            return APIResponse.error(response, apiId, `${key} Invalid key`, `Invalid filter key`, HttpStatus.BAD_REQUEST
             );
-          } else {
-            if (value === "") {
-              emptyValueKeys[key] = value;
-              emptyKeysString += (emptyKeysString ? ", " : "") + key;
-            }
-            else if (key === 'name') {
-              whereClause[key] = ILike(`%${value}%`);
-            } else if (cohortAllKeys.includes(key)) {
-              whereClause[key] = value;
-            } else if (customFieldsKeys.includes(key)) {
-              searchCustomFields[key] = value;
-            }
+          }
+          if (value === "") {
+            emptyValueKeys[key] = value;
+            emptyKeysString += (emptyKeysString ? ", " : "") + key;
+          }
+          else if (key === 'name') {
+            whereClause[key] = ILike(`%${value}%`);
+          } else if (cohortAllKeys.includes(key)) {
+            whereClause[key] = value;
+          } else if (customFieldsKeys.includes(key)) {
+            searchCustomFields[key] = value;
           }
         });
       }
@@ -599,7 +594,7 @@ export class PostgresCohortService {
       };
 
       let order = {};
-      if (sort && sort.length) {
+      if (sort?.length) {
         order[sort[0]] = ['ASC', 'DESC'].includes(sort[1].toUpperCase()) ? sort[1].toUpperCase() : 'ASC'
       } else {
         order['name'] = 'ASC'
@@ -679,13 +674,13 @@ export class PostgresCohortService {
           whereClause['cohortId'] = In(getCohortIdUsingCustomFields)
         }
 
-        const [data, totalcount] = await this.cohortRepository.findAndCount({
+        const [data, totalCount] = await this.cohortRepository.findAndCount({
           where: whereClause,
           order,
         });
 
         const cohortData = data.slice(offset, offset + limit);
-        count = totalcount;
+        count = totalCount;
 
         for (let data of cohortData) {
           let customFieldsData = await this.getCohortDataWithCustomfield(
@@ -698,32 +693,13 @@ export class PostgresCohortService {
       }
 
       if (results.cohortDetails.length > 0) {
-        const totalCount = results.cohortDetails.length;
-        return APIResponse.success(
-          response,
-          apiId,
-          { count, results },
-          HttpStatus.OK,
-          "Cohort details fetched successfully"
-        );
+        return APIResponse.success(response, apiId, { count, results }, HttpStatus.OK, "Cohort details fetched successfully");
       } else {
-        return APIResponse.error(
-          response,
-          apiId,
-          `No data found.`,
-          "No data found.",
-          HttpStatus.NOT_FOUND
-        );
+        return APIResponse.error(response, apiId, `No data found.`, "No data found.", HttpStatus.NOT_FOUND);
       }
     } catch (error) {
       const errorMessage = error.message || "Internal server error";
-      return APIResponse.error(
-        response,
-        apiId,
-        "Internal Server Error",
-        errorMessage,
-        HttpStatus.INTERNAL_SERVER_ERROR
-      );
+      return APIResponse.error(response, apiId, "Internal Server Error", errorMessage, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 
@@ -731,7 +707,6 @@ export class PostgresCohortService {
     const apiId = APIID.COHORT_DELETE;
     try {
       const decoded: any = jwt_decode(request.headers.authorization);
-      // const createdBy = decoded?.sub;
       const updatedBy = decoded?.sub;
 
       if (!isUUID(cohortId)) {
@@ -799,7 +774,7 @@ export class PostgresCohortService {
 
   private async getCohortHierarchy(
     parentId: string,
-    customField?: Boolean
+    customField?: boolean
   ): Promise<any> {
     const childData = await this.cohortRepository.find({ where: { parentId } });
     const hierarchy = [];
