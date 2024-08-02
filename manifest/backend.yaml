@@ -17,15 +17,25 @@ spec:
       labels:
         app: backend
     spec:
+      terminationGracePeriodSeconds: 0
       containers:
       - image: ${ECR_REPOSITORY}:${IMAGE_TAG}
-        imagePullPolicy: ""
+        imagePullPolicy: "Always"
         name: backend-pratham
         ports:
         - containerPort: 3000
         envFrom:
         - configMapRef:
             name: backend-service-config
+        resources: {}
+      - name: cloudwatch-logs-agent
+        image: amazon/aws-for-fluent-bit:latest
+        imagePullPolicy: Always
+        env:
+          - name: REGION
+            value: ap-south-1
+          - name: LOG_GROUP
+            value: /aws/ecs/user-service
         resources: {}
       restartPolicy: Always
 status: {}

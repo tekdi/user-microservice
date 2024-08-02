@@ -18,7 +18,7 @@ import path, { join } from 'path';
 import { FieldFactory } from "src/fields/fieldValidators/fieldFactory";
 import { FieldsUpdateDto } from "src/fields/dto/fields-update.dto";
 import { SchemaField, Option } from "src/fields/fieldValidators/fieldClass";
-
+import jwt_decode from "jwt-decode";
 @Injectable()
 export class PostgresFieldsService implements IServicelocatorfields {
     constructor(
@@ -195,6 +195,9 @@ export class PostgresFieldsService implements IServicelocatorfields {
         const apiId = APIID.FIELDS_CREATE;
         try {
             const fieldsData: any = {}; // Define an empty object to store field data
+            const decoded: any = jwt_decode(request.headers.authorization);
+            const createdBy = decoded?.sub;
+            const updatedBy = decoded?.sub;
 
             Object.keys(fieldsDto).forEach((e) => {
                 if (fieldsDto[e] && fieldsDto[e] !== "") {
@@ -239,9 +242,9 @@ export class PostgresFieldsService implements IServicelocatorfields {
                     const checkSourceData = await this.fieldsValuesRepository.query(query);
 
                     if (checkSourceData[0].count == 0) {
-                        let createSourceField = await this.createSourceDetailsTableFields(fieldsData.sourceDetails.table, sourceFieldName['name'], sourceFieldName['value'], sourceFieldName['controllingfieldfk'], fieldsData?.dependsOn);
+                        let createSourceField = await this.createSourceDetailsTableFields(fieldsData.sourceDetails.table, sourceFieldName['name'], sourceFieldName['value'], createdBy, sourceFieldName['controllingfieldfk'], fieldsData?.dependsOn);
                     } else {
-                        let updateSourceField = await this.updateSourceDetailsTableFields(fieldsData.sourceDetails.table, sourceFieldName['name'], sourceFieldName['value'], sourceFieldName['controllingfieldfk']);
+                        let updateSourceField = await this.updateSourceDetailsTableFields(fieldsData.sourceDetails.table, sourceFieldName['name'], sourceFieldName['value'], updatedBy, sourceFieldName['controllingfieldfk']);
                     }
                 }
                 delete fieldsData.fieldParams;
@@ -266,6 +269,10 @@ export class PostgresFieldsService implements IServicelocatorfields {
     async updateFields(fieldId: any, request: any, fieldsUpdateDto: FieldsUpdateDto, response: Response) {
         const apiId = APIID.FIELDS_CREATE;
         try {
+            const decoded: any = jwt_decode(request.headers.authorization);
+            const createdBy = decoded?.sub;
+            const updatedBy = decoded?.sub;
+
             const fieldsData: any = {}; // Define an empty object to store field data
             let storeWithoutControllingField = [];
             let error = '';
@@ -291,6 +298,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
             //Update field options
             //Update data in source table
             if (getSourceDetails.sourceDetails && getSourceDetails.sourceDetails.source == 'table') {
+
                 for (let sourceFieldName of fieldsData.fieldParams.options) {
                     if (getSourceDetails.dependsOn && (!sourceFieldName['controllingfieldfk'] || sourceFieldName['controllingfieldfk'] === '')) {
                         storeWithoutControllingField.push(sourceFieldName['name'])
@@ -302,9 +310,9 @@ export class PostgresFieldsService implements IServicelocatorfields {
 
                     //If not exist then create that column else update that data
                     if (checkSourceData[0].count == 0) {
-                        let createSourceField = await this.createSourceDetailsTableFields(getSourceDetails.sourceDetails.table, sourceFieldName['name'], sourceFieldName['value'], sourceFieldName['controllingfieldfk'], getSourceDetails.dependsOn);
+                        let createSourceField = await this.createSourceDetailsTableFields(getSourceDetails.sourceDetails.table, sourceFieldName['name'], sourceFieldName['value'], createdBy, sourceFieldName['controllingfieldfk'], getSourceDetails.dependsOn);
                     } else {
-                        let updateSourceField = await this.updateSourceDetailsTableFields(getSourceDetails.sourceDetails.table, sourceFieldName['name'], sourceFieldName['value'], sourceFieldName['controllingfieldfk']);
+                        let updateSourceField = await this.updateSourceDetailsTableFields(getSourceDetails.sourceDetails.table, sourceFieldName['name'], sourceFieldName['value'], updatedBy, sourceFieldName['controllingfieldfk']);
                     }
                 }
                 delete fieldsData.fieldParams;
@@ -376,15 +384,16 @@ export class PostgresFieldsService implements IServicelocatorfields {
 
     }
 
-    async createSourceDetailsTableFields(tableName: string, name: string, value: string, controllingfieldfk?: string, dependsOn?: string) {
-        let createSourceFields = `INSERT INTO public.${tableName} (name, value`;
+    async createSourceDetailsTableFields(tableName: string, name: string, value: string, createdBy: string, controllingfieldfk?: string, dependsOn?: string) {
+
+        let createSourceFields = `INSERT INTO public.${tableName} ("name", "value", "createdBy"`;
 
         // Add controllingfieldfk to the columns if it is defined
         if (controllingfieldfk !== undefined && controllingfieldfk !== '') {
             createSourceFields += `, controllingfieldfk`;
         }
 
-        createSourceFields += `) VALUES ('${name}', '${value}'`;
+        createSourceFields += `) VALUES ('${name}', '${value}', '${createdBy}'`;
 
         // Add controllingfieldfk to the values if it is defined
         if (controllingfieldfk !== undefined && controllingfieldfk !== '') {
@@ -404,15 +413,16 @@ export class PostgresFieldsService implements IServicelocatorfields {
         }
     }
 
-    async updateSourceDetailsTableFields(tableName: string, name: string, value: string, controllingfieldfk?: string) {
+    async updateSourceDetailsTableFields(tableName: string, name: string, value: string, updatedBy: string, controllingfieldfk?: string) {
 
-        let updateSourceDetails = `UPDATE public.${tableName} SET name='${name}'`;
+        let updateSourceDetails = `UPDATE public.${tableName} SET "name"='${name}',"updatedBy"='${updatedBy}'`;
 
         if (controllingfieldfk !== undefined) {
             updateSourceDetails += `, controllingfieldfk='${controllingfieldfk}'`;
         }
 
         updateSourceDetails += ` WHERE value='${value}';`;
+
         const updateSourceData = await this.fieldsValuesRepository.query(updateSourceDetails);
         if (updateSourceData.length == 0) {
             return false
@@ -569,6 +579,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
     async searchFieldValues(request: any, fieldValuesSearchDto: FieldValuesSearchDto, response: Response) {
         const apiId = APIID.FIELDVALUES_SEARCH;
         try {
+
             const getConditionalData = await this.search(fieldValuesSearchDto)
             const offset = getConditionalData.offset;
             const limit = getConditionalData.limit;
@@ -750,11 +761,10 @@ export class PostgresFieldsService implements IServicelocatorfields {
 
     //Get all fields options
     public async getFieldOptions(fieldsOptionsSearchDto: FieldsOptionsSearchDto, response: Response) {
-
         const apiId = APIID.FIELDVALUES_SEARCH;
         try {
             let dynamicOptions;
-            let { fieldName, controllingfieldfk, context, contextType, offset, limit, sort, optionName } = fieldsOptionsSearchDto
+            let { fieldName, controllingfieldfk, context, contextType, offset, limit, sort, optionName } = fieldsOptionsSearchDto;
 
             offset = offset ? offset : 0;
             limit = limit ? limit : 200;
@@ -773,13 +783,13 @@ export class PostgresFieldsService implements IServicelocatorfields {
 
             const fetchFieldParams = await this.fieldsRepository.findOne({
                 where: condition
-            })
+            });
 
             let order;
             if (sort && sort.length) {
-                order = `ORDER BY ${sort[0]} ${sort[1]}`
+                order = `ORDER BY ${sort[0]} ${sort[1]}`;
             } else {
-                order = `ORDER BY name ASC`
+                order = `ORDER BY name ASC`;
             }
 
             if (fetchFieldParams?.sourceDetails?.source === 'table') {
@@ -797,24 +807,30 @@ export class PostgresFieldsService implements IServicelocatorfields {
                 let getFieldValuesFromJson = JSON.parse(readFileSync(filePath, 'utf-8'));
 
                 if (controllingfieldfk) {
-                    dynamicOptions = getFieldValuesFromJson.options.filter(option => (option?.controllingfieldfk === controllingfieldfk))
+                    dynamicOptions = getFieldValuesFromJson.options.filter(option => (option?.controllingfieldfk === controllingfieldfk));
                 } else {
                     dynamicOptions = getFieldValuesFromJson;
                 }
 
             } else {
-                fetchFieldParams.fieldParams['options'] && controllingfieldfk ?
-                    dynamicOptions = fetchFieldParams?.fieldParams['options'].filter((option: any) => option?.controllingfieldfk === controllingfieldfk) :
+                if (fetchFieldParams.fieldParams['options'] && controllingfieldfk) {
+                    dynamicOptions = fetchFieldParams?.fieldParams['options'].filter((option: any) => option?.controllingfieldfk === controllingfieldfk);
+                } else {
                     dynamicOptions = fetchFieldParams?.fieldParams['options'];
+                }
             }
 
-            return await APIResponse.success(response, apiId, dynamicOptions,
-                HttpStatus.OK, 'Field Values fetched successfully.')
+            const result = {
+                fieldId: fetchFieldParams.fieldId,
+                values: dynamicOptions
+            };
+
+            return await APIResponse.success(response, apiId, result,
+                HttpStatus.OK, 'Field Values fetched successfully.');
         } catch (e) {
             const errorMessage = e?.message || 'Something went wrong';
-            return APIResponse.error(response, apiId, "Internal Server Error", `Error : ${errorMessage}`, HttpStatus.INTERNAL_SERVER_ERROR)
+            return APIResponse.error(response, apiId, "Internal Server Error", `Error : ${errorMessage}`, HttpStatus.INTERNAL_SERVER_ERROR);
         }
-
     }
 
     public async deleteFieldOptions(requiredData, response) {
@@ -903,8 +919,12 @@ export class PostgresFieldsService implements IServicelocatorfields {
         }
 
         return result.map(result => ({
-            value: result.value,
-            label: result.name
+            value: result?.value,
+            label: result?.name,
+            createdAt: result?.createdAt,
+            updatedAt: result?.updatedAt,
+            createdBy: result?.createdBy,
+            updatedBy: result?.updatedBy
         }));
     }
     async findCustomFields(context: string, contextType?: string[], getFields?: string[]) {
@@ -1101,4 +1121,5 @@ export class PostgresFieldsService implements IServicelocatorfields {
         });
         return mappedFields;
     }
+
 }
