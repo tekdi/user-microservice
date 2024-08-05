@@ -763,11 +763,12 @@ export class PostgresFieldsService implements IServicelocatorfields {
     public async getFieldOptions(fieldsOptionsSearchDto: FieldsOptionsSearchDto, response: Response) {
         const apiId = APIID.FIELDVALUES_SEARCH;
         try {
+
             let dynamicOptions;
             let { fieldName, controllingfieldfk, context, contextType, offset, limit, sort, optionName } = fieldsOptionsSearchDto;
 
-            offset = offset ? offset : 0;
-            limit = limit ? limit : 200;
+            offset = offset || 0;
+            limit = limit || 200;
 
             const condition: any = {
                 name: fieldName
@@ -786,7 +787,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
             });
 
             let order;
-            if (sort && sort.length) {
+            if (sort?.length) {
                 order = `ORDER BY ${sort[0]} ${sort[1]}`;
             } else {
                 order = `ORDER BY name ASC`;
@@ -820,9 +821,19 @@ export class PostgresFieldsService implements IServicelocatorfields {
                 }
             }
 
+            const queryData = dynamicOptions.map(result => ({
+                value: result?.value,
+                label: result?.name,
+                createdAt: result?.createdAt,
+                updatedAt: result?.updatedAt,
+                createdBy: result?.createdBy,
+                updatedBy: result?.updatedBy
+            }));
+
             const result = {
+                totalCount: parseInt(dynamicOptions[0].total_count, 10),
                 fieldId: fetchFieldParams.fieldId,
-                values: dynamicOptions
+                values: queryData
             };
 
             return await APIResponse.success(response, apiId, result,
@@ -895,7 +906,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         let query: string;
         let result;
 
-        let orderCond = order ? order : '';
+        let orderCond = order || '';
         let offsetCond = offset ? `offset ${offset}` : '';
         let limitCond = limit ? `limit ${limit}` : '';
         let whereCond = `WHERE `;
@@ -911,21 +922,14 @@ export class PostgresFieldsService implements IServicelocatorfields {
             whereCond += ''
         }
 
-        query = `SELECT * FROM public."${tableName}" ${whereCond} ${orderCond} ${offsetCond} ${limitCond}`
+        query = `SELECT *,COUNT(*) OVER() AS total_count FROM public."${tableName}" ${whereCond} ${orderCond} ${offsetCond} ${limitCond}`
 
         result = await this.fieldsRepository.query(query);
         if (!result) {
             return null;
         }
 
-        return result.map(result => ({
-            value: result?.value,
-            label: result?.name,
-            createdAt: result?.createdAt,
-            updatedAt: result?.updatedAt,
-            createdBy: result?.createdBy,
-            updatedBy: result?.updatedBy
-        }));
+        return result
     }
     async findCustomFields(context: string, contextType?: string[], getFields?: string[]) {
         const condition: any = {
@@ -1143,7 +1147,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
     public async getUserCustomFieldDetails(
         userId: string,
         fieldOption?: boolean
-      ) {
+    ) {
         const query = `
         SELECT DISTINCT 
           f."fieldId",
@@ -1162,39 +1166,39 @@ export class PostgresFieldsService implements IServicelocatorfields {
       `;
         let result = await this.fieldsRepository.query(query, [userId]);
         result = result.map(async (data) => {
-          const originalValue = data.value;
-          let processedValue = data.value;
-    
-          if (data?.sourceDetails) {
-            if (data.sourceDetails.source === "fieldparams") {
-              data.fieldParams.options.forEach((option) => {
-                if (data.value === option.value) {
-                  processedValue = option.label;
+            const originalValue = data.value;
+            let processedValue = data.value;
+
+            if (data?.sourceDetails) {
+                if (data.sourceDetails.source === "fieldparams") {
+                    data.fieldParams.options.forEach((option) => {
+                        if (data.value === option.value) {
+                            processedValue = option.label;
+                        }
+                    });
+                } else if (data.sourceDetails.source === "table") {
+                    let labels = await this.findDynamicOptions(
+                        data.sourceDetails.table,
+                        `value='${data.value}'`
+                    );
+                    if (labels && labels.length > 0) {
+                        processedValue = labels[0].label;
+                    }
                 }
-              });
-            } else if (data.sourceDetails.source === "table") {
-              let labels = await this.findDynamicOptions(
-                data.sourceDetails.table,
-                `value='${data.value}'`
-              );
-              if (labels && labels.length > 0) {
-                processedValue = labels[0].label;
-              }
             }
-          }
-    
-          delete data.fieldParams;
-          delete data.sourceDetails;
-    
-          return {
-            ...data,
-            value: processedValue,
-            code: originalValue
-          };
+
+            delete data.fieldParams;
+            delete data.sourceDetails;
+
+            return {
+                ...data,
+                value: processedValue,
+                code: originalValue
+            };
         });
-    
+
         result = await Promise.all(result);
         return result;
-      }
+    }
 
 }
