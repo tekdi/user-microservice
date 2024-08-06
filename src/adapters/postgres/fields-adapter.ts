@@ -1003,8 +1003,6 @@ export class PostgresFieldsService implements IServicelocatorfields {
         )
         SELECT "itemId"
         FROM user_fields ${whereCondition}`
-        console.log(query);
-
 
         const queryData = await this.fieldsValuesRepository.query(query);
         const result = queryData.length > 0 ? queryData.map(item => item.itemId) : null;
@@ -1164,6 +1162,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         INNER JOIN public."Fields" f ON fv."fieldId" = f."fieldId"
         WHERE u."userId" = $1;
       `;
+
         let result = await this.fieldsRepository.query(query, [userId]);
         result = result.map(async (data) => {
             const originalValue = data.value;

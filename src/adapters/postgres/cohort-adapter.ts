@@ -225,7 +225,7 @@ export class PostgresCohortService {
             `value='${data.value}'`
           );
           if (labels && labels.length > 0) {
-            processedValue = labels[0].label;
+            processedValue = labels[0].name;
           }
         }
       }
@@ -551,7 +551,7 @@ export class PostgresCohortService {
         ],
         select: ["fieldId", "name", "label", "contextType"]
       });
-    
+
       // Extract custom field names
       const customFieldsKeys = getCustomFields.map(customFields => customFields.name);
 
@@ -828,7 +828,7 @@ export class PostgresCohortService {
             name: data.name,
             parentId: data.parentId,
             type: data.type,
-            status:data.status,
+            status: data.status,
             customField: {},
           };
           const getDetails = await this.getCohortCustomFieldDetails(
@@ -875,7 +875,7 @@ export class PostgresCohortService {
             cohortName: cohort.name,
             cohortId: cohort.cohortId,
             parentID: cohort.parentId,
-            status:cohort.status,
+            status: cohort.status,
             type: cohort.type,
           };
           if (requiredData.customField) {
