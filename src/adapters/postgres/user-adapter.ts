@@ -183,7 +183,7 @@ export class PostgresUserService implements IServicelocator {
       whereCondition = '';
     }
 
-    //Get user code fields data
+    //Get user core fields data
     let query = `SELECT U."userId", U."username", U."name", R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", U.status, COUNT(*) OVER() AS total_count 
       FROM  public."Users" U
       LEFT JOIN public."CohortMembers" CM 
