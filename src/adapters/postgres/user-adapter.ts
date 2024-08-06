@@ -183,6 +183,7 @@ export class PostgresUserService implements IServicelocator {
       whereCondition = '';
     }
 
+    //Get user code fields data
     let query = `SELECT U."userId", U."username", U."name", R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", U.status, COUNT(*) OVER() AS total_count 
       FROM  public."Users" U
       LEFT JOIN public."CohortMembers" CM 
@@ -196,21 +197,17 @@ export class PostgresUserService implements IServicelocator {
     if (userDetails.length > 0) {
       result.totalCount = parseInt(userDetails[0].total_count, 10);
 
-      if (userSearchDto?.fields) {
-        for (let userData of userDetails) {
-          let customFields = await this.fieldsService.getUserCustomFieldDetails(userData.userId);
-
-          userData['customFields'] = customFields.map(data => ({
-            fieldId: data?.fieldId,
-            label: data?.label,
-            value: data?.value,
-            code: data?.code,
-            type: data?.type,
-          }));
-          result.getUserDetails.push(userData);
-        }
-      } else {
-        result.getUserDetails.push(...userDetails);
+      //Get user custom field data
+      for (let userData of userDetails) {
+        let customFields = await this.fieldsService.getUserCustomFieldDetails(userData.userId);
+        userData['customFields'] = customFields.map(data => ({
+          fieldId: data?.fieldId,
+          label: data?.label,
+          value: data?.value,
+          code: data?.code,
+          type: data?.type,
+        }));
+        result.getUserDetails.push(userData);
       }
     } else {
       return false;
