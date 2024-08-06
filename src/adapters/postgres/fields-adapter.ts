@@ -1182,7 +1182,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
                         `value='${data.value}'`
                     );
                     if (labels && labels.length > 0) {
-                        processedValue = labels[0].label;
+                        processedValue = labels[0].name;
                     }
                 }
             }

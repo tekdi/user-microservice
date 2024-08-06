@@ -165,7 +165,6 @@ export class PostgresUserService implements IServicelocator {
     }
 
     if (getUserIdUsingCustomFields && getUserIdUsingCustomFields.length > 0) {
-
       const userIdsDependsOnCustomFields = getUserIdUsingCustomFields.map(userId => `'${userId}'`).join(',');
       whereCondition += `${index > 0 ? ' AND ' : ''} U."userId" IN (${userIdsDependsOnCustomFields})`;
       index++;
@@ -179,7 +178,6 @@ export class PostgresUserService implements IServicelocator {
       const userCondition = userIds ? `U."userId" NOT IN (${userIds})` : '';
       const cohortCondition = cohortIds ? `CM."cohortId" NOT IN (${cohortIds})` : '';
       const combinedCondition = [userCondition, cohortCondition].filter(String).join(' AND ');
-
       whereCondition += (index > 0 ? ' AND ' : '') + combinedCondition;
     } else if (index === 0) {
       whereCondition = '';
@@ -193,20 +191,22 @@ export class PostgresUserService implements IServicelocator {
       ON UR."userId" = U."userId"
       LEFT JOIN public."Roles" R
       ON R."roleId" = UR."roleId" ${whereCondition} GROUP BY U."userId", R."name" ${orderingCondition} ${offset} ${limit}`
-
-
     let userDetails = await this.usersRepository.query(query);
-
 
     if (userDetails.length > 0) {
       result.totalCount = parseInt(userDetails[0].total_count, 10);
-      if (userSearchDto.fields) {
+
+      if (userSearchDto?.fields) {
         for (let userData of userDetails) {
-          let context = 'USERS';
-          let contextType = userData.role.toUpperCase();
-          let isRequiredFieldOptions = false;
-          let customFields = await this.fieldsService.getFieldValuesData(userData.userId, context, contextType, userSearchDto.fields, isRequiredFieldOptions);
-          userData['customFields'] = customFields;
+          let customFields = await this.fieldsService.getUserCustomFieldDetails(userData.userId);
+
+          userData['customFields'] = customFields.map(data => ({
+            fieldId: data?.fieldId,
+            label: data?.label,
+            value: data?.value,
+            code: data?.code,
+            type: data?.type,
+          }));
           result.getUserDetails.push(userData);
         }
       } else {
