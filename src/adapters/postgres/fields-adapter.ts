@@ -821,6 +821,10 @@ export class PostgresFieldsService implements IServicelocatorfields {
                 }
             }
 
+            if (dynamicOptions.length === 0) {
+                return await APIResponse.error(response, apiId, `No data found in ${fieldName} table`, `NOT_FOUND`, (HttpStatus.NOT_FOUND))
+            }
+
             const queryData = dynamicOptions.map(result => ({
                 value: result?.value,
                 label: result?.name,
@@ -831,8 +835,8 @@ export class PostgresFieldsService implements IServicelocatorfields {
             }));
 
             const result = {
-                totalCount: parseInt(dynamicOptions[0].total_count, 10),
-                fieldId: fetchFieldParams.fieldId,
+                totalCount: parseInt(dynamicOptions[0]?.total_count, 10),
+                fieldId: fetchFieldParams?.fieldId,
                 values: queryData
             };
 
