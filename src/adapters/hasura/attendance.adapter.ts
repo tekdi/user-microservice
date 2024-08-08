@@ -445,7 +445,8 @@ export class AttendanceHasuraService implements IServicelocator {
   public async multipleAttendance(
     tenantId: string,
     request: any,
-    attendanceData: [AttendanceDto]
+    attendanceData: [AttendanceDto],
+    response: any,
   ) {
     const responses = [];
     const errors = [];

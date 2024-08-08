@@ -1,14 +1,109 @@
-import { Exclude, Expose, Type } from "class-transformer";
+import { Expose, Type } from "class-transformer";
 import {
   IsNotEmpty,
-  IsString,
   IsOptional,
   ValidateNested,
-  IsEnum
+  IsEnum,
+  IsBoolean,
+  IsString,
+  IsNumber
 } from "class-validator";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { FieldValuesCreateDto } from "src/fields/dto/field-values-create.dto";
 import { FieldValuesOptionDto } from "src/user/dto/user-create.dto";
+
+// export class SelfDto {
+//   @ApiProperty({ type: Number })
+//   @Expose()
+//   @IsNotEmpty()
+//   @IsNumber()
+//   allowed: number;
+
+//   @ApiProperty({ type: Number })
+//   @Expose()
+//   @IsNotEmpty()
+//   @IsNumber()
+//   back_dated_attendance: number;
+
+//   @ApiProperty({ type: Number })
+//   @Expose()
+//   @IsNotEmpty()
+//   @IsNumber()
+//   restrict_attendance_timings: number;
+
+//   @ApiProperty({ type: String })
+//   @Expose()
+//   @IsNotEmpty()
+//   @IsString()
+//   attendance_starts_at: string;
+
+//   @ApiProperty({ type: String })
+//   @Expose()
+//   @IsNotEmpty()
+//   @IsString()
+//   attendance_ends_at: string;
+
+//   @ApiProperty({ type: Number })
+//   @Expose()
+//   @IsNotEmpty()
+//   @IsNumber()
+//   allow_late_marking: number;
+
+//   @ApiProperty({ type: Number })
+//   @Expose()
+//   @IsNotEmpty()
+//   @IsNumber()
+//   capture_geoLocation: number;
+// }
+
+// export class StudentDto {
+//   @ApiProperty({ type: Number })
+//   @Expose()
+//   @IsNotEmpty()
+//   @IsNumber()
+//   allowed: number;
+
+//   @ApiProperty({ type: Number })
+//   @Expose()
+//   @IsNotEmpty()
+//   @IsNumber()
+//   back_dated_attendance: number;
+
+//   @ApiProperty({ type: Number })
+//   @Expose()
+//   @IsNotEmpty()
+//   @IsNumber()
+//   back_dated_attendance_allowed_days: number;
+
+//   @ApiProperty({ type: Number })
+//   @Expose()
+//   @IsNotEmpty()
+//   @IsNumber()
+//   restrict_attendance_timings: number;
+
+//   @ApiProperty({ type: String, required: false })
+//   @Expose()
+//   @IsOptional()
+//   @IsString()
+//   attendance_starts_at?: string;
+
+//   @ApiProperty({ type: String, required: false })
+//   @Expose()
+//   @IsOptional()
+//   @IsString()
+//   attendance_ends_at?: string;
+
+//   @ApiProperty({ type: Number, required: false })
+//   @Expose()
+//   @IsOptional()
+//   @IsNumber()
+//   capture_geoLocation?: number;
+
+//   @ApiProperty({ type: Number, required: false })
+//   @Expose()
+//   @IsOptional()
+//   @IsNumber()
+//   allow_late_marking?: number;
+// }
 
 export class CohortCreateDto {
   @Expose()
@@ -18,34 +113,38 @@ export class CohortCreateDto {
   tenantId: string;
 
   @Expose()
-  createdAt: string;
+  @IsOptional()
+  createdAt?: string;
 
   @Expose()
-  updatedAt: string;
+  @IsOptional()
+  updatedAt?: string;
 
-  //programId
+  // programId
   @ApiPropertyOptional({
     type: String,
     description: "The programId of the cohort",
     default: "",
   })
   @Expose()
-  programId: string;
+  @IsOptional()
+  programId?: string;
 
-  //parentId
+  // parentId
   @ApiPropertyOptional({
     type: String,
     description: "The parentId of the cohort",
     default: "",
   })
   @Expose()
-  parentId: string;
+  @IsOptional()
+  parentId?: string;
 
-  //referenceId
+  // referenceId
   @Expose()
   referenceId: string;
 
-  //name
+  // name
   @ApiProperty({
     type: String,
     description: "The name of the cohort",
@@ -55,7 +154,7 @@ export class CohortCreateDto {
   @IsNotEmpty()
   name: string;
 
-  //type
+  // type
   @ApiProperty({
     type: String,
     description: "The type of the cohort",
@@ -65,9 +164,6 @@ export class CohortCreateDto {
   @IsNotEmpty()
   type: string;
 
-  //status
-  // @Expose()
-  // status: string;
   @ApiProperty({
     type: String,
     description: "The status of Cohort",
@@ -77,47 +173,59 @@ export class CohortCreateDto {
     message: 'Status must be one of: active, archived, inactive',
   })
   @Expose()
-  status: string;
+  status?: string;
 
-  //attendanceCaptureImage
+  // attendanceCaptureImage
+  @ApiProperty({
+    type: Boolean,
+    description: "Capture image while marking the attendance",
+    default: false,
+  })
   @Expose()
-  attendanceCaptureImage: boolean;
+  @IsOptional()
+  @IsBoolean()
+  attendanceCaptureImage?: boolean;
 
-  //image need for future
-  // @Expose()
-  // @ApiPropertyOptional({ type: "string", format: "binary" })
-  // image: string;
-
-  //metadata
+  // metadata
+  @ApiPropertyOptional({
+    type: String,
+    description: "Additional metadata for the cohort",
+    default: "",
+  })
   @Expose()
-  metadata: string;
+  @IsString()
+  @IsOptional()
+  metadata?: string;
 
-  //createdBy
+  // createdBy
   @Expose()
-  createdBy: string;
+  @IsString()
+  @IsOptional()
+  createdBy?: string;
 
-  //updatedBy
+  // updatedBy
   @Expose()
-  updatedBy: string;
+  @IsString()
+  @IsOptional()
+  updatedBy?: string;
 
-  //fieldValues
-  //fieldValues
+  // fieldValues
   @ApiPropertyOptional({
     type: [FieldValuesOptionDto],
     description: "The fieldValues Object",
   })
   @ValidateNested({ each: true })
   @Type(() => FieldValuesOptionDto)
-  customFields: FieldValuesOptionDto[];
-  // @ApiPropertyOptional({
-  //   type: String,
-  //   description: "The fieldValues Object",
-  // })
-  // @IsString()
-  // @IsOptional()
-  // @Expose()
-  // fieldValues?: string;
+  @IsOptional()
+  customFields?: FieldValuesOptionDto[];
 
+  @ApiPropertyOptional({
+    type: Object,
+    description: "Cohort attendance params",
+    default: {},
+  })
+  @Expose()
+  params: object;
 
   constructor(obj?: Partial<CohortCreateDto>) {
     if (obj) {

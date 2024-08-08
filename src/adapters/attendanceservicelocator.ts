@@ -21,7 +21,8 @@ export interface IServicelocator {
   multipleAttendance(
     tenantId: string,
     request: any,
-    attendanceData: any
+    attendanceData: any,
+    response: any,
   );
   searchAttendance(
     tenantId: string,

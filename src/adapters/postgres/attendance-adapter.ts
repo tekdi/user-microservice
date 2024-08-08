@@ -11,6 +11,10 @@ import { AttendanceDateDto } from '../../attendance/dto/attendance-date.dto';
 import { AttendanceStatsDto } from '../../attendance/dto/attendance-stats.dto';
 import { ErrorResponseTypeOrm } from 'src/error-response-typeorm';
 import { CohortMembers } from 'src/cohortMembers/entities/cohort-member.entity';
+import { PostgresCohortService } from "src/adapters/postgres/cohort-adapter";
+import { Cohort } from "src/cohort/entities/cohort.entity";
+import { format, isWithinInterval, subDays } from 'date-fns';
+import { UserRoleMapping } from "src/rbac/assign-role/entities/assign-role.entity";
 const moment = require('moment');
 const facetedSearch = require("in-memory-faceted-search");
 
@@ -22,7 +26,9 @@ export class PostgresAttendanceService {
         @InjectRepository(User)
         private userRepository: Repository<User>,
         @InjectRepository(CohortMembers)
-        private cohortMembersRepository: Repository<CohortMembers>
+        private cohortMembersRepository: Repository<CohortMembers>,
+        @InjectRepository(Cohort)
+        private cohortRepository: Repository<Cohort>
     ) { }
 
 
@@ -558,7 +564,6 @@ export class PostgresAttendanceService {
             if (
                 attendanceFound.data.attendanceList.length > 0
             ) {
-
                 attendanceDto.updatedBy = loginUserId
                 return await this.updateAttendance(
                     attendanceFound.data.attendanceList[0].attendanceId,
@@ -591,12 +596,9 @@ export class PostgresAttendanceService {
         attendanceDto: AttendanceDto
     ) {
         try {
-
-
             const attendanceRecord = await this.attendanceRepository.findOne({
                 where: { attendanceId },
             });
-
 
             if (!attendanceRecord) {
                 return new ErrorResponseTypeOrm({
@@ -608,9 +610,20 @@ export class PostgresAttendanceService {
             this.attendanceRepository.merge(attendanceRecord, attendanceDto);
 
             // Save the updated attendance record
-            const updatedAttendanceRecord = await this.attendanceRepository.save(
+
+            const attendanceValidation = await this.markAttendanceValidtion(attendanceDto)
+
+            if (attendanceValidation.status === false) {
+                return new ErrorResponseTypeOrm({
+                    statusCode: HttpStatus.BAD_REQUEST,
+                    errorMessage: attendanceValidation.errorMessage,
+                });
+            }
+
+            let updatedAttendanceRecord = await this.attendanceRepository.save(
                 attendanceRecord
             );
+
 
             return new SuccessResponse({
                 statusCode: HttpStatus.OK,
@@ -643,6 +656,15 @@ export class PostgresAttendanceService {
     public async createAttendance(request: any, attendanceDto: AttendanceDto) {
 
         try {
+            // Save the updated attendance record
+            const attendanceValidation = await this.markAttendanceValidtion(attendanceDto)
+
+            if (attendanceValidation.status === false) {
+                return new ErrorResponseTypeOrm({
+                    statusCode: HttpStatus.BAD_REQUEST,
+                    errorMessage: attendanceValidation.errorMessage,
+                });
+            }
             const attendance = this.attendanceRepository.create(attendanceDto);
             const result = await this.attendanceRepository.save(attendance);
 
@@ -665,6 +687,109 @@ export class PostgresAttendanceService {
                 });
             }
         }
+    }
+
+    public async markAttendanceValidtion(attendanceDto) {
+        // Save the updated attendance record
+        let getCohortDetails = await this.cohortRepository.findOne({
+            where: { "cohortId": attendanceDto.contextId }
+        });
+
+        //Get current date
+        const todayDate = format(new Date(), 'yyyy-MM-dd');
+        const attendanceDate = format(new Date(attendanceDto.attendanceDate), 'yyyy-MM-dd');
+
+
+        let attendanceValidation = attendanceDto.scope ? getCohortDetails.params[attendanceDto.scope] : getCohortDetails.params['student']
+
+        //set flag for mark attendance
+        let result: any = {};
+        if (attendanceValidation?.allowed !== 1) {
+            result = {
+                status: false,
+                errorMessage: "Mark attendance not allowed",
+            }
+        }
+
+        //Set flag for mark back dated attendance
+        if (attendanceValidation?.back_dated_attendance !== 1 && todayDate !== attendanceDate) {
+            result = {
+                status: false,
+                errorMessage: `Back dated attendance not allowed`,
+            }
+        }
+
+        //set flag on update attendance status
+        if (attendanceValidation?.update_once_marked !== 1) {
+            result = {
+                status: false,
+                errorMessage: `You have no permission to update your attendance.`,
+            }
+        }
+
+        //Validation on back dated date
+        if (attendanceValidation?.back_dated_attendance === 1 && isWithinInterval(new Date(attendanceDto?.attendanceDate), {
+            start: subDays(new Date(), attendanceValidation?.back_dated_attendance_allowed_days),
+            end: new Date()
+        }) === false) {
+            result = {
+                status: false,
+                errorMessage: `Back dated attendance allowed only for ${attendanceValidation?.back_dated_attendance_allowed_days} days`,
+            }
+        }
+
+
+
+        //Set validation on mark attendance on time
+        const selfAttendanceEnd = attendanceValidation?.attendance_ends_at;
+        const selfAttendanceStart = attendanceValidation?.attendance_starts_at;
+
+
+        if (selfAttendanceEnd !== null || selfAttendanceStart !== null) {
+            // Parse the self attendance start time
+            const [startHours, startMinutes] = selfAttendanceStart.split(":").map(Number);
+            if (isNaN(startHours) || isNaN(startMinutes)) {
+                result = {
+                    status: false,
+                    errorMessage: `Invalid self_attendance_start time format.`,
+                }
+            }
+
+            // Parse the self attendance end time
+            const [endHours, endMinutes] = selfAttendanceEnd.split(":").map(Number);
+            if (isNaN(endHours) || isNaN(endMinutes)) {
+                result = {
+                    status: false,
+                    errorMessage: `Invalid self attendance end time format.`,
+                }
+            }
+
+            //Fetch current time 
+            const currentTimeIST = new Date(Date.now() + (5.5 * 60 * 60 * 1000));
+            const currentHours = currentTimeIST.getUTCHours();
+            const currentMinutes = currentTimeIST.getUTCMinutes();
+
+            // Format the current time and end time in HH:MM format
+            const formatTime = (hours: number, minutes: number) => {
+                return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+            };
+
+            //Can not mark attendance before and after attendance timing 
+            const currentTimeFormatted = formatTime(currentHours, currentMinutes);
+            const endTimeFormatted = formatTime(endHours, endMinutes);
+            const startTimeFormatted = formatTime(startHours, startMinutes);
+
+
+            if (attendanceDto.scope == 'self' && currentTimeFormatted < startTimeFormatted || currentTimeFormatted > endTimeFormatted) {
+                result = {
+                    status: false,
+                    errorMessage: `Attendance cannot be marked at this time.`,
+                }
+            }
+        }
+
+
+        return result;
     }
 
     /*Method to search attendance fromDate to toDate 
@@ -725,7 +850,8 @@ export class PostgresAttendanceService {
     public async multipleAttendance(
         tenantId: string,
         request: any,
-        attendanceData: BulkAttendanceDTO
+        attendanceData: BulkAttendanceDTO,
+        response: any,
     ) {
 
         const loginUserId = request.user.userId
@@ -736,13 +862,15 @@ export class PostgresAttendanceService {
         try {
             let count = 1;
 
-            for (let attendance of attendanceData.userAttendance) {
 
+            // console.log(attendanceData);
+
+            for (let attendance of attendanceData.userAttendance) {
 
                 const userAttendance = new AttendanceDto({
                     attendanceDate: attendanceData.attendanceDate,
                     contextId: attendanceData?.contextId,
-                    scope: attendanceData?.scope,
+                    scope: attendance?.scope ? attendance?.scope : 'student',
                     attendance: attendance?.attendance,
                     userId: attendance?.userId,
                     tenantId: tenantId,
@@ -760,6 +888,7 @@ export class PostgresAttendanceService {
                     loginUserId,
                     userAttendance
                 );
+
 
                 if (attendanceRes?.statusCode === 200 || attendanceRes?.statusCode === 201) {
                     responses.push(attendanceRes.data);
