@@ -147,6 +147,13 @@ export class AttendanceDto {
   @Expose()
   updatedBy: string;
 
+  @Expose()
+  lateMark: boolean;
+
+  @ApiPropertyOptional()
+  @Expose()
+  absentReason: string;
+
   @ApiPropertyOptional()
   @ValidateIf(o => o.scope !== undefined && o.scope !== null) @IsEnum(Scope, { message: "Please enter valid enum values for scope [self, student]" })
   scope: string

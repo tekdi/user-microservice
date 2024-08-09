@@ -614,17 +614,24 @@ export class PostgresAttendanceService {
             });
 
             // Set validation on mark attendance
-            if (getCohortDetails?.params) {
-                const attendanceValidation = await this.markAttendanceValidtion(attendanceDto, getCohortDetails, attendanceRecord?.attendanceId)
 
-                if (attendanceValidation.status === false) {
-                    return new ErrorResponseTypeOrm({
-                        statusCode: HttpStatus.BAD_REQUEST,
-                        errorMessage: attendanceValidation.errorMessage,
-                    });
-                }
+            let attendanceValidation: any = {};
+            if (getCohortDetails?.params) {
+                attendanceValidation = await this.markAttendanceValidtion(attendanceDto, getCohortDetails)
             }
 
+            if (attendanceValidation.status === false) {
+                return new ErrorResponseTypeOrm({
+                    statusCode: HttpStatus.BAD_REQUEST,
+                    errorMessage: attendanceValidation.errorMessage,
+                });
+            }
+
+            const todayDate = format(new Date(), 'yyyy-MM-dd');
+            const attendanceDate = format(new Date(attendanceDto?.attendanceDate), 'yyyy-MM-dd');
+            if (attendanceValidation.status !== false && todayDate !== attendanceDate) {
+                attendanceRecord.lateMark = true;
+            }
 
             let updatedAttendanceRecord = await this.attendanceRepository.save(
                 attendanceRecord
@@ -667,16 +674,25 @@ export class PostgresAttendanceService {
             });
 
             // Set validation on mark attendance
+            let attendanceValidation: any = {};
             if (getCohortDetails?.params) {
-                const attendanceValidation = await this.markAttendanceValidtion(attendanceDto, getCohortDetails)
-
-                if (attendanceValidation.status === false) {
-                    return new ErrorResponseTypeOrm({
-                        statusCode: HttpStatus.BAD_REQUEST,
-                        errorMessage: attendanceValidation.errorMessage,
-                    });
-                }
+                attendanceValidation = await this.markAttendanceValidtion(attendanceDto, getCohortDetails)
             }
+
+            if (attendanceValidation.status === false) {
+                return new ErrorResponseTypeOrm({
+                    statusCode: HttpStatus.BAD_REQUEST,
+                    errorMessage: attendanceValidation.errorMessage,
+                });
+            }
+
+            const todayDate = format(new Date(), 'yyyy-MM-dd');
+            const attendanceDate = format(new Date(attendanceDto?.attendanceDate), 'yyyy-MM-dd');
+            if (attendanceValidation.status !== false && todayDate !== attendanceDate) {
+                attendanceDto['lateMark'] = true;
+            }
+            console.log(attendanceDto);
+
 
             const attendance = this.attendanceRepository.create(attendanceDto);
             const result = await this.attendanceRepository.save(attendance);
