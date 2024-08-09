@@ -802,6 +802,7 @@ export class PostgresCohortService {
   }
 
   public async getCohortHierarchyData(requiredData, res) {
+
     let apiId = APIID.COHORT_LIST;
     if (!requiredData.getChildData) {
       try {
@@ -830,6 +831,7 @@ export class PostgresCohortService {
             params: data.params,
             customField: {},
           };
+
           const getDetails = await this.getCohortCustomFieldDetails(
             data.cohortId
           );
@@ -875,6 +877,7 @@ export class PostgresCohortService {
             cohortId: cohort.cohortId,
             parentID: cohort.parentId,
             type: cohort.type,
+            params: cohort.params,
           };
           if (requiredData.customField) {
             resultData["customField"] = await this.getCohortCustomFieldDetails(
