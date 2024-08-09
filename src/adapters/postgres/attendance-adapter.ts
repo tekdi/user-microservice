@@ -609,16 +609,22 @@ export class PostgresAttendanceService {
 
             this.attendanceRepository.merge(attendanceRecord, attendanceDto);
 
-            // Save the updated attendance record
+            let getCohortDetails = await this.cohortRepository.findOne({
+                where: { "cohortId": attendanceDto.contextId }
+            });
 
-            const attendanceValidation = await this.markAttendanceValidtion(attendanceDto)
+            // Set validation on mark attendance
+            if (getCohortDetails?.params) {
+                const attendanceValidation = await this.markAttendanceValidtion(attendanceDto, getCohortDetails, attendanceRecord?.attendanceId)
 
-            if (attendanceValidation.status === false) {
-                return new ErrorResponseTypeOrm({
-                    statusCode: HttpStatus.BAD_REQUEST,
-                    errorMessage: attendanceValidation.errorMessage,
-                });
+                if (attendanceValidation.status === false) {
+                    return new ErrorResponseTypeOrm({
+                        statusCode: HttpStatus.BAD_REQUEST,
+                        errorMessage: attendanceValidation.errorMessage,
+                    });
+                }
             }
+
 
             let updatedAttendanceRecord = await this.attendanceRepository.save(
                 attendanceRecord
@@ -656,15 +662,22 @@ export class PostgresAttendanceService {
     public async createAttendance(request: any, attendanceDto: AttendanceDto) {
 
         try {
-            // Save the updated attendance record
-            const attendanceValidation = await this.markAttendanceValidtion(attendanceDto)
+            let getCohortDetails = await this.cohortRepository.findOne({
+                where: { "cohortId": attendanceDto.contextId }
+            });
 
-            if (attendanceValidation.status === false) {
-                return new ErrorResponseTypeOrm({
-                    statusCode: HttpStatus.BAD_REQUEST,
-                    errorMessage: attendanceValidation.errorMessage,
-                });
+            // Set validation on mark attendance
+            if (getCohortDetails?.params) {
+                const attendanceValidation = await this.markAttendanceValidtion(attendanceDto, getCohortDetails)
+
+                if (attendanceValidation.status === false) {
+                    return new ErrorResponseTypeOrm({
+                        statusCode: HttpStatus.BAD_REQUEST,
+                        errorMessage: attendanceValidation.errorMessage,
+                    });
+                }
             }
+
             const attendance = this.attendanceRepository.create(attendanceDto);
             const result = await this.attendanceRepository.save(attendance);
 
@@ -689,18 +702,14 @@ export class PostgresAttendanceService {
         }
     }
 
-    public async markAttendanceValidtion(attendanceDto) {
-        // Save the updated attendance record
-        let getCohortDetails = await this.cohortRepository.findOne({
-            where: { "cohortId": attendanceDto.contextId }
-        });
+    public async markAttendanceValidtion(attendanceDto, getCohortDetails, attendanceId?: string) {
 
         //Get current date
         const todayDate = format(new Date(), 'yyyy-MM-dd');
-        const attendanceDate = format(new Date(attendanceDto.attendanceDate), 'yyyy-MM-dd');
+        const attendanceDate = format(new Date(attendanceDto?.attendanceDate), 'yyyy-MM-dd');
 
+        let attendanceValidation = attendanceDto.scope ? getCohortDetails.params[attendanceDto.scope] : getCohortDetails.params['student'];
 
-        let attendanceValidation = attendanceDto.scope ? getCohortDetails.params[attendanceDto.scope] : getCohortDetails.params['student']
 
         //set flag for mark attendance
         let result: any = {};
@@ -711,6 +720,7 @@ export class PostgresAttendanceService {
             }
         }
 
+
         //Set flag for mark back dated attendance
         if (attendanceValidation?.back_dated_attendance !== 1 && todayDate !== attendanceDate) {
             result = {
@@ -720,7 +730,7 @@ export class PostgresAttendanceService {
         }
 
         //set flag on update attendance status
-        if (attendanceValidation?.update_once_marked !== 1) {
+        if (attendanceId && attendanceValidation?.update_once_marked !== 1) {
             result = {
                 status: false,
                 errorMessage: `You have no permission to update your attendance.`,
@@ -728,10 +738,11 @@ export class PostgresAttendanceService {
         }
 
         //Validation on back dated date
-        if (attendanceValidation?.back_dated_attendance === 1 && isWithinInterval(new Date(attendanceDto?.attendanceDate), {
-            start: subDays(new Date(), attendanceValidation?.back_dated_attendance_allowed_days),
-            end: new Date()
-        }) === false) {
+        if (attendanceValidation?.back_dated_attendance === 1 &&
+            isWithinInterval((attendanceDate), {
+                start: subDays(new Date(), attendanceValidation?.back_dated_attendance_allowed_days),
+                end: new Date()
+            }) === false) {
             result = {
                 status: false,
                 errorMessage: `Back dated attendance allowed only for ${attendanceValidation?.back_dated_attendance_allowed_days} days`,
@@ -744,8 +755,9 @@ export class PostgresAttendanceService {
         const selfAttendanceEnd = attendanceValidation?.attendance_ends_at;
         const selfAttendanceStart = attendanceValidation?.attendance_starts_at;
 
-
-        if (selfAttendanceEnd !== null || selfAttendanceStart !== null) {
+        //If you can marked back dated attendance in that case no time restriction is there
+        //If restrict_attendance_timings flag is on only that case you can restrict your timing
+        if (attendanceValidation?.back_dated_attendance !== 1 && attendanceValidation?.restrict_attendance_timings === 1 && (selfAttendanceEnd !== null || selfAttendanceStart !== null)) {
             // Parse the self attendance start time
             const [startHours, startMinutes] = selfAttendanceStart.split(":").map(Number);
             if (isNaN(startHours) || isNaN(startMinutes)) {
@@ -780,7 +792,7 @@ export class PostgresAttendanceService {
             const startTimeFormatted = formatTime(startHours, startMinutes);
 
 
-            if (attendanceDto.scope == 'self' && currentTimeFormatted < startTimeFormatted || currentTimeFormatted > endTimeFormatted) {
+            if (currentTimeFormatted < startTimeFormatted || currentTimeFormatted > endTimeFormatted) {
                 result = {
                     status: false,
                     errorMessage: `Attendance cannot be marked at this time.`,
@@ -861,9 +873,6 @@ export class PostgresAttendanceService {
         const errors = [];
         try {
             let count = 1;
-
-
-            // console.log(attendanceData);
 
             for (let attendance of attendanceData.userAttendance) {
 
