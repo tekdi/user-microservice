@@ -547,7 +547,8 @@ export class PostgresUserService implements IServicelocator {
         HttpStatus.CREATED, "User has been created successfully.")
       // }
     } catch (e) {
-      return APIResponse.error(response, apiId, "Internal Server Error", "Something went wrong", HttpStatus.INTERNAL_SERVER_ERROR);
+      const errorMessage = e?.message || 'Something went wrong';
+      return APIResponse.error(response, apiId, "Internal Server Error", `Error : ${errorMessage}`, HttpStatus.INTERNAL_SERVER_ERROR)
     }
   }
 

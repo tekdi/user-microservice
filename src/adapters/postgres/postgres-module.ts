@@ -18,6 +18,8 @@ import { Role } from "src/rbac/role/entities/role.entity";
 import { PostgresRoleService } from "./rbac/role-adapter";
 import { RolePrivilegeMapping } from "src/rbac/assign-privilege/entities/assign-privilege.entity";
 import { NotificationRequest } from "@utils/notification.axios";
+import { PostgresCohortService } from "src/adapters/postgres/cohort-adapter";
+
 
 
 @Module({
@@ -42,13 +44,15 @@ import { NotificationRequest } from "@utils/notification.axios";
         PostgresAttendanceService,
         PostgresFieldsService,
         PostgresRoleService,
-        NotificationRequest
+        NotificationRequest,
+        PostgresCohortService
     ],
     exports: [
         PostgresUserService,
         PostgresAttendanceService,
         PostgresFieldsService,
-        NotificationRequest
+        NotificationRequest,
+        PostgresCohortService
     ],
 })
 export class PostgresModule { }

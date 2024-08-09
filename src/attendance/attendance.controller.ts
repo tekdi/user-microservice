@@ -47,7 +47,7 @@ import { JwtAuthGuard } from "src/common/guards/keycloak.guard";
 export class AttendanceController {
   constructor(
     private attendaceAdapter: AttendaceAdapter,
-  ) {}
+  ) { }
 
   // @Get("/:id")
   // @UseInterceptors(ClassSerializerInterceptor)
@@ -150,10 +150,10 @@ export class AttendanceController {
 
   @Post("bulkAttendance")
   @ApiBasicAuth("access-token")
-  @ApiCreatedResponse({description: "Attendance has been created successfully."})
-  @ApiBadRequestResponse({description: "Bad Request",})
-  @ApiOkResponse({description: "Attendance updated successfully"})
-  @ApiInternalServerErrorResponse({description: "Internal server error"})
+  @ApiCreatedResponse({ description: "Attendance has been created successfully." })
+  @ApiBadRequestResponse({ description: "Bad Request", })
+  @ApiOkResponse({ description: "Attendance updated successfully" })
+  @ApiInternalServerErrorResponse({ description: "Internal server error" })
   @ApiBody({ type: BulkAttendanceDTO })
   @ApiHeader({
     name: "tenantid",
@@ -169,7 +169,8 @@ export class AttendanceController {
     const result = await this.attendaceAdapter.buildAttenceAdapter().multipleAttendance(
       tenantId,
       request,
-      attendanceDtos
+      attendanceDtos,
+      response,
     );
     return response.status(result.statusCode).json(result);
   }
