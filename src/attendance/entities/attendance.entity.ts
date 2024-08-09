@@ -1,4 +1,3 @@
-import { Cohort } from 'src/cohort/entities/cohort.entity';
 import { User } from 'src/user/entities/user-entity';
 import { Entity, Column, PrimaryGeneratedColumn, ManyToOne, JoinColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
 
