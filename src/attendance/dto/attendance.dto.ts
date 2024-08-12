@@ -82,17 +82,17 @@ export class AttendanceDto {
   @ApiPropertyOptional()
   remark: string;
 
- 
+
   @Expose()
   @ApiPropertyOptional()
   latitude: number;
 
-  
+
   @Expose()
   @ApiPropertyOptional()
   longitude: number;
 
-  
+
   @Expose()
   @ApiPropertyOptional()
   image: string;
@@ -146,6 +146,12 @@ export class AttendanceDto {
 
   @Expose()
   updatedBy: string;
+
+  @Expose()
+  lateMark: boolean;
+
+  @Expose()
+  absentReason: string;
 
   @ApiPropertyOptional()
   @ValidateIf(o => o.scope !== undefined && o.scope !== null) @IsEnum(Scope, { message: "Please enter valid enum values for scope [self, student]" })
@@ -211,6 +217,11 @@ export class UserAttendanceDTO {
   })
   @Expose()
   contextType: string;
+
+  @ApiPropertyOptional()
+  @ValidateIf(o => o.scope !== undefined && o.scope !== null)
+  @IsEnum(Scope, { message: "Please enter valid enum values for scope [self, student]" })
+  scope: string
 }
 
 export class BulkAttendanceDTO {
@@ -247,6 +258,14 @@ export class BulkAttendanceDTO {
   @Type(() => UserAttendanceDTO)
   // Adjust the max size according to your requirements
   userAttendance: UserAttendanceDTO[];
+
+  @ApiPropertyOptional({
+    type: Object,
+    description: "Cohort attendance params",
+    default: {},
+  })
+  @Expose()
+  params: object;
 
   constructor(obj: any) {
     Object.assign(this, obj);

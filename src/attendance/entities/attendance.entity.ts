@@ -1,8 +1,7 @@
-import { Cohort } from 'src/cohort/entities/cohort.entity';
 import { User } from 'src/user/entities/user-entity';
 import { Entity, Column, PrimaryGeneratedColumn, ManyToOne, JoinColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
 
-@Entity({name:"Attendance"})
+@Entity({ name: "Attendance" })
 export class AttendanceEntity {
   @PrimaryGeneratedColumn('uuid')
   attendanceId: string;
@@ -13,7 +12,7 @@ export class AttendanceEntity {
   @Column()
   userId: string;
 
-  @ManyToOne(() => User, {nullable:true})
+  @ManyToOne(() => User, { nullable: true })
   @JoinColumn({ name: 'userId' })
   user: User;
 
@@ -65,6 +64,12 @@ export class AttendanceEntity {
 
   @Column()
   scope: string;
+
+  @Column()
+  lateMark: boolean;
+
+  @Column()
+  absentReason: string;
 
   constructor(obj: Partial<AttendanceEntity>) {
     Object.assign(this, obj);

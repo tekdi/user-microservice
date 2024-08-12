@@ -1,36 +1,23 @@
-import { ConsoleLogger, HttpStatus, Injectable } from "@nestjs/common";
-import { SuccessResponse } from "src/success-response";
+import { HttpStatus, Injectable } from "@nestjs/common";
 const resolvePath = require("object-resolve-path");
 import jwt_decode from "jwt-decode";
-import { CohortDto, ReturnResponseBody } from "src/cohort/dto/cohort.dto";
+import { ReturnResponseBody } from "src/cohort/dto/cohort.dto";
 import { CohortSearchDto } from "src/cohort/dto/cohort-search.dto";
-import { UserDto } from "src/user/dto/user.dto";
 import { CohortCreateDto } from "src/cohort/dto/cohort-create.dto";
 import { CohortUpdateDto } from "src/cohort/dto/cohort-update.dto";
-import { FieldValuesDto } from "src/fields/dto/field-values.dto";
-import { FieldValuesUpdateDto } from "src/fields/dto/field-values-update.dto";
-import {
-  IsNull,
-  Not,
-  Repository,
-  getConnection,
-  getRepository,
-  In,
-  Like,
-  ILike
-} from "typeorm";
+import { IsNull, Repository, In, ILike } from "typeorm";
 import { Cohort } from "src/cohort/entities/cohort.entity";
 import { Fields } from "src/fields/entities/fields.entity";
 import { InjectRepository } from "@nestjs/typeorm";
 import { PostgresFieldsService } from "./fields-adapter";
 import { FieldValues } from "../../fields/entities/fields-values.entity";
 import { CohortMembers, MemberStatus } from "src/cohortMembers/entities/cohort-member.entity";
-import { ErrorResponseTypeOrm } from "src/error-response-typeorm";
 import { isUUID } from "class-validator";
 import { UserTenantMapping } from "src/userTenantMapping/entities/user-tenant-mapping.entity";
 import APIResponse from "src/common/responses/response";
 import { APIID } from "src/common/utils/api-id.config";
 import { PostgresUserService } from "./user-adapter";
+import { response } from "express";
 
 @Injectable()
 export class PostgresCohortService {
@@ -162,30 +149,13 @@ export class PostgresCohortService {
   }
 
   public async findCohortName(userId: any) {
-    let query = `SELECT c."name",c."cohortId",c."parentId",c."type"
+    let query = `SELECT c."name",c."cohortId",c."parentId",c."type",c."params"
     FROM public."CohortMembers" AS cm
     LEFT JOIN public."Cohort" AS c ON cm."cohortId" = c."cohortId"
     WHERE cm."userId"=$1 AND c.status='active'`;
     let result = await this.cohortMembersRepository.query(query, [userId]);
     return result;
   }
-
-  //   public async getCohortCustomFieldDetails(cohortId: string) {
-  //     let context = 'COHORT';
-  //     let fieldValue = await this.fieldsService.getFieldValuesData(cohortId, context, "COHORT", null, true, true);
-  //     let results = [];
-
-  //     for (let data of fieldValue) {
-  //         let result = {
-  //             name: '',
-  //             value: ''
-  //         };
-  //         result.name = data.name;
-  //         result.value = data.value;
-  //         results.push(result);
-  //     }
-  //     return results;
-  // }
 
   public async getCohortCustomFieldDetails(
     cohortId: string,
@@ -305,7 +275,7 @@ export class PostgresCohortService {
       const response = await this.cohortRepository.save(cohortCreateDto);
       const createFailures = [];
 
-      //SAVE  in fieldValues table
+      // SAVE  in fieldValues table
       if (response && cohortCreateDto.customFields && cohortCreateDto.customFields.length > 0) {
         let cohortId = response?.cohortId;
         let contextType = cohortCreateDto?.type ? [cohortCreateDto.type] : [];
@@ -832,10 +802,13 @@ export class PostgresCohortService {
   }
 
   public async getCohortHierarchyData(requiredData, res) {
+
     let apiId = APIID.COHORT_LIST;
     if (!requiredData.getChildData) {
       try {
+
         let findCohortId = await this.findCohortName(requiredData.userId);
+
         if (!findCohortId.length) {
           return APIResponse.error(
             res,
@@ -855,8 +828,10 @@ export class PostgresCohortService {
             name: data.name,
             parentId: data.parentId,
             type: data.type,
+            params: data.params,
             customField: {},
           };
+
           const getDetails = await this.getCohortCustomFieldDetails(
             data.cohortId
           );
@@ -902,6 +877,7 @@ export class PostgresCohortService {
             cohortId: cohort.cohortId,
             parentID: cohort.parentId,
             type: cohort.type,
+            params: cohort.params,
           };
           if (requiredData.customField) {
             resultData["customField"] = await this.getCohortCustomFieldDetails(
