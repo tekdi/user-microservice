@@ -810,7 +810,7 @@ export class PostgresAttendanceService {
         // If all validations are successful and the date is today, 
         // check if the attendance is being marked after the designated end time.
         // In such cases, set `markLate` to true.
-        if (result.status !== false && attendanceValidation?.restrict_attendance_timings === 1 && currentTimeFormatted > endTimeFormatted) {
+        if (result.status === true && attendanceValidation?.restrict_attendance_timings === 1 && currentTimeFormatted > endTimeFormatted) {
             result = {
                 status: true,
                 markLate: true,
