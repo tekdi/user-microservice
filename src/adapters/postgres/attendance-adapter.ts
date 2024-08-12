@@ -627,7 +627,7 @@ export class PostgresAttendanceService {
                 });
             }
 
-            if (attendanceValidation.status === true) {
+            if (attendanceValidation?.status === true && attendanceValidation?.markLate === true) {
                 attendanceRecord.lateMark = true;
             }
 
@@ -684,7 +684,7 @@ export class PostgresAttendanceService {
                 });
             }
 
-            if (attendanceValidation.status === true) {
+            if (attendanceValidation?.status === true && attendanceValidation?.markLate === true) {
                 attendanceDto['lateMark'] = true;
             }
 
@@ -751,11 +751,16 @@ export class PostgresAttendanceService {
 
 
         //set flag for mark attendance
-        let result: any = {};
+        let result = {
+            status: true,
+            markLate: false,
+            errorMessage: "",
+        }
         if (attendanceValidation?.allowed !== 1) {
             result = {
                 status: false,
-                errorMessage: "Mark attendance not allowed",
+                markLate: false,
+                errorMessage: "Marking attendance not allowed.",
             }
         }
 
@@ -763,6 +768,7 @@ export class PostgresAttendanceService {
         if (attendanceId && attendanceValidation?.update_once_marked !== 1) {
             result = {
                 status: false,
+                markLate: false,
                 errorMessage: `You have no permission to update your attendance.`,
             }
         }
@@ -771,6 +777,7 @@ export class PostgresAttendanceService {
         if (attendanceValidation?.back_dated_attendance !== 1 && todayDate !== attendanceDate) {
             result = {
                 status: false,
+                markLate: false,
                 errorMessage: `Back dated attendance not allowed`,
             }
         }
@@ -783,23 +790,31 @@ export class PostgresAttendanceService {
             }) === false) {
             result = {
                 status: false,
+                markLate: false,
                 errorMessage: `Back dated attendance allowed only for ${attendanceValidation?.back_dated_attendance_allowed_days} days`,
             }
+            console.log("hii");
+
         }
 
         //If you can marked back dated attendance in that case no time restriction is there
         //If restrict_attendance_timings flag is on only that case you can restrict your timing
-        if (attendanceValidation?.restrict_attendance_timings === 1 && (currentTimeFormatted < startTimeFormatted || currentTimeFormatted > endTimeFormatted)) {
+        if (attendanceValidation?.back_dated_attendance !== 1 && attendanceValidation?.restrict_attendance_timings === 1 && (currentTimeFormatted < startTimeFormatted || currentTimeFormatted > endTimeFormatted)) {
             result = {
                 status: false,
+                markLate: false,
                 errorMessage: `Attendance cannot be marked at this time.`,
             }
         }
 
-        if (attendanceValidation?.restrict_attendance_timings === 1 && currentTimeFormatted > endTimeFormatted) {
+        // If all validations are successful and the date is today, 
+        // check if the attendance is being marked after the designated end time.
+        // In such cases, set `markLate` to true.
+        if (result.status !== false && attendanceValidation?.restrict_attendance_timings === 1 && currentTimeFormatted > endTimeFormatted) {
             result = {
                 status: true,
-                errorMessage: `late marking allowed.`,
+                markLate: true,
+                errorMessage: "",
             }
         }
 
