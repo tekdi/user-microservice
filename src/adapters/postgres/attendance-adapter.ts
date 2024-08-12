@@ -617,7 +617,7 @@ export class PostgresAttendanceService {
 
             let attendanceValidation: any = {};
             if (getCohortDetails?.params) {
-                attendanceValidation = await this.markAttendanceValidtion(attendanceDto, getCohortDetails)
+                attendanceValidation = await this.markAttendanceValidation(attendanceDto, getCohortDetails)
             }
 
             if (attendanceValidation.status === false) {
@@ -627,9 +627,7 @@ export class PostgresAttendanceService {
                 });
             }
 
-            const todayDate = format(new Date(), 'yyyy-MM-dd');
-            const attendanceDate = format(new Date(attendanceDto?.attendanceDate), 'yyyy-MM-dd');
-            if (attendanceValidation.status !== false && todayDate !== attendanceDate) {
+            if (attendanceValidation.status === true) {
                 attendanceRecord.lateMark = true;
             }
 
@@ -676,7 +674,7 @@ export class PostgresAttendanceService {
             // Set validation on mark attendance
             let attendanceValidation: any = {};
             if (getCohortDetails?.params) {
-                attendanceValidation = await this.markAttendanceValidtion(attendanceDto, getCohortDetails)
+                attendanceValidation = await this.markAttendanceValidation(attendanceDto, getCohortDetails)
             }
 
             if (attendanceValidation.status === false) {
@@ -686,12 +684,9 @@ export class PostgresAttendanceService {
                 });
             }
 
-            const todayDate = format(new Date(), 'yyyy-MM-dd');
-            const attendanceDate = format(new Date(attendanceDto?.attendanceDate), 'yyyy-MM-dd');
-            if (attendanceValidation.status !== false && todayDate !== attendanceDate) {
+            if (attendanceValidation.status === true) {
                 attendanceDto['lateMark'] = true;
             }
-            console.log(attendanceDto);
 
 
             const attendance = this.attendanceRepository.create(attendanceDto);
@@ -718,13 +713,41 @@ export class PostgresAttendanceService {
         }
     }
 
-    public async markAttendanceValidtion(attendanceDto, getCohortDetails, attendanceId?: string) {
+    public async markAttendanceValidation(attendanceDto, getCohortDetails, attendanceId?: string) {
 
         //Get current date
         const todayDate = format(new Date(), 'yyyy-MM-dd');
         const attendanceDate = format(new Date(attendanceDto?.attendanceDate), 'yyyy-MM-dd');
 
-        let attendanceValidation = attendanceDto.scope ? getCohortDetails.params[attendanceDto.scope] : getCohortDetails.params['student'];
+        // If a scope is provided in the request body, retrieve the credentials associated with that scope for marking attendance.
+        // Otherwise, default to retrieving credentials for students.
+        const scope = attendanceDto.scope || 'student';
+        const attendanceValidation = getCohortDetails.params[scope];
+
+        //Set validation on mark attendance on time
+        const selfAttendanceEnd = attendanceValidation?.attendance_ends_at;
+        const selfAttendanceStart = attendanceValidation?.attendance_starts_at;
+
+        // Parse the self attendance start time
+        const [startHours, startMinutes] = selfAttendanceStart.split(":").map(Number);
+        // Parse the self attendance end time
+        const [endHours, endMinutes] = selfAttendanceEnd.split(":").map(Number);
+
+        //Fetch current time 
+        const currentTimeIST = new Date(Date.now() + (5.5 * 60 * 60 * 1000));
+        const currentHours = currentTimeIST.getUTCHours();
+        const currentMinutes = currentTimeIST.getUTCMinutes();
+
+        // Format the current time and end time in HH:MM format
+        const formatTime = (hours: number, minutes: number) => {
+            return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+        };
+
+        //Can not mark attendance before and after attendance timing 
+        const currentTimeFormatted = formatTime(currentHours, currentMinutes);
+        const endTimeFormatted = formatTime(endHours, endMinutes);
+        const startTimeFormatted = formatTime(startHours, startMinutes);
+
 
 
         //set flag for mark attendance
@@ -736,20 +759,19 @@ export class PostgresAttendanceService {
             }
         }
 
+        //set flag on update attendance status
+        if (attendanceId && attendanceValidation?.update_once_marked !== 1) {
+            result = {
+                status: false,
+                errorMessage: `You have no permission to update your attendance.`,
+            }
+        }
 
         //Set flag for mark back dated attendance
         if (attendanceValidation?.back_dated_attendance !== 1 && todayDate !== attendanceDate) {
             result = {
                 status: false,
                 errorMessage: `Back dated attendance not allowed`,
-            }
-        }
-
-        //set flag on update attendance status
-        if (attendanceId && attendanceValidation?.update_once_marked !== 1) {
-            result = {
-                status: false,
-                errorMessage: `You have no permission to update your attendance.`,
             }
         }
 
@@ -765,57 +787,21 @@ export class PostgresAttendanceService {
             }
         }
 
-
-
-        //Set validation on mark attendance on time
-        const selfAttendanceEnd = attendanceValidation?.attendance_ends_at;
-        const selfAttendanceStart = attendanceValidation?.attendance_starts_at;
-
         //If you can marked back dated attendance in that case no time restriction is there
         //If restrict_attendance_timings flag is on only that case you can restrict your timing
-        if (attendanceValidation?.back_dated_attendance !== 1 && attendanceValidation?.restrict_attendance_timings === 1 && (selfAttendanceEnd !== null || selfAttendanceStart !== null)) {
-            // Parse the self attendance start time
-            const [startHours, startMinutes] = selfAttendanceStart.split(":").map(Number);
-            if (isNaN(startHours) || isNaN(startMinutes)) {
-                result = {
-                    status: false,
-                    errorMessage: `Invalid self_attendance_start time format.`,
-                }
-            }
-
-            // Parse the self attendance end time
-            const [endHours, endMinutes] = selfAttendanceEnd.split(":").map(Number);
-            if (isNaN(endHours) || isNaN(endMinutes)) {
-                result = {
-                    status: false,
-                    errorMessage: `Invalid self attendance end time format.`,
-                }
-            }
-
-            //Fetch current time 
-            const currentTimeIST = new Date(Date.now() + (5.5 * 60 * 60 * 1000));
-            const currentHours = currentTimeIST.getUTCHours();
-            const currentMinutes = currentTimeIST.getUTCMinutes();
-
-            // Format the current time and end time in HH:MM format
-            const formatTime = (hours: number, minutes: number) => {
-                return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-            };
-
-            //Can not mark attendance before and after attendance timing 
-            const currentTimeFormatted = formatTime(currentHours, currentMinutes);
-            const endTimeFormatted = formatTime(endHours, endMinutes);
-            const startTimeFormatted = formatTime(startHours, startMinutes);
-
-
-            if (currentTimeFormatted < startTimeFormatted || currentTimeFormatted > endTimeFormatted) {
-                result = {
-                    status: false,
-                    errorMessage: `Attendance cannot be marked at this time.`,
-                }
+        if (attendanceValidation?.restrict_attendance_timings === 1 && (currentTimeFormatted < startTimeFormatted || currentTimeFormatted > endTimeFormatted)) {
+            result = {
+                status: false,
+                errorMessage: `Attendance cannot be marked at this time.`,
             }
         }
 
+        if (attendanceValidation?.restrict_attendance_timings === 1 && currentTimeFormatted > endTimeFormatted) {
+            result = {
+                status: true,
+                errorMessage: `late marking allowed.`,
+            }
+        }
 
         return result;
     }
