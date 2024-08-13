@@ -308,17 +308,15 @@ export class PostgresCohortService {
       //SAVE  in fieldValues table
       if (response && cohortCreateDto.customFields && cohortCreateDto.customFields.length > 0) {
         let cohortId = response?.cohortId;
-        let contextType = cohortCreateDto?.type ? [cohortCreateDto.type] : [];
 
-        const allCustomFields = await this.fieldsService.findCustomFields("COHORT", contextType)
-        if (allCustomFields.length > 0) {
-          const customFieldAttributes = allCustomFields.reduce((fieldDetail, { fieldId, fieldAttributes, fieldParams, name }) => fieldDetail[`${fieldId}`] ? fieldDetail : { ...fieldDetail, [`${fieldId}`]: { fieldAttributes, fieldParams, name } }, {});
+        if (cohortCreateDto.customFields.length > 0) {
           for (let fieldValues of cohortCreateDto.customFields) {
             const fieldData = {
               fieldId: fieldValues['fieldId'],
               value: fieldValues['value']
             }
-            let resfields = await this.fieldsService.updateCustomFields(cohortId, fieldData, customFieldAttributes[fieldData.fieldId]);
+
+            let resfields = await this.fieldsService.updateCustomFields(cohortId, fieldData, cohortCreateDto.customFields[0].fieldId);
             if (resfields.correctValue) {
               if (!response['customFieldsValue'])
                 response['customFieldsValue'] = [];
@@ -449,6 +447,7 @@ export class PostgresCohortService {
         if (cohortUpdateDto.customFields && cohortUpdateDto.customFields.length > 0) {
           let contextType = cohortUpdateDto.type ? [cohortUpdateDto.type] : existingCohorDetails?.type ? [existingCohorDetails.type] : [];
           const allCustomFields = await this.fieldsService.findCustomFields("COHORT", contextType)
+
           if (allCustomFields.length > 0) {
             const customFieldAttributes = allCustomFields.reduce((fieldDetail, { fieldId, fieldAttributes, fieldParams, name }) => fieldDetail[`${fieldId}`] ? fieldDetail : { ...fieldDetail, [`${fieldId}`]: { fieldAttributes, fieldParams, name } }, {});
             for (let fieldValues of cohortUpdateDto.customFields) {
