@@ -21,6 +21,6 @@ jobs:
             if [ -f .env ]; then
             rm .env
             fi
-            echo "${{ secrets.OBLF_ENV }}" > .env
+            echo '"${{ secrets.OBLF_ENV }}"' > .env
             ls -ltra
             ./deploy.sh
