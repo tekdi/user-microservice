@@ -788,7 +788,8 @@ export class PostgresFieldsService implements IServicelocatorfields {
 
             let order;
             if (sort?.length) {
-                order = `ORDER BY ${sort[0]} ${sort[1]}`;
+                const orderKey = sort[1].toUpperCase();
+                order = `ORDER BY "${sort[0]}" ${orderKey}`;
             } else {
                 order = `ORDER BY name ASC`;
             }
@@ -947,6 +948,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         }
 
         query = `SELECT *,COUNT(*) OVER() AS total_count FROM public."${tableName}" ${whereCond} ${orderCond} ${offsetCond} ${limitCond}`
+
 
         result = await this.fieldsRepository.query(query);
         if (!result) {
