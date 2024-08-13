@@ -841,7 +841,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
             };
 
             return await APIResponse.success(response, apiId, result,
-                HttpStatus.OK, 'Field Values fetched successfully.');
+                HttpStatus.OK, 'Field options fetched successfully.');
         } catch (e) {
             const errorMessage = e?.message || 'Something went wrong';
             return APIResponse.error(response, apiId, "Internal Server Error", `Error : ${errorMessage}`, HttpStatus.INTERNAL_SERVER_ERROR);
@@ -938,7 +938,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
 
         if (optionName) {
             if (whereCond) {
-                whereCond += `name ILike '%${optionName}%'`
+                whereCond += `AND "name" ILike '%${optionName}%'`
             } else {
                 whereCond += `WHERE "name" ILike '%${optionName}%'`
             }
