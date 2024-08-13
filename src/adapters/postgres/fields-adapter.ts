@@ -788,7 +788,8 @@ export class PostgresFieldsService implements IServicelocatorfields {
 
             let order;
             if (sort?.length) {
-                order = `ORDER BY ${sort[0]} ${sort[1]}`;
+                const orderKey = sort[1].toUpperCase();
+                order = `ORDER BY "${sort[0]}" ${orderKey}`;
             } else {
                 order = `ORDER BY name ASC`;
             }
@@ -841,7 +842,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
             };
 
             return await APIResponse.success(response, apiId, result,
-                HttpStatus.OK, 'Field Values fetched successfully.');
+                HttpStatus.OK, 'Field options fetched successfully.');
         } catch (e) {
             const errorMessage = e?.message || 'Something went wrong';
             return APIResponse.error(response, apiId, "Internal Server Error", `Error : ${errorMessage}`, HttpStatus.INTERNAL_SERVER_ERROR);
@@ -938,7 +939,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
 
         if (optionName) {
             if (whereCond) {
-                whereCond += `name ILike '%${optionName}%'`
+                whereCond += `AND "name" ILike '%${optionName}%'`
             } else {
                 whereCond += `WHERE "name" ILike '%${optionName}%'`
             }
@@ -947,6 +948,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         }
 
         query = `SELECT *,COUNT(*) OVER() AS total_count FROM public."${tableName}" ${whereCond} ${orderCond} ${offsetCond} ${limitCond}`
+
 
         result = await this.fieldsRepository.query(query);
         if (!result) {
