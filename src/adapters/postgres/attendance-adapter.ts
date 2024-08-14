@@ -13,7 +13,7 @@ import { ErrorResponseTypeOrm } from 'src/error-response-typeorm';
 import { CohortMembers } from 'src/cohortMembers/entities/cohort-member.entity';
 import { PostgresCohortService } from "src/adapters/postgres/cohort-adapter";
 import { Cohort } from "src/cohort/entities/cohort.entity";
-import { format, isWithinInterval, subDays } from 'date-fns';
+import { format, differenceInCalendarDays, subDays } from 'date-fns';
 import { UserRoleMapping } from "src/rbac/assign-role/entities/assign-role.entity";
 const moment = require('moment');
 const facetedSearch = require("in-memory-faceted-search");
@@ -617,7 +617,7 @@ export class PostgresAttendanceService {
 
             let attendanceValidation: any = {};
             if (getCohortDetails?.params) {
-                attendanceValidation = await this.markAttendanceValidation(attendanceDto, getCohortDetails)
+                attendanceValidation = await this.markAttendanceValidation(attendanceDto, getCohortDetails, attendanceId)
             }
 
             if (attendanceValidation.status === false) {
@@ -712,6 +712,10 @@ export class PostgresAttendanceService {
             }
         }
     }
+    
+    public formatTime (hours: number, minutes: number) {
+        return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+    };
 
     public async markAttendanceValidation(attendanceDto, getCohortDetails, attendanceId?: string) {
 
@@ -724,32 +728,6 @@ export class PostgresAttendanceService {
         const scope = attendanceDto.scope || 'student';
         const attendanceValidation = getCohortDetails.params[scope];
 
-        //Set validation on mark attendance on time
-        const selfAttendanceEnd = attendanceValidation?.attendance_ends_at;
-        const selfAttendanceStart = attendanceValidation?.attendance_starts_at;
-
-        // Parse the self attendance start time
-        const [startHours, startMinutes] = selfAttendanceStart.split(":").map(Number);
-        // Parse the self attendance end time
-        const [endHours, endMinutes] = selfAttendanceEnd.split(":").map(Number);
-
-        //Fetch current time 
-        const currentTimeIST = new Date(Date.now() + (5.5 * 60 * 60 * 1000));
-        const currentHours = currentTimeIST.getUTCHours();
-        const currentMinutes = currentTimeIST.getUTCMinutes();
-
-        // Format the current time and end time in HH:MM format
-        const formatTime = (hours: number, minutes: number) => {
-            return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-        };
-
-        //Can not mark attendance before and after attendance timing 
-        const currentTimeFormatted = formatTime(currentHours, currentMinutes);
-        const endTimeFormatted = formatTime(endHours, endMinutes);
-        const startTimeFormatted = formatTime(startHours, startMinutes);
-
-
-
         //set flag for mark attendance
         let result = {
             status: true,
@@ -757,67 +735,70 @@ export class PostgresAttendanceService {
             errorMessage: "",
         }
         if (attendanceValidation?.allowed !== 1) {
-            result = {
-                status: false,
-                markLate: false,
-                errorMessage: "Marking attendance not allowed.",
-            }
+            result.status = false;
+            result.errorMessage = "Marking attendance not allowed."
+            return result;
         }
 
         //set flag on update attendance status
-        if (attendanceId && attendanceValidation?.update_once_marked !== 1) {
-            result = {
-                status: false,
-                markLate: false,
-                errorMessage: `You have no permission to update your attendance.`,
-            }
+        if (attendanceId && attendanceValidation?.can_be_updated !== 1) {
+            result.status = false;
+            result.errorMessage = `You have no permission to update your attendance.`
+            return result;
         }
 
-        //Set flag for mark back dated attendance
-        if (attendanceValidation?.back_dated_attendance !== 1 && todayDate !== attendanceDate) {
-            result = {
-                status: false,
-                markLate: false,
-                errorMessage: `Back dated attendance not allowed`,
+        if (todayDate !== attendanceDate) {
+            if (attendanceValidation?.back_dated_attendance !== 1) {
+                result.status = false;
+                result.errorMessage = `Back dated attendance not allowed`;
+            } else if (differenceInCalendarDays(todayDate,attendanceDate) > attendanceValidation?.back_dated_attendance_allowed_days) {
+                   result.status = false;
+                   result.errorMessage = `Back dated attendance allowed only for ${attendanceValidation?.back_dated_attendance_allowed_days} days`
+                }
+        } else if (todayDate === attendanceDate) {
+
+            // time in 24-hour format
+            let regex = new RegExp(/^([01]\d|2[0-3]):?([0-5]\d)$/);
+            let selfAttendanceStart = '';
+            let selfAttendanceEnd = '';
+            if (attendanceValidation?.attendance_starts_at && regex.test(attendanceValidation?.attendance_starts_at) == true) {
+                selfAttendanceStart = attendanceValidation?.attendance_starts_at;
             }
-        }
-
-        //Validation on back dated date
-        if (attendanceValidation?.back_dated_attendance === 1 &&
-            isWithinInterval((attendanceDate), {
-                start: subDays(new Date(), attendanceValidation?.back_dated_attendance_allowed_days),
-                end: new Date()
-            }) === false) {
-            result = {
-                status: false,
-                markLate: false,
-                errorMessage: `Back dated attendance allowed only for ${attendanceValidation?.back_dated_attendance_allowed_days} days`,
+            if (attendanceValidation?.attendance_ends_at && regex.test(attendanceValidation?.attendance_ends_at) == true) {
+                selfAttendanceEnd = attendanceValidation?.attendance_ends_at;
             }
-            console.log("hii");
+          
+            if (attendanceValidation?.restrict_attendance_timings === 1 && (selfAttendanceEnd || selfAttendanceStart)) {
+                 //Fetch current time 
+                 const currentTimeIST = new Date(Date.now() + (5.5 * 60 * 60 * 1000));
+                 const currentHours = currentTimeIST.getUTCHours();
+                 const currentMinutes = currentTimeIST.getUTCMinutes();
+                // Format the current time and end time in HH:MM format
+                 const currentTimeFormatted = this.formatTime(currentHours, currentMinutes);
 
+                if (selfAttendanceStart) {
+                    // Parse the self attendance start time
+                    const [startHours, startMinutes] = selfAttendanceStart.split(":").map(Number);
+                    const startTimeFormatted = this.formatTime(startHours, startMinutes);
+                    if (currentTimeFormatted < startTimeFormatted) {
+                        result.status = false;
+                        result.errorMessage = `Attendance cannot be marked at this time.`;
+                    }
+                }
+                if (selfAttendanceEnd) {
+                    const [endHours, endMinutes] = selfAttendanceEnd.split(":").map(Number);
+                    const endTimeFormatted = this.formatTime(endHours, endMinutes);
+                    if (currentTimeFormatted > endTimeFormatted && attendanceValidation.allow_late_marking !== 1 ) {
+                        result.status = false;
+                        result.errorMessage = `Attendance marking time passed`;
+                    } else if (currentTimeFormatted > endTimeFormatted && attendanceValidation.allow_late_marking === 1 ) {
+                        result.status = true;
+                        result.markLate = true;
+    
+                    }
+                }
+            }   
         }
-
-        //If you can marked back dated attendance in that case no time restriction is there
-        //If restrict_attendance_timings flag is on only that case you can restrict your timing
-        if (attendanceValidation?.back_dated_attendance !== 1 && attendanceValidation?.restrict_attendance_timings === 1 && (currentTimeFormatted < startTimeFormatted || currentTimeFormatted > endTimeFormatted)) {
-            result = {
-                status: false,
-                markLate: false,
-                errorMessage: `Attendance cannot be marked at this time.`,
-            }
-        }
-
-        // If all validations are successful and the date is today, 
-        // check if the attendance is being marked after the designated end time.
-        // In such cases, set `markLate` to true.
-        if (result.status === true && attendanceValidation?.restrict_attendance_timings === 1 && currentTimeFormatted > endTimeFormatted) {
-            result = {
-                status: true,
-                markLate: true,
-                errorMessage: "",
-            }
-        }
-
         return result;
     }
 
