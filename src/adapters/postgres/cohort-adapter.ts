@@ -813,9 +813,9 @@ export class PostgresCohortService {
           return APIResponse.error(
             res,
             apiId,
-            "BAD_REQUEST",
+            "NOT_FOUND",
             `No Cohort Found for this User ID`,
-            HttpStatus.BAD_REQUEST
+            HttpStatus.NOT_FOUND
           );
         }
         let result = {
@@ -864,9 +864,9 @@ export class PostgresCohortService {
           return APIResponse.error(
             res,
             apiId,
-            "BAD_REQUEST",
+            "NOT_FOUND",
             `No Cohort Found for this User ID`,
-            HttpStatus.BAD_REQUEST
+            HttpStatus.NOT_FOUND
           );
         }
         let resultDataList = [];
