@@ -118,6 +118,7 @@ export class PostgresCohortService {
         cohortId: cohort.cohortId,
         parentID: cohort.parentId,
         type: cohort.type,
+        status: cohort?.status,
         customField: requiredData.customField
           ? await this.getCohortCustomFieldDetails(cohort.cohortId)
           : undefined,
@@ -162,12 +163,13 @@ export class PostgresCohortService {
   }
 
   public async findCohortName(userId: any) {
-    let query = `SELECT c."name",c."cohortId",c."parentId",c."type",cm."status"
+    let query = `SELECT c."name",c."cohortId",c."parentId",c."type",cm."status" AS cohortmemberstatus, c."status" AS cohortstatus
     FROM public."CohortMembers" AS cm
     LEFT JOIN public."Cohort" AS c ON cm."cohortId" = c."cohortId"
-    WHERE cm."userId"=$1 AND c.status='active' `;
+    WHERE cm."userId"=$1 `;
     let result = await this.cohortMembersRepository.query(query, [userId]);
     return result;
+
   }
 
   //   public async getCohortCustomFieldDetails(cohortId: string) {
@@ -796,10 +798,12 @@ export class PostgresCohortService {
         name: data.name,
         parentId: data.parentId,
         type: data.type,
+        status: data.status,
         customField: customFieldDetails || [],
         childData: childHierarchy,
       });
     }
+
     return hierarchy;
   }
 
@@ -827,7 +831,8 @@ export class PostgresCohortService {
             name: data.name,
             parentId: data.parentId,
             type: data.type,
-            status: data.status,
+            cohortMemberStatus: data.cohortmemberstatus,
+            cohortStatus: data.cohortstatus,
             customField: {},
           };
           const getDetails = await this.getCohortCustomFieldDetails(
@@ -874,7 +879,8 @@ export class PostgresCohortService {
             cohortName: cohort.name,
             cohortId: cohort.cohortId,
             parentID: cohort.parentId,
-            status: cohort.status,
+            cohortMemberStatus: cohort.cohortmemberstatus,
+            cohortStatus: cohort.cohortstatus,
             type: cohort.type,
           };
           if (requiredData.customField) {
