@@ -835,8 +835,6 @@ export class PostgresCohortService {
             cohortStatus: data.cohortstatus,
             customField: {},
           };
-          console.log(cohortData);
-
           const getDetails = await this.getCohortCustomFieldDetails(
             data.cohortId
           );
