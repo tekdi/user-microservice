@@ -112,6 +112,7 @@ export class CohortMembersController {
   @ApiNotFoundResponse({ description: "Data not found" })
   @ApiBadRequestResponse({ description: "Bad request" })
   @ApiBody({ type: CohortMembersSearchDto })
+  @UsePipes(new ValidationPipe())
   @SerializeOptions({
     strategy: "excludeAll",
   })
