@@ -163,7 +163,7 @@ export class PostgresCohortService {
   }
 
   public async findCohortName(userId: any) {
-    let query = `SELECT c."name",c."cohortId",c."parentId",c."type",cm."status" AS cohortmemberstatus, c."status" AS cohortstatus
+    let query = `SELECT c."name",c."cohortId",c."parentId",c."type",cm."status" AS cohortmemberstatus, c."status" AS cohortstatus, cm."cohortMembershipId"
     FROM public."CohortMembers" AS cm
     LEFT JOIN public."Cohort" AS c ON cm."cohortId" = c."cohortId"
     WHERE cm."userId"=$1 `;
@@ -827,12 +827,13 @@ export class PostgresCohortService {
 
         for (let data of findCohortId) {
           let cohortData = {
-            cohortId: data.cohortId,
-            name: data.name,
-            parentId: data.parentId,
-            type: data.type,
-            cohortMemberStatus: data.cohortmemberstatus,
-            cohortStatus: data.cohortstatus,
+            cohortId: data?.cohortId,
+            name: data?.name,
+            parentId: data?.parentId,
+            type: data?.type,
+            cohortMemberStatus: data?.cohortmemberstatus,
+            cohortMembershipId: data?.cohortMembershipId,
+            cohortStatus: data?.cohortstatus,
             customField: {},
           };
           const getDetails = await this.getCohortCustomFieldDetails(
@@ -876,12 +877,13 @@ export class PostgresCohortService {
 
         for (let cohort of findCohortId) {
           let resultData = {
-            cohortName: cohort.name,
-            cohortId: cohort.cohortId,
-            parentID: cohort.parentId,
-            cohortMemberStatus: cohort.cohortmemberstatus,
-            cohortStatus: cohort.cohortstatus,
-            type: cohort.type,
+            cohortName: cohort?.name,
+            cohortId: cohort?.cohortId,
+            parentID: cohort?.parentId,
+            cohortMemberStatus: cohort?.cohortmemberstatus,
+            cohortMembershipId: cohort?.cohortMembershipId,
+            cohortStatus: cohort?.cohortstatus,
+            type: cohort?.type,
           };
           if (requiredData.customField) {
             resultData["customField"] = await this.getCohortCustomFieldDetails(
