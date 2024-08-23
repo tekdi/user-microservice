@@ -151,15 +151,8 @@ export class PostgresCohortService {
     cohortId: string,
     contextType?: string
   ) {
-    let context = "COHORT";
-    let fieldValue = await this.fieldsService.getFieldValuesData(
-      cohortId,
-      context,
-      contextType,
-      ['All'],
-      true
-    );
-    return fieldValue;
+    let fieldValues = await this.getCohortCustomFieldDetails(cohortId);
+    return fieldValues;
   }
 
   public async findCohortName(userId: any) {
