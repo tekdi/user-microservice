@@ -20,8 +20,6 @@ import { UserModule } from "./user/user.module";
 import { RbacModule } from "./rbac/rbac.module";
 import { AssignTenantModule } from './userTenantMapping/user-tenant-mapping.module';
 import { FormsModule } from './forms/forms.module';
-import { CoursePlannerModule } from './course-planner/course-planner.module';
-import { HttpService } from "@utils/http-service";
 
 @Module({
   imports: [
@@ -40,9 +38,8 @@ import { HttpService } from "@utils/http-service";
     AuthRbacModule,
     DatabaseModule,
     FormsModule,
-    CoursePlannerModule,
   ],
   controllers: [AppController],
-  providers: [AppService,HttpService]
+  providers: [AppService],
 })
 export class AppModule {}
