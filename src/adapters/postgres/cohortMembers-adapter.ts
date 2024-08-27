@@ -1,22 +1,15 @@
 import { Injectable } from "@nestjs/common";
-import { HttpService } from "@nestjs/axios";
-import { SuccessResponse } from "src/success-response";
-import { ErrorResponse } from "src/error-response";
 const resolvePath = require("object-resolve-path");
 import { CohortMembersDto } from "src/cohortMembers/dto/cohortMembers.dto";
 import { CohortMembersSearchDto } from "src/cohortMembers/dto/cohortMembers-search.dto";
 import { CohortMembers } from "src/cohortMembers/entities/cohort-member.entity";
 import { InjectRepository } from "@nestjs/typeorm";
-import { IsNull, Not, Repository, getConnection, getRepository } from "typeorm";
-import { CohortDto } from "src/cohort/dto/cohort.dto";
+import { Repository } from "typeorm";
 
 import { HttpStatus } from "@nestjs/common";
-import response from "src/utils/response";
 import { User } from "src/user/entities/user-entity";
 import { CohortMembersUpdateDto } from "src/cohortMembers/dto/cohortMember-update.dto";
-import { ErrorResponseTypeOrm } from "src/error-response-typeorm";
 import { Fields } from "src/fields/entities/fields.entity";
-import { UUID } from "typeorm/driver/mongodb/bson.typings";
 import { isUUID } from "class-validator";
 import { Cohort } from "src/cohort/entities/cohort.entity";
 import APIResponse from "src/common/responses/response";
@@ -54,7 +47,6 @@ export class PostgresCohortMembersService {
       if (!isUUID(cohortId)) {
         return APIResponse.error(res, apiId, "Bad Request", "Invalid input: CohortId must be a valid UUID.", HttpStatus.BAD_REQUEST);
       }
-
 
       const cohortTenantMap = await this.cohortRepository.find({
         where: {
@@ -188,8 +180,8 @@ export class PostgresCohortMembersService {
 
       let { limit, sort, offset, filters } = cohortMembersSearchDto;
 
-      offset = offset ? offset : 0;
-      limit = limit ? limit : 0;
+      offset = offset || 0;
+      limit = limit || 0;
 
       const whereClause = {};
       if (filters && Object.keys(filters).length > 0) {
@@ -391,8 +383,7 @@ export class PostgresCohortMembersService {
       });
     }
 
-    query = `SELECT U."userId", U."username", U."name", R."name" AS role, U."district", U."state",U."mobile", U."createdAt",U."updatedAt", 
-      CM."status", CM."statusReason",CM."cohortMembershipId", COUNT(*) OVER() AS total_count  FROM public."CohortMembers" CM
+    query = `SELECT U."userId", U."username", U."name", R."name" AS role, U."district", U."state",U."mobile", CM."status", CM."statusReason",CM."cohortMembershipId",CM."status",CM."createdAt",U."updatedAt", COUNT(*) OVER() AS total_count  FROM public."CohortMembers" CM
       INNER JOIN public."Users" U
       ON CM."userId" = U."userId"
       INNER JOIN public."UserRolesMapping" UR

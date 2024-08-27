@@ -12,7 +12,7 @@ export class FormsService {
     private readonly fieldsService: PostgresFieldsService,
     @InjectRepository(Form)
     private readonly formRepository: Repository<Form>
-  ) {}
+  ) { }
 
   async getForm(requiredData, response) {
     let apiId = "getFormData";
@@ -100,11 +100,11 @@ export class FormsService {
   }
 
   async getFormData(whereClause): Promise<any> {
-    
+
     let query = this.formRepository.createQueryBuilder('form')
       .select(['form.formid', 'form.title', 'form.fields'])
       .where('form.context = :context', { context: whereClause.context });
-  
+
     if (whereClause.contextType !== undefined) {
       if (whereClause.contextType === null) {
         query = query.andWhere('form.contextType IS NULL');
@@ -114,13 +114,13 @@ export class FormsService {
     }
     if (whereClause.tenantId) {
       query = query.andWhere('form.tenantId = :tenantId', { tenantId: whereClause.tenantId });
-    }else{
+    } else {
       query = query.andWhere('form.tenantId IS NULL');
     }
     const result = await query.getOne();
     return result || false;
   }
-  
+
 
   async checkValidUserContextType() {
     let query = `select name from "Roles" r`;
