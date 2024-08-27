@@ -69,14 +69,15 @@ export class PostgresUserService implements IServicelocator {
     try {
       let findData = await this.findAllUserDetails(userSearchDto);
 
-      if (!findData) {
-        return APIResponse.error(response, apiId, "Not Found", `No Data Found`, HttpStatus.NOT_FOUND);
+      if (findData === false) {
+        return APIResponse.error(response, apiId, "No Data Found", "Not Found", HttpStatus.NOT_FOUND);
       }
 
       return await APIResponse.success(response, apiId, findData,
         HttpStatus.OK, 'User List fetched.')
     } catch (e) {
-      return APIResponse.error(response, apiId, "Internal Server Error", "Something went wrong", HttpStatus.INTERNAL_SERVER_ERROR);
+      const errorMessage = e.message || "Internal server error";
+      return APIResponse.error(response, apiId, "Internal Server Error", errorMessage, HttpStatus.INTERNAL_SERVER_ERROR)
     }
   }
 
@@ -96,7 +97,7 @@ export class PostgresUserService implements IServicelocator {
 
     let whereCondition = `WHERE`;
     let index = 0;
-    const searchCustomFields = {};
+    const searchCustomFields: any = {};
 
     const userAllKeys = this.usersRepository.metadata.columns.map(
       (column) => column.propertyName,
@@ -114,7 +115,14 @@ export class PostgresUserService implements IServicelocator {
             whereCondition += ` U."${key}" ILIKE '%${value}%'`;
           }
           else {
-            whereCondition += ` U."${key}" = '${value}'`;
+            if (key === 'status') {
+              if (Array.isArray(value) && value.every(item => typeof item === 'string')) {
+                const status = value.map(item => `'${item.trim().toLowerCase()}'`).join(',');
+                whereCondition += ` U."${key}" IN(${status})`;
+              }
+            } else {
+              whereCondition += ` U."${key}" = '${value}'`;
+            }
           }
           index++;
         } else {
@@ -157,7 +165,6 @@ export class PostgresUserService implements IServicelocator {
     }
 
     if (getUserIdUsingCustomFields && getUserIdUsingCustomFields.length > 0) {
-
       const userIdsDependsOnCustomFields = getUserIdUsingCustomFields.map(userId => `'${userId}'`).join(',');
       whereCondition += `${index > 0 ? ' AND ' : ''} U."userId" IN (${userIdsDependsOnCustomFields})`;
       index++;
@@ -171,13 +178,13 @@ export class PostgresUserService implements IServicelocator {
       const userCondition = userIds ? `U."userId" NOT IN (${userIds})` : '';
       const cohortCondition = cohortIds ? `CM."cohortId" NOT IN (${cohortIds})` : '';
       const combinedCondition = [userCondition, cohortCondition].filter(String).join(' AND ');
-
       whereCondition += (index > 0 ? ' AND ' : '') + combinedCondition;
     } else if (index === 0) {
       whereCondition = '';
     }
 
-    let query = `SELECT U."userId", U."username", U."name", R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", COUNT(*) OVER() AS total_count 
+    //Get user core fields data
+    let query = `SELECT U."userId", U."username", U."name", R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", U.status, COUNT(*) OVER() AS total_count 
       FROM  public."Users" U
       LEFT JOIN public."CohortMembers" CM 
       ON CM."userId" = U."userId"
@@ -185,25 +192,25 @@ export class PostgresUserService implements IServicelocator {
       ON UR."userId" = U."userId"
       LEFT JOIN public."Roles" R
       ON R."roleId" = UR."roleId" ${whereCondition} GROUP BY U."userId", R."name" ${orderingCondition} ${offset} ${limit}`
-
-
     let userDetails = await this.usersRepository.query(query);
-
 
     if (userDetails.length > 0) {
       result.totalCount = parseInt(userDetails[0].total_count, 10);
-      if (userSearchDto.fields) {
-        for (let userData of userDetails) {
-          let context = 'USERS';
-          let contextType = userData.role.toUpperCase();
-          let isRequiredFieldOptions = false;
-          let customFields = await this.fieldsService.getFieldValuesData(userData.userId, context, contextType, userSearchDto.fields, isRequiredFieldOptions);
-          userData['customFields'] = customFields;
-          result.getUserDetails.push(userData);
-        }
-      } else {
-        result.getUserDetails.push(...userDetails);
+
+      //Get user custom field data
+      for (let userData of userDetails) {
+        let customFields = await this.fieldsService.getUserCustomFieldDetails(userData.userId);
+        userData['customFields'] = customFields.map(data => ({
+          fieldId: data?.fieldId,
+          label: data?.label,
+          value: data?.value,
+          code: data?.code,
+          type: data?.type,
+        }));
+        result.getUserDetails.push(userData);
       }
+    } else {
+      return false;
     }
     return result;
   }
@@ -254,7 +261,8 @@ export class PostgresUserService implements IServicelocator {
       if (userData && userData?.fieldValue) {
         let context = 'USERS';
         let contextType = roleInUpper;
-        customFields = await this.fieldsService.getFieldValuesData(userData.userId, context, contextType, ['All'], true);
+        // customFields = await this.fieldsService.getFieldValuesData(userData.userId, context, contextType, ['All'], true);
+        customFields = await this.fieldsService.getUserCustomFieldDetails(userData.userId)
       }
 
       result.userData = userDetails;
@@ -315,7 +323,7 @@ export class PostgresUserService implements IServicelocator {
     }
     let userDetails = await this.usersRepository.findOne({
       where: whereClause,
-      select: ["userId", "username", "name", "mobile"]
+      select: ["userId", "username", "name", "mobile", "email"]
     })
     if (!userDetails) {
       return false;

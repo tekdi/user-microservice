@@ -18,7 +18,7 @@ import path, { join } from 'path';
 import { FieldFactory } from "src/fields/fieldValidators/fieldFactory";
 import { FieldsUpdateDto } from "src/fields/dto/fields-update.dto";
 import { SchemaField, Option } from "src/fields/fieldValidators/fieldClass";
-
+import jwt_decode from "jwt-decode";
 @Injectable()
 export class PostgresFieldsService implements IServicelocatorfields {
     constructor(
@@ -195,6 +195,9 @@ export class PostgresFieldsService implements IServicelocatorfields {
         const apiId = APIID.FIELDS_CREATE;
         try {
             const fieldsData: any = {}; // Define an empty object to store field data
+            const decoded: any = jwt_decode(request.headers.authorization);
+            const createdBy = decoded?.sub;
+            const updatedBy = decoded?.sub;
 
             Object.keys(fieldsDto).forEach((e) => {
                 if (fieldsDto[e] && fieldsDto[e] !== "") {
@@ -239,9 +242,9 @@ export class PostgresFieldsService implements IServicelocatorfields {
                     const checkSourceData = await this.fieldsValuesRepository.query(query);
 
                     if (checkSourceData[0].count == 0) {
-                        let createSourceField = await this.createSourceDetailsTableFields(fieldsData.sourceDetails.table, sourceFieldName['name'], sourceFieldName['value'], sourceFieldName['controllingfieldfk'], fieldsData?.dependsOn);
+                        let createSourceField = await this.createSourceDetailsTableFields(fieldsData.sourceDetails.table, sourceFieldName['name'], sourceFieldName['value'], createdBy, sourceFieldName['controllingfieldfk'], fieldsData?.dependsOn);
                     } else {
-                        let updateSourceField = await this.updateSourceDetailsTableFields(fieldsData.sourceDetails.table, sourceFieldName['name'], sourceFieldName['value'], sourceFieldName['controllingfieldfk']);
+                        let updateSourceField = await this.updateSourceDetailsTableFields(fieldsData.sourceDetails.table, sourceFieldName['name'], sourceFieldName['value'], updatedBy, sourceFieldName['controllingfieldfk']);
                     }
                 }
                 delete fieldsData.fieldParams;
@@ -266,6 +269,10 @@ export class PostgresFieldsService implements IServicelocatorfields {
     async updateFields(fieldId: any, request: any, fieldsUpdateDto: FieldsUpdateDto, response: Response) {
         const apiId = APIID.FIELDS_CREATE;
         try {
+            const decoded: any = jwt_decode(request.headers.authorization);
+            const createdBy = decoded?.sub;
+            const updatedBy = decoded?.sub;
+
             const fieldsData: any = {}; // Define an empty object to store field data
             let storeWithoutControllingField = [];
             let error = '';
@@ -291,6 +298,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
             //Update field options
             //Update data in source table
             if (getSourceDetails.sourceDetails && getSourceDetails.sourceDetails.source == 'table') {
+
                 for (let sourceFieldName of fieldsData.fieldParams.options) {
                     if (getSourceDetails.dependsOn && (!sourceFieldName['controllingfieldfk'] || sourceFieldName['controllingfieldfk'] === '')) {
                         storeWithoutControllingField.push(sourceFieldName['name'])
@@ -302,9 +310,9 @@ export class PostgresFieldsService implements IServicelocatorfields {
 
                     //If not exist then create that column else update that data
                     if (checkSourceData[0].count == 0) {
-                        let createSourceField = await this.createSourceDetailsTableFields(getSourceDetails.sourceDetails.table, sourceFieldName['name'], sourceFieldName['value'], sourceFieldName['controllingfieldfk'], getSourceDetails.dependsOn);
+                        let createSourceField = await this.createSourceDetailsTableFields(getSourceDetails.sourceDetails.table, sourceFieldName['name'], sourceFieldName['value'], createdBy, sourceFieldName['controllingfieldfk'], getSourceDetails.dependsOn);
                     } else {
-                        let updateSourceField = await this.updateSourceDetailsTableFields(getSourceDetails.sourceDetails.table, sourceFieldName['name'], sourceFieldName['value'], sourceFieldName['controllingfieldfk']);
+                        let updateSourceField = await this.updateSourceDetailsTableFields(getSourceDetails.sourceDetails.table, sourceFieldName['name'], sourceFieldName['value'], updatedBy, sourceFieldName['controllingfieldfk']);
                     }
                 }
                 delete fieldsData.fieldParams;
@@ -376,15 +384,16 @@ export class PostgresFieldsService implements IServicelocatorfields {
 
     }
 
-    async createSourceDetailsTableFields(tableName: string, name: string, value: string, controllingfieldfk?: string, dependsOn?: string) {
-        let createSourceFields = `INSERT INTO public.${tableName} (name, value`;
+    async createSourceDetailsTableFields(tableName: string, name: string, value: string, createdBy: string, controllingfieldfk?: string, dependsOn?: string) {
+
+        let createSourceFields = `INSERT INTO public.${tableName} ("name", "value", "createdBy"`;
 
         // Add controllingfieldfk to the columns if it is defined
         if (controllingfieldfk !== undefined && controllingfieldfk !== '') {
             createSourceFields += `, controllingfieldfk`;
         }
 
-        createSourceFields += `) VALUES ('${name}', '${value}'`;
+        createSourceFields += `) VALUES ('${name}', '${value}', '${createdBy}'`;
 
         // Add controllingfieldfk to the values if it is defined
         if (controllingfieldfk !== undefined && controllingfieldfk !== '') {
@@ -404,15 +413,16 @@ export class PostgresFieldsService implements IServicelocatorfields {
         }
     }
 
-    async updateSourceDetailsTableFields(tableName: string, name: string, value: string, controllingfieldfk?: string) {
+    async updateSourceDetailsTableFields(tableName: string, name: string, value: string, updatedBy: string, controllingfieldfk?: string) {
 
-        let updateSourceDetails = `UPDATE public.${tableName} SET name='${name}'`;
+        let updateSourceDetails = `UPDATE public.${tableName} SET "name"='${name}',"updatedBy"='${updatedBy}'`;
 
         if (controllingfieldfk !== undefined) {
             updateSourceDetails += `, controllingfieldfk='${controllingfieldfk}'`;
         }
 
         updateSourceDetails += ` WHERE value='${value}';`;
+
         const updateSourceData = await this.fieldsValuesRepository.query(updateSourceDetails);
         if (updateSourceData.length == 0) {
             return false
@@ -569,6 +579,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
     async searchFieldValues(request: any, fieldValuesSearchDto: FieldValuesSearchDto, response: Response) {
         const apiId = APIID.FIELDVALUES_SEARCH;
         try {
+
             const getConditionalData = await this.search(fieldValuesSearchDto)
             const offset = getConditionalData.offset;
             const limit = getConditionalData.limit;
@@ -750,14 +761,14 @@ export class PostgresFieldsService implements IServicelocatorfields {
 
     //Get all fields options
     public async getFieldOptions(fieldsOptionsSearchDto: FieldsOptionsSearchDto, response: Response) {
-
         const apiId = APIID.FIELDVALUES_SEARCH;
         try {
-            let dynamicOptions;
-            let { fieldName, controllingfieldfk, context, contextType, offset, limit, sort, optionName } = fieldsOptionsSearchDto
 
-            offset = offset ? offset : 0;
-            limit = limit ? limit : 200;
+            let dynamicOptions;
+            let { fieldName, controllingfieldfk, context, contextType, offset, limit, sort, optionName } = fieldsOptionsSearchDto;
+
+            offset = offset || 0;
+            limit = limit || 200;
 
             const condition: any = {
                 name: fieldName
@@ -773,13 +784,14 @@ export class PostgresFieldsService implements IServicelocatorfields {
 
             const fetchFieldParams = await this.fieldsRepository.findOne({
                 where: condition
-            })
+            });
 
             let order;
-            if (sort && sort.length) {
-                order = `ORDER BY ${sort[0]} ${sort[1]}`
+            if (sort?.length) {
+                const orderKey = sort[1].toUpperCase();
+                order = `ORDER BY "${sort[0]}" ${orderKey}`;
             } else {
-                order = `ORDER BY name ASC`
+                order = `ORDER BY name ASC`;
             }
 
             if (fetchFieldParams?.sourceDetails?.source === 'table') {
@@ -797,78 +809,118 @@ export class PostgresFieldsService implements IServicelocatorfields {
                 let getFieldValuesFromJson = JSON.parse(readFileSync(filePath, 'utf-8'));
 
                 if (controllingfieldfk) {
-                    dynamicOptions = getFieldValuesFromJson.options.filter(option => (option?.controllingfieldfk === controllingfieldfk))
+                    dynamicOptions = getFieldValuesFromJson.options.filter(option => (option?.controllingfieldfk === controllingfieldfk));
                 } else {
                     dynamicOptions = getFieldValuesFromJson;
                 }
 
             } else {
-                fetchFieldParams.fieldParams['options'] && controllingfieldfk ?
-                    dynamicOptions = fetchFieldParams?.fieldParams['options'].filter((option: any) => option?.controllingfieldfk === controllingfieldfk) :
+                if (fetchFieldParams.fieldParams['options'] && controllingfieldfk) {
+                    dynamicOptions = fetchFieldParams?.fieldParams['options'].filter((option: any) => option?.controllingfieldfk === controllingfieldfk);
+                } else {
                     dynamicOptions = fetchFieldParams?.fieldParams['options'];
+                }
             }
 
-            return await APIResponse.success(response, apiId, dynamicOptions,
-                HttpStatus.OK, 'Field Values fetched successfully.')
+            if (dynamicOptions.length === 0) {
+                return await APIResponse.error(response, apiId, `No data found in ${fieldName} table`, `NOT_FOUND`, (HttpStatus.NOT_FOUND))
+            }
+
+            const queryData = dynamicOptions.map(result => ({
+                value: result?.value,
+                label: result?.name,
+                createdAt: result?.createdAt,
+                updatedAt: result?.updatedAt,
+                createdBy: result?.createdBy,
+                updatedBy: result?.updatedBy
+            }));
+
+            const result = {
+                totalCount: parseInt(dynamicOptions[0]?.total_count, 10),
+                fieldId: fetchFieldParams?.fieldId,
+                values: queryData
+            };
+
+            return await APIResponse.success(response, apiId, result,
+                HttpStatus.OK, 'Field options fetched successfully.');
         } catch (e) {
             const errorMessage = e?.message || 'Something went wrong';
-            return APIResponse.error(response, apiId, "Internal Server Error", `Error : ${errorMessage}`, HttpStatus.INTERNAL_SERVER_ERROR)
+            return APIResponse.error(response, apiId, "Internal Server Error", `Error : ${errorMessage}`, HttpStatus.INTERNAL_SERVER_ERROR);
         }
-
     }
 
     public async deleteFieldOptions(requiredData, response) {
         const apiId = APIID.FIELD_OPTIONS_DELETE;
         try {
-            let result;
+            let result: any = {};
             const condition: any = {
                 name: requiredData.fieldName,
             };
 
             // If `context` and `contextType` are not provided, in that case check those fields where both `context` and `contextType` are null.
             let removeOption = requiredData.option !== null ? requiredData.option : null;
-            condition.context = requiredData.context !== null ? requiredData.context : In([null, 'null', 'NULL']);
-            condition.contextType = requiredData.contextType !== null ? requiredData.contextType : In([null, 'null', 'NULL']);
+
+            if (requiredData.context !== null) {
+                condition.context = requiredData.context
+            }
+            if (requiredData.contextType) {
+                condition.contextType = requiredData.contextType
+            }
+            condition.name = requiredData.fieldName
+
+            // Fetch the total number of matching rows
+            const totalCount = await this.fieldsRepository.count({
+                where: condition
+            });
+            if (totalCount > 1) {
+                return await APIResponse.error(response, apiId, `Please select additional filters. The deletion cannot proceed because multiple fields have the same name.`, `BAD_REQUEST`, (HttpStatus.BAD_REQUEST))
+            }
 
             let getField = await this.fieldsRepository.findOne({
                 where: condition
             })
 
-            if (getField) {
-                //Delete data from source table
-                if (getField?.sourceDetails?.source == 'table') {
-                    let whereCond = requiredData.option ? `WHERE "value"='${requiredData.option}'` : '';
-                    let query = `DELETE FROM public.${getField?.sourceDetails?.table} ${whereCond}`
-                    let deleteData = await this.fieldsRepository.query(query);
-                }
-                //Delete data from fieldParams column
-                if (getField?.sourceDetails?.source == 'fieldparams') {
-
-                    // check options exits in fieldParams column or not
-                    const query = `SELECT * FROM public."Fields" WHERE "fieldId"='${getField.fieldId}' AND "fieldParams" -> 'options' @> '[{"value": "${removeOption}"}]' `;
-                    let checkSourceData = await this.fieldsRepository.query(query);
-
-                    if (checkSourceData.length > 0) {
-                        let fieldParamsOptions = checkSourceData[0].fieldParams.options;
-
-                        let fieldParamsData: any = {}
-                        if (fieldParamsOptions) {
-                            fieldParamsOptions = fieldParamsOptions.filter(option => option.name !== removeOption);
-                        }
-                        fieldParamsData = fieldParamsOptions.length > 0 ? { options: fieldParamsOptions } : null
-
-                        result = await this.fieldsRepository.update({ fieldId: getField.fieldId }, { fieldParams: fieldParamsData });
-
-                    } else {
-                        return await APIResponse.error(response, apiId, `Fields option not found`, `Fields option not found`, (HttpStatus.NOT_FOUND))
-                    }
-
-                }
-            } else {
-                return await APIResponse.error(response, apiId, `Fields not found.`, `NOT FOUND`, (HttpStatus.NOT_FOUND))
+            if (!getField) {
+                return await APIResponse.error(response, apiId, `Field not found.`, `NOT_FOUND`, (HttpStatus.NOT_FOUND))
             }
-            return await APIResponse.success(response, apiId, result,
-                HttpStatus.OK, 'Field Options deleted successfully.')
+
+            //Delete data from source table
+            if (getField?.sourceDetails?.source == 'table') {
+                let whereCond = requiredData.option ? `WHERE "value"='${requiredData.option}'` : '';
+                let query = `DELETE FROM public.${getField?.sourceDetails?.table} ${whereCond}`
+                let [_, affectedRow] = await this.fieldsRepository.query(query);
+
+                if (affectedRow === 0) {
+                    return await APIResponse.error(response, apiId, `Fields option not found`, `NOT_FOUND`, (HttpStatus.NOT_FOUND))
+                }
+                result = { "affected": affectedRow };
+            }
+            //Delete data from fieldParams column
+            if (getField?.sourceDetails?.source == 'fieldparams') {
+                // check options exits in fieldParams column or not
+                const query = `SELECT * FROM public."Fields" WHERE "fieldId"='${getField.fieldId}' AND "fieldParams" -> 'options' @> '[{"value": "${removeOption}"}]' `;
+                let checkSourceData = await this.fieldsRepository.query(query);
+
+                if (checkSourceData.length > 0) {
+                    let fieldParamsOptions = checkSourceData[0].fieldParams.options;
+
+                    let fieldParamsData: any = {}
+                    if (fieldParamsOptions) {
+                        fieldParamsOptions = fieldParamsOptions.filter(option => option.name !== removeOption);
+                    }
+                    fieldParamsData = fieldParamsOptions.length > 0 ? { options: fieldParamsOptions } : null
+
+                    result = await this.fieldsRepository.update({ fieldId: getField.fieldId }, { fieldParams: fieldParamsData });
+
+                } else {
+                    return await APIResponse.error(response, apiId, `Fields option not found`, `NOT_FOUND`, (HttpStatus.NOT_FOUND))
+                }
+
+            }
+            if (result.affected > 0) {
+                return await APIResponse.success(response, apiId, result,
+                    HttpStatus.OK, 'Field Options deleted successfully.')
+            }
         } catch (e) {
             const errorMessage = e?.message || 'Something went wrong';
             return APIResponse.error(response, apiId, "Internal Server Error", `Error : ${errorMessage}`, HttpStatus.INTERNAL_SERVER_ERROR)
@@ -879,7 +931,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         let query: string;
         let result;
 
-        let orderCond = order ? order : '';
+        let orderCond = order || '';
         let offsetCond = offset ? `offset ${offset}` : '';
         let limitCond = limit ? `limit ${limit}` : '';
         let whereCond = `WHERE `;
@@ -887,7 +939,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
 
         if (optionName) {
             if (whereCond) {
-                whereCond += `name ILike '%${optionName}%'`
+                whereCond += `AND "name" ILike '%${optionName}%'`
             } else {
                 whereCond += `WHERE "name" ILike '%${optionName}%'`
             }
@@ -895,17 +947,15 @@ export class PostgresFieldsService implements IServicelocatorfields {
             whereCond += ''
         }
 
-        query = `SELECT * FROM public."${tableName}" ${whereCond} ${orderCond} ${offsetCond} ${limitCond}`
+        query = `SELECT *,COUNT(*) OVER() AS total_count FROM public."${tableName}" ${whereCond} ${orderCond} ${offsetCond} ${limitCond}`
+
 
         result = await this.fieldsRepository.query(query);
         if (!result) {
             return null;
         }
 
-        return result.map(result => ({
-            value: result.value,
-            label: result.name
-        }));
+        return result
     }
     async findCustomFields(context: string, contextType?: string[], getFields?: string[]) {
         const condition: any = {
@@ -946,6 +996,17 @@ export class PostgresFieldsService implements IServicelocatorfields {
         let searchKey = [];
         let whereCondition = ` WHERE `;
         let index = 0;
+        let tableName = '';
+        let joinCond = '';
+
+        if (context === 'COHORT') {
+            joinCond = `JOIN "Cohort" u ON fv."itemId" = u."cohortId"`
+        } else if (context === 'USERS') {
+            joinCond = `JOIN "Users" u ON fv."itemId" = u."userId"`
+        } else {
+            joinCond = ``
+        }
+
 
         for (const [key, value] of Object.entries(stateDistBlockData)) {
             searchKey.push(`'${key}'`);
@@ -962,7 +1023,8 @@ export class PostgresFieldsService implements IServicelocatorfields {
             jsonb_object_agg(f."name", fv."value") AS fields
         FROM "FieldValues" fv
         JOIN "Fields" f ON fv."fieldId" = f."fieldId"
-        WHERE f."name" IN (${searchKey}) AND f.context = '${context}'
+        ${joinCond}
+        WHERE f."name" IN (${searchKey}) AND (f.context IN('${context}', 'NULL', 'null', '') OR f.context IS NULL)
         GROUP BY fv."itemId"
         )
         SELECT "itemId"
@@ -1096,8 +1158,72 @@ export class PostgresFieldsService implements IServicelocatorfields {
                 fieldId: field.fieldId ?? null,
                 dependsOn: field.dependsOn ?? false,
                 sourceDetails: field.sourceDetails ?? null,
+                default: field?.fieldAttributes?.default ?? null
             };
         });
         return mappedFields;
     }
+
+    /* This function Fetches the Custom Field Enteres By User. Here
+       Here It convert the Value into Real Option.
+       Used in getUserDetails API as of Now.
+    */
+    public async getUserCustomFieldDetails(
+        userId: string,
+        fieldOption?: boolean
+    ) {
+        const query = `
+        SELECT DISTINCT 
+          f."fieldId",
+          f."label", 
+          fv."value", 
+          f."type", 
+          f."fieldParams",
+          f."sourceDetails"
+        FROM public."Users" u
+        LEFT JOIN (
+          SELECT DISTINCT ON (fv."fieldId", fv."itemId") fv.*
+          FROM public."FieldValues" fv
+        ) fv ON fv."itemId" = u."userId"
+        INNER JOIN public."Fields" f ON fv."fieldId" = f."fieldId"
+        WHERE u."userId" = $1;
+      `;
+
+        let result = await this.fieldsRepository.query(query, [userId]);
+        result = result.map(async (data) => {
+            const originalValue = data.value;
+            let processedValue = data.value;
+
+            if (data?.sourceDetails) {
+                if (data.sourceDetails.source === "fieldparams") {
+                    data.fieldParams.options.forEach((option) => {
+                        if (data.value === option.value) {
+                            processedValue = option.label;
+                        }
+                    });
+                } else if (data.sourceDetails.source === "table") {
+                    let labels = await this.findDynamicOptions(
+                        data.sourceDetails.table,
+                        `value='${data.value}'`
+                    );
+                    if (labels && labels.length > 0) {
+                        processedValue = labels[0].name;
+                    }
+                }
+            }
+
+            delete data.fieldParams;
+            delete data.sourceDetails;
+
+            return {
+                ...data,
+                value: processedValue,
+                code: originalValue
+            };
+        });
+
+        result = await Promise.all(result);
+        return result;
+    }
+
 }
