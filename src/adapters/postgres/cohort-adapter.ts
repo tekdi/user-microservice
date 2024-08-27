@@ -150,7 +150,7 @@ export class PostgresCohortService {
   }
 
   public async findCohortName(userId: any) {
-    let query = `SELECT c."name",c."cohortId",c."parentId",c."type",cm."status" AS cohortmemberstatus, c."status" AS cohortstatus, cm."cohortMembershipId"
+    let query = `SELECT c."name",c."cohortId",c."parentId",c."type",cm."status" AS cohortmemberstatus, c."status" AS cohortstatus, cm."cohortMembershipId", c."params"
     FROM public."CohortMembers" AS cm
     LEFT JOIN public."Cohort" AS c ON cm."cohortId" = c."cohortId"
     WHERE cm."userId"=$1 `;
@@ -804,6 +804,7 @@ export class PostgresCohortService {
             name: data?.name,
             parentId: data?.parentId,
             type: data?.type,
+            params: data?.params,
             cohortMemberStatus: data?.cohortmemberstatus,
             cohortMembershipId: data?.cohortMembershipId,
             cohortStatus: data?.cohortstatus,
@@ -858,6 +859,7 @@ export class PostgresCohortService {
             cohortMembershipId: cohort?.cohortMembershipId,
             cohortStatus: cohort?.cohortstatus,
             type: cohort?.type,
+            params: cohort?.params,
           };
           if (requiredData.customField) {
             resultData["customField"] = await this.getCohortCustomFieldDetails(
