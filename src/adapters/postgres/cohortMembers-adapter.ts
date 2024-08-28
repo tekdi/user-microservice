@@ -9,7 +9,7 @@ import { CohortMembers } from "src/cohortMembers/entities/cohort-member.entity";
 import { InjectRepository } from "@nestjs/typeorm";
 import { IsNull, Not, Repository, getConnection, getRepository } from "typeorm";
 import { CohortDto } from "src/cohort/dto/cohort.dto";
-
+import { PostgresFieldsService } from "./fields-adapter"
 import { HttpStatus } from "@nestjs/common";
 import response from "src/utils/response";
 import { User } from "src/user/entities/user-entity";
@@ -37,7 +37,8 @@ export class PostgresCohortMembersService {
     private usersRepository: Repository<User>,
     @InjectRepository(Cohort)
     private cohortRepository: Repository<Cohort>,
-    private readonly notificationRequest: NotificationRequest
+    private readonly notificationRequest: NotificationRequest,
+    private fieldsService: PostgresFieldsService,
 
   ) { }
 
@@ -187,9 +188,11 @@ export class PostgresCohortMembersService {
       }
 
       let { limit, sort, offset, filters } = cohortMembersSearchDto;
-
-      offset = offset ? offset : 0;
-      limit = limit ? limit : 0;
+      offset = offset || 0;
+      limit = limit || 0;
+      let results = {};
+      let where = [];
+      let options = [];
 
       const whereClause = {};
       if (filters && Object.keys(filters).length > 0) {
@@ -198,20 +201,13 @@ export class PostgresCohortMembersService {
         });
       }
 
-      // Validate cohortId and userId format
-      if (whereClause["cohortId"] && !isUUID(whereClause["cohortId"])) {
-        return APIResponse.error(res, apiId, "Bad Request", "Invalid input: CohortId must be a valid UUID.", HttpStatus.BAD_REQUEST);
-      }
-      if (whereClause["userId"] && !isUUID(whereClause["userId"])) {
-        return APIResponse.error(res, apiId, "Bad Request", "Invalid input: UserId must be a valid UUID.", HttpStatus.BAD_REQUEST);
-      }
       // Check if cohortId exists
       if (whereClause["cohortId"]) {
         const cohortExists = await this.cohortMembersRepository.findOne({
           where: { cohortId: whereClause["cohortId"] },
         });
         if (!cohortExists) {
-          return APIResponse.error(res, apiId, "Not Found", "Invalid input: No member found for this cohortId.", HttpStatus.NOT_FOUND);
+          return APIResponse.error(res, apiId, "Invalid input: No member found for this cohortId.", "Not Found", HttpStatus.NOT_FOUND);
         }
       }
 
@@ -221,35 +217,19 @@ export class PostgresCohortMembersService {
           where: { userId: whereClause["userId"] },
         });
         if (!userExists) {
-          return APIResponse.error(res, apiId, "Not Found", "Invalid input: No member found for this userId and cohort combination.", HttpStatus.NOT_FOUND);
+          return APIResponse.error(res, apiId, "Invalid input: No member found for this userId and cohort combination.", "Not Found", HttpStatus.NOT_FOUND);
         }
       }
 
-      let results = {};
-      let where = [];
-      if (whereClause["cohortId"]) {
-        where.push(["cohortId", whereClause["cohortId"]]);
-      }
-      if (whereClause["userId"]) {
-        where.push(["userId", whereClause["userId"]]);
-      }
-      if (whereClause["role"]) {
-        where.push(["role", whereClause["role"]]);
-      }
-      if (whereClause["name"]) {
-        where.push(["name", whereClause["name"]]);
-      }
+      const whereKeys = ["cohortId", "userId", "role", "name", "status"];
+      whereKeys.forEach(key => {
+        if (whereClause[key]) {
+          where.push([key, whereClause[key]]);
+        }
+      });
 
-      if (whereClause["status"] && Array.isArray(whereClause["status"])) {
-        where.push(["status", whereClause["status"]]);
-      }
-      let options = [];
-      if (limit) {
-        options.push(['limit', limit]);
-      }
-      if (offset) {
-        options.push(['offset', offset]);
-      }
+      if (limit) options.push(['limit', limit]);
+      if (offset) options.push(['offset', offset]);
 
       const order = {};
       if (sort) {
@@ -289,7 +269,7 @@ export class PostgresCohortMembersService {
         if (fieldShowHide === "false") {
           results.userDetails.push(data);
         } else {
-          const fieldValues = await this.getFieldandFieldValues(data.userId);
+          const fieldValues = await this.fieldsService.getUserCustomFieldDetails(data.userId);
           data['customField'] = fieldValues;
           results.userDetails.push(data);
         }
@@ -365,34 +345,37 @@ export class PostgresCohortMembersService {
   }
 
   async getUsers(where: any, options: any, order: any) {
-    let query = ``;
+
     let whereCase = ``;
     let limit, offset;
 
     if (where.length > 0) {
-      whereCase = `WHERE `;
-      where.forEach((value, index) => {
-        if (value[0] === "role") {
-          whereCase += `R."name"='${value[1]}'`;
-        }
-        else {
-          if (value[0] === "status") {
-            const statusValues = value[1].map(status => `'${status}'`).join(', ');
-            whereCase += `CM."status" IN (${statusValues})`;
-          } else if (value[0] === "name") {
-            whereCase += `U."name" ILIKE '%${value[1]}%'`;
-          } else {
-            whereCase += `CM."${value[0]}"='${value[1]}'`;
+      whereCase = "WHERE ";
+
+      const processCondition = ([key, value]) => {
+        switch (key) {
+          case "role":
+            return `R."name"='${value}'`;
+          case "status": {
+            const statusValues = Array.isArray(value)
+              ? value.map(status => `'${status}'`).join(', ')
+              : `'${value}'`;
+            return `CM."status" IN (${statusValues})`;
+          }
+          case "name": {
+            return `U."name" ILIKE '%${value}%'`;
+          }
+          default: {
+            return `CM."${key}"='${value}'`;
           }
         }
-        if (index !== where.length - 1) {
-          whereCase += ` AND `;
-        }
-      });
+      };
+
+      whereCase += where.map(processCondition).join(" AND ");
     }
 
-    query = `SELECT U."userId", U.username, U.name, R.name AS role, U.district, U.state,U.mobile, 
-      CM."status", CM."statusReason",CM."cohortMembershipId",CM."status",CM."createdAt", COUNT(*) OVER() AS total_count  FROM public."CohortMembers" CM
+    let query = `SELECT U."userId", U.username, U.name, R.name AS role, U.district, U.state,U.mobile, 
+      CM."status", CM."statusReason",CM."cohortMembershipId",CM."status",CM."createdAt", U."createdAt", U."updatedAt",U."createdBy",U."updatedBy", COUNT(*) OVER() AS total_count  FROM public."CohortMembers" CM
       INNER JOIN public."Users" U
       ON CM."userId" = U."userId"
       INNER JOIN public."UserRolesMapping" UR
@@ -412,7 +395,7 @@ export class PostgresCohortMembersService {
     if (order && Object.keys(order).length > 0) {
       const orderField = Object.keys(order)[0];
       const orderDirection = order[orderField].toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
-      query += ` ORDER BY ${orderField} ${orderDirection}`;
+      query += ` ORDER BY U."${orderField}" ${orderDirection}`;
     }
 
     if (limit !== undefined) {

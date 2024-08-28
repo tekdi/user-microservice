@@ -1,10 +1,39 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { ArrayMaxSize, ArrayMinSize, IsEnum, IsArray, IsOptional, ValidateIf } from "class-validator";
+import { Type } from "class-transformer";
+import { ArrayMaxSize, ArrayMinSize, IsEnum, IsArray, IsOptional, ValidateIf, IsString, ValidateNested, IsUUID } from "class-validator";
 
 
 enum SortDirection {
   ASC = 'asc',
   DESC = 'desc',
+}
+class FiltersDto {
+  @ApiPropertyOptional({ type: String, description: 'Cohort ID', example: '' })
+  @IsOptional()
+  @IsString()
+  @IsUUID()
+  cohortId?: string;
+
+  @ApiPropertyOptional({ type: String, description: 'User ID', example: '' })
+  @IsOptional()
+  @IsString()
+  @IsUUID()
+  userId?: string;
+
+  @ApiPropertyOptional({ type: String, description: 'Role', example: '' })
+  @IsOptional()
+  @IsString()
+  role?: string;
+
+  @ApiPropertyOptional({ type: String, description: 'Name', example: '' })
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @ApiPropertyOptional({ type: Array, description: 'Status', example: [] })
+  @IsOptional()
+  @IsArray()
+  status?: string[];  // Assuming status is an array of strings
 }
 export class CohortMembersSearchDto {
   @ApiProperty({
@@ -20,12 +49,14 @@ export class CohortMembersSearchDto {
   offset: number;
 
   @ApiProperty({
-    type: Object,
+    type: FiltersDto,
     description: "Filters",
-    example: { cohortId: "", userId: "", role: "", name: "" }, // Adding example for Swagger
+    example: { cohortId: "", userId: "", role: "", name: "", status: [] }, // Adding example for Swagger
   })
-  @ApiPropertyOptional()
-  filters: { cohortId?: string; userId?: string; role?: string, name?: string }; // Define cohortId and userId properties
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => FiltersDto)
+  filters?: FiltersDto; // Define cohortId and userId properties
 
   @ApiPropertyOptional({
     description: "Sort",
