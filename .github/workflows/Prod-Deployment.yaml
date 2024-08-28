@@ -1,4 +1,4 @@
-name: Deploy to EKS-Pratham
+name: PROD-TAG-BASE-DEPLOYMENT
 on:
   workflow_dispatch:
     inputs:
