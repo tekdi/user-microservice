@@ -8,7 +8,7 @@ export interface FieldAttributes {
     // [key: string]: any;
     isRequired: boolean;
     isEditable: boolean;
-    isHidden: boolean;
+    isHidden?: boolean;
     isPIIField?: boolean;
     isMultiSelect?: boolean;
     maxSelections?: number
@@ -24,7 +24,7 @@ export interface SchemaField {
     type: string;
     isRequired: boolean;
     isEditable: boolean;
-    isHidden: boolean;
+    isHidden?: boolean;
     isPIIField: boolean;
     placeholder?: string;
     validation: string[];
