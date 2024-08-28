@@ -78,7 +78,7 @@ jobs:
         docker push ${{ secrets.ECR_REPOSITORY }}:${{ env.TAG }}
 
     - name: Update kube config
-      run: aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER_NAME }} --region ${{ secrets.AWS_REGION_NAME }}
+      run: aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER_NAME_PROD }} --region ${{ secrets.AWS_REGION_NAME }}
 
     - name: Deploy to EKS
       env:
