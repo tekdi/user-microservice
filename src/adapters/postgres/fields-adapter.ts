@@ -1134,7 +1134,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
     mappedFields(fieldDataList) {
         const mappedFields: SchemaField[] = fieldDataList.map((field) => {
             const options = field.fieldParams?.options?.map((opt) => ({
-                label: opt.label,
+                label: opt.label || opt.name,
                 value: opt.value,
             })) || [];
 
