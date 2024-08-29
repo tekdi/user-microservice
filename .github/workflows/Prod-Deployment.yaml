@@ -7,7 +7,7 @@ on:
 
 env:
   ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
-  EKS_CLUSTER_NAME: ${{ secrets.EKS_CLUSTER_NAME }}
+  EKS_CLUSTER_NAME: ${{ secrets.EKS_CLUSTER_NAME_PROD }}
   AWS_REGION: ${{ secrets.AWS_REGION_NAME }}
 
 jobs:
@@ -40,7 +40,7 @@ jobs:
 
     - name: Copy .env file
       env:
-        ENV_FILE_CONTENT: ${{ secrets.ENV_FILE_CONTENT }}
+        ENV_FILE_CONTENT: ${{ secrets.ENV_FILE_CONTENT_PROD }}
       run: echo "$ENV_FILE_CONTENT" > manifest/configmap.yaml
 
     - name: Show PWD and list content and Latest 3 commits 
