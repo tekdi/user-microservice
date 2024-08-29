@@ -1,11 +1,9 @@
-name: PROD-TAG-BASE-DEPLOYMENT
+name: PROD-BACKEND-TAG-BASE-DEPLOYMENT
+
 on:
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: 'Specify the tag to deploy'
-        required: true
-        default: ''
+  push:
+    tags:
+      - 'v*'   # This will trigger on tags starting with 'v'
 
 env:
   ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
@@ -13,7 +11,7 @@ env:
   AWS_REGION: ${{ secrets.AWS_REGION_NAME }}
 
 jobs:
-  TAG-BASE-DEPLOYMENT-PROD:
+  BACKEND-TAG-BASE-DEPLOYMENT-PROD:
     name: Deployment
     runs-on: ubuntu-latest
     steps:
@@ -23,14 +21,7 @@ jobs:
         fetch-depth: 0
 
     - name: Set TAG environment variable
-      if: github.event.inputs.tag != ''
-      run: echo "TAG=${{ github.event.inputs.tag }}" >> $GITHUB_ENV
-
-    - name: Set TAG environment variable from latest tag
-      if: github.event.inputs.tag == ''
-      run: |
-        TAG=$(git describe --tags `git rev-list --tags --max-count=1`)
-        echo "TAG=${TAG}" >> $GITHUB_ENV
+      run: echo "TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
 
     - name: Debug TAG value
       run: echo "TAG value - ${{ env.TAG }}"
