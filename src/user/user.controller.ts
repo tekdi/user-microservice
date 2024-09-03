@@ -175,7 +175,7 @@ export class UserController {
   ) {
     return await this.userAdapter
       .buildUserAdapter()
-      .resetUserPassword(request, "", reqBody.newPassword, response);
+      .resetUserPassword(request, reqBody.userName, reqBody.newPassword, response);
   }
 
   // required for FTL
