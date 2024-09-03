@@ -774,13 +774,15 @@ export class PostgresUserService implements IServicelocator {
 
   public async resetUserPassword(
     request: any,
-    username: string,
+    extraField: string,
     newPassword: string,
     response: Response
   ) {
     const apiId = APIID.USER_RESET_PASSWORD;
     try {
-      const userData: any = await this.findUserDetails(null, username);
+      const user = request.user;
+
+      const userData: any = await this.findUserDetails(null, user.username);
       let userId;
 
       if (userData?.userId) {
@@ -812,7 +814,7 @@ export class PostgresUserService implements IServicelocator {
 
       if (apiResponse.statusCode === 204) {
         return await APIResponse.success(response, apiId, {},
-          HttpStatus.NO_CONTENT, 'User Password Updated Successfully.')
+          HttpStatus.OK, 'User Password Updated Successfully.')
       } else {
         return APIResponse.error(response, apiId, "Bad Request", `Error : ${apiResponse?.errors}`, HttpStatus.BAD_REQUEST);
       }

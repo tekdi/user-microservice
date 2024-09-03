@@ -169,13 +169,13 @@ export class UserController {
     @Res() response: Response,
     @Body()
     reqBody: {
-      username: string;
+      userName: ""
       newPassword: string;
     }
   ) {
     return await this.userAdapter
       .buildUserAdapter()
-      .resetUserPassword(request, reqBody.username, reqBody.newPassword, response);
+      .resetUserPassword(request, "", reqBody.newPassword, response);
   }
 
   // required for FTL
