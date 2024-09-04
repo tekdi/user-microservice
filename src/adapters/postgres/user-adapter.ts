@@ -323,7 +323,7 @@ export class PostgresUserService implements IServicelocator {
     }
     let userDetails = await this.usersRepository.findOne({
       where: whereClause,
-      select: ["userId", "username", "name", "mobile", "email"]
+      select: ["userId", "username", "name", "mobile", "email", "firstLogin"]
     })
     if (!userDetails) {
       return false;
@@ -801,6 +801,8 @@ export class PostgresUserService implements IServicelocator {
       const resToken = keycloakResponse.data.access_token;
       let apiResponse;
 
+
+
       try {
         apiResponse = await this.resetKeycloakPassword(
           request,
@@ -813,6 +815,9 @@ export class PostgresUserService implements IServicelocator {
       }
 
       if (apiResponse.statusCode === 204) {
+        if (userData.firstLogin) {
+          await this.usersRepository.update(userData.userId, { firstLogin: false })
+        }
         return await APIResponse.success(response, apiId, {},
           HttpStatus.OK, 'User Password Updated Successfully.')
       } else {
