@@ -323,7 +323,7 @@ export class PostgresUserService implements IServicelocator {
     }
     let userDetails = await this.usersRepository.findOne({
       where: whereClause,
-      select: ["userId", "username", "name", "mobile", "email", "firstLogin"]
+      select: ["userId", "username", "name", "mobile", "email", "temporaryPassword"]
     })
     if (!userDetails) {
       return false;
@@ -815,8 +815,8 @@ export class PostgresUserService implements IServicelocator {
       }
 
       if (apiResponse.statusCode === 204) {
-        if (userData.firstLogin) {
-          await this.usersRepository.update(userData.userId, { firstLogin: false })
+        if (userData.temporaryPassword) {
+          await this.usersRepository.update(userData.userId, { temporaryPassword: false })
         }
         return await APIResponse.success(response, apiId, {},
           HttpStatus.OK, 'User Password Updated Successfully.')
