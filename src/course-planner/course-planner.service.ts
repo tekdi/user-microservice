@@ -47,6 +47,9 @@ export class CoursePlannerService {
         },
       };
     } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
       this.logger.error(`Error in processUploadedData: ${error.message}`, error.stack);
       throw new HttpException('Failed to process uploaded data', HttpStatus.INTERNAL_SERVER_ERROR);
     }
@@ -158,6 +161,26 @@ export class CoursePlannerService {
     };
   }
 
+  // private async createProjectSubtask1(projectId: string, file: Express.Multer.File): Promise<any> {
+  //   try {
+  //     const form = new FormData();
+  //     form.append('projectTemplateTasks', file.buffer, {
+  //       filename: file.originalname,
+  //       contentType: file.mimetype,
+  //     });
+
+  //     const url = `${this.baseUrl}/project/v1/project/templateTasks/bulkCreate/${projectId}`;
+  //     const response = await this.makeHttpRequest('post', url, form, {
+  //       ...form.getHeaders(),
+  //       'internal-access-token': `${this.internalAccessToken}`,
+  //     });
+  //     this.logger.error(`Project subtask Created Successfully: `, response.data);
+  //     return response.data;
+  //   } catch (error) {
+  //     this.logger.error(`Error creating project subtask: ${error.message}`, error.stack);
+  //     throw new HttpException('Failed to create project subtask', HttpStatus.INTERNAL_SERVER_ERROR);
+  //   }
+  // }
   private async createProjectSubtask(projectId: string, file: Express.Multer.File): Promise<any> {
     try {
       const form = new FormData();
@@ -165,31 +188,50 @@ export class CoursePlannerService {
         filename: file.originalname,
         contentType: file.mimetype,
       });
-
+  
       const url = `${this.baseUrl}/project/v1/project/templateTasks/bulkCreate/${projectId}`;
       const response = await this.makeHttpRequest('post', url, form, {
         ...form.getHeaders(),
         'internal-access-token': `${this.internalAccessToken}`,
       });
-      this.logger.error(`Project subtask Created Successfully: `, response.data);
+      console.log(response);
+      // Check if the response contains the "Project Template Already Exist" error
+      if (Array.isArray(response.data)) {
+        for (const item of response.data) {
+          if (
+            item.STATUS === "Project Template Already Exist" ||
+            item.STATUS === "\"Project Template Already Exist\""
+          ) {
+            throw new HttpException('Project Template Already Exists', HttpStatus.BAD_REQUEST);
+          }
+        }
+      }
+  
+      this.logger.log(`Project subtask Created Successfully: ${JSON.stringify(response.data)}`);
       return response.data;
     } catch (error) {
       this.logger.error(`Error creating project subtask: ${error.message}`, error.stack);
+      if (error instanceof HttpException) {
+        throw error; // Re-throw HttpExceptions (including our custom one)
+      }
       throw new HttpException('Failed to create project subtask', HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
+
 
   private async validateAndCreateProject(externalId: string, metaData: MetaDataDto, createProjectDto: CreateProjectDto) {
     try {
       const url = `${this.baseUrl}${URL.ValidateProjectUrl}`;
       const projectData = { externalIds: [externalId] };
+      console.log(this.authToken);
       const response = await this.makeHttpRequest('post', url, projectData, {
-        'internal-access-token':  `${this.internalAccessToken}`
+        'internal-access-token':  `${this.internalAccessToken}`,
       });
 
       if (response.status === 400) {
         return this.createProject(externalId, metaData, createProjectDto);
       } else {
+        console.log(response.data)
         return response.data.result[0]._id;
       }
     } catch (error) {
@@ -279,6 +321,7 @@ export class CoursePlannerService {
     };
 
     try {
+      console.log(config)
       const response = await this.httpService[method](url, data, config);
       return response;
     } catch (error) {
