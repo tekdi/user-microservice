@@ -323,7 +323,7 @@ export class PostgresUserService implements IServicelocator {
     }
     let userDetails = await this.usersRepository.findOne({
       where: whereClause,
-      select: ["userId", "username", "name", "mobile", "email"]
+      select: ["userId", "username", "name", "mobile", "email", "temporaryPassword"]
     })
     if (!userDetails) {
       return false;
@@ -774,13 +774,15 @@ export class PostgresUserService implements IServicelocator {
 
   public async resetUserPassword(
     request: any,
-    username: string,
+    extraField: string,
     newPassword: string,
     response: Response
   ) {
     const apiId = APIID.USER_RESET_PASSWORD;
     try {
-      const userData: any = await this.findUserDetails(null, username);
+      const user = request.user;
+
+      const userData: any = await this.findUserDetails(null, user.username);
       let userId;
 
       if (userData?.userId) {
@@ -799,6 +801,8 @@ export class PostgresUserService implements IServicelocator {
       const resToken = keycloakResponse.data.access_token;
       let apiResponse;
 
+
+
       try {
         apiResponse = await this.resetKeycloakPassword(
           request,
@@ -811,8 +815,11 @@ export class PostgresUserService implements IServicelocator {
       }
 
       if (apiResponse.statusCode === 204) {
+        if (userData.temporaryPassword) {
+          await this.usersRepository.update(userData.userId, { temporaryPassword: false })
+        }
         return await APIResponse.success(response, apiId, {},
-          HttpStatus.NO_CONTENT, 'User Password Updated Successfully.')
+          HttpStatus.OK, 'User Password Updated Successfully.')
       } else {
         return APIResponse.error(response, apiId, "Bad Request", `Error : ${apiResponse?.errors}`, HttpStatus.BAD_REQUEST);
       }

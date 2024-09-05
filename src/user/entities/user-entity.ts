@@ -58,6 +58,9 @@ export class User {
   @Column({ nullable: true })
   mobile: number;
 
+  @Column({ nullable: false, default: true })
+  temporaryPassword: boolean
+
   @Column({ nullable: true })
   createdBy: string;
 
