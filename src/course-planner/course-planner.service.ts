@@ -20,16 +20,16 @@ export class CoursePlannerService {
     private configService: ConfigService
   ) {
     this.baseUrl = this.configService.get<string>('SHIKSHA_LOKAM_URL');
-    this.authToken = this.configService.get<string>('AUTH_TOKEN');
     this.internalAccessToken = this.configService.get<string>('INTERNAL_ACCESS_TOKEN');
 
-    if (!this.baseUrl || !this.authToken || !this.internalAccessToken) {
+    if (!this.baseUrl || !this.internalAccessToken) {
       throw new Error('Missing required configuration');
     }
   }
 
-  async processUploadedData(file: Express.Multer.File, metaData: MetaDataDto, createProjectDto: CreateProjectDto) {
+  async processUploadedData(file: Express.Multer.File, metaData: MetaDataDto, createProjectDto: CreateProjectDto,authToken: string){
     try {
+      this.authToken=authToken;
       const projectExternalId = this.generateProjectExternalId(metaData);
       const checkAndCreateProject = await this.validateAndCreateProject(projectExternalId, metaData, createProjectDto);
       await this.createProjectSubtask(checkAndCreateProject, file);
@@ -194,18 +194,12 @@ export class CoursePlannerService {
         ...form.getHeaders(),
         'internal-access-token': `${this.internalAccessToken}`,
       });
-      console.log(response);
-      // Check if the response contains the "Project Template Already Exist" error
-      if (Array.isArray(response.data)) {
-        for (const item of response.data) {
-          if (
-            item.STATUS === "Project Template Already Exist" ||
-            item.STATUS === "\"Project Template Already Exist\""
-          ) {
-            throw new HttpException('Project Template Already Exists', HttpStatus.BAD_REQUEST);
-          }
+         const responseData = response.data;
+         // Check if the string contains the specific status message
+        if (responseData.includes('Project template tasks already exists') || responseData.includes('"Project template tasks already exists"')) {
+            throw new HttpException('Project Template Already Exists. Make Sure you add unique exteranl Id', HttpStatus.BAD_REQUEST);
         }
-      }
+
   
       this.logger.log(`Project subtask Created Successfully: ${JSON.stringify(response.data)}`);
       return response.data;
@@ -223,7 +217,6 @@ export class CoursePlannerService {
     try {
       const url = `${this.baseUrl}${URL.ValidateProjectUrl}`;
       const projectData = { externalIds: [externalId] };
-      console.log(this.authToken);
       const response = await this.makeHttpRequest('post', url, projectData, {
         'internal-access-token':  `${this.internalAccessToken}`,
       });
@@ -231,7 +224,6 @@ export class CoursePlannerService {
       if (response.status === 400) {
         return this.createProject(externalId, metaData, createProjectDto);
       } else {
-        console.log(response.data)
         return response.data.result[0]._id;
       }
     } catch (error) {
@@ -321,7 +313,6 @@ export class CoursePlannerService {
     };
 
     try {
-      console.log(config)
       const response = await this.httpService[method](url, data, config);
       return response;
     } catch (error) {
