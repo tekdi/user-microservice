@@ -70,7 +70,7 @@ export class PostgresUserService implements IServicelocator {
   ) {
     this.jwt_secret = this.configService.get<string>("RBAC_JWT_SECRET");
     this.jwt_password_reset_expires_In = this.configService.get<string>("PASSWORD_RESET_JWT_EXPIRES_IN");
-    this.front_end_url = this.configService.get<string>("FRONTEND_BASE_URL");
+    this.front_end_url = this.configService.get<string>("BASE_URL");
   }
 
   public async sendPasswordResetLink(
@@ -103,7 +103,7 @@ export class PostgresUserService implements IServicelocator {
       }
       const jwtExpireTime = this.jwt_password_reset_expires_In;
       const jwtSecretKey = this.jwt_secret;
-      const frontEndUrl = this.front_end_url;
+      const frontEndUrl = `${this.front_end_url}/reset-password`;
       const resetToken = await this.jwtUtil.generateTokenForForgotPassword(tokenPayload, jwtExpireTime, jwtSecretKey);
 
       // Format expiration time
