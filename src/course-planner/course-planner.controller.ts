@@ -1,15 +1,17 @@
-import { Controller, Post, UploadedFile, UseInterceptors, Req, HttpException, HttpStatus, ConsoleLogger } from '@nestjs/common';
+import { Controller, Post, UploadedFile, UseInterceptors, Req, HttpException, HttpStatus, ConsoleLogger, UseGuards } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { CoursePlannerService } from './course-planner.service';
 import { MetaDataDto } from './dto/meta-data.dto';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { Request } from 'express';
+import { JwtAuthGuard } from 'src/common/guards/keycloak.guard';
 
 @Controller('course-planner')
 export class CoursePlannerController {
   constructor(private readonly coursePlannerService: CoursePlannerService) {}
 
   @Post('upload')
+  @UseGuards(JwtAuthGuard)
   @UseInterceptors(FileInterceptor('file')) 
   async uploadFile(
     @UploadedFile() file: Express.Multer.File,
@@ -23,12 +25,10 @@ export class CoursePlannerController {
       if (!metaData) {
         throw new HttpException('No metadata provided', HttpStatus.BAD_REQUEST);
       }
-
-      // Parse metadata string to an object
+      const token = req.headers.authorization?.split(' ')[1];
       const metaDataObject: MetaDataDto = JSON.parse(metaData);
       const createProjectDto = new CreateProjectDto();
-      console.log(metaDataObject);
-      const result = await this.coursePlannerService.processUploadedData(file, metaDataObject,createProjectDto);
+      const result = await this.coursePlannerService.processUploadedData(file, metaDataObject,createProjectDto,token);
       return result;
     } 
   }
