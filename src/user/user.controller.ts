@@ -41,6 +41,7 @@ import { JwtAuthGuard } from "src/common/guards/keycloak.guard";
 import { Request, Response } from "express";
 import { AllExceptionsFilter } from "src/common/filters/exception.filter";
 import { APIID } from "src/common/utils/api-id.config";
+import { ResetUserPasswordDto, SendPasswordResetLinkDto } from "./dto/passwordReset.dto";
 export interface UserData {
   context: string;
   tenantId: string;
@@ -157,26 +158,35 @@ export class UserController {
     return await this.userAdapter.buildUserAdapter().searchUser(tenantId, request, response, userSearchDto);
   }
 
+  @Post("/password-reset-link")
+  @ApiOkResponse({ description: 'Password reset link sent successfully.' })
+  @UsePipes(new ValidationPipe({ transform: true }))
+  public async sendPasswordResetLink(
+    @Req() request: Request,
+    @Res() response: Response,
+    @Body() reqBody: SendPasswordResetLinkDto
+  ) {
+    return await this.userAdapter.buildUserAdapter().sendPasswordResetLink(request, reqBody.username, response)
+  }
+
   @UseFilters(new AllExceptionsFilter(APIID.USER_RESET_PASSWORD))
   @Post("/reset-password")
   @UseGuards(JwtAuthGuard)
   @ApiBasicAuth("access-token")
   @ApiOkResponse({ description: "Password reset successfully." })
+  @UsePipes(new ValidationPipe({ transform: true }))
   @ApiForbiddenResponse({ description: "Forbidden" })
   @ApiBody({ type: Object })
   public async resetUserPassword(
     @Req() request: Request,
     @Res() response: Response,
-    @Body()
-    reqBody: {
-      userName: ""
-      newPassword: string;
-    }
+    @Body() reqBody: ResetUserPasswordDto
   ) {
     return await this.userAdapter
       .buildUserAdapter()
       .resetUserPassword(request, reqBody.userName, reqBody.newPassword, response);
   }
+
 
   // required for FTL
   @Post("/check")

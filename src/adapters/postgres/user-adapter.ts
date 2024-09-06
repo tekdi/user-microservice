@@ -1,4 +1,4 @@
-import { HttpStatus, Injectable, Query } from '@nestjs/common';
+import { BadRequestException, HttpStatus, Injectable, Query } from '@nestjs/common';
 import { User } from '../../user/entities/user-entity'
 import { FieldValues } from 'src/fields/entities/fields-values.entity';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -31,11 +31,16 @@ import { PostgresFieldsService } from "./fields-adapter"
 import { PostgresRoleService } from './rbac/role-adapter';
 import { CustomFieldsValidation } from '@utils/custom-field-validation';
 import { NotificationRequest } from '@utils/notification.axios';
+import { JwtUtil } from '@utils/jwt-token';
+import { ConfigService } from '@nestjs/config';
+import { formatTime } from '@utils/formatTimeConversion';
 
 
 @Injectable()
 export class PostgresUserService implements IServicelocator {
   axios = require("axios");
+  jwt_password_reset_expires_In: any;
+  jwt_secret: any;
 
   constructor(
     // private axiosInstance: AxiosInstance,
@@ -57,9 +62,83 @@ export class PostgresUserService implements IServicelocator {
     private roleRepository: Repository<Role>,
     private fieldsService: PostgresFieldsService,
     private readonly postgresRoleService: PostgresRoleService,
-    private readonly notificationRequest: NotificationRequest
+    private readonly notificationRequest: NotificationRequest,
+    private readonly jwtUtil: JwtUtil,
+    private configService: ConfigService
     // private cohortMemberService: PostgresCohortMembersService,
-  ) { }
+  ) {
+    this.jwt_secret = this.configService.get<string>("RBAC_JWT_SECRET");
+    this.jwt_password_reset_expires_In = this.configService.get<string>("PASSWORD_RESET_JWT_EXPIRES_IN");
+  }
+
+  public async sendPasswordResetLink(
+    request: any,
+    username: string,
+    response: Response
+  ) {
+    const apiId = 'api.sendLinkForResetpassword';
+    try {
+      // Fetch user details
+      const userData: any = await this.findUserDetails(null, username);
+      if (!userData) {
+        return APIResponse.error(response, apiId, "NOT_FOUND", 'Username Does not exist', HttpStatus.NOT_FOUND);
+      }
+      // Determine email address
+      let emailOfUser = userData?.email;
+      if (!emailOfUser) {
+        const createdByUser = await this.usersRepository.findOne({
+          where: { userId: userData.createdBy },
+        });
+        emailOfUser = createdByUser?.email;
+      }
+      if (!emailOfUser) {
+        return APIResponse.error(response, apiId, "Bad Request", 'EmailId Does not exist for send Reset password link', HttpStatus.BAD_REQUEST);
+      }
+
+      //Generate Token for password Reset
+      const tokenPayload = {
+        sub: userData.userId
+      }
+      const jwtExpireTime = this.jwt_password_reset_expires_In;
+      const jwtSecretKey = this.jwt_secret;
+      const resetToken = await this.jwtUtil.generateTokenForForgotPassword(tokenPayload, jwtExpireTime, jwtSecretKey);
+
+      // Format expiration time
+      const time = formatTime(jwtExpireTime);
+
+      //Send Notification
+      const notificationPayload = {
+        isQueue: false,
+        context: 'USER',
+        key: "OnForgotPasswordReset",
+        replacements: {
+          "{username}": username,
+          "{resetToken}": resetToken,
+          "{programName}": userData?.tenantData[0]?.tenantName,
+          "{expireTime}": time
+        },
+        email: {
+          receipients: [emailOfUser]
+        }
+      };
+      const mailSend = await this.notificationRequest.sendNotification(notificationPayload);
+      if (mailSend?.result?.email?.errors.length > 0) {
+        return APIResponse.error(
+          response,
+          apiId,
+          mailSend?.result?.email?.errors,
+          "Failed to send the reset password link. Please try again later.",
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      return await APIResponse.success(response, apiId, { email: emailOfUser },
+        HttpStatus.OK, 'Reset password link has been sent successfully. Please check your email.')
+
+    } catch (e) {
+      return APIResponse.error(response, apiId, "Internal Server Error", `Error : ${e?.response?.data.error}`, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
 
   async searchUser(tenantId: string,
     request: any,
@@ -323,7 +402,7 @@ export class PostgresUserService implements IServicelocator {
     }
     let userDetails = await this.usersRepository.findOne({
       where: whereClause,
-      select: ["userId", "username", "name", "mobile", "email", "temporaryPassword"]
+      select: ["userId", "username", "name", "mobile", "email", "temporaryPassword", "createdBy"]
     })
     if (!userDetails) {
       return false;
