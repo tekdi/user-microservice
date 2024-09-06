@@ -13,7 +13,6 @@ export class JwtUtil {
         const token = await this.jwtService.signAsync(plainObject, {
             secret: jwtSecret,
             expiresIn: passwordexpiresIn,
-            algorithm: 'HS256',
             // noTimestamp: true,
         });
         return token;
