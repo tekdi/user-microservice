@@ -4,6 +4,8 @@ export const APIID = {
     USER_UPDATE: "api.user.update",
     USER_LIST: "api.user.list",
     USER_RESET_PASSWORD: "api.user.resetPassword",
+    USER_RESET_PASSWORD_LINK: 'api.user.sendLinkForResetPassword',
+    USER_FORGOT_PASSWORD: 'api.user.forgotPassword',
     USER_DELETE: "api.user.delete",
     ROLE_GET: "api.role.get",
     ROLE_CREATE: "api.role.create",
