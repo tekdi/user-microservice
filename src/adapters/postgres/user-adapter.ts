@@ -34,6 +34,7 @@ import { NotificationRequest } from '@utils/notification.axios';
 import { JwtUtil } from '@utils/jwt-token';
 import { ConfigService } from '@nestjs/config';
 import { formatTime } from '@utils/formatTimeConversion';
+import { API_RESPONSES } from '@utils/response.messages';
 
 
 @Injectable()
@@ -78,12 +79,12 @@ export class PostgresUserService implements IServicelocator {
     username: string,
     response: Response
   ) {
-    const apiId = 'api.sendLinkForResetpassword';
+    const apiId = APIID.USER_RESET_PASSWORD_LINK;
     try {
       // Fetch user details
       const userData: any = await this.findUserDetails(null, username);
       if (!userData) {
-        return APIResponse.error(response, apiId, "NOT_FOUND", 'Username Does not exist', HttpStatus.NOT_FOUND);
+        return APIResponse.error(response, apiId, API_RESPONSES.NOT_FOUND, API_RESPONSES.USERNAME_NOT_FOUND, HttpStatus.NOT_FOUND);
       }
       // Determine email address
       let emailOfUser = userData?.email;
@@ -94,7 +95,7 @@ export class PostgresUserService implements IServicelocator {
         emailOfUser = createdByUser?.email;
       }
       if (!emailOfUser) {
-        return APIResponse.error(response, apiId, "Bad Request", 'EmailId Does not exist for send Reset password link', HttpStatus.BAD_REQUEST);
+        return APIResponse.error(response, apiId, API_RESPONSES.BAD_REQUEST, API_RESPONSES.EMAIL_NOT_FOUND_FOR_RESET, HttpStatus.BAD_REQUEST);
       }
 
       //Generate Token for password Reset
@@ -131,16 +132,16 @@ export class PostgresUserService implements IServicelocator {
           response,
           apiId,
           mailSend?.result?.email?.errors,
-          "Failed to send the reset password link. Please try again later.",
+          API_RESPONSES.RESET_PASSWORD_LINK_FAILED,
           HttpStatus.BAD_REQUEST
         );
       }
 
       return await APIResponse.success(response, apiId, { email: emailOfUser },
-        HttpStatus.OK, 'Reset password link has been sent successfully. Please check your email.')
+        HttpStatus.OK, API_RESPONSES.RESET_PASSWORD_LINK_SUCCESS)
 
     } catch (e) {
-      return APIResponse.error(response, apiId, "Internal Server Error", `Error : ${e?.response?.data.error}`, HttpStatus.INTERNAL_SERVER_ERROR);
+      return APIResponse.error(response, apiId, API_RESPONSES.INTERNAL_SERVER_ERROR, `Error : ${e?.response?.data.error}`, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 
