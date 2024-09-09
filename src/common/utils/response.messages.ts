@@ -9,5 +9,6 @@ export const API_RESPONSES = {
     BAD_REQUEST: 'Bad Request',
     INVALID_LINK: 'Invalid Link',
     LINK_EXPIRED: 'The link is expired. Please request a new one.',
+    SERVICE_UNAVAILABLE: 'Notification service is unreachable. Please try again later.',
     INTERNAL_SERVER_ERROR: 'Internal Server Error',
 }
