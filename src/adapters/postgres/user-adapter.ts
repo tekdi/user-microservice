@@ -145,6 +145,43 @@ export class PostgresUserService implements IServicelocator {
     }
   }
 
+  async forgotPassword(request: any, body: any, response: Response<any, Record<string, any>>) {
+    const apiId = APIID.USER_FORGOT_PASSWORD;
+    try {
+      const decoded: any = jwt_decode(body.token);
+      const currentTime = Math.floor(Date.now() / 1000);
+
+      //  Check if token has an expiration date
+      if (decoded.exp && decoded.exp < currentTime) {
+        return APIResponse.error(response, apiId, API_RESPONSES.LINK_EXPIRED, API_RESPONSES.INVALID_LINK, HttpStatus.BAD_REQUEST);
+      }
+      const userDetail = await this.usersRepository.findOne({ where: { userId: decoded.sub } });
+      if (!userDetail) {
+        return APIResponse.error(response, apiId, API_RESPONSES.NOT_FOUND, API_RESPONSES.USER_NOT_FOUND, HttpStatus.NOT_FOUND);
+      }
+      const keycloakResponse = await getKeycloakAdminToken();
+      const keyClocktoken = keycloakResponse.data.access_token;
+      let apiResponse: any;
+      try {
+        apiResponse = await this.resetKeycloakPassword(
+          request,
+          keyClocktoken,
+          body.newPassword,
+          userDetail.userId
+        );
+      }
+      catch (e) {
+        return APIResponse.error(response, apiId, API_RESPONSES.INTERNAL_SERVER_ERROR, `Error : ${e?.response?.data.error}`, HttpStatus.INTERNAL_SERVER_ERROR);
+      }
+
+      return await APIResponse.success(response, apiId, {},
+        HttpStatus.OK, API_RESPONSES.FORGOT_PASSWORD_SUCCESS)
+    }
+    catch (e) {
+      return APIResponse.error(response, apiId, API_RESPONSES.INTERNAL_SERVER_ERROR, `Error : ${e?.response?.data.error}`, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
   async searchUser(tenantId: string,
     request: any,
     response: any,

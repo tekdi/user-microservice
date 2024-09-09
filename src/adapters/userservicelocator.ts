@@ -26,4 +26,5 @@ export interface IServicelocator {
   checkUser(body: any, response);
   deleteUserById(userId: string, response: Response): Promise<any>;
   sendPasswordResetLink(request: any, username: string, response: Response);
+  forgotPassword(request: any, body: any, response: Response);
 }

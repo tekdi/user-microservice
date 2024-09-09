@@ -13,3 +13,15 @@ export class ResetUserPasswordDto {
     @IsNotEmpty()
     newPassword: string;
 }
+
+
+export class ForgotPasswordDto {
+
+    @IsString()
+    @IsNotEmpty()
+    newPassword: string;
+
+    @IsString()
+    @IsNotEmpty()
+    token: string;
+}
