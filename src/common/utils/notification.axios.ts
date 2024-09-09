@@ -17,7 +17,7 @@ export class NotificationRequest {
         const config: AxiosRequestConfig<any> = {
             method: 'POST',
             maxBodyLength: Infinity,
-            url: this.url,
+            url: `${this.url}/notification/send`,
             headers: {
                 'Content-Type': 'application/json'
             },
