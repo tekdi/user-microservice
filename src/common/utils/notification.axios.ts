@@ -36,7 +36,7 @@ export class NotificationRequest {
             }
             if (error.response) {
                 const statusCode = error.response.status;
-                const errorDetails = error.response.data || 'Error occurred';
+                const errorDetails = error.response.data || API_RESPONSES.ERROR;
 
                 switch (statusCode) {
                     case 400:
@@ -56,7 +56,7 @@ export class NotificationRequest {
                         );
                     default:
                         throw new HttpException(
-                            `Unexpected Error: ${errorDetails.params?.errmsg || 'An unexpected error occurred'}`,
+                            `Unexpected Error: ${errorDetails.params?.errmsg || API_RESPONSES.UNEXPECTED_ERROR}`,
                             HttpStatus.INTERNAL_SERVER_ERROR
                         );
                 }

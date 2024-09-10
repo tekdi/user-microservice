@@ -11,4 +11,6 @@ export const API_RESPONSES = {
     LINK_EXPIRED: 'The link is expired. Please request a new one.',
     SERVICE_UNAVAILABLE: 'Notification service is unreachable. Please try again later.',
     INTERNAL_SERVER_ERROR: 'Internal Server Error',
+    ERROR: 'Error occurred',
+    UNEXPECTED_ERROR: 'An unexpected error occurred'
 }
