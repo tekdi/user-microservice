@@ -41,6 +41,7 @@ export class PostgresAttendanceService {
 
     async searchAttendance(tenantId: string, request: any, attendanceSearchDto: AttendanceSearchDto) {
         try {
+
             let { limit, offset, filters, facets, sort } = attendanceSearchDto;
             // Set default limit 0 and offset 20 if not provided
             limit = limit ? limit : 20;
@@ -546,6 +547,7 @@ export class PostgresAttendanceService {
             attendanceToSearch.filters = {
                 attendanceDate: attendanceDto.attendanceDate,
                 userId: attendanceDto.userId,
+                contextId: attendanceDto.contextId,
             };
 
             const attendanceFound: any = await this.searchAttendance(
@@ -597,7 +599,11 @@ export class PostgresAttendanceService {
     ) {
         try {
             const attendanceRecord = await this.attendanceRepository.findOne({
-                where: { attendanceId },
+                where: {
+                    "contextId": attendanceDto.contextId,
+                    "userId": attendanceDto.userId,
+                    "attendanceId": attendanceId
+                },
             });
 
             if (!attendanceRecord) {
@@ -668,7 +674,9 @@ export class PostgresAttendanceService {
 
         try {
             let getCohortDetails = await this.cohortRepository.findOne({
-                where: { "cohortId": attendanceDto.contextId }
+                where: {
+                    "cohortId": attendanceDto.contextId
+                }
             });
 
             // Set validation on mark attendance
@@ -712,8 +720,8 @@ export class PostgresAttendanceService {
             }
         }
     }
-    
-    public formatTime (hours: number, minutes: number) {
+
+    public formatTime(hours: number, minutes: number) {
         return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
     };
 
@@ -751,10 +759,10 @@ export class PostgresAttendanceService {
             if (attendanceValidation?.back_dated_attendance !== 1) {
                 result.status = false;
                 result.errorMessage = `Back dated attendance not allowed`;
-            } else if (differenceInCalendarDays(todayDate,attendanceDate) > attendanceValidation?.back_dated_attendance_allowed_days) {
-                   result.status = false;
-                   result.errorMessage = `Back dated attendance allowed only for ${attendanceValidation?.back_dated_attendance_allowed_days} days`
-                }
+            } else if (differenceInCalendarDays(todayDate, attendanceDate) > attendanceValidation?.back_dated_attendance_allowed_days) {
+                result.status = false;
+                result.errorMessage = `Back dated attendance allowed only for ${attendanceValidation?.back_dated_attendance_allowed_days} days`
+            }
         } else if (todayDate === attendanceDate) {
 
             // time in 24-hour format
@@ -767,14 +775,14 @@ export class PostgresAttendanceService {
             if (attendanceValidation?.attendance_ends_at && regex.test(attendanceValidation?.attendance_ends_at) == true) {
                 selfAttendanceEnd = attendanceValidation?.attendance_ends_at;
             }
-          
+
             if (attendanceValidation?.restrict_attendance_timings === 1 && (selfAttendanceEnd || selfAttendanceStart)) {
-                 //Fetch current time 
-                 const currentTimeIST = new Date(Date.now() + (5.5 * 60 * 60 * 1000));
-                 const currentHours = currentTimeIST.getUTCHours();
-                 const currentMinutes = currentTimeIST.getUTCMinutes();
+                //Fetch current time 
+                const currentTimeIST = new Date(Date.now() + (5.5 * 60 * 60 * 1000));
+                const currentHours = currentTimeIST.getUTCHours();
+                const currentMinutes = currentTimeIST.getUTCMinutes();
                 // Format the current time and end time in HH:MM format
-                 const currentTimeFormatted = this.formatTime(currentHours, currentMinutes);
+                const currentTimeFormatted = this.formatTime(currentHours, currentMinutes);
 
                 if (selfAttendanceStart) {
                     // Parse the self attendance start time
@@ -788,16 +796,16 @@ export class PostgresAttendanceService {
                 if (selfAttendanceEnd) {
                     const [endHours, endMinutes] = selfAttendanceEnd.split(":").map(Number);
                     const endTimeFormatted = this.formatTime(endHours, endMinutes);
-                    if (currentTimeFormatted > endTimeFormatted && attendanceValidation.allow_late_marking !== 1 ) {
+                    if (currentTimeFormatted > endTimeFormatted && attendanceValidation.allow_late_marking !== 1) {
                         result.status = false;
                         result.errorMessage = `Attendance marking time passed`;
-                    } else if (currentTimeFormatted > endTimeFormatted && attendanceValidation.allow_late_marking === 1 ) {
+                    } else if (currentTimeFormatted > endTimeFormatted && attendanceValidation.allow_late_marking === 1) {
                         result.status = true;
                         result.markLate = true;
-    
+
                     }
                 }
-            }   
+            }
         }
         return result;
     }
