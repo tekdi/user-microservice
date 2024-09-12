@@ -658,25 +658,12 @@ export class PostgresUserService implements IServicelocator {
         }
       }
 
-      // Send Notification if user added as cohort Member
-      if (result && userCreateDto?.tenantCohortRoleMapping && userCreateDto?.tenantCohortRoleMapping[0]?.cohortId && userCreateDto?.tenantCohortRoleMapping[0]?.cohortId.length > 0 && email && email.email) {
-
-        const notificationPayload = {
-          isQueue: false,
-          context: 'USER',
-          replacements: [userCreateDto.name, userCreateDto.username, userCreateDto.password],
-          email: {
-            receipients: [email.email]
-          }
-        };
-        await this.notificationRequest.sendNotification(notificationPayload);
-      }
-
       APIResponse.success(response, apiId, { userData: { ...result, createFailures } },
         HttpStatus.CREATED, "User has been created successfully.")
-      // }
+
     } catch (e) {
-      return APIResponse.error(response, apiId, "Internal Server Error", "Something went wrong", HttpStatus.INTERNAL_SERVER_ERROR);
+      const errorMessage = e.message || 'Internal server error';
+      return APIResponse.error(response, apiId, "Internal Server Error", errorMessage, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 
