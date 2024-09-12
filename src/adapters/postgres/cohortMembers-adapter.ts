@@ -323,19 +323,6 @@ export class PostgresCohortMembersService {
         cohortMembers
       );
 
-      // if (deviceId) {
-      //   // Prepare the notification payload
-      //   const notificationPayload = {
-      //     isQueue: false,
-      //     context: 'COHORT',
-      //     replacements: [cohortMembers.cohortId],
-      //     push: {
-      //       receipients: [deviceId],
-      //       // to: deviceId,
-      //     },
-      //   };
-      //   await this.notificationRequest.sendNotification(notificationPayload);
-      // }
       return APIResponse.success(res, apiId, savedCohortMember, HttpStatus.OK, "Cohort member has been successfully assigned.");
 
     } catch (e) {

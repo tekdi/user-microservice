@@ -658,20 +658,6 @@ export class PostgresUserService implements IServicelocator {
         }
       }
 
-      // Send Notification if user added as cohort Member
-      // if (result && userCreateDto?.tenantCohortRoleMapping && userCreateDto?.tenantCohortRoleMapping[0]?.cohortId && userCreateDto?.tenantCohortRoleMapping[0]?.cohortId.length > 0 && email && email.email) {
-
-      //   const notificationPayload = {
-      //     isQueue: false,
-      //     context: 'USER',
-      //     replacements: [userCreateDto.name, userCreateDto.username, userCreateDto.password],
-      //     email: {
-      //       receipients: [email.email]
-      //     }
-      //   };
-      //   await this.notificationRequest.sendNotification(notificationPayload);
-      // }
-
       APIResponse.success(response, apiId, { userData: { ...result, createFailures } },
         HttpStatus.CREATED, "User has been created successfully.")
 
