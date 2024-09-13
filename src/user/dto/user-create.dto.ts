@@ -64,10 +64,9 @@ export class UserCreateDto {
   @Expose()
   userId: string;
 
-  @ApiProperty({ type: () => String })
+  @ApiPropertyOptional({ type: () => String })
   @Expose()
-  @IsNotEmpty()
-  username: string;
+  username?: string;
 
   @ApiProperty({ type: () => String })
   @Expose()
@@ -94,11 +93,10 @@ export class UserCreateDto {
   @Expose()
   email: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     type: String,
     description: "The password of the user",
   })
-  @IsNotEmpty()
   @Expose()
   password: string;
 
