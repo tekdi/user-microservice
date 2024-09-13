@@ -481,14 +481,9 @@ export class PostgresUserService implements IServicelocator {
 
       userCreateDto.username = userCreateDto.username ? await this.formatUsername(userCreateDto.username) : getUsernameAndPassword['username'];
 
-      userCreateDto.password = userCreateDto.password ? await this.formatUsername(userCreateDto.password) : getUsernameAndPassword['password'];
+      userCreateDto.password = userCreateDto.password ? userCreateDto.password : getUsernameAndPassword['password'];
 
-      if (userCreateDto.username === 'abcdef') {
-        const errorMessage = 'Something went wrong';
-        return APIResponse.error(response, apiId, "Internal Server Error", `Error : ${errorMessage}`, HttpStatus.INTERNAL_SERVER_ERROR)
-      }
       const userSchema = new UserCreateDto(userCreateDto);
-
 
       let errKeycloak = "";
       let resKeycloak = "";
@@ -759,7 +754,7 @@ export class PostgresUserService implements IServicelocator {
       return loginCredintial;
 
     } catch (error) {
-      return 'abcdef';
+      return false;
     }
   }
 
