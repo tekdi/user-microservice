@@ -28,4 +28,7 @@ export class Tenants {
         default: () => "CURRENT_TIMESTAMP",
     })
     updatedAt: Date;
+
+    @Column()
+    params: string;
 }
