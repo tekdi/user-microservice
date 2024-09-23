@@ -23,11 +23,13 @@ export class PostgresAssignPrivilegeService {
         }
         const privilegeRoles = createPrivilegeRoleDto.privilegeId.map(privilegeId => ({
             roleId: createPrivilegeRoleDto.roleId,
+            tenantId: createPrivilegeRoleDto.tenantId,
             privilegeId
         }));
         const existingPrivileges = await this.rolePrivilegeMappingRepository.find({
             where: {
                 roleId: createPrivilegeRoleDto.roleId,
+                tenantId: createPrivilegeRoleDto.tenantId,
                 privilegeId: In(createPrivilegeRoleDto.privilegeId)
             }
         });
@@ -65,13 +67,13 @@ export class PostgresAssignPrivilegeService {
         if (!isUUID(roleId)) {
             return APIResponse.error(response, apiId, "Bad Request","Please Enter Valid User ID.", HttpStatus.BAD_REQUEST);
           }
-        let result = await this.checkExistingRole(roleId);
+        let privileges = await this.getPrivilegesForRoleAndTenant(roleId,request.headers["tenantid"]);
 
-        if(!result){
+        if(!privileges){
             return APIResponse.error(response, apiId, "Not Found","No Role Found.", HttpStatus.NOT_FOUND);
         }
 
-        return await APIResponse.success(response, apiId, result,HttpStatus.OK, "Privileges for role fetched successfully.")
+        return await APIResponse.success(response, apiId, privileges,HttpStatus.OK, "Privileges for role fetched successfully.")
 
     } catch (error) {
         return APIResponse.error(response, apiId, "Internal Server Error",`Something went wrong.`, HttpStatus.INTERNAL_SERVER_ERROR);
@@ -84,6 +86,12 @@ export class PostgresAssignPrivilegeService {
         where: { roleId }
     })
     return result;
+   }
+   async getPrivilegesForRoleAndTenant(roleId: string,tenantId: string){
+    const privileges= await this.rolePrivilegeMappingRepository.find({
+        where: { roleId, tenantId }
+    })
+    return privileges;
    }
 
 }
