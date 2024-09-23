@@ -31,7 +31,8 @@ jobs:
     - name: Copy .env file
       env:
        ENV_FILE_CONTENT: ${{ secrets.ENV_FILE_CONTENT }}
-      run: echo "$ENV_FILE_CONTENT" > manifest/configmap.yaml
+      run: printf "%s" "$ENV_FILE_CONTENT" > manifest/configmap.yaml 
+      #echo "$ENV_FILE_CONTENT" > manifest/configmap.yaml
     - name: Show PWD and list content and Latest 3 commits 
       run: |
            echo "Fetching all branches to ensure complete history"
