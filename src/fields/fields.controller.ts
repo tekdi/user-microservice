@@ -159,7 +159,6 @@ export class FieldsController {
   //Get Field Option
   @Post("/options/read")
   @UsePipes(new ValidationPipe())
-  @UseGuards(JwtAuthGuard)
   @ApiBasicAuth("access-token")
   @ApiCreatedResponse({ description: "Field Options list." })
   @ApiBody({ type: FieldsOptionsSearchDto })
