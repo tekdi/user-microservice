@@ -12,5 +12,12 @@ export const API_RESPONSES = {
     SERVICE_UNAVAILABLE: 'Notification service is unreachable. Please try again later.',
     INTERNAL_SERVER_ERROR: 'Internal Server Error',
     ERROR: 'Error occurred',
-    UNEXPECTED_ERROR: 'An unexpected error occurred'
+    UNEXPECTED_ERROR: 'An unexpected error occurred',
+    TENANT_GET: 'Tenant fetched successfully.',
+    TENANT_NOT_FOUND: 'Tenant does not exist',
+    CONFLICT: 'Conflict detected',
+    TENANT_EXISTS: 'Tenant already exists',
+    TENANT_CREATE: 'Tenant created successfully',
+    TENANT_UPDATE: 'Tenant updated successfully',
+    TENANT_DELETE: 'Tenant deleted successfully',
 }

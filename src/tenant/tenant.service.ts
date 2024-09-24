@@ -3,6 +3,9 @@ import { Tenants } from './entities/tenent.entity';
 import { Repository } from 'typeorm';
 import APIResponse from "src/common/responses/response";
 import { InjectRepository } from '@nestjs/typeorm';
+import { API_RESPONSES } from '@utils/response.messages';
+import { APIID } from '@utils/api-id.config';
+
 
 @Injectable()
 export class TenantService {
@@ -12,22 +15,31 @@ export class TenantService {
     ) { }
 
     public async getTenants(request, response) {
-        let apiId = "getTenantData";
+        let apiId = APIID.TENANT_LIST;
         try {
             let result = await this.tenantRepository.find();
+            if (result.length == 0) {
+                return APIResponse.error(
+                    response,
+                    apiId,
+                    API_RESPONSES.NOT_FOUND,
+                    API_RESPONSES.TENANT_NOT_FOUND,
+                    HttpStatus.NOT_FOUND
+                );
+            }
             return APIResponse.success(
                 response,
                 apiId,
                 result,
                 HttpStatus.OK,
-                "Tenant fetched successfully."
+                API_RESPONSES.TENANT_GET
             );
         } catch (error) {
-            const errorMessage = error.message || "Internal server error";
+            const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
             return APIResponse.error(
                 response,
                 apiId,
-                "INTERNAL_SERVER_ERROR",
+                API_RESPONSES.INTERNAL_SERVER_ERROR,
                 errorMessage,
                 HttpStatus.INTERNAL_SERVER_ERROR
             );
@@ -36,7 +48,7 @@ export class TenantService {
     }
 
     public async createTenants(request, tenantCreateDto, response) {
-        let apiId = "createTenant";
+        let apiId = APIID.TENANT_CREATE;
         try {
             let checkExitTenants = await this.tenantRepository.find({
                 where: {
@@ -48,8 +60,8 @@ export class TenantService {
                 return APIResponse.error(
                     response,
                     apiId,
-                    "Tenant already exists",
-                    "CONFLICT",
+                    API_RESPONSES.CONFLICT,
+                    API_RESPONSES.TENANT_EXISTS,
                     HttpStatus.CONFLICT
                 );
             }
@@ -59,14 +71,14 @@ export class TenantService {
                 apiId,
                 result,
                 HttpStatus.CREATED,
-                "Tenant created successfully."
+                API_RESPONSES.TENANT_CREATE
             );
         } catch (error) {
-            const errorMessage = error.message || "Internal server error";
+            const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
             return APIResponse.error(
                 response,
                 apiId,
-                "INTERNAL_SERVER_ERROR",
+                API_RESPONSES.INTERNAL_SERVER_ERROR,
                 errorMessage,
                 HttpStatus.INTERNAL_SERVER_ERROR
             );
@@ -74,7 +86,7 @@ export class TenantService {
     }
 
     public async deleteTenants(request, tenantId, response) {
-        let apiId = "deleteTenant";
+        let apiId = APIID.TENANT_DELETE;
         try {
             let checkExitTenants = await this.tenantRepository.find({
                 where: {
@@ -86,8 +98,8 @@ export class TenantService {
                 return APIResponse.error(
                     response,
                     apiId,
-                    "Tenant is not exists",
-                    "CONFLICT",
+                    API_RESPONSES.CONFLICT,
+                    API_RESPONSES.TENANT_EXISTS,
                     HttpStatus.CONFLICT
                 );
             }
@@ -98,14 +110,14 @@ export class TenantService {
                 apiId,
                 result,
                 HttpStatus.OK,
-                "Tenant deleted successfully."
+                API_RESPONSES.TENANT_DELETE,
             );
         } catch (error) {
-            const errorMessage = error.message || "Internal server error";
+            const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
             return APIResponse.error(
                 response,
                 apiId,
-                "INTERNAL_SERVER_ERROR",
+                API_RESPONSES.INTERNAL_SERVER_ERROR,
                 errorMessage,
                 HttpStatus.INTERNAL_SERVER_ERROR
             );
@@ -113,7 +125,7 @@ export class TenantService {
     }
 
     public async updateTenants(request, tenantId, response) {
-        let apiId = "updateTenant";
+        let apiId = APIID.TENANT_UPDATE;
         try {
             let checkExitTenants = await this.tenantRepository.find({
                 where: {
@@ -125,8 +137,8 @@ export class TenantService {
                 return APIResponse.error(
                     response,
                     apiId,
-                    "Tenant is not exists",
-                    "CONFLICT",
+                    API_RESPONSES.CONFLICT,
+                    API_RESPONSES.TENANT_EXISTS,
                     HttpStatus.CONFLICT
                 );
             }
@@ -140,18 +152,19 @@ export class TenantService {
                 apiId,
                 result,
                 HttpStatus.OK,
-                "Tenant updated successfully."
+                API_RESPONSES.TENANT_UPDATE
             );
         } catch (error) {
-            const errorMessage = error.message || "Internal server error";
+            const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
             return APIResponse.error(
                 response,
                 apiId,
-                "INTERNAL_SERVER_ERROR",
+                API_RESPONSES.INTERNAL_SERVER_ERROR,
                 errorMessage,
                 HttpStatus.INTERNAL_SERVER_ERROR
             );
         }
 
     }
+
 }

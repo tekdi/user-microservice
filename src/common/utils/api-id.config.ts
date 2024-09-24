@@ -41,5 +41,9 @@ export const APIID = {
     LOGOUT: "api.logout",
     REFRESH: "api.refresh",
     USER_AUTH: "api.user.auth",
-    RBAC_TOKEN: "api.rbac.token"
+    RBAC_TOKEN: "api.rbac.token",
+    TENANT_CREATE: "api.tenant.create",
+    TENANT_UPDATE: "api.tenant.update",
+    TENANT_DELETE: "api.tenant.delete",
+    TENANT_LIST: "api.tenant.list",
 }
