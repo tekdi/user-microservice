@@ -576,9 +576,12 @@ export class PostgresUserService implements IServicelocator {
     const apiId = APIID.USER_CREATE;
     // It is considered that if user is not present in keycloak it is not present in database as well
     try {
-      const decoded: any = jwt_decode(request.headers.authorization);
-      userCreateDto.createdBy = decoded?.sub
-      userCreateDto.updatedBy = decoded?.sub
+      if (request.headers.authorization) {
+        const decoded: any = jwt_decode(request?.headers?.authorization);
+        userCreateDto.createdBy = decoded?.sub
+        userCreateDto.updatedBy = decoded?.sub
+      }
+
       // const emailId = decoded?.email;
 
 
@@ -801,13 +804,13 @@ export class PostgresUserService implements IServicelocator {
   async createUserInDatabase(request: any, userCreateDto: UserCreateDto, response: Response) {
 
     const user = new User()
-    user.username = userCreateDto?.username
-    user.name = userCreateDto?.name
-    user.email = userCreateDto?.email
-    user.mobile = Number(userCreateDto?.mobile) || null,
-      user.createdBy = userCreateDto?.createdBy
-    user.updatedBy = userCreateDto?.updatedBy
-    user.userId = userCreateDto?.userId,
+    user.username = userCreateDto?.username,
+      user.name = userCreateDto?.name,
+      user.email = userCreateDto?.email,
+      user.mobile = Number(userCreateDto?.mobile) || null,
+      user.createdBy = userCreateDto?.createdBy || userCreateDto?.userId,
+      user.updatedBy = userCreateDto?.updatedBy || userCreateDto?.userId,
+      user.userId = userCreateDto?.userId,
       user.state = userCreateDto?.state,
       user.district = userCreateDto?.district,
       user.address = userCreateDto?.address,
@@ -817,7 +820,6 @@ export class PostgresUserService implements IServicelocator {
       user.dob = new Date(userCreateDto.dob);
     }
     let result = await this.usersRepository.save(user);
-
 
 
     if (result && userCreateDto.tenantCohortRoleMapping) {
