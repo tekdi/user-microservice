@@ -94,9 +94,9 @@ export class UserController {
 
   @UseFilters(new AllExceptionsFilter(APIID.USER_CREATE))
   @Post("/create")
-  @UseGuards(JwtAuthGuard)
+  // @UseGuards(JwtAuthGuard)
   @UsePipes(new ValidationPipe())
-  @ApiBasicAuth("access-token")
+  // @ApiBasicAuth("access-token")
   @ApiCreatedResponse({ description: "User has been created successfully." })
   @ApiBody({ type: UserCreateDto })
   @ApiForbiddenResponse({ description: "User Already Exists" })
