@@ -8,6 +8,9 @@ export class RolePrivilegeMapping {
     @Column('uuid', { name: 'roleId' })
     roleId: string;
 
+    @Column('uuid',{ name: 'tenantId'})
+    tenantId: string;
+
     @Column('uuid', { name: 'createdBy', nullable: true })
     createdBy: string | null;
 
