@@ -488,26 +488,14 @@ export class PostgresCohortService {
   ) {
     const apiId = APIID.COHORT_LIST;
     try {
+      console.log("hiiiii")
       let { limit, sort, offset, filters } = cohortSearchDto;
 
       offset = offset || 0;
-      limit = limit || 10000;
 
       const emptyValueKeys = {};
       let emptyKeysString = "";
 
-      const MAX_LIMIT = 200;
-
-      // Validate the limit parameter
-      if (limit > MAX_LIMIT) {
-        return APIResponse.error(
-          response,
-          apiId,
-          `Limit exceeds maximum allowed value of ${MAX_LIMIT}`,
-          `Limit exceeded`,
-          HttpStatus.BAD_REQUEST
-        );
-      }
 
       //Get all cohorts fields
       const cohortAllKeys = this.cohortRepository.metadata.columns.map(
@@ -608,7 +596,12 @@ export class PostgresCohortService {
           await this.cohortMembersRepository.findAndCount({
             where: whereClause,
           });
-        const userExistCohortGroup = data.slice(offset, offset + limit);
+
+        let userExistCohortGroup;
+        if (limit > 0) {
+          userExistCohortGroup = data.slice(offset, offset + limit);
+        }
+        userExistCohortGroup = data
         count = totalCount;
 
         let cohortIds = userExistCohortGroup.map(cohortId => cohortId.cohortId);
@@ -650,7 +643,11 @@ export class PostgresCohortService {
           order,
         });
 
-        const cohortData = data.slice(offset, offset + limit);
+        let cohortData;
+        if (limit > 0) {
+          cohortData = data.slice(offset, offset + limit);
+        }
+        cohortData = data
         count = totalCount;
 
         for (let data of cohortData) {
