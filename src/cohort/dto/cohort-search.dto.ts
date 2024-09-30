@@ -115,14 +115,14 @@ enum SortDirection {
 }
 export class CohortSearchDto {
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     type: Number,
     description: "Limit",
   })
   @IsNumber()
   limit: number;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     type: Number,
     description: "Offset",
   })
