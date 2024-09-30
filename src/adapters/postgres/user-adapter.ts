@@ -1,4 +1,4 @@
-import { BadRequestException, HttpStatus, Injectable, Query } from '@nestjs/common';
+import { BadRequestException, HttpStatus, Injectable, Query, UnauthorizedException } from '@nestjs/common';
 import { User } from '../../user/entities/user-entity'
 import { FieldValues } from 'src/fields/entities/fields-values.entity';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -35,6 +35,7 @@ import { JwtUtil } from '@utils/jwt-token';
 import { ConfigService } from '@nestjs/config';
 import { formatTime } from '@utils/formatTimeConversion';
 import { API_RESPONSES } from '@utils/response.messages';
+import { TokenExpiredError, JsonWebTokenError } from 'jsonwebtoken';
 
 
 @Injectable()
@@ -153,12 +154,9 @@ export class PostgresUserService implements IServicelocator {
     const apiId = APIID.USER_FORGOT_PASSWORD;
     try {
       const decoded: any = jwt_decode(body.token);
-      const currentTime = Math.floor(Date.now() / 1000);
+      const jwtSecretKey = this.jwt_secret;
+      await this.jwtUtil.validateToken(body.token, jwtSecretKey)
 
-      //  Check if token has an expiration date
-      if (decoded.exp && decoded.exp < currentTime) {
-        return APIResponse.error(response, apiId, API_RESPONSES.LINK_EXPIRED, API_RESPONSES.INVALID_LINK, HttpStatus.BAD_REQUEST);
-      }
       const userDetail = await this.usersRepository.findOne({ where: { userId: decoded.sub } });
       if (!userDetail) {
         return APIResponse.error(response, apiId, API_RESPONSES.NOT_FOUND, API_RESPONSES.USER_NOT_FOUND, HttpStatus.NOT_FOUND);
@@ -184,6 +182,17 @@ export class PostgresUserService implements IServicelocator {
         HttpStatus.OK, API_RESPONSES.FORGOT_PASSWORD_SUCCESS)
     }
     catch (e) {
+      if (e instanceof TokenExpiredError) {
+        // Handle the specific case where the token is expired
+        return APIResponse.error(response, apiId, API_RESPONSES.LINK_EXPIRED, API_RESPONSES.INVALID_LINK, HttpStatus.UNAUTHORIZED);
+      } else if (e.name === 'InvalidTokenError') {
+        // Handle the case where the token is invalid
+        return APIResponse.error(response, apiId, API_RESPONSES.INVALID_TOKEN, API_RESPONSES.UNAUTHORIZED, HttpStatus.UNAUTHORIZED);
+      }
+      else if (e instanceof JsonWebTokenError) {
+        // Handle the case where the token is invalid 
+        return APIResponse.error(response, apiId, API_RESPONSES.INVALID_TOKEN, API_RESPONSES.UNAUTHORIZED, HttpStatus.UNAUTHORIZED);
+      }
       return APIResponse.error(response, apiId, API_RESPONSES.INTERNAL_SERVER_ERROR, `Error : ${e?.response?.data.error}`, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
