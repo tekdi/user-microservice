@@ -491,7 +491,7 @@ export class PostgresCohortService {
       let { limit, sort, offset, filters } = cohortSearchDto;
 
       offset = offset || 0;
-      limit = limit || 200;
+      limit = limit || 10000;
 
       const emptyValueKeys = {};
       let emptyKeysString = "";
