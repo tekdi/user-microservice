@@ -8,9 +8,12 @@ export const API_RESPONSES = {
     NOT_FOUND: 'Not Found',
     BAD_REQUEST: 'Bad Request',
     INVALID_LINK: 'Invalid Link',
-    LINK_EXPIRED: 'The link is expired. Please request a new one.',
+    LINK_EXPIRED: 'Link has been expired.',
     SERVICE_UNAVAILABLE: 'Notification service is unreachable. Please try again later.',
     INTERNAL_SERVER_ERROR: 'Internal Server Error',
     ERROR: 'Error occurred',
-    UNEXPECTED_ERROR: 'An unexpected error occurred'
+    UNEXPECTED_ERROR: 'An unexpected error occurred',
+    UNAUTHORIZED: 'Unauthorized',
+    INVALID_TOKEN: 'Token Invalid'
+
 }
