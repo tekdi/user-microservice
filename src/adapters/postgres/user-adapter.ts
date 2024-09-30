@@ -146,8 +146,6 @@ export class PostgresUserService implements IServicelocator {
         HttpStatus.OK, API_RESPONSES.RESET_PASSWORD_LINK_SUCCESS)
 
     } catch (e) {
-      console.log(e, "e");
-
       return APIResponse.error(response, apiId, API_RESPONSES.INTERNAL_SERVER_ERROR, `Error : ${e.message}`, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
