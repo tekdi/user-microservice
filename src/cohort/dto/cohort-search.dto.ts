@@ -122,6 +122,7 @@ export class CohortSearchDto {
   @IsNumber()
   limit: number;
 
+
   @ApiPropertyOptional({
     type: Number,
     description: "Offset",
