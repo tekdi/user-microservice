@@ -31,6 +31,7 @@ import { UserTenantMapping } from "src/userTenantMapping/entities/user-tenant-ma
 import APIResponse from "src/common/responses/response";
 import { APIID } from "src/common/utils/api-id.config";
 import { PostgresUserService } from "./user-adapter";
+import { CohortAcademicYearService } from "./cohortAcademicYear-adapter";
 
 @Injectable()
 export class PostgresCohortService {
@@ -46,7 +47,7 @@ export class PostgresCohortService {
     @InjectRepository(UserTenantMapping)
     private UserTenantMappingRepository: Repository<UserTenantMapping>,
     private fieldsService: PostgresFieldsService,
-    private userAapter: PostgresUserService
+    private readonly cohortAcademicYearService: CohortAcademicYearService
   ) { }
 
   public async getCohortsDetails(requiredData, res) {
@@ -322,6 +323,14 @@ export class PostgresCohortService {
           }
         }
       }
+
+      // Multi year support : check id of year is valid and active
+      // then generate cohort
+      // add the year mapping entry in table
+      const yearId = "b41c9c5b-eb73-4451-98bf-807d0417f4f5"; // Hardcoded for now
+      // TODO : verify yearId is valid and active 
+      // verifyYearId(yearId);
+      const cohortAcademicYear = await this.cohortAcademicYearService.insertCohortAcademicYear(response.cohortId, yearId, decoded?.sub, decoded?.sub);
 
       const resBody = new ReturnResponseBody(response);
       return APIResponse.success(
