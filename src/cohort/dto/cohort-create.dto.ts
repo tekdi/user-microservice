@@ -1,13 +1,12 @@
-import { Exclude, Expose, Type } from "class-transformer";
+import { Expose, Type } from "class-transformer";
 import {
   IsNotEmpty,
-  IsString,
   IsOptional,
   ValidateNested,
-  IsEnum
+  IsEnum,
+  IsUUID
 } from "class-validator";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { FieldValuesCreateDto } from "src/fields/dto/field-values-create.dto";
 import { FieldValuesOptionDto } from "src/user/dto/user-create.dto";
 
 export class CohortCreateDto {
@@ -40,6 +39,16 @@ export class CohortCreateDto {
   })
   @Expose()
   parentId: string;
+
+    //academicYearId
+  @ApiPropertyOptional({
+    type: String,
+    description: "The academicYearId of the cohort",
+    default: "",
+  })
+  @IsUUID()
+  @Expose()
+  academicYearId: string;
 
   //referenceId
   @Expose()

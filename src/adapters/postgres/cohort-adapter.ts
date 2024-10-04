@@ -2,7 +2,7 @@ import { ConsoleLogger, HttpStatus, Injectable } from "@nestjs/common";
 import { SuccessResponse } from "src/success-response";
 const resolvePath = require("object-resolve-path");
 import jwt_decode from "jwt-decode";
-import { CohortDto, ReturnResponseBody } from "src/cohort/dto/cohort.dto";
+import { ReturnResponseBody } from "src/cohort/dto/cohort.dto";
 import { CohortSearchDto } from "src/cohort/dto/cohort-search.dto";
 import { UserDto } from "src/user/dto/user.dto";
 import { CohortCreateDto } from "src/cohort/dto/cohort-create.dto";
@@ -138,14 +138,6 @@ export class PostgresCohortService {
       HttpStatus.OK,
       "Cohort hierarchy fetched successfully"
     );
-  }
-
-  async findCohortDetails(cohortId: string) {
-    let whereClause: any = { cohortId: cohortId };
-    let cohortDetails = await this.cohortRepository.findOne({
-      where: whereClause,
-    });
-    return new ReturnResponseBody(cohortDetails);
   }
 
   public async getCohortDataWithCustomfield(
@@ -324,15 +316,12 @@ export class PostgresCohortService {
         }
       }
 
-      // Multi year support : check id of year is valid and active
-      // then generate cohort
-      // add the year mapping entry in table
-      const yearId = "b41c9c5b-eb73-4451-98bf-807d0417f4f5"; // Hardcoded for now
-      // TODO : verify yearId is valid and active 
-      // verifyYearId(yearId);
-      const cohortAcademicYear = await this.cohortAcademicYearService.insertCohortAcademicYear(response.cohortId, yearId, decoded?.sub, decoded?.sub);
+      // add the year mapping entry in table with cohortId
+      const academicYearId = cohortCreateDto.academicYearId; // get academic year id which is already verified in middleware
+     
+      await this.cohortAcademicYearService.insertCohortAcademicYear(response.cohortId, academicYearId, decoded?.sub, decoded?.sub);
 
-      const resBody = new ReturnResponseBody(response);
+      const resBody = new ReturnResponseBody({...response , academicYearId});
       return APIResponse.success(
         res,
         apiId,
