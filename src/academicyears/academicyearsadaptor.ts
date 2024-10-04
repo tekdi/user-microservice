@@ -14,6 +14,4 @@ export class AcademicYearAdapter {
         }
         return adapter;
     }
-
-
 }
