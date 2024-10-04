@@ -12,5 +12,8 @@ export const API_RESPONSES = {
     SERVICE_UNAVAILABLE: 'Notification service is unreachable. Please try again later.',
     INTERNAL_SERVER_ERROR: 'Internal Server Error',
     ERROR: 'Error occurred',
-    UNEXPECTED_ERROR: 'An unexpected error occurred'
+    UNEXPECTED_ERROR: 'An unexpected error occurred',
+    ACADEMICYEAR: 'Academic Year Created Succesfully',
+    ACADEMICYEAR_EXIST: 'Academic Year Already Exist',
+    ACADEMICYEAR_YEAR: 'Already Exist'
 }
