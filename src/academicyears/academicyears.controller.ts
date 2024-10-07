@@ -27,7 +27,7 @@ export class AcademicyearsController {
         @Headers() headers) {
         const tenantId = headers["tenantid"];
         if (!tenantId || !isUUID(tenantId)) {
-            throw new BadRequestException('Tenant ID is required and must be a valid UUID.');
+            throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
         }
         let result = await this.academicYearAdapter.buildAcademicYears().createAcademicYear(academicyearsService, tenantId, response)
         return response.status(result.statusCode).json(result);

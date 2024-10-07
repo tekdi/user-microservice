@@ -13,7 +13,12 @@ export const API_RESPONSES = {
     INTERNAL_SERVER_ERROR: 'Internal Server Error',
     ERROR: 'Error occurred',
     UNEXPECTED_ERROR: 'An unexpected error occurred',
-    ACADEMICYEAR: 'Academic Year Created Succesfully',
+    ACADEMICYEAR: 'Academic Year Created Successfully',
     ACADEMICYEAR_EXIST: 'Academic Year Already Exist',
-    ACADEMICYEAR_YEAR: 'Already Exist'
+    ACADEMICYEAR_YEAR: 'Already Exist',
+    ACADEMICYEAR_NOTFOUND: 'Academic Year Not Found',
+    ACADEMICYEAR_GET_SUCCESS: 'Get Successfully',
+    STARTDATE_VALIDATION: 'start Date should not less than current date',
+    ENDDATE_VALIDATION: 'End Date shluld not less than startDate',
+    TENANTID_VALIDATION: 'Tenant ID is required and must be a valid UUID'
 }
