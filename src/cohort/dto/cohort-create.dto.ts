@@ -16,6 +16,8 @@ export class CohortCreateDto {
   @Expose()
   tenantId: string;
 
+  academicYearId: string;
+
   @Expose()
   createdAt: string;
 
@@ -39,16 +41,6 @@ export class CohortCreateDto {
   })
   @Expose()
   parentId: string;
-
-    //academicYearId
-  @ApiPropertyOptional({
-    type: String,
-    description: "The academicYearId of the cohort",
-    default: "",
-  })
-  @IsUUID()
-  @Expose()
-  academicYearId: string;
 
   //referenceId
   @Expose()

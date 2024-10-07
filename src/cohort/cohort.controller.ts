@@ -47,6 +47,8 @@ import { JwtAuthGuard } from "src/common/guards/keycloak.guard";
 import { AllExceptionsFilter } from "src/common/filters/exception.filter";
 import { APIID } from "src/common/utils/api-id.config";
 import { CustomFieldsValidation } from "@utils/custom-field-validation";
+import { isUUID } from "class-validator";
+import { API_RESPONSES } from "@utils/response.messages";
 
 @ApiTags("Cohort")
 @Controller("cohort")
@@ -63,6 +65,9 @@ export class CohortController {
   @ApiBadRequestResponse({ description: "Bad Request" })
   @SerializeOptions({ strategy: "excludeAll", })
   @ApiHeader({ name: "tenantid", })
+  @ApiHeader({
+    name: "academicyearid",
+  })
   public async getCohortsDetails(
     @Headers() headers,
     @Param("cohortId") cohortId: string,
@@ -105,6 +110,9 @@ export class CohortController {
   @ApiHeader({
     name: "tenantid",
   })
+  @ApiHeader({
+    name: "academicyearid",
+  })
   public async createCohort(
     @Headers() headers,
     @Req() request: Request,
@@ -112,12 +120,16 @@ export class CohortController {
     @UploadedFile() image,
     @Res() response: Response
   ) {
-    let tenantid = headers["tenantid"];
-    const payload = {
-      image: image?.filename,
-      tenantId: tenantid,
-    };
-    Object.assign(cohortCreateDto, payload);
+    let tenantId = headers["tenantid"];
+    let academicYearId = headers["academicyearid"];
+    if (!tenantId || !isUUID(tenantId)) {
+      throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
+    }
+    if (!academicYearId || !isUUID(academicYearId)) {
+      throw new BadRequestException(API_RESPONSES.ACADEMICYEARID_VALIDATION);
+    }
+    cohortCreateDto.academicYearId = academicYearId;
+    cohortCreateDto.tenantId = tenantId;
     return await this.cohortAdapter.buildCohortAdapter().createCohort(
       request,
       cohortCreateDto,
@@ -139,6 +151,9 @@ export class CohortController {
   })
   @ApiHeader({
     name: "tenantid",
+  })
+  @ApiHeader({
+    name: "academicyearid",
   })
   public async searchCohort(
     @Headers() headers,
