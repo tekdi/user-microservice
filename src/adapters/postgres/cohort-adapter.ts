@@ -260,7 +260,7 @@ export class PostgresCohortService {
       const academicYearId = cohortCreateDto.academicYearId; 
      
       // verify if the academic year id is valid
-      const academicYear = await this.postgresAcademicYearService.getAcademicYear(cohortCreateDto.academicYearId);
+      const academicYear = await this.postgresAcademicYearService.getActiveAcademicYear(cohortCreateDto.academicYearId);
 
       if (academicYear.length !== 1) {
         return APIResponse.error(
