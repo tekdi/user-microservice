@@ -5,7 +5,7 @@ import { PostgresAcademicYearService } from "src/adapters/postgres/academicyears
 @Injectable()
 export class AcademicYearAdapter {
     constructor(
-        private postgresProviders: PostgresAcademicYearService) { }
+        private readonly postgresProviders: PostgresAcademicYearService) { }
     buildAcademicYears(): IServicelocatorAcademicyear {
         let adapter: IServicelocatorAcademicyear
         switch (process.env.ADAPTERSOURCE) {

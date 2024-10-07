@@ -1,6 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
-import { IsDateString, IsNotEmpty, IsUUID, MinDate } from 'class-validator';
+import { IsDateString, IsNotEmpty, IsUUID } from 'class-validator';
 
 export class AcademicYearDto {
 
