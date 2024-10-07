@@ -4,7 +4,6 @@ import {
   IsOptional,
   ValidateNested,
   IsEnum,
-  IsUUID
 } from "class-validator";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { FieldValuesOptionDto } from "src/user/dto/user-create.dto";
