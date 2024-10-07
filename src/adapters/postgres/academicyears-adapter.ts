@@ -8,6 +8,7 @@ import { Repository } from "typeorm";
 import { API_RESPONSES } from "@utils/response.messages";
 import { APIID } from "@utils/api-id.config";
 import APIResponse from "src/common/responses/response";
+import { AcademicYearSearchDto } from "src/academicyears/dto/academicyears-search.dto";
 
 @Injectable()
 export class PostgresAcademicYearService implements IServicelocatorAcademicyear {
@@ -78,5 +79,76 @@ export class PostgresAcademicYearService implements IServicelocatorAcademicyear 
             return true
         }
         return false;
+    }
+
+    async getAcademicYearList(academicYearSearchDto: AcademicYearSearchDto, tenantId, response: Response) {
+        const apiId = APIID.ACADEMICYEAR_LIST;
+        try {
+            // Fetch academic years based on active status or just tenantId
+            const searchCriteria = { tenantId };
+            if (academicYearSearchDto.isActive !== undefined) {
+                searchCriteria['isActive'] = academicYearSearchDto.isActive;
+            }
+            const academicYearList = await this.academicYearRespository.find({ where: searchCriteria });
+
+            // Check if the list is empty
+            if (academicYearList.length === 0) {
+                return APIResponse.error(
+                    response,
+                    apiId,
+                    API_RESPONSES.ACADEMICYEAR_NOTFOUND,
+                    API_RESPONSES.NOT_FOUND,
+                    HttpStatus.BAD_REQUEST
+                );
+            }
+            return APIResponse.success(
+                response,
+                apiId,
+                academicYearList,
+                HttpStatus.OK,
+                API_RESPONSES.ACADEMICYEAR
+            );
+
+        } catch (error) {
+            const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+            return APIResponse.error(
+                response,
+                apiId,
+                API_RESPONSES.INTERNAL_SERVER_ERROR,
+                errorMessage,
+                HttpStatus.INTERNAL_SERVER_ERROR
+            );
+        }
+    }
+    async getAcademicYearById(id, response) {
+        const apiId = APIID.ACADEMICYEAR_GET;
+        try {
+            const academicYearResult = await this.academicYearRespository.findOne({ where: { id: id } });
+            if (!academicYearResult) {
+                return APIResponse.error(
+                    response,
+                    apiId,
+                    API_RESPONSES.ACADEMICYEAR_NOTFOUND,
+                    API_RESPONSES.NOT_FOUND,
+                    HttpStatus.BAD_REQUEST
+                );
+            }
+            return APIResponse.success(
+                response,
+                apiId,
+                academicYearResult,
+                HttpStatus.OK,
+                API_RESPONSES.ACADEMICYEAR
+            );
+        } catch (error) {
+            const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+            return APIResponse.error(
+                response,
+                apiId,
+                API_RESPONSES.INTERNAL_SERVER_ERROR,
+                errorMessage,
+                HttpStatus.INTERNAL_SERVER_ERROR
+            );
+        }
     }
 }
