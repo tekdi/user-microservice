@@ -20,5 +20,7 @@ export const API_RESPONSES = {
     ACADEMICYEAR_GET_SUCCESS: 'Get Successfully',
     STARTDATE_VALIDATION: 'start Date should not less than current date',
     ENDDATE_VALIDATION: 'End Date shluld not less than startDate',
-    TENANTID_VALIDATION: 'Tenant ID is required and must be a valid UUID'
+    TENANTID_VALIDATION: 'Tenant ID is required and must be a valid UUID',
+    ACADEMICYEARID_VALIDATION: 'Academic Year ID is required and must be a valid UUID',
+    ACADEMICYEAR_NOT_FOUND: 'Academic Year Not Found',
 }

@@ -2,7 +2,7 @@ import { ConsoleLogger, HttpStatus, Injectable } from "@nestjs/common";
 import { SuccessResponse } from "src/success-response";
 const resolvePath = require("object-resolve-path");
 import jwt_decode from "jwt-decode";
-import { CohortDto, ReturnResponseBody } from "src/cohort/dto/cohort.dto";
+import { ReturnResponseBody } from "src/cohort/dto/cohort.dto";
 import { CohortSearchDto } from "src/cohort/dto/cohort-search.dto";
 import { UserDto } from "src/user/dto/user.dto";
 import { CohortCreateDto } from "src/cohort/dto/cohort-create.dto";
@@ -31,6 +31,9 @@ import { UserTenantMapping } from "src/userTenantMapping/entities/user-tenant-ma
 import APIResponse from "src/common/responses/response";
 import { APIID } from "src/common/utils/api-id.config";
 import { PostgresUserService } from "./user-adapter";
+import { CohortAcademicYearService } from "./cohortAcademicYear-adapter";
+import { PostgresAcademicYearService } from "./academicyears-adapter";
+import { API_RESPONSES } from "@utils/response.messages";
 
 @Injectable()
 export class PostgresCohortService {
@@ -46,7 +49,8 @@ export class PostgresCohortService {
     @InjectRepository(UserTenantMapping)
     private UserTenantMappingRepository: Repository<UserTenantMapping>,
     private fieldsService: PostgresFieldsService,
-    private userAapter: PostgresUserService
+    private readonly cohortAcademicYearService: CohortAcademicYearService,
+    private readonly postgresAcademicYearService : PostgresAcademicYearService
   ) { }
 
   public async getCohortsDetails(requiredData, res) {
@@ -137,14 +141,6 @@ export class PostgresCohortService {
       HttpStatus.OK,
       "Cohort hierarchy fetched successfully"
     );
-  }
-
-  async findCohortDetails(cohortId: string) {
-    let whereClause: any = { cohortId: cohortId };
-    let cohortDetails = await this.cohortRepository.findOne({
-      where: whereClause,
-    });
-    return new ReturnResponseBody(cohortDetails);
   }
 
   public async getCohortDataWithCustomfield(
@@ -260,6 +256,22 @@ export class PostgresCohortService {
     try {
       // Add validation for check both duplicate field ids exist or not
       // and whatever user pass fieldIds is exist in field table or not 
+
+      const academicYearId = cohortCreateDto.academicYearId; 
+     
+      // verify if the academic year id is valid
+      const academicYear = await this.postgresAcademicYearService.getActiveAcademicYear(cohortCreateDto.academicYearId);
+
+      if (academicYear.length !== 1) {
+        return APIResponse.error(
+          res,
+          apiId,
+          HttpStatus.NOT_FOUND.toLocaleString(),
+          API_RESPONSES.ACADEMICYEAR_NOT_FOUND,
+          HttpStatus.NOT_FOUND
+        );
+      }
+
       if (cohortCreateDto.customFields && cohortCreateDto.customFields.length > 0) {
         const validationResponse = await this.fieldsService.validateCustomField(cohortCreateDto, cohortCreateDto.type);
 
@@ -323,7 +335,10 @@ export class PostgresCohortService {
         }
       }
 
-      const resBody = new ReturnResponseBody(response);
+    // add the year mapping entry in table with cohortId and academicYearId
+      await this.cohortAcademicYearService.insertCohortAcademicYear(response.cohortId, academicYearId, decoded?.sub, decoded?.sub);
+
+      const resBody = new ReturnResponseBody({...response , academicYearId: academicYearId});
       return APIResponse.success(
         res,
         apiId,
