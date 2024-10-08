@@ -327,7 +327,7 @@ export class PostgresCohortMembersService {
         }
       })
       if (existCohort.length == 0) {
-        return APIResponse.error(res, apiId, "Bad Request", "Invalid input: Cohort Id does not exist.", HttpStatus.BAD_REQUEST);
+        return APIResponse.error(res, apiId, API_RESPONSES.BAD_REQUEST, API_RESPONSES.INVALID_COHORTID, HttpStatus.BAD_REQUEST);
       }
 
       const existUser = await this.usersRepository.find({
@@ -336,7 +336,7 @@ export class PostgresCohortMembersService {
         }
       })
       if (existUser.length == 0) {
-        return APIResponse.error(res, apiId, "Bad Request", "Invalid input: User Id does not exist.", HttpStatus.BAD_REQUEST);
+        return APIResponse.error(res, apiId, API_RESPONSES.BAD_REQUEST, API_RESPONSES.INVALID_USERID, HttpStatus.BAD_REQUEST);
       }
 
       const existrole = await this.cohortMembersRepository.find({
@@ -346,20 +346,19 @@ export class PostgresCohortMembersService {
         }
       })
       if (existrole.length > 0) {
-        return APIResponse.error(res, apiId, "CONFLICT", `User '${cohortMembers.userId}' is already assigned to cohort '${cohortMembers.cohortId}'.`, HttpStatus.CONFLICT);
+        return APIResponse.error(res, apiId, API_RESPONSES.CONFLICT, `User '${cohortMembers.userId}' is already assigned to cohort '${cohortMembers.cohortId}'.`, HttpStatus.CONFLICT);
       }
-
 
       // Create a new CohortMembers entity and populate it with cohortMembers data
       const savedCohortMember = await this.cohortMembersRepository.save(
         cohortMembers
       );
 
-      return APIResponse.success(res, apiId, savedCohortMember, HttpStatus.OK, "Cohort member has been successfully assigned.");
+      return APIResponse.success(res, apiId, savedCohortMember, HttpStatus.OK, API_RESPONSES.COHORTMEMBER_CREATED_SUCCESSFULLY);
 
     } catch (e) {
-      const errorMessage = e.message || 'Internal server error';
-      return APIResponse.error(res, apiId, "Internal Server Error", errorMessage, HttpStatus.INTERNAL_SERVER_ERROR);
+      const errorMessage = e.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+      return APIResponse.error(res, apiId, API_RESPONSES.INTERNAL_SERVER_ERROR, errorMessage, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 
