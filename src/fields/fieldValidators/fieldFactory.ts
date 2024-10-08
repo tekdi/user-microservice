@@ -1,4 +1,4 @@
-import { CheckboxField, DropdownField, NumericField, TimeField, RadioField, TextField } from "./fieldTypeClasses";
+import { CheckboxField, DropdownField, NumericField, TimeField, DateField, RadioField, TextField } from "./fieldTypeClasses";
 import { FieldAttributes, FieldParams, Field } from "./fieldClass";
 export class FieldFactory {
     static createField(type: string, fieldAttributes: FieldAttributes, fieldParams: FieldParams): Field {
@@ -15,6 +15,8 @@ export class FieldFactory {
                 return new NumericField(fieldAttributes);
             case 'time':
                 return new TimeField(fieldAttributes);
+            case 'date':
+                return new DateField(fieldAttributes);
             default:
                 throw new Error(`Unsupported field type: ${type}`);
         }
