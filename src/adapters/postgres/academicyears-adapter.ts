@@ -81,9 +81,9 @@ export class PostgresAcademicYearService implements IServicelocatorAcademicyear 
         return false;
     }
 
-    async getActiveAcademicYear(academicYearId:string): Promise<AcademicYear[]> {
-        return await this.academicYearRespository.find({
-            where : { id : academicYearId , isActive : true }
+    async getActiveAcademicYear(academicYearId: string): Promise<AcademicYear> {
+        return await this.academicYearRespository.findOne({
+            where: { id: academicYearId, isActive: true }
         });
     }
 

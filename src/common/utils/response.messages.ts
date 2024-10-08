@@ -23,4 +23,5 @@ export const API_RESPONSES = {
     TENANTID_VALIDATION: 'Tenant ID is required and must be a valid UUID',
     ACADEMICYEARID_VALIDATION: 'Academic Year ID is required and must be a valid UUID',
     ACADEMICYEAR_NOT_FOUND: 'Academic Year Not Found',
+    ACADEMICYEAR_COHORT_NOT_FOUND: 'This cohort not exist for this year'
 }

@@ -24,6 +24,9 @@ import { Response } from "express";
 import { APIID } from 'src/common/utils/api-id.config';
 import { MemberStatus } from "src/cohortMembers/entities/cohort-member.entity";
 import { NotificationRequest } from "@utils/notification.axios";
+import { CohortAcademicYear } from "src/cohortAcademicYear/entities/cohortAcademicYear.entity";
+import { PostgresAcademicYearService } from "./academicyears-adapter";
+import { API_RESPONSES } from "@utils/response.messages";
 
 
 @Injectable()
@@ -37,6 +40,9 @@ export class PostgresCohortMembersService {
     private usersRepository: Repository<User>,
     @InjectRepository(Cohort)
     private cohortRepository: Repository<Cohort>,
+    @InjectRepository(CohortAcademicYear)
+    private readonly cohortAcademicYearRespository: Repository<CohortAcademicYear>,
+    private readonly academicyearService: PostgresAcademicYearService,
     private readonly notificationRequest: NotificationRequest,
     private fieldsService: PostgresFieldsService,
 
@@ -179,6 +185,7 @@ export class PostgresCohortMembersService {
   public async searchCohortMembers(
     cohortMembersSearchDto: CohortMembersSearchDto,
     tenantId: string,
+    academicyearId: string,
     res: Response
   ) {
     const apiId = APIID.COHORT_MEMBER_SEARCH;
@@ -284,12 +291,36 @@ export class PostgresCohortMembersService {
     cohortMembers: CohortMembersDto,
     res: Response,
     tenantId: string,
-    deviceId: string
+    deviceId: string,
+    academicyearId: string
   ) {
     const apiId = APIID.COHORT_MEMBER_CREATE;
     try {
+      // check year is live or not
+      const academicYear = await this.academicyearService.getActiveAcademicYear(academicyearId);
+      if (!academicYear) {
+        return APIResponse.error(
+          res,
+          apiId,
+          HttpStatus.NOT_FOUND.toLocaleString(),
+          API_RESPONSES.ACADEMICYEAR_NOT_FOUND,
+          HttpStatus.NOT_FOUND
+        );
+      }
+      const isExistAcademicYear = await this.findCohortAcademicYearId(academicyearId, cohortMembers);
+      if (!isExistAcademicYear) {
+        return APIResponse.error(
+          res,
+          apiId,
+          HttpStatus.NOT_FOUND.toLocaleString(),
+          API_RESPONSES.ACADEMICYEAR_COHORT_NOT_FOUND,
+          HttpStatus.NOT_FOUND
+        );
+      }
+      const cohortacAdemicyearId = isExistAcademicYear.cohortAcademicYearId;
       cohortMembers.createdBy = loginUser;
       cohortMembers.updatedBy = loginUser;
+      cohortMembers.CohortacademicYearId = cohortacAdemicyearId;
       const existCohort = await this.cohortRepository.find({
         where: {
           cohortId: cohortMembers.cohortId
@@ -318,6 +349,7 @@ export class PostgresCohortMembersService {
         return APIResponse.error(res, apiId, "CONFLICT", `User '${cohortMembers.userId}' is already assigned to cohort '${cohortMembers.cohortId}'.`, HttpStatus.CONFLICT);
       }
 
+
       // Create a new CohortMembers entity and populate it with cohortMembers data
       const savedCohortMember = await this.cohortMembersRepository.save(
         cohortMembers
@@ -329,6 +361,12 @@ export class PostgresCohortMembersService {
       const errorMessage = e.message || 'Internal server error';
       return APIResponse.error(res, apiId, "Internal Server Error", errorMessage, HttpStatus.INTERNAL_SERVER_ERROR);
     }
+  }
+
+  async findCohortAcademicYearId(academicyearId, cohortMembers) {
+    return await this.cohortAcademicYearRespository.findOne({
+      where: { academicYearId: academicyearId, cohortId: cohortMembers.cohortId }
+    })
   }
 
   async getUsers(where: any, options: any, order: any) {

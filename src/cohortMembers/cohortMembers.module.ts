@@ -11,10 +11,13 @@ import { HasuraCohortMembersService } from "src/adapters/hasura/cohortMembers.ad
 import { Fields } from "src/fields/entities/fields.entity";
 import { User } from "src/user/entities/user-entity";
 import { Cohort } from "src/cohort/entities/cohort.entity";
+import { CohortAcademicYear } from "src/cohortAcademicYear/entities/cohortAcademicYear.entity";
+import { PostgresAcademicYearService } from "src/adapters/postgres/academicyears-adapter";
+import { AcademicYear } from "src/academicyears/entities/academicyears-entity";
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([CohortMembers, Fields, User, Cohort]),
+    TypeOrmModule.forFeature([CohortMembers, Fields, User, Cohort, CohortAcademicYear, AcademicYear]),
     HttpModule,
     HasuraModule,
     PostgresModule,
@@ -24,6 +27,7 @@ import { Cohort } from "src/cohort/entities/cohort.entity";
     CohortMembersAdapter,
     PostgresCohortMembersService,
     HasuraCohortMembersService,
+    PostgresAcademicYearService
   ],
 })
 export class CohortMembersModule { }
