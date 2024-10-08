@@ -57,6 +57,30 @@ export class TimeField extends Field {
     }
 }
 
+export class DateField extends Field {
+    validate(value: any): boolean {
+        if (typeof value !== 'string' || !this.isValidDate(value)) {
+            throw new Error('Value must be a valid date format (YYYY-MM-DD).');
+        }
+        return true;
+    }
+
+    isValidDate(input: string): boolean {
+        // Regular expression to match YYYY-MM-DD format
+        const dateRegex = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+
+        // Check if the date matches the format
+        if (!dateRegex.test(input)) {
+            return false;
+        }
+
+        // Additional check for valid month and day combinations (like no February 30th)
+        const date = new Date(input);
+        return date instanceof Date && !isNaN(date.getTime()) && input === date.toISOString().slice(0, 10);
+    }
+}
+
+
 export class RadioField extends Field {
 
     constructor(fieldAttributes: FieldAttributes, fieldParams: FieldParams) {
