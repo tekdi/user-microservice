@@ -181,7 +181,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
             return false;
         }
         for (let data of result) {
-            if ((data?.dependsOn == '' || data?.dependsOn == undefined || data?.dependsOn == null) && data?.sourceDetails?.source === 'table' || data?.sourceDetails?.source === 'jsonfile') {
+            if ((data?.dependsOn == '' || data?.dependsOn == undefined || data?.dependsOn == null || data?.dependsOn == 'NULL') && data?.sourceDetails?.source === 'table' || data?.sourceDetails?.source === 'jsonfile') {
                 let options = await this.findDynamicOptions(data.sourceDetails.table);
                 data.fieldParams = data.fieldParams || {};
                 data.fieldParams.options = options;
