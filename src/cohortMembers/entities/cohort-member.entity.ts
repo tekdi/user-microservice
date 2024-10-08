@@ -16,7 +16,7 @@ export class CohortMembers {
   cohortId: string;
 
   @Column({ type: 'uuid' })
-  CohortacademicYearId: string;
+  cohortAcademicYearId: string;
 
   @Column({ type: 'uuid' })
   userId: string;

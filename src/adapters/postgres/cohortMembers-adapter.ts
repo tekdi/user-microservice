@@ -320,7 +320,7 @@ export class PostgresCohortMembersService {
       const cohortacAdemicyearId = isExistAcademicYear.cohortAcademicYearId;
       cohortMembers.createdBy = loginUser;
       cohortMembers.updatedBy = loginUser;
-      cohortMembers.CohortacademicYearId = cohortacAdemicyearId;
+      cohortMembers.cohortAcademicYearId = cohortacAdemicyearId;
       const existCohort = await this.cohortRepository.find({
         where: {
           cohortId: cohortMembers.cohortId

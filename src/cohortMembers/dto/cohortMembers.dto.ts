@@ -28,7 +28,7 @@ export class CohortMembersDto {
   @IsUUID(undefined, { message: 'Cohort Id must be a valid UUID' })
   cohortId: string;
 
-  CohortacademicYearId: string;
+  cohortAcademicYearId: string;
 
   //userId
   @ApiProperty({
