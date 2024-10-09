@@ -41,7 +41,7 @@ export class PostgresCohortService {
     private UserTenantMappingRepository: Repository<UserTenantMapping>,
     private fieldsService: PostgresFieldsService,
     private readonly cohortAcademicYearService: CohortAcademicYearService,
-    private readonly postgresAcademicYearService : PostgresAcademicYearService
+    private readonly postgresAcademicYearService: PostgresAcademicYearService
   ) { }
 
   public async getCohortsDetails(requiredData, res) {
@@ -248,12 +248,12 @@ export class PostgresCohortService {
       // Add validation for check both duplicate field ids exist or not
       // and whatever user pass fieldIds is exist in field table or not 
 
-      const academicYearId = cohortCreateDto.academicYearId; 
-     
+      const academicYearId = cohortCreateDto.academicYearId;
+
       // verify if the academic year id is valid
       const academicYear = await this.postgresAcademicYearService.getActiveAcademicYear(cohortCreateDto.academicYearId);
 
-      if (academicYear.length !== 1) {
+      if (!academicYear) {
         return APIResponse.error(
           res,
           apiId,
@@ -326,10 +326,10 @@ export class PostgresCohortService {
         }
       }
 
-    // add the year mapping entry in table with cohortId and academicYearId
+      // add the year mapping entry in table with cohortId and academicYearId
       await this.cohortAcademicYearService.insertCohortAcademicYear(response.cohortId, academicYearId, decoded?.sub, decoded?.sub);
 
-      const resBody = new ReturnResponseBody({...response , academicYearId: academicYearId});
+      const resBody = new ReturnResponseBody({ ...response, academicYearId: academicYearId });
       return APIResponse.success(
         res,
         apiId,

@@ -24,4 +24,9 @@ export const API_RESPONSES = {
     COHORT_NOT_AVAILABLE_FOR_ACADEMIC_YEAR:'No cohorts available for given Academic year',
     ACADEMICYEARID_VALIDATION: 'Academic Year ID is required and must be a valid UUID',
     ACADEMICYEAR_NOT_FOUND: 'Academic Year Not Found',
+    ACADEMICYEAR_COHORT_NOT_FOUND: 'This cohort not exist for this year',
+    COHORTMEMBER_CREATED_SUCCESSFULLY: 'Cohort member has been successfully assigned.',
+    CONFLICT: 'CONFLICT',
+    INVALID_USERID: 'Invalid input: User Id does not exist.',
+    INVALID_COHORTID: 'Invalid input: Cohort Id does not exist.'
 }
