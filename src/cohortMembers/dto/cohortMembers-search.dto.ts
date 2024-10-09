@@ -51,7 +51,7 @@ export class CohortMembersSearchDto {
   @ApiProperty({
     type: FiltersDto,
     description: "Filters",
-    example: { cohortId: "", userId: "", role: "", name: "", status: [] }, // Adding example for Swagger
+    example: { cohortId: "", userId: "", role: "", name: "", status: [], academicYearIds: [] }, // Adding example for Swagger
   })
   @IsOptional()
   @ValidateNested()
