@@ -19,4 +19,14 @@ export class CohortAcademicYearService {
     cohortAcademicYear.updatedBy = updatedBy;
     return await this.cohortAcademicYearRepository.save(cohortAcademicYear);
     }
+
+  async getCohortsByAcademicYear(academicYearId : string) : Promise<CohortAcademicYear[]>{
+    return await this.cohortAcademicYearRepository.find(  
+      {
+        where : {
+          academicYearId
+        }
+      }
+    )
+  }
 }

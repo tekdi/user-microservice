@@ -28,6 +28,18 @@ export class filtersProperty {
   @IsNotEmpty()
   cohortId?: string;
 
+  //academicYearId
+  @ApiProperty({
+    type: String,
+    description: "Academic Year Id",
+    default: "",
+  })
+  @Expose()
+  @IsOptional()
+  @IsUUID()
+  @IsNotEmpty()
+  academicYearId?: string;
+
   //name
   @ApiProperty({
     type: String,
@@ -98,16 +110,14 @@ export class filtersProperty {
 
   //customFieldsName
   @ApiProperty({
-    type: [String],
+    type: Object,
     description: "The customFieldsName of the cohort",
-    default: [],
   })
   @Expose()
   @IsOptional()
-  @IsArray()
+  @IsObject()
   @IsNotEmpty({ each: true })
-  @IsUUID(undefined, { each: true })
-  customFieldsName?: string[];
+  customFieldsName?: {};
 }
 enum SortDirection {
   ASC = 'asc',
