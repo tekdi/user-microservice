@@ -27,5 +27,11 @@ export const API_RESPONSES = {
     COHORTMEMBER_CREATED_SUCCESSFULLY: 'Cohort member has been successfully assigned.',
     CONFLICT: 'CONFLICT',
     INVALID_USERID: 'Invalid input: User Id does not exist.',
-    INVALID_COHORTID: 'Invalid input: Cohort Id does not exist.'
+    INVALID_COHORTID: 'Invalid input: Cohort Id does not exist.',
+    TENANT_ID_NOTFOUND: '"Invalid input: TenantId must be a valid UUID."',
+    COHORT_NOTFOUND: 'Cohort not exist for this year.',
+    USER_NOTFOUND: 'User not exist for this year.',
+    USER_DETAIL_NOTFOUND: 'User Deatil not found',
+    COHORT_GET_SUCCESSFULLY: 'Cohort members details fetched successfully.',
+    COHORT_USER_NOTFOUND: 'User not exist in this cohort for this year.'
 }
