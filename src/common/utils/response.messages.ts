@@ -34,5 +34,7 @@ export const API_RESPONSES = {
     USER_NOTFOUND: 'User not exist for this year.',
     USER_DETAIL_NOTFOUND: 'User Deatil not found',
     COHORT_GET_SUCCESSFULLY: 'Cohort members details fetched successfully.',
-    COHORT_USER_NOTFOUND: 'User not exist in this cohort for this year.'
+    COHORT_USER_NOTFOUND: 'User not exist in this cohort for this year.',
+    COHORT_NOT_IN_ACADEMIC_YEAR: 'Cohort ID does not belong in Academic year',
+    USER_NOT_IN_ACADEMIC_YEAR: 'User ID does not belong in Academic year'
 }
