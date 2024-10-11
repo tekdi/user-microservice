@@ -263,10 +263,11 @@ export class PostgresCohortService {
       // and whatever user pass fieldIds is exist in field table or not 
 
       const academicYearId = cohortCreateDto.academicYearId;
+      const tenantId = cohortCreateDto.tenantId;
 
       // verify if the academic year id is valid
-      const academicYear = await this.postgresAcademicYearService.getActiveAcademicYear(cohortCreateDto.academicYearId);
-
+      const academicYear = await this.postgresAcademicYearService.getActiveAcademicYear(cohortCreateDto.academicYearId, tenantId);
+      
       if (!academicYear) {
         return APIResponse.error(
           res,
