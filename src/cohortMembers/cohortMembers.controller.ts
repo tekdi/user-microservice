@@ -139,6 +139,9 @@ export class CohortMembersController {
   ) {
     const tenantId = headers["tenantid"];
     const academicyearId = headers["academicyearid"];
+    if (!academicyearId || !isUUID(academicyearId)) {
+      throw new BadRequestException('academicyearId is required and must be a valid UUID.');
+    }
     const result = await this.cohortMemberAdapter
       .buildCohortMembersAdapter()
       .searchCohortMembers(cohortMembersSearchDto, tenantId, academicyearId, response);
