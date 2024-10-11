@@ -212,6 +212,9 @@ export class CohortMembersController {
   @ApiHeader({
     name: "tenantid",
   })
+  @ApiHeader({
+    name: "academicyearid",
+  })
   public async craeteBulkCohortMembers(
     @Headers() headers,
     @Req() request,
@@ -220,9 +223,13 @@ export class CohortMembersController {
   ) {
     const loginUser = request.user.userId;
     const tenantId = headers["tenantid"];
+    const academicyearId = headers["academicyearid"];
+    if (!academicyearId || !isUUID(academicyearId)) {
+      throw new BadRequestException('academicyearId is required and must be a valid UUID.');
+    }
     const result = await this.cohortMemberAdapter
       .buildCohortMembersAdapter()
-      .createBulkCohortMembers(loginUser, bulkcohortMembersDto, response, tenantId);
+      .createBulkCohortMembers(loginUser, bulkcohortMembersDto, response, tenantId, academicyearId);
     return result;
   }
 }
