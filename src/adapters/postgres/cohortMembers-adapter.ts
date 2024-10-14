@@ -7,7 +7,7 @@ import { CohortMembersDto } from "src/cohortMembers/dto/cohortMembers.dto";
 import { CohortMembersSearchDto } from "src/cohortMembers/dto/cohortMembers-search.dto";
 import { CohortMembers } from "src/cohortMembers/entities/cohort-member.entity";
 import { InjectRepository } from "@nestjs/typeorm";
-import { IsNull, Not, Repository, getConnection, getRepository } from "typeorm";
+import { In, IsNull, Not, Repository, getConnection, getRepository } from "typeorm";
 import { CohortDto } from "src/cohort/dto/cohort.dto";
 import { PostgresFieldsService } from "./fields-adapter"
 import { HttpStatus } from "@nestjs/common";
@@ -24,6 +24,9 @@ import { Response } from "express";
 import { APIID } from 'src/common/utils/api-id.config';
 import { MemberStatus } from "src/cohortMembers/entities/cohort-member.entity";
 import { NotificationRequest } from "@utils/notification.axios";
+import { CohortAcademicYear } from "src/cohortAcademicYear/entities/cohortAcademicYear.entity";
+import { PostgresAcademicYearService } from "./academicyears-adapter";
+import { API_RESPONSES } from "@utils/response.messages";
 
 
 @Injectable()
@@ -37,6 +40,9 @@ export class PostgresCohortMembersService {
     private usersRepository: Repository<User>,
     @InjectRepository(Cohort)
     private cohortRepository: Repository<Cohort>,
+    @InjectRepository(CohortAcademicYear)
+    private readonly cohortAcademicYearRespository: Repository<CohortAcademicYear>,
+    private readonly academicyearService: PostgresAcademicYearService,
     private readonly notificationRequest: NotificationRequest,
     private fieldsService: PostgresFieldsService,
 
@@ -179,12 +185,13 @@ export class PostgresCohortMembersService {
   public async searchCohortMembers(
     cohortMembersSearchDto: CohortMembersSearchDto,
     tenantId: string,
+    academicyearId: string,
     res: Response
   ) {
     const apiId = APIID.COHORT_MEMBER_SEARCH;
     try {
       if (!isUUID(tenantId)) {
-        return APIResponse.error(res, apiId, "Bad Request", "Invalid input: TenantId must be a valid UUID.", HttpStatus.BAD_REQUEST);
+        return APIResponse.error(res, apiId, API_RESPONSES.BAD_REQUEST, API_RESPONSES.TENANT_ID_NOTFOUND, HttpStatus.BAD_REQUEST);
       }
 
       let { limit, sort, offset, filters } = cohortMembersSearchDto;
@@ -201,27 +208,36 @@ export class PostgresCohortMembersService {
         });
       }
 
-      // Check if cohortId exists
+      let cohortYearExistInYear = [], userYearExistInYear = [], finalExistRecord = [];
+      // Check if cohortId exists for passing year
       if (whereClause["cohortId"]) {
-        const cohortExists = await this.cohortMembersRepository.findOne({
-          where: { cohortId: whereClause["cohortId"] },
-        });
-        if (!cohortExists) {
-          return APIResponse.error(res, apiId, "Invalid input: No member found for this cohortId.", "Not Found", HttpStatus.NOT_FOUND);
+        const getYearExistRecord = await this.isCohortExistForYear(academicyearId, cohortMembersSearchDto.filters.cohortId);
+        if (getYearExistRecord.length === 0) {
+          return APIResponse.error(res, apiId, API_RESPONSES.COHORT_NOTFOUND, API_RESPONSES.NOT_FOUND, HttpStatus.NOT_FOUND);
         }
+        cohortYearExistInYear = getYearExistRecord.map((item) => item.cohortAcademicYearId)
+        finalExistRecord = [...cohortYearExistInYear];
       }
 
-      // Check if userId exists
+      // Check if userId exists for passing year
       if (whereClause["userId"]) {
-        const userExists = await this.cohortMembersRepository.findOne({
-          where: { userId: whereClause["userId"] },
-        });
-        if (!userExists) {
-          return APIResponse.error(res, apiId, "Invalid input: No member found for this userId and cohort combination.", "Not Found", HttpStatus.NOT_FOUND);
+        const getYearExitUser = await this.isUserExistForYear(academicyearId, cohortMembersSearchDto.filters.userId)
+        if (getYearExitUser.length === 0) {
+          return APIResponse.error(res, apiId, API_RESPONSES.USER_NOTFOUND, API_RESPONSES.NOT_FOUND, HttpStatus.NOT_FOUND);
         }
+        userYearExistInYear = getYearExitUser.map((item) => item.cohortAcademicYearId);
+        finalExistRecord = [...userYearExistInYear];
       }
 
-      const whereKeys = ["cohortId", "userId", "role", "name", "status"];
+      // Validate if both cohortId and userId match in the same academic year
+      if (whereClause["userId"] && whereClause["cohortId"] && cohortYearExistInYear[0] !== userYearExistInYear[0]) {
+        return APIResponse.error(res, apiId, API_RESPONSES.COHORT_USER_NOTFOUND, API_RESPONSES.NOT_FOUND, HttpStatus.NOT_FOUND);
+      }
+      // Add cohortAcademicYearId filter if applicable
+      if (finalExistRecord.length > 0) {
+        whereClause['cohortAcademicYearId'] = finalExistRecord;
+      }
+      const whereKeys = ["cohortId", "userId", "role", "name", "status", "cohortAcademicYearId"];
       whereKeys.forEach(key => {
         if (whereClause[key]) {
           where.push([key, whereClause[key]]);
@@ -236,24 +252,51 @@ export class PostgresCohortMembersService {
         const [sortField, sortOrder] = sort;
         order[sortField] = sortOrder;
       }
-
       results = await this.getCohortMemberUserDetails(
         where,
         "true",
         options,
         order
       );
-
       if (results['userDetails'].length == 0) {
-        return APIResponse.error(res, apiId, "Not Found", "Invalid input: No data found.", HttpStatus.NOT_FOUND);
+        return APIResponse.error(res, apiId, API_RESPONSES.NOT_FOUND, API_RESPONSES.USER_DETAIL_NOTFOUND, HttpStatus.NOT_FOUND);
       }
-
-      return APIResponse.success(res, apiId, results, HttpStatus.OK, "Cohort members details fetched successfully.");
-
+      return APIResponse.success(res, apiId, results, HttpStatus.OK, API_RESPONSES.COHORT_GET_SUCCESSFULLY);
     } catch (e) {
-      const errorMessage = e.message || 'Internal server error';
-      return APIResponse.error(res, apiId, "Internal Server Error", errorMessage, HttpStatus.INTERNAL_SERVER_ERROR);
+      const errorMessage = e.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+      return APIResponse.error(res, apiId, API_RESPONSES.INTERNAL_SERVER_ERROR, errorMessage, HttpStatus.INTERNAL_SERVER_ERROR);
     }
+  }
+
+  async isCohortExistForYear(yearId, cohortId) {
+    return await this.cohortAcademicYearRespository.find({
+      where: { academicYearId: yearId, cohortId: cohortId }
+    })
+  }
+
+  async isUserExistForYear(yearId, userId) {
+    // Join query with yearId, userId, academicYearId on CohortMember and CohortAcademicyear table
+    const query = `
+        SELECT 
+            cm."cohortMembershipId",
+            cm."createdAt",
+            cm."updatedAt",
+            cm."cohortId",
+            cm."userId",
+            cm."status",
+            cm."statusReason",
+            cm."cohortAcademicYearId",
+            cay."academicYearId"
+        FROM 
+            public."CohortMembers" cm
+        JOIN 
+            public."CohortAcademicYear" cay ON cm."cohortAcademicYearId" = cay."cohortAcademicYearId"
+        WHERE 
+            cm."userId" = $1 AND 
+            cay."academicYearId" = $2;
+    `;
+    const result = await this.cohortMembersRepository.query(query, [userId, yearId]);
+    return result;
   }
 
   async getCohortMemberUserDetails(where: any, fieldShowHide: any, options: any, order: any) {
@@ -284,55 +327,78 @@ export class PostgresCohortMembersService {
     cohortMembers: CohortMembersDto,
     res: Response,
     tenantId: string,
-    deviceId: string
+    deviceId: string,
+    academicyearId: string
   ) {
     const apiId = APIID.COHORT_MEMBER_CREATE;
     try {
-      cohortMembers.createdBy = loginUser;
-      cohortMembers.updatedBy = loginUser;
-      const existCohort = await this.cohortRepository.find({
-        where: {
-          cohortId: cohortMembers.cohortId
-        }
-      })
-      if (existCohort.length == 0) {
-        return APIResponse.error(res, apiId, "Bad Request", "Invalid input: Cohort Id does not exist.", HttpStatus.BAD_REQUEST);
-      }
-
       const existUser = await this.usersRepository.find({
         where: {
           userId: cohortMembers.userId,
         }
       })
-      if (existUser.length == 0) {
-        return APIResponse.error(res, apiId, "Bad Request", "Invalid input: User Id does not exist.", HttpStatus.BAD_REQUEST);
+      if (existUser.length === 0) {
+        return APIResponse.error(res, apiId, API_RESPONSES.BAD_REQUEST, API_RESPONSES.INVALID_USERID, HttpStatus.BAD_REQUEST);
       }
+      // check year is live or not
+      const academicYear = await this.academicyearService.getActiveAcademicYear(academicyearId, tenantId);
 
+      if (!academicYear) {
+        return APIResponse.error(
+          res,
+          apiId,
+          HttpStatus.NOT_FOUND.toLocaleString(),
+          API_RESPONSES.ACADEMICYEAR_NOT_FOUND,
+          HttpStatus.NOT_FOUND
+        );
+      }
+      //check this cohort exist this year or not
+      const isExistAcademicYear = await this.findCohortAcademicYearId(academicyearId, cohortMembers);
+      if (!isExistAcademicYear) {
+        return APIResponse.error(
+          res,
+          apiId,
+          HttpStatus.NOT_FOUND.toLocaleString(),
+          API_RESPONSES.ACADEMICYEAR_COHORT_NOT_FOUND,
+          HttpStatus.NOT_FOUND
+        );
+      }
+      const cohortacAdemicyearId = isExistAcademicYear.cohortAcademicYearId;
+      //check user is already exist in this cohort for this year or not
       const existrole = await this.cohortMembersRepository.find({
         where: {
           userId: cohortMembers.userId,
-          cohortId: cohortMembers.cohortId
+          cohortId: cohortMembers.cohortId,
+          cohortAcademicYearId: cohortacAdemicyearId
         }
       })
       if (existrole.length > 0) {
-        return APIResponse.error(res, apiId, "CONFLICT", `User '${cohortMembers.userId}' is already assigned to cohort '${cohortMembers.cohortId}'.`, HttpStatus.CONFLICT);
+        return APIResponse.error(res, apiId, API_RESPONSES.CONFLICT, `User '${cohortMembers.userId}' is already assigned to cohort '${cohortMembers.cohortId}'.`, HttpStatus.CONFLICT);
       }
 
+      cohortMembers.createdBy = loginUser;
+      cohortMembers.updatedBy = loginUser;
+      cohortMembers.cohortAcademicYearId = cohortacAdemicyearId;
       // Create a new CohortMembers entity and populate it with cohortMembers data
       const savedCohortMember = await this.cohortMembersRepository.save(
         cohortMembers
       );
 
-      return APIResponse.success(res, apiId, savedCohortMember, HttpStatus.OK, "Cohort member has been successfully assigned.");
+      return APIResponse.success(res, apiId, savedCohortMember, HttpStatus.OK, API_RESPONSES.COHORTMEMBER_CREATED_SUCCESSFULLY);
 
     } catch (e) {
-      const errorMessage = e.message || 'Internal server error';
-      return APIResponse.error(res, apiId, "Internal Server Error", errorMessage, HttpStatus.INTERNAL_SERVER_ERROR);
+      const errorMessage = e.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+      return APIResponse.error(res, apiId, API_RESPONSES.INTERNAL_SERVER_ERROR, errorMessage, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 
-  async getUsers(where: any, options: any, order: any) {
+  async findCohortAcademicYearId(academicyearId, cohortMembers) {
+    return await this.cohortAcademicYearRespository.findOne({
+      where: { academicYearId: academicyearId, cohortId: cohortMembers.cohortId }
+    })
+  }
 
+  async getUsers(where: any, options: any, order: any) {
     let whereCase = ``;
     let limit, offset;
 
@@ -352,12 +418,17 @@ export class PostgresCohortMembersService {
           case "name": {
             return `U."name" ILIKE '%${value}%'`;
           }
+          case "cohortAcademicYearId": {
+            const cohortIdAcademicYear = Array.isArray(value)
+              ? value.map(id => `'${id}'`).join(', ')
+              : `'${value}'`;
+            return `CM."cohortAcademicYearId" IN (${cohortIdAcademicYear})`;
+          }
           default: {
             return `CM."${key}"='${value}'`;
           }
         }
       };
-
       whereCase += where.map(processCondition).join(" AND ");
     }
 
@@ -369,6 +440,7 @@ export class PostgresCohortMembersService {
       ON UR."userId" = U."userId"
       INNER JOIN public."Roles" R
       ON R."roleId" = UR."roleId" ${whereCase}`;
+
 
     options.forEach(option => {
       if (option[0] === 'limit') {
@@ -469,9 +541,6 @@ export class PostgresCohortMembersService {
         userId: userId,
       }
     })
-    if (!existUser) {
-      return false;
-    }
     return existUser;
   }
 
@@ -488,11 +557,12 @@ export class PostgresCohortMembersService {
     return existCohort;
   }
 
-  public async cohortUserMapping(userId, cohortId) {
+  public async cohortUserMapping(userId, cohortId, cohortAcademicYearId) {
     const mappingExist = await this.cohortMembersRepository.findOne({
       where: {
         userId: userId,
         cohortId: cohortId,
+        cohortAcademicYearId: cohortAcademicYearId
       }
     })
     if (!mappingExist) {
@@ -505,20 +575,35 @@ export class PostgresCohortMembersService {
     loginUser: any,
     cohortMembersDto: { userId: string[], cohortId: string[], removeCohortId?: string[] },
     response: Response,
-    tenantId: string
+    tenantId: string,
+    academicyearId: string
   ) {
+    const apiId = APIID.COHORT_MEMBER_CREATE
     const results = [];
     const errors = [];
     const cohortMembersBase = {
       createdBy: loginUser,
       updatedBy: loginUser,
-      tenantId: tenantId
+      tenantId: tenantId,
+      // cohortAcademicYearId: academicyearId
     };
 
+    const academicYear = await this.academicyearService.getActiveAcademicYear(academicyearId, tenantId);
+    if (!academicYear) {
+      return APIResponse.error(
+        response,
+        apiId,
+        HttpStatus.NOT_FOUND.toLocaleString(),
+        API_RESPONSES.ACADEMICYEAR_NOT_FOUND,
+        HttpStatus.NOT_FOUND
+      );
+    }
+
     for (let userId of cohortMembersDto.userId) {
+      // why checking from user table beacuse it is possible to make first time part of any cohort
       const userExists = await this.checkUserExist(userId);
       if (!userExists) {
-        errors.push(`User with userId ${userId} does not exist.`);
+        errors.push(API_RESPONSES.USER_NOTEXIST(userId));
         continue;
       }
 
@@ -526,19 +611,19 @@ export class PostgresCohortMembersService {
       if (cohortMembersDto.removeCohortId && cohortMembersDto.removeCohortId.length > 0) {
         for (let removeCohortId of cohortMembersDto.removeCohortId) {
           try {
-            const cohortExists = await this.checkCohortExist(removeCohortId);
-            if (!cohortExists) {
-              errors.push(`Cohort with cohortId ${removeCohortId} does not exist.`);
+            const cohortExists = await this.isCohortExistForYear(academicyearId, removeCohortId);
+            if (cohortExists.length === 0) {
+              errors.push(API_RESPONSES.COHORTID_NOTFOUND_FOT_THIS_YEAR(removeCohortId));
               continue;
             }
-            const updateCohort = await this.cohortMembersRepository.update({ userId, cohortId: removeCohortId }, { status: MemberStatus.ARCHIVED });
+            const updateCohort = await this.cohortMembersRepository.update({ userId, cohortId: removeCohortId, cohortAcademicYearId: cohortExists[0].cohortAcademicYearId }, { status: MemberStatus.ARCHIVED });
             if (updateCohort.affected === 0) {
-              results.push({ message: `Cohort Id ${removeCohortId} is not mapped to user Id${userId}} ` });
+              results.push({ message: API_RESPONSES.COHORT_NOTMAPPED_WITH_USER(removeCohortId, userId) });
             } else {
-              results.push({ message: `Cohort Id ${removeCohortId} status updated for This user Id${userId}} ` });
+              results.push({ message: API_RESPONSES.COHORT_STATUS_UPDATED_FOR_USER(removeCohortId, userId) });
             }
           } catch (error) {
-            errors.push(`Error updating cohort member with userId ${userId} and cohortId ${removeCohortId}: ${error.message}`);
+            errors.push(API_RESPONSES.ERROR_UPDATE_COHORTMEMBER(userId, removeCohortId, error.message));
           }
         }
       }
@@ -548,37 +633,42 @@ export class PostgresCohortMembersService {
         const cohortMembers = {
           ...cohortMembersBase,
           userId: userId,
-          cohortId: cohortId
+          cohortId: cohortId,
         };
         try {
-          const cohortExists = await this.checkCohortExist(cohortId);
-          if (!cohortExists) {
-            errors.push(`Cohort with cohortId ${cohortId} does not exist.`);
+          const cohortExists = await this.isCohortExistForYear(academicyearId, cohortId);
+          if (cohortExists.length === 0) {
+            errors.push(API_RESPONSES.COHORTID_NOTFOUND_FOT_THIS_YEAR(cohortId));
             continue;
           }
-          const mappingExists = await this.cohortUserMapping(userId, cohortId);
+          const mappingExists = await this.cohortUserMapping(userId, cohortId, cohortExists[0].cohortAcademicYearId);
           if (mappingExists) {
             if (mappingExists.status === MemberStatus.ACTIVE) {
-              errors.push(`Mapping already exists for userId ${userId} and cohortId ${cohortId}.`);
+              // errors.push(`Mapping already exists for userId ${userId} and cohortId ${cohortId} for this academic year`);
+              errors.push(API_RESPONSES.MAPPING_EXIST_BW_USER_AND_COHORT(userId, cohortId))
               continue;
             } else if (mappingExists.status === MemberStatus.ARCHIVED) {
-              const updateCohort = await this.cohortMembersRepository.update({ userId, cohortId }, { status: MemberStatus.ACTIVE });
+              const updateCohort = await this.cohortMembersRepository.update({ userId, cohortId, cohortAcademicYearId: cohortExists[0].cohortAcademicYearId }, { status: MemberStatus.ACTIVE });
               results.push(updateCohort);
               continue;
             }
           }
-          const result = await this.cohortMembersRepository.save(cohortMembers);
+          const cohortMemberForAcademicYear = {
+            ...cohortMembers,
+            cohortAcademicYearId: cohortExists[0].cohortAcademicYearId
+          }
+          // Need to add User in cohort for Academic year 
+          const result = await this.cohortMembersRepository.save(cohortMemberForAcademicYear);
           results.push(result);
         } catch (error) {
-          errors.push(`Error saving cohort member with userId ${userId} and cohortId ${cohortId}: ${error.message}`);
+          errors.push(API_RESPONSES.ERROR_SAVING_COHORTMEMBER(userId, cohortId, error.message));
         }
       }
     }
 
     if (errors.length > 0) {
-      return APIResponse.success(response, APIID.COHORT_MEMBER_CREATE, { results, errors }, HttpStatus.CREATED, "Cohort Members Created with some errors");
+      return APIResponse.success(response, APIID.COHORT_MEMBER_CREATE, { results, errors }, HttpStatus.CREATED, API_RESPONSES.COHORTMEMBER_ERROR);
     }
-
-    return APIResponse.success(response, APIID.COHORT_MEMBER_CREATE, results, HttpStatus.CREATED, "Cohort Members Created Successfully");
+    return APIResponse.success(response, APIID.COHORT_MEMBER_CREATE, results, HttpStatus.CREATED, API_RESPONSES.COHORTMEMBER_SUCCESSFULLY);
   }
 }

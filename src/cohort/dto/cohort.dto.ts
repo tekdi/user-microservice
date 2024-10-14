@@ -1,12 +1,6 @@
-import { Exclude, Expose } from "class-transformer";
-import {
-  MaxLength,
-  IsNotEmpty,
-  IsEmail,
-  IsString,
-  IsNumber,
-} from "class-validator";
+import { Expose } from "class-transformer";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { CohortCreateDto } from "./cohort-create.dto";
 
 export class CohortDto {
   //generated fields
@@ -86,7 +80,7 @@ export class CohortDto {
     default: false,
   })
   @Expose()
-  attendanceCaptureImage: Boolean;
+  attendanceCaptureImage: boolean;
 
   //metadata
   @ApiPropertyOptional({
@@ -133,13 +127,16 @@ export class ReturnResponseBody {
   status: string;
   @Expose()
   tenantId: string;
+  @Expose()
+  academicYearId: string;
 
-  constructor(cohortDto: CohortDto) {
+  constructor(cohortDto: CohortCreateDto) {
     this.cohortId = cohortDto.cohortId;
     this.parentId = cohortDto.parentId;
     this.name = cohortDto.name;
     this.type = cohortDto.type;
     this.status = cohortDto.status;
     this.tenantId = cohortDto.tenantId;
+    this.academicYearId = cohortDto.academicYearId;
   }
 }

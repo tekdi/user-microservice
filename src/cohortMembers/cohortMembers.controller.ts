@@ -27,6 +27,7 @@ import {
   ValidationPipe,
   Query,
   UseFilters,
+  BadRequestException,
 } from "@nestjs/common";
 import { CohortMembersSearchDto } from "./dto/cohortMembers-search.dto";
 import { Request } from "@nestjs/common";
@@ -38,6 +39,8 @@ import { Response } from "express";
 import { AllExceptionsFilter } from "src/common/filters/exception.filter";
 import { APIID } from "src/common/utils/api-id.config";
 import { BulkCohortMember } from "./dto/bulkMember-create.dto";
+import { isUUID } from "class-validator";
+import { API_RESPONSES } from "@utils/response.messages";
 
 @ApiTags("Cohort Member")
 @Controller("cohortmember")
@@ -60,6 +63,9 @@ export class CohortMembersController {
     name: "tenantid",
   })
   @ApiHeader({
+    name: "academicyearid",
+  })
+  @ApiHeader({
     name: "deviceid",
   })
   public async createCohortMembers(
@@ -71,9 +77,16 @@ export class CohortMembersController {
     const loginUser = request.user.userId;
     const tenantId = headers["tenantid"];
     const deviceId = headers["deviceid"];
+    const academicyearId = headers["academicyearid"];
+    if (!tenantId || !isUUID(tenantId)) {
+      throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
+    }
+    if (!academicyearId || !isUUID(academicyearId)) {
+      throw new BadRequestException('academicyearId is required and academicyearId must be a valid UUID.');
+    }
     const result = await this.cohortMemberAdapter
       .buildCohortMembersAdapter()
-      .createCohortMembers(loginUser, cohortMembersDto, response, tenantId, deviceId);
+      .createCohortMembers(loginUser, cohortMembersDto, response, tenantId, deviceId, academicyearId);
     return response.status(result.statusCode).json(result);
   }
 
@@ -119,6 +132,9 @@ export class CohortMembersController {
   @ApiHeader({
     name: "tenantid",
   })
+  @ApiHeader({
+    name: "academicyearid",
+  })
   public async searchCohortMembers(
     @Headers() headers,
     @Req() request: Request,
@@ -126,10 +142,13 @@ export class CohortMembersController {
     @Body() cohortMembersSearchDto: CohortMembersSearchDto
   ) {
     const tenantId = headers["tenantid"];
-
+    const academicyearId = headers["academicyearid"];
+    if (!academicyearId || !isUUID(academicyearId)) {
+      throw new BadRequestException('academicyearId is required and must be a valid UUID.');
+    }
     const result = await this.cohortMemberAdapter
       .buildCohortMembersAdapter()
-      .searchCohortMembers(cohortMembersSearchDto, tenantId, response);
+      .searchCohortMembers(cohortMembersSearchDto, tenantId, academicyearId, response);
   }
 
   //update
@@ -197,6 +216,9 @@ export class CohortMembersController {
   @ApiHeader({
     name: "tenantid",
   })
+  @ApiHeader({
+    name: "academicyearid",
+  })
   public async craeteBulkCohortMembers(
     @Headers() headers,
     @Req() request,
@@ -205,9 +227,13 @@ export class CohortMembersController {
   ) {
     const loginUser = request.user.userId;
     const tenantId = headers["tenantid"];
+    const academicyearId = headers["academicyearid"];
+    if (!academicyearId || !isUUID(academicyearId)) {
+      throw new BadRequestException('academicyearId is required and must be a valid UUID.');
+    }
     const result = await this.cohortMemberAdapter
       .buildCohortMembersAdapter()
-      .createBulkCohortMembers(loginUser, bulkcohortMembersDto, response, tenantId);
+      .createBulkCohortMembers(loginUser, bulkcohortMembersDto, response, tenantId, academicyearId);
     return result;
   }
 }

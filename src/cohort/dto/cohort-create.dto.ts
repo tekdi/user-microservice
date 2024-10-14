@@ -1,13 +1,11 @@
-import { Exclude, Expose, Type } from "class-transformer";
+import { Expose, Type } from "class-transformer";
 import {
   IsNotEmpty,
-  IsString,
   IsOptional,
   ValidateNested,
-  IsEnum
+  IsEnum,
 } from "class-validator";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { FieldValuesCreateDto } from "src/fields/dto/field-values-create.dto";
 import { FieldValuesOptionDto } from "src/user/dto/user-create.dto";
 
 export class CohortCreateDto {
@@ -16,6 +14,8 @@ export class CohortCreateDto {
 
   @Expose()
   tenantId: string;
+
+  academicYearId: string;
 
   @Expose()
   createdAt: string;

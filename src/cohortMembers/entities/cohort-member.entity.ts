@@ -16,6 +16,9 @@ export class CohortMembers {
   cohortId: string;
 
   @Column({ type: 'uuid' })
+  cohortAcademicYearId: string;
+
+  @Column({ type: 'uuid' })
   userId: string;
 
   @CreateDateColumn({ type: 'date', default: () => 'CURRENT_DATE' })

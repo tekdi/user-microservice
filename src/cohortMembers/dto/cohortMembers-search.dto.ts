@@ -9,15 +9,17 @@ enum SortDirection {
 }
 class FiltersDto {
   @ApiPropertyOptional({ type: String, description: 'Cohort ID', example: '' })
-  @IsOptional()
+  // @IsOptional()
   @IsString()
   @IsUUID()
+  @ValidateIf(o => !o.userId)
   cohortId?: string;
 
   @ApiPropertyOptional({ type: String, description: 'User ID', example: '' })
-  @IsOptional()
+  // @IsOptional()
   @IsString()
   @IsUUID()
+  @ValidateIf(o => !o.cohortId)
   userId?: string;
 
   @ApiPropertyOptional({ type: String, description: 'Role', example: '' })
@@ -51,7 +53,7 @@ export class CohortMembersSearchDto {
   @ApiProperty({
     type: FiltersDto,
     description: "Filters",
-    example: { cohortId: "", userId: "", role: "", name: "", status: [] }, // Adding example for Swagger
+    example: { cohortId: "", userId: "", role: "", name: "", status: [], academicYearIds: [] }, // Adding example for Swagger
   })
   @IsOptional()
   @ValidateNested()

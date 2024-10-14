@@ -47,6 +47,8 @@ import { JwtAuthGuard } from "src/common/guards/keycloak.guard";
 import { AllExceptionsFilter } from "src/common/filters/exception.filter";
 import { APIID } from "src/common/utils/api-id.config";
 import { CustomFieldsValidation } from "@utils/custom-field-validation";
+import { isUUID } from "class-validator";
+import { API_RESPONSES } from "@utils/response.messages";
 
 @ApiTags("Cohort")
 @Controller("cohort")
@@ -63,6 +65,11 @@ export class CohortController {
   @ApiBadRequestResponse({ description: "Bad Request" })
   @SerializeOptions({ strategy: "excludeAll", })
   @ApiHeader({ name: "tenantid", })
+  @ApiHeader({
+    name: "academicyearid",
+  })
+  @ApiQuery({ name: "children", required: false, type: Boolean })
+  @ApiQuery({ name: "customField", required: false, type: Boolean })
   public async getCohortsDetails(
     @Headers() headers,
     @Param("cohortId") cohortId: string,
@@ -71,11 +78,19 @@ export class CohortController {
     @Query("children") children: string,
     @Query("customField") customField: string
   ) {
-    // const tenantId = headers["tenantid"];   Can be Used In future
+    let tenantId = headers["tenantid"];
+    let academicYearId = headers["academicyearid"];
+    if (!tenantId || !isUUID(tenantId)) {
+      throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
+    }
+    if (!academicYearId || !isUUID(academicYearId)) {
+      throw new BadRequestException(API_RESPONSES.ACADEMICYEARID_VALIDATION);
+    }
     const getChildDataValueBoolean = children === 'true';
     let fieldValueBooelan = customField === 'true'
     let requiredData = {
       cohortId: cohortId,
+      academicYearId: academicYearId,
       getChildData: getChildDataValueBoolean,
       customField: fieldValueBooelan
     }
@@ -105,6 +120,9 @@ export class CohortController {
   @ApiHeader({
     name: "tenantid",
   })
+  @ApiHeader({
+    name: "academicyearid",
+  })
   public async createCohort(
     @Headers() headers,
     @Req() request: Request,
@@ -112,12 +130,16 @@ export class CohortController {
     @UploadedFile() image,
     @Res() response: Response
   ) {
-    let tenantid = headers["tenantid"];
-    const payload = {
-      image: image?.filename,
-      tenantId: tenantid,
-    };
-    Object.assign(cohortCreateDto, payload);
+    let tenantId = headers["tenantid"];
+    let academicYearId = headers["academicyearid"];
+    if (!tenantId || !isUUID(tenantId)) {
+      throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
+    }
+    if (!academicYearId || !isUUID(academicYearId)) {
+      throw new BadRequestException(API_RESPONSES.ACADEMICYEARID_VALIDATION);
+    }
+    cohortCreateDto.academicYearId = academicYearId;
+    cohortCreateDto.tenantId = tenantId;
     return await this.cohortAdapter.buildCohortAdapter().createCohort(
       request,
       cohortCreateDto,
@@ -140,15 +162,26 @@ export class CohortController {
   @ApiHeader({
     name: "tenantid",
   })
+  @ApiHeader({
+    name: "academicyearid",
+  })
   public async searchCohort(
     @Headers() headers,
     @Req() request: Request,
     @Body() cohortSearchDto: CohortSearchDto,
     @Res() response: Response
   ) {
-    let tenantid = headers["tenantid"];
+    let tenantId = headers["tenantid"];
+    let academicYearId = headers["academicyearid"];
+    if (!tenantId || !isUUID(tenantId)) {
+      throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
+    }
+    if (!academicYearId || !isUUID(academicYearId)) {
+      throw new BadRequestException(API_RESPONSES.ACADEMICYEARID_VALIDATION);
+    }
     return await this.cohortAdapter.buildCohortAdapter().searchCohort(
-      tenantid,
+      tenantId,
+      academicYearId,
       request,
       cohortSearchDto,
       response
@@ -210,20 +243,32 @@ export class CohortController {
   @ApiInternalServerErrorResponse({ description: "Internal Server Error." })
   @ApiBadRequestResponse({ description: "Bad Request" })
   @ApiHeader({ name: "tenantid", })
+  @ApiHeader({
+    name: "academicyearid",
+  })
   @ApiQuery({ name: "children", required: false, type: Boolean })
   @ApiQuery({ name: "customField", required: false, type: Boolean })
   public async getCohortsHierarachyData(
     @Request() request: Request,
+    @Headers() headers,
     @Param('userId', ParseUUIDPipe) userId: string,
     @Query("children") children: string,
     @Query("customField") customField: string | null = null,
     @Res() response: Response
   ) {
-    const tenantId = request.headers["tenantid"];
+    let tenantId = headers["tenantid"];
+    let academicYearId = headers["academicyearid"];
+    if (!tenantId || !isUUID(tenantId)) {
+      throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
+    }
+    if (!academicYearId || !isUUID(academicYearId)) {
+      throw new BadRequestException(API_RESPONSES.ACADEMICYEARID_VALIDATION);
+    }
     const getChildDataValueBoolean = children === 'true';
     let fieldValueBooelan = customField === 'true'
     let requiredData = {
       userId: userId,
+      academicYearId: academicYearId,
       getChildData: getChildDataValueBoolean,
       customField: fieldValueBooelan
     }
