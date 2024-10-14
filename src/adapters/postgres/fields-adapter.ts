@@ -236,12 +236,6 @@ export class PostgresFieldsService implements IServicelocatorfields {
                     let query = `SELECT COUNT(*) FROM public.${fieldsData.sourceDetails.table} WHERE value = '${sourceFieldName['value']}'`;
                     const checkSourceData = await this.fieldsValuesRepository.query(query);
 
-                    // if (!tenantId) {
-                    //     return await APIResponse.error(
-                    //         response, apiId, 'Tenant ID is required', 'TENANT_ID_MISSING', HttpStatus.BAD_REQUEST
-                    //     );
-                    // }
-
                     if (checkSourceData[0].count == 0) {
                         let createSourceField = await this.createSourceDetailsTableFields(fieldsData.sourceDetails.table, sourceFieldName['name'], sourceFieldName['value'], createdBy, tenantId, sourceFieldName['controllingfieldfk'], fieldsData?.dependsOn);
                     } else {
@@ -306,11 +300,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
                         storeWithoutControllingField.push(sourceFieldName['name'])
                     }
 
-                    // if (!tenantId) {
-                    //     return await APIResponse.error(
-                    //         response, apiId, 'Tenant ID is required', 'TENANT_ID_MISSING', HttpStatus.BAD_REQUEST
-                    //     );
-                    // }
+
 
                     // check options exits in source table column or not for that particular tenant
                     let whereConditions = !tenantId
@@ -829,12 +819,6 @@ export class PostgresFieldsService implements IServicelocatorfields {
             if (fetchFieldParams?.sourceDetails?.source === 'table') {
                 //If field option source is a table then tenantId is required
 
-                // if (!tenantId) {
-                //     return await APIResponse.error(
-                //         response, apiId, 'Tenant ID is required', 'TENANT_ID_MISSING', HttpStatus.BAD_REQUEST
-                //     );
-                // }
-
                 let whereClause;
                 if (controllingfieldfk) {
                     whereClause = `"controllingfieldfk" = '${controllingfieldfk}'`;
@@ -928,12 +912,6 @@ export class PostgresFieldsService implements IServicelocatorfields {
 
             //Delete data from source table
             if (getField?.sourceDetails?.source == 'table') {
-
-                // if (!requiredData.tenantId) {
-                //     return await APIResponse.error(
-                //         response, apiId, 'Tenant ID is required', 'TENANT_ID_MISSING', HttpStatus.BAD_REQUEST
-                //     );
-                // }
 
                 let whereCond = requiredData.option ? `WHERE "value"='${requiredData.option}'` : '';
                 if (whereCond) {
