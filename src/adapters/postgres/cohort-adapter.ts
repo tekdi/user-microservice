@@ -579,7 +579,8 @@ export class PostgresCohortService {
       const searchCustomFields = {};
 
       if(academicYearId) {
-        cohortsByAcademicYear = await this.cohortAcademicYearService.getCohortsByAcademicYear(filters["academicYearId"]);
+        // check if the tenantId and academic year exist together
+        cohortsByAcademicYear = await this.cohortAcademicYearService.getCohortsAcademicYear(academicYearId, tenantId);
        
         if(cohortsByAcademicYear?.length === 0) {
           return APIResponse.error(response, apiId, API_RESPONSES.COHORT_NOT_AVAILABLE_FOR_ACADEMIC_YEAR,API_RESPONSES.COHORT_NOT_AVAILABLE_FOR_ACADEMIC_YEAR ,HttpStatus.NOT_FOUND);
@@ -710,7 +711,9 @@ export class PostgresCohortService {
             cohortIdsByFieldAndAcademicYear = cohortsByAcademicYear.filter(({cohortId}) => getCohortIdUsingCustomFields.includes(cohortId))
           }
           const cohortIds = cohortIdsByFieldAndAcademicYear?.map(({cohortId}) => cohortId )
-          // "cohortIdsByFieldAndAcademicYear")
+          whereClause['cohortId'] = In(cohortIds)
+        } else if(cohortsByAcademicYear?.length >= 1) {
+          const cohortIds = cohortsByAcademicYear?.map(({cohortId}) => cohortId )
           whereClause['cohortId'] = In(cohortIds)
         }
 

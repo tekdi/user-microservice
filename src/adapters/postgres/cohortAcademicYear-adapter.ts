@@ -20,13 +20,16 @@ export class CohortAcademicYearService {
     return await this.cohortAcademicYearRepository.save(cohortAcademicYear);
     }
 
-  async getCohortsByAcademicYear(academicYearId : string) : Promise<CohortAcademicYear[]>{
-    return await this.cohortAcademicYearRepository.find(  
-      {
-        where : {
-          academicYearId
-        }
-      }
-    )
+  async getCohortsAcademicYear(academicYearId : string, tenantId:  string) : Promise<CohortAcademicYear[]>{
+  
+    let query = `
+      SELECT cay.*
+      FROM public."CohortAcademicYear" cay
+      INNER JOIN public."AcademicYears" ay
+        ON cay."academicYearId" = ay."id"
+      WHERE cay."academicYearId" = $1
+        AND ay."tenantId" = $2`;
+
+    return await this.cohortAcademicYearRepository.query(query, [academicYearId, tenantId]);
   }
 }
