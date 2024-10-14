@@ -21,7 +21,7 @@ export const API_RESPONSES = {
     STARTDATE_VALIDATION: 'start Date should not less than current date',
     ENDDATE_VALIDATION: 'End Date shluld not less than startDate',
     TENANTID_VALIDATION: 'Tenant ID is required and must be a valid UUID',
-    COHORT_NOT_AVAILABLE_FOR_ACADEMIC_YEAR:'No cohorts available for given Academic year',
+    COHORT_NOT_AVAILABLE_FOR_ACADEMIC_YEAR: 'No cohorts available for given Academic year',
     ACADEMICYEARID_VALIDATION: 'Academic Year ID is required and must be a valid UUID',
     ACADEMICYEAR_NOT_FOUND: 'Academic Year Not Found',
     ACADEMICYEAR_COHORT_NOT_FOUND: 'This cohort not exist for this year',
@@ -35,6 +35,16 @@ export const API_RESPONSES = {
     USER_DETAIL_NOTFOUND: 'User Deatil not found',
     COHORT_GET_SUCCESSFULLY: 'Cohort members details fetched successfully.',
     COHORT_USER_NOTFOUND: 'User not exist in this cohort for this year.',
+    COHORTMEMBER_ERROR: 'Cohort Members Created with some errors',
+    COHORTMEMBER_SUCCESSFULLY: "Cohort Members Created Successfully",
     COHORT_NOT_IN_ACADEMIC_YEAR: 'Cohort ID does not belong in Academic year',
-    USER_NOT_IN_ACADEMIC_YEAR: 'User ID does not belong in Academic year'
-}
+    USER_NOT_IN_ACADEMIC_YEAR: 'User ID does not belong in Academic year',
+    COHORTID_NOTFOUND_FOT_THIS_YEAR: (cohortId) => `Cohort with cohortId ${cohortId} does not exist for this academic year`,
+    MAPPING_EXIST_BW_USER_AND_COHORT: (userId, cohortId) => `Mapping already exists for userId ${userId} and cohortId ${cohortId} for this academic year`,
+    COHORT_NOTMAPPED_WITH_USER: (removeCohortId, userId) => `Cohort Id ${removeCohortId} is not mapped to user Id${userId}} for this academic year`,
+    COHORT_STATUS_UPDATED_FOR_USER: (removeCohortId, userId) => `Cohort Id ${removeCohortId} status updated for This user Id${userId}}`,
+    ERROR_UPDATE_COHORTMEMBER: (userId, removeCohortId, error) => `Error updating cohort member with userId ${userId} and cohortId ${removeCohortId}: ${error}`,
+    ERROR_SAVING_COHORTMEMBER: (userId, cohortId, error) => `Error saving cohort member with userId ${userId} and cohortId ${cohortId}: ${error}`,
+    USER_NOTEXIST: (userId) => `User with userId ${userId} does not exist for this academic year.`
+};
+
