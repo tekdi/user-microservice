@@ -341,7 +341,8 @@ export class PostgresCohortMembersService {
         return APIResponse.error(res, apiId, API_RESPONSES.BAD_REQUEST, API_RESPONSES.INVALID_USERID, HttpStatus.BAD_REQUEST);
       }
       // check year is live or not
-      const academicYear = await this.academicyearService.getActiveAcademicYear(academicyearId);
+      const academicYear = await this.academicyearService.getActiveAcademicYear(academicyearId, tenantId);
+
       if (!academicYear) {
         return APIResponse.error(
           res,
@@ -587,7 +588,7 @@ export class PostgresCohortMembersService {
       // cohortAcademicYearId: academicyearId
     };
 
-    const academicYear = await this.academicyearService.getActiveAcademicYear(academicyearId);
+    const academicYear = await this.academicyearService.getActiveAcademicYear(academicyearId, tenantId);
     if (!academicYear) {
       return APIResponse.error(
         response,
