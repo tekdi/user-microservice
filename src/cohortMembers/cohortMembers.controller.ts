@@ -104,6 +104,9 @@ export class CohortMembersController {
     description: "Send True to Fetch Custom Field of User",
     required: false,
   })
+  @ApiHeader({
+    name: "academicyearid",
+  })
   public async getCohortMembers(
     @Headers() headers,
     @Param("cohortId") cohortId: string,
@@ -112,9 +115,13 @@ export class CohortMembersController {
     @Query("fieldvalue") fieldvalue: string | null = null
   ) {
     const tenantId = headers["tenantid"];
+    const academicyearId = headers["academicyearid"];
+    if (!academicyearId || !isUUID(academicyearId)) {
+      throw new BadRequestException('academicyearId is required and academicyearId must be a valid UUID.');
+    }
     const result = await this.cohortMemberAdapter
       .buildCohortMembersAdapter()
-      .getCohortMembers(cohortId, tenantId, fieldvalue, response);
+      .getCohortMembers(cohortId, tenantId, fieldvalue, academicyearId, response);
   }
 
   // search;
