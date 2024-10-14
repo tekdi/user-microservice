@@ -191,7 +191,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         return schema;
     }
 
-    async createFields(request: any, fieldsDto: FieldsDto, tenantId: String, response: Response,) {
+    async createFields(request: any, fieldsDto: FieldsDto, response: Response, tenantId?: String) {
         const apiId = APIID.FIELDS_CREATE;
         try {
             const fieldsData: any = {}; // Define an empty object to store field data
@@ -236,16 +236,16 @@ export class PostgresFieldsService implements IServicelocatorfields {
                     let query = `SELECT COUNT(*) FROM public.${fieldsData.sourceDetails.table} WHERE value = '${sourceFieldName['value']}'`;
                     const checkSourceData = await this.fieldsValuesRepository.query(query);
 
-                    if (!tenantId) {
-                        return await APIResponse.error(
-                            response, apiId, 'Tenant ID is required', 'TENANT_ID_MISSING', HttpStatus.BAD_REQUEST
-                        );
-                    }
+                    // if (!tenantId) {
+                    //     return await APIResponse.error(
+                    //         response, apiId, 'Tenant ID is required', 'TENANT_ID_MISSING', HttpStatus.BAD_REQUEST
+                    //     );
+                    // }
 
                     if (checkSourceData[0].count == 0) {
                         let createSourceField = await this.createSourceDetailsTableFields(fieldsData.sourceDetails.table, sourceFieldName['name'], sourceFieldName['value'], createdBy, tenantId, sourceFieldName['controllingfieldfk'], fieldsData?.dependsOn);
                     } else {
-                        let updateSourceField = await this.updateSourceDetailsTableFields(fieldsData.sourceDetails.table, sourceFieldName['name'], sourceFieldName['value'], tenantId, updatedBy, sourceFieldName['controllingfieldfk']);
+                        let updateSourceField = await this.updateSourceDetailsTableFields(fieldsData.sourceDetails.table, sourceFieldName['name'], sourceFieldName['value'], updatedBy, tenantId, sourceFieldName['controllingfieldfk']);
                     }
                 }
                 delete fieldsData.fieldParams;
@@ -267,9 +267,10 @@ export class PostgresFieldsService implements IServicelocatorfields {
         }
     }
 
-    async updateFields(fieldId: any, request: any, fieldsUpdateDto: FieldsUpdateDto, tenantId: String, response: Response) {
+    async updateFields(fieldId: any, request: any, fieldsUpdateDto: FieldsUpdateDto, response: Response, tenantId?: String,) {
         const apiId = APIID.FIELDS_CREATE;
         try {
+
             const decoded: any = jwt_decode(request.headers.authorization);
             const createdBy = decoded?.sub;
             const updatedBy = decoded?.sub;
@@ -305,14 +306,19 @@ export class PostgresFieldsService implements IServicelocatorfields {
                         storeWithoutControllingField.push(sourceFieldName['name'])
                     }
 
-                    if (!tenantId) {
-                        return await APIResponse.error(
-                            response, apiId, 'Tenant ID is required', 'TENANT_ID_MISSING', HttpStatus.BAD_REQUEST
-                        );
-                    }
+                    // if (!tenantId) {
+                    //     return await APIResponse.error(
+                    //         response, apiId, 'Tenant ID is required', 'TENANT_ID_MISSING', HttpStatus.BAD_REQUEST
+                    //     );
+                    // }
 
                     // check options exits in source table column or not for that particular tenant
-                    let query = `SELECT COUNT(*) FROM public.${getSourceDetails.sourceDetails.table} WHERE "value" = '${sourceFieldName['value']}' AND "tenantId" = '${tenantId}'`;
+                    let whereConditions = !tenantId
+                        ? `WHERE "value" = '${sourceFieldName['value']}' AND "tenantId" IS NULL`
+                        : `WHERE "value" = '${sourceFieldName['value']}' AND "tenantId" = '${tenantId}'`;
+
+
+                    let query = `SELECT COUNT(*) FROM public.${getSourceDetails.sourceDetails.table} ${whereConditions}`;
 
                     const checkSourceData = await this.fieldsValuesRepository.query(query);
 
@@ -324,7 +330,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
                     if (checkSourceData[0].count == 0) {
                         let createSourceField = await this.createSourceDetailsTableFields(getSourceDetails.sourceDetails.table, sourceFieldName['name'], sourceFieldName['value'], createdBy, tenantId, sourceFieldName['controllingfieldfk'], getSourceDetails.dependsOn);
                     } else {
-                        let updateSourceField = await this.updateSourceDetailsTableFields(getSourceDetails.sourceDetails.table, sourceFieldName['name'], sourceFieldName['value'], tenantId, updatedBy, sourceFieldName['controllingfieldfk']);
+                        let updateSourceField = await this.updateSourceDetailsTableFields(getSourceDetails.sourceDetails.table, sourceFieldName['name'], sourceFieldName['value'], updatedBy, tenantId, sourceFieldName['controllingfieldfk']);
                     }
                 }
                 delete fieldsData.fieldParams;
@@ -396,16 +402,21 @@ export class PostgresFieldsService implements IServicelocatorfields {
 
     }
 
-    async createSourceDetailsTableFields(tableName: string, name: string, value: string, createdBy: string, tenantId: String, controllingfieldfk?: string, dependsOn?: string) {
+    async createSourceDetailsTableFields(tableName: string, name: string, value: string, createdBy: string, tenantId?: String, controllingfieldfk?: string, dependsOn?: string) {
 
-        let createSourceFields = `INSERT INTO public.${tableName} ("name", "value", "createdBy","tenantId"`;
+        let values = !tenantId ? `("name", "value", "createdBy"` : `("name", "value", "createdBy", "tenantId"`
+
+        let createSourceFields = `INSERT INTO public.${tableName} ${values}`;
 
         // Add controllingfieldfk to the columns if it is defined
         if (controllingfieldfk !== undefined && controllingfieldfk !== '') {
-            createSourceFields += `, controllingfieldfk`;
+            createSourceFields += `, "controllingfieldfk"`;
         }
+        createSourceFields += `) VALUES ('${name}', '${value}', '${createdBy}'`;
 
-        createSourceFields += `) VALUES ('${name}', '${value}', '${createdBy}', '${tenantId}'`;
+        if (tenantId !== undefined && tenantId !== '') {
+            createSourceFields += `, '${tenantId}'`;
+        }
 
         // Add controllingfieldfk to the values if it is defined
         if (controllingfieldfk !== undefined && controllingfieldfk !== '') {
@@ -425,15 +436,24 @@ export class PostgresFieldsService implements IServicelocatorfields {
         }
     }
 
-    async updateSourceDetailsTableFields(tableName: string, name: string, value: string, tenantId: String, updatedBy: string, controllingfieldfk?: string) {
+    async updateSourceDetailsTableFields(tableName: string, name: string, value: string, updatedBy: string, tenantId?: String, controllingfieldfk?: string) {
 
         let updateSourceDetails = `UPDATE public.${tableName} SET "name"='${name}',"updatedBy"='${updatedBy}'`;
 
         if (controllingfieldfk !== undefined) {
-            updateSourceDetails += `, controllingfieldfk='${controllingfieldfk}'`;
+            updateSourceDetails += `, "controllingfieldfk"='${controllingfieldfk}'`;
         }
 
-        updateSourceDetails += ` WHERE value='${value}' AND "tenantId" = '${tenantId}';`;
+
+        if (tenantId) {
+            updateSourceDetails += `, "tenantId"='${tenantId}'`;
+        }
+
+        let whereCondition = !tenantId
+            ? ` WHERE value='${value}' AND "tenantId" IS NULL`
+            : ` WHERE value='${value}' AND "tenantId"='${tenantId}'`
+        updateSourceDetails += `${whereCondition}`;
+
 
         const updateSourceData = await this.fieldsValuesRepository.query(updateSourceDetails);
         if (updateSourceData.length == 0) {
@@ -772,7 +792,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
     }
 
     //Get all fields options
-    public async getFieldOptions(fieldsOptionsSearchDto: FieldsOptionsSearchDto, tenantId: string, response: Response) {
+    public async getFieldOptions(fieldsOptionsSearchDto: FieldsOptionsSearchDto, response: Response, tenantId?: string,) {
         const apiId = APIID.FIELDVALUES_SEARCH;
         try {
 
@@ -809,11 +829,11 @@ export class PostgresFieldsService implements IServicelocatorfields {
             if (fetchFieldParams?.sourceDetails?.source === 'table') {
                 //If field option source is a table then tenantId is required
 
-                if (!tenantId) {
-                    return await APIResponse.error(
-                        response, apiId, 'Tenant ID is required', 'TENANT_ID_MISSING', HttpStatus.BAD_REQUEST
-                    );
-                }
+                // if (!tenantId) {
+                //     return await APIResponse.error(
+                //         response, apiId, 'Tenant ID is required', 'TENANT_ID_MISSING', HttpStatus.BAD_REQUEST
+                //     );
+                // }
 
                 let whereClause;
                 if (controllingfieldfk) {
@@ -909,17 +929,17 @@ export class PostgresFieldsService implements IServicelocatorfields {
             //Delete data from source table
             if (getField?.sourceDetails?.source == 'table') {
 
-                if (!requiredData.tenantId) {
-                    return await APIResponse.error(
-                        response, apiId, 'Tenant ID is required', 'TENANT_ID_MISSING', HttpStatus.BAD_REQUEST
-                    );
-                }
+                // if (!requiredData.tenantId) {
+                //     return await APIResponse.error(
+                //         response, apiId, 'Tenant ID is required', 'TENANT_ID_MISSING', HttpStatus.BAD_REQUEST
+                //     );
+                // }
 
                 let whereCond = requiredData.option ? `WHERE "value"='${requiredData.option}'` : '';
                 if (whereCond) {
-                    whereCond += `AND "tenantId"='${requiredData.tenantId}'`
+                    whereCond += !requiredData.tenantId ? `AND "tenantId" IS NULL` : `AND "tenantId"='${requiredData.tenantId}'`
                 } else {
-                    whereCond = `WHERE "tenantId"='${requiredData.tenantId}'`
+                    whereCond = !requiredData.tenantId ? `WHERE "tenantId" IS NULL` : `WHERE "tenantId"='${requiredData.tenantId}'`
                 }
 
                 let query = `DELETE FROM public.${getField?.sourceDetails?.table} ${whereCond}`

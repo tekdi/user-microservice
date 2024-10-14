@@ -64,8 +64,8 @@ export class FieldsController {
     @Body() fieldsDto: FieldsDto,
     @Res() response: Response
   ) {
-    let tenantId = headers["tenantid"];
-    return await this.fieldsAdapter.buildFieldsAdapter().createFields(request, fieldsDto, tenantId, response);
+    let tenantId = headers["tenantid"] || null;
+    return await this.fieldsAdapter.buildFieldsAdapter().createFields(request, fieldsDto, response, tenantId);
   }
 
   //create fields
@@ -84,8 +84,9 @@ export class FieldsController {
     @Body() fieldsUpdateDto: FieldsUpdateDto,
     @Res() response: Response
   ) {
-    let tenantId = headers["tenantid"];
-    return await this.fieldsAdapter.buildFieldsAdapter().updateFields(fieldId, request, fieldsUpdateDto, tenantId, response);
+    let tenantId = headers["tenantid"] || '';
+
+    return await this.fieldsAdapter.buildFieldsAdapter().updateFields(fieldId, request, fieldsUpdateDto, response, tenantId);
   }
 
   //search
@@ -183,8 +184,8 @@ export class FieldsController {
     @Body() fieldsOptionsSearchDto: FieldsOptionsSearchDto,
     @Res() response: Response
   ) {
-    let tenantId = headers["tenantid"];
-    return await this.fieldsAdapter.buildFieldsAdapter().getFieldOptions(fieldsOptionsSearchDto, tenantId, response);
+    let tenantId = headers["tenantid"] || null;
+    return await this.fieldsAdapter.buildFieldsAdapter().getFieldOptions(fieldsOptionsSearchDto, response, tenantId);
   }
 
   //Delete Field Option
