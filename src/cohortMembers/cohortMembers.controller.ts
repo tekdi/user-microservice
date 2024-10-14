@@ -40,6 +40,7 @@ import { AllExceptionsFilter } from "src/common/filters/exception.filter";
 import { APIID } from "src/common/utils/api-id.config";
 import { BulkCohortMember } from "./dto/bulkMember-create.dto";
 import { isUUID } from "class-validator";
+import { API_RESPONSES } from "@utils/response.messages";
 
 @ApiTags("Cohort Member")
 @Controller("cohortmember")
@@ -77,6 +78,9 @@ export class CohortMembersController {
     const tenantId = headers["tenantid"];
     const deviceId = headers["deviceid"];
     const academicyearId = headers["academicyearid"];
+    if (!tenantId || !isUUID(tenantId)) {
+      throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
+    }
     if (!academicyearId || !isUUID(academicyearId)) {
       throw new BadRequestException('academicyearId is required and academicyearId must be a valid UUID.');
     }

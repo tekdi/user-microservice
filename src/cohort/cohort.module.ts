@@ -18,15 +18,17 @@ import { Role } from "src/rbac/role/entities/role.entity";
 import { CohortAcademicYear } from "src/cohortAcademicYear/entities/cohortAcademicYear.entity";
 import { PostgresAcademicYearService } from "src/adapters/postgres/academicyears-adapter";
 import { AcademicYear } from "src/academicyears/entities/academicyears-entity";
+import { PostgresCohortMembersService } from "src/adapters/postgres/cohortMembers-adapter";
+import { User } from "src/user/entities/user-entity";
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Cohort, FieldValues, Fields, CohortMembers, UserTenantMapping, Role, CohortAcademicYear, AcademicYear]),
+    TypeOrmModule.forFeature([Cohort, FieldValues, Fields, CohortMembers, UserTenantMapping, Role, CohortAcademicYear, AcademicYear, User]),
     HttpModule,
     HasuraModule,
     PostgresModule
   ],
   controllers: [CohortController],
-  providers: [CohortAdapter, FieldsService, PostgresCohortService, PostgresFieldsService, CohortAcademicYearService, PostgresAcademicYearService],
+  providers: [CohortAdapter, FieldsService, PostgresCohortService, PostgresFieldsService, CohortAcademicYearService, PostgresAcademicYearService, PostgresCohortMembersService],
 })
 export class CohortModule { }

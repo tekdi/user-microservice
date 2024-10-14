@@ -25,6 +25,7 @@ import { CohortAcademicYearService } from "./cohortAcademicYear-adapter";
 import { PostgresAcademicYearService } from "./academicyears-adapter";
 import { API_RESPONSES } from "@utils/response.messages";
 import { CohortAcademicYear } from "src/cohortAcademicYear/entities/cohortAcademicYear.entity";
+import { PostgresCohortMembersService } from "./cohortMembers-adapter";
 
 @Injectable()
 export class PostgresCohortService {
@@ -41,11 +42,24 @@ export class PostgresCohortService {
     private UserTenantMappingRepository: Repository<UserTenantMapping>,
     private fieldsService: PostgresFieldsService,
     private readonly cohortAcademicYearService: CohortAcademicYearService,
-    private readonly postgresAcademicYearService: PostgresAcademicYearService
+    private readonly postgresAcademicYearService: PostgresAcademicYearService,
+    private readonly postgresCohortMembersService : PostgresCohortMembersService
   ) { }
 
   public async getCohortsDetails(requiredData, res) {
     const apiId = APIID.COHORT_READ;
+
+    const cohortAcademicYear : any[] = await this.postgresCohortMembersService.isCohortExistForYear(requiredData.academicYearId,requiredData.cohortId);
+
+    if(cohortAcademicYear.length !== 1) {
+      return APIResponse.error(
+        res,
+        apiId,
+        "BAD_REQUEST",
+        API_RESPONSES.COHORT_NOT_IN_ACADEMIC_YEAR,
+        HttpStatus.BAD_REQUEST
+      );
+    } 
 
     try {
       const cohorts = await this.cohortRepository.find({
@@ -249,10 +263,11 @@ export class PostgresCohortService {
       // and whatever user pass fieldIds is exist in field table or not 
 
       const academicYearId = cohortCreateDto.academicYearId;
+      const tenantId = cohortCreateDto.tenantId;
 
       // verify if the academic year id is valid
-      const academicYear = await this.postgresAcademicYearService.getActiveAcademicYear(cohortCreateDto.academicYearId);
-
+      const academicYear = await this.postgresAcademicYearService.getActiveAcademicYear(cohortCreateDto.academicYearId, tenantId);
+      
       if (!academicYear) {
         return APIResponse.error(
           res,
@@ -835,7 +850,20 @@ export class PostgresCohortService {
   }
 
   public async getCohortHierarchyData(requiredData, res) {
+    // my cohort
     let apiId = APIID.COHORT_LIST;
+    const userAcademicYear : any[] = await this.postgresCohortMembersService.isUserExistForYear(requiredData.academicYearId,requiredData.userId);
+
+    if(userAcademicYear.length !== 1) {
+      return APIResponse.error(
+        res,
+        apiId,
+        "BAD_REQUEST",
+        API_RESPONSES.USER_NOT_IN_ACADEMIC_YEAR,
+        HttpStatus.BAD_REQUEST
+      );
+    } 
+
     if (!requiredData.getChildData) {
       try {
         let findCohortId = await this.findCohortName(requiredData.userId);

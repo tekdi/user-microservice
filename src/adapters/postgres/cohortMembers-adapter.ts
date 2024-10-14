@@ -334,7 +334,8 @@ export class PostgresCohortMembersService {
     const apiId = APIID.COHORT_MEMBER_CREATE;
     try {
       // check year is live or not
-      const academicYear = await this.academicyearService.getActiveAcademicYear(academicyearId);
+      const academicYear = await this.academicyearService.getActiveAcademicYear(academicyearId, tenantId);
+      
       if (!academicYear) {
         return APIResponse.error(
           res,
