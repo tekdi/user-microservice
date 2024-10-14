@@ -23,6 +23,7 @@ import { FormsModule } from './forms/forms.module';
 import { CoursePlannerModule } from './course-planner/course-planner.module';
 import { HttpService } from "@utils/http-service";
 import { TenantModule } from './tenant/tenant.module';
+import { AcademicyearsModule } from './academicyears/academicyears.module';
 
 @Module({
   imports: [
@@ -43,8 +44,9 @@ import { TenantModule } from './tenant/tenant.module';
     FormsModule,
     CoursePlannerModule,
     TenantModule,
+    AcademicyearsModule,
   ],
   controllers: [AppController],
-  providers: [AppService,HttpService]
+  providers: [AppService, HttpService]
 })
-export class AppModule {}
+export class AppModule { }

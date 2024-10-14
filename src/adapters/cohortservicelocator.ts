@@ -7,7 +7,7 @@ import { Response } from "express";
 export interface IServicelocatorcohort {
   getCohortsDetails(requiredData,response);
   createCohort(request: any, cohortDto: CohortCreateDto,response);
-  searchCohort(tenantid, request: any, cohortSearchDto: CohortSearchDto,response);
+  searchCohort(tenantid, academicYearId, request: any, cohortSearchDto: CohortSearchDto,response);
   updateCohort(cohortId: string, request: any, cohortUpdateDto: CohortUpdateDto,response);
   updateCohortStatus(cohortId: string, request: any,response);
   getCohortHierarchyData(requiredData,response)

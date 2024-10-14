@@ -311,7 +311,7 @@ export class PostgresUserService implements IServicelocator {
     }
 
     //Get user core fields data
-    let query = `SELECT U."userId", U."username", U."name", R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", U.status, COUNT(*) OVER() AS total_count 
+    let query = `SELECT U."userId", U."username",U."email", U."name", R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", U.status, COUNT(*) OVER() AS total_count 
       FROM  public."Users" U
       LEFT JOIN public."CohortMembers" CM 
       ON CM."userId" = U."userId"
@@ -838,6 +838,7 @@ export class PostgresUserService implements IServicelocator {
           userId: result?.userId,
           tenantRoleMapping: mapData,
         }
+
         await this.assignUserToTenant(tenantRoleMappingData, request);
       }
     }
@@ -855,18 +856,17 @@ export class PostgresUserService implements IServicelocator {
           userId: userId,
           tenantId: tenantId,
           roleId: roleId,
-          createdBy: request['user'].userId,
-          updatedBy: request['user'].userId
+          createdBy: request['user']?.userId || userId,
+          updatedBy: request['user']?.userId || userId,
         })
       }
 
       const data = await this.userTenantMappingRepository.save({
         userId: userId,
         tenantId: tenantId,
-        createdBy: request['user'].userId,
-        updatedBy: request['user'].userId
+        createdBy: request['user']?.userId || userId,
+        updatedBy: request['user']?.userId || userId
       })
-
 
     } catch (error) {
       throw new Error(error)
