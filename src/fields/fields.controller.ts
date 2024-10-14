@@ -55,13 +55,17 @@ export class FieldsController {
   @ApiCreatedResponse({ description: "Fields has been created successfully." })
   @ApiBody({ type: FieldsDto })
   @ApiForbiddenResponse({ description: "Forbidden" })
+  @ApiHeader({
+    name: "tenantid",
+  })
   public async createFields(
     @Headers() headers,
     @Req() request: Request,
     @Body() fieldsDto: FieldsDto,
     @Res() response: Response
   ) {
-    return await this.fieldsAdapter.buildFieldsAdapter().createFields(request, fieldsDto, response);
+    let tenantId = headers["tenantid"] || null;
+    return await this.fieldsAdapter.buildFieldsAdapter().createFields(request, fieldsDto, response, tenantId);
   }
 
   //create fields
@@ -70,6 +74,9 @@ export class FieldsController {
   @ApiCreatedResponse({ description: "Fields has been created successfully." })
   @ApiBody({ type: FieldsUpdateDto })
   @ApiForbiddenResponse({ description: "Forbidden" })
+  @ApiHeader({
+    name: "tenantid",
+  })
   public async updateFields(
     @Param("fieldId") fieldId: string,
     @Headers() headers,
@@ -77,7 +84,9 @@ export class FieldsController {
     @Body() fieldsUpdateDto: FieldsUpdateDto,
     @Res() response: Response
   ) {
-    return await this.fieldsAdapter.buildFieldsAdapter().updateFields(fieldId, request, fieldsUpdateDto, response);
+    let tenantId = headers["tenantid"] || '';
+
+    return await this.fieldsAdapter.buildFieldsAdapter().updateFields(fieldId, request, fieldsUpdateDto, response, tenantId);
   }
 
   //search
@@ -166,14 +175,17 @@ export class FieldsController {
   @SerializeOptions({
     strategy: "excludeAll",
   })
-
+  @ApiHeader({
+    name: "tenantid",
+  })
   public async getFieldOptions(
     @Headers() headers,
     @Req() request: Request,
     @Body() fieldsOptionsSearchDto: FieldsOptionsSearchDto,
     @Res() response: Response
   ) {
-    return await this.fieldsAdapter.buildFieldsAdapter().getFieldOptions(fieldsOptionsSearchDto, response);
+    let tenantId = headers["tenantid"] || null;
+    return await this.fieldsAdapter.buildFieldsAdapter().getFieldOptions(fieldsOptionsSearchDto, response, tenantId);
   }
 
   //Delete Field Option
@@ -184,6 +196,9 @@ export class FieldsController {
   @ApiForbiddenResponse({ description: "Forbidden" })
   @SerializeOptions({
     strategy: "excludeAll",
+  })
+  @ApiHeader({
+    name: "tenantid",
   })
   @ApiQuery({ name: 'context', required: null })
   @ApiQuery({ name: 'option', required: null })
@@ -197,11 +212,13 @@ export class FieldsController {
     @Query("contextType") contextType: string | null = null,
     @Res() response: Response
   ) {
+    let tenantId = headers["tenantid"];
     let requiredData = {
       fieldName: fieldName || null,
       option: option || null,
       context: context || null,
-      contextType: contextType || null
+      contextType: contextType || null,
+      tenantId: tenantId || null,
     }
     return await this.fieldsAdapter.buildFieldsAdapter().deleteFieldOptions(requiredData, response);
   }

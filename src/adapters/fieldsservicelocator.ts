@@ -7,9 +7,9 @@ import { FieldsUpdateDto } from "src/fields/dto/fields-update.dto";
 
 export interface IServicelocatorfields {
   //fields
-  createFields(request: any, fieldsDto: FieldsDto, response: Response);
+  createFields(request: any, fieldsDto: FieldsDto, response: Response, tenantId?: String);
   //Update
-  updateFields(fieldId: any, request: any, fieldsUpdateDto: FieldsUpdateDto, response: Response);
+  updateFields(fieldId: any, request: any, fieldsUpdateDto: FieldsUpdateDto, response: Response, tenantId?: String);
   // getFields(tenantId, fieldsId, request);
   searchFields(tenantid, request: any, fieldsSearchDto: FieldsSearchDto, response: Response);
   // updateFields(fieldsId: string, request: any, fieldsDto: FieldsDto);
@@ -18,7 +18,7 @@ export interface IServicelocatorfields {
   // getFieldValues(id, request);
   searchFieldValues(request: any, fieldValuesSearchDto: FieldValuesSearchDto, response: Response);
   updateFieldValues(id: string, request: any, fieldValuesDto: FieldValuesDto);
-  getFieldOptions(fieldsOptionsSearchDto: FieldsOptionsSearchDto, response: Response);
+  getFieldOptions(fieldsOptionsSearchDto: FieldsOptionsSearchDto, response: Response, tenantId?: String);
   deleteFieldOptions(requiredData, response)
   getFormCustomField(requiredData, response);
 
