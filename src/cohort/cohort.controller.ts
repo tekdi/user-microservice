@@ -161,9 +161,17 @@ export class CohortController {
     @Body() cohortSearchDto: CohortSearchDto,
     @Res() response: Response
   ) {
-    let tenantid = headers["tenantid"];
+    let tenantId = headers["tenantid"];
+    let academicYearId = headers["academicyearid"];
+    if (!tenantId || !isUUID(tenantId)) {
+      throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
+    }
+    if (!academicYearId || !isUUID(academicYearId)) {
+      throw new BadRequestException(API_RESPONSES.ACADEMICYEARID_VALIDATION);
+    }
     return await this.cohortAdapter.buildCohortAdapter().searchCohort(
-      tenantid,
+      tenantId,
+      academicYearId,
       request,
       cohortSearchDto,
       response

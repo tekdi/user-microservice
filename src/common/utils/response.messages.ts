@@ -21,6 +21,7 @@ export const API_RESPONSES = {
     STARTDATE_VALIDATION: 'start Date should not less than current date',
     ENDDATE_VALIDATION: 'End Date shluld not less than startDate',
     TENANTID_VALIDATION: 'Tenant ID is required and must be a valid UUID',
+    COHORT_NOT_AVAILABLE_FOR_ACADEMIC_YEAR:'No cohorts available for given Academic year',
     ACADEMICYEARID_VALIDATION: 'Academic Year ID is required and must be a valid UUID',
     ACADEMICYEAR_NOT_FOUND: 'Academic Year Not Found',
     ACADEMICYEAR_COHORT_NOT_FOUND: 'This cohort not exist for this year',
