@@ -111,7 +111,7 @@ export class PostgresUserService implements IServicelocator {
       // Format expiration time
       const time = formatTime(jwtExpireTime);
       const programName = userData?.tenantData[0]?.tenantName;
-      const capilatizeFirstLettterOfProgram = programName ? programName.charAt(0).toUpperCase() + programName.slice(1) : '';
+      const capilatizeFirstLettterOfProgram = programName ? programName.charAt(0).toUpperCase() + programName.slice(1) : 'Learner Account';
 
 
       //Send Notification
