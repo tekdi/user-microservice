@@ -49,30 +49,25 @@ export class PostgresCohortMembersService {
   ) { }
 
   //Get cohort member 
-  async getCohortMembers(cohortId: any, tenantId: any, fieldvalue: any, res: Response) {
+  async getCohortMembers(cohortId: any, tenantId: any, fieldvalue: any, academicYearId: string, res: Response) {
     const apiId = APIID.COHORT_MEMBER_GET
     try {
       const fieldvalues = fieldvalue?.toLowerCase()
 
       if (!tenantId) {
-        return APIResponse.error(res, apiId, "Bad Request", `TenantId required`, HttpStatus.BAD_REQUEST);
+        return APIResponse.error(res, apiId, API_RESPONSES.BAD_REQUEST, API_RESPONSES.TANANT_ID_REQUIRED, HttpStatus.BAD_REQUEST);
       }
 
       if (!isUUID(cohortId)) {
-        return APIResponse.error(res, apiId, "Bad Request", "Invalid input: CohortId must be a valid UUID.", HttpStatus.BAD_REQUEST);
+        return APIResponse.error(res, apiId, API_RESPONSES.BAD_REQUEST, API_RESPONSES.COHORT_VALID_UUID, HttpStatus.BAD_REQUEST);
       }
 
-
-      const cohortTenantMap = await this.cohortRepository.find({
-        where: {
-          cohortId: cohortId,
-          tenantId: tenantId
-        }
-      })
-      if (!cohortTenantMap) {
-        return APIResponse.error(res, apiId, "Not Found", "Invalid input: Cohort not found for the provided tenant.", HttpStatus.NOT_FOUND);
+      const cohortAcademicYearMap = await this.isCohortExistForYear(academicYearId, cohortId)
+      if (cohortAcademicYearMap.length === 0) {
+        return APIResponse.error(res, apiId, API_RESPONSES.NOT_FOUND, API_RESPONSES.ACADEMICYEAR_COHORT_NOT_FOUND, HttpStatus.NOT_FOUND);
       }
-      const userDetails = await this.findcohortData(cohortId);
+      const cohortAcademicyearId = cohortAcademicYearMap[0].cohortAcademicYearId
+      const userDetails = await this.findcohortData(cohortId, cohortAcademicyearId);
       if (userDetails === true) {
         let results = {
           userDetails: [],
@@ -81,25 +76,26 @@ export class PostgresCohortMembersService {
         let cohortDetails = await this.getUserDetails(
           cohortId,
           "cohortId",
-          fieldvalues
+          fieldvalues,
+          cohortAcademicyearId
         );
         results.userDetails.push(cohortDetails);
 
-        return APIResponse.success(res, apiId, results, HttpStatus.OK, "Cohort members details fetched successfully.");
+        return APIResponse.success(res, apiId, results, HttpStatus.OK, API_RESPONSES.COHORT_MEMBER_GET_SUCCESSFULLY);
       } else {
-        return APIResponse.error(res, apiId, "Not Found", "Invalid input: Cohort Member not exist.", HttpStatus.NOT_FOUND);
+        return APIResponse.error(res, apiId, API_RESPONSES.NOT_FOUND, API_RESPONSES.COHORTMEMBER_NOTFOUND, HttpStatus.NOT_FOUND);
       }
     } catch (e) {
-      const errorMessage = e.message || 'Internal server error';
-      return APIResponse.error(res, apiId, "Internal Server Error", errorMessage, HttpStatus.INTERNAL_SERVER_ERROR);
+      const errorMessage = e.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+      return APIResponse.error(res, apiId, API_RESPONSES.INTERNAL_SERVER_ERROR, errorMessage, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
-  async getUserDetails(searchId: any, searchKey: any, fieldShowHide: any) {
+  async getUserDetails(searchId: any, searchKey: any, fieldShowHide: any, cohortAcademicyearId: string) {
     let results = {
       userDetails: [],
     };
 
-    let getUserDetails = await this.findUserName(searchId, searchKey);
+    let getUserDetails = await this.findUserName(searchId, searchKey, cohortAcademicyearId);
 
     for (let data of getUserDetails) {
       let userDetails = {
@@ -134,8 +130,8 @@ export class PostgresCohortMembersService {
   }
 
 
-  async findcohortData(cohortId: any) {
-    let whereClause: any = { cohortId: cohortId };
+  async findcohortData(cohortId: any, cohortAcademicYearId: string) {
+    let whereClause: any = { cohortId: cohortId, cohortAcademicYearId: cohortAcademicYearId };
     let userDetails = await this.cohortMembersRepository.find({
       where: whereClause,
     });
@@ -167,7 +163,7 @@ export class PostgresCohortMembersService {
     return result;
   }
 
-  async findUserName(searchData: string, searchKey: any) {
+  async findUserName(searchData: string, searchKey: any, cohortAcademicYear) {
     let whereCase;
     if (searchKey == "cohortId") {
       whereCase = `where CM."cohortId" =$1`;
@@ -178,9 +174,11 @@ export class PostgresCohortMembersService {
     LEFT JOIN public."Users" U
     ON CM."userId" = U."userId" ${whereCase}`;
 
+
     let result = await this.usersRepository.query(query, [searchData]);
     return result;
   }
+
 
   public async searchCohortMembers(
     cohortMembersSearchDto: CohortMembersSearchDto,
