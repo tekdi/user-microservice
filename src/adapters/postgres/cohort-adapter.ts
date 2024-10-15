@@ -43,15 +43,15 @@ export class PostgresCohortService {
     private fieldsService: PostgresFieldsService,
     private readonly cohortAcademicYearService: CohortAcademicYearService,
     private readonly postgresAcademicYearService: PostgresAcademicYearService,
-    private readonly postgresCohortMembersService : PostgresCohortMembersService
+    private readonly postgresCohortMembersService: PostgresCohortMembersService
   ) { }
 
   public async getCohortsDetails(requiredData, res) {
     const apiId = APIID.COHORT_READ;
 
-    const cohortAcademicYear : any[] = await this.postgresCohortMembersService.isCohortExistForYear(requiredData.academicYearId,requiredData.cohortId);
+    const cohortAcademicYear: any[] = await this.postgresCohortMembersService.isCohortExistForYear(requiredData.academicYearId, requiredData.cohortId);
 
-    if(cohortAcademicYear.length !== 1) {
+    if (cohortAcademicYear.length !== 1) {
       return APIResponse.error(
         res,
         apiId,
@@ -59,7 +59,7 @@ export class PostgresCohortService {
         API_RESPONSES.COHORT_NOT_IN_ACADEMIC_YEAR,
         HttpStatus.BAD_REQUEST
       );
-    } 
+    }
 
     try {
       const cohorts = await this.cohortRepository.find({
@@ -267,7 +267,7 @@ export class PostgresCohortService {
 
       // verify if the academic year id is valid
       const academicYear = await this.postgresAcademicYearService.getActiveAcademicYear(cohortCreateDto.academicYearId, tenantId);
-      
+
       if (!academicYear) {
         return APIResponse.error(
           res,
@@ -534,7 +534,7 @@ export class PostgresCohortService {
     const apiId = APIID.COHORT_LIST;
     try {
       let { limit, sort, offset, filters } = cohortSearchDto;
-      let cohortsByAcademicYear :CohortAcademicYear[];
+      let cohortsByAcademicYear: CohortAcademicYear[];
 
       offset = offset || 0;
       limit = limit || 200;
@@ -578,24 +578,24 @@ export class PostgresCohortService {
       const whereClause = {};
       const searchCustomFields = {};
 
-      if(academicYearId) {
+      if (academicYearId) {
         // check if the tenantId and academic year exist together
         cohortsByAcademicYear = await this.cohortAcademicYearService.getCohortsAcademicYear(academicYearId, tenantId);
-       
-        if(cohortsByAcademicYear?.length === 0) {
-          return APIResponse.error(response, apiId, API_RESPONSES.COHORT_NOT_AVAILABLE_FOR_ACADEMIC_YEAR,API_RESPONSES.COHORT_NOT_AVAILABLE_FOR_ACADEMIC_YEAR ,HttpStatus.NOT_FOUND);
+
+        if (cohortsByAcademicYear?.length === 0) {
+          return APIResponse.error(response, apiId, API_RESPONSES.COHORT_NOT_AVAILABLE_FOR_ACADEMIC_YEAR, API_RESPONSES.COHORT_NOT_AVAILABLE_FOR_ACADEMIC_YEAR, HttpStatus.NOT_FOUND);
         }
       }
 
       if (filters && Object.keys(filters).length > 0) {
 
-        if(filters?.customFieldsName) {
-        Object.entries(filters.customFieldsName).forEach(([key, value]) => {
-          if (customFieldsKeys.includes(key)) {
-            searchCustomFields[key] = value;
-          }
-        })
-      }
+        if (filters?.customFieldsName) {
+          Object.entries(filters.customFieldsName).forEach(([key, value]) => {
+            if (customFieldsKeys.includes(key)) {
+              searchCustomFields[key] = value;
+            }
+          })
+        }
 
         Object.entries(filters).forEach(([key, value]) => {
           if (!allowedKeys.includes(key) && key !== 'customFieldsName') {
@@ -707,13 +707,13 @@ export class PostgresCohortService {
 
         if (getCohortIdUsingCustomFields && getCohortIdUsingCustomFields.length > 0) {
           let cohortIdsByFieldAndAcademicYear;
-          if(cohortsByAcademicYear?.length >= 1) {
-            cohortIdsByFieldAndAcademicYear = cohortsByAcademicYear.filter(({cohortId}) => getCohortIdUsingCustomFields.includes(cohortId))
+          if (cohortsByAcademicYear?.length >= 1) {
+            cohortIdsByFieldAndAcademicYear = cohortsByAcademicYear.filter(({ cohortId }) => getCohortIdUsingCustomFields.includes(cohortId))
           }
-          const cohortIds = cohortIdsByFieldAndAcademicYear?.map(({cohortId}) => cohortId )
+          const cohortIds = cohortIdsByFieldAndAcademicYear?.map(({ cohortId }) => cohortId)
           whereClause['cohortId'] = In(cohortIds)
-        } else if(cohortsByAcademicYear?.length >= 1) {
-          const cohortIds = cohortsByAcademicYear?.map(({cohortId}) => cohortId )
+        } else if (cohortsByAcademicYear?.length >= 1) {
+          const cohortIds = cohortsByAcademicYear?.map(({ cohortId }) => cohortId)
           whereClause['cohortId'] = In(cohortIds)
         }
 
@@ -852,9 +852,9 @@ export class PostgresCohortService {
   public async getCohortHierarchyData(requiredData, res) {
     // my cohort
     let apiId = APIID.COHORT_LIST;
-    const userAcademicYear : any[] = await this.postgresCohortMembersService.isUserExistForYear(requiredData.academicYearId,requiredData.userId);
+    const userAcademicYear: any[] = await this.postgresCohortMembersService.isUserExistForYear(requiredData.academicYearId, requiredData.userId);
 
-    if(userAcademicYear.length !== 1) {
+    if (userAcademicYear.length !== 1) {
       return APIResponse.error(
         res,
         apiId,
@@ -862,7 +862,7 @@ export class PostgresCohortService {
         API_RESPONSES.USER_NOT_IN_ACADEMIC_YEAR,
         HttpStatus.BAD_REQUEST
       );
-    } 
+    }
 
     if (!requiredData.getChildData) {
       try {
