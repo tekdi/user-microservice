@@ -39,14 +39,24 @@ export class AuthRbacService {
     return token;
   }
 
-  async signInRbac(username: string, tenantId: string, response: Response): Promise<any> {
+  async signInRbac(
+    username: string,
+    tenantId: string,
+    response: Response
+  ): Promise<any> {
     const apiId = APIID.RBAC_TOKEN;
-    let userData = await this.userAdapter
+    const userData = await this.userAdapter
       .buildUserAdapter()
       .findUserDetails(null, username);
 
     if (!userData || !tenantId) {
-      return APIResponse.error(response, apiId, "Bad Request","User details or tenant not found for user", HttpStatus.BAD_REQUEST);
+      return APIResponse.error(
+        response,
+        apiId,
+        "Bad Request",
+        "User details or tenant not found for user",
+        HttpStatus.BAD_REQUEST
+      );
     }
 
     const userRoles = await this.postgresRoleService.findUserRoleData(
@@ -55,7 +65,13 @@ export class AuthRbacService {
     );
 
     if (!userRoles?.length) {
-      return APIResponse.error(response, apiId, "Bad Request","Roles not found for user", HttpStatus.BAD_REQUEST);
+      return APIResponse.error(
+        response,
+        apiId,
+        "Bad Request",
+        "Roles not found for user",
+        HttpStatus.BAD_REQUEST
+      );
     }
 
     userData["roles"] = userRoles.map(({ code }) => code);
@@ -74,8 +90,13 @@ export class AuthRbacService {
     const result = {
       access_token: await this.generateToken(payload),
     };
-    return await APIResponse.success(response, apiId, result,
-      HttpStatus.OK, "User and related entries deleted Successfully.")
+    return await APIResponse.success(
+      response,
+      apiId,
+      result,
+      HttpStatus.OK,
+      "User and related entries deleted Successfully."
+    );
   }
 
   async getPrivileges(userRoleData) {

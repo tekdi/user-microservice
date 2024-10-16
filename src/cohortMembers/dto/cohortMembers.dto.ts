@@ -25,7 +25,7 @@ export class CohortMembersDto {
   })
   @Expose()
   @IsNotEmpty()
-  @IsUUID(undefined, { message: 'Cohort Id must be a valid UUID' })
+  @IsUUID(undefined, { message: "Cohort Id must be a valid UUID" })
   cohortId: string;
 
   cohortAcademicYearId: string;
@@ -38,7 +38,7 @@ export class CohortMembersDto {
   })
   @Expose()
   @IsNotEmpty()
-  @IsUUID(undefined, { message: 'User Id must be a valid UUID' })
+  @IsUUID(undefined, { message: "User Id must be a valid UUID" })
   userId: string;
 
   constructor(obj: any) {

@@ -1,22 +1,21 @@
-import { HttpModule, Module } from '@nestjs/common';
-import { AssignTenantController } from './user-tenant-mapping.controller';
-import { TypeOrmModule } from '@nestjs/typeorm';
+import { HttpModule, Module } from "@nestjs/common";
+import { AssignTenantController } from "./user-tenant-mapping.controller";
+import { TypeOrmModule } from "@nestjs/typeorm";
 import { UserTenantMapping } from "./entities/user-tenant-mapping.entity";
 import { AssignTenantAdapter } from "./user-tenant-mapping.adapter";
 import { PostgresAssignTenantService } from "src/adapters/postgres/userTenantMapping-adapter";
-import { HasuraAssignTenantService } from "src/adapters/hasura/userTenantMapping.adapter";
 import { User } from "src/user/entities/user-entity";
 import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
 
-
 @Module({
-  imports:[TypeOrmModule.forFeature([UserTenantMapping,User,Tenants]),HttpModule],
+  imports: [
+    TypeOrmModule.forFeature([UserTenantMapping, User, Tenants]),
+    HttpModule,
+  ],
   controllers: [AssignTenantController],
-  providers: [AssignTenantAdapter,HasuraAssignTenantService,PostgresAssignTenantService]
-
+  providers: [AssignTenantAdapter, PostgresAssignTenantService],
 })
 export class AssignTenantModule {}
-
 
 // import { Module } from '@nestjs/common';
 // import { AssignRoleAdapter } from './assign-role.apater';

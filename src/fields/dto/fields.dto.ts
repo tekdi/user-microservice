@@ -54,7 +54,7 @@ export class FieldsDto {
   @ApiProperty({
     enum: FieldType,
     default: FieldType.TEXT,
-    nullable: false
+    nullable: false,
   })
   @IsEnum(FieldType)
   @Expose()
@@ -67,8 +67,7 @@ export class FieldsDto {
     default: 0,
   })
   @Expose()
-  ordering: Number;
-
+  ordering: number;
 
   //tenantId
   @ApiPropertyOptional({

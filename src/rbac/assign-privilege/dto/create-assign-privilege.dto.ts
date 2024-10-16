@@ -33,7 +33,7 @@ export class CreatePrivilegeRoleDto {
   @ApiProperty({
     type: String,
     description: "Tenant Id",
-    default: ""
+    default: "",
   })
   @Expose()
   @IsNotEmpty()
