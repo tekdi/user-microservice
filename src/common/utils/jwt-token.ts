@@ -17,4 +17,10 @@ export class JwtUtil {
         });
         return token;
     }
+    async validateToken(token: string, jwtSecret: any) {
+        const decoded = await this.jwtService.verifyAsync(token, {
+            secret: jwtSecret,
+        });
+        return decoded;
+    }
 }

@@ -112,7 +112,7 @@ export class PostgresAcademicYearService implements IServicelocatorAcademicyear 
                 apiId,
                 academicYearList,
                 HttpStatus.OK,
-                API_RESPONSES.ACADEMICYEAR
+                API_RESPONSES.ACADEMICYEAR_GET_SUCCESSFULLY
             );
 
         } catch (error) {
@@ -145,7 +145,7 @@ export class PostgresAcademicYearService implements IServicelocatorAcademicyear 
                 apiId,
                 academicYearResult,
                 HttpStatus.OK,
-                API_RESPONSES.ACADEMICYEAR
+                API_RESPONSES.ACADEMICYEAR_GET_SUCCESS
             );
         } catch (error) {
             const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;

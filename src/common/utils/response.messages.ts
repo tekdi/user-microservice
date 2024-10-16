@@ -43,12 +43,15 @@ export const API_RESPONSES = {
     COHORT_VALID_UUID: 'Invalid input: CohortId must be a valid UUID.',
     COHORT_MEMBER_GET_SUCCESSFULLY: 'Cohort members details fetched successfully.',
     COHORTMEMBER_NOTFOUND: 'Invalid input: Cohort Member not exist.',
+    ACADEMICYEAR_GET_SUCCESSFULLY: 'Get Successfully Academic year list',
     COHORTID_NOTFOUND_FOT_THIS_YEAR: (cohortId) => `Cohort with cohortId ${cohortId} does not exist for this academic year`,
     MAPPING_EXIST_BW_USER_AND_COHORT: (userId, cohortId) => `Mapping already exists for userId ${userId} and cohortId ${cohortId} for this academic year`,
     COHORT_NOTMAPPED_WITH_USER: (removeCohortId, userId) => `Cohort Id ${removeCohortId} is not mapped to user Id${userId}} for this academic year`,
     COHORT_STATUS_UPDATED_FOR_USER: (removeCohortId, userId) => `Cohort Id ${removeCohortId} status updated for This user Id${userId}}`,
     ERROR_UPDATE_COHORTMEMBER: (userId, removeCohortId, error) => `Error updating cohort member with userId ${userId} and cohortId ${removeCohortId}: ${error}`,
     ERROR_SAVING_COHORTMEMBER: (userId, cohortId, error) => `Error saving cohort member with userId ${userId} and cohortId ${cohortId}: ${error}`,
-    USER_NOTEXIST: (userId) => `User with userId ${userId} does not exist for this academic year.`
+    USER_NOTEXIST: (userId) => `User with userId ${userId} does not exist for this academic year.`,
+    UNAUTHORIZED: 'Unauthorized',
+    INVALID_TOKEN: 'Token Invalid',
 };
 

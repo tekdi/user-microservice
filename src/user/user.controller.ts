@@ -161,12 +161,13 @@ export class UserController {
   @Post("/password-reset-link")
   @ApiOkResponse({ description: 'Password reset link sent successfully.' })
   @UsePipes(new ValidationPipe({ transform: true }))
+  @ApiBody({ type: SendPasswordResetLinkDto })
   public async sendPasswordResetLink(
     @Req() request: Request,
     @Res() response: Response,
     @Body() reqBody: SendPasswordResetLinkDto
   ) {
-    return await this.userAdapter.buildUserAdapter().sendPasswordResetLink(request, reqBody.username, response)
+    return await this.userAdapter.buildUserAdapter().sendPasswordResetLink(request, reqBody.username, reqBody.redirectUrl, response)
   }
 
   @Post("/forgot-password")

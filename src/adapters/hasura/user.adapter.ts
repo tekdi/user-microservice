@@ -30,7 +30,7 @@ export class HasuraUserService implements IServicelocator {
   forgotPassword(request: any, token: string, response: Response<any, Record<string, any>>) {
     throw new Error("Method not implemented.");
   }
-  sendPasswordResetLink(request: any, username: string, response: Response<any, Record<string, any>>) {
+  sendPasswordResetLink(request: any, username: string, redirectUrl: string, response: Response<any, Record<string, any>>) {
     throw new Error("Method not implemented.");
   }
   checkUser(body: any, response: any) {
