@@ -148,7 +148,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         };
         getFieldDetails["fieldParams"] = transformedFieldParams;
       } else {
-        getFieldDetails["fieldParams"] = getFieldDetails.fieldParams;
+        getFieldDetails["fieldParams"] = getFieldDetails?.fieldParams ?? {};
       }
 
       const checkValidation = this.validateFieldValue(
