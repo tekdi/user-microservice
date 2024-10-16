@@ -1366,7 +1366,7 @@ export class PostgresUserService implements IServicelocator {
 
         // getFieldDetails['fieldParams'] = getOption
       } else {
-        getFieldDetails["fieldParams"] = getFieldDetails.fieldParams;
+        getFieldDetails["fieldParams"] = getFieldDetails?.fieldParams || {};
       }
 
       const checkValidation = this.fieldsService.validateFieldValue(
