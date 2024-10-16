@@ -1,5 +1,22 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsEnum, IsNotEmpty, IsNumber, IsNumberString, IsObject, IsOptional, IsString, IsUUID, ValidateIf, ValidationArguments, ValidationOptions, registerDecorator } from "class-validator";
+import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  IsArray,
+  IsBoolean,
+  IsEnum,
+  IsNotEmpty,
+  IsNumber,
+  IsNumberString,
+  IsObject,
+  IsOptional,
+  IsString,
+  IsUUID,
+  ValidateIf,
+  ValidationArguments,
+  ValidationOptions,
+  registerDecorator,
+} from "class-validator";
 import { CohortDto } from "./cohort.dto";
 import { Expose } from "class-transformer";
 
@@ -120,11 +137,10 @@ export class filtersProperty {
   customFieldsName?: {};
 }
 enum SortDirection {
-  ASC = 'asc',
-  DESC = 'desc',
+  ASC = "asc",
+  DESC = "desc",
 }
 export class CohortSearchDto {
-
   @ApiProperty({
     type: Number,
     description: "Limit",
@@ -148,16 +164,19 @@ export class CohortSearchDto {
 
   @ApiPropertyOptional({
     description: "Sort",
-    example: ["name", "asc"]
+    example: ["name", "asc"],
   })
   @IsArray()
   @IsOptional()
-  @ArrayMinSize(2, { message: 'Sort array must contain exactly two elements' })
-  @ArrayMaxSize(2, { message: 'Sort array must contain exactly two elements' })
+  @ArrayMinSize(2, { message: "Sort array must contain exactly two elements" })
+  @ArrayMaxSize(2, { message: "Sort array must contain exactly two elements" })
   sort: [string, string];
 
   @ValidateIf((o) => o.sort !== undefined)
-  @IsEnum(SortDirection, { each: true, message: 'Sort[1] must be either asc or desc' })
+  @IsEnum(SortDirection, {
+    each: true,
+    message: "Sort[1] must be either asc or desc",
+  })
   get sortDirection(): string | undefined {
     return this.sort ? this.sort[1] : undefined;
   }

@@ -11,14 +11,12 @@ import { FieldValues } from "src/fields/entities/fields-values.entity";
 import { Fields } from "src/fields/entities/fields.entity";
 import { CohortMembers } from "src/cohortMembers/entities/cohort-member.entity";
 import { KeycloakService } from "src/common/utils/keycloak.service";
-import { HasuraModule } from "src/adapters/hasura/hasura.module";
 import { PostgresModule } from "src/adapters/postgres/postgres-module";
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([User, FieldValues, Fields, CohortMembers]),
     HttpModule,
-    HasuraModule,
     PostgresModule,
   ],
   controllers: [AuthController],

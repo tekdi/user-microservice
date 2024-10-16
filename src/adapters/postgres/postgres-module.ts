@@ -21,41 +21,40 @@ import { NotificationRequest } from "@utils/notification.axios";
 import { JwtUtil } from "@utils/jwt-token";
 import { JwtService } from "@nestjs/jwt";
 
-
-
 @Module({
-    imports: [HttpModule,
-        TypeOrmModule.forFeature([
-            User,
-            Fields,
-            FieldValues,
-            CohortMembers,
-            AttendanceEntity,
-            Fields,
-            Cohort,
-            UserTenantMapping,
-            Tenants,
-            UserRoleMapping,
-            Role,
-            RolePrivilegeMapping,
-        ])
-    ],
-    providers: [
-        PostgresUserService,
-        PostgresAttendanceService,
-        PostgresFieldsService,
-        PostgresRoleService,
-        NotificationRequest,
-        JwtUtil,
-        JwtService
-    ],
-    exports: [
-        PostgresUserService,
-        PostgresAttendanceService,
-        PostgresFieldsService,
-        NotificationRequest,
-        JwtUtil,
-        JwtService
-    ],
+  imports: [
+    HttpModule,
+    TypeOrmModule.forFeature([
+      User,
+      Fields,
+      FieldValues,
+      CohortMembers,
+      AttendanceEntity,
+      Fields,
+      Cohort,
+      UserTenantMapping,
+      Tenants,
+      UserRoleMapping,
+      Role,
+      RolePrivilegeMapping,
+    ]),
+  ],
+  providers: [
+    PostgresUserService,
+    PostgresAttendanceService,
+    PostgresFieldsService,
+    PostgresRoleService,
+    NotificationRequest,
+    JwtUtil,
+    JwtService,
+  ],
+  exports: [
+    PostgresUserService,
+    PostgresAttendanceService,
+    PostgresFieldsService,
+    NotificationRequest,
+    JwtUtil,
+    JwtService,
+  ],
 })
-export class PostgresModule { }
+export class PostgresModule {}

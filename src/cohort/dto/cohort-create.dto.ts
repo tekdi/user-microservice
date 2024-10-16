@@ -73,8 +73,8 @@ export class CohortCreateDto {
     description: "The status of Cohort",
   })
   @IsOptional()
-  @IsEnum(['active', 'archived', 'inactive'], {
-    message: 'Status must be one of: active, archived, inactive',
+  @IsEnum(["active", "archived", "inactive"], {
+    message: "Status must be one of: active, archived, inactive",
   })
   @Expose()
   status: string;
@@ -117,7 +117,6 @@ export class CohortCreateDto {
   // @IsOptional()
   // @Expose()
   // fieldValues?: string;
-
 
   constructor(obj?: Partial<CohortCreateDto>) {
     if (obj) {

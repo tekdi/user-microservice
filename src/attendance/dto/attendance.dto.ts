@@ -1,27 +1,45 @@
-import { ManyToOne, JoinColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
-import { IsDate, IsDateString, IsDefined, IsEnum, IsUUID, Matches, Validate, ValidateIf, ValidateNested, ValidationArguments, ValidatorConstraint, ValidatorConstraintInterface } from 'class-validator';
+import {
+  ManyToOne,
+  JoinColumn,
+  CreateDateColumn,
+  UpdateDateColumn,
+} from "typeorm";
+import {
+  IsDate,
+  IsDateString,
+  IsDefined,
+  IsEnum,
+  IsUUID,
+  Matches,
+  Validate,
+  ValidateIf,
+  ValidateNested,
+  ValidationArguments,
+  ValidatorConstraint,
+  ValidatorConstraintInterface,
+} from "class-validator";
 import { Exclude, Expose, Transform, Type } from "class-transformer";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { IsNotEmpty, IsString, IsObject } from 'class-validator';
-import { User } from 'src/user/entities/user-entity';
-import { addHours, format, isAfter, isBefore, isValid } from 'date-fns'; // Import isAfter function from date-fns
-import { HttpException, HttpStatus } from '@nestjs/common';
-import { Cohort } from 'src/cohort/entities/cohort.entity';
+import { IsNotEmpty, IsString, IsObject } from "class-validator";
+import { User } from "src/user/entities/user-entity";
+import { addHours, format, isAfter, isBefore, isValid } from "date-fns"; // Import isAfter function from date-fns
+import { HttpException, HttpStatus } from "@nestjs/common";
+import { Cohort } from "src/cohort/entities/cohort.entity";
 
 //for student valid enum are[present,absent]
 //for teacher valid enum are[present,on-leave,half-day]
 enum Attendance {
   present = "present",
   absent = "absent",
-  onLeave = "on-leave"
+  onLeave = "on-leave",
 }
 
 enum Scope {
-  self = 'self',
-  student = 'student',
+  self = "self",
+  student = "student",
 }
 
-@ValidatorConstraint({ name: 'isNotAfterToday', async: false })
+@ValidatorConstraint({ name: "isNotAfterToday", async: false })
 export class IsNotAfterToday implements ValidatorConstraintInterface {
   validate(date: Date, args: ValidationArguments) {
     const currentDateIST = addHours(new Date(), 5.5);
@@ -29,7 +47,7 @@ export class IsNotAfterToday implements ValidatorConstraintInterface {
   }
 
   defaultMessage(args: ValidationArguments) {
-    return 'Attendance date must not be after today';
+    return "Attendance date must not be after today";
   }
 }
 export class AttendanceDto {
@@ -51,18 +69,20 @@ export class AttendanceDto {
   userId: string;
 
   @ManyToOne(() => User, { nullable: true })
-  @JoinColumn({ name: 'userId' })
+  @JoinColumn({ name: "userId" })
   user: User;
 
   @ApiProperty({
     type: String,
     description: "The date of the attendance in format yyyy-mm-dd",
-    default: new Date()
+    default: new Date(),
   })
   @IsNotEmpty()
-  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'Please provide a valid date in the format yyyy-mm-dd' })
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, {
+    message: "Please provide a valid date in the format yyyy-mm-dd",
+  })
   @Validate(IsNotAfterToday, {
-    message: 'Attendance date must not be after today',
+    message: "Attendance date must not be after today",
   })
   @Expose()
   attendanceDate: Date;
@@ -74,25 +94,24 @@ export class AttendanceDto {
   })
   @Expose()
   @IsNotEmpty()
-  @IsEnum(Attendance, { message: "Please enter valid enum values for attendance [present, absent,on-leave]" })
+  @IsEnum(Attendance, {
+    message:
+      "Please enter valid enum values for attendance [present, absent,on-leave]",
+  })
   attendance: string;
-
 
   @Expose()
   @ApiPropertyOptional()
   remark: string;
 
- 
   @Expose()
   @ApiPropertyOptional()
   latitude: number;
 
-  
   @Expose()
   @ApiPropertyOptional()
   longitude: number;
 
-  
   @Expose()
   @ApiPropertyOptional()
   image: string;
@@ -132,7 +151,6 @@ export class AttendanceDto {
   @JoinColumn({ name: "contextId", referencedColumnName: "cohortId" }) // Map contextId to cohortId column in Cohort table
   cohort: Cohort;
 
-
   @CreateDateColumn()
   @Expose()
   createdAt: string;
@@ -148,14 +166,16 @@ export class AttendanceDto {
   updatedBy: string;
 
   @ApiPropertyOptional()
-  @ValidateIf(o => o.scope !== undefined && o.scope !== null) @IsEnum(Scope, { message: "Please enter valid enum values for scope [self, student]" })
-  scope: string
+  @ValidateIf((o) => o.scope !== undefined && o.scope !== null)
+  @IsEnum(Scope, {
+    message: "Please enter valid enum values for scope [self, student]",
+  })
+  scope: string;
 
   constructor(obj: any) {
     Object.assign(this, obj);
   }
 }
-
 
 export class UserAttendanceDTO {
   @IsUUID()
@@ -171,9 +191,11 @@ export class UserAttendanceDTO {
   })
   @Expose()
   @IsNotEmpty()
-  @IsEnum(Attendance, { message: "Please enter valid enum values for attendance [present, absent,on-leave, half-day]" })
+  @IsEnum(Attendance, {
+    message:
+      "Please enter valid enum values for attendance [present, absent,on-leave, half-day]",
+  })
   attendance: string;
-
 
   @Expose()
   @ApiPropertyOptional()
@@ -186,7 +208,6 @@ export class UserAttendanceDTO {
   @Expose()
   @ApiPropertyOptional()
   longitude: number;
-
 
   @Expose()
   @ApiPropertyOptional()
@@ -219,9 +240,11 @@ export class BulkAttendanceDTO {
     description: "The date of the attendance in format yyyy-mm-dd",
   })
   @IsNotEmpty()
-  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'Please provide a valid date in the format yyyy-mm-dd' })
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, {
+    message: "Please provide a valid date in the format yyyy-mm-dd",
+  })
   @Validate(IsNotAfterToday, {
-    message: 'Attendance date must not be after today',
+    message: "Attendance date must not be after today",
   })
   @Expose()
   attendanceDate: Date;
@@ -230,18 +253,18 @@ export class BulkAttendanceDTO {
   @Expose()
   @IsNotEmpty()
   @ApiProperty()
-
   contextId: string;
 
   @ApiPropertyOptional()
-  @ValidateIf(o => o.scope !== undefined && o.scope !== null)
-  @IsEnum(Scope, { message: "Please enter valid enum values for scope [self, student]" })
-  scope: string
-
+  @ValidateIf((o) => o.scope !== undefined && o.scope !== null)
+  @IsEnum(Scope, {
+    message: "Please enter valid enum values for scope [self, student]",
+  })
+  scope: string;
 
   @ApiProperty({
     type: [UserAttendanceDTO], // Specify the type of userAttendance as an array of UserAttendanceDTO
-    description: 'List of user attendance details',
+    description: "List of user attendance details",
   })
   @ValidateNested({ each: true })
   @Type(() => UserAttendanceDTO)

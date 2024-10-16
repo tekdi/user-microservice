@@ -1,3 +1,3 @@
-export enum CohortContextType{
-    COHORT="COHORT",
+export enum CohortContextType {
+  COHORT = "COHORT",
 }

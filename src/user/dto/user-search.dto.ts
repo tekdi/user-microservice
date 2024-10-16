@@ -76,8 +76,8 @@ export class excludeFields {
 }
 
 enum SortDirection {
-  ASC = 'asc',
-  DESC = 'desc',
+  ASC = "asc",
+  DESC = "desc",
 }
 
 export class tenantCohortRoleMappingDto {
@@ -140,13 +140,12 @@ export class UserSearchDto {
 
   @ApiProperty({
     type: [String],
-    description: 'Custom Fields Name',
+    description: "Custom Fields Name",
     default: [],
   })
   @Expose()
   @IsOptional()
   customFieldsName: string[];
-
 
   @ApiPropertyOptional({
     type: tenantCohortRoleMappingDto,
@@ -168,16 +167,19 @@ export class UserSearchDto {
 
   @ApiPropertyOptional({
     description: "Sort",
-    example: ["username", "asc"]
+    example: ["username", "asc"],
   })
   @IsArray()
   @IsOptional()
-  @ArrayMinSize(2, { message: 'Sort array must contain exactly two elements' })
-  @ArrayMaxSize(2, { message: 'Sort array must contain exactly two elements' })
+  @ArrayMinSize(2, { message: "Sort array must contain exactly two elements" })
+  @ArrayMaxSize(2, { message: "Sort array must contain exactly two elements" })
   sort: [string, string];
 
   @ValidateIf((o) => o.sort !== undefined)
-  @IsEnum(SortDirection, { each: true, message: 'Sort[1] must be either asc or desc' })
+  @IsEnum(SortDirection, {
+    each: true,
+    message: "Sort[1] must be either asc or desc",
+  })
   get sortDirection(): string | undefined {
     return this.sort ? this.sort[1] : undefined;
   }
@@ -186,4 +188,3 @@ export class UserSearchDto {
     Object.assign(this, partial);
   }
 }
-
