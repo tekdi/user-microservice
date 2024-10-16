@@ -1,53 +1,54 @@
 export interface Option {
-    name: string;
-    order: string;
-    value: string;
+  name: string;
+  order: string;
+  value: string;
 }
 
 export interface FieldAttributes {
-    // [key: string]: any;
-    isRequired: boolean;
-    isEditable: boolean;
-    isHidden?: boolean;
-    isPIIField?: boolean;
-    isMultiSelect?: boolean;
-    maxSelections?: number
+  // [key: string]: any;
+  isRequired: boolean;
+  isEditable: boolean;
+  isHidden?: boolean;
+  isPIIField?: boolean;
+  isMultiSelect?: boolean;
+  maxSelections?: number;
 }
 
 export interface FieldParams {
-    options: Option[]
+  options: Option[];
 }
 
 export interface SchemaField {
-    label: string;
-    name: string;
-    type: string;
-    isRequired: boolean;
-    isEditable: boolean;
-    isHidden?: boolean;
-    isPIIField: boolean;
-    placeholder?: string;
-    validation: string[];
-    options?: Option[];
-    isMultiSelect?: boolean;
-    maxSelections?: number;
-    hint?: string;
-    pattern?: string;
-    maxLength?: number;
-    minLength?: number;
-    fieldId?: string;
-    dependsOn?: boolean
+  label: string;
+  name: string;
+  type: string;
+  isRequired: boolean;
+  isEditable: boolean;
+  isHidden?: boolean;
+  isPIIField: boolean;
+  placeholder?: string;
+  validation: string[];
+  options?: Option[];
+  isMultiSelect?: boolean;
+  maxSelections?: number;
+  hint?: string;
+  pattern?: string;
+  maxLength?: number;
+  minLength?: number;
+  fieldId?: string;
+  dependsOn?: boolean;
 }
 
 export interface Option {
-    label: string;
-    value: string;
+  label: string;
+  value: string;
 }
 
 export abstract class Field {
-    constructor(protected fieldAttributes: FieldAttributes,
-        protected fieldParams?: FieldParams
-    ) { }
+  constructor(
+    protected fieldAttributes: FieldAttributes,
+    protected fieldParams?: FieldParams
+  ) {}
 
-    abstract validate(value: any): boolean;
+  abstract validate(value: any): boolean;
 }

@@ -46,9 +46,7 @@ import { API_RESPONSES } from "@utils/response.messages";
 @Controller("cohortmember")
 @UseGuards(JwtAuthGuard)
 export class CohortMembersController {
-  constructor(
-    private readonly cohortMemberAdapter: CohortMembersAdapter
-  ) { }
+  constructor(private readonly cohortMemberAdapter: CohortMembersAdapter) {}
 
   //create cohort members
   @UseFilters(new AllExceptionsFilter(APIID.COHORT_MEMBER_CREATE))
@@ -82,11 +80,20 @@ export class CohortMembersController {
       throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
     }
     if (!academicyearId || !isUUID(academicyearId)) {
-      throw new BadRequestException('academicyearId is required and academicyearId must be a valid UUID.');
+      throw new BadRequestException(
+        "academicyearId is required and academicyearId must be a valid UUID."
+      );
     }
     const result = await this.cohortMemberAdapter
       .buildCohortMembersAdapter()
-      .createCohortMembers(loginUser, cohortMembersDto, response, tenantId, deviceId, academicyearId);
+      .createCohortMembers(
+        loginUser,
+        cohortMembersDto,
+        response,
+        tenantId,
+        deviceId,
+        academicyearId
+      );
     return response.status(result.statusCode).json(result);
   }
 
@@ -117,11 +124,19 @@ export class CohortMembersController {
     const tenantId = headers["tenantid"];
     const academicyearId = headers["academicyearid"];
     if (!academicyearId || !isUUID(academicyearId)) {
-      throw new BadRequestException('academicyearId is required and academicyearId must be a valid UUID.');
+      throw new BadRequestException(
+        "academicyearId is required and academicyearId must be a valid UUID."
+      );
     }
     const result = await this.cohortMemberAdapter
       .buildCohortMembersAdapter()
-      .getCohortMembers(cohortId, tenantId, fieldvalue, academicyearId, response);
+      .getCohortMembers(
+        cohortId,
+        tenantId,
+        fieldvalue,
+        academicyearId,
+        response
+      );
   }
 
   // search;
@@ -151,11 +166,18 @@ export class CohortMembersController {
     const tenantId = headers["tenantid"];
     const academicyearId = headers["academicyearid"];
     if (!academicyearId || !isUUID(academicyearId)) {
-      throw new BadRequestException('academicyearId is required and must be a valid UUID.');
+      throw new BadRequestException(
+        "academicyearId is required and must be a valid UUID."
+      );
     }
     const result = await this.cohortMemberAdapter
       .buildCohortMembersAdapter()
-      .searchCohortMembers(cohortMembersSearchDto, tenantId, academicyearId, response);
+      .searchCohortMembers(
+        cohortMembersSearchDto,
+        tenantId,
+        academicyearId,
+        response
+      );
   }
 
   //update
@@ -205,7 +227,7 @@ export class CohortMembersController {
     @Req() request: Request,
     @Res() response: Response
   ) {
-    let tenantid = headers["tenantid"];
+    const tenantid = headers["tenantid"];
 
     const result = await this.cohortMemberAdapter
       .buildCohortMembersAdapter()
@@ -236,11 +258,19 @@ export class CohortMembersController {
     const tenantId = headers["tenantid"];
     const academicyearId = headers["academicyearid"];
     if (!academicyearId || !isUUID(academicyearId)) {
-      throw new BadRequestException('academicyearId is required and must be a valid UUID.');
+      throw new BadRequestException(
+        "academicyearId is required and must be a valid UUID."
+      );
     }
     const result = await this.cohortMemberAdapter
       .buildCohortMembersAdapter()
-      .createBulkCohortMembers(loginUser, bulkcohortMembersDto, response, tenantId, academicyearId);
+      .createBulkCohortMembers(
+        loginUser,
+        bulkcohortMembersDto,
+        response,
+        tenantId,
+        academicyearId
+      );
     return result;
   }
 }

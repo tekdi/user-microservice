@@ -18,11 +18,11 @@ import { FieldsModule } from "./fields/fields.module";
 import { AttendanceModule } from "./attendance/attendance.module";
 import { UserModule } from "./user/user.module";
 import { RbacModule } from "./rbac/rbac.module";
-import { AssignTenantModule } from './userTenantMapping/user-tenant-mapping.module';
-import { FormsModule } from './forms/forms.module';
-import { CoursePlannerModule } from './course-planner/course-planner.module';
+import { AssignTenantModule } from "./userTenantMapping/user-tenant-mapping.module";
+import { FormsModule } from "./forms/forms.module";
+import { CoursePlannerModule } from "./course-planner/course-planner.module";
 import { HttpService } from "@utils/http-service";
-import { AcademicyearsModule } from './academicyears/academicyears.module';
+import { AcademicyearsModule } from "./academicyears/academicyears.module";
 
 @Module({
   imports: [
@@ -45,6 +45,6 @@ import { AcademicyearsModule } from './academicyears/academicyears.module';
     AcademicyearsModule,
   ],
   controllers: [AppController],
-  providers: [AppService,HttpService]
+  providers: [AppService, HttpService],
 })
 export class AppModule {}

@@ -44,7 +44,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiForbiddenResponse({ description: "Forbidden" })
   public async login(@Body() authDto: AuthDto, @Res() response: Response) {
-    return this.authService.login(authDto,response);
+    return this.authService.login(authDto, response);
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.USER_AUTH))
@@ -57,8 +57,8 @@ export class AuthController {
     strategy: "excludeAll",
   })
   public async getUserByAuth(@Req() request, @Res() response: Response) {
-    let tenantId = request?.headers["tenantid"];
-    return this.authService.getUserByAuth(request, tenantId,response);
+    const tenantId = request?.headers["tenantid"];
+    return this.authService.getUserByAuth(request, tenantId, response);
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.REFRESH))
@@ -66,10 +66,13 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiBody({ type: RefreshTokenRequestBody })
   @UsePipes(ValidationPipe)
-  refreshToken(@Body() body: RefreshTokenRequestBody, @Res() response: Response) {
+  refreshToken(
+    @Body() body: RefreshTokenRequestBody,
+    @Res() response: Response
+  ) {
     const { refresh_token: refreshToken } = body;
 
-    return this.authService.refreshToken(refreshToken,response);
+    return this.authService.refreshToken(refreshToken, response);
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.LOGOUT))
@@ -80,6 +83,6 @@ export class AuthController {
   async logout(@Body() body: LogoutRequestBody, @Res() response: Response) {
     const { refresh_token: refreshToken } = body;
 
-    await this.authService.logout(refreshToken,response);
+    await this.authService.logout(refreshToken, response);
   }
 }

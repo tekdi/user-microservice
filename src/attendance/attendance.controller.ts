@@ -45,9 +45,7 @@ import { JwtAuthGuard } from "src/common/guards/keycloak.guard";
 @Controller("attendance")
 @UseGuards(JwtAuthGuard)
 export class AttendanceController {
-  constructor(
-    private attendaceAdapter: AttendaceAdapter,
-  ) {}
+  constructor(private attendaceAdapter: AttendaceAdapter) {}
 
   // @Get("/:id")
   // @UseInterceptors(ClassSerializerInterceptor)
@@ -88,7 +86,7 @@ export class AttendanceController {
   @ApiBody({ type: AttendanceDto })
   // @UseInterceptors(ClassSerializerInterceptor)
   @ApiHeader({
-    name: "tenantid"
+    name: "tenantid",
   })
   @UsePipes(ValidationPipe)
   public async createAttendace(
@@ -100,15 +98,11 @@ export class AttendanceController {
   ) {
     attendanceDto.tenantId = headers["tenantid"];
     attendanceDto.image = image?.filename;
-    const result = await this.attendaceAdapter.buildAttenceAdapter().updateAttendanceRecord(
-      request.user.userId,
-      attendanceDto
-    );
+    const result = await this.attendaceAdapter
+      .buildAttenceAdapter()
+      .updateAttendanceRecord(request.user.userId, attendanceDto);
     return response.status(result.statusCode).json(result);
   }
-
-
-
 
   @Post("/list")
   @ApiBasicAuth("access-token")
@@ -130,7 +124,7 @@ export class AttendanceController {
     @Body() studentSearchDto: AttendanceSearchDto,
     @Res() response: Response
   ) {
-    let tenantid = headers["tenantid"];
+    const tenantid = headers["tenantid"];
     if (!tenantid) {
       return response.status(HttpStatus.BAD_REQUEST).json({
         statusCode: HttpStatus.BAD_REQUEST,
@@ -138,22 +132,20 @@ export class AttendanceController {
       });
     }
 
-    const result = await this.attendaceAdapter.buildAttenceAdapter().searchAttendance(
-      tenantid,
-      request,
-      studentSearchDto
-    );
+    const result = await this.attendaceAdapter
+      .buildAttenceAdapter()
+      .searchAttendance(tenantid, request, studentSearchDto);
     return response.status(result.statusCode).json(result);
   }
 
-
-
   @Post("bulkAttendance")
   @ApiBasicAuth("access-token")
-  @ApiCreatedResponse({description: "Attendance has been created successfully."})
-  @ApiBadRequestResponse({description: "Bad Request",})
-  @ApiOkResponse({description: "Attendance updated successfully"})
-  @ApiInternalServerErrorResponse({description: "Internal server error"})
+  @ApiCreatedResponse({
+    description: "Attendance has been created successfully.",
+  })
+  @ApiBadRequestResponse({ description: "Bad Request" })
+  @ApiOkResponse({ description: "Attendance updated successfully" })
+  @ApiInternalServerErrorResponse({ description: "Internal server error" })
   @ApiBody({ type: BulkAttendanceDTO })
   @ApiHeader({
     name: "tenantid",
@@ -165,13 +157,10 @@ export class AttendanceController {
     @Res() response: Response,
     @Body() attendanceDtos: BulkAttendanceDTO
   ) {
-    let tenantId = headers["tenantid"];
-    const result = await this.attendaceAdapter.buildAttenceAdapter().multipleAttendance(
-      tenantId,
-      request,
-      attendanceDtos
-    );
+    const tenantId = headers["tenantid"];
+    const result = await this.attendaceAdapter
+      .buildAttenceAdapter()
+      .multipleAttendance(tenantId, request, attendanceDtos);
     return response.status(result.statusCode).json(result);
   }
-
 }

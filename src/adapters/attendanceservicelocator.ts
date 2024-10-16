@@ -5,24 +5,15 @@ import { AttendanceDto } from "src/attendance/dto/attendance.dto";
 export interface IServicelocator {
   // checkAndAddAttendance(request: Request, attendanceDto: AttendanceDto): unknown;
   // getAttendance(tenantId: string, attendanceId: string, request: any);
-  attendanceReport(
-    attendanceStatsDto
-  );
-  updateAttendanceRecord(
-    request,
-    attendanceDto
-  );
+  attendanceReport(attendanceStatsDto);
+  updateAttendanceRecord(request, attendanceDto);
   updateAttendance(
     attendanceId: string,
     request: any,
     attendanceDto: AttendanceDto
   );
   createAttendance(request: any, attendanceDto: AttendanceDto);
-  multipleAttendance(
-    tenantId: string,
-    request: any,
-    attendanceData: any
-  );
+  multipleAttendance(tenantId: string, request: any, attendanceData: any);
   searchAttendance(
     tenantId: string,
     request: any,

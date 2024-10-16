@@ -58,7 +58,6 @@ export class CohortDto {
   @Expose()
   type: string;
 
-
   //status
   @ApiPropertyOptional({
     type: String,

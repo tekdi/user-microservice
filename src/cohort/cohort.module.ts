@@ -2,7 +2,6 @@ import { Module } from "@nestjs/common";
 import { CohortController } from "./cohort.controller";
 import { HttpModule } from "@nestjs/axios";
 import { CohortAdapter } from "./cohortadapter";
-import { HasuraModule } from "src/adapters/hasura/hasura.module";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { Cohort } from "./entities/cohort.entity";
 import { FieldsService } from "../fields/fields.service";
@@ -23,12 +22,29 @@ import { User } from "src/user/entities/user-entity";
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Cohort, FieldValues, Fields, CohortMembers, UserTenantMapping, Role, CohortAcademicYear, AcademicYear, User]),
+    TypeOrmModule.forFeature([
+      Cohort,
+      FieldValues,
+      Fields,
+      CohortMembers,
+      UserTenantMapping,
+      Role,
+      CohortAcademicYear,
+      AcademicYear,
+      User,
+    ]),
     HttpModule,
-    HasuraModule,
-    PostgresModule
+    PostgresModule,
   ],
   controllers: [CohortController],
-  providers: [CohortAdapter, FieldsService, PostgresCohortService, PostgresFieldsService, CohortAcademicYearService, PostgresAcademicYearService, PostgresCohortMembersService],
+  providers: [
+    CohortAdapter,
+    FieldsService,
+    PostgresCohortService,
+    PostgresFieldsService,
+    CohortAcademicYearService,
+    PostgresAcademicYearService,
+    PostgresCohortMembersService,
+  ],
 })
-export class CohortModule { }
+export class CohortModule {}
