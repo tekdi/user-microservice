@@ -56,9 +56,23 @@ export class CoursePlannerService {
   }
 
   private generateProjectExternalId(metaData: MetaDataDto): string {
-    return `${metaData.subject.slice(0, 2)}${metaData.state.slice(0, 2)}${metaData.board.slice(0, 2)}${metaData.type.slice(0, 2)}${metaData.medium.slice(0,2)}${metaData.class}`;
+    const subjectAbbreviation = this.hashSubject(metaData.subject.toLowerCase());
+    return `${subjectAbbreviation}${metaData.state.slice(
+      0,
+      2
+    )}${metaData.board.slice(0, 2)}${metaData.type.slice(
+      0,
+      2
+    )}${metaData.medium.slice(0, 2)}${metaData.class}`;
   }
 
+  private hashSubject(subject: string): string {
+    let hash = 0;
+    for (let i = 0; i < subject.length; i++) {
+      hash = subject.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return `S${hash & 0xffff}`; 
+  }
   private async createSolution(externalId: string, metadata: MetaDataDto): Promise<any> {
     try {
       const solutionData = this.prepareSolutionData(externalId, metadata);
