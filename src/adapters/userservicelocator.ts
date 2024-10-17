@@ -30,6 +30,6 @@ export interface IServicelocator {
   );
   checkUser(body: any, response);
   deleteUserById(userId: string, response: Response): Promise<any>;
-  sendPasswordResetLink(request: any, username: string, response: Response);
+  sendPasswordResetLink(request: any, username: string, redirectUrl: string, response: Response);
   forgotPassword(request: any, body: any, response: Response);
 }

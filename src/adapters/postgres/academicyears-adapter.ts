@@ -12,12 +12,11 @@ import { AcademicYearSearchDto } from "src/academicyears/dto/academicyears-searc
 
 @Injectable()
 export class PostgresAcademicYearService
-  implements IServicelocatorAcademicyear
-{
+  implements IServicelocatorAcademicyear {
   constructor(
     @InjectRepository(AcademicYear)
     private readonly academicYearRespository: Repository<AcademicYear>
-  ) {}
+  ) { }
 
   public async createAcademicYear(
     academicYearDto: AcademicYearDto,
@@ -139,7 +138,7 @@ export class PostgresAcademicYearService
         apiId,
         academicYearList,
         HttpStatus.OK,
-        API_RESPONSES.ACADEMICYEAR
+        API_RESPONSES.ACADEMICYEAR_GET_SUCCESS
       );
     } catch (error) {
       const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
@@ -156,9 +155,7 @@ export class PostgresAcademicYearService
   async getAcademicYearById(id, response) {
     const apiId = APIID.ACADEMICYEAR_GET;
     try {
-      const academicYearResult = await this.academicYearRespository.findOne({
-        where: { id: id },
-      });
+      const academicYearResult = await this.academicYearRespository.findOne({ where: { id: id } });
       if (!academicYearResult) {
         return APIResponse.error(
           response,
@@ -173,7 +170,7 @@ export class PostgresAcademicYearService
         apiId,
         academicYearResult,
         HttpStatus.OK,
-        API_RESPONSES.ACADEMICYEAR
+        API_RESPONSES.ACADEMICYEAR_GET_SUCCESS
       );
     } catch (error) {
       const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
@@ -187,3 +184,4 @@ export class PostgresAcademicYearService
     }
   }
 }
+

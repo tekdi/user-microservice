@@ -56,7 +56,7 @@ export interface UserData {
 @ApiTags("User")
 @Controller()
 export class UserController {
-  constructor(private userAdapter: UserAdapter) {}
+  constructor(private userAdapter: UserAdapter) { }
 
   @UseFilters(new AllExceptionsFilter(APIID.USER_GET))
   @Get("read/:userId")
@@ -175,14 +175,13 @@ export class UserController {
   @Post("/password-reset-link")
   @ApiOkResponse({ description: "Password reset link sent successfully." })
   @UsePipes(new ValidationPipe({ transform: true }))
+  @ApiBody({ type: SendPasswordResetLinkDto })
   public async sendPasswordResetLink(
     @Req() request: Request,
     @Res() response: Response,
     @Body() reqBody: SendPasswordResetLinkDto
   ) {
-    return await this.userAdapter
-      .buildUserAdapter()
-      .sendPasswordResetLink(request, reqBody.username, response);
+    return await this.userAdapter.buildUserAdapter().sendPasswordResetLink(request, reqBody.username, reqBody.redirectUrl, response)
   }
 
   @Post("/forgot-password")

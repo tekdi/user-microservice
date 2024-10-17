@@ -34,13 +34,13 @@ import { JwtUtil } from "@utils/jwt-token";
 import { ConfigService } from "@nestjs/config";
 import { formatTime } from "@utils/formatTimeConversion";
 import { API_RESPONSES } from "@utils/response.messages";
+import { TokenExpiredError, JsonWebTokenError } from 'jsonwebtoken';
 
 @Injectable()
 export class PostgresUserService implements IServicelocator {
   axios = require("axios");
   jwt_password_reset_expires_In: any;
   jwt_secret: any;
-  front_end_url: any;
 
   constructor(
     // private axiosInstance: AxiosInstance,
@@ -67,15 +67,13 @@ export class PostgresUserService implements IServicelocator {
     private configService: ConfigService // private cohortMemberService: PostgresCohortMembersService,
   ) {
     this.jwt_secret = this.configService.get<string>("RBAC_JWT_SECRET");
-    this.jwt_password_reset_expires_In = this.configService.get<string>(
-      "PASSWORD_RESET_JWT_EXPIRES_IN"
-    );
-    this.front_end_url = this.configService.get<string>("BASE_URL");
+    this.jwt_password_reset_expires_In = this.configService.get<string>("PASSWORD_RESET_JWT_EXPIRES_IN");
   }
 
   public async sendPasswordResetLink(
     request: any,
     username: string,
+    redirectUrl: string,
     response: Response
   ) {
     const apiId = APIID.USER_RESET_PASSWORD_LINK;
@@ -116,19 +114,14 @@ export class PostgresUserService implements IServicelocator {
       };
       const jwtExpireTime = this.jwt_password_reset_expires_In;
       const jwtSecretKey = this.jwt_secret;
-      const frontEndUrl = `${this.front_end_url}/reset-password`;
-      const resetToken = await this.jwtUtil.generateTokenForForgotPassword(
-        tokenPayload,
-        jwtExpireTime,
-        jwtSecretKey
-      );
+      const frontEndUrl = `${redirectUrl}/reset-password`;
+      const resetToken = await this.jwtUtil.generateTokenForForgotPassword(tokenPayload, jwtExpireTime, jwtSecretKey);
 
       // Format expiration time
       const time = formatTime(jwtExpireTime);
       const programName = userData?.tenantData[0]?.tenantName;
-      const capilatizeFirstLettterOfProgram = programName
-        ? programName.charAt(0).toUpperCase() + programName.slice(1)
-        : "";
+      const capilatizeFirstLettterOfProgram = programName ? programName.charAt(0).toUpperCase() + programName.slice(1) : 'Learner Account';
+
 
       //Send Notification
       const notificationPayload = {
@@ -184,22 +177,9 @@ export class PostgresUserService implements IServicelocator {
   ) {
     const apiId = APIID.USER_FORGOT_PASSWORD;
     try {
-      const decoded: any = jwt_decode(body.token);
-      const currentTime = Math.floor(Date.now() / 1000);
-
-      //  Check if token has an expiration date
-      if (decoded.exp && decoded.exp < currentTime) {
-        return APIResponse.error(
-          response,
-          apiId,
-          API_RESPONSES.LINK_EXPIRED,
-          API_RESPONSES.INVALID_LINK,
-          HttpStatus.BAD_REQUEST
-        );
-      }
-      const userDetail = await this.usersRepository.findOne({
-        where: { userId: decoded.sub },
-      });
+      const jwtSecretKey = this.jwt_secret;
+      const decoded = await this.jwtUtil.validateToken(body.token, jwtSecretKey);
+      const userDetail = await this.usersRepository.findOne({ where: { userId: decoded.sub } });
       if (!userDetail) {
         return APIResponse.error(
           response,
@@ -234,21 +214,22 @@ export class PostgresUserService implements IServicelocator {
         );
       }
 
-      return await APIResponse.success(
-        response,
-        apiId,
-        {},
-        HttpStatus.OK,
-        API_RESPONSES.FORGOT_PASSWORD_SUCCESS
-      );
-    } catch (e) {
-      return APIResponse.error(
-        response,
-        apiId,
-        API_RESPONSES.INTERNAL_SERVER_ERROR,
-        `Error : ${e?.response?.data.error}`,
-        HttpStatus.INTERNAL_SERVER_ERROR
-      );
+      return await APIResponse.success(response, apiId, {},
+        HttpStatus.OK, API_RESPONSES.FORGOT_PASSWORD_SUCCESS)
+    }
+    catch (e) {
+      if (e instanceof TokenExpiredError) {
+        // Handle the specific case where the token is expired
+        return APIResponse.error(response, apiId, API_RESPONSES.LINK_EXPIRED, API_RESPONSES.INVALID_LINK, HttpStatus.UNAUTHORIZED);
+      } else if (e.name === 'InvalidTokenError') {
+        // Handle the case where the token is invalid
+        return APIResponse.error(response, apiId, API_RESPONSES.INVALID_TOKEN, API_RESPONSES.UNAUTHORIZED, HttpStatus.UNAUTHORIZED);
+      }
+      else if (e instanceof JsonWebTokenError) {
+        // Handle the case where the token is invalid 
+        return APIResponse.error(response, apiId, API_RESPONSES.INVALID_TOKEN, API_RESPONSES.UNAUTHORIZED, HttpStatus.UNAUTHORIZED);
+      }
+      return APIResponse.error(response, apiId, API_RESPONSES.INTERNAL_SERVER_ERROR, `Error : ${e?.response?.data.error}`, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 
@@ -385,9 +366,8 @@ export class PostgresUserService implements IServicelocator {
       const userIdsDependsOnCustomFields = getUserIdUsingCustomFields
         .map((userId) => `'${userId}'`)
         .join(",");
-      whereCondition += `${
-        index > 0 ? " AND " : ""
-      } U."userId" IN (${userIdsDependsOnCustomFields})`;
+      whereCondition += `${index > 0 ? " AND " : ""
+        } U."userId" IN (${userIdsDependsOnCustomFields})`;
       index++;
     }
 
@@ -865,9 +845,9 @@ export class PostgresUserService implements IServicelocator {
               fieldDetail[`${fieldId}`]
                 ? fieldDetail
                 : {
-                    ...fieldDetail,
-                    [`${fieldId}`]: { fieldAttributes, fieldParams, name },
-                  },
+                  ...fieldDetail,
+                  [`${fieldId}`]: { fieldAttributes, fieldParams, name },
+                },
             {}
           );
 
@@ -1290,10 +1270,10 @@ export class PostgresUserService implements IServicelocator {
           context: "USER",
           key: "OnPasswordReset",
           replacements: {
-            "{username}": userData.name,
+            "{username}": userData?.name,
             "{programName}": userData?.tenantData?.[0]?.tenantName
               ? userData.tenantData[0].tenantName.charAt(0).toUpperCase() +
-                userData.tenantData[0].tenantName.slice(1)
+              userData.tenantData[0].tenantName.slice(1)
               : "",
           },
           email: {
@@ -1395,8 +1375,8 @@ export class PostgresUserService implements IServicelocator {
     const roleIds =
       userCreateDto && userCreateDto.tenantCohortRoleMapping
         ? userCreateDto.tenantCohortRoleMapping.map(
-            (userRole) => userRole.roleId
-          )
+          (userRole) => userRole.roleId
+        )
         : [];
 
     let contextType;
