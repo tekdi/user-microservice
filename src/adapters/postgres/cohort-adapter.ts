@@ -712,10 +712,13 @@ export class PostgresCohortService {
           }
           const cohortIds = cohortIdsByFieldAndAcademicYear?.map(({ cohortId }) => cohortId)
           whereClause['cohortId'] = In(cohortIds)
-        } else if (cohortsByAcademicYear?.length >= 1) {
-          const cohortIds = cohortsByAcademicYear?.map(({ cohortId }) => cohortId)
-          whereClause['cohortId'] = In(cohortIds)
         }
+        // else if (cohortsByAcademicYear?.length >= 1) {
+        //   console.log("hiii");
+
+        //   const cohortIds = cohortsByAcademicYear?.map(({ cohortId }) => cohortId)
+        //   whereClause['cohortId'] = In(cohortIds)
+        // }
 
         const [data, totalCount] = await this.cohortRepository.findAndCount({
           where: whereClause,

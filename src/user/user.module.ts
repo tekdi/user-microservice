@@ -18,7 +18,7 @@ import { Role } from "src/rbac/role/entities/role.entity";
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, FieldValues, Fields, CohortMembers,UserTenantMapping,Tenants,UserRoleMapping,Cohort,Role]),
+    TypeOrmModule.forFeature([User, FieldValues, Fields, CohortMembers, UserTenantMapping, Tenants, UserRoleMapping, Cohort, Role]),
     HttpModule,
     HasuraModule,
     PostgresModule,
@@ -26,4 +26,4 @@ import { Role } from "src/rbac/role/entities/role.entity";
   controllers: [UserController],
   providers: [UserAdapter],
 })
-export class UserModule {}
+export class UserModule { }

@@ -7,8 +7,8 @@ import { Repository } from 'typeorm';
 export class CohortAcademicYearService {
 
   constructor(
-  @InjectRepository(CohortAcademicYear)
-  private readonly cohortAcademicYearRepository: Repository<CohortAcademicYear>
+    @InjectRepository(CohortAcademicYear)
+    private readonly cohortAcademicYearRepository: Repository<CohortAcademicYear>
   ) { }
 
   async insertCohortAcademicYear(cohortId: string, academicYearId: string, createdBy: string, updatedBy: string) {
@@ -18,10 +18,10 @@ export class CohortAcademicYearService {
     cohortAcademicYear.createdBy = createdBy;
     cohortAcademicYear.updatedBy = updatedBy;
     return await this.cohortAcademicYearRepository.save(cohortAcademicYear);
-    }
+  }
 
-  async getCohortsAcademicYear(academicYearId : string, tenantId:  string) : Promise<CohortAcademicYear[]>{
-  
+  async getCohortsAcademicYear(academicYearId: string, tenantId: string): Promise<CohortAcademicYear[]> {
+
     let query = `
       SELECT cay.*
       FROM public."CohortAcademicYear" cay

@@ -36,7 +36,6 @@ import { ConfigService } from '@nestjs/config';
 import { formatTime } from '@utils/formatTimeConversion';
 import { API_RESPONSES } from '@utils/response.messages';
 
-
 @Injectable()
 export class PostgresUserService implements IServicelocator {
   axios = require("axios");
@@ -66,7 +65,7 @@ export class PostgresUserService implements IServicelocator {
     private readonly postgresRoleService: PostgresRoleService,
     private readonly notificationRequest: NotificationRequest,
     private readonly jwtUtil: JwtUtil,
-    private configService: ConfigService
+    private configService: ConfigService,
     // private cohortMemberService: PostgresCohortMembersService,
   ) {
     this.jwt_secret = this.configService.get<string>("RBAC_JWT_SECRET");
@@ -571,7 +570,7 @@ export class PostgresUserService implements IServicelocator {
     return this.usersRepository.save(user);
   }
 
-  async createUser(request: any, userCreateDto: UserCreateDto, response: Response) {
+  async createUser(request: any, userCreateDto: UserCreateDto, academicyearId: string, response: Response) {
 
     const apiId = APIID.USER_CREATE;
     // It is considered that if user is not present in keycloak it is not present in database as well
@@ -630,7 +629,7 @@ export class PostgresUserService implements IServicelocator {
 
       userCreateDto.userId = resKeycloak;
 
-      let result = await this.createUserInDatabase(request, userCreateDto, response);
+      let result = await this.createUserInDatabase(request, userCreateDto, academicyearId, response);
 
       const createFailures = [];
       if (result && userCreateDto.customFields && userCreateDto.customFields.length > 0) {
@@ -801,7 +800,16 @@ export class PostgresUserService implements IServicelocator {
     }
   }
 
-  async createUserInDatabase(request: any, userCreateDto: UserCreateDto, response: Response) {
+  async createUserInDatabase(request: any, userCreateDto: UserCreateDto, academicYearId: string, response: Response) {
+    // if (userCreateDto.tenantCohortRoleMapping) {
+    //   for (let mapCohortData of userCreateDto.tenantCohortRoleMapping) {
+    //     if (mapCohortData.cohortId) {
+    //       for (let cohortIds of mapCohortData.cohortId) {
+
+    //       }
+    //     }
+    //   }
+    // }
 
     const user = new User()
     user.username = userCreateDto?.username,
@@ -826,10 +834,17 @@ export class PostgresUserService implements IServicelocator {
       for (let mapData of userCreateDto.tenantCohortRoleMapping) {
         if (mapData.cohortId) {
           for (let cohortIds of mapData.cohortId) {
+            let query = `SELECT * FROM public."CohortAcademicYear" WHERE "cohortId"= '${cohortIds}' AND "academicYearId" = '${academicYearId}'`
+
+            let getCohortAcademicTearId = await this.usersRepository.query(query);
+            // result = await this.usersRepository.query(query, [cohortId]);
+
             let cohortData = {
               userId: result?.userId,
-              cohortId: cohortIds
+              cohortId: cohortIds,
+              cohortAcademicYearId: getCohortAcademicTearId[0]['cohortAcademicYearId'] || null
             }
+
             await this.addCohortMember(cohortData);
           }
         }
