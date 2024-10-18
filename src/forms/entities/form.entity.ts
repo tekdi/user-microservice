@@ -4,7 +4,6 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
-  Generated,
 } from "typeorm";
 
 @Entity({ name: "forms" })
@@ -32,4 +31,10 @@ export class Form {
 
   @Column({ type: "jsonb", nullable: true })
   fields: object;
+
+  @Column({ type: 'uuid'})
+  createdBy: string;
+
+  @Column({ type: 'uuid'})
+  updatedBy: string;
 }
