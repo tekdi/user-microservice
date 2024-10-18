@@ -44,5 +44,7 @@ export const APIID = {
     RBAC_TOKEN: "api.rbac.token",
     ACADEMICYEAR_CREATE: 'api.academicyear.create',
     ACADEMICYEAR_LIST: 'api.academicyear.list',
-    ACADEMICYEAR_GET: 'api.academicyear.get'
+    ACADEMICYEAR_GET: 'api.academicyear.get',
+    FORM_GET: 'api.form.read',
+    FORM_CREATE: 'api.form.create'
 }

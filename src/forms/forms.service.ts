@@ -1,10 +1,14 @@
 import { BadRequestException, HttpStatus, Injectable } from "@nestjs/common";
+import jwt_decode from "jwt-decode";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Form } from "./entities/form.entity";
 import { Repository } from "typeorm";
 import { PostgresFieldsService } from "../adapters/postgres/fields-adapter";
 import APIResponse from "src/common/responses/response";
 import { CohortContextType } from "./utils/form-class";
+import { FormCreateDto } from "./dto/form-create.dto";
+import { APIID } from "@utils/api-id.config";
+import { API_RESPONSES } from "@utils/response.messages";
 
 @Injectable()
 export class FormsService {
@@ -15,7 +19,7 @@ export class FormsService {
   ) { }
 
   async getForm(requiredData, response) {
-    let apiId = "getFormData";
+    let apiId = APIID.FORM_GET;
     try {
       if (!requiredData.context && !requiredData.contextType) {
         return APIResponse.error(
@@ -176,6 +180,60 @@ export class FormsService {
         return Object.values(CohortContextType);
       default:
         return [];
+    }
+  }
+
+  public async createForm(request, formCreateDto: FormCreateDto, response) {
+    let apiId = APIID.FORM_CREATE;
+
+    try {
+      const decoded: any = jwt_decode(request.headers.authorization);
+      formCreateDto.createdBy = decoded?.sub;
+      formCreateDto.updatedBy = decoded?.sub;
+
+      formCreateDto.contextType = formCreateDto.contextType.toUpperCase();
+      formCreateDto.context = formCreateDto.context.toUpperCase();
+      formCreateDto.title = formCreateDto.title.toUpperCase();
+
+      const validContextTypes = await this.getValidContextTypes(formCreateDto.context);
+      if (validContextTypes.length === 0) {
+        return APIResponse.error(
+          response,
+          apiId,
+          "BAD_REQUEST",
+          API_RESPONSES.INVALID_CONTEXT(formCreateDto.context),
+          HttpStatus.BAD_REQUEST
+        );
+      }
+      if (formCreateDto.contextType && !validContextTypes.includes(formCreateDto.contextType)) {
+        return APIResponse.error(
+          response,
+          apiId,
+          "BAD_REQUEST",
+          API_RESPONSES.INVALID_CONTEXTTYPE(formCreateDto.context,validContextTypes.join( ", ")),
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      const result = await this.formRepository.save(formCreateDto);
+
+      return APIResponse.success(
+        response,
+        apiId,
+        result,
+        HttpStatus.OK,
+        API_RESPONSES.FORM_CREATED_SUCCESSFULLY
+      );
+
+    } catch (error) {
+      const errorMessage = error.message || "Internal server error";
+      return APIResponse.error(
+        response,
+        apiId,
+        "INTERNAL_SERVER_ERROR",
+        errorMessage,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
     }
   }
 }
