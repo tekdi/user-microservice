@@ -1,10 +1,18 @@
-import { Cohort } from 'src/cohort/entities/cohort.entity';
-import { User } from 'src/user/entities/user-entity';
-import { Entity, Column, PrimaryGeneratedColumn, ManyToOne, JoinColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import { Cohort } from "src/cohort/entities/cohort.entity";
+import { User } from "src/user/entities/user-entity";
+import {
+  Entity,
+  Column,
+  PrimaryGeneratedColumn,
+  ManyToOne,
+  JoinColumn,
+  CreateDateColumn,
+  UpdateDateColumn,
+} from "typeorm";
 
-@Entity({name:"Attendance"})
+@Entity({ name: "Attendance" })
 export class AttendanceEntity {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryGeneratedColumn("uuid")
   attendanceId: string;
 
   @Column()
@@ -13,11 +21,11 @@ export class AttendanceEntity {
   @Column()
   userId: string;
 
-  @ManyToOne(() => User, {nullable:true})
-  @JoinColumn({ name: 'userId' })
+  @ManyToOne(() => User, { nullable: true })
+  @JoinColumn({ name: "userId" })
   user: User;
 
-  @Column({ type: 'date' })
+  @Column({ type: "date" })
   attendanceDate: Date;
 
   @Column()
@@ -26,10 +34,10 @@ export class AttendanceEntity {
   @Column({ nullable: true })
   remark: string;
 
-  @Column({ type: 'numeric', nullable: true })
+  @Column({ type: "numeric", nullable: true })
   latitude: number;
 
-  @Column({ type: 'numeric', nullable: true })
+  @Column({ type: "numeric", nullable: true })
   longitude: number;
 
   @Column({ nullable: true })
@@ -51,10 +59,16 @@ export class AttendanceEntity {
   contextId: string;
 
   // @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
-  @CreateDateColumn({ type: "timestamp with time zone", default: () => "CURRENT_TIMESTAMP" })
+  @CreateDateColumn({
+    type: "timestamp with time zone",
+    default: () => "CURRENT_TIMESTAMP",
+  })
   createdAt: Date;
 
-  @UpdateDateColumn({ type: "timestamp with time zone", default: () => "CURRENT_TIMESTAMP" })
+  @UpdateDateColumn({
+    type: "timestamp with time zone",
+    default: () => "CURRENT_TIMESTAMP",
+  })
   updatedAt: Date;
 
   @Column()

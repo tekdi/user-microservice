@@ -59,7 +59,7 @@ export class User {
   mobile: number;
 
   @Column({ nullable: false, default: true })
-  temporaryPassword: boolean
+  temporaryPassword: boolean;
 
   @Column({ nullable: true })
   createdBy: string;

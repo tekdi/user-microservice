@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsIn } from 'class-validator';
+import { IsString, IsNotEmpty, IsIn } from "class-validator";
 
 export class MetaDataDto {
   @IsString()
@@ -7,7 +7,7 @@ export class MetaDataDto {
 
   @IsString()
   @IsNotEmpty()
-  @IsIn(['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'])
+  @IsIn(["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"])
   class: string;
 
   @IsString()
@@ -20,12 +20,12 @@ export class MetaDataDto {
 
   @IsString()
   @IsNotEmpty()
-  @IsIn(['foundationCourse', 'mainCourse',])
+  @IsIn(["foundationCourse", "mainCourse"])
   type: string;
 
   @IsString()
   @IsNotEmpty()
-  @IsIn(['Teacher', 'Learner', 'Admin'])
+  @IsIn(["Teacher", "Learner", "Admin"])
   role: string;
 
   @IsString()

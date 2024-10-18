@@ -25,7 +25,10 @@ import {
   Patch,
   Delete,
 } from "@nestjs/common";
-import { FieldsOptionsSearchDto, FieldsSearchDto } from "./dto/fields-search.dto";
+import {
+  FieldsOptionsSearchDto,
+  FieldsSearchDto,
+} from "./dto/fields-search.dto";
 import { Request } from "@nestjs/common";
 import { FieldsDto } from "./dto/fields.dto";
 import { FieldsUpdateDto } from "./dto/fields-update.dto";
@@ -42,9 +45,7 @@ import { APIID } from "src/common/utils/api-id.config";
 @ApiTags("Fields")
 @Controller("fields")
 export class FieldsController {
-  constructor(
-    private fieldsAdapter: FieldsAdapter,
-  ) { }
+  constructor(private fieldsAdapter: FieldsAdapter) {}
 
   //fields
   //create fields
@@ -61,7 +62,9 @@ export class FieldsController {
     @Body() fieldsDto: FieldsDto,
     @Res() response: Response
   ) {
-    return await this.fieldsAdapter.buildFieldsAdapter().createFields(request, fieldsDto, response);
+    return await this.fieldsAdapter
+      .buildFieldsAdapter()
+      .createFields(request, fieldsDto, response);
   }
 
   //create fields
@@ -77,7 +80,9 @@ export class FieldsController {
     @Body() fieldsUpdateDto: FieldsUpdateDto,
     @Res() response: Response
   ) {
-    return await this.fieldsAdapter.buildFieldsAdapter().updateFields(fieldId, request, fieldsUpdateDto, response);
+    return await this.fieldsAdapter
+      .buildFieldsAdapter()
+      .updateFields(fieldId, request, fieldsUpdateDto, response);
   }
 
   //search
@@ -99,13 +104,10 @@ export class FieldsController {
     @Body() fieldsSearchDto: FieldsSearchDto,
     @Res() response: Response
   ) {
-    let tenantid = headers["tenantid"];
-    return await this.fieldsAdapter.buildFieldsAdapter().searchFields(
-      tenantid,
-      request,
-      fieldsSearchDto,
-      response
-    );
+    const tenantid = headers["tenantid"];
+    return await this.fieldsAdapter
+      .buildFieldsAdapter()
+      .searchFields(tenantid, request, fieldsSearchDto, response);
   }
 
   //field values
@@ -125,11 +127,9 @@ export class FieldsController {
     @Body() fieldValuesDto: FieldValuesDto,
     @Res() response: Response
   ) {
-    return await this.fieldsAdapter.buildFieldsAdapter().createFieldValues(
-      request,
-      fieldValuesDto,
-      response
-    );
+    return await this.fieldsAdapter
+      .buildFieldsAdapter()
+      .createFieldValues(request, fieldValuesDto, response);
   }
 
   //search fields values
@@ -148,13 +148,10 @@ export class FieldsController {
     @Body() fieldValuesSearchDto: FieldValuesSearchDto,
     @Res() response: Response
   ) {
-    return await this.fieldsAdapter.buildFieldsAdapter().searchFieldValues(
-      request,
-      fieldValuesSearchDto,
-      response
-    );
+    return await this.fieldsAdapter
+      .buildFieldsAdapter()
+      .searchFieldValues(request, fieldValuesSearchDto, response);
   }
-
 
   //Get Field Option
   @Post("/options/read")
@@ -166,14 +163,15 @@ export class FieldsController {
   @SerializeOptions({
     strategy: "excludeAll",
   })
-
   public async getFieldOptions(
     @Headers() headers,
     @Req() request: Request,
     @Body() fieldsOptionsSearchDto: FieldsOptionsSearchDto,
     @Res() response: Response
   ) {
-    return await this.fieldsAdapter.buildFieldsAdapter().getFieldOptions(fieldsOptionsSearchDto, response);
+    return await this.fieldsAdapter
+      .buildFieldsAdapter()
+      .getFieldOptions(fieldsOptionsSearchDto, response);
   }
 
   //Delete Field Option
@@ -185,25 +183,27 @@ export class FieldsController {
   @SerializeOptions({
     strategy: "excludeAll",
   })
-  @ApiQuery({ name: 'context', required: null })
-  @ApiQuery({ name: 'option', required: null })
-  @ApiQuery({ name: 'contextType', required: null })
+  @ApiQuery({ name: "context", required: null })
+  @ApiQuery({ name: "option", required: null })
+  @ApiQuery({ name: "contextType", required: null })
   public async deleteFieldOptions(
     @Headers() headers,
     @Req() request: Request,
-    @Param('fieldName') fieldName: string,
+    @Param("fieldName") fieldName: string,
     @Query("option") option: string | null = null,
     @Query("context") context: string | null = null,
     @Query("contextType") contextType: string | null = null,
     @Res() response: Response
   ) {
-    let requiredData = {
+    const requiredData = {
       fieldName: fieldName || null,
       option: option || null,
       context: context || null,
-      contextType: contextType || null
-    }
-    return await this.fieldsAdapter.buildFieldsAdapter().deleteFieldOptions(requiredData, response);
+      contextType: contextType || null,
+    };
+    return await this.fieldsAdapter
+      .buildFieldsAdapter()
+      .deleteFieldOptions(requiredData, response);
   }
 
   @Get("/formFields")
@@ -212,8 +212,8 @@ export class FieldsController {
   @SerializeOptions({
     strategy: "excludeAll",
   })
-  @ApiQuery({ name: 'context', required: false })
-  @ApiQuery({ name: 'contextType', required: false })
+  @ApiQuery({ name: "context", required: false })
+  @ApiQuery({ name: "contextType", required: false })
   public async getFormData(
     @Headers() headers,
     @Req() request: Request,
@@ -221,10 +221,12 @@ export class FieldsController {
     @Query("contextType") contextType: string | null = null,
     @Res() response: Response
   ) {
-    let requiredData = {
+    const requiredData = {
       context: context || false,
-      contextType: contextType || false
-    }
-    return await this.fieldsAdapter.buildFieldsAdapter().getFormCustomField(requiredData, response);
+      contextType: contextType || false,
+    };
+    return await this.fieldsAdapter
+      .buildFieldsAdapter()
+      .getFormCustomField(requiredData, response);
   }
-} 
+}

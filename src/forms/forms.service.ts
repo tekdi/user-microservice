@@ -16,7 +16,7 @@ export class FormsService {
     private readonly fieldsService: PostgresFieldsService,
     @InjectRepository(Form)
     private readonly formRepository: Repository<Form>
-  ) { }
+  ) {}
 
   async getForm(requiredData, response) {
     let apiId = APIID.FORM_GET;
@@ -77,7 +77,7 @@ export class FormsService {
         })
       );
 
-      let result = {
+      const result = {
         formid: formData.formid,
         title: formData.title,
         fields: mappedResponse,
@@ -103,31 +103,34 @@ export class FormsService {
   }
 
   async getFormData(whereClause): Promise<any> {
-
-    let query = this.formRepository.createQueryBuilder('form')
-      .select(['form.formid', 'form.title', 'form.fields'])
-      .where('form.context = :context', { context: whereClause.context });
+    let query = this.formRepository
+      .createQueryBuilder("form")
+      .select(["form.formid", "form.title", "form.fields"])
+      .where("form.context = :context", { context: whereClause.context });
 
     if (whereClause.contextType !== undefined) {
       if (whereClause.contextType === null) {
-        query = query.andWhere('form.contextType IS NULL');
+        query = query.andWhere("form.contextType IS NULL");
       } else {
-        query = query.andWhere('form.contextType = :contextType', { contextType: whereClause.contextType });
+        query = query.andWhere("form.contextType = :contextType", {
+          contextType: whereClause.contextType,
+        });
       }
     }
     if (whereClause.tenantId) {
-      query = query.andWhere('form.tenantId = :tenantId', { tenantId: whereClause.tenantId });
+      query = query.andWhere("form.tenantId = :tenantId", {
+        tenantId: whereClause.tenantId,
+      });
     } else {
-      query = query.andWhere('form.tenantId IS NULL');
+      query = query.andWhere("form.tenantId IS NULL");
     }
     const result = await query.getOne();
     return result || false;
   }
 
-
   async checkValidUserContextType() {
-    let query = `select name from "Roles" r`;
-    let roleName = await this.formRepository.query(query);
+    const query = `select name from "Roles" r`;
+    const roleName = await this.formRepository.query(query);
     return roleName;
   }
 
