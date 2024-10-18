@@ -16,6 +16,7 @@ import {
   Delete,
   ParseUUIDPipe,
   UseFilters,
+  BadRequestException,
 } from "@nestjs/common";
 
 import {
@@ -46,6 +47,7 @@ import {
   ResetUserPasswordDto,
   SendPasswordResetLinkDto,
 } from "./dto/passwordReset.dto";
+import { isUUID } from "class-validator";
 export interface UserData {
   context: string;
   tenantId: string;
@@ -111,15 +113,24 @@ export class UserController {
   @ApiForbiddenResponse({ description: "User Already Exists" })
   @ApiInternalServerErrorResponse({ description: "Internal Server Error" })
   @ApiConflictResponse({ description: "Duplicate data." })
+  @ApiHeader({
+    name: "academicyearid",
+  })
   async createUser(
     @Headers() headers,
     @Req() request: Request,
     @Body() userCreateDto: UserCreateDto,
     @Res() response: Response
   ) {
+    const academicYearId = headers["academicyearid"];
+    if (!academicYearId || !isUUID(academicYearId)) {
+      throw new BadRequestException(
+        "academicYearId is required and academicYearId must be a valid UUID."
+      );
+    }
     return await this.userAdapter
       .buildUserAdapter()
-      .createUser(request, userCreateDto, response);
+      .createUser(request, userCreateDto, academicYearId, response);
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.USER_UPDATE))

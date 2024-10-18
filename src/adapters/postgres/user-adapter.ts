@@ -727,6 +727,7 @@ export class PostgresUserService implements IServicelocator {
   async createUser(
     request: any,
     userCreateDto: UserCreateDto,
+    academicYearId: string,
     response: Response
   ) {
     const apiId = APIID.USER_CREATE;
@@ -818,6 +819,7 @@ export class PostgresUserService implements IServicelocator {
       const result = await this.createUserInDatabase(
         request,
         userCreateDto,
+        academicYearId,
         response
       );
 
@@ -1044,6 +1046,7 @@ export class PostgresUserService implements IServicelocator {
   async createUserInDatabase(
     request: any,
     userCreateDto: UserCreateDto,
+    academicYearId: string,
     response: Response
   ) {
     const user = new User();
@@ -1068,10 +1071,16 @@ export class PostgresUserService implements IServicelocator {
       for (const mapData of userCreateDto.tenantCohortRoleMapping) {
         if (mapData.cohortId) {
           for (const cohortIds of mapData.cohortId) {
-            const cohortData = {
+            let query = `SELECT * FROM public."CohortAcademicYear" WHERE "cohortId"= '${cohortIds}' AND "academicYearId" = '${academicYearId}'`
+
+            let getCohortAcademicTearId = await this.usersRepository.query(query);
+            // result = await this.usersRepository.query(query, [cohortId]);
+
+            let cohortData = {
               userId: result?.userId,
               cohortId: cohortIds,
-            };
+              cohortAcademicYearId: getCohortAcademicTearId[0]['cohortAcademicYearId'] || null
+            }
             await this.addCohortMember(cohortData);
           }
         }
