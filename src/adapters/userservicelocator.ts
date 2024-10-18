@@ -14,7 +14,7 @@ export interface IServicelocator {
   // );
   getUsersDetailsById(userData: UserData, response: any);
   updateUser(userDto?: any, response?: any);
-  createUser(request: any, userDto: UserCreateDto, response: Response);
+  createUser(request: any, userDto: UserCreateDto, academicYearId: string, response: Response);
   findUserDetails(userID: any, username: string, tenantId?: string);
   searchUser(
     tenantId: string,
