@@ -45,4 +45,6 @@ export const APIID = {
   ACADEMICYEAR_CREATE: "api.academicyear.create",
   ACADEMICYEAR_LIST: "api.academicyear.list",
   ACADEMICYEAR_GET: "api.academicyear.get",
+  FORM_GET: "api.form.read",
+  FORM_CREATE: "api.form.create"
 };
