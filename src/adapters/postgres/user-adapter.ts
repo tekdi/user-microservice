@@ -382,7 +382,7 @@ export class PostgresUserService implements IServicelocator {
         : null;
 
     if (userIds || cohortIds) {
-      const userCondition = userIds ? `U."userId" NOT IN (${userIds})` : "";
+      const userCondition = userIds ? ` U."userId" NOT IN (${userIds})` : "";
       const cohortCondition = cohortIds
         ? `CM."cohortId" NOT IN (${cohortIds})`
         : "";
