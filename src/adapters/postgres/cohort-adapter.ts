@@ -42,7 +42,7 @@ export class PostgresCohortService {
     private readonly cohortAcademicYearService: CohortAcademicYearService,
     private readonly postgresAcademicYearService: PostgresAcademicYearService,
     private readonly postgresCohortMembersService: PostgresCohortMembersService
-  ) {}
+  ) { }
 
   public async getCohortsDetails(requiredData, res) {
     const apiId = APIID.COHORT_READ;
@@ -505,8 +505,8 @@ export class PostgresCohortService {
           const contextType = cohortUpdateDto.type
             ? [cohortUpdateDto.type]
             : existingCohorDetails?.type
-            ? [existingCohorDetails.type]
-            : [];
+              ? [existingCohorDetails.type]
+              : [];
           const allCustomFields = await this.fieldsService.findCustomFields(
             "COHORT",
             contextType
@@ -518,9 +518,9 @@ export class PostgresCohortService {
                 fieldDetail[`${fieldId}`]
                   ? fieldDetail
                   : {
-                      ...fieldDetail,
-                      [`${fieldId}`]: { fieldAttributes, fieldParams, name },
-                    },
+                    ...fieldDetail,
+                    [`${fieldId}`]: { fieldAttributes, fieldParams, name },
+                  },
               {}
             );
             for (const fieldValues of cohortUpdateDto.customFields) {
@@ -602,6 +602,7 @@ export class PostgresCohortService {
 
       offset = offset || 0;
       limit = limit || 200;
+
 
       const emptyValueKeys = {};
       let emptyKeysString = "";
@@ -817,6 +818,8 @@ export class PostgresCohortService {
           );
           whereClause["cohortId"] = In(cohortIds);
         }
+
+
 
         const [data, totalCount] = await this.cohortRepository.findAndCount({
           where: whereClause,
