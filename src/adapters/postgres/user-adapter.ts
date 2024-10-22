@@ -1073,13 +1073,13 @@ export class PostgresUserService implements IServicelocator {
           for (const cohortIds of mapData.cohortId) {
             let query = `SELECT * FROM public."CohortAcademicYear" WHERE "cohortId"= '${cohortIds}' AND "academicYearId" = '${academicYearId}'`
 
-            let getCohortAcademicTearId = await this.usersRepository.query(query);
+            let getCohortAcademicYearId = await this.usersRepository.query(query);
             // result = await this.usersRepository.query(query, [cohortId]);
 
             let cohortData = {
               userId: result?.userId,
               cohortId: cohortIds,
-              cohortAcademicYearId: getCohortAcademicTearId[0]['cohortAcademicYearId'] || null
+              cohortAcademicYearId: getCohortAcademicYearId[0]['cohortAcademicYearId'] || null
             }
             await this.addCohortMember(cohortData);
           }
