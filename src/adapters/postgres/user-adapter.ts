@@ -1074,7 +1074,6 @@ export class PostgresUserService implements IServicelocator {
             let query = `SELECT * FROM public."CohortAcademicYear" WHERE "cohortId"= '${cohortIds}' AND "academicYearId" = '${academicYearId}'`
 
             let getCohortAcademicYearId = await this.usersRepository.query(query);
-            // result = await this.usersRepository.query(query, [cohortId]);
 
             let cohortData = {
               userId: result?.userId,
