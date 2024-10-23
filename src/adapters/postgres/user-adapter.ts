@@ -41,6 +41,7 @@ export class PostgresUserService implements IServicelocator {
   axios = require("axios");
   jwt_password_reset_expires_In: any;
   jwt_secret: any;
+  reset_frontEnd_url: any;
 
   constructor(
     // private axiosInstance: AxiosInstance,
@@ -68,6 +69,7 @@ export class PostgresUserService implements IServicelocator {
   ) {
     this.jwt_secret = this.configService.get<string>("RBAC_JWT_SECRET");
     this.jwt_password_reset_expires_In = this.configService.get<string>("PASSWORD_RESET_JWT_EXPIRES_IN");
+    this.reset_frontEnd_url = this.configService.get<string>("RESET_FRONTEND_URL");
   }
 
   public async sendPasswordResetLink(
@@ -114,7 +116,7 @@ export class PostgresUserService implements IServicelocator {
       };
       const jwtExpireTime = this.jwt_password_reset_expires_In;
       const jwtSecretKey = this.jwt_secret;
-      const frontEndUrl = `${redirectUrl}/reset-password`;
+      const frontEndUrl = `${this.reset_frontEnd_url}/reset-password`;
       const resetToken = await this.jwtUtil.generateTokenForForgotPassword(tokenPayload, jwtExpireTime, jwtSecretKey);
 
       // Format expiration time
@@ -134,14 +136,17 @@ export class PostgresUserService implements IServicelocator {
           "{programName}": capilatizeFirstLettterOfProgram,
           "{expireTime}": time,
           "{frontEndUrl}": frontEndUrl,
+          "{redirectUrl}": redirectUrl
         },
         email: {
           receipients: [emailOfUser],
         },
       };
+
       const mailSend = await this.notificationRequest.sendNotification(
         notificationPayload
       );
+
       if (mailSend?.result?.email?.errors.length > 0) {
         return APIResponse.error(
           response,
