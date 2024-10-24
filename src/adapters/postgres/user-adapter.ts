@@ -41,6 +41,7 @@ export class PostgresUserService implements IServicelocator {
   axios = require("axios");
   jwt_password_reset_expires_In: any;
   jwt_secret: any;
+  reset_frontEnd_url: any;
 
   constructor(
     // private axiosInstance: AxiosInstance,
@@ -68,6 +69,7 @@ export class PostgresUserService implements IServicelocator {
   ) {
     this.jwt_secret = this.configService.get<string>("RBAC_JWT_SECRET");
     this.jwt_password_reset_expires_In = this.configService.get<string>("PASSWORD_RESET_JWT_EXPIRES_IN");
+    this.reset_frontEnd_url = this.configService.get<string>("RESET_FRONTEND_URL");
   }
 
   public async sendPasswordResetLink(
@@ -114,7 +116,7 @@ export class PostgresUserService implements IServicelocator {
       };
       const jwtExpireTime = this.jwt_password_reset_expires_In;
       const jwtSecretKey = this.jwt_secret;
-      const frontEndUrl = `${redirectUrl}/reset-password`;
+      const frontEndUrl = `${this.reset_frontEnd_url}/reset-password`;
       const resetToken = await this.jwtUtil.generateTokenForForgotPassword(tokenPayload, jwtExpireTime, jwtSecretKey);
 
       // Format expiration time
@@ -134,14 +136,17 @@ export class PostgresUserService implements IServicelocator {
           "{programName}": capilatizeFirstLettterOfProgram,
           "{expireTime}": time,
           "{frontEndUrl}": frontEndUrl,
+          "{redirectUrl}": redirectUrl
         },
         email: {
           receipients: [emailOfUser],
         },
       };
+
       const mailSend = await this.notificationRequest.sendNotification(
         notificationPayload
       );
+
       if (mailSend?.result?.email?.errors.length > 0) {
         return APIResponse.error(
           response,
@@ -382,7 +387,7 @@ export class PostgresUserService implements IServicelocator {
         : null;
 
     if (userIds || cohortIds) {
-      const userCondition = userIds ? `U."userId" NOT IN (${userIds})` : "";
+      const userCondition = userIds ? ` U."userId" NOT IN (${userIds})` : "";
       const cohortCondition = cohortIds
         ? `CM."cohortId" NOT IN (${cohortIds})`
         : "";
@@ -727,6 +732,7 @@ export class PostgresUserService implements IServicelocator {
   async createUser(
     request: any,
     userCreateDto: UserCreateDto,
+    academicYearId: string,
     response: Response
   ) {
     const apiId = APIID.USER_CREATE;
@@ -818,6 +824,7 @@ export class PostgresUserService implements IServicelocator {
       const result = await this.createUserInDatabase(
         request,
         userCreateDto,
+        academicYearId,
         response
       );
 
@@ -1044,6 +1051,7 @@ export class PostgresUserService implements IServicelocator {
   async createUserInDatabase(
     request: any,
     userCreateDto: UserCreateDto,
+    academicYearId: string,
     response: Response
   ) {
     const user = new User();
@@ -1068,10 +1076,15 @@ export class PostgresUserService implements IServicelocator {
       for (const mapData of userCreateDto.tenantCohortRoleMapping) {
         if (mapData.cohortId) {
           for (const cohortIds of mapData.cohortId) {
-            const cohortData = {
+            let query = `SELECT * FROM public."CohortAcademicYear" WHERE "cohortId"= '${cohortIds}' AND "academicYearId" = '${academicYearId}'`
+
+            let getCohortAcademicYearId = await this.usersRepository.query(query);
+
+            let cohortData = {
               userId: result?.userId,
               cohortId: cohortIds,
-            };
+              cohortAcademicYearId: getCohortAcademicYearId[0]['cohortAcademicYearId'] || null
+            }
             await this.addCohortMember(cohortData);
           }
         }
