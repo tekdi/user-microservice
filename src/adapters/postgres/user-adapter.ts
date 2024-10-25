@@ -724,8 +724,7 @@ export class PostgresUserService implements IServicelocator {
     if (!user) {
       return null;
     }
-    Object.assign(user, userData);
-
+    Object.assign(user, userData[0]);
     return this.usersRepository.save(user);
   }
 

@@ -92,6 +92,11 @@ class UserDataDTO {
   @IsString()
   @IsOptional()
   reason: string;
+
+  @ApiProperty({ type: () => String })
+  @IsString()
+  @IsOptional()
+  deviceId: string;
 }
 class CustomFieldDTO {
   @ApiProperty({ type: () => String })
