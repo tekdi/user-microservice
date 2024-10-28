@@ -46,5 +46,6 @@ export const APIID = {
   ACADEMICYEAR_LIST: "api.academicyear.list",
   ACADEMICYEAR_GET: "api.academicyear.get",
   FORM_GET: "api.form.read",
-  FORM_CREATE: "api.form.create"
+  FORM_CREATE: "api.form.create",
+  ADD_COHORT_TO_ACADEMIC_YEAR: 'api.create.cohortAcademicYear',
 };
