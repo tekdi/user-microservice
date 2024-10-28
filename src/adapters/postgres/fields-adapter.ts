@@ -182,7 +182,9 @@ export class PostgresFieldsService implements IServicelocatorfields {
         }
         for (let data of result) {
             if ((data?.dependsOn == '' || data?.dependsOn == undefined || data?.dependsOn == null || data?.dependsOn == 'NULL') && data?.sourceDetails?.source === 'table' || data?.sourceDetails?.source === 'jsonfile') {
-                let options = await this.findDynamicOptions(data.sourceDetails.table);
+                let order = `ORDER BY name ASC`;
+                // let options = await this.findDynamicOptions(data.sourceDetails.table);
+                let options = await this.findDynamicOptions(data.sourceDetails.table, null, null, null, order);
                 data.fieldParams = data.fieldParams || {};
                 data.fieldParams.options = options;
             }
@@ -948,7 +950,6 @@ export class PostgresFieldsService implements IServicelocatorfields {
         }
 
         query = `SELECT *,COUNT(*) OVER() AS total_count FROM public."${tableName}" ${whereCond} ${orderCond} ${offsetCond} ${limitCond}`
-
 
         result = await this.fieldsRepository.query(query);
         if (!result) {

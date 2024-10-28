@@ -487,11 +487,11 @@ export class PostgresUserService implements IServicelocator {
 
       let errKeycloak = "";
       let resKeycloak = "";
-
       const keycloakResponse = await getKeycloakAdminToken();
       const token = keycloakResponse.data.access_token;
       let checkUserinKeyCloakandDb = await this.checkUserinKeyCloakandDb(userCreateDto)
       // let checkUserinDb = await this.checkUserinKeyCloakandDb(userCreateDto.username);
+
       if (checkUserinKeyCloakandDb) {
         return APIResponse.error(response, apiId, "Forbidden", `User Already Exist`, HttpStatus.FORBIDDEN);
       }
