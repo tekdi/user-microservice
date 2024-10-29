@@ -744,15 +744,6 @@ export class PostgresUserService implements IServicelocator {
         userCreateDto.updatedBy = decoded?.sub;
       }
 
-      // const emailId = decoded?.email;
-      const keycloakResponse1 = await getKeycloakAdminToken();
-      const token1 = keycloakResponse1.data.access_token;
-      console.log(token1);
-      const email = await this.usersRepository.findOne({
-        where: { userId: userCreateDto.createdBy },
-        select: ["email"],
-      });
-
       let customFieldError;
       if (userCreateDto.customFields && userCreateDto.customFields.length > 0) {
         customFieldError = await this.validateCustomField(
@@ -801,9 +792,9 @@ export class PostgresUserService implements IServicelocator {
         return APIResponse.error(
           response,
           apiId,
-          "Forbidden",
+          "Bad Request",
           `User Already Exist`,
-          HttpStatus.FORBIDDEN
+          HttpStatus.BAD_REQUEST
         );
       }
       resKeycloak = await createUserInKeyCloak(userSchema, token).catch(
@@ -1026,7 +1017,7 @@ export class PostgresUserService implements IServicelocator {
   async checkUserinKeyCloakandDb(userDto) {
     const keycloakResponse = await getKeycloakAdminToken();
     const token = keycloakResponse.data.access_token;
-    console.log(token);
+
     if (userDto?.username) {
       const usernameExistsInKeycloak = await checkIfUsernameExistsInKeycloak(
         userDto?.username,
@@ -1071,6 +1062,7 @@ export class PostgresUserService implements IServicelocator {
       user.dob = new Date(userCreateDto.dob);
     }
     const result = await this.usersRepository.save(user);
+    // if cohort given then check for academic year 
 
     if (result && userCreateDto.tenantCohortRoleMapping) {
       for (const mapData of userCreateDto.tenantCohortRoleMapping) {
@@ -1330,7 +1322,7 @@ export class PostgresUserService implements IServicelocator {
       );
 
       if (getFieldDetails == null) {
-        return (error = "Field not found");
+        return ("Field not found");
       }
 
       if (encounteredKeys.includes(fieldId)) {
@@ -1416,7 +1408,7 @@ export class PostgresUserService implements IServicelocator {
       .map((fieldValue) => fieldValue.fieldId);
 
     if (invalidFieldIds.length > 0) {
-      return (error = `The following fields are not valid for this user: ${invalidFieldIds.join(
+      return (`The following fields are not valid for this user: ${invalidFieldIds.join(
         ", "
       )}.`);
     }
