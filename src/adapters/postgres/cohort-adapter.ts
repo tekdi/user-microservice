@@ -974,13 +974,14 @@ export class PostgresCohortService {
   public async getCohortHierarchyData(requiredData, res) {
     // my cohort
     const apiId = APIID.COHORT_LIST;
+
     const userAcademicYear: any[] =
       await this.postgresCohortMembersService.isUserExistForYear(
         requiredData.academicYearId,
         requiredData.userId
       );
 
-    if (userAcademicYear.length !== 1) {
+    if (userAcademicYear.length === 0) {
       return APIResponse.error(
         res,
         apiId,

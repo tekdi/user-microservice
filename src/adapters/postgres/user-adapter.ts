@@ -582,6 +582,7 @@ export class PostgresUserService implements IServicelocator {
         "email",
         "temporaryPassword",
         "createdBy",
+        "deviceId"
       ],
     });
     if (!userDetails) {
