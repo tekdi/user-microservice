@@ -49,6 +49,7 @@ export const API_RESPONSES = {
   COHORT_NOT_FOUND: 'Cohort not found',
   FORM_EXISTS: 'Form already exists',
   INVALID_FORM: 'Invalid form',
+  TENANTID_MISMATCHED: 'Tenant id mismatched',
   INVALID_CONTEXT: (context) => `Invalid context: ${context}`,
   INVALID_CONTEXTTYPE: (context, validContextTypes) => `Invalid contextType. For the context '${context}', it must be one of: ${validContextTypes}`,
   COHORTID_NOTFOUND_FOT_THIS_YEAR: (cohortId) => `Cohort with cohortId ${cohortId} does not exist for this academic year`,
