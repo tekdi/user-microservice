@@ -47,21 +47,21 @@ export class PostgresCohortService {
   public async getCohortsDetails(requiredData, res) {
     const apiId = APIID.COHORT_READ;
 
-    const cohortAcademicYear: any[] =
-      await this.postgresCohortMembersService.isCohortExistForYear(
-        requiredData.academicYearId,
-        requiredData.cohortId
-      );
+    // const cohortAcademicYear: any[] =
+    //   await this.postgresCohortMembersService.isCohortExistForYear(
+    //     requiredData.academicYearId,
+    //     requiredData.cohortId
+    //   );
 
-    if (cohortAcademicYear.length !== 1) {
-      return APIResponse.error(
-        res,
-        apiId,
-        "BAD_REQUEST",
-        API_RESPONSES.COHORT_NOT_IN_ACADEMIC_YEAR,
-        HttpStatus.BAD_REQUEST
-      );
-    }
+    // if (cohortAcademicYear.length !== 1) {
+    //   return APIResponse.error(
+    //     res,
+    //     apiId,
+    //     "BAD_REQUEST",
+    //     API_RESPONSES.COHORT_NOT_IN_ACADEMIC_YEAR,
+    //     HttpStatus.BAD_REQUEST
+    //   );
+    // }
 
     try {
       const cohorts = await this.cohortRepository.find({
