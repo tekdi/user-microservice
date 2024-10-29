@@ -2,7 +2,7 @@ import { BadRequestException, HttpStatus, Injectable } from "@nestjs/common";
 import jwt_decode from "jwt-decode";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Form } from "./entities/form.entity";
-import { Repository } from "typeorm";
+import { IsNull, Repository } from "typeorm";
 import { PostgresFieldsService } from "../adapters/postgres/fields-adapter";
 import APIResponse from "src/common/responses/response";
 import { CohortContextType } from "./utils/form-class";
@@ -16,7 +16,7 @@ export class FormsService {
     private readonly fieldsService: PostgresFieldsService,
     @InjectRepository(Form)
     private readonly formRepository: Repository<Form>
-  ) {}
+  ) { }
 
   async getForm(requiredData, response) {
     let apiId = APIID.FORM_GET;
@@ -198,6 +198,29 @@ export class FormsService {
       formCreateDto.context = formCreateDto.context.toUpperCase();
       formCreateDto.title = formCreateDto.title.toUpperCase();
 
+      formCreateDto.tenantId = formCreateDto.tenantId.trim().length ? formCreateDto.tenantId : null;
+      const checkFormExists = await this.getFormDetail(formCreateDto.context, formCreateDto.contextType, formCreateDto.tenantId);
+
+      if (checkFormExists.length) {
+        return APIResponse.error(
+          response,
+          apiId,
+          "BAD_REQUEST", API_RESPONSES.FORM_EXISTS,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      const validForm = await this.validateFormFields(formCreateDto.fields?.result);
+
+      if (!validForm) {
+        return APIResponse.error(
+          response,
+          apiId,
+          "BAD_REQUEST", API_RESPONSES.INVALID_FORM,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
       const validContextTypes = await this.getValidContextTypes(formCreateDto.context);
       if (validContextTypes.length === 0) {
         return APIResponse.error(
@@ -213,7 +236,7 @@ export class FormsService {
           response,
           apiId,
           "BAD_REQUEST",
-          API_RESPONSES.INVALID_CONTEXTTYPE(formCreateDto.context,validContextTypes.join( ", ")),
+          API_RESPONSES.INVALID_CONTEXTTYPE(formCreateDto.context, validContextTypes.join(", ")),
           HttpStatus.BAD_REQUEST
         );
       }
@@ -238,5 +261,35 @@ export class FormsService {
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
+  }
+
+  private async validateFormFields(formFields) {
+
+    const fieldIds = [];
+    if (Array.isArray(formFields)) {
+      for (const element of formFields) {
+        if (element["coreField"] === 0 && element["fieldId"]?.trim().length) {
+          fieldIds.push(element["fieldId"]);
+        } else if ((element['coreField'] === 0 && !element['fieldId']) || (element["coreField"] === 1 && element["fieldId"] !== null)) {
+          return false;
+        }
+      }
+
+      const fieldsData = await this.fieldsService.getFieldsByIds(fieldIds);
+
+      if (fieldsData.length === fieldIds.length) {
+        return true;
+      }
+      return false;
+    }
+  }
+
+  async getFormDetail(context: string, contextType: string, tenantId: string) {
+    return await this.formRepository.find({
+      where: {
+        context, contextType,
+        tenantId: tenantId || IsNull()
+      }
+    })
   }
 }
