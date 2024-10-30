@@ -80,12 +80,12 @@ export class CohortController {
   ) {
     const tenantId = headers["tenantid"];
     const academicYearId = headers["academicyearid"];
-    if (!tenantId || !isUUID(tenantId)) {
-      throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
-    }
-    if (!academicYearId || !isUUID(academicYearId)) {
-      throw new BadRequestException(API_RESPONSES.ACADEMICYEARID_VALIDATION);
-    }
+    // if (!tenantId || !isUUID(tenantId)) {
+    //   throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
+    // }
+    // if (!academicYearId || !isUUID(academicYearId)) {
+    //   throw new BadRequestException(API_RESPONSES.ACADEMICYEARID_VALIDATION);
+    // }
     const getChildDataValueBoolean = children === "true";
     const fieldValueBooelan = customField === "true";
     const requiredData = {

@@ -41,26 +41,26 @@ export class PostgresCohortService {
     private readonly cohortAcademicYearService: CohortAcademicYearService,
     private readonly postgresAcademicYearService: PostgresAcademicYearService,
     private readonly postgresCohortMembersService: PostgresCohortMembersService
-  ) {}
+  ) { }
 
   public async getCohortsDetails(requiredData, res) {
     const apiId = APIID.COHORT_READ;
 
-    const cohortAcademicYear: any[] =
-      await this.postgresCohortMembersService.isCohortExistForYear(
-        requiredData.academicYearId,
-        requiredData.cohortId
-      );
+    // const cohortAcademicYear: any[] =
+    //   await this.postgresCohortMembersService.isCohortExistForYear(
+    //     requiredData.academicYearId,
+    //     requiredData.cohortId
+    //   );
 
-    if (cohortAcademicYear.length !== 1) {
-      return APIResponse.error(
-        res,
-        apiId,
-        "BAD_REQUEST",
-        API_RESPONSES.COHORT_NOT_IN_ACADEMIC_YEAR,
-        HttpStatus.BAD_REQUEST
-      );
-    }
+    // if (cohortAcademicYear.length !== 1) {
+    //   return APIResponse.error(
+    //     res,
+    //     apiId,
+    //     "BAD_REQUEST",
+    //     API_RESPONSES.COHORT_NOT_IN_ACADEMIC_YEAR,
+    //     HttpStatus.BAD_REQUEST
+    //   );
+    // }
 
     try {
       const cohorts = await this.cohortRepository.find({
@@ -504,8 +504,8 @@ export class PostgresCohortService {
           const contextType = cohortUpdateDto.type
             ? [cohortUpdateDto.type]
             : existingCohorDetails?.type
-            ? [existingCohorDetails.type]
-            : [];
+              ? [existingCohorDetails.type]
+              : [];
           const allCustomFields = await this.fieldsService.findCustomFields(
             "COHORT",
             contextType
@@ -517,9 +517,9 @@ export class PostgresCohortService {
                 fieldDetail[`${fieldId}`]
                   ? fieldDetail
                   : {
-                      ...fieldDetail,
-                      [`${fieldId}`]: { fieldAttributes, fieldParams, name },
-                    },
+                    ...fieldDetail,
+                    [`${fieldId}`]: { fieldAttributes, fieldParams, name },
+                  },
               {}
             );
             for (const fieldValues of cohortUpdateDto.customFields) {
@@ -602,6 +602,7 @@ export class PostgresCohortService {
 
       offset = offset || 0;
       limit = limit || 200;
+
 
       const emptyValueKeys = {};
       let emptyKeysString = "";
@@ -819,6 +820,8 @@ export class PostgresCohortService {
         //   whereClause["cohortId"] = In(cohortIds);
         // }
 
+
+
         const [data, totalCount] = await this.cohortRepository.findAndCount({
           where: whereClause,
           order,
@@ -972,13 +975,14 @@ export class PostgresCohortService {
   public async getCohortHierarchyData(requiredData, res) {
     // my cohort
     const apiId = APIID.COHORT_LIST;
+
     const userAcademicYear: any[] =
       await this.postgresCohortMembersService.isUserExistForYear(
         requiredData.academicYearId,
         requiredData.userId
       );
 
-    if (userAcademicYear.length !== 1) {
+    if (userAcademicYear.length === 0) {
       return APIResponse.error(
         res,
         apiId,

@@ -23,6 +23,7 @@ import { FormsModule } from "./forms/forms.module";
 import { CoursePlannerModule } from "./course-planner/course-planner.module";
 import { HttpService } from "@utils/http-service";
 import { AcademicyearsModule } from "./academicyears/academicyears.module";
+import { CohortAcademicYearModule } from "./cohortAcademicYear/cohortAcademicYear.module";
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { AcademicyearsModule } from "./academicyears/academicyears.module";
     FormsModule,
     CoursePlannerModule,
     AcademicyearsModule,
+    CohortAcademicYearModule
   ],
   controllers: [AppController],
   providers: [AppService, HttpService],
