@@ -123,11 +123,11 @@ export class UserController {
     @Res() response: Response
   ) {
     const academicYearId = headers["academicyearid"];
-    if (!academicYearId || !isUUID(academicYearId)) {
-      throw new BadRequestException(
-        "academicYearId is required and academicYearId must be a valid UUID."
-      );
-    }
+    // if (!academicYearId || !isUUID(academicYearId)) {
+    //   throw new BadRequestException(
+    //     "academicYearId is required and academicYearId must be a valid UUID."
+    //   );
+    // }
     return await this.userAdapter
       .buildUserAdapter()
       .createUser(request, userCreateDto, academicYearId, response);

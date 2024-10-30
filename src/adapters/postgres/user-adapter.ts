@@ -1,4 +1,4 @@
-import { ConsoleLogger, HttpStatus, Injectable } from "@nestjs/common";
+import { HttpStatus, Injectable } from "@nestjs/common";
 import { User } from "../../user/entities/user-entity";
 import { FieldValues } from "src/fields/entities/fields-values.entity";
 import { InjectRepository } from "@nestjs/typeorm";
@@ -35,6 +35,8 @@ import { ConfigService } from "@nestjs/config";
 import { formatTime } from "@utils/formatTimeConversion";
 import { API_RESPONSES } from "@utils/response.messages";
 import { TokenExpiredError, JsonWebTokenError } from 'jsonwebtoken';
+import { CohortAcademicYearService } from "./cohortAcademicYear-adapter";
+import { PostgresAcademicYearService } from "./academicyears-adapter";
 
 @Injectable()
 export class PostgresUserService implements IServicelocator {
@@ -65,7 +67,9 @@ export class PostgresUserService implements IServicelocator {
     private readonly postgresRoleService: PostgresRoleService,
     private readonly notificationRequest: NotificationRequest,
     private readonly jwtUtil: JwtUtil,
-    private configService: ConfigService // private cohortMemberService: PostgresCohortMembersService,
+    private configService: ConfigService,
+    private postgresAcademicYearService: PostgresAcademicYearService,
+    private cohortAcademicYearService: CohortAcademicYearService
   ) {
     this.jwt_secret = this.configService.get<string>("RBAC_JWT_SECRET");
     this.jwt_password_reset_expires_In = this.configService.get<string>("PASSWORD_RESET_JWT_EXPIRES_IN");
@@ -744,15 +748,6 @@ export class PostgresUserService implements IServicelocator {
         userCreateDto.updatedBy = decoded?.sub;
       }
 
-      // const emailId = decoded?.email;
-      const keycloakResponse1 = await getKeycloakAdminToken();
-      const token1 = keycloakResponse1.data.access_token;
-      console.log(token1);
-      const email = await this.usersRepository.findOne({
-        where: { userId: userCreateDto.createdBy },
-        select: ["email"],
-      });
-
       let customFieldError;
       if (userCreateDto.customFields && userCreateDto.customFields.length > 0) {
         customFieldError = await this.validateCustomField(
@@ -773,9 +768,10 @@ export class PostgresUserService implements IServicelocator {
       }
 
       // check and validate all fields
-      const validatedRoles = await this.validateRequestBody(userCreateDto);
+      const validatedRoles = await this.validateRequestBody(userCreateDto, academicYearId);
 
-      if (validatedRoles) {
+      // check if roles are invalid and academic year is provided 
+      if ((!Array.isArray(validatedRoles) || !validatedRoles.every(role => role instanceof Role)) && academicYearId?.length) {
         return APIResponse.error(
           response,
           apiId,
@@ -801,9 +797,9 @@ export class PostgresUserService implements IServicelocator {
         return APIResponse.error(
           response,
           apiId,
-          "Forbidden",
+          "Bad Request",
           `User Already Exist`,
-          HttpStatus.FORBIDDEN
+          HttpStatus.BAD_REQUEST
         );
       }
       resKeycloak = await createUserInKeyCloak(userSchema, token).catch(
@@ -821,6 +817,8 @@ export class PostgresUserService implements IServicelocator {
 
       userCreateDto.userId = resKeycloak;
 
+      // if cohort given then check for academic year 
+
       const result = await this.createUserInDatabase(
         request,
         userCreateDto,
@@ -837,7 +835,7 @@ export class PostgresUserService implements IServicelocator {
         const userId = result?.userId;
         let roles;
 
-        if (validatedRoles) {
+        if (validatedRoles && academicYearId) {
           roles = validatedRoles?.map(({ code }) => code?.toUpperCase());
         }
 
@@ -901,8 +899,8 @@ export class PostgresUserService implements IServicelocator {
     }
   }
 
-  async validateRequestBody(userCreateDto) {
-    const roleData = [];
+  async validateRequestBody(userCreateDto, academicYearId) {
+    let roleData: any[] = [];
     const duplicateTenet = [];
 
     const error = [];
@@ -938,9 +936,20 @@ export class PostgresUserService implements IServicelocator {
       }
     }
 
+    if (!academicYearId?.length) {
+      return false;
+    }
+
     if (userCreateDto.tenantCohortRoleMapping) {
       for (const tenantCohortRoleMapping of userCreateDto?.tenantCohortRoleMapping) {
-        const { tenantId, cohortId, roleId } = tenantCohortRoleMapping;
+
+        const { tenantId, cohortIds, roleId } = tenantCohortRoleMapping;
+
+        // check academic year exists for tenant 
+        const checkAcadmicYear = await this.postgresAcademicYearService.getActiveAcademicYear(academicYearId, tenantId);
+        if (!checkAcadmicYear) {
+          error.push("Academic year not found for tenant")
+        }
 
         if (duplicateTenet.includes(tenantId)) {
           error.push(
@@ -958,8 +967,8 @@ export class PostgresUserService implements IServicelocator {
           tenantId
             ? this.tenantsRepository.find({ where: { tenantId } })
             : Promise.resolve(null),
-          tenantId && cohortId
-            ? this.checkCohort(tenantId, cohortId)
+          tenantId && cohortIds
+            ? this.checkCohortExistsInAcademicYear(academicYearId, cohortIds)
             : Promise.resolve(null),
           roleId
             ? this.roleRepository.find({ where: { roleId, tenantId } })
@@ -980,6 +989,8 @@ export class PostgresUserService implements IServicelocator {
           error.push(
             `Role Id '${roleId}' does not exist for this tenant '${tenantId}'.`
           );
+        } else {
+          roleData = [...roleData, ...roleExists]
         }
       }
       if (error.length > 0) {
@@ -988,16 +999,19 @@ export class PostgresUserService implements IServicelocator {
     } else {
       return false;
     }
+    return roleData;
   }
 
-  async checkCohort(tenantId: any, cohortData: any) {
+  async checkCohortExistsInAcademicYear(academicYearId: any, cohortData: any[]) {
     const notExistCohort = [];
     for (const cohortId of cohortData) {
-      const findCohortData = await this.cohortRepository.findOne({
-        where: { tenantId, cohortId },
-      });
+      // const findCohortData = await this.cohortRepository.findOne({
+      //   where: { tenantId, cohortId },
+      // });
 
-      if (!findCohortData) {
+      const findCohortData = await this.cohortAcademicYearService.isCohortExistForYear(academicYearId, cohortId)
+
+      if (!findCohortData?.length) {
         notExistCohort.push(cohortId);
       }
     }
@@ -1026,7 +1040,7 @@ export class PostgresUserService implements IServicelocator {
   async checkUserinKeyCloakandDb(userDto) {
     const keycloakResponse = await getKeycloakAdminToken();
     const token = keycloakResponse.data.access_token;
-    console.log(token);
+
     if (userDto?.username) {
       const usernameExistsInKeycloak = await checkIfUsernameExistsInKeycloak(
         userDto?.username,
@@ -1074,12 +1088,13 @@ export class PostgresUserService implements IServicelocator {
 
     if (result && userCreateDto.tenantCohortRoleMapping) {
       for (const mapData of userCreateDto.tenantCohortRoleMapping) {
-        if (mapData.cohortId) {
-          for (const cohortIds of mapData.cohortId) {
+        if (mapData.cohortIds) {
+          for (const cohortIds of mapData.cohortIds) {
             let query = `SELECT * FROM public."CohortAcademicYear" WHERE "cohortId"= '${cohortIds}' AND "academicYearId" = '${academicYearId}'`
 
             let getCohortAcademicYearId = await this.usersRepository.query(query);
 
+            // will add data only if cohort is found with acadmic year
             let cohortData = {
               userId: result?.userId,
               cohortId: cohortIds,
@@ -1330,7 +1345,7 @@ export class PostgresUserService implements IServicelocator {
       );
 
       if (getFieldDetails == null) {
-        return (error = "Field not found");
+        return ("Field not found");
       }
 
       if (encounteredKeys.includes(fieldId)) {
@@ -1416,7 +1431,7 @@ export class PostgresUserService implements IServicelocator {
       .map((fieldValue) => fieldValue.fieldId);
 
     if (invalidFieldIds.length > 0) {
-      return (error = `The following fields are not valid for this user: ${invalidFieldIds.join(
+      return (`The following fields are not valid for this user: ${invalidFieldIds.join(
         ", "
       )}.`);
     }

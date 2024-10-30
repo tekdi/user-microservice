@@ -34,7 +34,6 @@ export class CohortAcademicYearService implements IServiceLocatorCohortAcademicY
         where: { cohortId: cohortAcademicYearDto.cohortId, status: 'active' },
       });
 
-
       if (!existingCohort) {
         return APIResponse.error(
           response,
@@ -42,6 +41,16 @@ export class CohortAcademicYearService implements IServiceLocatorCohortAcademicY
           HttpStatus.NOT_FOUND.toLocaleString(),
           API_RESPONSES.COHORT_NOT_FOUND,
           HttpStatus.NOT_FOUND
+        );
+      }
+
+      if (existingCohort.tenantId !== tenantId) {
+        return APIResponse.error(
+          response,
+          apiId,
+          HttpStatus.BAD_REQUEST.toLocaleString(),
+          API_RESPONSES.TENANTID_MISMATCHED,
+          HttpStatus.BAD_REQUEST
         );
       }
 
@@ -117,4 +126,11 @@ export class CohortAcademicYearService implements IServiceLocatorCohortAcademicY
       tenantId,
     ]);
   }
+
+  async isCohortExistForYear(yearId, cohortId) {
+    return await this.cohortAcademicYearRepository.find({
+      where: { academicYearId: yearId, cohortId: cohortId },
+    });
+  }
+
 }
