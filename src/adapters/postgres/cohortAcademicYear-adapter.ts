@@ -126,4 +126,11 @@ export class CohortAcademicYearService implements IServiceLocatorCohortAcademicY
       tenantId,
     ]);
   }
+
+  async isCohortExistForYear(yearId, cohortId) {
+    return await this.cohortAcademicYearRepository.find({
+      where: { academicYearId: yearId, cohortId: cohortId },
+    });
+  }
+
 }

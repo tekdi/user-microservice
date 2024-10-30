@@ -32,5 +32,6 @@ import { AcademicYear } from "src/academicyears/entities/academicyears-entity";
     PostgresCohortMembersService,
     PostgresAcademicYearService,
   ],
+  exports: [PostgresCohortMembersService]
 })
 export class CohortMembersModule {}

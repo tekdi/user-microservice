@@ -20,6 +20,10 @@ import { RolePrivilegeMapping } from "src/rbac/assign-privilege/entities/assign-
 import { NotificationRequest } from "@utils/notification.axios";
 import { JwtUtil } from "@utils/jwt-token";
 import { JwtService } from "@nestjs/jwt";
+import { PostgresAcademicYearService } from "./academicyears-adapter";
+import { CohortAcademicYear } from "src/cohortAcademicYear/entities/cohortAcademicYear.entity";
+import { AcademicYear } from "src/academicyears/entities/academicyears-entity";
+import { CohortAcademicYearService } from "./cohortAcademicYear-adapter";
 
 @Module({
   imports: [
@@ -37,6 +41,8 @@ import { JwtService } from "@nestjs/jwt";
       UserRoleMapping,
       Role,
       RolePrivilegeMapping,
+      CohortAcademicYear,
+      AcademicYear
     ]),
   ],
   providers: [
@@ -47,6 +53,8 @@ import { JwtService } from "@nestjs/jwt";
     NotificationRequest,
     JwtUtil,
     JwtService,
+    CohortAcademicYearService,
+    PostgresAcademicYearService
   ],
   exports: [
     PostgresUserService,
@@ -55,6 +63,8 @@ import { JwtService } from "@nestjs/jwt";
     NotificationRequest,
     JwtUtil,
     JwtService,
+    CohortAcademicYearService,
+    PostgresAcademicYearService
   ],
 })
 export class PostgresModule {}

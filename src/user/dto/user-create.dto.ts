@@ -30,8 +30,9 @@ export class tenantRoleMappingDto {
   })
   @Expose()
   @IsOptional()
+  @IsArray()
   @IsUUID(undefined, { each: true })
-  cohortId: string[];
+  cohortIds: string[];
 
   @ApiPropertyOptional({
     type: String,
