@@ -771,7 +771,7 @@ export class PostgresUserService implements IServicelocator {
       const validatedRoles = await this.validateRequestBody(userCreateDto, academicYearId);
 
       // check if roles are invalid and academic year is provided 
-      if (!Array.isArray(validatedRoles) || !validatedRoles.every(role => role instanceof Role) && academicYearId.length) {
+      if ((!Array.isArray(validatedRoles) || !validatedRoles.every(role => role instanceof Role)) && academicYearId?.length) {
         return APIResponse.error(
           response,
           apiId,
