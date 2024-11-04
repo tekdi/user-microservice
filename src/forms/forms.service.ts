@@ -143,7 +143,7 @@ export class FormsService {
     requiredData: any
   ): Promise<{ error: string | null }> {
     delete requiredData.tenantId;
-    const allowedKeys = ["context", "contextType"];
+    const allowedKeys = ["context", "contextType","userId"];
     const extraKeys = Object.keys(requiredData).filter(
       (key) => !allowedKeys.includes(key)
     );
