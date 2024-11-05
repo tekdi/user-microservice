@@ -2,7 +2,7 @@ import { ApiProperty } from "@nestjs/swagger";
 import { IsDateString, IsNotEmpty, IsUUID } from "class-validator";
 
 export class AcademicYearDto {
-  @ApiProperty({ description: "startDate", example: "2024-10-05" })
+  @ApiProperty({ description: "startDate", example: "YYYY-MM-DD" })
   @IsNotEmpty()
   @IsDateString(
     {},
@@ -10,7 +10,7 @@ export class AcademicYearDto {
   )
   startDate: string;
 
-  @ApiProperty({ description: "endDate", example: "2024-10-10" })
+  @ApiProperty({ description: "endDate", example: "YYYY-MM-DD" })
   @IsDateString(
     {},
     { message: "endDate must be in ISO 8601 format (e.g., YYYY-MM-DD)" }

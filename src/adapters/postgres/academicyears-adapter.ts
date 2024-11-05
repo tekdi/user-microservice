@@ -9,13 +9,16 @@ import { API_RESPONSES } from "@utils/response.messages";
 import { APIID } from "@utils/api-id.config";
 import APIResponse from "src/common/responses/response";
 import { AcademicYearSearchDto } from "src/academicyears/dto/academicyears-search.dto";
+import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
 
 @Injectable()
 export class PostgresAcademicYearService
   implements IServicelocatorAcademicyear {
   constructor(
     @InjectRepository(AcademicYear)
-    private readonly academicYearRespository: Repository<AcademicYear>
+    private readonly academicYearRespository: Repository<AcademicYear>,
+    @InjectRepository(Tenants)
+    private readonly tenantRepository: Repository<Tenants>
   ) { }
 
   public async createAcademicYear(
@@ -31,6 +34,17 @@ export class PostgresAcademicYearService
       const endSessionYear = new Date(academicYearDto.endDate).getFullYear();
       academicYearDto.session = `${startSessionYear}-${endSessionYear}`;
       academicYearDto.tenantId = tenantId;
+
+      const tenantExist = await this.tenantRepository.findOne({ where: { tenantId: tenantId } })
+      if (!tenantExist) {
+        return APIResponse.error(
+          response,
+          apiId,
+          'tenant not found',
+          'Not found',
+          HttpStatus.BAD_REQUEST
+        );
+      }
 
       // session session alread exist or not
       const checkResult = await this.isExistSessionWithTenant(
