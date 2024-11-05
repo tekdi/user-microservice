@@ -741,7 +741,7 @@ export class PostgresUserService implements IServicelocator {
     const apiId = APIID.USER_CREATE;
     // It is considered that if user is not present in keycloak it is not present in database as well
     try {
-      if (userCreateDto.userId) {
+      if (userCreateDto.userId != null) {
         // const decoded: any = jwt_decode(request.headers.authorization);
         // userCreateDto.createdBy = decoded?.sub;
         // userCreateDto.updatedBy = decoded?.sub;

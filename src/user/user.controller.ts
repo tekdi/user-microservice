@@ -113,13 +113,19 @@ export class UserController {
   @ApiHeader({
     name: "academicyearid",
   })
+  @ApiQuery({
+    name: "userId",
+    required: false,
+  })
   async createUser(
     @Headers() headers,
     @Req() request: Request,
     @Body() userCreateDto: UserCreateDto,
-    @Res() response: Response
+    @Res() response: Response,
+    @Query("userId") userId: string | null = null
   ) {
     const academicYearId = headers["academicyearid"];
+    userCreateDto.userId = userId;
     // if (!academicYearId || !isUUID(academicYearId)) {
     //   throw new BadRequestException(
     //     "academicYearId is required and academicYearId must be a valid UUID."
