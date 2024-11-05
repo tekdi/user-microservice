@@ -40,8 +40,8 @@ export class PostgresAcademicYearService
         return APIResponse.error(
           response,
           apiId,
-          'tenant not found',
-          'Not found',
+          API_RESPONSES.TENANT_NOTFOUND,
+          API_RESPONSES.NOT_FOUND,
           HttpStatus.BAD_REQUEST
         );
       }
