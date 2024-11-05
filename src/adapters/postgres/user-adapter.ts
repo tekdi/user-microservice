@@ -4,7 +4,6 @@ import { FieldValues } from "src/fields/entities/fields-values.entity";
 import { InjectRepository } from "@nestjs/typeorm";
 import { In, Repository } from "typeorm";
 import { UserCreateDto } from "../../user/dto/user-create.dto";
-import jwt_decode from "jwt-decode";
 import {
   getKeycloakAdminToken,
   createUserInKeyCloak,
@@ -742,10 +741,12 @@ export class PostgresUserService implements IServicelocator {
     const apiId = APIID.USER_CREATE;
     // It is considered that if user is not present in keycloak it is not present in database as well
     try {
-      if (request.headers.authorization) {
-        const decoded: any = jwt_decode(request.headers.authorization);
-        userCreateDto.createdBy = decoded?.sub;
-        userCreateDto.updatedBy = decoded?.sub;
+      if (userCreateDto.userId) {
+        // const decoded: any = jwt_decode(request.headers.authorization);
+        // userCreateDto.createdBy = decoded?.sub;
+        // userCreateDto.updatedBy = decoded?.sub;
+        userCreateDto.createdBy = userCreateDto?.userId;
+        userCreateDto.updatedBy = userCreateDto?.userId;
       }
 
       let customFieldError;
@@ -947,6 +948,7 @@ export class PostgresUserService implements IServicelocator {
 
         // check academic year exists for tenant 
         const checkAcadmicYear = await this.postgresAcademicYearService.getActiveAcademicYear(academicYearId, tenantId);
+
         if (!checkAcadmicYear) {
           error.push("Academic year not found for tenant")
         }

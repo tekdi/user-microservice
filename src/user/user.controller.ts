@@ -62,7 +62,6 @@ export class UserController {
 
   @UseFilters(new AllExceptionsFilter(APIID.USER_GET))
   @Get("read/:userId")
-  @UseGuards(JwtAuthGuard)
   @ApiBasicAuth("access-token")
   @ApiOkResponse({ description: "User details Fetched Successfully" })
   @ApiNotFoundResponse({ description: "User Not Found" })
@@ -105,9 +104,7 @@ export class UserController {
 
   @UseFilters(new AllExceptionsFilter(APIID.USER_CREATE))
   @Post("/create")
-  // @UseGuards(JwtAuthGuard)
   @UsePipes(new ValidationPipe())
-  // @ApiBasicAuth("access-token")
   @ApiCreatedResponse({ description: "User has been created successfully." })
   @ApiBody({ type: UserCreateDto })
   @ApiForbiddenResponse({ description: "User Already Exists" })
@@ -136,8 +133,6 @@ export class UserController {
   @UseFilters(new AllExceptionsFilter(APIID.USER_UPDATE))
   @Patch("update/:userid")
   @UsePipes(new ValidationPipe())
-  @UseGuards(JwtAuthGuard)
-  @ApiBasicAuth("access-token")
   @ApiBody({ type: UserUpdateDTO })
   @ApiCreatedResponse({ description: "User has been updated successfully." })
   @ApiForbiddenResponse({ description: "Forbidden" })
@@ -160,8 +155,6 @@ export class UserController {
 
   @UseFilters(new AllExceptionsFilter(APIID.USER_LIST))
   @Post("/list")
-  @UseGuards(JwtAuthGuard)
-  @ApiBasicAuth("access-token")
   @ApiCreatedResponse({ description: "User list." })
   @ApiBody({ type: UserSearchDto })
   @UsePipes(ValidationPipe)
@@ -210,8 +203,6 @@ export class UserController {
 
   @UseFilters(new AllExceptionsFilter(APIID.USER_RESET_PASSWORD))
   @Post("/reset-password")
-  @UseGuards(JwtAuthGuard)
-  @ApiBasicAuth("access-token")
   @ApiOkResponse({ description: "Password reset successfully." })
   @UsePipes(new ValidationPipe({ transform: true }))
   @ApiForbiddenResponse({ description: "Forbidden" })
@@ -243,8 +234,6 @@ export class UserController {
   //delete
   @UseFilters(new AllExceptionsFilter(APIID.USER_DELETE))
   @Delete("delete/:userId")
-  @UseGuards(JwtAuthGuard)
-  @ApiBasicAuth("access-token")
   @ApiOkResponse({ description: "User deleted successfully" })
   @ApiNotFoundResponse({ description: "Data not found" })
   @SerializeOptions({
