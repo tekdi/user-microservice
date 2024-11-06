@@ -20,42 +20,51 @@ import { RolePrivilegeMapping } from "src/rbac/assign-privilege/entities/assign-
 import { NotificationRequest } from "@utils/notification.axios";
 import { JwtUtil } from "@utils/jwt-token";
 import { JwtService } from "@nestjs/jwt";
-
-
+import { PostgresAcademicYearService } from "./academicyears-adapter";
+import { CohortAcademicYear } from "src/cohortAcademicYear/entities/cohortAcademicYear.entity";
+import { AcademicYear } from "src/academicyears/entities/academicyears-entity";
+import { CohortAcademicYearService } from "./cohortAcademicYear-adapter";
 
 @Module({
-    imports: [HttpModule,
-        TypeOrmModule.forFeature([
-            User,
-            Fields,
-            FieldValues,
-            CohortMembers,
-            AttendanceEntity,
-            Fields,
-            Cohort,
-            UserTenantMapping,
-            Tenants,
-            UserRoleMapping,
-            Role,
-            RolePrivilegeMapping,
-        ])
-    ],
-    providers: [
-        PostgresUserService,
-        PostgresAttendanceService,
-        PostgresFieldsService,
-        PostgresRoleService,
-        NotificationRequest,
-        JwtUtil,
-        JwtService
-    ],
-    exports: [
-        PostgresUserService,
-        PostgresAttendanceService,
-        PostgresFieldsService,
-        NotificationRequest,
-        JwtUtil,
-        JwtService
-    ],
+  imports: [
+    HttpModule,
+    TypeOrmModule.forFeature([
+      User,
+      Fields,
+      FieldValues,
+      CohortMembers,
+      AttendanceEntity,
+      Fields,
+      Cohort,
+      UserTenantMapping,
+      Tenants,
+      UserRoleMapping,
+      Role,
+      RolePrivilegeMapping,
+      CohortAcademicYear,
+      AcademicYear
+    ]),
+  ],
+  providers: [
+    PostgresUserService,
+    PostgresAttendanceService,
+    PostgresFieldsService,
+    PostgresRoleService,
+    NotificationRequest,
+    JwtUtil,
+    JwtService,
+    CohortAcademicYearService,
+    PostgresAcademicYearService
+  ],
+  exports: [
+    PostgresUserService,
+    PostgresAttendanceService,
+    PostgresFieldsService,
+    NotificationRequest,
+    JwtUtil,
+    JwtService,
+    CohortAcademicYearService,
+    PostgresAcademicYearService
+  ],
 })
-export class PostgresModule { }
+export class PostgresModule {}

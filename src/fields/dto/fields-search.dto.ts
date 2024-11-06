@@ -1,6 +1,18 @@
 import { ApiPropertyOptional, ApiProperty } from "@nestjs/swagger";
 import { Expose, Type } from "class-transformer";
-import { IsOptional, IsString, IsUUID, IsNotEmpty, IsNumber, ValidateNested, IsArray, ArrayMinSize, ArrayMaxSize, ValidateIf, IsEnum } from "class-validator";
+import {
+  IsOptional,
+  IsString,
+  IsUUID,
+  IsNotEmpty,
+  IsNumber,
+  ValidateNested,
+  IsArray,
+  ArrayMinSize,
+  ArrayMaxSize,
+  ValidateIf,
+  IsEnum,
+} from "class-validator";
 
 export class FieldsFilterDto {
   @ApiPropertyOptional()
@@ -15,21 +27,19 @@ export class FieldsFilterDto {
   @ApiPropertyOptional()
   @IsUUID()
   @IsOptional()
-  fieldId?: string
+  fieldId?: string;
 
   @ApiPropertyOptional()
   @IsString()
-  name?: string
+  name?: string;
 
   @IsOptional()
-  type?: string[]
-
+  type?: string[];
 
   @ApiPropertyOptional()
   @IsUUID()
   @IsOptional()
-  tenantId?: string
-
+  tenantId?: string;
 
   [key: string]: any;
 }
@@ -41,7 +51,7 @@ export class FieldsSearchDto {
   })
   @IsOptional()
   @IsNotEmpty()
-  @IsNumber({}, { message: 'Limit must be a number' })
+  @IsNumber({}, { message: "Limit must be a number" })
   limit: number;
 
   @ApiProperty({
@@ -56,7 +66,7 @@ export class FieldsSearchDto {
   })
   @ValidateNested({ each: true })
   @Type(() => FieldsFilterDto)
-  filters: FieldsFilterDto
+  filters: FieldsFilterDto;
 
   constructor(partial: Partial<FieldsSearchDto>) {
     Object.assign(this, partial);
@@ -64,21 +74,21 @@ export class FieldsSearchDto {
 }
 
 enum SortDirection {
-  ASC = 'asc',
-  DESC = 'desc',
+  ASC = "asc",
+  DESC = "desc",
 }
 
 //Filters for getting field Options list.
 export class FieldsOptionsSearchDto {
   @ApiPropertyOptional({ type: () => Number })
   @IsOptional()
-  @IsNumber({}, { message: 'Limit must be a number' })
+  @IsNumber({}, { message: "Limit must be a number" })
   @Expose()
   limit: number;
 
   @ApiPropertyOptional({ type: () => Number })
   @IsOptional()
-  @IsNumber({}, { message: 'Offset must be a number' })
+  @IsNumber({}, { message: "Offset must be a number" })
   @Expose()
   offset: number;
 
@@ -86,7 +96,6 @@ export class FieldsOptionsSearchDto {
   @Expose()
   @IsNotEmpty()
   fieldName: string;
-
 
   @ApiPropertyOptional({ type: () => String })
   @IsOptional()
@@ -113,19 +122,21 @@ export class FieldsOptionsSearchDto {
   @Expose()
   optionName: string;
 
-
   @ApiPropertyOptional({
     description: "Sort",
-    example: ["name", "asc"]
+    example: ["name", "asc"],
   })
   @IsArray()
   @IsOptional()
-  @ArrayMinSize(2, { message: 'Sort array must contain exactly two elements' })
-  @ArrayMaxSize(2, { message: 'Sort array must contain exactly two elements' })
+  @ArrayMinSize(2, { message: "Sort array must contain exactly two elements" })
+  @ArrayMaxSize(2, { message: "Sort array must contain exactly two elements" })
   sort: [string, string];
 
   @ValidateIf((o) => o.sort !== undefined)
-  @IsEnum(SortDirection, { each: true, message: 'Sort[1] must be either asc or desc' })
+  @IsEnum(SortDirection, {
+    each: true,
+    message: "Sort[1] must be either asc or desc",
+  })
   get sortDirection(): string | undefined {
     return this.sort ? this.sort[1] : undefined;
   }
