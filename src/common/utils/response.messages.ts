@@ -61,4 +61,39 @@ export const API_RESPONSES = {
   USER_NOTEXIST: (userId) => `User with userId ${userId} does not exist for this academic year.`,
   UNAUTHORIZED: 'Unauthorized',
   INVALID_TOKEN: 'Token Invalid',
+
+  //User Api messages
+  USER_UPDATED_SUCCESSFULLY: 'User updated successfully.',
+  USER_NOT_EXISTS: 'User does not exist.',
+  USER_EXISTS: 'User already exist.',
+  DUPLICATE_DATA: 'Duplicate data.',
+  USER_ALREADY_EXISTS: 'User already exists.',
+  SERVER_ERROR: 'Internal server error',
+  SERVICE_NAME: 'User service',
+
+  USER_ALREADY_EXISTS_WITH_EMAIL: 'User already exists with the given email.',
+  USER_ALREADY_EXISTS_WITH_PHONE: 'User already exists with the given phone number.',
+  USER_NOT_FOUND_FOR_DELETE: 'User not found for delete.',
+  USER_NOT_FOUND_FOR_PASSWORD_RESET: 'User not found for password reset.',
+  USER_NOT_FOUND_FOR_EMAIL_VERIFICATION: 'User not found for email verification.',
+  //get User Details
+  USER_GET_SUCCESSFULLY: 'User details fetched successfully.',
+
+  USER_GET_BY_EMAIL_SUCCESSFULLY: 'User details fetched successfully by email',
+  USER_GET_BY_PHONE_SUCCESSFULLY: 'User details fetched successfully by phone',
+  USER_GET_BY_USERNAME_SUCCESSFULLY: 'User details fetched successfully by username',
+  USER_GET_BY_TENANT_ID_SUCCESSFULLY: 'User details fetched successfully by tenantId',
+  USER_GET_BY_USER_ID_SUCCESSFULLY: 'User details fetched successfully by userId',
+  USER_GET_BY_USER_ID_AND_TENANT_ID_SUCCESSFULLY: 'User details fetched successfully by userId and tenantId',
+  USER_GET_BY_EMAIL_AND_TENANT_ID_SUCCESSFULLY: 'User details fetched successfully by email and tenantId',
+
+  //Create user
+  USER_CREATE_SUCCESSFULLY: 'User created successfully',
+  USER_CREATE_FAILED: 'User creation failed',
+  USER_CREATE_FAILED_WITH_ERROR: (error) => `User creation failed with error: ${error}`,
+  USER_CREATE_FAILED_WITH_ERROR_AND_EMAIL: (error, email) => `User creation failed with error: ${error}. Email: ${email}`,
+  USER_CREATE_FAILED_WITH_ERROR_AND_PHONE: (error, phone) => `User creation failed with error: ${error}. Phone: ${phone}`,
+  USER_CREATE_FAILED_WITH_ERROR_AND_USERNAME: (error, username) => `User creation failed with error: ${error}. Username: ${username}`,
+
+
 };

@@ -37,6 +37,7 @@ import { API_RESPONSES } from "@utils/response.messages";
 import { TokenExpiredError, JsonWebTokenError } from 'jsonwebtoken';
 import { CohortAcademicYearService } from "./cohortAcademicYear-adapter";
 import { PostgresAcademicYearService } from "./academicyears-adapter";
+import { LoggerUtil } from "src/common/logger/LoggerUtil";
 
 @Injectable()
 export class PostgresUserService implements IServicelocator {
@@ -253,28 +254,42 @@ export class PostgresUserService implements IServicelocator {
       const findData = await this.findAllUserDetails(userSearchDto);
 
       if (findData === false) {
+        LoggerUtil.error(
+          `${API_RESPONSES.NOT_FOUND}: ${request.url}`,
+          API_RESPONSES.USER_NOT_FOUND,
+          apiId
+        )
         return APIResponse.error(
           response,
           apiId,
-          "No Data Found",
-          "Not Found",
+          API_RESPONSES.USER_NOT_FOUND,
+          API_RESPONSES.NOT_FOUND,
           HttpStatus.NOT_FOUND
         );
       }
-
+      LoggerUtil.log(
+        API_RESPONSES.USER_GET_SUCCESSFULLY,
+        apiId
+      )
       return await APIResponse.success(
         response,
         apiId,
         findData,
         HttpStatus.OK,
-        "User List fetched."
+        API_RESPONSES.USER_GET_SUCCESSFULLY
       );
     } catch (e) {
-      const errorMessage = e.message || "Internal server error";
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
+        e.message,
+        apiId
+      )
+
+      const errorMessage = e.message || API_RESPONSES.SERVER_ERROR;
       return APIResponse.error(
         response,
         apiId,
-        "Internal Server Error",
+        API_RESPONSES.SERVER_ERROR,
         errorMessage,
         HttpStatus.INTERNAL_SERVER_ERROR
       );

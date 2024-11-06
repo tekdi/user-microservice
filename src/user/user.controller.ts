@@ -48,6 +48,7 @@ import {
   SendPasswordResetLinkDto,
 } from "./dto/passwordReset.dto";
 import { isUUID } from "class-validator";
+import { API_RESPONSES } from "@utils/response.messages";
 export interface UserData {
   context: string;
   tenantId: string;
@@ -64,10 +65,10 @@ export class UserController {
   @Get("read/:userId")
   @UseGuards(JwtAuthGuard)
   @ApiBasicAuth("access-token")
-  @ApiOkResponse({ description: "User details Fetched Successfully" })
-  @ApiNotFoundResponse({ description: "User Not Found" })
-  @ApiInternalServerErrorResponse({ description: "Internal Server Error" })
-  @ApiBadRequestResponse({ description: "Bad Request" })
+  @ApiOkResponse({ description: API_RESPONSES.USER_GET_SUCCESSFULLY })
+  @ApiNotFoundResponse({ description: API_RESPONSES.USER_NOT_FOUND })
+  @ApiInternalServerErrorResponse({ description: API_RESPONSES.INTERNAL_SERVER_ERROR })
+  @ApiBadRequestResponse({ description: API_RESPONSES.BAD_REQUEST })
   @SerializeOptions({ strategy: "excludeAll" })
   @ApiHeader({ name: "tenantid" })
   @ApiQuery({
@@ -108,11 +109,11 @@ export class UserController {
   // @UseGuards(JwtAuthGuard)
   @UsePipes(new ValidationPipe())
   // @ApiBasicAuth("access-token")
-  @ApiCreatedResponse({ description: "User has been created successfully." })
+  @ApiCreatedResponse({ description: API_RESPONSES.USER_CREATE_SUCCESSFULLY })
   @ApiBody({ type: UserCreateDto })
-  @ApiForbiddenResponse({ description: "User Already Exists" })
-  @ApiInternalServerErrorResponse({ description: "Internal Server Error" })
-  @ApiConflictResponse({ description: "Duplicate data." })
+  @ApiForbiddenResponse({ description: API_RESPONSES.USER_EXISTS })
+  @ApiInternalServerErrorResponse({ description: API_RESPONSES.INTERNAL_SERVER_ERROR })
+  @ApiConflictResponse({ description: API_RESPONSES.DUPLICATE_DATA })
   @ApiHeader({
     name: "academicyearid",
   })
@@ -139,8 +140,7 @@ export class UserController {
   @UseGuards(JwtAuthGuard)
   @ApiBasicAuth("access-token")
   @ApiBody({ type: UserUpdateDTO })
-  @ApiCreatedResponse({ description: "User has been updated successfully." })
-  @ApiForbiddenResponse({ description: "Forbidden" })
+  @ApiOkResponse({ description: API_RESPONSES.USER_UPDATED_SUCCESSFULLY })
   @ApiHeader({
     name: "tenantid",
   })
