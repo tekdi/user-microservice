@@ -41,6 +41,7 @@ import { APIID } from "src/common/utils/api-id.config";
 import { BulkCohortMember } from "./dto/bulkMember-create.dto";
 import { isUUID } from "class-validator";
 import { API_RESPONSES } from "@utils/response.messages";
+import { RegisterForBoardEnrolmentDto } from "./dto/registerBoardEnrolment_create.dto";
 
 @ApiTags("Cohort Member")
 @Controller("cohortmember")
@@ -271,6 +272,76 @@ export class CohortMembersController {
         tenantId,
         academicyearId
       );
+    return result;
+  }
+  //board enrolment register
+  @Post("/board_enrolment")
+  @ApiBody({ type: BulkCohortMember })
+  @ApiHeader({
+    name: "tenantid",
+  })
+  @ApiHeader({
+    name: "academicyearid",
+  })
+  public async registerForBoardEnrolment(
+    @Headers() headers,
+    @Req() request,
+    @Body() registerForBoardEnrolmentDto: RegisterForBoardEnrolmentDto,
+    @Res() response: Response,
+    @Query("userId") loggedInUserId?: string
+  ) {
+    const tenantId = headers["tenantid"];
+    const academicyearId = headers["academicyearid"];
+    if (!academicyearId || !isUUID(academicyearId)) {
+      throw new BadRequestException(
+        "academicyearId is required and must be a valid UUID."
+      );
+    }
+    if (!loggedInUserId || !isUUID(loggedInUserId)) {
+      throw new BadRequestException(
+        "userId is required and must be a valid UUID."
+      );
+    }
+    const result = await this.cohortMemberAdapter
+      .buildCohortMembersAdapter()
+      .registerForBoardEnrolment(
+        loggedInUserId,
+        registerForBoardEnrolmentDto,
+        response,
+        tenantId,
+        academicyearId
+      );
+    return result;
+  }
+  //get board enrolment register
+  @Get("/board_enrolment")
+  //@ApiBody({ type: BulkCohortMember })
+  @ApiHeader({
+    name: "tenantid",
+  })
+  @ApiHeader({
+    name: "academicyearid",
+  })
+  public async getRegistrationDetailsForBoardEnrolment(
+    @Headers() headers,
+    @Req() request,
+    @Res() response: Response,
+    @Query("cohortMembershipId") cohortMembershipId: string
+  ) {
+    const academicyearId = headers["academicyearid"];
+    if (!academicyearId || !isUUID(academicyearId)) {
+      throw new BadRequestException(
+        "academicyearId is required and must be a valid UUID."
+      );
+    }
+    if (!cohortMembershipId || !isUUID(cohortMembershipId)) {
+      throw new BadRequestException(
+        "cohortMembershipId is required and must be a valid UUID."
+      );
+    }
+    const result = await this.cohortMemberAdapter
+      .buildCohortMembersAdapter()
+      .getRegistrationDetailsForBoardEnrolment(cohortMembershipId, response);
     return result;
   }
 }

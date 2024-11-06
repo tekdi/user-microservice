@@ -19,6 +19,7 @@ import { NotificationRequest } from "@utils/notification.axios";
 import { CohortAcademicYear } from "src/cohortAcademicYear/entities/cohortAcademicYear.entity";
 import { PostgresAcademicYearService } from "./academicyears-adapter";
 import { API_RESPONSES } from "@utils/response.messages";
+import { RegisterForBoardEnrolmentDto } from "src/cohortMembers/dto/registerBoardEnrolment_create.dto";
 
 @Injectable()
 export class PostgresCohortMembersService {
@@ -938,5 +939,185 @@ export class PostgresCohortMembersService {
       HttpStatus.CREATED,
       API_RESPONSES.COHORTMEMBER_SUCCESSFULLY
     );
+  }
+  public async registerForBoardEnrolment(
+    loggedInUserId: string,
+    registerForBoardEnrolmentDto: RegisterForBoardEnrolmentDto,
+    response: Response,
+    tenantId: string,
+    academicyearId: string
+  ) {
+    const apiId = APIID.BOARD_ENROLMENT_REGISTRATION;
+    const results = [];
+    const errors = [];
+
+    const academicYear = await this.academicyearService.getActiveAcademicYear(
+      academicyearId,
+      tenantId
+    );
+    if (!academicYear) {
+      return APIResponse.error(
+        response,
+        apiId,
+        HttpStatus.NOT_FOUND.toLocaleString(),
+        API_RESPONSES.ACADEMICYEAR_NOT_FOUND,
+        HttpStatus.NOT_FOUND
+      );
+    }
+    let responseFlag = false;
+    if (registerForBoardEnrolmentDto.board) {
+      const boardResponse = await this.registerFieldValue(
+        "board",
+        "COHORTMEMBER",
+        registerForBoardEnrolmentDto.board,
+        registerForBoardEnrolmentDto.cohortMembershipId,
+        loggedInUserId
+      );
+      responseFlag = boardResponse;
+    }
+    if (registerForBoardEnrolmentDto.subjects) {
+      const boardResponse = await this.registerFieldValue(
+        "subjects",
+        "COHORTMEMBER",
+        registerForBoardEnrolmentDto.subjects,
+        registerForBoardEnrolmentDto.cohortMembershipId,
+        loggedInUserId
+      );
+      responseFlag = boardResponse;
+    }
+    if (registerForBoardEnrolmentDto.boardEnrolmentNumber) {
+      const boardResponse = await this.registerFieldValue(
+        "board_enrolment_number",
+        "COHORTMEMBER",
+        registerForBoardEnrolmentDto.boardEnrolmentNumber,
+        registerForBoardEnrolmentDto.cohortMembershipId,
+        loggedInUserId
+      );
+      responseFlag = boardResponse;
+    }
+    if (registerForBoardEnrolmentDto.examFeePaid) {
+      const boardResponse = await this.registerFieldValue(
+        "fees_paid",
+        "COHORTMEMBER",
+        registerForBoardEnrolmentDto.examFeePaid,
+        registerForBoardEnrolmentDto.cohortMembershipId,
+        loggedInUserId
+      );
+      responseFlag = boardResponse;
+    }
+
+    if (responseFlag) {
+      return APIResponse.success(
+        response,
+        apiId,
+        results,
+        HttpStatus.CREATED,
+        API_RESPONSES.BOARD_ENROLMENT_REGISTER_SUCCESS
+      );
+    } else {
+      return APIResponse.success(
+        response,
+        apiId,
+        { results, errors },
+        HttpStatus.CREATED,
+        API_RESPONSES.BOARD_ENROLMENT_REGISTER_ERROR
+      );
+    }
+  }
+  public async registerFieldValue(
+    fieldName: string,
+    context: string,
+    value: any,
+    itemId: string,
+    loggedInUserId: string
+  ) {
+    let stringValue = typeof value !== "string" ? JSON.stringify(value) : value;
+    // Fetch the field data using fieldName and context
+    const fieldDataResponse = await this.fieldsService.getFieldData(
+      `"name" = '${fieldName}' AND "context" = '${context}'`
+    );
+
+    // If a fieldId is returned, proceed to save the field value
+    if (fieldDataResponse[0]?.fieldId) {
+      //create
+      const registerResponse = await this.fieldsService.findAndSaveFieldValues({
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        fieldId: fieldDataResponse[0].fieldId,
+        value: stringValue,
+        itemId: itemId,
+        createdBy: loggedInUserId,
+        updatedBy: loggedInUserId,
+      });
+      //update
+      if (!registerResponse) {
+        const updateResponse = await this.fieldsService.updateCustomFields(
+          itemId,
+          {
+            updatedAt: new Date(),
+            value: JSON.stringify(value),
+            fieldId: fieldDataResponse[0].fieldId,
+            updatedBy: loggedInUserId,
+          },
+          {}
+        );
+        if (updateResponse) {
+          return true;
+        } else {
+          return false;
+        }
+      }
+    } else {
+      return false;
+    }
+  }
+
+  public async getRegistrationDetailsForBoardEnrolment(
+    cohortMembershipId: string,
+    response: Response
+  ) {
+    const apiId = APIID.BOARD_ENROLMENT_REGISTRATION_DETAILS;
+    const errors = [];
+    const responseData = await this.fieldsService.getFieldsAndFieldsValues(
+      cohortMembershipId
+    );
+    let results = responseData.map((obj) => {
+      return {
+        name: obj.fieldname,
+        value: this.safeJSONParse(obj.value),
+      };
+    });
+    if (results) {
+      return APIResponse.success(
+        response,
+        apiId,
+        results,
+        HttpStatus.OK,
+        API_RESPONSES.BOARD_ENROLMENT_REGISTER_DETAILS_SUCCESS
+      );
+    } else {
+      return APIResponse.success(
+        response,
+        apiId,
+        { results, errors },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+        API_RESPONSES.BOARD_ENROLMENT_REGISTER__DETAILS_ERROR
+      );
+    }
+  }
+  public safeJSONParse(input) {
+    // Check if the input is a string
+    if (typeof input === "string") {
+      try {
+        // Attempt to parse the JSON string
+        return JSON.parse(input);
+      } catch (error) {
+        // Handle the error
+        return input;
+      }
+    } else {
+      // If input is not a string, return it as-is
+      return input;
+    }
   }
 }

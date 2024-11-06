@@ -2,6 +2,7 @@ import { CohortMembersSearchDto } from "src/cohortMembers/dto/cohortMembers-sear
 import { CohortMembersDto } from "src/cohortMembers/dto/cohortMembers.dto";
 import { CohortMembersUpdateDto } from "src/cohortMembers/dto/cohortMember-update.dto";
 import { Response } from "express";
+import { RegisterForBoardEnrolmentDto } from "src/cohortMembers/dto/registerBoardEnrolment_create.dto";
 export interface IServicelocatorcohortMembers {
   createCohortMembers(
     loginUser: any,
@@ -38,5 +39,16 @@ export interface IServicelocatorcohortMembers {
     response,
     tenantId,
     academicyearId: string
+  );
+  registerForBoardEnrolment(
+    loggedInUserId: string,
+    registerForBoardEnrolmentDto: RegisterForBoardEnrolmentDto,
+    response: Response,
+    tenantId: string,
+    academicyearId: string
+  );
+  getRegistrationDetailsForBoardEnrolment(
+    cohortMembershipId: string,
+    response: Response
   );
 }
