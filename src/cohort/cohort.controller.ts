@@ -64,10 +64,10 @@ export class CohortController {
   @ApiInternalServerErrorResponse({ description: "Internal Server Error." })
   @ApiBadRequestResponse({ description: "Bad Request" })
   @SerializeOptions({ strategy: "excludeAll" })
-  @ApiHeader({ name: "tenantid" })
-  @ApiHeader({
-    name: "academicyearid",
-  })
+  // @ApiHeader({ name: "tenantid" })
+  // @ApiHeader({
+  //   name: "academicyearid",
+  // })
   @ApiQuery({ name: "children", required: false, type: Boolean })
   @ApiQuery({ name: "customField", required: false, type: Boolean })
   public async getCohortsDetails(
