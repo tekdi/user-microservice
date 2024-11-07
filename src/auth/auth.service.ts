@@ -23,7 +23,7 @@ export class AuthService {
   constructor(
     private readonly useradapter: UserAdapter,
     private readonly keycloakService: KeycloakService
-  ) {}
+  ) { }
 
   async login(authDto, response: Response) {
     const apiId = APIID.LOGIN;

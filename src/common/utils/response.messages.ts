@@ -61,4 +61,12 @@ export const API_RESPONSES = {
   USER_NOTEXIST: (userId) => `User with userId ${userId} does not exist for this academic year.`,
   UNAUTHORIZED: 'Unauthorized',
   INVALID_TOKEN: 'Token Invalid',
+
+  //Tenant 
+  TENANT_GET: 'Tenant fetched successfully.',
+  TENANT_NOT_FOUND: 'Tenant does not exist',
+  TENANT_EXISTS: 'Tenant already exists',
+  TENANT_CREATE: 'Tenant created successfully',
+  TENANT_UPDATE: 'Tenant updated successfully',
+  TENANT_DELETE: 'Tenant deleted successfully',
 };
