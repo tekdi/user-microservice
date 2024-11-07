@@ -1083,7 +1083,7 @@ export class PostgresCohortMembersService {
     );
     let results = responseData.map((obj) => {
       return {
-        name: obj.fieldname,
+        name: obj.label,
         value: this.safeJSONParse(obj.value),
       };
     });
