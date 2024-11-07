@@ -943,27 +943,12 @@ export class PostgresCohortMembersService {
   public async registerForBoardEnrolment(
     loggedInUserId: string,
     registerForBoardEnrolmentDto: RegisterForBoardEnrolmentDto,
-    response: Response,
-    tenantId: string,
-    academicyearId: string
+    response: Response
   ) {
     const apiId = APIID.BOARD_ENROLMENT_REGISTRATION;
     const results = [];
     const errors = [];
 
-    const academicYear = await this.academicyearService.getActiveAcademicYear(
-      academicyearId,
-      tenantId
-    );
-    if (!academicYear) {
-      return APIResponse.error(
-        response,
-        apiId,
-        HttpStatus.NOT_FOUND.toLocaleString(),
-        API_RESPONSES.ACADEMICYEAR_NOT_FOUND,
-        HttpStatus.NOT_FOUND
-      );
-    }
     let responseFlag = false;
     if (registerForBoardEnrolmentDto.board) {
       const boardResponse = await this.registerFieldValue(

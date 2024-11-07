@@ -43,9 +43,7 @@ export interface IServicelocatorcohortMembers {
   registerForBoardEnrolment(
     loggedInUserId: string,
     registerForBoardEnrolmentDto: RegisterForBoardEnrolmentDto,
-    response: Response,
-    tenantId: string,
-    academicyearId: string
+    response: Response
   );
   getRegistrationDetailsForBoardEnrolment(
     cohortMembershipId: string,

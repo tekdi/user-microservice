@@ -276,27 +276,16 @@ export class CohortMembersController {
   }
   //board enrolment register
   @Post("/board_enrolment")
-  @ApiBody({ type: BulkCohortMember })
+  @ApiBody({ type: RegisterForBoardEnrolmentDto })
   @ApiHeader({
     name: "tenantid",
   })
-  @ApiHeader({
-    name: "academicyearid",
-  })
+  @ApiQuery({ name: "userId", required: true, type: "string" })
   public async registerForBoardEnrolment(
-    @Headers() headers,
-    @Req() request,
     @Body() registerForBoardEnrolmentDto: RegisterForBoardEnrolmentDto,
     @Res() response: Response,
     @Query("userId") loggedInUserId?: string
   ) {
-    const tenantId = headers["tenantid"];
-    const academicyearId = headers["academicyearid"];
-    if (!academicyearId || !isUUID(academicyearId)) {
-      throw new BadRequestException(
-        "academicyearId is required and must be a valid UUID."
-      );
-    }
     if (!loggedInUserId || !isUUID(loggedInUserId)) {
       throw new BadRequestException(
         "userId is required and must be a valid UUID."
@@ -307,33 +296,21 @@ export class CohortMembersController {
       .registerForBoardEnrolment(
         loggedInUserId,
         registerForBoardEnrolmentDto,
-        response,
-        tenantId,
-        academicyearId
+        response
       );
     return result;
   }
   //get board enrolment register
   @Get("/board_enrolment")
-  //@ApiBody({ type: BulkCohortMember })
   @ApiHeader({
     name: "tenantid",
   })
-  @ApiHeader({
-    name: "academicyearid",
-  })
+  @ApiQuery({ name: "cohortMembershipId", required: true, type: "string" })
   public async getRegistrationDetailsForBoardEnrolment(
     @Headers() headers,
-    @Req() request,
     @Res() response: Response,
     @Query("cohortMembershipId") cohortMembershipId: string
   ) {
-    const academicyearId = headers["academicyearid"];
-    if (!academicyearId || !isUUID(academicyearId)) {
-      throw new BadRequestException(
-        "academicyearId is required and must be a valid UUID."
-      );
-    }
     if (!cohortMembershipId || !isUUID(cohortMembershipId)) {
       throw new BadRequestException(
         "cohortMembershipId is required and must be a valid UUID."
