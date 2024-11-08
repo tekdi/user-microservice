@@ -599,7 +599,7 @@ export class PostgresCohortMembersService {
       whereCase += where.map(processCondition).join(" AND ");
     }
 
-    let query = `SELECT U."userId", U.username, U.name, R.name AS role, U.district, U.state,U.mobile, 
+    let query = `SELECT U."userId", U.username, U.name, R.name AS role, U.district, U.state,U.mobile,U."deviceId",
       CM."status", CM."statusReason",CM."cohortMembershipId",CM."status",CM."createdAt", U."createdAt", U."updatedAt",U."createdBy",U."updatedBy", COUNT(*) OVER() AS total_count  FROM public."CohortMembers" CM
       INNER JOIN public."Users" U
       ON CM."userId" = U."userId"

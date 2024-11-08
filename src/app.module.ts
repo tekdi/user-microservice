@@ -22,6 +22,7 @@ import { AssignTenantModule } from "./userTenantMapping/user-tenant-mapping.modu
 import { FormsModule } from "./forms/forms.module";
 import { CoursePlannerModule } from "./course-planner/course-planner.module";
 import { HttpService } from "@utils/http-service";
+import { TenantModule } from './tenant/tenant.module';
 import { AcademicyearsModule } from "./academicyears/academicyears.module";
 import { CohortAcademicYearModule } from "./cohortAcademicYear/cohortAcademicYear.module";
 
@@ -43,10 +44,11 @@ import { CohortAcademicYearModule } from "./cohortAcademicYear/cohortAcademicYea
     DatabaseModule,
     FormsModule,
     CoursePlannerModule,
+    TenantModule,
     AcademicyearsModule,
     CohortAcademicYearModule
   ],
   controllers: [AppController],
   providers: [AppService, HttpService],
 })
-export class AppModule {}
+export class AppModule { }

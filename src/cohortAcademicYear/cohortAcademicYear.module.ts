@@ -8,6 +8,8 @@ import { PostgresAcademicYearService } from "src/adapters/postgres/academicyears
 import { PostgresModule } from "src/adapters/postgres/postgres-module";
 import { Cohort } from "src/cohort/entities/cohort.entity";
 import { AcademicYear } from "src/academicyears/entities/academicyears-entity";
+import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
+
 
 @Module({
   imports: [
@@ -15,7 +17,8 @@ import { AcademicYear } from "src/academicyears/entities/academicyears-entity";
     TypeOrmModule.forFeature([
       CohortAcademicYear,
       Cohort,
-      AcademicYear
+      AcademicYear,
+      Tenants
     ]),
   ],
   controllers: [CohortAcademicYearController],
