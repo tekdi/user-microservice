@@ -153,6 +153,11 @@ export class PostgresUserService implements IServicelocator {
       );
 
       if (mailSend?.result?.email?.errors.length > 0) {
+        LoggerUtil.error(
+          `${API_RESPONSES.BAD_REQUEST}`,
+          `Error: ${API_RESPONSES.RESET_PASSWORD_LINK_FAILED}`,
+          apiId
+        )
         return APIResponse.error(
           response,
           apiId,
@@ -170,6 +175,11 @@ export class PostgresUserService implements IServicelocator {
         API_RESPONSES.RESET_PASSWORD_LINK_SUCCESS
       );
     } catch (e) {
+      LoggerUtil.error(
+        `${API_RESPONSES.INTERNAL_SERVER_ERROR}`,
+        `Error: ${e.message}`,
+        apiId
+      )
       return APIResponse.error(
         response,
         apiId,
@@ -191,6 +201,11 @@ export class PostgresUserService implements IServicelocator {
       const decoded = await this.jwtUtil.validateToken(body.token, jwtSecretKey);
       const userDetail = await this.usersRepository.findOne({ where: { userId: decoded.sub } });
       if (!userDetail) {
+        LoggerUtil.error(
+          `${API_RESPONSES.NOT_FOUND}`,
+          API_RESPONSES.USERNAME_NOT_FOUND,
+          apiId
+        )
         return APIResponse.error(
           response,
           apiId,
@@ -215,6 +230,12 @@ export class PostgresUserService implements IServicelocator {
           userDetail.userId
         );
       } catch (e) {
+        LoggerUtil.error(
+          `${API_RESPONSES.INTERNAL_SERVER_ERROR}`,
+          `Error: ${e.message}`,
+          apiId
+        )
+
         return APIResponse.error(
           response,
           apiId,
@@ -281,7 +302,7 @@ export class PostgresUserService implements IServicelocator {
     } catch (e) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
-        e.message,
+        `Error: ${e.message}`,
         apiId
       )
 
@@ -459,8 +480,8 @@ export class PostgresUserService implements IServicelocator {
         return APIResponse.error(
           response,
           apiId,
-          "Bad request",
-          `Please Enter Valid  UUID`,
+          API_RESPONSES.BAD_REQUEST,
+          `Error: ${API_RESPONSES.UUID_VALIDATION}`,
           HttpStatus.BAD_REQUEST
         );
       }
@@ -474,8 +495,8 @@ export class PostgresUserService implements IServicelocator {
         return APIResponse.error(
           response,
           apiId,
-          "Not Found",
-          `User Id '${userData.userId}' does not exist.`,
+          API_RESPONSES.NOT_FOUND,
+          API_RESPONSES.USERID_NOT_FOUND(userData.userId),
           HttpStatus.NOT_FOUND
         );
       }
@@ -501,18 +522,22 @@ export class PostgresUserService implements IServicelocator {
         return APIResponse.error(
           response,
           apiId,
-          "Not Found",
-          `User Not Found`,
+          API_RESPONSES.NOT_FOUND,
+          API_RESPONSES.USERNAME_NOT_FOUND,
           HttpStatus.NOT_FOUND
         );
       }
       if (!userData.fieldValue) {
+        LoggerUtil.log(
+          API_RESPONSES.USER_GET_SUCCESSFULLY,
+          apiId
+        )
         return await APIResponse.success(
           response,
           apiId,
           { userData: userDetails },
           HttpStatus.OK,
-          "User details Fetched Successfully."
+          API_RESPONSES.USER_GET_SUCCESSFULLY
         );
       }
 
@@ -530,19 +555,31 @@ export class PostgresUserService implements IServicelocator {
       result.userData = userDetails;
 
       result.userData["customFields"] = customFields;
+
+      LoggerUtil.log(
+        API_RESPONSES.USER_GET_SUCCESSFULLY,
+        apiId,
+        userData?.userId
+      )
+
       return await APIResponse.success(
         response,
         apiId,
         { ...result },
         HttpStatus.OK,
-        "User details Fetched Successfully."
+        API_RESPONSES.USER_GET_SUCCESSFULLY
       );
     } catch (e) {
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${e.message}`,
+        apiId
+      )
       return APIResponse.error(
         response,
         apiId,
-        "Internal Server Error",
-        "Something went wrong",
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${e.message}`,
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
@@ -679,6 +716,12 @@ export class PostgresUserService implements IServicelocator {
         updatedData["basicDetails"] = userDto.userData;
       }
 
+      LoggerUtil.log(
+        API_RESPONSES.USER_BASIC_DETAILS_UPDATE,
+        apiId,
+        userDto?.userId
+      )
+
       if (userDto?.customFields?.length > 0) {
         const getFieldsAttributes =
           await this.fieldsService.getEditableFieldsAttributes();
@@ -719,19 +762,31 @@ export class PostgresUserService implements IServicelocator {
           editIssues["editFieldsFailure"] = editFailures;
         }
       }
+
+      LoggerUtil.log(
+        API_RESPONSES.USER_UPDATED_SUCCESSFULLY,
+        apiId,
+        userDto?.userId
+      )
+
       return await APIResponse.success(
         response,
         apiId,
         { ...updatedData, editIssues },
         HttpStatus.OK,
-        "User has been updated successfully."
+        API_RESPONSES.USER_UPDATED_SUCCESSFULLY
       );
     } catch (e) {
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${e.message}`,
+        apiId
+      )
       return APIResponse.error(
         response,
         apiId,
-        "Internal Server Error",
-        "Something went wrong",
+        API_RESPONSES.SERVER_ERROR,
+        API_RESPONSES.SOMETHING_WRONG,
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
@@ -744,7 +799,7 @@ export class PostgresUserService implements IServicelocator {
     if (!user) {
       return null;
     }
-    Object.assign(user, userData[0]);
+    Object.assign(user, userData);
     return this.usersRepository.save(user);
   }
 
@@ -775,7 +830,7 @@ export class PostgresUserService implements IServicelocator {
           return APIResponse.error(
             response,
             apiId,
-            "BAD_REQUEST",
+            API_RESPONSES.BAD_REQUEST,
             `${customFieldError}`,
             HttpStatus.BAD_REQUEST
           );
@@ -790,7 +845,7 @@ export class PostgresUserService implements IServicelocator {
         return APIResponse.error(
           response,
           apiId,
-          "BAD_REQUEST",
+          API_RESPONSES.BAD_REQUEST,
           `${validatedRoles}`,
           HttpStatus.BAD_REQUEST
         );
@@ -812,23 +867,34 @@ export class PostgresUserService implements IServicelocator {
         return APIResponse.error(
           response,
           apiId,
-          "Bad Request",
-          `User Already Exist`,
+          API_RESPONSES.BAD_REQUEST,
+          API_RESPONSES.USER_EXISTS,
           HttpStatus.BAD_REQUEST
         );
       }
       resKeycloak = await createUserInKeyCloak(userSchema, token).catch(
         (error) => {
+          LoggerUtil.error(
+            `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
+            `KeyCloak Error: ${error.message}`,
+            apiId
+          )
+
           errKeycloak = error.response?.data.errorMessage;
           return APIResponse.error(
             response,
             apiId,
-            "Internal Server Error",
+            API_RESPONSES.SERVER_ERROR,
             `${errKeycloak}`,
             HttpStatus.INTERNAL_SERVER_ERROR
           );
         }
       );
+
+      LoggerUtil.log(
+        API_RESPONSES.USER_CREATE_KEYCLOAK,
+        apiId
+      )
 
       userCreateDto.userId = resKeycloak;
 
@@ -840,6 +906,11 @@ export class PostgresUserService implements IServicelocator {
         academicYearId,
         response
       );
+
+      LoggerUtil.log(
+        API_RESPONSES.USER_CREATE_IN_DB,
+        apiId
+      )
 
       const createFailures = [];
       if (
@@ -894,20 +965,28 @@ export class PostgresUserService implements IServicelocator {
           }
         }
       }
-
+      LoggerUtil.log(
+        API_RESPONSES.USER_CREATE_SUCCESSFULLY,
+        apiId
+      )
       APIResponse.success(
         response,
         apiId,
         { userData: { ...result, createFailures } },
         HttpStatus.CREATED,
-        "User has been created successfully."
+        API_RESPONSES.USER_CREATE_SUCCESSFULLY,
       );
     } catch (e) {
-      const errorMessage = e.message || "Internal server error";
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
+        `Error: ${e.message}`,
+        apiId
+      )
+      const errorMessage = e.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
       return APIResponse.error(
         response,
         apiId,
-        "Internal Server Error",
+        API_RESPONSES.INTERNAL_SERVER_ERROR,
         errorMessage,
         HttpStatus.INTERNAL_SERVER_ERROR
       );
@@ -926,7 +1005,7 @@ export class PostgresUserService implements IServicelocator {
           userCreateDto.email
         );
         if (!checkValidEmail) {
-          error.push(`Invalid email address`);
+          error.push(API_RESPONSES.INVALID_EMAIL(userCreateDto.email));
         }
       }
 
@@ -936,7 +1015,7 @@ export class PostgresUserService implements IServicelocator {
           userCreateDto.mobile
         );
         if (!checkValidMobile) {
-          error.push(`Mobile number must be 10 digits long`);
+          error.push(API_RESPONSES.MOBILE_NO_CHECK(userCreateDto.mobile));
         }
       }
 
@@ -946,7 +1025,7 @@ export class PostgresUserService implements IServicelocator {
           userCreateDto.dob
         );
         if (!checkValidDob) {
-          error.push(`Date of birth must be in the format yyyy-mm-dd`);
+          error.push(API_RESPONSES.DOB_FORMAT(userCreateDto.dob));
         }
       }
     }
@@ -963,18 +1042,18 @@ export class PostgresUserService implements IServicelocator {
         // check academic year exists for tenant 
         const checkAcadmicYear = await this.postgresAcademicYearService.getActiveAcademicYear(academicYearId, tenantId);
         if (!checkAcadmicYear) {
-          error.push("Academic year not found for tenant")
+          error.push(API_RESPONSES.ACADEMIC_YEAR_NOT_FOUND)
         }
 
         if (duplicateTenet.includes(tenantId)) {
           error.push(
-            "Duplicate tenantId detected. Please ensure each tenantId is unique and correct your data."
+            error.push(API_RESPONSES.DUPLICAT_TENANTID)
           );
         }
 
         if ((tenantId && !roleId) || (!tenantId && roleId)) {
           error.push(
-            "Invalid parameters provided. Please ensure that tenantId, roleId, and cohortId (if applicable) are correctly provided."
+            error.push(API_RESPONSES.INVALID_PARAMETERS)
           );
         }
 
@@ -991,19 +1070,15 @@ export class PostgresUserService implements IServicelocator {
         ]);
 
         if (tenantExists.length === 0) {
-          error.push(`Tenant Id '${tenantId}' does not exist.`);
+          error.push(API_RESPONSES.TENANTID_NOT_FOUND(tenantId))
         }
 
         if (cohortExists) {
-          error.push(
-            `Cohort Id '${cohortExists}' does not exist for this tenant '${tenantId}'.`
-          );
+          error.push(API_RESPONSES.COHORT_NOT_FOUND_IN_TENANT_ID(cohortExists, tenantId));
         }
 
         if (roleExists && roleExists?.length === 0) {
-          error.push(
-            `Role Id '${roleId}' does not exist for this tenant '${tenantId}'.`
-          );
+          error.push(API_RESPONSES.ROLE_NOT_FOUND_IN_TENANT(roleId, tenantId));
         } else {
           roleData = [...roleData, ...roleExists]
         }
@@ -1040,13 +1115,13 @@ export class PostgresUserService implements IServicelocator {
     if (checkUserinKeyCloakandDb) {
       return new SuccessResponse({
         statusCode: 200,
-        message: "User Exists. Proceed with Sending Email ",
+        message: API_RESPONSES.USER_EXISTS_SEND_MAIL,
         data: { data: true },
       });
     }
     return new SuccessResponse({
       statusCode: HttpStatus.BAD_REQUEST,
-      message: "Invalid Username Or Email",
+      message: API_RESPONSES.INVALID_USERNAME_EMAIL,
       data: { data: false },
     });
   }
@@ -1152,7 +1227,16 @@ export class PostgresUserService implements IServicelocator {
         createdBy: request["user"]?.userId || userId,
         updatedBy: request["user"]?.userId || userId,
       });
+
+      LoggerUtil.log(
+        API_RESPONSES.USER_TENANT
+      )
+
     } catch (error) {
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
+        `Error: ${error.message}`,
+      )
       throw new Error(error);
     }
   }
@@ -1171,6 +1255,9 @@ export class PostgresUserService implements IServicelocator {
 
   async addCohortMember(cohortData) {
     const result = await this.cohortMemberRepository.save(cohortData);
+    LoggerUtil.log(
+      API_RESPONSES.USER_COHORT
+    )
     return result;
   }
 
@@ -1193,8 +1280,8 @@ export class PostgresUserService implements IServicelocator {
         return APIResponse.error(
           response,
           apiId,
-          "Not Found",
-          `User with given username not found`,
+          API_RESPONSES.NOT_FOUND,
+          API_RESPONSES.USERID_NOT_FOUND(userId),
           HttpStatus.NOT_FOUND
         );
       }
@@ -1218,10 +1305,15 @@ export class PostgresUserService implements IServicelocator {
           userId
         );
       } catch (e) {
+        LoggerUtil.error(
+          `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
+          `Error: ${e.message}`,
+          apiId
+        )
         return APIResponse.error(
           response,
           apiId,
-          "Internal Server Error",
+          API_RESPONSES.SERVER_ERROR,
           `Error : ${e?.response?.data.error}`,
           HttpStatus.INTERNAL_SERVER_ERROR
         );
@@ -1238,23 +1330,27 @@ export class PostgresUserService implements IServicelocator {
           apiId,
           {},
           HttpStatus.OK,
-          "User Password Updated Successfully."
+          API_RESPONSES.USER_PASSWORD_UPDATE
         );
       } else {
         return APIResponse.error(
           response,
           apiId,
-          "Bad Request",
+          API_RESPONSES.BAD_REQUEST,
           `Error : ${apiResponse?.errors}`,
           HttpStatus.BAD_REQUEST
         );
       }
     } catch (e) {
-      // return e;
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
+        `Error: ${e.message}`,
+        apiId
+      )
       return APIResponse.error(
         response,
         apiId,
-        "Internal Server Error",
+        API_RESPONSES.INTERNAL_SERVER_ERROR,
         `Error : ${e?.response?.data.error}`,
         HttpStatus.INTERNAL_SERVER_ERROR
       );
@@ -1299,6 +1395,10 @@ export class PostgresUserService implements IServicelocator {
     try {
       apiResponse = await this.axios(config);
     } catch (e) {
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
+        `Error: ${e.message}`
+      )
       return new ErrorResponse({
         errorCode: `${e.response.status}`,
         errorMessage: e.response.data.error,
@@ -1331,13 +1431,16 @@ export class PostgresUserService implements IServicelocator {
             // error messgae if generated by notification service
           }
         } catch (error) {
-          // error
+          LoggerUtil.error(
+            `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
+            `Error: ${error.message}`,
+          )
         }
       }
       return new SuccessResponse({
         statusCode: apiResponse.status,
         message: apiResponse.statusText,
-        data: { msg: "Password reset successful!" },
+        data: { msg: API_RESPONSES.PASSWORD_RESET },
       });
     } else {
       return new ErrorResponse({
@@ -1360,7 +1463,7 @@ export class PostgresUserService implements IServicelocator {
       );
 
       if (getFieldDetails == null) {
-        return ("Field not found");
+        return (API_RESPONSES.FIELD_NOT_FOUND);
       }
 
       if (encounteredKeys.includes(fieldId)) {
@@ -1406,12 +1509,12 @@ export class PostgresUserService implements IServicelocator {
 
     //Validation for duplicate fields
     if (duplicateFieldKeys.length > 0) {
-      return (error = `Duplicate fieldId detected: ${duplicateFieldKeys}`);
+      return (error = API_RESPONSES.DUPLICATE_FIELD(duplicateFieldKeys));
     }
 
     //Validation for fields values
     if (invalidateFields.length > 0) {
-      return (error = `Invalid fields found: ${invalidateFields}`);
+      return (error = API_RESPONSES.INVALID_FIELD(invalidateFields));
     }
 
     //Verifying whether these fields correspond to their respective roles.
@@ -1460,8 +1563,8 @@ export class PostgresUserService implements IServicelocator {
       return APIResponse.error(
         response,
         apiId,
-        "Bad request",
-        `Please Enter Valid UUID for userId`,
+        API_RESPONSES.BAD_REQUEST,
+        API_RESPONSES.UUID_VALIDATION,
         HttpStatus.BAD_REQUEST
       );
     }
@@ -1475,8 +1578,8 @@ export class PostgresUserService implements IServicelocator {
         return APIResponse.error(
           response,
           apiId,
-          "Not Found",
-          `User not found in user table.`,
+          API_RESPONSES.NOT_FOUND,
+          API_RESPONSES.USERNAME_NOT_FOUND,
           HttpStatus.NOT_FOUND
         );
       }
@@ -1517,13 +1620,18 @@ export class PostgresUserService implements IServicelocator {
         apiId,
         userResult,
         HttpStatus.OK,
-        "User and related entries deleted Successfully."
+        API_RESPONSES.USER_RELATEDENTITY_DELETE
       );
     } catch (e) {
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${e.message}`,
+        apiId
+      )
       return APIResponse.error(
         response,
         apiId,
-        "Internal Server Error",
+        API_RESPONSES.SERVER_ERROR,
         `Error : ${e?.response?.data.error}`,
         HttpStatus.INTERNAL_SERVER_ERROR
       );

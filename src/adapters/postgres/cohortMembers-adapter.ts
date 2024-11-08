@@ -19,6 +19,7 @@ import { NotificationRequest } from "@utils/notification.axios";
 import { CohortAcademicYear } from "src/cohortAcademicYear/entities/cohortAcademicYear.entity";
 import { PostgresAcademicYearService } from "./academicyears-adapter";
 import { API_RESPONSES } from "@utils/response.messages";
+import { LoggerUtil } from "src/common/logger/LoggerUtil";
 
 @Injectable()
 export class PostgresCohortMembersService {
@@ -36,7 +37,7 @@ export class PostgresCohortMembersService {
     private readonly academicyearService: PostgresAcademicYearService,
     private readonly notificationRequest: NotificationRequest,
     private fieldsService: PostgresFieldsService
-  ) {}
+  ) { }
 
   //Get cohort member
   async getCohortMembers(
@@ -119,6 +120,11 @@ export class PostgresCohortMembersService {
         );
       }
     } catch (e) {
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${e.message}`,
+        apiId
+      )
       const errorMessage = e.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
       return APIResponse.error(
         res,
@@ -367,6 +373,11 @@ export class PostgresCohortMembersService {
         API_RESPONSES.COHORT_GET_SUCCESSFULLY
       );
     } catch (e) {
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${e.message}`,
+        apiId
+      )
       const errorMessage = e.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
       return APIResponse.error(
         res,
@@ -529,6 +540,11 @@ export class PostgresCohortMembersService {
         API_RESPONSES.COHORTMEMBER_CREATED_SUCCESSFULLY
       );
     } catch (e) {
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${e.message}`,
+        apiId
+      )
       const errorMessage = e.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
       return APIResponse.error(
         res,
@@ -670,6 +686,11 @@ export class PostgresCohortMembersService {
         "Cohort Member Updated successfully."
       );
     } catch (e) {
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${e.message}`,
+        apiId
+      )
       const errorMessage = e.message || "Internal server error";
       return APIResponse.error(
         res,
@@ -717,11 +738,16 @@ export class PostgresCohortMembersService {
         "Cohort Member deleted Successfully."
       );
     } catch (e) {
-      const errorMessage = e.message || "Internal server error";
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${e.message}`,
+        apiId
+      )
+      const errorMessage = e.message || API_RESPONSES.SERVER_ERROR;
       return APIResponse.error(
         res,
         apiId,
-        "Internal Server Error",
+        API_RESPONSES.SERVER_ERROR,
         errorMessage,
         HttpStatus.INTERNAL_SERVER_ERROR
       );
@@ -847,6 +873,11 @@ export class PostgresCohortMembersService {
               });
             }
           } catch (error) {
+            LoggerUtil.error(
+              `${API_RESPONSES.SERVER_ERROR}`,
+              `Error: ${error.message}`,
+              apiId
+            )
             errors.push(
               API_RESPONSES.ERROR_UPDATE_COHORTMEMBER(
                 userId,
@@ -911,6 +942,11 @@ export class PostgresCohortMembersService {
           );
           results.push(result);
         } catch (error) {
+          LoggerUtil.error(
+            `${API_RESPONSES.SERVER_ERROR}`,
+            `Error: ${error.message}`,
+            apiId
+          )
           errors.push(
             API_RESPONSES.ERROR_SAVING_COHORTMEMBER(
               userId,
