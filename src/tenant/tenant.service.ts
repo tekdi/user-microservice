@@ -18,7 +18,8 @@ export class TenantService {
         let apiId = APIID.TENANT_LIST;
         try {
             let result = await this.tenantRepository.find();
-            if (result.length == 0) {
+
+            if (result.length === 0) {
                 return APIResponse.error(
                     response,
                     apiId,
@@ -27,6 +28,26 @@ export class TenantService {
                     HttpStatus.NOT_FOUND
                 );
             }
+
+            for (let tenantData of result) {
+                let query = `SELECT * FROM public."Roles" WHERE "tenantId" = '${tenantData.tenantId}'`;
+
+                const getRole = await this.tenantRepository.query(query);
+
+                // Add role details to the tenantData object
+                let roleDetails = [];
+                for (let roleData of getRole) {
+
+                    roleDetails.push({
+                        roleId: roleData.roleId,
+                        name: roleData.name,
+                        code: roleData.code
+                    });
+                    tenantData['role'] = roleDetails;
+                }
+
+            }
+
             return APIResponse.success(
                 response,
                 apiId,
@@ -44,8 +65,8 @@ export class TenantService {
                 HttpStatus.INTERNAL_SERVER_ERROR
             );
         }
-
     }
+
 
     public async createTenants(request, tenantCreateDto, response) {
         let apiId = APIID.TENANT_CREATE;
