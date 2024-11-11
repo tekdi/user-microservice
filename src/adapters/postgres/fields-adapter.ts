@@ -1579,6 +1579,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         fieldId: field.fieldId ?? null,
         dependsOn: field.dependsOn ?? false,
         sourceDetails: field.sourceDetails ?? null,
+        ordering: field.ordering ?? null,
         default: field?.fieldAttributes?.default ?? null,
       };
     });
