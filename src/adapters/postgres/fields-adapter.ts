@@ -199,6 +199,102 @@ export class PostgresFieldsService implements IServicelocatorfields {
       isValid: true,
     };
   }
+  //validate custom fields by context and contextType
+  public async validateCustomFieldByContext(
+    cohortCreateDto,
+    context: string,
+    contextType: string
+  ) {
+    const fieldValues = cohortCreateDto ? cohortCreateDto.customFields : [];
+    const encounteredKeys = [];
+    const invalidateFields = [];
+    const duplicateFieldKeys = [];
+    const error = "";
+
+    for (const fieldsData of fieldValues) {
+      const fieldId = fieldsData["fieldId"];
+      const getFieldDetails: any = await this.getFieldByIdes(fieldId);
+
+      if (getFieldDetails == null) {
+        return {
+          isValid: false,
+          error: `Field not found`,
+        };
+      }
+
+      if (encounteredKeys.includes(fieldId)) {
+        duplicateFieldKeys.push(`${fieldId} - ${getFieldDetails["name"]}`);
+      } else {
+        encounteredKeys.push(fieldId);
+      }
+
+      if (
+        (getFieldDetails.type == "checkbox" ||
+          getFieldDetails.type == "drop_down" ||
+          getFieldDetails.type == "radio") &&
+        getFieldDetails.sourceDetails.source == "table"
+      ) {
+        const getOption = await this.findDynamicOptions(
+          getFieldDetails.sourceDetails.table
+        );
+        const transformedFieldParams = {
+          options: getOption.map((param) => ({
+            value: param.value,
+            label: param.label,
+          })),
+        };
+        getFieldDetails["fieldParams"] = transformedFieldParams;
+      } else {
+        getFieldDetails["fieldParams"] = getFieldDetails?.fieldParams ?? {};
+      }
+
+      const checkValidation = this.validateFieldValue(
+        getFieldDetails,
+        fieldsData["value"]
+      );
+
+      if (typeof checkValidation === "object" && "error" in checkValidation) {
+        invalidateFields.push(
+          `${fieldId}: ${getFieldDetails["name"]} - ${checkValidation?.error?.message}`
+        );
+      }
+    }
+
+    // Validation for duplicate fields
+    if (duplicateFieldKeys.length > 0) {
+      return {
+        isValid: false,
+        error: `Duplicate fieldId detected: ${duplicateFieldKeys}`,
+      };
+    }
+
+    // Validation for fields values
+    if (invalidateFields.length > 0) {
+      return {
+        isValid: false,
+        error: `Invalid fields found: ${invalidateFields}`,
+      };
+    }
+    const getFieldIds = await this.getFieldIds(context, contextType);
+
+    const validFieldIds = new Set(getFieldIds.map((field) => field.fieldId));
+
+    const invalidFieldIds = cohortCreateDto.customFields
+      .filter((fieldValue) => !validFieldIds.has(fieldValue.fieldId))
+      .map((fieldValue) => fieldValue.fieldId);
+
+    if (invalidFieldIds.length > 0) {
+      return {
+        isValid: false,
+        error: `The following fields are not valid for this user: ${invalidFieldIds.join(
+          ", "
+        )}.`,
+      };
+    }
+    return {
+      isValid: true,
+    };
+  }
 
   async getFieldData(whereClause): Promise<any> {
     const query = `select * from public."Fields" where ${whereClause}`;
@@ -778,12 +874,46 @@ export class PostgresFieldsService implements IServicelocatorfields {
     if (limit !== undefined) {
       queryOptions.take = parseInt(limit);
     }
+    try {
+      const [results, totalCount] =
+        await this.fieldsValuesRepository.findAndCount(queryOptions);
+      const mappedResponse = await this.mappedResponse(results);
 
-    const [results, totalCount] =
-      await this.fieldsValuesRepository.findAndCount(queryOptions);
-    const mappedResponse = await this.mappedResponse(results);
+      return { mappedResponse, totalCount };
+    } catch (error) {
+      console.log("error: ", error);
+      return error;
+    }
+  }
+  //In operator
+  async getSearchFieldValueDataByIds(
+    offset: number,
+    limit: string,
+    searchData: any
+  ) {
+    const queryOptions: any = {
+      where: {
+        itemId: In(searchData),
+      },
+    };
 
-    return { mappedResponse, totalCount };
+    if (offset !== undefined) {
+      queryOptions.skip = offset;
+    }
+
+    if (limit !== undefined) {
+      queryOptions.take = parseInt(limit);
+    }
+    try {
+      const [results, totalCount] =
+        await this.fieldsValuesRepository.findAndCount(queryOptions);
+      const mappedResponse = await this.mappedResponse(results);
+
+      return { mappedResponse, totalCount };
+    } catch (error) {
+      console.log("error: ", error);
+      return error;
+    }
   }
 
   async searchFieldValueId(fieldId: string, itemId?: string) {

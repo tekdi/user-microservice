@@ -49,4 +49,8 @@ export interface IServicelocatorcohortMembers {
     cohortMembershipId: string,
     response: Response
   );
+  getRegistrationDetailsForBoardEnrolmentForMultipleMember(
+    cohortMembershipIds: string[],
+    response: Response
+  );
 }

@@ -274,7 +274,7 @@ export class CohortMembersController {
       );
     return result;
   }
-  //board enrolment register
+  //board enrolment register - save
   @Post("/board_enrolment")
   @ApiBody({ type: RegisterForBoardEnrolmentDto })
   @ApiHeader({
@@ -300,7 +300,32 @@ export class CohortMembersController {
       );
     return result;
   }
-  //get board enrolment register
+  //fetch data for multiple members
+  @Post("/board_enrolments")
+  //@ApiBody({ })
+  @ApiHeader({
+    name: "tenantid",
+  })
+  @ApiQuery({ name: "userId", required: true, type: "string" })
+  public async registerForBoardEnrolmentForMultipleMember(
+    @Body() request: any,
+    @Res() response: Response,
+    @Query("userId") loggedInUserId?: string
+  ) {
+    if (!loggedInUserId || !isUUID(loggedInUserId)) {
+      throw new BadRequestException(
+        "userId is required and must be a valid UUID."
+      );
+    }
+    const result = await this.cohortMemberAdapter
+      .buildCohortMembersAdapter()
+      .getRegistrationDetailsForBoardEnrolmentForMultipleMember(
+        request.cohortMembershipIds,
+        response
+      );
+    return result;
+  }
+  //fetch data for single members
   @Get("/board_enrolment")
   @ApiHeader({
     name: "tenantid",

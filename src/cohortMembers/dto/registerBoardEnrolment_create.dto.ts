@@ -4,56 +4,36 @@ import {
   IsOptional,
   IsEnum,
   IsNotEmpty,
+  ValidateNested,
+  ValidateIf,
 } from "class-validator";
-import { Type } from "class-transformer";
+import { Expose, Type } from "class-transformer";
+import { ApiProperty } from "@nestjs/swagger";
 
-// Enum for exam fee status validation
-enum ExamFeeStatus {
-  Yes = "Yes",
-  No = "No",
-  NA = "NA",
-}
-
-class BoardDTO {
+class CustomFieldDTO {
+  @ApiProperty({ type: () => String })
   @IsString()
+  @Expose()
   @IsNotEmpty()
-  name: string;
+  fieldId: string;
 
-  @IsString()
+  @ApiProperty({ type: () => String })
+  @ValidateIf((o) => o.value !== "")
   @IsNotEmpty()
-  boardId: string;
-}
-
-class SubjectDTO {
-  @IsString()
-  @IsNotEmpty()
-  name: string;
-
-  @IsString()
-  @IsNotEmpty()
-  subjectId: string;
+  @Expose()
+  value: string | string[];
 }
 
 export class RegisterForBoardEnrolmentDto {
-  @IsOptional()
-  @Type(() => BoardDTO)
-  board: BoardDTO;
-
-  @IsOptional()
-  @IsArray()
-  @Type(() => SubjectDTO)
-  subjects: SubjectDTO[];
-
-  @IsOptional()
-  @IsString()
-  @IsNotEmpty()
-  boardEnrolmentNumber: string;
-
-  @IsOptional()
-  @IsEnum(ExamFeeStatus)
-  examFeePaid: ExamFeeStatus;
-
   @IsString()
   @IsNotEmpty()
   cohortMembershipId: string;
+
+  @ApiProperty({ type: () => [CustomFieldDTO] })
+  @IsArray()
+  @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => CustomFieldDTO)
+  @Expose()
+  customFields: CustomFieldDTO[];
 }

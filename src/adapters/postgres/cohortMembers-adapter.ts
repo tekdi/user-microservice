@@ -20,6 +20,7 @@ import { CohortAcademicYear } from "src/cohortAcademicYear/entities/cohortAcadem
 import { PostgresAcademicYearService } from "./academicyears-adapter";
 import { API_RESPONSES } from "@utils/response.messages";
 import { RegisterForBoardEnrolmentDto } from "src/cohortMembers/dto/registerBoardEnrolment_create.dto";
+import { PostgresUserService } from "./user-adapter";
 
 @Injectable()
 export class PostgresCohortMembersService {
@@ -36,7 +37,8 @@ export class PostgresCohortMembersService {
     private readonly cohortAcademicYearRespository: Repository<CohortAcademicYear>,
     private readonly academicyearService: PostgresAcademicYearService,
     private readonly notificationRequest: NotificationRequest,
-    private fieldsService: PostgresFieldsService
+    private fieldsService: PostgresFieldsService,
+    private userService: PostgresUserService
   ) {}
 
   //Get cohort member
@@ -949,49 +951,41 @@ export class PostgresCohortMembersService {
     const results = [];
     const errors = [];
 
-    let responseFlag = false;
-    if (registerForBoardEnrolmentDto.board) {
-      const boardResponse = await this.registerFieldValue(
-        "board",
-        "COHORTMEMBER",
-        registerForBoardEnrolmentDto.board,
-        registerForBoardEnrolmentDto.cohortMembershipId,
-        loggedInUserId
-      );
-      responseFlag = boardResponse;
+    //validate custom field
+    let customFieldValidate;
+    if (
+      registerForBoardEnrolmentDto.customFields &&
+      registerForBoardEnrolmentDto.customFields.length > 0
+    ) {
+      customFieldValidate =
+        await this.fieldsService.validateCustomFieldByContext(
+          registerForBoardEnrolmentDto,
+          "COHORTMEMBER",
+          "COHORTMEMBER"
+        );
+      console.log("validate: ", customFieldValidate);
+      if (!customFieldValidate) {
+        return APIResponse.error(
+          response,
+          apiId,
+          "BAD_REQUEST",
+          `${customFieldValidate}`,
+          HttpStatus.BAD_REQUEST
+        );
+      }
     }
-    if (registerForBoardEnrolmentDto.subjects) {
-      const boardResponse = await this.registerFieldValue(
-        "subjects",
-        "COHORTMEMBER",
-        registerForBoardEnrolmentDto.subjects,
-        registerForBoardEnrolmentDto.cohortMembershipId,
-        loggedInUserId
-      );
-      responseFlag = boardResponse;
-    }
-    if (registerForBoardEnrolmentDto.boardEnrolmentNumber) {
-      const boardResponse = await this.registerFieldValue(
-        "board_enrolment_number",
-        "COHORTMEMBER",
-        registerForBoardEnrolmentDto.boardEnrolmentNumber,
-        registerForBoardEnrolmentDto.cohortMembershipId,
-        loggedInUserId
-      );
-      responseFlag = boardResponse;
-    }
-    if (registerForBoardEnrolmentDto.examFeePaid) {
-      const boardResponse = await this.registerFieldValue(
-        "fees_paid",
-        "COHORTMEMBER",
-        registerForBoardEnrolmentDto.examFeePaid,
-        registerForBoardEnrolmentDto.cohortMembershipId,
-        loggedInUserId
-      );
-      responseFlag = boardResponse;
-    }
-
-    if (responseFlag) {
+    const promises = [];
+    try {
+      registerForBoardEnrolmentDto.customFields.forEach((customField) => {
+        const promise = this.registerFieldValue(
+          customField.fieldId,
+          customField.value,
+          registerForBoardEnrolmentDto.cohortMembershipId,
+          loggedInUserId
+        ).then((data) => results.push(data));
+        promises.push(promise);
+      });
+      await Promise.all(promises);
       return APIResponse.success(
         response,
         apiId,
@@ -999,61 +993,50 @@ export class PostgresCohortMembersService {
         HttpStatus.CREATED,
         API_RESPONSES.BOARD_ENROLMENT_REGISTER_SUCCESS
       );
-    } else {
-      return APIResponse.success(
+    } catch (error) {
+      return APIResponse.error(
         response,
         apiId,
-        { results, errors },
-        HttpStatus.CREATED,
-        API_RESPONSES.BOARD_ENROLMENT_REGISTER_ERROR
+        "Internal server error",
+        "Internal server error",
+        HttpStatus.INTERNAL_SERVER_ERROR
+        //API_RESPONSES.BOARD_ENROLMENT_REGISTER_ERROR
       );
     }
   }
   public async registerFieldValue(
-    fieldName: string,
-    context: string,
+    fieldId: string,
     value: any,
     itemId: string,
     loggedInUserId: string
   ) {
-    let stringValue = typeof value !== "string" ? JSON.stringify(value) : value;
-    // Fetch the field data using fieldName and context
-    const fieldDataResponse = await this.fieldsService.getFieldData(
-      `"name" = '${fieldName}' AND "context" = '${context}'`
-    );
-
-    // If a fieldId is returned, proceed to save the field value
-    if (fieldDataResponse[0]?.fieldId) {
-      //create
-      const registerResponse = await this.fieldsService.findAndSaveFieldValues({
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        fieldId: fieldDataResponse[0].fieldId,
-        value: stringValue,
-        itemId: itemId,
-        createdBy: loggedInUserId,
-        updatedBy: loggedInUserId,
-      });
-      //update
-      if (!registerResponse) {
-        const updateResponse = await this.fieldsService.updateCustomFields(
-          itemId,
-          {
-            updatedAt: new Date(),
-            value: JSON.stringify(value),
-            fieldId: fieldDataResponse[0].fieldId,
-            updatedBy: loggedInUserId,
-          },
-          {}
-        );
-        if (updateResponse) {
-          return true;
-        } else {
-          return false;
-        }
+    //create
+    const registerResponse = await this.fieldsService.findAndSaveFieldValues({
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      fieldId: fieldId,
+      value: value,
+      itemId: itemId,
+      createdBy: loggedInUserId,
+      updatedBy: loggedInUserId,
+    });
+    //update
+    if (!registerResponse) {
+      const updateResponse = await this.fieldsService.updateCustomFields(
+        itemId,
+        {
+          updatedAt: new Date(),
+          value: JSON.stringify(value),
+          fieldId: fieldId,
+          updatedBy: loggedInUserId,
+        },
+        {}
+      );
+      if (updateResponse) {
+        return true;
+      } else {
+        return false;
       }
-    } else {
-      return false;
     }
   }
 
@@ -1066,9 +1049,10 @@ export class PostgresCohortMembersService {
     const responseData = await this.fieldsService.getFieldsAndFieldsValues(
       cohortMembershipId
     );
-    let results = responseData.map((obj) => {
+    const results = responseData.map((obj) => {
       return {
         name: obj.label,
+        filedId: obj.fieldId,
         value: this.safeJSONParse(obj.value),
       };
     });
@@ -1103,6 +1087,53 @@ export class PostgresCohortMembersService {
     } else {
       // If input is not a string, return it as-is
       return input;
+    }
+  }
+  public async getRegistrationDetailsForBoardEnrolmentForMultipleMember(
+    cohortMembershipIds: string[],
+    response: Response
+  ) {
+    const apiId = APIID.BOARD_ENROLMENT_REGISTRATION_DETAILS;
+    const errors = [];
+
+    const queryResult = await this.fieldsService.getSearchFieldValueDataByIds(
+      0,
+      "100",
+      cohortMembershipIds
+    );
+
+    const results = Object.entries(
+      queryResult.mappedResponse.reduce((acc, { itemId, fieldId, value }) => {
+        // Group initialization
+        if (!acc[itemId]) {
+          acc[itemId] = [];
+        }
+
+        // Grouping
+        acc[itemId].push({ fieldId, value });
+
+        return acc;
+      }, {})
+    ).map(([cohortMembershipId, customFields]) => ({
+      cohortMembershipId,
+      customFields,
+    }));
+    if (results) {
+      return APIResponse.success(
+        response,
+        apiId,
+        results,
+        HttpStatus.OK,
+        API_RESPONSES.BOARD_ENROLMENT_REGISTER_DETAILS_SUCCESS
+      );
+    } else {
+      return APIResponse.success(
+        response,
+        apiId,
+        { results, errors },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+        API_RESPONSES.BOARD_ENROLMENT_REGISTER__DETAILS_ERROR
+      );
     }
   }
 }
