@@ -43,6 +43,14 @@ export class TenantCreateDto {
     @Expose()
     params: object;
 
+    //file path
+    @ApiPropertyOptional({
+        type: String,
+    })
+    @IsString()
+    @Expose()
+    programImage: string;
+
     constructor(obj?: Partial<TenantCreateDto>) {
         if (obj) {
             Object.assign(this, obj);

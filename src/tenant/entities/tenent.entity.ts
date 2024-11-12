@@ -31,4 +31,7 @@ export class Tenants {
 
     @Column()
     params: string;
+
+    @Column()
+    programImage: string;
 }

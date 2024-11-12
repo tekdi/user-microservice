@@ -71,21 +71,23 @@ export class TenantService {
     public async createTenants(request, tenantCreateDto, response) {
         let apiId = APIID.TENANT_CREATE;
         try {
-            let checkExitTenants = await this.tenantRepository.find({
-                where: {
-                    "name": tenantCreateDto?.name
-                }
-            }
-            )
-            if (checkExitTenants.length > 0) {
-                return APIResponse.error(
-                    response,
-                    apiId,
-                    API_RESPONSES.CONFLICT,
-                    API_RESPONSES.TENANT_EXISTS,
-                    HttpStatus.CONFLICT
-                );
-            }
+            // let checkExitTenants = await this.tenantRepository.find({
+            //     where: {
+            //         "name": tenantCreateDto?.name
+            //     }
+            // }
+            // )
+            // if (checkExitTenants.length > 0) {
+            //     return APIResponse.error(
+            //         response,
+            //         apiId,
+            //         API_RESPONSES.CONFLICT,
+            //         API_RESPONSES.TENANT_EXISTS,
+            //         HttpStatus.CONFLICT
+            //     );
+            // }
+            console.log(tenantCreateDto);
+
             let result = await this.tenantRepository.save(tenantCreateDto);
             return APIResponse.success(
                 response,
