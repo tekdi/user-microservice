@@ -670,7 +670,6 @@ export class PostgresCohortMembersService {
           "COHORTMEMBER",
           "COHORTMEMBER"
         );
-      console.log("validate: ", customFieldValidate);
       if (!customFieldValidate || !isValid) {
         return APIResponse.error(
           response,
@@ -1042,7 +1041,6 @@ export class PostgresCohortMembersService {
 
       return { success: true, data: results };
     } catch (error) {
-      console.error("Error processing custom fields:", error);
       return { success: false, error: error.message };
     }
   }

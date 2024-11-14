@@ -881,7 +881,6 @@ export class PostgresFieldsService implements IServicelocatorfields {
 
       return { mappedResponse, totalCount };
     } catch (error) {
-      console.log("error: ", error);
       return error;
     }
   }
@@ -911,7 +910,6 @@ export class PostgresFieldsService implements IServicelocatorfields {
 
       return { mappedResponse, totalCount };
     } catch (error) {
-      console.log("error: ", error);
       return error;
     }
   }
