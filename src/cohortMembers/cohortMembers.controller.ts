@@ -41,7 +41,6 @@ import { APIID } from "src/common/utils/api-id.config";
 import { BulkCohortMember } from "./dto/bulkMember-create.dto";
 import { isUUID } from "class-validator";
 import { API_RESPONSES } from "@utils/response.messages";
-import { RegisterForBoardEnrolmentDto } from "./dto/registerBoardEnrolment_create.dto";
 
 @ApiTags("Cohort Member")
 @Controller("cohortmember")
@@ -272,78 +271,6 @@ export class CohortMembersController {
         tenantId,
         academicyearId
       );
-    return result;
-  }
-  //board enrolment register - save
-  @Post("/board_enrolment")
-  @ApiBody({ type: RegisterForBoardEnrolmentDto })
-  @ApiHeader({
-    name: "tenantid",
-  })
-  @ApiQuery({ name: "userId", required: true, type: "string" })
-  public async registerForBoardEnrolment(
-    @Body() registerForBoardEnrolmentDto: RegisterForBoardEnrolmentDto,
-    @Res() response: Response,
-    @Query("userId") loggedInUserId?: string
-  ) {
-    if (!loggedInUserId || !isUUID(loggedInUserId)) {
-      throw new BadRequestException(
-        "userId is required and must be a valid UUID."
-      );
-    }
-    const result = await this.cohortMemberAdapter
-      .buildCohortMembersAdapter()
-      .registerForBoardEnrolment(
-        loggedInUserId,
-        registerForBoardEnrolmentDto,
-        response
-      );
-    return result;
-  }
-  //fetch data for multiple members
-  @Post("/board_enrolments")
-  //@ApiBody({ })
-  @ApiHeader({
-    name: "tenantid",
-  })
-  @ApiQuery({ name: "userId", required: true, type: "string" })
-  public async registerForBoardEnrolmentForMultipleMember(
-    @Body() request: any,
-    @Res() response: Response,
-    @Query("userId") loggedInUserId?: string
-  ) {
-    if (!loggedInUserId || !isUUID(loggedInUserId)) {
-      throw new BadRequestException(
-        "userId is required and must be a valid UUID."
-      );
-    }
-    const result = await this.cohortMemberAdapter
-      .buildCohortMembersAdapter()
-      .getRegistrationDetailsForBoardEnrolmentForMultipleMember(
-        request.cohortMembershipIds,
-        response
-      );
-    return result;
-  }
-  //fetch data for single members
-  @Get("/board_enrolment")
-  @ApiHeader({
-    name: "tenantid",
-  })
-  @ApiQuery({ name: "cohortMembershipId", required: true, type: "string" })
-  public async getRegistrationDetailsForBoardEnrolment(
-    @Headers() headers,
-    @Res() response: Response,
-    @Query("cohortMembershipId") cohortMembershipId: string
-  ) {
-    if (!cohortMembershipId || !isUUID(cohortMembershipId)) {
-      throw new BadRequestException(
-        "cohortMembershipId is required and must be a valid UUID."
-      );
-    }
-    const result = await this.cohortMemberAdapter
-      .buildCohortMembersAdapter()
-      .getRegistrationDetailsForBoardEnrolment(cohortMembershipId, response);
     return result;
   }
 }

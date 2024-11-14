@@ -77,12 +77,5 @@ export const API_RESPONSES = {
     `User with userId ${userId} does not exist for this academic year.`,
   UNAUTHORIZED: "Unauthorized",
   INVALID_TOKEN: "Token Invalid",
-  BOARD_ENROLMENT_REGISTER_SUCCESS:
-    "Board enrolment registration details updated successfully",
-  BOARD_ENROLMENT_REGISTER_ERROR:
-    "Error while updating board enrolment registration details",
-  BOARD_ENROLMENT_REGISTER_DETAILS_SUCCESS:
-    "Board enrolment registration details fetched successfully",
-  BOARD_ENROLMENT_REGISTER__DETAILS_ERROR:
-    "Error while fetching board enrolment registration details",
+  COHORTMEMBER_UPDATE_SUCCESSFULLY: "Cohort Member updated Successfully",
 };

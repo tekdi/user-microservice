@@ -48,7 +48,4 @@ export const APIID = {
   FORM_GET: "api.form.read",
   FORM_CREATE: "api.form.create",
   ADD_COHORT_TO_ACADEMIC_YEAR: "api.create.cohortAcademicYear",
-  BOARD_ENROLMENT_REGISTRATION: "api.create.boardEnrolmentRegister",
-  BOARD_ENROLMENT_REGISTRATION_DETAILS:
-    "api.get.boardEnrolmentRegistrationDetails",
 };

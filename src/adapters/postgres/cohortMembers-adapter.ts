@@ -12,15 +12,16 @@ import { Fields } from "src/fields/entities/fields.entity";
 import { isUUID } from "class-validator";
 import { Cohort } from "src/cohort/entities/cohort.entity";
 import APIResponse from "src/common/responses/response";
-import { Response } from "express";
+import { response, Response } from "express";
 import { APIID } from "src/common/utils/api-id.config";
 import { MemberStatus } from "src/cohortMembers/entities/cohort-member.entity";
 import { NotificationRequest } from "@utils/notification.axios";
 import { CohortAcademicYear } from "src/cohortAcademicYear/entities/cohortAcademicYear.entity";
 import { PostgresAcademicYearService } from "./academicyears-adapter";
 import { API_RESPONSES } from "@utils/response.messages";
-import { RegisterForBoardEnrolmentDto } from "src/cohortMembers/dto/registerBoardEnrolment_create.dto";
 import { PostgresUserService } from "./user-adapter";
+import { isValid } from "date-fns";
+import { FieldValuesOptionDto } from "src/user/dto/user-create.dto";
 
 @Injectable()
 export class PostgresCohortMembersService {
@@ -435,7 +436,23 @@ export class PostgresCohortMembersService {
         } else {
           const fieldValues =
             await this.fieldsService.getUserCustomFieldDetails(data.userId);
-          data["customField"] = fieldValues;
+          //get data by cohort membership Id
+          let fieldValuesForCohort =
+            await this.fieldsService.getFieldsAndFieldsValues(
+              data.cohortMembershipId
+            );
+
+          fieldValuesForCohort = fieldValuesForCohort.map((field) => {
+            return {
+              fieldId: field.fieldId,
+              label: field.label,
+              value: field.value,
+              type: field.type,
+              code: field.code,
+            };
+          });
+
+          data["customField"] = fieldValues.concat(fieldValuesForCohort);
           results.userDetails.push(data);
         }
       }
@@ -623,57 +640,85 @@ export class PostgresCohortMembersService {
 
     return result;
   }
-
+  //****
   public async updateCohortMembers(
     cohortMembershipId: string,
     loginUser: any,
     cohortMembersUpdateDto: CohortMembersUpdateDto,
-    res: Response
+    res
   ) {
     const apiId = APIID.COHORT_MEMBER_UPDATE;
-
-    try {
-      cohortMembersUpdateDto.updatedBy = loginUser;
-      if (!isUUID(cohortMembershipId)) {
+    cohortMembersUpdateDto.updatedBy = loginUser;
+    if (!isUUID(cohortMembershipId)) {
+      return APIResponse.error(
+        res,
+        apiId,
+        "Bad Request",
+        "Invalid input: Please Enter a valid UUID for cohortMembershipId.",
+        HttpStatus.BAD_REQUEST
+      );
+    }
+    //validate custom fileds
+    let customFieldValidate;
+    if (
+      cohortMembersUpdateDto.customFields &&
+      cohortMembersUpdateDto.customFields.length > 0
+    ) {
+      customFieldValidate =
+        await this.fieldsService.validateCustomFieldByContext(
+          cohortMembersUpdateDto,
+          "COHORTMEMBER",
+          "COHORTMEMBER"
+        );
+      console.log("validate: ", customFieldValidate);
+      if (!customFieldValidate || !isValid) {
         return APIResponse.error(
-          res,
+          response,
           apiId,
-          "Bad Request",
-          "Invalid input: Please Enter a valid UUID for cohortMembershipId.",
+          "BAD_REQUEST",
+          `${customFieldValidate}`,
           HttpStatus.BAD_REQUEST
         );
       }
+    }
 
-      const cohortMembershipToUpdate =
-        await this.cohortMembersRepository.findOne({
-          where: { cohortMembershipId: cohortMembershipId },
-        });
+    let cohortMembershipToUpdate = await this.cohortMembersRepository.findOne({
+      where: { cohortMembershipId: cohortMembershipId },
+    });
 
-      if (!cohortMembershipToUpdate) {
-        return APIResponse.error(
-          res,
-          apiId,
-          "Not Found",
-          "Invalid input: Cohort member not found.",
-          HttpStatus.NOT_FOUND
-        );
-      }
-
-      Object.assign(cohortMembershipToUpdate, cohortMembersUpdateDto);
-
-      const updatedCohortMember = await this.cohortMembersRepository.save(
-        cohortMembershipToUpdate
+    if (!cohortMembershipToUpdate) {
+      return APIResponse.error(
+        res,
+        apiId,
+        "Not Found",
+        "Invalid input: Cohort member not found.",
+        HttpStatus.NOT_FOUND
       );
+    }
 
+    const customFields = cohortMembersUpdateDto.customFields;
+    delete cohortMembersUpdateDto.customFields;
+    Object.assign(cohortMembershipToUpdate, cohortMembersUpdateDto);
+
+    await this.cohortMembersRepository.save(cohortMembershipToUpdate);
+    //update custom fields
+
+    let responseForCustomField = await this.processCustomFields(
+      customFields,
+      cohortMembershipId,
+      cohortMembersUpdateDto
+    );
+    if (responseForCustomField.success) {
       return APIResponse.success(
         res,
         apiId,
-        updatedCohortMember,
-        HttpStatus.OK,
-        "Cohort Member Updated successfully."
+        [],
+        HttpStatus.CREATED,
+        API_RESPONSES.COHORTMEMBER_UPDATE_SUCCESSFULLY
       );
-    } catch (e) {
-      const errorMessage = e.message || "Internal server error";
+    } else {
+      const errorMessage =
+        responseForCustomField.error || "Internal server error";
       return APIResponse.error(
         res,
         apiId,
@@ -942,68 +987,7 @@ export class PostgresCohortMembersService {
       API_RESPONSES.COHORTMEMBER_SUCCESSFULLY
     );
   }
-  public async registerForBoardEnrolment(
-    loggedInUserId: string,
-    registerForBoardEnrolmentDto: RegisterForBoardEnrolmentDto,
-    response: Response
-  ) {
-    const apiId = APIID.BOARD_ENROLMENT_REGISTRATION;
-    const results = [];
-    const errors = [];
 
-    //validate custom field
-    let customFieldValidate;
-    if (
-      registerForBoardEnrolmentDto.customFields &&
-      registerForBoardEnrolmentDto.customFields.length > 0
-    ) {
-      customFieldValidate =
-        await this.fieldsService.validateCustomFieldByContext(
-          registerForBoardEnrolmentDto,
-          "COHORTMEMBER",
-          "COHORTMEMBER"
-        );
-      console.log("validate: ", customFieldValidate);
-      if (!customFieldValidate) {
-        return APIResponse.error(
-          response,
-          apiId,
-          "BAD_REQUEST",
-          `${customFieldValidate}`,
-          HttpStatus.BAD_REQUEST
-        );
-      }
-    }
-    const promises = [];
-    try {
-      registerForBoardEnrolmentDto.customFields.forEach((customField) => {
-        const promise = this.registerFieldValue(
-          customField.fieldId,
-          customField.value,
-          registerForBoardEnrolmentDto.cohortMembershipId,
-          loggedInUserId
-        ).then((data) => results.push(data));
-        promises.push(promise);
-      });
-      await Promise.all(promises);
-      return APIResponse.success(
-        response,
-        apiId,
-        results,
-        HttpStatus.CREATED,
-        API_RESPONSES.BOARD_ENROLMENT_REGISTER_SUCCESS
-      );
-    } catch (error) {
-      return APIResponse.error(
-        response,
-        apiId,
-        "Internal server error",
-        "Internal server error",
-        HttpStatus.INTERNAL_SERVER_ERROR
-        //API_RESPONSES.BOARD_ENROLMENT_REGISTER_ERROR
-      );
-    }
-  }
   public async registerFieldValue(
     fieldId: string,
     value: any,
@@ -1039,101 +1023,27 @@ export class PostgresCohortMembersService {
       }
     }
   }
-
-  public async getRegistrationDetailsForBoardEnrolment(
+  async processCustomFields(
+    customFields: FieldValuesOptionDto[],
     cohortMembershipId: string,
-    response: Response
+    cohortMembersUpdateDto: CohortMembersUpdateDto
   ) {
-    const apiId = APIID.BOARD_ENROLMENT_REGISTRATION_DETAILS;
-    const errors = [];
-    const responseData = await this.fieldsService.getFieldsAndFieldsValues(
-      cohortMembershipId
-    );
-    const results = responseData.map((obj) => {
-      return {
-        name: obj.label,
-        filedId: obj.fieldId,
-        value: this.safeJSONParse(obj.value),
-      };
-    });
-    if (results) {
-      return APIResponse.success(
-        response,
-        apiId,
-        results,
-        HttpStatus.OK,
-        API_RESPONSES.BOARD_ENROLMENT_REGISTER_DETAILS_SUCCESS
+    try {
+      const promises = customFields.map((customField) =>
+        this.registerFieldValue(
+          customField.fieldId,
+          customField.value,
+          cohortMembershipId,
+          cohortMembersUpdateDto.userId
+        )
       );
-    } else {
-      return APIResponse.success(
-        response,
-        apiId,
-        { results, errors },
-        HttpStatus.INTERNAL_SERVER_ERROR,
-        API_RESPONSES.BOARD_ENROLMENT_REGISTER__DETAILS_ERROR
-      );
-    }
-  }
-  public safeJSONParse(input) {
-    // Check if the input is a string
-    if (typeof input === "string") {
-      try {
-        // Attempt to parse the JSON string
-        return JSON.parse(input);
-      } catch (error) {
-        // Handle the error
-        return input;
-      }
-    } else {
-      // If input is not a string, return it as-is
-      return input;
-    }
-  }
-  public async getRegistrationDetailsForBoardEnrolmentForMultipleMember(
-    cohortMembershipIds: string[],
-    response: Response
-  ) {
-    const apiId = APIID.BOARD_ENROLMENT_REGISTRATION_DETAILS;
-    const errors = [];
 
-    const queryResult = await this.fieldsService.getSearchFieldValueDataByIds(
-      0,
-      "100",
-      cohortMembershipIds
-    );
+      const results = await Promise.all(promises);
 
-    const results = Object.entries(
-      queryResult.mappedResponse.reduce((acc, { itemId, fieldId, value }) => {
-        // Group initialization
-        if (!acc[itemId]) {
-          acc[itemId] = [];
-        }
-
-        // Grouping
-        acc[itemId].push({ fieldId, value });
-
-        return acc;
-      }, {})
-    ).map(([cohortMembershipId, customFields]) => ({
-      cohortMembershipId,
-      customFields,
-    }));
-    if (results) {
-      return APIResponse.success(
-        response,
-        apiId,
-        results,
-        HttpStatus.OK,
-        API_RESPONSES.BOARD_ENROLMENT_REGISTER_DETAILS_SUCCESS
-      );
-    } else {
-      return APIResponse.success(
-        response,
-        apiId,
-        { results, errors },
-        HttpStatus.INTERNAL_SERVER_ERROR,
-        API_RESPONSES.BOARD_ENROLMENT_REGISTER__DETAILS_ERROR
-      );
+      return { success: true, data: results };
+    } catch (error) {
+      console.error("Error processing custom fields:", error);
+      return { success: false, error: error.message };
     }
   }
 }
