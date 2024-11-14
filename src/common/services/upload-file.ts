@@ -19,7 +19,6 @@ export class FilesUploadService {
     }
 
     async saveFile(file: Express.Multer.File): Promise<{ filePath: string; fileSize: number }> {
-
         const allowedExtensions: string[] = ['.jpg', '.jpeg', '.png', '.gif', '.ico', '.webp'];
         const fileExtension = extname(file.originalname).toLowerCase();
 
@@ -33,19 +32,16 @@ export class FilesUploadService {
         const params = {
             Bucket: this.bucketName,
             Key: uniqueFileName,
-            Body: file.buffer,  // Added the Body with file data
+            Body: file.buffer,
             ContentType: file.mimetype,
         };
-        console.log(this.bucketName)
+
         try {
             await this.s3Client.send(new PutObjectCommand(params));
         } catch (error) {
-            throw new InternalServerErrorException(`Failed to upload file to S3. Error: ${error?.message || error}. Bucket Name: ${this.bucketName}`);
-
-
+            throw new InternalServerErrorException(`Failed to upload file to S3. Error: ${error?.message || error}`);
         }
-        // await this.s3Client.send(new PutObjectCommand(params));
-        console.log("hiii")
+
         const metadata = await this.s3Client.send(new HeadObjectCommand({
             Bucket: this.bucketName,
             Key: uniqueFileName,

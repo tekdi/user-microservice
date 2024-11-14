@@ -1,5 +1,5 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { Tenants } from './entities/tenent.entity';
+import { Tenant } from './entities/tenent.entity';
 import { Repository } from 'typeorm';
 import APIResponse from "src/common/responses/response";
 import { InjectRepository } from '@nestjs/typeorm';
@@ -10,8 +10,8 @@ import { APIID } from '@utils/api-id.config';
 @Injectable()
 export class TenantService {
     constructor(
-        @InjectRepository(Tenants)
-        private tenantRepository: Repository<Tenants>,
+        @InjectRepository(Tenant)
+        private tenantRepository: Repository<Tenant>,
     ) { }
 
     public async getTenants(request, response) {
@@ -71,22 +71,21 @@ export class TenantService {
     public async createTenants(request, tenantCreateDto, response) {
         let apiId = APIID.TENANT_CREATE;
         try {
-            // let checkExitTenants = await this.tenantRepository.find({
-            //     where: {
-            //         "name": tenantCreateDto?.name
-            //     }
-            // }
-            // )
-            // if (checkExitTenants.length > 0) {
-            //     return APIResponse.error(
-            //         response,
-            //         apiId,
-            //         API_RESPONSES.CONFLICT,
-            //         API_RESPONSES.TENANT_EXISTS,
-            //         HttpStatus.CONFLICT
-            //     );
-            // }
-            console.log(tenantCreateDto);
+            let checkExitTenants = await this.tenantRepository.find({
+                where: {
+                    "name": tenantCreateDto?.name
+                }
+            }
+            )
+            if (checkExitTenants.length > 0) {
+                return APIResponse.error(
+                    response,
+                    apiId,
+                    API_RESPONSES.CONFLICT,
+                    API_RESPONSES.TENANT_EXISTS,
+                    HttpStatus.CONFLICT
+                );
+            }
 
             let result = await this.tenantRepository.save(tenantCreateDto);
             return APIResponse.success(
@@ -147,7 +146,7 @@ export class TenantService {
         }
     }
 
-    public async updateTenants(request, tenantId, response) {
+    public async updateTenants(request, tenantId, tenantUpdateDto, response) {
         let apiId = APIID.TENANT_UPDATE;
         try {
             let checkExitTenants = await this.tenantRepository.find({
@@ -166,10 +165,9 @@ export class TenantService {
                 );
             }
 
-            let result = await this.tenantRepository.update(
-                tenantId,
-                request.body
-            );
+            console.log(tenantUpdateDto);
+
+            let result = await this.tenantRepository.update(tenantId, tenantUpdateDto);
             return APIResponse.success(
                 response,
                 apiId,

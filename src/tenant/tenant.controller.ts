@@ -1,9 +1,10 @@
-import { Body, Controller, Delete, Get, Patch, Post, Query, Req, Res, SerializeOptions, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Patch, Post, Query, Req, Res, SerializeOptions, UploadedFile, UploadedFiles, UseInterceptors } from '@nestjs/common';
 import { TenantService } from './tenant.service';
 import { ApiCreatedResponse, ApiForbiddenResponse } from '@nestjs/swagger';
 import { TenantCreateDto } from './dto/tenant-create.dto';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { FilesInterceptor } from '@nestjs/platform-express';
 import { FilesUploadService } from 'src/common/services/upload-file';
+import { TenantUpdateDto } from './dto/tenant-update.dto';
 @Controller('tenant')
 export class TenantController {
     constructor(
@@ -28,7 +29,7 @@ export class TenantController {
     @Post("/create")
     @ApiCreatedResponse({ description: "Tenant Created Successfully" })
     @ApiForbiddenResponse({ description: "Forbidden" })
-    @UseInterceptors(FileInterceptor('programImage'))
+    @UseInterceptors(FilesInterceptor('programImages', 10))
     @SerializeOptions({
         strategy: "excludeAll",
     })
@@ -36,18 +37,54 @@ export class TenantController {
         @Req() request: Request,
         @Res() response: Response,
         @Body() tenantCreateDto: TenantCreateDto,
-        @UploadedFile() file: Express.Multer.File,
+        @UploadedFiles() files: Express.Multer.File[],
     ) {
-        if (file) {
-            const uploadedFile = await this.filesUploadService.saveFile(file);
-            console.log(uploadedFile);
+        const uploadedFiles = [];
 
-            tenantCreateDto.programImage = uploadedFile.filePath;
+        // Loop through each file and upload it
+        if (files && files.length > 0) {
+            for (const file of files) {
+                const uploadedFile = await this.filesUploadService.saveFile(file);
+                uploadedFiles.push(uploadedFile);
+            }
+
+            // Assuming tenantCreateDto needs an array of file paths
+            tenantCreateDto.programImages = uploadedFiles.map(file => file.filePath); // Adjust field as needed
         }
-        console.log(tenantCreateDto);
 
         return await this.tenantService.createTenants(request, tenantCreateDto, response);
     }
+
+    //Update a tenant
+    @Patch("/update")
+    @ApiCreatedResponse({ description: "Tenant Data Fetch" })
+    @ApiForbiddenResponse({ description: "Forbidden" })
+    @UseInterceptors(FilesInterceptor('programImages', 10))
+    @SerializeOptions({
+        strategy: "excludeAll",
+    })
+    public async updateTenants(
+        @Req() request: Request,
+        @Res() response: Response,
+        @Query("id") id: string,
+        @Body() tenantUpdateDto: TenantUpdateDto,
+        @UploadedFiles() files: Express.Multer.File[],
+    ) {
+        const uploadedFiles = [];
+
+        // Loop through each file and upload it
+        if (files && files.length > 0) {
+            for (const file of files) {
+                const uploadedFile = await this.filesUploadService.saveFile(file);
+                uploadedFiles.push(uploadedFile);
+            }
+            // Assuming tenantCreateDto needs an array of file paths
+            tenantUpdateDto.programImages = uploadedFiles.map(file => file.filePath); // Adjust field as needed
+        }
+        const tenantId = id;
+        return await this.tenantService.updateTenants(request, tenantId, tenantUpdateDto, response);
+    }
+
 
     //Delete a tenant
     @Delete("/delete")
@@ -65,20 +102,4 @@ export class TenantController {
         return await this.tenantService.deleteTenants(request, tenantId, response);
     }
 
-
-    //Update a tenant
-    @Patch("/update")
-    @ApiCreatedResponse({ description: "Tenant Data Fetch" })
-    @ApiForbiddenResponse({ description: "Forbidden" })
-    @SerializeOptions({
-        strategy: "excludeAll",
-    })
-    public async updateTenants(
-        @Req() request: Request,
-        @Res() response: Response,
-        @Query("id") id: string
-    ) {
-        const tenantId = id;
-        return await this.tenantService.updateTenants(request, tenantId, response);
-    }
 }
