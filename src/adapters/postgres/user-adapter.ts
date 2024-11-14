@@ -741,6 +741,7 @@ export class PostgresUserService implements IServicelocator {
   ) {
     const apiId = APIID.USER_CREATE;
     // It is considered that if user is not present in keycloak it is not present in database as well
+
     try {
       if (request.headers.authorization) {
         const decoded: any = jwt_decode(request.headers.authorization);
@@ -771,12 +772,20 @@ export class PostgresUserService implements IServicelocator {
       const validatedRoles = await this.validateRequestBody(userCreateDto, academicYearId);
 
       // check if roles are invalid and academic year is provided 
-      if ((!Array.isArray(validatedRoles) || !validatedRoles.every(role => role instanceof Role)) && academicYearId?.length) {
+      if ((!Array.isArray(validatedRoles) || !validatedRoles.every(role => role instanceof Role)) && academicYearId?.length > 0) {
         return APIResponse.error(
           response,
           apiId,
           "BAD_REQUEST",
           `${validatedRoles}`,
+          HttpStatus.BAD_REQUEST
+        );
+      } else if (!Array.isArray(validatedRoles) || (academicYearId?.length <= 0)) {
+        return APIResponse.error(
+          response,
+          apiId,
+          "BAD_REQUEST",
+          `Roles and academic year invalid`,
           HttpStatus.BAD_REQUEST
         );
       }
@@ -944,6 +953,10 @@ export class PostgresUserService implements IServicelocator {
       for (const tenantCohortRoleMapping of userCreateDto?.tenantCohortRoleMapping) {
 
         const { tenantId, cohortIds, roleId } = tenantCohortRoleMapping;
+
+        if (!tenantId || !cohortIds?.length || !roleId) {
+          return false;
+        }
 
         // check academic year exists for tenant 
         const checkAcadmicYear = await this.postgresAcademicYearService.getActiveAcademicYear(academicYearId, tenantId);
