@@ -23,7 +23,8 @@ export const API_RESPONSES = {
   ACADEMICYEAR_NOTFOUND: "Academic Year Not Found",
   ACADEMICYEAR_GET_SUCCESS: "Get Successfully",
   STARTDATE_VALIDATION: "start Date should not less than current date",
-  ENDDATE_VALIDATION: "End Date shluld not less than startDate",
+  ENDDATE_VALIDATION:
+    "End Date should not be earlier than Start Date and can be equal to it.",
   TENANTID_VALIDATION: "Tenant ID is required and must be a valid UUID",
   COHORT_NOT_AVAILABLE_FOR_ACADEMIC_YEAR:
     "No cohorts available for given Academic year",
@@ -39,7 +40,7 @@ export const API_RESPONSES = {
   TENANT_ID_NOTFOUND: '"Invalid input: TenantId must be a valid UUID."',
   COHORT_NOTFOUND: "Cohort not exist for this year.",
   USER_NOTFOUND: "User not exist for this year.",
-  USER_DETAIL_NOTFOUND: "User Deatil not found",
+  USER_DETAIL_NOTFOUND: "User details not found",
   COHORT_GET_SUCCESSFULLY: "Cohort members details fetched successfully.",
   COHORT_USER_NOTFOUND: "User not exist in this cohort for this year.",
   COHORTMEMBER_ERROR: "Cohort Members Created with some errors",
@@ -78,4 +79,13 @@ export const API_RESPONSES = {
   UNAUTHORIZED: "Unauthorized",
   INVALID_TOKEN: "Token Invalid",
   COHORTMEMBER_UPDATE_SUCCESSFULLY: "Cohort Member updated Successfully",
+  TENANT_NOTFOUND: "tenant not found",
+
+  //Tenant
+  TENANT_GET: "Tenant fetched successfully.",
+  TENANT_NOT_FOUND: "Tenant does not exist",
+  TENANT_EXISTS: "Tenant already exists",
+  TENANT_CREATE: "Tenant created successfully",
+  TENANT_UPDATE: "Tenant updated successfully",
+  TENANT_DELETE: "Tenant deleted successfully",
 };
