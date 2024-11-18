@@ -7,8 +7,6 @@ import { User } from "src/user/entities/user-entity";
 import { CohortMembers } from "src/cohortMembers/entities/cohort-member.entity";
 import { Fields } from "src/fields/entities/fields.entity";
 import { FieldValues } from "src/fields/entities/fields-values.entity";
-import { AttendanceEntity } from "src/attendance/entities/attendance.entity";
-import { PostgresAttendanceService } from "./attendance-adapter";
 import { PostgresFieldsService } from "./fields-adapter";
 import { Cohort } from "src/cohort/entities/cohort.entity";
 import { UserTenantMapping } from "src/userTenantMapping/entities/user-tenant-mapping.entity";
@@ -33,7 +31,6 @@ import { CohortAcademicYearService } from "./cohortAcademicYear-adapter";
       Fields,
       FieldValues,
       CohortMembers,
-      AttendanceEntity,
       Fields,
       Cohort,
       UserTenantMapping,
@@ -42,29 +39,27 @@ import { CohortAcademicYearService } from "./cohortAcademicYear-adapter";
       Role,
       RolePrivilegeMapping,
       CohortAcademicYear,
-      AcademicYear
+      AcademicYear,
     ]),
   ],
   providers: [
     PostgresUserService,
-    PostgresAttendanceService,
     PostgresFieldsService,
     PostgresRoleService,
     NotificationRequest,
     JwtUtil,
     JwtService,
     CohortAcademicYearService,
-    PostgresAcademicYearService
+    PostgresAcademicYearService,
   ],
   exports: [
     PostgresUserService,
-    PostgresAttendanceService,
     PostgresFieldsService,
     NotificationRequest,
     JwtUtil,
     JwtService,
     CohortAcademicYearService,
-    PostgresAcademicYearService
+    PostgresAcademicYearService,
   ],
 })
 export class PostgresModule {}

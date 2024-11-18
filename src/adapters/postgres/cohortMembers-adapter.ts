@@ -12,13 +12,16 @@ import { Fields } from "src/fields/entities/fields.entity";
 import { isUUID } from "class-validator";
 import { Cohort } from "src/cohort/entities/cohort.entity";
 import APIResponse from "src/common/responses/response";
-import { Response } from "express";
+import { response, Response } from "express";
 import { APIID } from "src/common/utils/api-id.config";
 import { MemberStatus } from "src/cohortMembers/entities/cohort-member.entity";
 import { NotificationRequest } from "@utils/notification.axios";
 import { CohortAcademicYear } from "src/cohortAcademicYear/entities/cohortAcademicYear.entity";
 import { PostgresAcademicYearService } from "./academicyears-adapter";
 import { API_RESPONSES } from "@utils/response.messages";
+import { PostgresUserService } from "./user-adapter";
+import { isValid } from "date-fns";
+import { FieldValuesOptionDto } from "src/user/dto/user-create.dto";
 
 @Injectable()
 export class PostgresCohortMembersService {
@@ -35,7 +38,8 @@ export class PostgresCohortMembersService {
     private readonly cohortAcademicYearRespository: Repository<CohortAcademicYear>,
     private readonly academicyearService: PostgresAcademicYearService,
     private readonly notificationRequest: NotificationRequest,
-    private fieldsService: PostgresFieldsService
+    private fieldsService: PostgresFieldsService,
+    private userService: PostgresUserService
   ) {}
 
   //Get cohort member
@@ -432,7 +436,23 @@ export class PostgresCohortMembersService {
         } else {
           const fieldValues =
             await this.fieldsService.getUserCustomFieldDetails(data.userId);
-          data["customField"] = fieldValues;
+          //get data by cohort membership Id
+          let fieldValuesForCohort =
+            await this.fieldsService.getFieldsAndFieldsValues(
+              data.cohortMembershipId
+            );
+
+          fieldValuesForCohort = fieldValuesForCohort.map((field) => {
+            return {
+              fieldId: field.fieldId,
+              label: field.label,
+              value: field.value,
+              type: field.type,
+              code: field.code,
+            };
+          });
+
+          data["customField"] = fieldValues.concat(fieldValuesForCohort);
           results.userDetails.push(data);
         }
       }
@@ -583,7 +603,7 @@ export class PostgresCohortMembersService {
       whereCase += where.map(processCondition).join(" AND ");
     }
 
-    let query = `SELECT U."userId", U.username, U.name, R.name AS role, U.district, U.state,U.mobile, 
+    let query = `SELECT U."userId", U.username, U.name, R.name AS role, U.district, U.state,U.mobile,U."deviceId",
       CM."status", CM."statusReason",CM."cohortMembershipId",CM."status",CM."createdAt", U."createdAt", U."updatedAt",U."createdBy",U."updatedBy", COUNT(*) OVER() AS total_count  FROM public."CohortMembers" CM
       INNER JOIN public."Users" U
       ON CM."userId" = U."userId"
@@ -620,57 +640,84 @@ export class PostgresCohortMembersService {
 
     return result;
   }
-
+  //****
   public async updateCohortMembers(
     cohortMembershipId: string,
     loginUser: any,
     cohortMembersUpdateDto: CohortMembersUpdateDto,
-    res: Response
+    res
   ) {
     const apiId = APIID.COHORT_MEMBER_UPDATE;
-
-    try {
-      cohortMembersUpdateDto.updatedBy = loginUser;
-      if (!isUUID(cohortMembershipId)) {
+    cohortMembersUpdateDto.updatedBy = loginUser;
+    if (!isUUID(cohortMembershipId)) {
+      return APIResponse.error(
+        res,
+        apiId,
+        "Bad Request",
+        "Invalid input: Please Enter a valid UUID for cohortMembershipId.",
+        HttpStatus.BAD_REQUEST
+      );
+    }
+    //validate custom fileds
+    let customFieldValidate;
+    if (
+      cohortMembersUpdateDto.customFields &&
+      cohortMembersUpdateDto.customFields.length > 0
+    ) {
+      customFieldValidate =
+        await this.fieldsService.validateCustomFieldByContext(
+          cohortMembersUpdateDto,
+          "COHORTMEMBER",
+          "COHORTMEMBER"
+        );
+      if (!customFieldValidate || !isValid) {
         return APIResponse.error(
-          res,
+          response,
           apiId,
-          "Bad Request",
-          "Invalid input: Please Enter a valid UUID for cohortMembershipId.",
+          "BAD_REQUEST",
+          `${customFieldValidate}`,
           HttpStatus.BAD_REQUEST
         );
       }
+    }
 
-      const cohortMembershipToUpdate =
-        await this.cohortMembersRepository.findOne({
-          where: { cohortMembershipId: cohortMembershipId },
-        });
+    let cohortMembershipToUpdate = await this.cohortMembersRepository.findOne({
+      where: { cohortMembershipId: cohortMembershipId },
+    });
 
-      if (!cohortMembershipToUpdate) {
-        return APIResponse.error(
-          res,
-          apiId,
-          "Not Found",
-          "Invalid input: Cohort member not found.",
-          HttpStatus.NOT_FOUND
-        );
-      }
-
-      Object.assign(cohortMembershipToUpdate, cohortMembersUpdateDto);
-
-      const updatedCohortMember = await this.cohortMembersRepository.save(
-        cohortMembershipToUpdate
+    if (!cohortMembershipToUpdate) {
+      return APIResponse.error(
+        res,
+        apiId,
+        "Not Found",
+        "Invalid input: Cohort member not found.",
+        HttpStatus.NOT_FOUND
       );
+    }
 
+    const customFields = cohortMembersUpdateDto.customFields;
+    delete cohortMembersUpdateDto.customFields;
+    Object.assign(cohortMembershipToUpdate, cohortMembersUpdateDto);
+
+    await this.cohortMembersRepository.save(cohortMembershipToUpdate);
+    //update custom fields
+
+    let responseForCustomField = await this.processCustomFields(
+      customFields,
+      cohortMembershipId,
+      cohortMembersUpdateDto
+    );
+    if (responseForCustomField.success) {
       return APIResponse.success(
         res,
         apiId,
-        updatedCohortMember,
-        HttpStatus.OK,
-        "Cohort Member Updated successfully."
+        [],
+        HttpStatus.CREATED,
+        API_RESPONSES.COHORTMEMBER_UPDATE_SUCCESSFULLY
       );
-    } catch (e) {
-      const errorMessage = e.message || "Internal server error";
+    } else {
+      const errorMessage =
+        responseForCustomField.error || "Internal server error";
       return APIResponse.error(
         res,
         apiId,
@@ -938,5 +985,63 @@ export class PostgresCohortMembersService {
       HttpStatus.CREATED,
       API_RESPONSES.COHORTMEMBER_SUCCESSFULLY
     );
+  }
+
+  public async registerFieldValue(
+    fieldId: string,
+    value: any,
+    itemId: string,
+    loggedInUserId: string
+  ) {
+    //create
+    const registerResponse = await this.fieldsService.findAndSaveFieldValues({
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      fieldId: fieldId,
+      value: value,
+      itemId: itemId,
+      createdBy: loggedInUserId,
+      updatedBy: loggedInUserId,
+    });
+    //update
+    if (!registerResponse) {
+      const updateResponse = await this.fieldsService.updateCustomFields(
+        itemId,
+        {
+          updatedAt: new Date(),
+          value: JSON.stringify(value),
+          fieldId: fieldId,
+          updatedBy: loggedInUserId,
+        },
+        {}
+      );
+      if (updateResponse) {
+        return true;
+      } else {
+        return false;
+      }
+    }
+  }
+  async processCustomFields(
+    customFields: FieldValuesOptionDto[],
+    cohortMembershipId: string,
+    cohortMembersUpdateDto: CohortMembersUpdateDto
+  ) {
+    try {
+      const promises = customFields.map((customField) =>
+        this.registerFieldValue(
+          customField.fieldId,
+          customField.value,
+          cohortMembershipId,
+          cohortMembersUpdateDto.userId
+        )
+      );
+
+      const results = await Promise.all(promises);
+
+      return { success: true, data: results };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
   }
 }

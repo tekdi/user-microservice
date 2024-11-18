@@ -213,6 +213,14 @@ export class PostgresUserService implements IServicelocator {
           body.newPassword,
           userDetail.userId
         );
+        //update tempPassword status
+        if (apiResponse?.statusCode === 204) {
+          if (userData.temporaryPassword) {
+            await this.usersRepository.update(userData.userId, {
+              temporaryPassword: false,
+            });
+          }
+        }
       } catch (e) {
         return APIResponse.error(
           response,
@@ -729,7 +737,7 @@ export class PostgresUserService implements IServicelocator {
     if (!user) {
       return null;
     }
-    Object.assign(user, userData[0]);
+    Object.assign(user, userData);
     return this.usersRepository.save(user);
   }
 

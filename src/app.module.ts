@@ -15,13 +15,13 @@ import { AuthRbacModule } from "./authRbac/authRbac.module";
 import { CohortModule } from "./cohort/cohort.module";
 import { CohortMembersModule } from "./cohortMembers/cohortMembers.module";
 import { FieldsModule } from "./fields/fields.module";
-import { AttendanceModule } from "./attendance/attendance.module";
 import { UserModule } from "./user/user.module";
 import { RbacModule } from "./rbac/rbac.module";
 import { AssignTenantModule } from "./userTenantMapping/user-tenant-mapping.module";
 import { FormsModule } from "./forms/forms.module";
 import { CoursePlannerModule } from "./course-planner/course-planner.module";
 import { HttpService } from "@utils/http-service";
+import { TenantModule } from "./tenant/tenant.module";
 import { AcademicyearsModule } from "./academicyears/academicyears.module";
 import { CohortAcademicYearModule } from "./cohortAcademicYear/cohortAcademicYear.module";
 
@@ -33,7 +33,6 @@ import { CohortAcademicYearModule } from "./cohortAcademicYear/cohortAcademicYea
     //   dest: "./uploads",
     // }),
     UserModule,
-    AttendanceModule,
     CohortModule,
     CohortMembersModule,
     AssignTenantModule,
@@ -43,8 +42,9 @@ import { CohortAcademicYearModule } from "./cohortAcademicYear/cohortAcademicYea
     DatabaseModule,
     FormsModule,
     CoursePlannerModule,
+    TenantModule,
     AcademicyearsModule,
-    CohortAcademicYearModule
+    CohortAcademicYearModule,
   ],
   controllers: [AppController],
   providers: [AppService, HttpService],

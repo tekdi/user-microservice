@@ -10,10 +10,10 @@ import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 
 export class FieldValuesDto {
   @Expose()
-  createdAt: string;
+  createdAt: Date;
 
   @Expose()
-  updatedAt: string;
+  updatedAt: Date;
 
   //fieldId
   @Expose()

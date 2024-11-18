@@ -1,5 +1,4 @@
 import { HttpStatus, Injectable } from "@nestjs/common";
-const resolvePath = require("object-resolve-path");
 import jwt_decode from "jwt-decode";
 import { ReturnResponseBody } from "src/cohort/dto/cohort.dto";
 import { CohortSearchDto } from "src/cohort/dto/cohort-search.dto";
@@ -630,7 +629,8 @@ export class PostgresCohortService {
   ) {
     const apiId = APIID.COHORT_LIST;
     try {
-      let { limit, sort, offset, filters } = cohortSearchDto;
+      const { sort, filters } = cohortSearchDto;
+      let { limit, offset } = cohortSearchDto;
       let cohortsByAcademicYear: CohortAcademicYear[];
 
       offset = offset || 0;
@@ -845,12 +845,13 @@ export class PostgresCohortService {
             ({ cohortId }) => cohortId
           );
           whereClause["cohortId"] = In(cohortIds);
-        } else if (cohortsByAcademicYear?.length >= 1) {
-          const cohortIds = cohortsByAcademicYear?.map(
-            ({ cohortId }) => cohortId
-          );
-          whereClause["cohortId"] = In(cohortIds);
         }
+        // } else if (cohortsByAcademicYear?.length >= 1) {
+        //   const cohortIds = cohortsByAcademicYear?.map(
+        //     ({ cohortId }) => cohortId
+        //   );
+        //   whereClause["cohortId"] = In(cohortIds);
+        // }
 
 
 
