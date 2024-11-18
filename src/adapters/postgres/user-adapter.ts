@@ -769,25 +769,33 @@ export class PostgresUserService implements IServicelocator {
       }
 
       // check and validate all fields
-      const validatedRoles = await this.validateRequestBody(userCreateDto, academicYearId);
 
-      // check if roles are invalid and academic year is provided 
-      if ((!Array.isArray(validatedRoles) || !validatedRoles.every(role => role instanceof Role)) && academicYearId?.length > 0) {
-        return APIResponse.error(
-          response,
-          apiId,
-          "BAD_REQUEST",
-          `${validatedRoles}`,
-          HttpStatus.BAD_REQUEST
-        );
-      } else if (!Array.isArray(validatedRoles) || (academicYearId?.length <= 0)) {
-        return APIResponse.error(
-          response,
-          apiId,
-          "BAD_REQUEST",
-          `Roles and academic year invalid`,
-          HttpStatus.BAD_REQUEST
-        );
+      let validatedRoles;
+
+      if (userCreateDto.tenantCohortRoleMapping) {
+
+        if (!academicYearId?.length) {
+          return APIResponse.error(
+            response,
+            apiId,
+            "BAD_REQUEST",
+            `Academic year invalid`,
+            HttpStatus.BAD_REQUEST
+          );
+        }
+
+        validatedRoles = await this.validateRequestBody(userCreateDto, academicYearId);
+
+        // check if roles are invalid and academic year is provided 
+        if ((!Array.isArray(validatedRoles) || !validatedRoles.every(role => role instanceof Role))) {
+          return APIResponse.error(
+            response,
+            apiId,
+            "BAD_REQUEST",
+            `${validatedRoles}`,
+            HttpStatus.BAD_REQUEST
+          );
+        }
       }
 
       userCreateDto.username = userCreateDto.username.toLocaleLowerCase();
@@ -992,7 +1000,7 @@ export class PostgresUserService implements IServicelocator {
           error.push(`Tenant Id '${tenantId}' does not exist.`);
         }
 
-        if (cohortExists) {
+        if (cohortExists.length) {
           error.push(
             `Cohort Id '${cohortExists}' does not exist for this tenant '${tenantId}'.`
           );
@@ -1016,12 +1024,11 @@ export class PostgresUserService implements IServicelocator {
   }
 
   async checkCohortExistsInAcademicYear(academicYearId: any, cohortData: any[]) {
+
+    // The method ensures that all cohorts provided in the cohortData array are associated with the given academicYearId. If any cohort does not exist in the academic year, it collects their IDs and returns them as a list.
+
     const notExistCohort = [];
     for (const cohortId of cohortData) {
-      // const findCohortData = await this.cohortRepository.findOne({
-      //   where: { tenantId, cohortId },
-      // });
-
       const findCohortData = await this.cohortAcademicYearService.isCohortExistForYear(academicYearId, cohortId)
 
       if (!findCohortData?.length) {
@@ -1029,10 +1036,9 @@ export class PostgresUserService implements IServicelocator {
       }
     }
 
-    if (notExistCohort.length > 0) {
-      return notExistCohort;
-    }
+    return notExistCohort.length > 0 ? notExistCohort : [];
   }
+
   async checkUser(body) {
     const checkUserinKeyCloakandDb = await this.checkUserinKeyCloakandDb(body);
     if (checkUserinKeyCloakandDb) {

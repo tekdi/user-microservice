@@ -158,12 +158,45 @@ export class PostgresCohortService {
     return fieldValues;
   }
 
-  public async findCohortName(userId: any) {
-    const query = `SELECT c."name",c."cohortId",c."parentId",c."type",cm."status" AS cohortmemberstatus, c."status" AS cohortstatus, cm."cohortMembershipId"
-    FROM public."CohortMembers" AS cm
-    LEFT JOIN public."Cohort" AS c ON cm."cohortId" = c."cohortId"
-    WHERE cm."userId"=$1 `;
-    const result = await this.cohortMembersRepository.query(query, [userId]);
+  public async findCohortName(userId: any, academicYearId?: string) {
+
+    const baseQuery = `
+                    SELECT 
+                      c."name", 
+                      c."cohortId", 
+                      c."parentId", 
+                      c."type", 
+                      cm."status" AS cohortmemberstatus, 
+                      c."status" AS cohortstatus, 
+                      cm."cohortMembershipId"
+                  `;
+
+    const additionalFields = academicYearId
+      ? `, cay."cohortAcademicYearId", cay."academicYearId"`
+      : ``;
+
+    const joins = academicYearId
+      ? `
+      JOIN public."CohortAcademicYear" cay ON cm."cohortAcademicYearId" = cay."cohortAcademicYearId"
+      WHERE cm."userId" = $1 AND cay."academicYearId" = $2
+    `
+      : `
+      LEFT JOIN public."Cohort" AS c ON cm."cohortId" = c."cohortId"
+      WHERE cm."userId" = $1
+    `;
+
+    const query = `
+                  ${baseQuery}
+                  ${additionalFields}
+                  FROM public."CohortMembers" AS cm
+                  JOIN public."Cohort" AS c ON cm."cohortId" = c."cohortId"
+                  ${joins}
+                `;
+
+    const params = academicYearId ? [userId, academicYearId] : [userId];
+
+    const result = await this.cohortMembersRepository.query(query, params);
+
     return result;
   }
 
@@ -993,7 +1026,7 @@ export class PostgresCohortService {
 
     if (!requiredData.getChildData) {
       try {
-        const findCohortId = await this.findCohortName(requiredData.userId);
+        const findCohortId = await this.findCohortName(requiredData.userId, requiredData?.academicYearId);
         if (!findCohortId.length) {
           return APIResponse.error(
             res,
@@ -1045,7 +1078,8 @@ export class PostgresCohortService {
     }
     if (requiredData.getChildData) {
       try {
-        const findCohortId = await this.findCohortName(requiredData.userId);
+        const findCohortId = await this.findCohortName(requiredData.userId, requiredData?.academicYearId);
+
         if (!findCohortId.length) {
           return APIResponse.error(
             res,
