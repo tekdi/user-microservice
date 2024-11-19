@@ -780,7 +780,7 @@ export class PostgresUserService implements IServicelocator {
       const validatedRoles = await this.validateRequestBody(userCreateDto, academicYearId);
 
       // check if roles are invalid and academic year is provided 
-      if ((!Array.isArray(validatedRoles) || !validatedRoles.every(role => role instanceof Role)) && academicYearId?.length > 0) {
+      if ((!Array.isArray(validatedRoles) || !validatedRoles.every(role => role instanceof Role))) {
         return APIResponse.error(
           response,
           apiId,
@@ -953,10 +953,6 @@ export class PostgresUserService implements IServicelocator {
       for (const tenantCohortRoleMapping of userCreateDto?.tenantCohortRoleMapping) {
 
         const { tenantId, cohortIds, roleId } = tenantCohortRoleMapping;
-
-        if (!tenantId || !cohortIds?.length || !roleId) {
-          return false;
-        }
 
         // check academic year exists for tenant 
         const checkAcadmicYear = await this.postgresAcademicYearService.getActiveAcademicYear(academicYearId, tenantId);
