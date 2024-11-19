@@ -31,7 +31,7 @@ export class FilesUploadService {
         }
 
         const uniqueFileName = `${uuidv4()}${fileExtension}`;
-        const fileUrl = `https://${this.bucketName}.s3.${process.env.AWS_REGION}.amazonaws.com/${uniqueFileName}`;
+        const fileUrl = `https://${this.bucketName}.s3.${this.configService.get<string>("AWS_REGION")}.amazonaws.com/${uniqueFileName}`;
 
         const params = {
             Bucket: this.bucketName,
