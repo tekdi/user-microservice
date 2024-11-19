@@ -304,8 +304,6 @@ export class PostgresCohortService {
       }
 
       const decoded: any = jwt_decode(request.headers.authorization);
-      cohortCreateDto.createdBy = decoded?.sub;
-      cohortCreateDto.updatedBy = decoded?.sub;
       cohortCreateDto.status = cohortCreateDto.status || "active";
       cohortCreateDto.attendanceCaptureImage = false;
 

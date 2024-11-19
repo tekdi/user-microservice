@@ -21,6 +21,13 @@ export class CreateAssignRoleDto {
   @IsUUID()
   userId: string;
 
+  @Expose()
+  createdBy: string;
+
+  @Expose()
+  updatedBy: string;
+
+
   @ApiProperty({
     type: [String],
     description: "Assigned Role Ids",

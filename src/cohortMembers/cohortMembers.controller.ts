@@ -44,9 +44,8 @@ import { API_RESPONSES } from "@utils/response.messages";
 
 @ApiTags("Cohort Member")
 @Controller("cohortmember")
-@UseGuards(JwtAuthGuard)
 export class CohortMembersController {
-  constructor(private readonly cohortMemberAdapter: CohortMembersAdapter) {}
+  constructor(private readonly cohortMemberAdapter: CohortMembersAdapter) { }
 
   //create cohort members
   @UseFilters(new AllExceptionsFilter(APIID.COHORT_MEMBER_CREATE))
@@ -66,13 +65,15 @@ export class CohortMembersController {
   @ApiHeader({
     name: "deviceid",
   })
+  @ApiQuery({ name: "userId", required: false, })
   public async createCohortMembers(
     @Headers() headers,
     @Req() request,
     @Body() cohortMembersDto: CohortMembersDto,
-    @Res() response: Response
+    @Res() response: Response,
+    @Query("userId") userId: string | null = null
   ) {
-    const loginUser = request.user.userId;
+    const loginUser = userId;
     const tenantId = headers["tenantid"];
     const deviceId = headers["deviceid"];
     const academicyearId = headers["academicyearid"];
@@ -191,13 +192,15 @@ export class CohortMembersController {
   @ApiBadRequestResponse({ description: "Bad request" })
   @ApiBody({ type: CohortMembersUpdateDto })
   @UsePipes(new ValidationPipe())
+  @ApiQuery({ name: "userId", required: false, })
   public async updateCohortMembers(
     @Param("cohortmembershipid") cohortMembersId: string,
     @Req() request,
     @Body() cohortMemberUpdateDto: CohortMembersUpdateDto,
-    @Res() response: Response
+    @Res() response: Response,
+    @Query("userId") userId: string | null = null
   ) {
-    const loginUser = request.user.userId;
+    const loginUser = userId;
 
     const result = await this.cohortMemberAdapter
       .buildCohortMembersAdapter()

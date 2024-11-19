@@ -13,6 +13,12 @@ export class TenantCreateDto {
     @Expose()
     updatedAt: string;
 
+    @Expose()
+    createdBy: string;
+
+    @Expose()
+    updatedBy: string;
+
     //tenant name
     @ApiProperty({
         type: String,

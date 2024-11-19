@@ -14,6 +14,7 @@ import {
   Headers,
   UseGuards,
   UseFilters,
+  Query,
 } from "@nestjs/common";
 import { AssignRoleAdapter } from "./assign-role.apater";
 import { CreateAssignRoleDto } from "./dto/create-assign-role.dto";
@@ -30,6 +31,7 @@ import {
   ApiInternalServerErrorResponse,
   ApiConflictResponse,
   ApiNotFoundResponse,
+  ApiQuery,
 } from "@nestjs/swagger";
 import { JwtAuthGuard } from "src/common/guards/keycloak.guard";
 import { DeleteAssignRoleDto } from "./dto/delete-assign-role.dto";
@@ -38,9 +40,8 @@ import { APIID } from "src/common/utils/api-id.config";
 
 @ApiTags("rbac")
 @Controller("rbac/usersRoles")
-@UseGuards(JwtAuthGuard)
 export class AssignRoleController {
-  constructor(private readonly assignRoleAdpater: AssignRoleAdapter) {}
+  constructor(private readonly assignRoleAdpater: AssignRoleAdapter) { }
 
   @UseFilters(new AllExceptionsFilter(APIID.USERROLE_CREATE))
   @Post()
@@ -50,6 +51,7 @@ export class AssignRoleController {
     description:
       "Role assigned successfully to the user in the specified tenant.",
   })
+  @ApiQuery({ name: "userId", required: false, })
   @ApiBadRequestResponse({ description: "Bad request." })
   @ApiInternalServerErrorResponse({ description: "Internal Server Error." })
   @ApiConflictResponse({
@@ -61,8 +63,10 @@ export class AssignRoleController {
     @Req() request: Request,
     @Body() createAssignRoleDto: CreateAssignRoleDto,
     @Res() response: Response,
-    @Headers() headers
+    @Headers() headers,
+    @Query("userId") userId: string | null = null
   ) {
+    createAssignRoleDto.createdBy = userId;
     return await this.assignRoleAdpater
       .buildassignroleAdapter()
       .createAssignRole(request, createAssignRoleDto, response);

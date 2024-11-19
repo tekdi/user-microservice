@@ -1,5 +1,5 @@
 import { Expose, Type } from "class-transformer";
-import { ApiProperty } from "@nestjs/swagger";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import {
   IsNotEmpty,
   IsString,
@@ -55,6 +55,10 @@ export class CreateRolesDto {
   @ValidateNested({ each: true })
   @Type(() => RoleDto)
   roles: RoleDto[];
+
+  @ApiPropertyOptional()
+  @Expose()
+  createdBy: string;
 
   constructor(obj: any) {
     Object.assign(this, obj);

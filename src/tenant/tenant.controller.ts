@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, Patch, Post, Query, Req, Res, SerializeOptions } from '@nestjs/common';
 import { TenantService } from './tenant.service';
-import { ApiCreatedResponse, ApiForbiddenResponse } from '@nestjs/swagger';
+import { ApiCreatedResponse, ApiForbiddenResponse, ApiQuery } from '@nestjs/swagger';
 import { TenantCreateDto } from './dto/tenant-create.dto';
 
 @Controller('tenant')
@@ -29,12 +29,14 @@ export class TenantController {
     @SerializeOptions({
         strategy: "excludeAll",
     })
+    @ApiQuery({ name: "userId", required: false, })
     public async createTenants(
         @Req() request: Request,
         @Res() response: Response,
-        @Body() tenantCreateDto: TenantCreateDto
+        @Body() tenantCreateDto: TenantCreateDto,
+        @Query("userId") userId: string | null = null
     ) {
-        return await this.tenantService.createTenants(request, tenantCreateDto, response);
+        return await this.tenantService.createTenants(request, userId, tenantCreateDto, response);
     }
 
     //Delete a tenant

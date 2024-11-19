@@ -45,7 +45,7 @@ import { APIID } from "src/common/utils/api-id.config";
 @ApiTags("Fields")
 @Controller("fields")
 export class FieldsController {
-  constructor(private fieldsAdapter: FieldsAdapter) {}
+  constructor(private fieldsAdapter: FieldsAdapter) { }
 
   //fields
   //create fields
@@ -56,12 +56,15 @@ export class FieldsController {
   @ApiCreatedResponse({ description: "Fields has been created successfully." })
   @ApiBody({ type: FieldsDto })
   @ApiForbiddenResponse({ description: "Forbidden" })
+  @ApiQuery({ name: "userId", required: false, })
   public async createFields(
     @Headers() headers,
     @Req() request: Request,
     @Body() fieldsDto: FieldsDto,
-    @Res() response: Response
+    @Res() response: Response,
+    @Query("userId") userId: string | null = null
   ) {
+    fieldsDto.createdBy = userId;
     return await this.fieldsAdapter
       .buildFieldsAdapter()
       .createFields(request, fieldsDto, response);
@@ -73,13 +76,17 @@ export class FieldsController {
   @ApiCreatedResponse({ description: "Fields has been created successfully." })
   @ApiBody({ type: FieldsUpdateDto })
   @ApiForbiddenResponse({ description: "Forbidden" })
+  @ApiQuery({ name: "userId", required: false, })
   public async updateFields(
     @Param("fieldId") fieldId: string,
     @Headers() headers,
     @Req() request: Request,
     @Body() fieldsUpdateDto: FieldsUpdateDto,
-    @Res() response: Response
+    @Res() response: Response,
+    @Query("userId") userId: string | null = null
   ) {
+    fieldsUpdateDto.createdBy = userId;
+    fieldsUpdateDto.updatedBy = userId;
     return await this.fieldsAdapter
       .buildFieldsAdapter()
       .updateFields(fieldId, request, fieldsUpdateDto, response);

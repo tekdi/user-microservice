@@ -14,6 +14,12 @@ export class FieldsUpdateDto {
   @Expose()
   fieldId: string;
 
+  @Expose()
+  createdBy: string;
+
+  @Expose()
+  updatedBy: string;
+
   //name
   @ApiPropertyOptional({
     type: String,
