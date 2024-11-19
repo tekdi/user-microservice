@@ -213,6 +213,14 @@ export class PostgresUserService implements IServicelocator {
           body.newPassword,
           userDetail.userId
         );
+        //update tempPassword status
+        if (apiResponse?.statusCode === 204) {
+          if (userData.temporaryPassword) {
+            await this.usersRepository.update(userData.userId, {
+              temporaryPassword: false,
+            });
+          }
+        }
       } catch (e) {
         return APIResponse.error(
           response,
@@ -770,8 +778,11 @@ export class PostgresUserService implements IServicelocator {
       // check and validate all fields
       const validatedRoles = await this.validateRequestBody(userCreateDto, academicYearId);
 
+
+      console.log(validatedRoles)
       // check if roles are invalid and academic year is provided 
-      if ((!Array.isArray(validatedRoles) || !validatedRoles.every(role => role instanceof Role)) && academicYearId?.length) {
+      console.log("hii", !Array.isArray(validatedRoles))
+      if (!Array.isArray(validatedRoles)) {
         return APIResponse.error(
           response,
           apiId,
@@ -888,12 +899,11 @@ export class PostgresUserService implements IServicelocator {
         "User has been created successfully."
       );
     } catch (e) {
-      const errorMessage = e.message || "Internal server error";
       return APIResponse.error(
         response,
         apiId,
         "Internal Server Error",
-        errorMessage,
+        `Error : ${e?.response?.data.error}`,
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
@@ -936,20 +946,22 @@ export class PostgresUserService implements IServicelocator {
       }
     }
 
-    if (!academicYearId?.length) {
-      return false;
-    }
-
     if (userCreateDto.tenantCohortRoleMapping) {
       for (const tenantCohortRoleMapping of userCreateDto?.tenantCohortRoleMapping) {
 
         const { tenantId, cohortIds, roleId } = tenantCohortRoleMapping;
 
+        if (!academicYearId && cohortIds) {
+          error.push("Academic Year ID is required when a Cohort ID is provided.")
+        }
+
         // check academic year exists for tenant 
         const checkAcadmicYear = await this.postgresAcademicYearService.getActiveAcademicYear(academicYearId, tenantId);
-        if (!checkAcadmicYear) {
+
+        if (!checkAcadmicYear && cohortIds) {
           error.push("Academic year not found for tenant")
         }
+
 
         if (duplicateTenet.includes(tenantId)) {
           error.push(
