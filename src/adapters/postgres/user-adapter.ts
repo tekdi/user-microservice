@@ -777,33 +777,17 @@ export class PostgresUserService implements IServicelocator {
       }
 
       // check and validate all fields
+      const validatedRoles = await this.validateRequestBody(userCreateDto, academicYearId);
 
-      let validatedRoles;
-
-      if (userCreateDto.tenantCohortRoleMapping) {
-
-        if (!academicYearId?.length) {
-          return APIResponse.error(
-            response,
-            apiId,
-            "BAD_REQUEST",
-            `Academic year invalid`,
-            HttpStatus.BAD_REQUEST
-          );
-        }
-
-        validatedRoles = await this.validateRequestBody(userCreateDto, academicYearId);
-
-        // check if roles are invalid and academic year is provided 
-        if ((!Array.isArray(validatedRoles) || !validatedRoles.every(role => role instanceof Role))) {
-          return APIResponse.error(
-            response,
-            apiId,
-            "BAD_REQUEST",
-            `${validatedRoles}`,
-            HttpStatus.BAD_REQUEST
-          );
-        }
+      // check if roles are invalid and academic year is provided 
+      if ((!Array.isArray(validatedRoles) || !validatedRoles.every(role => role instanceof Role)) && academicYearId?.length > 0) {
+        return APIResponse.error(
+          response,
+          apiId,
+          "BAD_REQUEST",
+          `${validatedRoles}`,
+          HttpStatus.BAD_REQUEST
+        );
       }
 
       userCreateDto.username = userCreateDto.username.toLocaleLowerCase();
