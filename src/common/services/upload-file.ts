@@ -2,18 +2,22 @@ import { Injectable, BadRequestException, InternalServerErrorException } from '@
 import { extname } from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { HeadObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { ConfigService } from "@nestjs/config";
+
 
 @Injectable()
 export class FilesUploadService {
     private readonly s3Client: S3Client;
-    private readonly bucketName: string = process.env.AWS_BUCKET_NAME;
+    private readonly bucketName: string = this.configService.get<string>("AWS_BUCKET_NAME");
 
-    constructor() {
+    constructor(
+        private configService: ConfigService,
+    ) {
         this.s3Client = new S3Client({
-            region: process.env.AWS_REGION,
+            region: this.configService.get<string>("AWS_REGION"),
             credentials: {
-                accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-                secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+                accessKeyId: this.configService.get<string>("AWS_ACCESS_KEY_ID"),
+                secretAccessKey: this.configService.get<string>("AWS_SECRET_ACCESS_KEY"),
             },
         });
     }
