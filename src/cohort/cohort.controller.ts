@@ -54,7 +54,7 @@ import { API_RESPONSES } from "@utils/response.messages";
 @Controller("cohort")
 @UseGuards(JwtAuthGuard)
 export class CohortController {
-  constructor(private readonly cohortAdapter: CohortAdapter) {}
+  constructor(private readonly cohortAdapter: CohortAdapter) { }
 
   @UseFilters(new AllExceptionsFilter(APIID.COHORT_READ))
   @Get("/cohortHierarchy/:cohortId")
@@ -118,6 +118,7 @@ export class CohortController {
   )
   @UsePipes(new ValidationPipe())
   @ApiBody({ type: CohortCreateDto })
+  @ApiQuery({ name: "userId", required: false, })
   @ApiHeader({
     name: "tenantid",
   })
@@ -129,7 +130,8 @@ export class CohortController {
     @Req() request: Request,
     @Body() cohortCreateDto: CohortCreateDto,
     @UploadedFile() image,
-    @Res() response: Response
+    @Res() response: Response,
+    @Query("userId") userId: string | null = null
   ) {
     const tenantId = headers["tenantid"];
     const academicYearId = headers["academicyearid"];
@@ -139,6 +141,7 @@ export class CohortController {
     if (!academicYearId || !isUUID(academicYearId)) {
       throw new BadRequestException(API_RESPONSES.ACADEMICYEARID_VALIDATION);
     }
+    cohortCreateDto.createdBy = userId
     cohortCreateDto.academicYearId = academicYearId;
     cohortCreateDto.tenantId = tenantId;
     return await this.cohortAdapter
