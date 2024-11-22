@@ -4,31 +4,31 @@ import {
     Column,
     CreateDateColumn,
     UpdateDateColumn,
-} from "typeorm";
+} from 'typeorm';
 
-@Entity({ name: "Tenants" })
-export class Tenants {
-    @PrimaryGeneratedColumn("uuid")
-    tenantId: string;
+@Entity('Tenants')
+export class Tenant {
+    @PrimaryGeneratedColumn('uuid')
+    tenantId: string; // UUID field
 
-    @Column()
-    name: string;
+    @Column({ type: 'text' })
+    name: string; // Text field for tenant's name
 
-    @Column()
-    domain: string;
+    @Column({ type: 'text' })
+    domain: string; // Text field for tenant's domain
 
-    @CreateDateColumn({
-        type: "timestamp with time zone",
-        default: () => "CURRENT_TIMESTAMP",
-    })
-    createdAt: Date;
+    @CreateDateColumn({ type: 'timestamptz', default: () => 'CURRENT_TIMESTAMP' })
+    createdAt: Date; // Timestamp for creation date with timezone
 
-    @UpdateDateColumn({
-        type: "timestamp with time zone",
-        default: () => "CURRENT_TIMESTAMP",
-    })
-    updatedAt: Date;
+    @UpdateDateColumn({ type: 'timestamptz', default: () => 'CURRENT_TIMESTAMP' })
+    updatedAt: Date; // Timestamp for last updated date with timezone
 
-    @Column()
-    params: string;
+    @Column({ type: 'jsonb', nullable: true })
+    params: Record<string, any>; // JSONB field for additional parameters
+
+    @Column({ type: 'json', nullable: true })
+    programImages: string[]; // JSON field to store array of program images
+
+    @Column({ type: 'text' })
+    description: string; // Text field for tenant's domain
 }

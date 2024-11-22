@@ -16,7 +16,7 @@ export class FormsService {
     private readonly fieldsService: PostgresFieldsService,
     @InjectRepository(Form)
     private readonly formRepository: Repository<Form>
-  ) { }
+  ) {}
 
   async getForm(requiredData, response) {
     let apiId = APIID.FORM_GET;
@@ -143,7 +143,7 @@ export class FormsService {
     requiredData: any
   ): Promise<{ error: string | null }> {
     delete requiredData.tenantId;
-    const allowedKeys = ["context", "contextType","userId"];
+    const allowedKeys = ["context", "contextType", "userId"];
     const extraKeys = Object.keys(requiredData).filter(
       (key) => !allowedKeys.includes(key)
     );
@@ -181,6 +181,8 @@ export class FormsService {
         return await this.getUserContextTypesFromDB();
       case "cohorts":
         return Object.values(CohortContextType);
+      case "cohortmember":
+        return ["COHORTMEMBER"];
       default:
         return [];
     }
@@ -198,30 +200,42 @@ export class FormsService {
       formCreateDto.context = formCreateDto.context.toUpperCase();
       formCreateDto.title = formCreateDto.title.toUpperCase();
 
-      formCreateDto.tenantId = formCreateDto.tenantId.trim().length ? formCreateDto.tenantId : null;
-      const checkFormExists = await this.getFormDetail(formCreateDto.context, formCreateDto.contextType, formCreateDto.tenantId);
+      formCreateDto.tenantId = formCreateDto.tenantId.trim().length
+        ? formCreateDto.tenantId
+        : null;
+      const checkFormExists = await this.getFormDetail(
+        formCreateDto.context,
+        formCreateDto.contextType,
+        formCreateDto.tenantId
+      );
 
       if (checkFormExists.length) {
         return APIResponse.error(
           response,
           apiId,
-          "BAD_REQUEST", API_RESPONSES.FORM_EXISTS,
+          "BAD_REQUEST",
+          API_RESPONSES.FORM_EXISTS,
           HttpStatus.BAD_REQUEST
         );
       }
 
-      const validForm = await this.validateFormFields(formCreateDto.fields?.result);
+      const validForm = await this.validateFormFields(
+        formCreateDto.fields?.result
+      );
 
       if (!validForm) {
         return APIResponse.error(
           response,
           apiId,
-          "BAD_REQUEST", API_RESPONSES.INVALID_FORM,
+          "BAD_REQUEST",
+          API_RESPONSES.INVALID_FORM,
           HttpStatus.BAD_REQUEST
         );
       }
 
-      const validContextTypes = await this.getValidContextTypes(formCreateDto.context);
+      const validContextTypes = await this.getValidContextTypes(
+        formCreateDto.context
+      );
       if (validContextTypes.length === 0) {
         return APIResponse.error(
           response,
@@ -231,12 +245,18 @@ export class FormsService {
           HttpStatus.BAD_REQUEST
         );
       }
-      if (formCreateDto.contextType && !validContextTypes.includes(formCreateDto.contextType)) {
+      if (
+        formCreateDto.contextType &&
+        !validContextTypes.includes(formCreateDto.contextType)
+      ) {
         return APIResponse.error(
           response,
           apiId,
           "BAD_REQUEST",
-          API_RESPONSES.INVALID_CONTEXTTYPE(formCreateDto.context, validContextTypes.join(", ")),
+          API_RESPONSES.INVALID_CONTEXTTYPE(
+            formCreateDto.context,
+            validContextTypes.join(", ")
+          ),
           HttpStatus.BAD_REQUEST
         );
       }
@@ -250,7 +270,6 @@ export class FormsService {
         HttpStatus.OK,
         API_RESPONSES.FORM_CREATED_SUCCESSFULLY
       );
-
     } catch (error) {
       const errorMessage = error.message || "Internal server error";
       return APIResponse.error(
@@ -264,13 +283,15 @@ export class FormsService {
   }
 
   private async validateFormFields(formFields) {
-
     const fieldIds = [];
     if (Array.isArray(formFields)) {
       for (const element of formFields) {
         if (element["coreField"] === 0 && element["fieldId"]?.trim().length) {
           fieldIds.push(element["fieldId"]);
-        } else if ((element['coreField'] === 0 && !element['fieldId']) || (element["coreField"] === 1 && element["fieldId"] !== null)) {
+        } else if (
+          (element["coreField"] === 0 && !element["fieldId"]) ||
+          (element["coreField"] === 1 && element["fieldId"] !== null)
+        ) {
           return false;
         }
       }
@@ -287,9 +308,10 @@ export class FormsService {
   async getFormDetail(context: string, contextType: string, tenantId: string) {
     return await this.formRepository.find({
       where: {
-        context, contextType,
-        tenantId: tenantId || IsNull()
-      }
-    })
+        context,
+        contextType,
+        tenantId: tenantId || IsNull(),
+      },
+    });
   }
 }

@@ -31,7 +31,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
     private fieldsRepository: Repository<Fields>,
     @InjectRepository(FieldValues)
     private fieldsValuesRepository: Repository<FieldValues>
-  ) { }
+  ) {}
 
   async getFormCustomField(requiredData, response) {
     const apiId = "FormData";
@@ -187,6 +187,102 @@ export class PostgresFieldsService implements IServicelocatorfields {
       };
     }
     const context = "COHORT";
+    const getFieldIds = await this.getFieldIds(context, contextType);
+
+    const validFieldIds = new Set(getFieldIds.map((field) => field.fieldId));
+
+    const invalidFieldIds = cohortCreateDto.customFields
+      .filter((fieldValue) => !validFieldIds.has(fieldValue.fieldId))
+      .map((fieldValue) => fieldValue.fieldId);
+
+    if (invalidFieldIds.length > 0) {
+      return {
+        isValid: false,
+        error: `The following fields are not valid for this user: ${invalidFieldIds.join(
+          ", "
+        )}.`,
+      };
+    }
+    return {
+      isValid: true,
+    };
+  }
+  //validate custom fields by context and contextType
+  public async validateCustomFieldByContext(
+    cohortCreateDto,
+    context: string,
+    contextType: string
+  ) {
+    const fieldValues = cohortCreateDto ? cohortCreateDto.customFields : [];
+    const encounteredKeys = [];
+    const invalidateFields = [];
+    const duplicateFieldKeys = [];
+    const error = "";
+
+    for (const fieldsData of fieldValues) {
+      const fieldId = fieldsData["fieldId"];
+      const getFieldDetails: any = await this.getFieldByIdes(fieldId);
+
+      if (getFieldDetails == null) {
+        return {
+          isValid: false,
+          error: `Field not found`,
+        };
+      }
+
+      if (encounteredKeys.includes(fieldId)) {
+        duplicateFieldKeys.push(`${fieldId} - ${getFieldDetails["name"]}`);
+      } else {
+        encounteredKeys.push(fieldId);
+      }
+
+      if (
+        (getFieldDetails.type == "checkbox" ||
+          getFieldDetails.type == "drop_down" ||
+          getFieldDetails.type == "radio") &&
+        getFieldDetails.sourceDetails.source == "table"
+      ) {
+        const getOption = await this.findDynamicOptions(
+          getFieldDetails.sourceDetails.table
+        );
+        const transformedFieldParams = {
+          options: getOption.map((param) => ({
+            value: param.value,
+            label: param.label,
+          })),
+        };
+        getFieldDetails["fieldParams"] = transformedFieldParams;
+      } else {
+        getFieldDetails["fieldParams"] = getFieldDetails?.fieldParams ?? {};
+      }
+
+      const checkValidation = this.validateFieldValue(
+        getFieldDetails,
+        fieldsData["value"]
+      );
+
+      if (typeof checkValidation === "object" && "error" in checkValidation) {
+        invalidateFields.push(
+          `${fieldId}: ${getFieldDetails["name"]} - ${checkValidation?.error?.message}`
+        );
+      }
+    }
+
+    // Validation for duplicate fields
+    if (duplicateFieldKeys.length > 0) {
+      return {
+        isValid: false,
+        error: `Duplicate fieldId detected: ${duplicateFieldKeys}`,
+      };
+    }
+
+    // Validation for fields values
+    if (invalidateFields.length > 0) {
+      return {
+        isValid: false,
+        error: `Invalid fields found: ${invalidateFields}`,
+      };
+    }
     const getFieldIds = await this.getFieldIds(context, contextType);
 
     const validFieldIds = new Set(getFieldIds.map((field) => field.fieldId));
@@ -819,12 +915,44 @@ export class PostgresFieldsService implements IServicelocatorfields {
     if (limit !== undefined) {
       queryOptions.take = parseInt(limit);
     }
+    try {
+      const [results, totalCount] =
+        await this.fieldsValuesRepository.findAndCount(queryOptions);
+      const mappedResponse = await this.mappedResponse(results);
 
-    const [results, totalCount] =
-      await this.fieldsValuesRepository.findAndCount(queryOptions);
-    const mappedResponse = await this.mappedResponse(results);
+      return { mappedResponse, totalCount };
+    } catch (error) {
+      return error;
+    }
+  }
+  //In operator
+  async getSearchFieldValueDataByIds(
+    offset: number,
+    limit: string,
+    searchData: any
+  ) {
+    const queryOptions: any = {
+      where: {
+        itemId: In(searchData),
+      },
+    };
 
-    return { mappedResponse, totalCount };
+    if (offset !== undefined) {
+      queryOptions.skip = offset;
+    }
+
+    if (limit !== undefined) {
+      queryOptions.take = parseInt(limit);
+    }
+    try {
+      const [results, totalCount] =
+        await this.fieldsValuesRepository.findAndCount(queryOptions);
+      const mappedResponse = await this.mappedResponse(results);
+
+      return { mappedResponse, totalCount };
+    } catch (error) {
+      return error;
+    }
   }
 
   async searchFieldValueId(fieldId: string, itemId?: string) {
@@ -872,11 +1000,11 @@ export class PostgresFieldsService implements IServicelocatorfields {
     }
   }
 
-  public async getFieldsAndFieldsValues(cohortId: string) {
+  public async getFieldsAndFieldsValues(itemId: string) {
     const query = `SELECT FV."value",FV."itemId", FV."fieldId", F."name" AS fieldname, F."label", F."context",F."type", F."state", F."contextType", F."fieldParams" FROM public."FieldValues" FV 
         LEFT JOIN public."Fields" F
         ON FV."fieldId" = F."fieldId" where FV."itemId" =$1`;
-    const results = await this.fieldsValuesRepository.query(query, [cohortId]);
+    const results = await this.fieldsValuesRepository.query(query, [itemId]);
     return results;
   }
 
@@ -1277,8 +1405,8 @@ export class PostgresFieldsService implements IServicelocatorfields {
       ...(getFields?.includes("All")
         ? {}
         : getFields?.length
-          ? { name: In(getFields.filter(Boolean)) }
-          : {}),
+        ? { name: In(getFields.filter(Boolean)) }
+        : {}),
     };
 
     const validContextTypes = contextType?.filter(Boolean);
@@ -1506,6 +1634,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         fieldId: field.fieldId ?? null,
         dependsOn: field.dependsOn ?? false,
         sourceDetails: field.sourceDetails ?? null,
+        ordering: field.ordering ?? null,
         default: field?.fieldAttributes?.default ?? null,
       };
     });
@@ -1577,8 +1706,8 @@ export class PostgresFieldsService implements IServicelocatorfields {
   public async getFieldsByIds(fieldIds: string[]) {
     return this.fieldsRepository.find({
       where: {
-        fieldId: In(fieldIds)
-      }
-    })
+        fieldId: In(fieldIds),
+      },
+    });
   }
 }
