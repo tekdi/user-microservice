@@ -154,4 +154,6 @@ export const API_RESPONSES = {
   TENANT_CREATE: "Tenant created successfully",
   TENANT_UPDATE: "Tenant updated successfully",
   TENANT_DELETE: "Tenant deleted successfully",
+  PROVIDE_ONE_USERID_IN_QUERY: "Please provide userId in query param",
+  USERID_INVALID: "Invalid UUID"
 };
