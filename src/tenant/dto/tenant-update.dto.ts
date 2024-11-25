@@ -2,31 +2,14 @@ import { Expose, Type } from "class-transformer";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { IsNotEmpty, IsString } from "class-validator";
 
-export class TenantCreateDto {
-
-    @Expose()
-    tenantId: string;
-
-    @Expose()
-    createdAt: string;
-
-    @Expose()
-    updatedAt: string;
-
-    @Expose()
-    createdBy: string;
-
-    @Expose()
-    updatedBy: string;
-
+export class TenantUpdateDto {
     //tenant name
-    @ApiProperty({
+    @ApiPropertyOptional({
         type: String,
         description: "Tenant name",
         default: "",
     })
     @IsString()
-    @IsNotEmpty()
     @Expose()
     name: string;
 
@@ -57,7 +40,13 @@ export class TenantCreateDto {
     @Expose()
     programImages: string[];
 
-    constructor(obj?: Partial<TenantCreateDto>) {
+
+    @ApiPropertyOptional({ type: String })
+    @IsString()
+    @Expose()
+    description: string;
+
+    constructor(obj?: Partial<TenantUpdateDto>) {
         if (obj) {
             Object.assign(this, obj);
         }

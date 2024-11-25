@@ -48,6 +48,8 @@ import {
   SendPasswordResetLinkDto,
 } from "./dto/passwordReset.dto";
 import { isUUID } from "class-validator";
+import { API_RESPONSES } from "@utils/response.messages";
+import { LoggerUtil } from "src/common/logger/LoggerUtil";
 export interface UserData {
   context: string;
   tenantId: string;
@@ -63,10 +65,10 @@ export class UserController {
   @UseFilters(new AllExceptionsFilter(APIID.USER_GET))
   @Get("read/:userId")
   @ApiBasicAuth("access-token")
-  @ApiOkResponse({ description: "User details Fetched Successfully" })
-  @ApiNotFoundResponse({ description: "User Not Found" })
-  @ApiInternalServerErrorResponse({ description: "Internal Server Error" })
-  @ApiBadRequestResponse({ description: "Bad Request" })
+  @ApiOkResponse({ description: API_RESPONSES.USER_GET_SUCCESSFULLY })
+  @ApiNotFoundResponse({ description: API_RESPONSES.USER_NOT_FOUND })
+  @ApiInternalServerErrorResponse({ description: API_RESPONSES.INTERNAL_SERVER_ERROR })
+  @ApiBadRequestResponse({ description: API_RESPONSES.BAD_REQUEST })
   @SerializeOptions({ strategy: "excludeAll" })
   @ApiHeader({ name: "tenantid" })
   @ApiQuery({
@@ -83,6 +85,10 @@ export class UserController {
   ) {
     const tenantId = headers["tenantid"];
     if (!tenantId) {
+      LoggerUtil.warn(
+        `${API_RESPONSES.BAD_REQUEST}`,
+        `Error: Missing tenantId in request headers for user ${userId}`,
+      )
       return response
         .status(400)
         .json({ statusCode: 400, error: "Please provide a tenantId." });
@@ -105,11 +111,12 @@ export class UserController {
   @UseFilters(new AllExceptionsFilter(APIID.USER_CREATE))
   @Post("/create")
   @UsePipes(new ValidationPipe())
-  @ApiCreatedResponse({ description: "User has been created successfully." })
+  // @ApiBasicAuth("access-token")
+  @ApiCreatedResponse({ description: API_RESPONSES.USER_CREATE_SUCCESSFULLY })
   @ApiBody({ type: UserCreateDto })
-  @ApiForbiddenResponse({ description: "User Already Exists" })
-  @ApiInternalServerErrorResponse({ description: "Internal Server Error" })
-  @ApiConflictResponse({ description: "Duplicate data." })
+  @ApiForbiddenResponse({ description: API_RESPONSES.USER_EXISTS })
+  @ApiInternalServerErrorResponse({ description: API_RESPONSES.INTERNAL_SERVER_ERROR })
+  @ApiConflictResponse({ description: API_RESPONSES.DUPLICATE_DATA })
   @ApiHeader({
     name: "academicyearid",
   })
@@ -140,8 +147,7 @@ export class UserController {
   @Patch("update/:userid")
   @UsePipes(new ValidationPipe())
   @ApiBody({ type: UserUpdateDTO })
-  @ApiCreatedResponse({ description: "User has been updated successfully." })
-  @ApiForbiddenResponse({ description: "Forbidden" })
+  @ApiOkResponse({ description: API_RESPONSES.USER_UPDATED_SUCCESSFULLY })
   @ApiHeader({
     name: "tenantid",
   })

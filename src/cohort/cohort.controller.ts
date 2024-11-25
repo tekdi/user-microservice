@@ -49,12 +49,13 @@ import { APIID } from "src/common/utils/api-id.config";
 import { CustomFieldsValidation } from "@utils/custom-field-validation";
 import { isUUID } from "class-validator";
 import { API_RESPONSES } from "@utils/response.messages";
+import { LoggerUtil } from "src/common/logger/LoggerUtil";
 
 @ApiTags("Cohort")
 @Controller("cohort")
 @UseGuards(JwtAuthGuard)
 export class CohortController {
-  constructor(private readonly cohortAdapter: CohortAdapter) {}
+  constructor(private readonly cohortAdapter: CohortAdapter) { }
 
   @UseFilters(new AllExceptionsFilter(APIID.COHORT_READ))
   @Get("/cohortHierarchy/:cohortId")
@@ -118,6 +119,7 @@ export class CohortController {
   )
   @UsePipes(new ValidationPipe())
   @ApiBody({ type: CohortCreateDto })
+  @ApiQuery({ name: "userId", required: false })
   @ApiHeader({
     name: "tenantid",
   })
@@ -129,7 +131,8 @@ export class CohortController {
     @Req() request: Request,
     @Body() cohortCreateDto: CohortCreateDto,
     @UploadedFile() image,
-    @Res() response: Response
+    @Res() response: Response,
+    @Query("userId") userId: string | null = null
   ) {
     const tenantId = headers["tenantid"];
     const academicYearId = headers["academicyearid"];
@@ -139,6 +142,11 @@ export class CohortController {
     if (!academicYearId || !isUUID(academicYearId)) {
       throw new BadRequestException(API_RESPONSES.ACADEMICYEARID_VALIDATION);
     }
+    cohortCreateDto.createdBy = userId;
+    LoggerUtil.log(
+      `Creating cohort with userId: ${userId}`
+    )
+
     cohortCreateDto.academicYearId = academicYearId;
     cohortCreateDto.tenantId = tenantId;
     return await this.cohortAdapter

@@ -1,17 +1,17 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { Tenants } from './entities/tenent.entity';
+import { Tenant } from './entities/tenent.entity';
 import { Repository } from 'typeorm';
 import APIResponse from "src/common/responses/response";
 import { InjectRepository } from '@nestjs/typeorm';
 import { API_RESPONSES } from '@utils/response.messages';
 import { APIID } from '@utils/api-id.config';
-
+import { LoggerUtil } from "src/common/logger/LoggerUtil";
 
 @Injectable()
 export class TenantService {
     constructor(
-        @InjectRepository(Tenants)
-        private tenantRepository: Repository<Tenants>,
+        @InjectRepository(Tenant)
+        private tenantRepository: Repository<Tenant>,
     ) { }
 
     public async getTenants(request, response) {
@@ -57,6 +57,11 @@ export class TenantService {
             );
         } catch (error) {
             const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+            LoggerUtil.error(
+                `${API_RESPONSES.SERVER_ERROR}`,
+                `Error: ${errorMessage}`,
+                apiId
+            )
             return APIResponse.error(
                 response,
                 apiId,
@@ -97,6 +102,11 @@ export class TenantService {
             );
         } catch (error) {
             const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+            LoggerUtil.error(
+                `${API_RESPONSES.SERVER_ERROR}`,
+                `Error: ${errorMessage}`,
+                apiId
+            )
             return APIResponse.error(
                 response,
                 apiId,
@@ -136,6 +146,11 @@ export class TenantService {
             );
         } catch (error) {
             const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+            LoggerUtil.error(
+                `${API_RESPONSES.SERVER_ERROR}`,
+                `Error: ${errorMessage}`,
+                apiId
+            )
             return APIResponse.error(
                 response,
                 apiId,
@@ -146,7 +161,7 @@ export class TenantService {
         }
     }
 
-    public async updateTenants(request, tenantId, response) {
+    public async updateTenants(request, tenantId, tenantUpdateDto, response) {
         let apiId = APIID.TENANT_UPDATE;
         try {
             let checkExitTenants = await this.tenantRepository.find({
@@ -165,10 +180,7 @@ export class TenantService {
                 );
             }
 
-            let result = await this.tenantRepository.update(
-                tenantId,
-                request.body
-            );
+            let result = await this.tenantRepository.update(tenantId, tenantUpdateDto);
             return APIResponse.success(
                 response,
                 apiId,
@@ -178,6 +190,11 @@ export class TenantService {
             );
         } catch (error) {
             const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+            LoggerUtil.error(
+                `${API_RESPONSES.SERVER_ERROR}`,
+                `Error: ${errorMessage}`,
+                apiId
+            )
             return APIResponse.error(
                 response,
                 apiId,

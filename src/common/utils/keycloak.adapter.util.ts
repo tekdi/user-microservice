@@ -1,3 +1,5 @@
+import { API_RESPONSES } from "./response.messages";
+import { LoggerUtil } from "src/common/logger/LoggerUtil";
 function getUserRole(userRoles: string[]) {
   if (userRoles.includes("systemAdmin")) {
     return "systemAdmin";
@@ -42,7 +44,10 @@ async function getKeycloakAdminToken() {
   try {
     res = await axios(config);
   } catch (error) {
-    console.log(error, "err");
+    LoggerUtil.error(
+      `${API_RESPONSES.SERVER_ERROR}`,
+      `Error: ${error.message},`
+    )
   }
 
   return res;
@@ -91,7 +96,6 @@ async function createUserInKeyCloak(query, token) {
   // try {
   //   userResponse = await axios(config);
   // } catch (e) {
-  //   console.log(e.response, "Keycloak Creation error");
   //   return e;
   // }
 
@@ -123,7 +127,10 @@ async function checkIfEmailExistsInKeycloak(email, token) {
   try {
     userResponse = await axios(config);
   } catch (e) {
-    console.log(e, "Keycloak error - email");
+    LoggerUtil.error(
+      `${API_RESPONSES.SERVER_ERROR}`,
+      `Error: "Keycloak error - email" ${e.message},`
+    )
     return e;
   }
 
@@ -131,7 +138,6 @@ async function checkIfEmailExistsInKeycloak(email, token) {
 }
 
 async function checkIfUsernameExistsInKeycloak(username, token) {
-  // console.log(username);
   const axios = require("axios");
   const config = {
     method: "get",
@@ -149,7 +155,10 @@ async function checkIfUsernameExistsInKeycloak(username, token) {
   try {
     userResponse = await axios(config);
   } catch (e) {
-    console.log(e, "Keycloak error - username");
+    LoggerUtil.error(
+      `${API_RESPONSES.SERVER_ERROR}`,
+      `Error: "Keycloak error - username" ${e.message},`
+    )
     return e;
   }
 
