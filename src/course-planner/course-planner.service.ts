@@ -8,6 +8,7 @@ import FormData from "form-data";
 import { URL } from "./url-config";
 import * as fs from "fs";
 import * as path from "path";
+import { LoggerUtil } from "src/common/logger/LoggerUtil";
 @Injectable()
 export class CoursePlannerService {
   private baseUrl: string;
@@ -94,7 +95,7 @@ export class CoursePlannerService {
   ): Promise<any> {
     try {
       const solutionData = this.prepareSolutionData(externalId, metadata);
-      console.log(solutionData, "Solution data");
+      LoggerUtil.log("Solution data")
       const url = `${this.baseUrl}/project/v1/solutions/create`;
       const response = await this.makeHttpRequest("post", url, solutionData);
       return response.data;
@@ -175,7 +176,7 @@ export class CoursePlannerService {
   private async createProgram(metadata: MetaDataDto): Promise<any> {
     try {
       const programData = this.prepareProgramData(metadata);
-      console.log(programData);
+      LoggerUtil.log(programData)
       const url = `${this.baseUrl}/project/v1/programs/create`;
       const response = await this.makeHttpRequest("post", url, programData);
       return response.data;
@@ -296,7 +297,6 @@ export class CoursePlannerService {
       const response = await this.makeHttpRequest("post", url, projectData, {
         "internal-access-token": `${this.internalAccessToken}`,
       });
-      console.log(response);
       if (response.status === 400) {
         return this.createProject(externalId, metaData, createProjectDto);
       } else {
@@ -353,7 +353,6 @@ export class CoursePlannerService {
       });
 
       const responseData = response.data;
-      console.log(responseData);
       const fields = responseData.split(",");
       return fields[fields.length - 1].replace(/"/g, "");
     } catch (error) {

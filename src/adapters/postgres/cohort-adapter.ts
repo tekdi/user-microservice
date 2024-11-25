@@ -23,6 +23,7 @@ import { PostgresAcademicYearService } from "./academicyears-adapter";
 import { API_RESPONSES } from "@utils/response.messages";
 import { CohortAcademicYear } from "src/cohortAcademicYear/entities/cohortAcademicYear.entity";
 import { PostgresCohortMembersService } from "./cohortMembers-adapter";
+import { LoggerUtil } from "src/common/logger/LoggerUtil";
 
 @Injectable()
 export class PostgresCohortService {
@@ -73,8 +74,8 @@ export class PostgresCohortService {
         return APIResponse.error(
           res,
           apiId,
-          "BAD_REQUEST",
-          `No Cohort Found for this cohort ID`,
+          API_RESPONSES.BAD_REQUEST,
+          API_RESPONSES.COHORT_NOT_FOUND,
           HttpStatus.BAD_REQUEST
         );
       }
@@ -85,11 +86,16 @@ export class PostgresCohortService {
         return this.handleCohortDataResponse(cohorts, res, apiId);
       }
     } catch (error) {
-      const errorMessage = error.message || "Internal server error";
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${error.message}`,
+        apiId
+      )
+      const errorMessage = error.message || API_RESPONSES.SERVER_ERROR;
       return APIResponse.error(
         res,
         apiId,
-        "Internal Server Error",
+        API_RESPONSES.SERVER_ERROR,
         errorMessage,
         HttpStatus.INTERNAL_SERVER_ERROR
       );
@@ -109,13 +115,15 @@ export class PostgresCohortService {
       };
       result.cohortData.push(cohortData);
     }
-
+    LoggerUtil.log(
+      API_RESPONSES.COHORT_DATA_RESPONSE,
+    )
     return APIResponse.success(
       res,
       apiId,
       result,
       HttpStatus.OK,
-      "Cohort list fetched successfully"
+      API_RESPONSES.COHORT_LIST,
     );
   }
 
@@ -138,6 +146,10 @@ export class PostgresCohortService {
         ),
       };
       resultDataList.push(resultData);
+
+      LoggerUtil.log(
+        API_RESPONSES.CHILD_DATA,
+      )
     }
 
     return APIResponse.success(
@@ -145,7 +157,7 @@ export class PostgresCohortService {
       apiId,
       resultDataList,
       HttpStatus.OK,
-      "Cohort hierarchy fetched successfully"
+      API_RESPONSES.COHORT_HIERARCHY,
     );
   }
 
@@ -269,6 +281,10 @@ export class PostgresCohortService {
       };
     });
 
+    LoggerUtil.log(
+      API_RESPONSES.COHORT_FIELD_DETAILS,
+    )
+
     result = await Promise.all(result);
     return result;
   }
@@ -354,8 +370,8 @@ export class PostgresCohortService {
         return APIResponse.error(
           res,
           apiId,
-          `Cohort name already exist.Please provide another name.`,
-          `Cohort already exists`,
+          API_RESPONSES.COHORT_NAME_EXIST,
+          API_RESPONSES.COHORT_EXISTS,
           HttpStatus.CONFLICT
         );
       }
@@ -408,19 +424,27 @@ export class PostgresCohortService {
         ...response,
         academicYearId: academicYearId,
       });
+      LoggerUtil.log(
+        API_RESPONSES.CREATE_COHORT,
+      )
       return APIResponse.success(
         res,
         apiId,
         resBody,
         HttpStatus.CREATED,
-        "Cohort Created Successfully."
+        API_RESPONSES.CREATE_COHORT
       );
     } catch (error) {
-      const errorMessage = error.message || "Internal server error";
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${error.message}`,
+        apiId
+      )
+      const errorMessage = error.message || API_RESPONSES.SERVER_ERROR;
       return APIResponse.error(
         res,
         apiId,
-        "Internal Server Error",
+        API_RESPONSES.SERVER_ERROR,
         errorMessage,
         HttpStatus.INTERNAL_SERVER_ERROR
       );
@@ -592,12 +616,15 @@ export class PostgresCohortService {
           }
         }
 
+        LoggerUtil.log(
+          API_RESPONSES.COHORT_UPDATED_SUCCESSFULLY,
+        )
         return APIResponse.success(
           res,
           apiId,
           response?.affected,
           HttpStatus.OK,
-          "Cohort updated successfully."
+          API_RESPONSES.COHORT_UPDATED_SUCCESSFULLY
         );
       } else {
         return APIResponse.error(
@@ -609,11 +636,16 @@ export class PostgresCohortService {
         );
       }
     } catch (error) {
-      const errorMessage = error.message || "Internal server error";
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${error.message}`,
+        apiId
+      )
+      const errorMessage = error.message || API_RESPONSES.SERVER_ERROR;
       return APIResponse.error(
         res,
         apiId,
-        "Internal Server Error",
+        API_RESPONSES.SERVER_ERROR,
         errorMessage,
         HttpStatus.INTERNAL_SERVER_ERROR
       );
@@ -891,11 +923,16 @@ export class PostgresCohortService {
         );
       }
     } catch (error) {
-      const errorMessage = error.message || "Internal server error";
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${error.message}`,
+        apiId
+      )
+      const errorMessage = error.message || API_RESPONSES.SERVER_ERROR;
       return APIResponse.error(
         response,
         apiId,
-        "Internal Server Error",
+        API_RESPONSES.SERVER_ERROR,
         errorMessage,
         HttpStatus.INTERNAL_SERVER_ERROR
       );
@@ -947,11 +984,16 @@ export class PostgresCohortService {
         );
       }
     } catch (error) {
-      const errorMessage = error.message || "Internal server error";
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${error.message}`,
+        apiId
+      )
+      const errorMessage = error.message || API_RESPONSES.SERVER_ERROR;
       return APIResponse.error(
         response,
         apiId,
-        "Internal Server Error",
+        API_RESPONSES.SERVER_ERROR,
         errorMessage,
         HttpStatus.INTERNAL_SERVER_ERROR
       );
@@ -1002,6 +1044,10 @@ export class PostgresCohortService {
       });
     }
 
+    LoggerUtil.log(
+      API_RESPONSES.COHORT_HIERARCHY,
+    )
+
     return hierarchy;
   }
 
@@ -1019,7 +1065,7 @@ export class PostgresCohortService {
       return APIResponse.error(
         res,
         apiId,
-        "BAD_REQUEST",
+        API_RESPONSES.BAD_REQUEST,
         API_RESPONSES.USER_NOT_IN_ACADEMIC_YEAR,
         HttpStatus.BAD_REQUEST
       );
@@ -1032,7 +1078,7 @@ export class PostgresCohortService {
           return APIResponse.error(
             res,
             apiId,
-            "BAD_REQUEST",
+            API_RESPONSES.BAD_REQUEST,
             `No Cohort Found for this User ID`,
             HttpStatus.BAD_REQUEST
           );
@@ -1067,11 +1113,16 @@ export class PostgresCohortService {
           "Cohort list fetched successfully"
         );
       } catch (error) {
-        const errorMessage = error.message || "Internal server error";
+        LoggerUtil.error(
+          `${API_RESPONSES.SERVER_ERROR}`,
+          `Error: ${error.message}`,
+          apiId
+        )
+        const errorMessage = error.message || API_RESPONSES.SERVER_ERROR;
         return APIResponse.error(
           res,
           apiId,
-          "Internal Server Error",
+          API_RESPONSES.SERVER_ERROR,
           errorMessage,
           HttpStatus.INTERNAL_SERVER_ERROR
         );
@@ -1122,14 +1173,19 @@ export class PostgresCohortService {
           apiId,
           resultDataList,
           HttpStatus.OK,
-          "Cohort hierarchy fetched successfully"
+          API_RESPONSES.COHORT_HIERARCHY
         );
       } catch (error) {
-        const errorMessage = error.message || "Internal server error";
+        LoggerUtil.error(
+          `${API_RESPONSES.SERVER_ERROR}`,
+          `Error: ${error.message}`,
+          apiId
+        )
+        const errorMessage = error.message || API_RESPONSES.SERVER_ERROR;
         return APIResponse.error(
           res,
           apiId,
-          "Internal Server Error",
+          API_RESPONSES.SERVER_ERROR,
           errorMessage,
           HttpStatus.INTERNAL_SERVER_ERROR
         );

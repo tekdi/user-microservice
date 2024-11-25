@@ -60,26 +60,92 @@ export const API_RESPONSES = {
   INVALID_FORM: "Invalid form",
   TENANTID_MISMATCHED: "Tenant id mismatched",
   INVALID_CONTEXT: (context) => `Invalid context: ${context}`,
-  INVALID_CONTEXTTYPE: (context, validContextTypes) =>
-    `Invalid contextType. For the context '${context}', it must be one of: ${validContextTypes}`,
-  COHORTID_NOTFOUND_FOT_THIS_YEAR: (cohortId) =>
-    `Cohort with cohortId ${cohortId} does not exist for this academic year`,
-  MAPPING_EXIST_BW_USER_AND_COHORT: (userId, cohortId) =>
-    `Mapping already exists for userId ${userId} and cohortId ${cohortId} for this academic year`,
-  COHORT_NOTMAPPED_WITH_USER: (removeCohortId, userId) =>
-    `Cohort Id ${removeCohortId} is not mapped to user Id${userId}} for this academic year`,
-  COHORT_STATUS_UPDATED_FOR_USER: (removeCohortId, userId) =>
-    `Cohort Id ${removeCohortId} status updated for This user Id${userId}}`,
-  ERROR_UPDATE_COHORTMEMBER: (userId, removeCohortId, error) =>
-    `Error updating cohort member with userId ${userId} and cohortId ${removeCohortId}: ${error}`,
-  ERROR_SAVING_COHORTMEMBER: (userId, cohortId, error) =>
-    `Error saving cohort member with userId ${userId} and cohortId ${cohortId}: ${error}`,
-  USER_NOTEXIST: (userId) =>
-    `User with userId ${userId} does not exist for this academic year.`,
-  UNAUTHORIZED: "Unauthorized",
-  INVALID_TOKEN: "Token Invalid",
+  INVALID_CONTEXTTYPE: (context, validContextTypes) => `Invalid contextType. For the context '${context}', it must be one of: ${validContextTypes}`,
+  COHORTID_NOTFOUND_FOT_THIS_YEAR: (cohortId) => `Cohort with cohortId ${cohortId} does not exist for this academic year.`,
+  MAPPING_EXIST_BW_USER_AND_COHORT: (userId, cohortId) => `Mapping already exists for userId ${userId} and cohortId ${cohortId} for this academic year`,
+  COHORT_NOTMAPPED_WITH_USER: (removeCohortId, userId) => `Cohort Id ${removeCohortId} is not mapped to user Id${userId}} for this academic year.`,
+  COHORT_STATUS_UPDATED_FOR_USER: (removeCohortId, userId) => `Cohort Id ${removeCohortId} status updated for This user Id${userId}}`,
+  ERROR_UPDATE_COHORTMEMBER: (userId, removeCohortId, error) => `Error updating cohort member with userId ${userId} and cohortId ${removeCohortId}: ${error}`,
+  ERROR_SAVING_COHORTMEMBER: (userId, cohortId, error) => `Error saving cohort member with userId ${userId} and cohortId ${cohortId}: ${error}`,
+  USER_NOTEXIST: (userId) => `User with userId ${userId} does not exist for this academic year.`,
+  UNAUTHORIZED: 'Unauthorized',
+  INVALID_TOKEN: 'Token Invalid',
+
+  //User Api messages
+  USER_UPDATED_SUCCESSFULLY: 'User updated successfully.',
+  USER_NOT_EXISTS: 'User does not exist.',
+  USER_EXISTS: 'User already exist.',
+  DUPLICATE_DATA: 'Duplicate data.',
+  USER_ALREADY_EXISTS: 'User already exists.',
+  SERVER_ERROR: 'Internal server error',
+  SERVICE_NAME: 'User service',
+
+
+  USER_NOT_FOUND_FOR_DELETE: 'User not found for delete.',
+  USER_NOT_FOUND_FOR_PASSWORD_RESET: 'User not found for password reset.',
+
+  //get User Details
+  USER_GET_SUCCESSFULLY: 'User details fetched successfully.',
+
+  USER_GET_BY_EMAIL_SUCCESSFULLY: 'User details fetched successfully by email',
+  USER_GET_BY_PHONE_SUCCESSFULLY: 'User details fetched successfully by phone',
+  USER_GET_BY_USERNAME_SUCCESSFULLY: 'User details fetched successfully by username',
+  USER_GET_BY_TENANT_ID_SUCCESSFULLY: 'User details fetched successfully by tenantId',
+  USER_GET_BY_USER_ID_SUCCESSFULLY: 'User details fetched successfully by userId',
+  USER_GET_BY_USER_ID_AND_TENANT_ID_SUCCESSFULLY: 'User details fetched successfully by userId and tenantId',
+  USER_GET_BY_EMAIL_AND_TENANT_ID_SUCCESSFULLY: 'User details fetched successfully by email and tenantId',
+
+  //Create user
+  USER_CREATE_SUCCESSFULLY: `User created successfully`,
+  USER_CREATE_IN_DB: 'User created in user table successfully',
+  USER_CREATE_KEYCLOAK: 'User created successfully on ',
+  USER_CREATE_FAILED: 'User creation failed',
+  USER_CREATE_FAILED_WITH_ERROR: (error) => `User creation failed with error: ${error}`,
+  USER_CREATE_FAILED_WITH_ERROR_AND_EMAIL: (error, email) => `User creation failed with error: ${error}. Email: ${email}`,
+  USER_CREATE_FAILED_WITH_ERROR_AND_PHONE: (error, phone) => `User creation failed with error: ${error}. Phone: ${phone}`,
+  USER_CREATE_FAILED_WITH_ERROR_AND_USERNAME: (error, username) => `User creation failed with error: ${error}. Username: ${username}`,
+  USERID_NOT_FOUND: (userId) => `User Id '${userId}' does not exist.`,
+  TENANTID_NOT_FOUND: (tenantId) => `Tenant Id '${tenantId}' does not exist.`,
+
+
+  //UUID constants
+  UUID_VALIDATION: 'Please enter valid UUID',
+  INVALID_EMAIL: (emailId) => `Invalid email address: ${emailId}`,
+  MOBILE_NO_CHECK: (mobileNo) => `Mobile number must be 10 digits long: ${mobileNo}`,
+  DOB_FORMAT: (dob) => `Date of birth must be in the format yyyy-mm-dd: ${dob}`,
+  INVALID_USERNAME_EMAIL: `Invalid Username Or Email`,
+  USER_RELATEDENTITY_DELETE: `User and related entries deleted Successfully.`,
+
+  ACADEMIC_YEAR_NOT_FOUND: 'Academic year not found for tenant',
+  DUPLICAT_TENANTID: "Duplicate tenantId detected. Please ensure each tenantId is unique and correct your data.",
+  INVALID_PARAMETERS: 'Invalid parameters provided. Please ensure that tenantId, roleId, and cohortId (if applicable) are correctly provided.',
+  COHORT_NOT_FOUND_IN_TENANT_ID: (cohortId, TenantId) => `Cohort Id '${cohortId}' does not exist for this tenant '${TenantId}'.`,
+
+  ROLE_NOT_FOUND_IN_TENANT: (roleId, tenantId) => `Role Id '${roleId}' does not exist for this tenant '${tenantId}'.`,
+  USER_EXISTS_SEND_MAIL: "User Exists. Proceed with Sending Email.",
+  INVALID_FIELD: (invalidateFields) => `Invalid fields found: ${invalidateFields}`,
+  DUPLICATE_FIELD: (duplicateFieldKeys) => `Duplicate fieldId detected: ${duplicateFieldKeys}`,
+  FIELD_NOT_FOUND: 'Field not found',
+  PASSWORD_RESET: 'Password reset successful!',
+
+  SOMETHING_WRONG: "Something went wrong",
+  USER_PASSWORD_UPDATE: "User Password Updated Successfully",
+  USER_BASIC_DETAILS_UPDATE: "User basic details updated successfully",
+  USER_TENANT: "User tenant mapping successfully",
+  USER_COHORT: "User cohort mapping successfully",
+  COHORT_NAME_EXIST: 'Cohort name already exist.Please provide another name.',
+
+  COHORT_LIST: "Cohort list fetched successfully",
+  COHORT_HIERARCHY: "Cohort hierarchy fetched successfully",
+  COHORT_EXISTS: 'Cohort already exists',
+  CREATE_COHORT: "Cohort Created Successfully.",
+  COHORT_FIELD_DETAILS: 'Fetch cohort custom field details',
+  CHILD_DATA: 'Get all child data response',
+  COHORT_DATA_RESPONSE: 'Fetch cohort data response',
+  COHORT_UPDATED_SUCCESSFULLY: 'Cohort updated successfully.',
+  TENANT_NOTFOUND: 'Tenant not found',
+
   COHORTMEMBER_UPDATE_SUCCESSFULLY: "Cohort Member updated Successfully",
-  TENANT_NOTFOUND: "tenant not found",
 
   //Tenant
   TENANT_GET: "Tenant fetched successfully.",

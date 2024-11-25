@@ -22,6 +22,8 @@ import { FieldFactory } from "src/fields/fieldValidators/fieldFactory";
 import { FieldsUpdateDto } from "src/fields/dto/fields-update.dto";
 import { SchemaField, Option } from "src/fields/fieldValidators/fieldClass";
 import jwt_decode from "jwt-decode";
+import { LoggerUtil } from "src/common/logger/LoggerUtil";
+import { API_RESPONSES } from "@utils/response.messages";
 @Injectable()
 export class PostgresFieldsService implements IServicelocatorfields {
   constructor(
@@ -95,11 +97,17 @@ export class PostgresFieldsService implements IServicelocatorfields {
         "Fields fetched successfully."
       );
     } catch (error) {
-      const errorMessage = error.message || "Internal server error";
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${error.message}`,
+        apiId
+      )
+
+      const errorMessage = error.message || API_RESPONSES.SERVER_ERROR;
       return APIResponse.error(
         response,
         apiId,
-        "Internal Server Error",
+        API_RESPONSES.SERVER_ERROR,
         errorMessage,
         HttpStatus.INTERNAL_SERVER_ERROR
       );
@@ -415,11 +423,16 @@ export class PostgresFieldsService implements IServicelocatorfields {
         "Fields created successfully."
       );
     } catch (e) {
-      const errorMessage = e?.message || "Something went wrong";
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${e.message}`,
+        apiId
+      )
+      const errorMessage = e?.message || API_RESPONSES.SERVER_ERROR;
       return APIResponse.error(
         response,
         apiId,
-        "Internal Server Error",
+        API_RESPONSES.SERVER_ERROR,
         `Error : ${errorMessage}`,
         HttpStatus.INTERNAL_SERVER_ERROR
       );
@@ -557,11 +570,16 @@ export class PostgresFieldsService implements IServicelocatorfields {
         "Fields updated successfully."
       );
     } catch (e) {
-      const errorMessage = e?.message || "Something went wrong";
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${e.message}`,
+        apiId
+      )
+      const errorMessage = e?.message || API_RESPONSES.SERVER_ERROR;
       return APIResponse.error(
         response,
         apiId,
-        "Internal Server Error",
+        API_RESPONSES.SERVER_ERROR,
         `Error : ${errorMessage}`,
         HttpStatus.INTERNAL_SERVER_ERROR
       );
@@ -591,7 +609,11 @@ export class PostgresFieldsService implements IServicelocatorfields {
       });
       return true;
     } catch (e) {
-      const errorMessage = e?.message || "Something went wrong";
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${e.message}`,
+      )
+      const errorMessage = e?.message || API_RESPONSES.SERVER_ERROR;
       return errorMessage;
     }
   }
@@ -686,6 +708,10 @@ export class PostgresFieldsService implements IServicelocatorfields {
       });
       return response;
     } catch (e) {
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${e.message}`,
+      )
       return { error: e };
     }
   }
@@ -747,11 +773,16 @@ export class PostgresFieldsService implements IServicelocatorfields {
         "Fields fetched successfully."
       );
     } catch (error) {
-      const errorMessage = error.message || "Internal server error";
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${error.message}`,
+        apiId
+      )
+      const errorMessage = error.message || API_RESPONSES.SERVER_ERROR;
       return APIResponse.error(
         response,
         apiId,
-        "Internal Server Error",
+        API_RESPONSES.SERVER_ERROR,
         errorMessage,
         HttpStatus.INTERNAL_SERVER_ERROR
       );
@@ -805,11 +836,16 @@ export class PostgresFieldsService implements IServicelocatorfields {
         "Field Values created successfully"
       );
     } catch (error) {
-      const errorMessage = error.message || "Something went wrong";
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${error.message}`,
+        apiId
+      )
+      const errorMessage = error.message || API_RESPONSES.SERVER_ERROR;
       return APIResponse.error(
         res,
         apiId,
-        "Internal Server Error",
+        API_RESPONSES.SERVER_ERROR,
         errorMessage,
         HttpStatus.INTERNAL_SERVER_ERROR
       );
@@ -847,11 +883,16 @@ export class PostgresFieldsService implements IServicelocatorfields {
         "Field Values fetched successfully."
       );
     } catch (e) {
-      const errorMessage = e?.message || "Something went wrong";
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${e.message}`,
+        apiId
+      )
+      const errorMessage = e?.message || API_RESPONSES.SERVER_ERROR;
       return APIResponse.error(
         response,
         apiId,
-        "Internal Server Error",
+        API_RESPONSES.SERVER_ERROR,
         `Error : ${errorMessage}`,
         HttpStatus.INTERNAL_SERVER_ERROR
       );
@@ -948,6 +989,10 @@ export class PostgresFieldsService implements IServicelocatorfields {
 
       return response;
     } catch (e) {
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${e.message}`,
+      )
       return new ErrorResponse({
         errorCode: "400",
         errorMessage: e,
@@ -1173,11 +1218,15 @@ export class PostgresFieldsService implements IServicelocatorfields {
         "Field options fetched successfully."
       );
     } catch (e) {
-      const errorMessage = e?.message || "Something went wrong";
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${e.message}`,
+      )
+      const errorMessage = e?.message || API_RESPONSES.SERVER_ERROR;
       return APIResponse.error(
         response,
         apiId,
-        "Internal Server Error",
+        API_RESPONSES.SERVER_ERROR,
         `Error : ${errorMessage}`,
         HttpStatus.INTERNAL_SERVER_ERROR
       );
@@ -1295,11 +1344,15 @@ export class PostgresFieldsService implements IServicelocatorfields {
         );
       }
     } catch (e) {
-      const errorMessage = e?.message || "Something went wrong";
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${e.message}`,
+      )
+      const errorMessage = e?.message || API_RESPONSES.SERVER_ERROR;
       return APIResponse.error(
         response,
         apiId,
-        "Internal Server Error",
+        API_RESPONSES.SERVER_ERROR,
         `Error : ${errorMessage}`,
         HttpStatus.INTERNAL_SERVER_ERROR
       );
@@ -1537,6 +1590,10 @@ export class PostgresFieldsService implements IServicelocatorfields {
       const isValid = fieldInstance.validate(value);
       return isValid;
     } catch (e) {
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${e.message}`,
+      )
       return { error: e };
     }
   }

@@ -19,6 +19,7 @@ import { NotificationRequest } from "@utils/notification.axios";
 import { CohortAcademicYear } from "src/cohortAcademicYear/entities/cohortAcademicYear.entity";
 import { PostgresAcademicYearService } from "./academicyears-adapter";
 import { API_RESPONSES } from "@utils/response.messages";
+import { LoggerUtil } from "src/common/logger/LoggerUtil";
 import { PostgresUserService } from "./user-adapter";
 import { isValid } from "date-fns";
 import { FieldValuesOptionDto } from "src/user/dto/user-create.dto";
@@ -40,7 +41,7 @@ export class PostgresCohortMembersService {
     private readonly notificationRequest: NotificationRequest,
     private fieldsService: PostgresFieldsService,
     private userService: PostgresUserService
-  ) {}
+  ) { }
 
   //Get cohort member
   async getCohortMembers(
@@ -123,6 +124,11 @@ export class PostgresCohortMembersService {
         );
       }
     } catch (e) {
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${e.message}`,
+        apiId
+      )
       const errorMessage = e.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
       return APIResponse.error(
         res,
@@ -371,6 +377,11 @@ export class PostgresCohortMembersService {
         API_RESPONSES.COHORT_GET_SUCCESSFULLY
       );
     } catch (e) {
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${e.message}`,
+        apiId
+      )
       const errorMessage = e.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
       return APIResponse.error(
         res,
@@ -549,6 +560,11 @@ export class PostgresCohortMembersService {
         API_RESPONSES.COHORTMEMBER_CREATED_SUCCESSFULLY
       );
     } catch (e) {
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${e.message}`,
+        apiId
+      )
       const errorMessage = e.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
       return APIResponse.error(
         res,
@@ -648,71 +664,92 @@ export class PostgresCohortMembersService {
     res
   ) {
     const apiId = APIID.COHORT_MEMBER_UPDATE;
-    cohortMembersUpdateDto.updatedBy = loginUser;
-    if (!isUUID(cohortMembershipId)) {
-      return APIResponse.error(
-        res,
-        apiId,
-        "Bad Request",
-        "Invalid input: Please Enter a valid UUID for cohortMembershipId.",
-        HttpStatus.BAD_REQUEST
-      );
-    }
-    //validate custom fileds
-    let customFieldValidate;
-    if (
-      cohortMembersUpdateDto.customFields &&
-      cohortMembersUpdateDto.customFields.length > 0
-    ) {
-      customFieldValidate =
-        await this.fieldsService.validateCustomFieldByContext(
-          cohortMembersUpdateDto,
-          "COHORTMEMBER",
-          "COHORTMEMBER"
-        );
-      if (!customFieldValidate || !isValid) {
+    try {
+      cohortMembersUpdateDto.updatedBy = loginUser;
+      if (!isUUID(cohortMembershipId)) {
         return APIResponse.error(
-          response,
+          res,
           apiId,
-          "BAD_REQUEST",
-          `${customFieldValidate}`,
+          "Bad Request",
+          "Invalid input: Please Enter a valid UUID for cohortMembershipId.",
           HttpStatus.BAD_REQUEST
         );
       }
-    }
+      //validate custom fileds
+      let customFieldValidate;
+      if (
+        cohortMembersUpdateDto.customFields &&
+        cohortMembersUpdateDto.customFields.length > 0
+      ) {
+        customFieldValidate =
+          await this.fieldsService.validateCustomFieldByContext(
+            cohortMembersUpdateDto,
+            "COHORTMEMBER",
+            "COHORTMEMBER"
+          );
+        if (!customFieldValidate || !isValid) {
+          return APIResponse.error(
+            response,
+            apiId,
+            "BAD_REQUEST",
+            `${customFieldValidate}`,
+            HttpStatus.BAD_REQUEST
+          );
+        }
+      }
 
-    let cohortMembershipToUpdate = await this.cohortMembersRepository.findOne({
-      where: { cohortMembershipId: cohortMembershipId },
-    });
+      let cohortMembershipToUpdate = await this.cohortMembersRepository.findOne({
+        where: { cohortMembershipId: cohortMembershipId },
+      });
 
-    if (!cohortMembershipToUpdate) {
-      return APIResponse.error(
-        res,
-        apiId,
-        "Not Found",
-        "Invalid input: Cohort member not found.",
-        HttpStatus.NOT_FOUND
+      if (!cohortMembershipToUpdate) {
+        return APIResponse.error(
+          res,
+          apiId,
+          "Not Found",
+          "Invalid input: Cohort member not found.",
+          HttpStatus.NOT_FOUND
+        );
+      }
+      let result = await this.cohortMembersRepository.save(
+        cohortMembershipToUpdate
       );
-    }
-    let result = await this.cohortMembersRepository.save(
-      cohortMembershipToUpdate
-    );
-    //update custom fields
-    let responseForCustomField;
-    if (
-      cohortMembersUpdateDto.customFields &&
-      cohortMembersUpdateDto.customFields.length > 0
-    ) {
-      const customFields = cohortMembersUpdateDto.customFields;
-      delete cohortMembersUpdateDto.customFields;
-      Object.assign(cohortMembershipToUpdate, cohortMembersUpdateDto);
+      //update custom fields
+      let responseForCustomField;
+      if (
+        cohortMembersUpdateDto.customFields &&
+        cohortMembersUpdateDto.customFields.length > 0
+      ) {
+        const customFields = cohortMembersUpdateDto.customFields;
+        delete cohortMembersUpdateDto.customFields;
+        Object.assign(cohortMembershipToUpdate, cohortMembersUpdateDto);
 
-      responseForCustomField = await this.processCustomFields(
-        customFields,
-        cohortMembershipId,
-        cohortMembersUpdateDto
-      );
-      if (result && responseForCustomField.success) {
+        responseForCustomField = await this.processCustomFields(
+          customFields,
+          cohortMembershipId,
+          cohortMembersUpdateDto
+        );
+        if (result && responseForCustomField.success) {
+          return APIResponse.success(
+            res,
+            apiId,
+            [],
+            HttpStatus.CREATED,
+            API_RESPONSES.COHORTMEMBER_UPDATE_SUCCESSFULLY
+          );
+        } else {
+          const errorMessage =
+            responseForCustomField.error || "Internal server error";
+          return APIResponse.error(
+            res,
+            apiId,
+            "Internal Server Error",
+            errorMessage,
+            HttpStatus.INTERNAL_SERVER_ERROR
+          );
+        }
+      }
+      if (result) {
         return APIResponse.success(
           res,
           apiId,
@@ -720,37 +757,24 @@ export class PostgresCohortMembersService {
           HttpStatus.CREATED,
           API_RESPONSES.COHORTMEMBER_UPDATE_SUCCESSFULLY
         );
-      } else {
-        const errorMessage =
-          responseForCustomField.error || "Internal server error";
-        return APIResponse.error(
-          res,
-          apiId,
-          "Internal Server Error",
-          errorMessage,
-          HttpStatus.INTERNAL_SERVER_ERROR
-        );
       }
-    }
-    if (result) {
-      return APIResponse.success(
-        res,
-        apiId,
-        [],
-        HttpStatus.CREATED,
-        API_RESPONSES.COHORTMEMBER_UPDATE_SUCCESSFULLY
-      );
-    } else {
-      const errorMessage =
-        responseForCustomField.error || "Internal server error";
+    } catch (error) {
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${error.message}`,
+        apiId
+      )
+
       return APIResponse.error(
-        res,
+        response,
         apiId,
-        "Internal Server Error",
-        errorMessage,
+        API_RESPONSES.INTERNAL_SERVER_ERROR,
+        `Error : ${error.message}`,
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
+
+
   }
 
   public async deleteCohortMemberById(
@@ -789,11 +813,16 @@ export class PostgresCohortMembersService {
         "Cohort Member deleted Successfully."
       );
     } catch (e) {
-      const errorMessage = e.message || "Internal server error";
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${e.message}`,
+        apiId
+      )
+      const errorMessage = e.message || API_RESPONSES.SERVER_ERROR;
       return APIResponse.error(
         res,
         apiId,
-        "Internal Server Error",
+        API_RESPONSES.SERVER_ERROR,
         errorMessage,
         HttpStatus.INTERNAL_SERVER_ERROR
       );
@@ -919,6 +948,11 @@ export class PostgresCohortMembersService {
               });
             }
           } catch (error) {
+            LoggerUtil.error(
+              `${API_RESPONSES.SERVER_ERROR}`,
+              `Error: ${error.message}`,
+              apiId
+            )
             errors.push(
               API_RESPONSES.ERROR_UPDATE_COHORTMEMBER(
                 userId,
@@ -983,6 +1017,11 @@ export class PostgresCohortMembersService {
           );
           results.push(result);
         } catch (error) {
+          LoggerUtil.error(
+            `${API_RESPONSES.SERVER_ERROR}`,
+            `Error: ${error.message}`,
+            apiId
+          )
           errors.push(
             API_RESPONSES.ERROR_SAVING_COHORTMEMBER(
               userId,
