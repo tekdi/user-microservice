@@ -42,7 +42,7 @@ export class PostgresCohortService {
     private readonly cohortAcademicYearService: CohortAcademicYearService,
     private readonly postgresAcademicYearService: PostgresAcademicYearService,
     private readonly postgresCohortMembersService: PostgresCohortMembersService
-  ) { }
+  ) {}
 
   public async getCohortsDetails(requiredData, res) {
     const apiId = APIID.COHORT_READ;
@@ -301,11 +301,7 @@ export class PostgresCohortService {
     return { valid: true, fieldId: "true" };
   }
 
-  public async createCohort(
-    request: any,
-    cohortCreateDto: CohortCreateDto,
-    res
-  ) {
+  public async createCohort(cohortCreateDto: CohortCreateDto, res) {
     const apiId = APIID.COHORT_CREATE;
     try {
       // Add validation for check both duplicate field ids exist or not
@@ -351,10 +347,6 @@ export class PostgresCohortService {
           );
         }
       }
-
-      const decoded: any = jwt_decode(request.headers.authorization);
-      cohortCreateDto.createdBy = decoded?.sub;
-      cohortCreateDto.updatedBy = decoded?.sub;
       cohortCreateDto.status = cohortCreateDto.status || "active";
       cohortCreateDto.attendanceCaptureImage = false;
 
@@ -416,8 +408,8 @@ export class PostgresCohortService {
       await this.cohortAcademicYearService.insertCohortAcademicYear(
         response.cohortId,
         academicYearId,
-        decoded?.sub,
-        decoded?.sub
+        cohortCreateDto.createdBy,
+        cohortCreateDto.updatedBy
       );
 
       const resBody = new ReturnResponseBody({
@@ -453,7 +445,6 @@ export class PostgresCohortService {
 
   public async updateCohort(
     cohortId: string,
-    request: any,
     cohortUpdateDto: CohortUpdateDto,
     res
   ) {
@@ -465,10 +456,6 @@ export class PostgresCohortService {
       inactive: ["active", "archived"],
     };
     try {
-      const decoded: any = jwt_decode(request.headers.authorization);
-      cohortUpdateDto.updatedBy = decoded?.sub;
-      cohortUpdateDto.createdBy = decoded?.sub;
-
       if (!isUUID(cohortId)) {
         return APIResponse.error(
           res,
@@ -561,8 +548,8 @@ export class PostgresCohortService {
           const contextType = cohortUpdateDto.type
             ? [cohortUpdateDto.type]
             : existingCohorDetails?.type
-              ? [existingCohorDetails.type]
-              : [];
+            ? [existingCohorDetails.type]
+            : [];
           const allCustomFields = await this.fieldsService.findCustomFields(
             "COHORT",
             contextType
@@ -574,9 +561,9 @@ export class PostgresCohortService {
                 fieldDetail[`${fieldId}`]
                   ? fieldDetail
                   : {
-                    ...fieldDetail,
-                    [`${fieldId}`]: { fieldAttributes, fieldParams, name },
-                  },
+                      ...fieldDetail,
+                      [`${fieldId}`]: { fieldAttributes, fieldParams, name },
+                    },
               {}
             );
             for (const fieldValues of cohortUpdateDto.customFields) {
@@ -654,8 +641,7 @@ export class PostgresCohortService {
 
   public async searchCohort(
     tenantId: string,
-    academicYearId,
-    request: any,
+    academicYearId: string,
     cohortSearchDto: CohortSearchDto,
     response
   ) {
@@ -667,7 +653,6 @@ export class PostgresCohortService {
 
       offset = offset || 0;
       limit = limit || 200;
-
 
       const emptyValueKeys = {};
       let emptyKeysString = "";
@@ -885,8 +870,6 @@ export class PostgresCohortService {
         //   whereClause["cohortId"] = In(cohortIds);
         // }
 
-
-
         const [data, totalCount] = await this.cohortRepository.findAndCount({
           where: whereClause,
           order,
@@ -939,12 +922,9 @@ export class PostgresCohortService {
     }
   }
 
-  public async updateCohortStatus(cohortId: string, request: any, response) {
+  public async updateCohortStatus(cohortId: string, response, userId: string) {
     const apiId = APIID.COHORT_DELETE;
     try {
-      const decoded: any = jwt_decode(request.headers.authorization);
-      const updatedBy = decoded?.sub;
-
       if (!isUUID(cohortId)) {
         return APIResponse.error(
           response,
@@ -959,7 +939,7 @@ export class PostgresCohortService {
       if (checkData === true) {
         const query = `UPDATE public."Cohort"
         SET "status" = 'archived',
-        "updatedBy" = '${updatedBy}'
+        "updatedBy" = '${userId}'
         WHERE "cohortId" = $1`;
         const affectedrows = await this.cohortRepository.query(query, [
           cohortId,
