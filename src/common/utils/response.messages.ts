@@ -61,9 +61,9 @@ export const API_RESPONSES = {
   TENANTID_MISMATCHED: "Tenant id mismatched",
   INVALID_CONTEXT: (context) => `Invalid context: ${context}`,
   INVALID_CONTEXTTYPE: (context, validContextTypes) => `Invalid contextType. For the context '${context}', it must be one of: ${validContextTypes}`,
-  COHORTID_NOTFOUND_FOT_THIS_YEAR: (cohortId) => `Cohort with cohortId ${cohortId} does not exist for this academic year`,
+  COHORTID_NOTFOUND_FOT_THIS_YEAR: (cohortId) => `Cohort with cohortId ${cohortId} does not exist for this academic year.`,
   MAPPING_EXIST_BW_USER_AND_COHORT: (userId, cohortId) => `Mapping already exists for userId ${userId} and cohortId ${cohortId} for this academic year`,
-  COHORT_NOTMAPPED_WITH_USER: (removeCohortId, userId) => `Cohort Id ${removeCohortId} is not mapped to user Id${userId}} for this academic year`,
+  COHORT_NOTMAPPED_WITH_USER: (removeCohortId, userId) => `Cohort Id ${removeCohortId} is not mapped to user Id${userId}} for this academic year.`,
   COHORT_STATUS_UPDATED_FOR_USER: (removeCohortId, userId) => `Cohort Id ${removeCohortId} status updated for This user Id${userId}}`,
   ERROR_UPDATE_COHORTMEMBER: (userId, removeCohortId, error) => `Error updating cohort member with userId ${userId} and cohortId ${removeCohortId}: ${error}`,
   ERROR_SAVING_COHORTMEMBER: (userId, cohortId, error) => `Error saving cohort member with userId ${userId} and cohortId ${cohortId}: ${error}`,
@@ -142,8 +142,8 @@ export const API_RESPONSES = {
   COHORT_FIELD_DETAILS: 'Fetch cohort custom field details',
   CHILD_DATA: 'Get all child data response',
   COHORT_DATA_RESPONSE: 'Fetch cohort data response',
-  COHORT_UPDATED_SUCCESSFULLY: 'User updated successfully.',
-  TENANT_NOTFOUND: 'tenant not found',
+  COHORT_UPDATED_SUCCESSFULLY: 'Cohort updated successfully.',
+  TENANT_NOTFOUND: 'Tenant not found',
 
   COHORTMEMBER_UPDATE_SUCCESSFULLY: "Cohort Member updated Successfully",
 

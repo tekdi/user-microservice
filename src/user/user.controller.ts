@@ -49,6 +49,7 @@ import {
 } from "./dto/passwordReset.dto";
 import { isUUID } from "class-validator";
 import { API_RESPONSES } from "@utils/response.messages";
+import { LoggerUtil } from "src/common/logger/LoggerUtil";
 export interface UserData {
   context: string;
   tenantId: string;
@@ -85,6 +86,10 @@ export class UserController {
   ) {
     const tenantId = headers["tenantid"];
     if (!tenantId) {
+      LoggerUtil.warn(
+        `${API_RESPONSES.BAD_REQUEST}`,
+        `Error: Missing tenantId in request headers for user ${userId}`,
+      )
       return response
         .status(400)
         .json({ statusCode: 400, error: "Please provide a tenantId." });

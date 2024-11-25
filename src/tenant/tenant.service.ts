@@ -5,7 +5,7 @@ import APIResponse from "src/common/responses/response";
 import { InjectRepository } from '@nestjs/typeorm';
 import { API_RESPONSES } from '@utils/response.messages';
 import { APIID } from '@utils/api-id.config';
-
+import { LoggerUtil } from "src/common/logger/LoggerUtil";
 
 @Injectable()
 export class TenantService {
@@ -57,6 +57,11 @@ export class TenantService {
             );
         } catch (error) {
             const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+            LoggerUtil.error(
+                `${API_RESPONSES.SERVER_ERROR}`,
+                `Error: ${errorMessage}`,
+                apiId
+            )
             return APIResponse.error(
                 response,
                 apiId,
@@ -97,6 +102,11 @@ export class TenantService {
             );
         } catch (error) {
             const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+            LoggerUtil.error(
+                `${API_RESPONSES.SERVER_ERROR}`,
+                `Error: ${errorMessage}`,
+                apiId
+            )
             return APIResponse.error(
                 response,
                 apiId,
@@ -136,6 +146,11 @@ export class TenantService {
             );
         } catch (error) {
             const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+            LoggerUtil.error(
+                `${API_RESPONSES.SERVER_ERROR}`,
+                `Error: ${errorMessage}`,
+                apiId
+            )
             return APIResponse.error(
                 response,
                 apiId,
@@ -165,8 +180,6 @@ export class TenantService {
                 );
             }
 
-            console.log(tenantUpdateDto);
-
             let result = await this.tenantRepository.update(tenantId, tenantUpdateDto);
             return APIResponse.success(
                 response,
@@ -177,6 +190,11 @@ export class TenantService {
             );
         } catch (error) {
             const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+            LoggerUtil.error(
+                `${API_RESPONSES.SERVER_ERROR}`,
+                `Error: ${errorMessage}`,
+                apiId
+            )
             return APIResponse.error(
                 response,
                 apiId,

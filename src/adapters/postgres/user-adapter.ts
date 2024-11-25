@@ -157,7 +157,7 @@ export class PostgresUserService implements IServicelocator {
           `${API_RESPONSES.BAD_REQUEST}`,
           `Error: ${API_RESPONSES.RESET_PASSWORD_LINK_FAILED}`,
           apiId
-        )
+        );
         return APIResponse.error(
           response,
           apiId,
@@ -179,7 +179,7 @@ export class PostgresUserService implements IServicelocator {
         `${API_RESPONSES.INTERNAL_SERVER_ERROR}`,
         `Error: ${e.message}`,
         apiId
-      )
+      );
       return APIResponse.error(
         response,
         apiId,
@@ -205,7 +205,7 @@ export class PostgresUserService implements IServicelocator {
           `${API_RESPONSES.NOT_FOUND}`,
           API_RESPONSES.USERNAME_NOT_FOUND,
           apiId
-        )
+        );
         return APIResponse.error(
           response,
           apiId,
@@ -234,7 +234,7 @@ export class PostgresUserService implements IServicelocator {
           `${API_RESPONSES.INTERNAL_SERVER_ERROR}`,
           `Error: ${e.message}`,
           apiId
-        )
+        );
 
         return APIResponse.error(
           response,
@@ -279,7 +279,7 @@ export class PostgresUserService implements IServicelocator {
           `${API_RESPONSES.NOT_FOUND}: ${request.url}`,
           API_RESPONSES.USER_NOT_FOUND,
           apiId
-        )
+        );
         return APIResponse.error(
           response,
           apiId,
@@ -291,7 +291,7 @@ export class PostgresUserService implements IServicelocator {
       LoggerUtil.log(
         API_RESPONSES.USER_GET_SUCCESSFULLY,
         apiId
-      )
+      );
       return await APIResponse.success(
         response,
         apiId,
@@ -304,7 +304,7 @@ export class PostgresUserService implements IServicelocator {
         `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
         `Error: ${e.message}`,
         apiId
-      )
+      );
 
       const errorMessage = e.message || API_RESPONSES.SERVER_ERROR;
       return APIResponse.error(
@@ -531,7 +531,7 @@ export class PostgresUserService implements IServicelocator {
         LoggerUtil.log(
           API_RESPONSES.USER_GET_SUCCESSFULLY,
           apiId
-        )
+        );
         return await APIResponse.success(
           response,
           apiId,
@@ -560,7 +560,7 @@ export class PostgresUserService implements IServicelocator {
         API_RESPONSES.USER_GET_SUCCESSFULLY,
         apiId,
         userData?.userId
-      )
+      );
 
       return await APIResponse.success(
         response,
@@ -574,7 +574,7 @@ export class PostgresUserService implements IServicelocator {
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error: ${e.message}`,
         apiId
-      )
+      );
       return APIResponse.error(
         response,
         apiId,
@@ -720,7 +720,7 @@ export class PostgresUserService implements IServicelocator {
         API_RESPONSES.USER_BASIC_DETAILS_UPDATE,
         apiId,
         userDto?.userId
-      )
+      );
 
       if (userDto?.customFields?.length > 0) {
         const getFieldsAttributes =
@@ -767,7 +767,7 @@ export class PostgresUserService implements IServicelocator {
         API_RESPONSES.USER_UPDATED_SUCCESSFULLY,
         apiId,
         userDto?.userId
-      )
+      );
 
       return await APIResponse.success(
         response,
@@ -781,7 +781,7 @@ export class PostgresUserService implements IServicelocator {
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error: ${e.message}`,
         apiId
-      )
+      );
       return APIResponse.error(
         response,
         apiId,
@@ -879,7 +879,7 @@ export class PostgresUserService implements IServicelocator {
             `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
             `KeyCloak Error: ${error.message}`,
             apiId
-          )
+          );
 
           errKeycloak = error.response?.data.errorMessage;
           return APIResponse.error(
@@ -895,7 +895,7 @@ export class PostgresUserService implements IServicelocator {
       LoggerUtil.log(
         API_RESPONSES.USER_CREATE_KEYCLOAK,
         apiId
-      )
+      );
 
       userCreateDto.userId = resKeycloak;
 
@@ -911,7 +911,7 @@ export class PostgresUserService implements IServicelocator {
       LoggerUtil.log(
         API_RESPONSES.USER_CREATE_IN_DB,
         apiId
-      )
+      );
 
       const createFailures = [];
       if (
@@ -969,20 +969,20 @@ export class PostgresUserService implements IServicelocator {
       LoggerUtil.log(
         API_RESPONSES.USER_CREATE_SUCCESSFULLY,
         apiId
-      )
+      );
       APIResponse.success(
         response,
         apiId,
         { userData: { ...result, createFailures } },
         HttpStatus.CREATED,
-        API_RESPONSES.USER_CREATE_SUCCESSFULLY,
+        API_RESPONSES.USER_CREATE_SUCCESSFULLY
       );
     } catch (e) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
         `Error: ${e.message}`,
         apiId
-      )
+      );
       const errorMessage = e.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
       return APIResponse.error(
         response,
@@ -1065,7 +1065,7 @@ export class PostgresUserService implements IServicelocator {
         const checkAcadmicYear = await this.postgresAcademicYearService.getActiveAcademicYear(academicYearId, tenantId);
 
         if (!checkAcadmicYear && cohortIds) {
-          errorCollector.addError(API_RESPONSES.ACADEMIC_YEAR_NOT_FOUND)
+          errorCollector.addError(API_RESPONSES.ACADEMIC_YEAR_NOT_FOUND);
         }
 
 
@@ -1255,13 +1255,13 @@ export class PostgresUserService implements IServicelocator {
 
       LoggerUtil.log(
         API_RESPONSES.USER_TENANT
-      )
+      );
 
     } catch (error) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
         `Error: ${error.message}`,
-      )
+      );
       throw new Error(error);
     }
   }
@@ -1282,7 +1282,7 @@ export class PostgresUserService implements IServicelocator {
     const result = await this.cohortMemberRepository.save(cohortData);
     LoggerUtil.log(
       API_RESPONSES.USER_COHORT
-    )
+    );
     return result;
   }
 
@@ -1334,7 +1334,7 @@ export class PostgresUserService implements IServicelocator {
           `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
           `Error: ${e.message}`,
           apiId
-        )
+        );
         return APIResponse.error(
           response,
           apiId,
@@ -1371,7 +1371,7 @@ export class PostgresUserService implements IServicelocator {
         `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
         `Error: ${e.message}`,
         apiId
-      )
+      );
       return APIResponse.error(
         response,
         apiId,
@@ -1423,7 +1423,7 @@ export class PostgresUserService implements IServicelocator {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
         `Error: ${e.message}`
-      )
+      );
       return new ErrorResponse({
         errorCode: `${e.response.status}`,
         errorMessage: e.response.data.error,
@@ -1458,8 +1458,8 @@ export class PostgresUserService implements IServicelocator {
         } catch (error) {
           LoggerUtil.error(
             `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
-            `Error: ${error.message}`,
-          )
+            `Error: ${error.message}`
+          );
         }
       }
       return new SuccessResponse({
@@ -1534,12 +1534,14 @@ export class PostgresUserService implements IServicelocator {
 
     //Validation for duplicate fields
     if (duplicateFieldKeys.length > 0) {
-      return (error = API_RESPONSES.DUPLICATE_FIELD(duplicateFieldKeys));
+      error = API_RESPONSES.DUPLICATE_FIELD(duplicateFieldKeys);
+      return error;
     }
 
     //Validation for fields values
     if (invalidateFields.length > 0) {
-      return (error = API_RESPONSES.INVALID_FIELD(invalidateFields));
+      error = API_RESPONSES.INVALID_FIELD(invalidateFields);
+      return error;
     }
 
     //Verifying whether these fields correspond to their respective roles.
@@ -1652,7 +1654,7 @@ export class PostgresUserService implements IServicelocator {
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error: ${e.message}`,
         apiId
-      )
+      );
       return APIResponse.error(
         response,
         apiId,

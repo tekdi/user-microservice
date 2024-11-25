@@ -49,6 +49,7 @@ import { APIID } from "src/common/utils/api-id.config";
 import { CustomFieldsValidation } from "@utils/custom-field-validation";
 import { isUUID } from "class-validator";
 import { API_RESPONSES } from "@utils/response.messages";
+import { LoggerUtil } from "src/common/logger/LoggerUtil";
 
 @ApiTags("Cohort")
 @Controller("cohort")
@@ -118,7 +119,7 @@ export class CohortController {
   )
   @UsePipes(new ValidationPipe())
   @ApiBody({ type: CohortCreateDto })
-  @ApiQuery({ name: "userId", required: false, })
+  @ApiQuery({ name: "userId", required: false })
   @ApiHeader({
     name: "tenantid",
   })
@@ -141,7 +142,11 @@ export class CohortController {
     if (!academicYearId || !isUUID(academicYearId)) {
       throw new BadRequestException(API_RESPONSES.ACADEMICYEARID_VALIDATION);
     }
-    cohortCreateDto.createdBy = userId
+    cohortCreateDto.createdBy = userId;
+    LoggerUtil.log(
+      `Creating cohort with userId: ${userId}`
+    )
+
     cohortCreateDto.academicYearId = academicYearId;
     cohortCreateDto.tenantId = tenantId;
     return await this.cohortAdapter
