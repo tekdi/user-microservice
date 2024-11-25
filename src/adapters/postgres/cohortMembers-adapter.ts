@@ -656,7 +656,7 @@ export class PostgresCohortMembersService {
 
     return result;
   }
-  //****
+
   public async updateCohortMembers(
     cohortMembershipId: string,
     loginUser: any,
@@ -710,21 +710,25 @@ export class PostgresCohortMembersService {
         HttpStatus.NOT_FOUND
       );
     }
-
-    const customFields = cohortMembersUpdateDto.customFields;
-    delete cohortMembersUpdateDto.customFields;
-    Object.assign(cohortMembershipToUpdate, cohortMembersUpdateDto);
-
-    await this.cohortMembersRepository.save(cohortMembershipToUpdate);
+    let result = await this.cohortMembersRepository.save(
+      cohortMembershipToUpdate
+    );
     //update custom fields
+    let responseForCustomField;
+    if (
+      cohortMembersUpdateDto.customFields &&
+      cohortMembersUpdateDto.customFields.length > 0
+    ) {
+      const customFields = cohortMembersUpdateDto.customFields;
+      delete cohortMembersUpdateDto.customFields;
+      Object.assign(cohortMembershipToUpdate, cohortMembersUpdateDto);
 
-    try {
-      let responseForCustomField = await this.processCustomFields(
+      responseForCustomField = await this.processCustomFields(
         customFields,
         cohortMembershipId,
         cohortMembersUpdateDto
       );
-      if (responseForCustomField.success) {
+      if (result && responseForCustomField.success) {
         return APIResponse.success(
           res,
           apiId,

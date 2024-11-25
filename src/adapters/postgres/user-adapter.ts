@@ -838,15 +838,15 @@ export class PostgresUserService implements IServicelocator {
       }
 
       // check and validate all fields
-      const validatedRoles = await this.validateRequestBody(userCreateDto, academicYearId);
+      const validatedRoles: any = await this.validateRequestBody(userCreateDto, academicYearId);
 
       // check if roles are invalid and academic year is provided 
-      if ((!Array.isArray(validatedRoles) || !validatedRoles.every(role => role instanceof Role)) && academicYearId?.length) {
+      if (Array.isArray(validatedRoles) && validatedRoles.some(item => item?.code === undefined)) {
         return APIResponse.error(
           response,
           apiId,
-          API_RESPONSES.BAD_REQUEST,
-          `${validatedRoles}`,
+          "BAD_REQUEST",
+          validatedRoles.join("; "),
           HttpStatus.BAD_REQUEST
         );
       }
@@ -872,6 +872,7 @@ export class PostgresUserService implements IServicelocator {
           HttpStatus.BAD_REQUEST
         );
       }
+
       resKeycloak = await createUserInKeyCloak(userSchema, token).catch(
         (error) => {
           LoggerUtil.error(
@@ -921,7 +922,7 @@ export class PostgresUserService implements IServicelocator {
         const userId = result?.userId;
         let roles;
 
-        if (validatedRoles && academicYearId) {
+        if (validatedRoles) {
           roles = validatedRoles?.map(({ code }) => code?.toUpperCase());
         }
 
@@ -993,7 +994,28 @@ export class PostgresUserService implements IServicelocator {
     }
   }
 
+  createErrorCollector() {
+    const errors: string[] = [];
+
+    return {
+      addError(message: string) {
+        errors.push(message);
+      },
+      hasErrors(): boolean {
+        return errors.length > 0;
+      },
+      getErrors(): string[] {
+        return errors;
+      },
+      getFormattedErrors(): string {
+        return errors.join("; ");
+      },
+    };
+  }
+
+
   async validateRequestBody(userCreateDto, academicYearId) {
+    const errorCollector = this.createErrorCollector();
     let roleData: any[] = [];
     const duplicateTenet = [];
 
@@ -1005,7 +1027,7 @@ export class PostgresUserService implements IServicelocator {
           userCreateDto.email
         );
         if (!checkValidEmail) {
-          error.push(API_RESPONSES.INVALID_EMAIL(userCreateDto.email));
+          errorCollector.addError(`Invalid email address`);
         }
       }
 
@@ -1015,7 +1037,7 @@ export class PostgresUserService implements IServicelocator {
           userCreateDto.mobile
         );
         if (!checkValidMobile) {
-          error.push(API_RESPONSES.MOBILE_NO_CHECK(userCreateDto.mobile));
+          errorCollector.addError(`Mobile number must be 10 digits long`);
         }
       }
 
@@ -1025,13 +1047,9 @@ export class PostgresUserService implements IServicelocator {
           userCreateDto.dob
         );
         if (!checkValidDob) {
-          error.push(API_RESPONSES.DOB_FORMAT(userCreateDto.dob));
+          errorCollector.addError(`Date of birth must be in the format yyyy-mm-dd`);
         }
       }
-    }
-
-    if (!academicYearId?.length) {
-      return false;
     }
 
     if (userCreateDto.tenantCohortRoleMapping) {
@@ -1039,21 +1057,27 @@ export class PostgresUserService implements IServicelocator {
 
         const { tenantId, cohortIds, roleId } = tenantCohortRoleMapping;
 
-        // check academic year exists for tenant 
-        const checkAcadmicYear = await this.postgresAcademicYearService.getActiveAcademicYear(academicYearId, tenantId);
-        if (!checkAcadmicYear) {
-          error.push(API_RESPONSES.ACADEMIC_YEAR_NOT_FOUND)
+        if (!academicYearId && cohortIds) {
+          errorCollector.addError("Academic Year ID is required when a Cohort ID is provided.")
         }
 
+        // check academic year exists for tenant 
+        const checkAcadmicYear = await this.postgresAcademicYearService.getActiveAcademicYear(academicYearId, tenantId);
+
+        if (!checkAcadmicYear && cohortIds) {
+          errorCollector.addError(API_RESPONSES.ACADEMIC_YEAR_NOT_FOUND)
+        }
+
+
         if (duplicateTenet.includes(tenantId)) {
-          error.push(
-            error.push(API_RESPONSES.DUPLICAT_TENANTID)
+          errorCollector.addError(
+            API_RESPONSES.DUPLICAT_TENANTID
           );
         }
 
         if ((tenantId && !roleId) || (!tenantId && roleId)) {
-          error.push(
-            error.push(API_RESPONSES.INVALID_PARAMETERS)
+          errorCollector.addError(
+            API_RESPONSES.INVALID_PARAMETERS
           );
         }
 
@@ -1070,26 +1094,27 @@ export class PostgresUserService implements IServicelocator {
         ]);
 
         if (tenantExists.length === 0) {
-          error.push(API_RESPONSES.TENANTID_NOT_FOUND(tenantId))
+          errorCollector.addError(`Tenant Id '${tenantId}' does not exist.`);
         }
 
         if (cohortExists) {
-          error.push(API_RESPONSES.COHORT_NOT_FOUND_IN_TENANT_ID(cohortExists, tenantId));
+          errorCollector.addError(
+            `Cohort Id '${cohortExists}' does not exist for this tenant '${tenantId}'.`
+          );
         }
 
         if (roleExists && roleExists?.length === 0) {
-          error.push(API_RESPONSES.ROLE_NOT_FOUND_IN_TENANT(roleId, tenantId));
-        } else {
-          roleData = [...roleData, ...roleExists]
+          errorCollector.addError(
+            `Role Id '${roleId}' does not exist for this tenant '${tenantId}'.`
+          );
+        } else if (roleExists) {
+          roleData = [...roleData, ...roleExists];
         }
-      }
-      if (error.length > 0) {
-        return error;
       }
     } else {
       return false;
     }
-    return roleData;
+    return errorCollector.hasErrors() ? errorCollector.getErrors() : roleData;
   }
 
   async checkCohortExistsInAcademicYear(academicYearId: any, cohortData: any[]) {
