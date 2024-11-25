@@ -61,21 +61,15 @@ export class CohortController {
   @ApiInternalServerErrorResponse({ description: "Internal Server Error." })
   @ApiBadRequestResponse({ description: "Bad Request" })
   @SerializeOptions({ strategy: "excludeAll" })
-  // @ApiHeader({ name: "tenantid" })
-  // @ApiHeader({
-  //   name: "academicyearid",
-  // })
   @ApiQuery({ name: "children", required: false, type: Boolean })
   @ApiQuery({ name: "customField", required: false, type: Boolean })
   public async getCohortsDetails(
     @Headers() headers,
     @Param("cohortId") cohortId: string,
-    @Req() request: Request,
     @Res() response: Response,
     @Query("children") children: string,
     @Query("customField") customField: string
   ) {
-    const tenantId = headers["tenantid"];
     const academicYearId = headers["academicyearid"];
     const getChildDataValueBoolean = children === "true";
     const fieldValueBooelan = customField === "true";
@@ -92,7 +86,6 @@ export class CohortController {
 
   @UseFilters(new AllExceptionsFilter(APIID.COHORT_CREATE))
   @Post("/create")
-  // @ApiConsumes("multipart/form-data")
   @ApiCreatedResponse({ description: "Cohort has been created successfully." })
   @ApiBadRequestResponse({ description: "Bad request." })
   @ApiInternalServerErrorResponse({ description: "Internal Server Error." })
@@ -215,7 +208,6 @@ export class CohortController {
   @ApiInternalServerErrorResponse({ description: "Internal Server Error." })
   public async updateCohortStatus(
     @Param("cohortId") cohortId: string,
-    @Req() request: Request,
     @Res() response: Response,
     @Query("userId") userId: string
   ) {
@@ -237,7 +229,6 @@ export class CohortController {
   @ApiQuery({ name: "children", required: false, type: Boolean })
   @ApiQuery({ name: "customField", required: false, type: Boolean })
   public async getCohortsHierarachyData(
-    @Request() request: Request,
     @Headers() headers,
     @Param("userId", ParseUUIDPipe) userId: string,
     @Query("children") children: string,
