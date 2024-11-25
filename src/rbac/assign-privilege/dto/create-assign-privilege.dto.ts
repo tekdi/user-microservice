@@ -39,6 +39,12 @@ export class CreatePrivilegeRoleDto {
   @IsNotEmpty()
   tenantId: string;
 
+  @Expose()
+  createdBy: string;
+
+  @Expose()
+  updatedBy: string;
+
   constructor(obj: any) {
     Object.assign(this, obj);
   }

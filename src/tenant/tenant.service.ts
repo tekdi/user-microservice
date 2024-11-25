@@ -73,7 +73,7 @@ export class TenantService {
     }
 
 
-    public async createTenants(request, tenantCreateDto, response) {
+    public async createTenants(request, userId, tenantCreateDto, response) {
         let apiId = APIID.TENANT_CREATE;
         try {
             let checkExitTenants = await this.tenantRepository.find({
@@ -91,7 +91,7 @@ export class TenantService {
                     HttpStatus.CONFLICT
                 );
             }
-
+            tenantCreateDto.createdBy = userId;
             let result = await this.tenantRepository.save(tenantCreateDto);
             return APIResponse.success(
                 response,

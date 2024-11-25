@@ -31,6 +31,7 @@ import {
   ApiInternalServerErrorResponse,
   ApiConflictResponse,
   ApiNotFoundResponse,
+  ApiQuery,
 } from "@nestjs/swagger";
 import { Request } from "@nestjs/common";
 import { Response, response } from "express";
@@ -40,15 +41,13 @@ import { v4 as uuidv4 } from "uuid";
 import { AllExceptionsFilter } from "src/common/filters/exception.filter";
 import { APIID } from "src/common/utils/api-id.config";
 
-@UseGuards(JwtAuthGuard)
 @ApiTags("rbac")
 @Controller("rbac/privileges")
 export class PrivilegeController {
-  constructor(private readonly privilegeAdapter: PrivilegeAdapter) {}
+  constructor(private readonly privilegeAdapter: PrivilegeAdapter) { }
 
   @UseFilters(new AllExceptionsFilter(APIID.PRIVILEGE_BYROLEID))
   @Get()
-  @ApiBasicAuth("access-token")
   @ApiOkResponse({ description: "Privilege Detail." })
   @ApiBadRequestResponse({ description: "Bad Request" })
   @ApiInternalServerErrorResponse({ description: "Internal Server Error" })
@@ -85,7 +84,7 @@ export class PrivilegeController {
   @UseFilters(new AllExceptionsFilter(APIID.PRIVILEGE_CREATE))
   @Post("/create")
   @UsePipes(new ValidationPipe())
-  @ApiBasicAuth("access-token")
+  @ApiQuery({ name: "userId", required: false, })
   @ApiCreatedResponse({
     description: "Privilege has been created successfully.",
   })
@@ -97,11 +96,12 @@ export class PrivilegeController {
   public async createPrivilege(
     @Req() request,
     @Body() createPrivilegesDto: CreatePrivilegesDto,
-    @Res() response: Response
+    @Res() response: Response,
+    @Query("userId") userId: string | null = null
   ) {
     return await this.privilegeAdapter
       .buildPrivilegeAdapter()
-      .createPrivilege(request.user.userId, createPrivilegesDto, response);
+      .createPrivilege(userId, createPrivilegesDto, response);
   }
 
   // @Put("/:id")

@@ -64,7 +64,6 @@ export class UserController {
 
   @UseFilters(new AllExceptionsFilter(APIID.USER_GET))
   @Get("read/:userId")
-  @UseGuards(JwtAuthGuard)
   @ApiBasicAuth("access-token")
   @ApiOkResponse({ description: API_RESPONSES.USER_GET_SUCCESSFULLY })
   @ApiNotFoundResponse({ description: API_RESPONSES.USER_NOT_FOUND })
@@ -111,7 +110,6 @@ export class UserController {
 
   @UseFilters(new AllExceptionsFilter(APIID.USER_CREATE))
   @Post("/create")
-  // @UseGuards(JwtAuthGuard)
   @UsePipes(new ValidationPipe())
   // @ApiBasicAuth("access-token")
   @ApiCreatedResponse({ description: API_RESPONSES.USER_CREATE_SUCCESSFULLY })
@@ -122,13 +120,19 @@ export class UserController {
   @ApiHeader({
     name: "academicyearid",
   })
+  @ApiQuery({
+    name: "userId",
+    required: false,
+  })
   async createUser(
     @Headers() headers,
     @Req() request: Request,
     @Body() userCreateDto: UserCreateDto,
-    @Res() response: Response
+    @Res() response: Response,
+    @Query("userId") userId: string | null = null
   ) {
     const academicYearId = headers["academicyearid"];
+    userCreateDto.userId = userId;
     // if (!academicYearId || !isUUID(academicYearId)) {
     //   throw new BadRequestException(
     //     "academicYearId is required and academicYearId must be a valid UUID."
@@ -142,8 +146,6 @@ export class UserController {
   @UseFilters(new AllExceptionsFilter(APIID.USER_UPDATE))
   @Patch("update/:userid")
   @UsePipes(new ValidationPipe())
-  @UseGuards(JwtAuthGuard)
-  @ApiBasicAuth("access-token")
   @ApiBody({ type: UserUpdateDTO })
   @ApiOkResponse({ description: API_RESPONSES.USER_UPDATED_SUCCESSFULLY })
   @ApiHeader({
@@ -165,8 +167,6 @@ export class UserController {
 
   @UseFilters(new AllExceptionsFilter(APIID.USER_LIST))
   @Post("/list")
-  @UseGuards(JwtAuthGuard)
-  @ApiBasicAuth("access-token")
   @ApiCreatedResponse({ description: "User list." })
   @ApiBody({ type: UserSearchDto })
   @UsePipes(ValidationPipe)
@@ -215,8 +215,6 @@ export class UserController {
 
   @UseFilters(new AllExceptionsFilter(APIID.USER_RESET_PASSWORD))
   @Post("/reset-password")
-  @UseGuards(JwtAuthGuard)
-  @ApiBasicAuth("access-token")
   @ApiOkResponse({ description: "Password reset successfully." })
   @UsePipes(new ValidationPipe({ transform: true }))
   @ApiForbiddenResponse({ description: "Forbidden" })
@@ -248,8 +246,6 @@ export class UserController {
   //delete
   @UseFilters(new AllExceptionsFilter(APIID.USER_DELETE))
   @Delete("delete/:userId")
-  @UseGuards(JwtAuthGuard)
-  @ApiBasicAuth("access-token")
   @ApiOkResponse({ description: "User deleted successfully" })
   @ApiNotFoundResponse({ description: "Data not found" })
   @SerializeOptions({

@@ -12,6 +12,7 @@ import {
   Res,
   SerializeOptions,
   UseGuards,
+  Query,
 } from "@nestjs/common";
 import { AssignPrivilegeAdapter } from "./assign-privilege.apater";
 import { CreatePrivilegeRoleDto } from "./dto/create-assign-privilege.dto";
@@ -24,6 +25,7 @@ import {
   ApiHeader,
   ApiOkResponse,
   ApiTags,
+  ApiQuery,
 } from "@nestjs/swagger";
 import { JwtAuthGuard } from "src/common/guards/keycloak.guard";
 
@@ -33,7 +35,7 @@ import { JwtAuthGuard } from "src/common/guards/keycloak.guard";
 export class AssignPrivilegeController {
   constructor(
     private readonly assignPrivilegeAdpater: AssignPrivilegeAdapter
-  ) {}
+  ) { }
 
   @Post()
   @UsePipes(new ValidationPipe())
@@ -41,14 +43,17 @@ export class AssignPrivilegeController {
   @ApiCreatedResponse({
     description: "Privilege has been Assigned successfully.",
   })
+  @ApiQuery({ name: "userId", required: false, })
   @ApiBody({ type: CreatePrivilegeRoleDto })
   @ApiForbiddenResponse({ description: "Forbidden" })
   @ApiHeader({ name: "tenantid" })
   public async create(
     @Req() request: Request,
     @Body() createAssignPrivilegeDto: CreatePrivilegeRoleDto,
-    @Res() response: Response
+    @Res() response: Response,
+    @Query("userId") userId: string | null = null
   ) {
+    createAssignPrivilegeDto.createdBy = userId;
     return await this.assignPrivilegeAdpater
       .buildPrivilegeRoleAdapter()
       .createPrivilegeRole(request, createAssignPrivilegeDto, response);

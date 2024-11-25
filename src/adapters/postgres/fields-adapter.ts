@@ -448,8 +448,8 @@ export class PostgresFieldsService implements IServicelocatorfields {
     const apiId = APIID.FIELDS_CREATE;
     try {
       const decoded: any = jwt_decode(request.headers.authorization);
-      const createdBy = decoded?.sub;
-      const updatedBy = decoded?.sub;
+      const createdBy = fieldsUpdateDto.createdBy;
+      const updatedBy = fieldsUpdateDto.updatedBy;
 
       const fieldsData: any = {}; // Define an empty object to store field data
       const storeWithoutControllingField = [];

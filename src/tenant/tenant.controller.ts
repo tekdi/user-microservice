@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, Patch, Post, Query, Req, Res, SerializeOptions, UploadedFile, UploadedFiles, UseInterceptors } from '@nestjs/common';
 import { TenantService } from './tenant.service';
-import { ApiCreatedResponse, ApiForbiddenResponse } from '@nestjs/swagger';
+import { ApiCreatedResponse, ApiForbiddenResponse, ApiQuery } from '@nestjs/swagger';
 import { TenantCreateDto } from './dto/tenant-create.dto';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { FilesUploadService } from 'src/common/services/upload-file';
@@ -33,11 +33,13 @@ export class TenantController {
     @SerializeOptions({
         strategy: "excludeAll",
     })
+    @ApiQuery({ name: "userId", required: false, })
     public async createTenants(
         @Req() request: Request,
         @Res() response: Response,
         @Body() tenantCreateDto: TenantCreateDto,
         @UploadedFiles() files: Express.Multer.File[],
+        @Query("userId") userId: string | null = null
     ) {
         const uploadedFiles = [];
 
@@ -52,7 +54,7 @@ export class TenantController {
             tenantCreateDto.programImages = uploadedFiles.map(file => file.filePath); // Adjust field as needed
         }
 
-        return await this.tenantService.createTenants(request, tenantCreateDto, response);
+        return await this.tenantService.createTenants(request, userId, tenantCreateDto, response);
     }
 
     //Update a tenant

@@ -14,6 +14,12 @@ export class FieldsDto {
   @Expose()
   fieldId: string;
 
+  @Expose()
+  createdBy: string;
+
+  @Expose()
+  updatedBy: string;
+
   //name
   @ApiProperty({
     type: String,

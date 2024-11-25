@@ -25,12 +25,14 @@ export class PostgresRoleService {
     private readonly userRoleMappingRepository: Repository<UserRoleMapping>,
     @InjectRepository(RolePrivilegeMapping)
     private readonly roleprivilegeMappingRepository: Repository<RolePrivilegeMapping>
-  ) {}
+  ) { }
   public async createRole(
     request: any,
     createRolesDto: CreateRolesDto,
     response: Response
   ) {
+
+
     const apiId = APIID.ROLE_CREATE;
     const tenant = await this.checkTenantID(createRolesDto.tenantId);
     if (!tenant) {
@@ -66,8 +68,7 @@ export class PostgresRoleService {
           code,
           createdAt: new Date(),
           updatedAt: new Date(),
-          createdBy: request.user.userId, // Assuming you have a user object in the request
-          updatedBy: request.user.userId,
+          createdBy: createRolesDto.createdBy, // Assuming you have a user object in the request
           tenantId, // Add the tenantId to the RoleDto
         });
         // Convert roleDto to lowercase

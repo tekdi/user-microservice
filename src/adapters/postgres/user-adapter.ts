@@ -4,7 +4,6 @@ import { FieldValues } from "src/fields/entities/fields-values.entity";
 import { InjectRepository } from "@nestjs/typeorm";
 import { In, Repository } from "typeorm";
 import { UserCreateDto } from "../../user/dto/user-create.dto";
-import jwt_decode from "jwt-decode";
 import {
   getKeycloakAdminToken,
   createUserInKeyCloak,
@@ -813,10 +812,12 @@ export class PostgresUserService implements IServicelocator {
     // It is considered that if user is not present in keycloak it is not present in database as well
 
     try {
-      if (request.headers.authorization) {
-        const decoded: any = jwt_decode(request.headers.authorization);
-        userCreateDto.createdBy = decoded?.sub;
-        userCreateDto.updatedBy = decoded?.sub;
+      if (userCreateDto.userId != null) {
+        // const decoded: any = jwt_decode(request.headers.authorization);
+        // userCreateDto.createdBy = decoded?.sub;
+        // userCreateDto.updatedBy = decoded?.sub;
+        userCreateDto.createdBy = userCreateDto?.userId;
+        userCreateDto.updatedBy = userCreateDto?.userId;
       }
 
       let customFieldError;

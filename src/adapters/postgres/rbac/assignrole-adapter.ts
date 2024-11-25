@@ -29,7 +29,7 @@ export class PostgresAssignroleService {
     private userRoleMappingRepository: Repository<UserRoleMapping>,
     @InjectRepository(Role)
     private roleRepository: Repository<Role>
-  ) {}
+  ) { }
   public async createAssignRole(
     request: Request,
     createAssignRoleDto: CreateAssignRoleDto,
@@ -88,8 +88,8 @@ export class PostgresAssignroleService {
           userId: userId,
           roleId: roleId,
           tenantId: tenantId,
-          createdBy: request["user"].userId,
-          updatedBy: request["user"].userId,
+          createdBy: createAssignRoleDto.createdBy,
+          updatedBy: createAssignRoleDto.updatedBy,
         });
         result.push(
           new ResponseAssignRoleDto(
