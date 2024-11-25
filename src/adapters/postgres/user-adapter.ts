@@ -749,6 +749,7 @@ export class PostgresUserService implements IServicelocator {
   ) {
     const apiId = APIID.USER_CREATE;
     // It is considered that if user is not present in keycloak it is not present in database as well
+
     try {
       if (request.headers.authorization) {
         const decoded: any = jwt_decode(request.headers.authorization);
@@ -1031,12 +1032,11 @@ export class PostgresUserService implements IServicelocator {
   }
 
   async checkCohortExistsInAcademicYear(academicYearId: any, cohortData: any[]) {
+
+    // The method ensures that all cohorts provided in the cohortData array are associated with the given academicYearId. If any cohort does not exist in the academic year, it collects their IDs and returns them as a list.
+
     const notExistCohort = [];
     for (const cohortId of cohortData) {
-      // const findCohortData = await this.cohortRepository.findOne({
-      //   where: { tenantId, cohortId },
-      // });
-
       const findCohortData = await this.cohortAcademicYearService.isCohortExistForYear(academicYearId, cohortId)
 
       if (!findCohortData?.length) {
@@ -1044,10 +1044,9 @@ export class PostgresUserService implements IServicelocator {
       }
     }
 
-    if (notExistCohort.length > 0) {
-      return notExistCohort;
-    }
+    return notExistCohort.length > 0 ? notExistCohort : [];
   }
+
   async checkUser(body) {
     const checkUserinKeyCloakandDb = await this.checkUserinKeyCloakandDb(body);
     if (checkUserinKeyCloakandDb) {
