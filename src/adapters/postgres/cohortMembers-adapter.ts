@@ -640,7 +640,7 @@ export class PostgresCohortMembersService {
 
     return result;
   }
-  //****
+
   public async updateCohortMembers(
     cohortMembershipId: string,
     loginUser: any,
@@ -694,20 +694,45 @@ export class PostgresCohortMembersService {
         HttpStatus.NOT_FOUND
       );
     }
-
-    const customFields = cohortMembersUpdateDto.customFields;
-    delete cohortMembersUpdateDto.customFields;
-    Object.assign(cohortMembershipToUpdate, cohortMembersUpdateDto);
-
-    await this.cohortMembersRepository.save(cohortMembershipToUpdate);
-    //update custom fields
-
-    let responseForCustomField = await this.processCustomFields(
-      customFields,
-      cohortMembershipId,
-      cohortMembersUpdateDto
+    let result = await this.cohortMembersRepository.save(
+      cohortMembershipToUpdate
     );
-    if (responseForCustomField.success) {
+    //update custom fields
+    let responseForCustomField;
+    if (
+      cohortMembersUpdateDto.customFields &&
+      cohortMembersUpdateDto.customFields.length > 0
+    ) {
+      const customFields = cohortMembersUpdateDto.customFields;
+      delete cohortMembersUpdateDto.customFields;
+      Object.assign(cohortMembershipToUpdate, cohortMembersUpdateDto);
+
+      responseForCustomField = await this.processCustomFields(
+        customFields,
+        cohortMembershipId,
+        cohortMembersUpdateDto
+      );
+      if (result && responseForCustomField.success) {
+        return APIResponse.success(
+          res,
+          apiId,
+          [],
+          HttpStatus.CREATED,
+          API_RESPONSES.COHORTMEMBER_UPDATE_SUCCESSFULLY
+        );
+      } else {
+        const errorMessage =
+          responseForCustomField.error || "Internal server error";
+        return APIResponse.error(
+          res,
+          apiId,
+          "Internal Server Error",
+          errorMessage,
+          HttpStatus.INTERNAL_SERVER_ERROR
+        );
+      }
+    }
+    if (result) {
       return APIResponse.success(
         res,
         apiId,
