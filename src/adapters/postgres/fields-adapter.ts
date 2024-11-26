@@ -506,7 +506,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
       //Update field options
       //Update data in source table
       if (
-        getSourceDetails.sourceDetails &&
+        getSourceDetails.sourceDetails && fieldsData.fieldParams && fieldsData.fieldParams.options &&
         getSourceDetails.sourceDetails.source == "table"
       ) {
         for (const sourceFieldName of fieldsData.fieldParams.options) {
