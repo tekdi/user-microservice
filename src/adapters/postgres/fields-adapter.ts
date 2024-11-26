@@ -31,7 +31,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
     private fieldsRepository: Repository<Fields>,
     @InjectRepository(FieldValues)
     private fieldsValuesRepository: Repository<FieldValues>
-  ) {}
+  ) { }
 
   async getFormCustomField(requiredData, response) {
     const apiId = "FormData";
@@ -381,22 +381,52 @@ export class PostgresFieldsService implements IServicelocatorfields {
           ) {
             storeWithoutControllingField.push(sourceFieldName["name"]);
           }
-          const query = `SELECT COUNT(*) FROM public.${fieldsData.sourceDetails.table} WHERE value = '${sourceFieldName["value"]}'`;
+
+          const query = `SELECT "name", "value" 
+          FROM public.${fieldsData.sourceDetails.table} 
+          WHERE value = '${sourceFieldName["value"]}' 
+          GROUP BY  "name", "value"`
+
           const checkSourceData = await this.fieldsValuesRepository.query(
             query
           );
 
-          if (checkSourceData[0].count == 0) {
-            const createSourceField = await this.createSourceDetailsTableFields(
+          //If code is not exist in db
+          if (checkSourceData.length === 0) {
+            //If code is not exist in db and isCreate flag is false
+            if (!fieldsData.fieldParams.isCreate) {
+              return APIResponse.error(
+                response,
+                apiId,
+                "BAD_REQUEST",
+                `Error: This code '${sourceFieldName["value"]}' does not exist in the '${fieldsData.sourceDetails.table}' table.`,
+                HttpStatus.BAD_REQUEST
+              );
+            }
+
+            // If not exist and isCreate is true, create the record
+            await this.createSourceDetailsTableFields(
               fieldsData.sourceDetails.table,
               sourceFieldName["name"],
               sourceFieldName["value"],
               createdBy,
               sourceFieldName["controllingfieldfk"],
-              fieldsData?.dependsOn
+              fieldsData.dependsOn
             );
           } else {
-            const updateSourceField = await this.updateSourceDetailsTableFields(
+            //If code is exist in db and isCreate flag is true
+            if (fieldsData.fieldParams.isCreate) {
+              return APIResponse.error(
+                response,
+                apiId,
+                "BAD_REQUEST",
+                `Error: This code '${sourceFieldName["value"]}' already exists for '${checkSourceData[0].name}' in the '${fieldsData.sourceDetails.table}' table.`,
+                HttpStatus.BAD_REQUEST
+              );
+            }
+
+            // If exist and isCreate is false, update the record
+            await this.updateSourceDetailsTableFields(
               fieldsData.sourceDetails.table,
               sourceFieldName["name"],
               sourceFieldName["value"],
@@ -489,14 +519,30 @@ export class PostgresFieldsService implements IServicelocatorfields {
           }
 
           // check options exits in source table column or not
-          const query = `SELECT COUNT(*) FROM public.${getSourceDetails.sourceDetails.table} WHERE value = '${sourceFieldName["value"]}'`;
+          const query = `SELECT "name", "value" 
+          FROM public.${getSourceDetails.sourceDetails.table} 
+          WHERE value = '${sourceFieldName["value"]}' 
+          GROUP BY  "name", "value"`;
+
           const checkSourceData = await this.fieldsValuesRepository.query(
             query
           );
 
-          //If not exist then create that column else update that data
-          if (checkSourceData[0].count == 0) {
-            const createSourceField = await this.createSourceDetailsTableFields(
+          //If code is not exist in db
+          if (checkSourceData.length === 0) {
+            //If code is not exist in db and isCreate flag is false
+            if (!fieldsData.fieldParams.isCreate) {
+              return APIResponse.error(
+                response,
+                apiId,
+                "BAD_REQUEST",
+                `Error: This code '${sourceFieldName["value"]}' does not exist in the '${getSourceDetails.sourceDetails.table}' table.`,
+                HttpStatus.BAD_REQUEST
+              );
+            }
+
+            // If not exist and isCreate is true, create the record
+            await this.createSourceDetailsTableFields(
               getSourceDetails.sourceDetails.table,
               sourceFieldName["name"],
               sourceFieldName["value"],
@@ -505,7 +551,19 @@ export class PostgresFieldsService implements IServicelocatorfields {
               getSourceDetails.dependsOn
             );
           } else {
-            const updateSourceField = await this.updateSourceDetailsTableFields(
+            //If code is exist in db and isCreate flag is true
+            if (fieldsData.fieldParams.isCreate) {
+              return APIResponse.error(
+                response,
+                apiId,
+                "BAD_REQUEST",
+                `Error: This code '${sourceFieldName["value"]}' already exists for '${checkSourceData[0].name}' in the '${getSourceDetails.sourceDetails.table}' table.`,
+                HttpStatus.BAD_REQUEST
+              );
+            }
+
+            // If exist and isCreate is false, update the record
+            await this.updateSourceDetailsTableFields(
               getSourceDetails.sourceDetails.table,
               sourceFieldName["name"],
               sourceFieldName["value"],
@@ -1405,8 +1463,8 @@ export class PostgresFieldsService implements IServicelocatorfields {
       ...(getFields?.includes("All")
         ? {}
         : getFields?.length
-        ? { name: In(getFields.filter(Boolean)) }
-        : {}),
+          ? { name: In(getFields.filter(Boolean)) }
+          : {}),
     };
 
     const validContextTypes = contextType?.filter(Boolean);
