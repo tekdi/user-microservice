@@ -34,7 +34,7 @@ import { JwtUtil } from "@utils/jwt-token";
 import { ConfigService } from "@nestjs/config";
 import { formatTime } from "@utils/formatTimeConversion";
 import { API_RESPONSES } from "@utils/response.messages";
-import { TokenExpiredError, JsonWebTokenError } from 'jsonwebtoken';
+import { TokenExpiredError, JsonWebTokenError } from "jsonwebtoken";
 import { CohortAcademicYearService } from "./cohortAcademicYear-adapter";
 import { PostgresAcademicYearService } from "./academicyears-adapter";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
@@ -73,8 +73,11 @@ export class PostgresUserService implements IServicelocator {
     private cohortAcademicYearService: CohortAcademicYearService
   ) {
     this.jwt_secret = this.configService.get<string>("RBAC_JWT_SECRET");
-    this.jwt_password_reset_expires_In = this.configService.get<string>("PASSWORD_RESET_JWT_EXPIRES_IN");
-    this.reset_frontEnd_url = this.configService.get<string>("RESET_FRONTEND_URL");
+    this.jwt_password_reset_expires_In = this.configService.get<string>(
+      "PASSWORD_RESET_JWT_EXPIRES_IN"
+    );
+    this.reset_frontEnd_url =
+      this.configService.get<string>("RESET_FRONTEND_URL");
   }
 
   public async sendPasswordResetLink(
@@ -122,13 +125,18 @@ export class PostgresUserService implements IServicelocator {
       const jwtExpireTime = this.jwt_password_reset_expires_In;
       const jwtSecretKey = this.jwt_secret;
       const frontEndUrl = `${this.reset_frontEnd_url}/reset-password`;
-      const resetToken = await this.jwtUtil.generateTokenForForgotPassword(tokenPayload, jwtExpireTime, jwtSecretKey);
+      const resetToken = await this.jwtUtil.generateTokenForForgotPassword(
+        tokenPayload,
+        jwtExpireTime,
+        jwtSecretKey
+      );
 
       // Format expiration time
       const time = formatTime(jwtExpireTime);
       const programName = userData?.tenantData[0]?.tenantName;
-      const capilatizeFirstLettterOfProgram = programName ? programName.charAt(0).toUpperCase() + programName.slice(1) : 'Learner Account';
-
+      const capilatizeFirstLettterOfProgram = programName
+        ? programName.charAt(0).toUpperCase() + programName.slice(1)
+        : "Learner Account";
 
       //Send Notification
       const notificationPayload = {
@@ -141,7 +149,7 @@ export class PostgresUserService implements IServicelocator {
           "{programName}": capilatizeFirstLettterOfProgram,
           "{expireTime}": time,
           "{frontEndUrl}": frontEndUrl,
-          "{redirectUrl}": redirectUrl
+          "{redirectUrl}": redirectUrl,
         },
         email: {
           receipients: [emailOfUser],
@@ -198,8 +206,13 @@ export class PostgresUserService implements IServicelocator {
     const apiId = APIID.USER_FORGOT_PASSWORD;
     try {
       const jwtSecretKey = this.jwt_secret;
-      const decoded = await this.jwtUtil.validateToken(body.token, jwtSecretKey);
-      const userDetail = await this.usersRepository.findOne({ where: { userId: decoded.sub } });
+      const decoded = await this.jwtUtil.validateToken(
+        body.token,
+        jwtSecretKey
+      );
+      const userDetail = await this.usersRepository.findOne({
+        where: { userId: decoded.sub },
+      });
       if (!userDetail) {
         LoggerUtil.error(
           `${API_RESPONSES.NOT_FOUND}`,
@@ -245,22 +258,49 @@ export class PostgresUserService implements IServicelocator {
         );
       }
 
-      return await APIResponse.success(response, apiId, {},
-        HttpStatus.OK, API_RESPONSES.FORGOT_PASSWORD_SUCCESS)
-    }
-    catch (e) {
+      return await APIResponse.success(
+        response,
+        apiId,
+        {},
+        HttpStatus.OK,
+        API_RESPONSES.FORGOT_PASSWORD_SUCCESS
+      );
+    } catch (e) {
       if (e instanceof TokenExpiredError) {
         // Handle the specific case where the token is expired
-        return APIResponse.error(response, apiId, API_RESPONSES.LINK_EXPIRED, API_RESPONSES.INVALID_LINK, HttpStatus.UNAUTHORIZED);
-      } else if (e.name === 'InvalidTokenError') {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.LINK_EXPIRED,
+          API_RESPONSES.INVALID_LINK,
+          HttpStatus.UNAUTHORIZED
+        );
+      } else if (e.name === "InvalidTokenError") {
         // Handle the case where the token is invalid
-        return APIResponse.error(response, apiId, API_RESPONSES.INVALID_TOKEN, API_RESPONSES.UNAUTHORIZED, HttpStatus.UNAUTHORIZED);
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.INVALID_TOKEN,
+          API_RESPONSES.UNAUTHORIZED,
+          HttpStatus.UNAUTHORIZED
+        );
+      } else if (e instanceof JsonWebTokenError) {
+        // Handle the case where the token is invalid
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.INVALID_TOKEN,
+          API_RESPONSES.UNAUTHORIZED,
+          HttpStatus.UNAUTHORIZED
+        );
       }
-      else if (e instanceof JsonWebTokenError) {
-        // Handle the case where the token is invalid 
-        return APIResponse.error(response, apiId, API_RESPONSES.INVALID_TOKEN, API_RESPONSES.UNAUTHORIZED, HttpStatus.UNAUTHORIZED);
-      }
-      return APIResponse.error(response, apiId, API_RESPONSES.INTERNAL_SERVER_ERROR, `Error : ${e?.response?.data.error}`, HttpStatus.INTERNAL_SERVER_ERROR);
+      return APIResponse.error(
+        response,
+        apiId,
+        API_RESPONSES.INTERNAL_SERVER_ERROR,
+        `Error : ${e?.response?.data.error}`,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
     }
   }
 
@@ -288,10 +328,7 @@ export class PostgresUserService implements IServicelocator {
           HttpStatus.NOT_FOUND
         );
       }
-      LoggerUtil.log(
-        API_RESPONSES.USER_GET_SUCCESSFULLY,
-        apiId
-      );
+      LoggerUtil.log(API_RESPONSES.USER_GET_SUCCESSFULLY, apiId);
       return await APIResponse.success(
         response,
         apiId,
@@ -411,8 +448,9 @@ export class PostgresUserService implements IServicelocator {
       const userIdsDependsOnCustomFields = getUserIdUsingCustomFields
         .map((userId) => `'${userId}'`)
         .join(",");
-      whereCondition += `${index > 0 ? " AND " : ""
-        } U."userId" IN (${userIdsDependsOnCustomFields})`;
+      whereCondition += `${
+        index > 0 ? " AND " : ""
+      } U."userId" IN (${userIdsDependsOnCustomFields})`;
       index++;
     }
 
@@ -528,10 +566,7 @@ export class PostgresUserService implements IServicelocator {
         );
       }
       if (!userData.fieldValue) {
-        LoggerUtil.log(
-          API_RESPONSES.USER_GET_SUCCESSFULLY,
-          apiId
-        );
+        LoggerUtil.log(API_RESPONSES.USER_GET_SUCCESSFULLY, apiId);
         return await APIResponse.success(
           response,
           apiId,
@@ -638,7 +673,7 @@ export class PostgresUserService implements IServicelocator {
         "email",
         "temporaryPassword",
         "createdBy",
-        "deviceId"
+        "deviceId",
       ],
     });
     if (!userDetails) {
@@ -839,10 +874,16 @@ export class PostgresUserService implements IServicelocator {
       }
 
       // check and validate all fields
-      const validatedRoles: any = await this.validateRequestBody(userCreateDto, academicYearId);
+      const validatedRoles: any = await this.validateRequestBody(
+        userCreateDto,
+        academicYearId
+      );
 
-      // check if roles are invalid and academic year is provided 
-      if (Array.isArray(validatedRoles) && validatedRoles.some(item => item?.code === undefined)) {
+      // check if roles are invalid and academic year is provided
+      if (
+        Array.isArray(validatedRoles) &&
+        validatedRoles.some((item) => item?.code === undefined)
+      ) {
         return APIResponse.error(
           response,
           apiId,
@@ -893,14 +934,11 @@ export class PostgresUserService implements IServicelocator {
         }
       );
 
-      LoggerUtil.log(
-        API_RESPONSES.USER_CREATE_KEYCLOAK,
-        apiId
-      );
+      LoggerUtil.log(API_RESPONSES.USER_CREATE_KEYCLOAK, apiId);
 
       userCreateDto.userId = resKeycloak;
 
-      // if cohort given then check for academic year 
+      // if cohort given then check for academic year
 
       const result = await this.createUserInDatabase(
         request,
@@ -909,10 +947,7 @@ export class PostgresUserService implements IServicelocator {
         response
       );
 
-      LoggerUtil.log(
-        API_RESPONSES.USER_CREATE_IN_DB,
-        apiId
-      );
+      LoggerUtil.log(API_RESPONSES.USER_CREATE_IN_DB, apiId);
 
       const createFailures = [];
       if (
@@ -938,9 +973,9 @@ export class PostgresUserService implements IServicelocator {
               fieldDetail[`${fieldId}`]
                 ? fieldDetail
                 : {
-                  ...fieldDetail,
-                  [`${fieldId}`]: { fieldAttributes, fieldParams, name },
-                },
+                    ...fieldDetail,
+                    [`${fieldId}`]: { fieldAttributes, fieldParams, name },
+                  },
             {}
           );
 
@@ -967,10 +1002,7 @@ export class PostgresUserService implements IServicelocator {
           }
         }
       }
-      LoggerUtil.log(
-        API_RESPONSES.USER_CREATE_SUCCESSFULLY,
-        apiId
-      );
+      LoggerUtil.log(API_RESPONSES.USER_CREATE_SUCCESSFULLY, apiId);
       APIResponse.success(
         response,
         apiId,
@@ -1014,7 +1046,6 @@ export class PostgresUserService implements IServicelocator {
     };
   }
 
-
   async validateRequestBody(userCreateDto, academicYearId) {
     const errorCollector = this.createErrorCollector();
     let roleData: any[] = [];
@@ -1048,41 +1079,43 @@ export class PostgresUserService implements IServicelocator {
           userCreateDto.dob
         );
         if (!checkValidDob) {
-          errorCollector.addError(`Date of birth must be in the format yyyy-mm-dd`);
+          errorCollector.addError(
+            `Date of birth must be in the format yyyy-mm-dd`
+          );
         }
       }
     }
 
     if (userCreateDto.tenantCohortRoleMapping) {
       for (const tenantCohortRoleMapping of userCreateDto?.tenantCohortRoleMapping) {
-
         const { tenantId, cohortIds, roleId } = tenantCohortRoleMapping;
 
         if (!academicYearId && cohortIds) {
-          errorCollector.addError("Academic Year ID is required when a Cohort ID is provided.")
+          errorCollector.addError(
+            "Academic Year ID is required when a Cohort ID is provided."
+          );
         }
 
-        // check academic year exists for tenant 
-        const checkAcadmicYear = await this.postgresAcademicYearService.getActiveAcademicYear(academicYearId, tenantId);
+        // check academic year exists for tenant
+        const checkAcadmicYear =
+          await this.postgresAcademicYearService.getActiveAcademicYear(
+            academicYearId,
+            tenantId
+          );
 
         if (!checkAcadmicYear && cohortIds) {
           errorCollector.addError(API_RESPONSES.ACADEMIC_YEAR_NOT_FOUND);
         }
 
-
         if (duplicateTenet.includes(tenantId)) {
-          errorCollector.addError(
-            API_RESPONSES.DUPLICAT_TENANTID
-          );
+          errorCollector.addError(API_RESPONSES.DUPLICAT_TENANTID);
         }
 
         if ((tenantId && !roleId) || (!tenantId && roleId)) {
-          errorCollector.addError(
-            API_RESPONSES.INVALID_PARAMETERS
-          );
+          errorCollector.addError(API_RESPONSES.INVALID_PARAMETERS);
         }
 
-        const [tenantExists, cohortExists, roleExists] = await Promise.all([
+        const [tenantExists, notExistCohort, roleExists] = await Promise.all([
           tenantId
             ? this.tenantsRepository.find({ where: { tenantId } })
             : Promise.resolve(null),
@@ -1098,9 +1131,9 @@ export class PostgresUserService implements IServicelocator {
           errorCollector.addError(`Tenant Id '${tenantId}' does not exist.`);
         }
 
-        if (cohortExists) {
+        if (notExistCohort.length > 0) {
           errorCollector.addError(
-            `Cohort Id '${cohortExists}' does not exist for this tenant '${tenantId}'.`
+            `Cohort Id '${notExistCohort}' does not exist for this tenant '${tenantId}'.`
           );
         }
 
@@ -1118,14 +1151,25 @@ export class PostgresUserService implements IServicelocator {
     return errorCollector.hasErrors() ? errorCollector.getErrors() : roleData;
   }
 
-  async checkCohortExistsInAcademicYear(academicYearId: any, cohortData: any[]) {
-
+  async checkCohortExistsInAcademicYear(
+    academicYearId: any,
+    cohortData: any[]
+  ) {
     // The method ensures that all cohorts provided in the cohortData array are associated with the given academicYearId. If any cohort does not exist in the academic year, it collects their IDs and returns them as a list.
 
     const notExistCohort = [];
     for (const cohortId of cohortData) {
-      const findCohortData = await this.cohortAcademicYearService.isCohortExistForYear(academicYearId, cohortId)
-
+      const findCohortData =
+        await this.cohortAcademicYearService.isCohortExistForYear(
+          academicYearId,
+          cohortId
+        );
+      console.log(
+        "findCohortData: ",
+        JSON.stringify(findCohortData),
+        findCohortData.length,
+        !findCohortData?.length
+      );
       if (!findCohortData?.length) {
         notExistCohort.push(cohortId);
       }
@@ -1204,16 +1248,19 @@ export class PostgresUserService implements IServicelocator {
       for (const mapData of userCreateDto.tenantCohortRoleMapping) {
         if (mapData.cohortIds) {
           for (const cohortIds of mapData.cohortIds) {
-            let query = `SELECT * FROM public."CohortAcademicYear" WHERE "cohortId"= '${cohortIds}' AND "academicYearId" = '${academicYearId}'`
+            let query = `SELECT * FROM public."CohortAcademicYear" WHERE "cohortId"= '${cohortIds}' AND "academicYearId" = '${academicYearId}'`;
 
-            let getCohortAcademicYearId = await this.usersRepository.query(query);
+            let getCohortAcademicYearId = await this.usersRepository.query(
+              query
+            );
 
             // will add data only if cohort is found with acadmic year
             let cohortData = {
               userId: result?.userId,
               cohortId: cohortIds,
-              cohortAcademicYearId: getCohortAcademicYearId[0]['cohortAcademicYearId'] || null
-            }
+              cohortAcademicYearId:
+                getCohortAcademicYearId[0]["cohortAcademicYearId"] || null,
+            };
             await this.addCohortMember(cohortData);
           }
         }
@@ -1252,14 +1299,11 @@ export class PostgresUserService implements IServicelocator {
         updatedBy: request["user"]?.userId || userId,
       });
 
-      LoggerUtil.log(
-        API_RESPONSES.USER_TENANT
-      );
-
+      LoggerUtil.log(API_RESPONSES.USER_TENANT);
     } catch (error) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
-        `Error: ${error.message}`,
+        `Error: ${error.message}`
       );
       throw new Error(error);
     }
@@ -1279,9 +1323,7 @@ export class PostgresUserService implements IServicelocator {
 
   async addCohortMember(cohortData) {
     const result = await this.cohortMemberRepository.save(cohortData);
-    LoggerUtil.log(
-      API_RESPONSES.USER_COHORT
-    );
+    LoggerUtil.log(API_RESPONSES.USER_COHORT);
     return result;
   }
 
@@ -1440,7 +1482,7 @@ export class PostgresUserService implements IServicelocator {
             "{username}": userData?.name,
             "{programName}": userData?.tenantData?.[0]?.tenantName
               ? userData.tenantData[0].tenantName.charAt(0).toUpperCase() +
-              userData.tenantData[0].tenantName.slice(1)
+                userData.tenantData[0].tenantName.slice(1)
               : "",
           },
           email: {
@@ -1487,7 +1529,7 @@ export class PostgresUserService implements IServicelocator {
       );
 
       if (getFieldDetails == null) {
-        return (API_RESPONSES.FIELD_NOT_FOUND);
+        return API_RESPONSES.FIELD_NOT_FOUND;
       }
 
       if (encounteredKeys.includes(fieldId)) {
@@ -1547,8 +1589,8 @@ export class PostgresUserService implements IServicelocator {
     const roleIds =
       userCreateDto && userCreateDto.tenantCohortRoleMapping
         ? userCreateDto.tenantCohortRoleMapping.map(
-          (userRole) => userRole.roleId
-        )
+            (userRole) => userRole.roleId
+          )
         : [];
 
     let contextType;
@@ -1575,9 +1617,9 @@ export class PostgresUserService implements IServicelocator {
       .map((fieldValue) => fieldValue.fieldId);
 
     if (invalidFieldIds.length > 0) {
-      return (`The following fields are not valid for this user: ${invalidFieldIds.join(
+      return `The following fields are not valid for this user: ${invalidFieldIds.join(
         ", "
-      )}.`);
+      )}.`;
     }
   }
 
