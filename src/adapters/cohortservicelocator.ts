@@ -6,20 +6,14 @@ import { Response } from "express";
 
 export interface IServicelocatorcohort {
   getCohortsDetails(requiredData, response);
-  createCohort(request: any, cohortDto: CohortCreateDto, response);
+  createCohort(cohortDto: CohortCreateDto, response);
   searchCohort(
-    tenantid,
-    academicYearId,
-    request: any,
+    tenantid: string,
+    academicYearId: string,
     cohortSearchDto: CohortSearchDto,
     response
   );
-  updateCohort(
-    cohortId: string,
-    request: any,
-    cohortUpdateDto: CohortUpdateDto,
-    response
-  );
-  updateCohortStatus(cohortId: string, request: any, response);
+  updateCohort(cohortId: string, cohortUpdateDto: CohortUpdateDto, response);
+  updateCohortStatus(cohortId: string, response, userId: string);
   getCohortHierarchyData(requiredData, response);
 }
