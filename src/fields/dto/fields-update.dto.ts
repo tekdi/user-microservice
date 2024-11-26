@@ -6,15 +6,43 @@ import {
   IsString,
   IsNumber,
   IsEnum,
+  IsOptional,
+  ValidateNested,
+  IsBoolean,
+  IsObject,
+  ValidateIf,
+  IsDefined,
 } from "class-validator";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { FieldType } from "../entities/fields.entity";
+import { Type } from "class-transformer";
+
+class FieldParams {
+  @ApiPropertyOptional({
+    type: Boolean,
+    description: "Specifies if the field can be created",
+    default: false,
+  })
+  @IsBoolean()
+  @IsDefined() // Ensures this field is required
+  isCreate: boolean;
+
+  @ApiPropertyOptional({
+    type: Array,
+    description: "Options for the field",
+    default: [],
+  })
+  @IsOptional()
+  @IsObject({ each: true })
+  options: { name: string; value: string }[];
+}
+
 export class FieldsUpdateDto {
-  //generated fields
+  // Generated fields
   @Expose()
   fieldId: string;
 
-  //name
+  // Name
   @ApiPropertyOptional({
     type: String,
     description: "The name of the fields",
@@ -23,7 +51,7 @@ export class FieldsUpdateDto {
   @Expose()
   name: string;
 
-  //label
+  // Label
   @ApiPropertyOptional({
     type: String,
     description: "The label of the fields",
@@ -32,7 +60,7 @@ export class FieldsUpdateDto {
   @Expose()
   label: string;
 
-  //context
+  // Context
   @ApiPropertyOptional({
     type: String,
     description: "The context of the fields",
@@ -41,7 +69,7 @@ export class FieldsUpdateDto {
   @Expose()
   context: string;
 
-  //contextType
+  // Context Type
   @ApiPropertyOptional({
     type: String,
     description: "The contextType of the fields",
@@ -50,17 +78,19 @@ export class FieldsUpdateDto {
   @Expose()
   contextType: string;
 
-  //type
+  // Type
   @ApiPropertyOptional({
     enum: FieldType,
     default: FieldType.TEXT,
     nullable: false,
   })
-  @IsEnum(FieldType)
+  @IsEnum(FieldType, { message: 'type must be a valid enum value' })
+  @ValidateIf((o) => o.type !== undefined) // Validate only if type is defined
   @Expose()
   type: string;
 
-  //ordering
+
+  // Ordering
   @ApiPropertyOptional({
     type: Number,
     description: "The ordering of the fields",
@@ -69,7 +99,7 @@ export class FieldsUpdateDto {
   @Expose()
   ordering: number;
 
-  //required
+  // Required
   @ApiPropertyOptional({
     type: Boolean,
     description: "The required of the fields",
@@ -78,7 +108,7 @@ export class FieldsUpdateDto {
   @Expose()
   required: boolean;
 
-  //tenantId
+  // Tenant ID
   @ApiPropertyOptional({
     type: String,
     description: "The tenantId of the fields",
@@ -87,16 +117,19 @@ export class FieldsUpdateDto {
   @Expose()
   tenantId: string;
 
-  // fieldParams
+  // FieldParams
   @ApiPropertyOptional({
-    type: Object,
+    type: FieldParams,
     description: "The fieldParams of the fields",
     default: {},
   })
+  @ValidateNested()
+  @Type(() => FieldParams)
+  @ValidateIf((o) => o.fieldParams !== undefined) // Validate only if fieldParams is present
   @Expose()
-  fieldParams: object;
+  fieldParams: FieldParams;
 
-  //fieldAttributes
+  // FieldAttributes
   @ApiPropertyOptional({
     type: Object,
     description: "The fieldAttributes of the fields",
@@ -105,7 +138,7 @@ export class FieldsUpdateDto {
   @Expose()
   fieldAttributes: object;
 
-  //sourceDetails
+  // SourceDetails
   @ApiPropertyOptional({
     type: Object,
     description: "The sourceDetails of the fields",
@@ -114,7 +147,7 @@ export class FieldsUpdateDto {
   @Expose()
   sourceDetails: object;
 
-  //dependsOn
+  // DependsOn
   @ApiPropertyOptional({
     type: String,
     description: "The dependsOn of the fields",

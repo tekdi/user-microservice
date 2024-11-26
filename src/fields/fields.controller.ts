@@ -45,7 +45,7 @@ import { APIID } from "src/common/utils/api-id.config";
 @ApiTags("Fields")
 @Controller("fields")
 export class FieldsController {
-  constructor(private fieldsAdapter: FieldsAdapter) {}
+  constructor(private fieldsAdapter: FieldsAdapter) { }
 
   //fields
   //create fields
@@ -72,6 +72,7 @@ export class FieldsController {
   @ApiBasicAuth("access-token")
   @ApiCreatedResponse({ description: "Fields has been created successfully." })
   @ApiBody({ type: FieldsUpdateDto })
+  @UsePipes(new ValidationPipe())
   @ApiForbiddenResponse({ description: "Forbidden" })
   public async updateFields(
     @Param("fieldId") fieldId: string,
