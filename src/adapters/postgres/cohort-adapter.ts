@@ -42,7 +42,7 @@ export class PostgresCohortService {
     private readonly cohortAcademicYearService: CohortAcademicYearService,
     private readonly postgresAcademicYearService: PostgresAcademicYearService,
     private readonly postgresCohortMembersService: PostgresCohortMembersService
-  ) {}
+  ) { }
 
   public async getCohortsDetails(requiredData, res) {
     const apiId = APIID.COHORT_READ;
@@ -367,7 +367,7 @@ export class PostgresCohortService {
           HttpStatus.CONFLICT
         );
       }
-
+      cohortCreateDto.name = cohortCreateDto?.name.toLowerCase()
       const response = await this.cohortRepository.save(cohortCreateDto);
       const createFailures = [];
 
@@ -548,8 +548,8 @@ export class PostgresCohortService {
           const contextType = cohortUpdateDto.type
             ? [cohortUpdateDto.type]
             : existingCohorDetails?.type
-            ? [existingCohorDetails.type]
-            : [];
+              ? [existingCohorDetails.type]
+              : [];
           const allCustomFields = await this.fieldsService.findCustomFields(
             "COHORT",
             contextType
@@ -561,9 +561,9 @@ export class PostgresCohortService {
                 fieldDetail[`${fieldId}`]
                   ? fieldDetail
                   : {
-                      ...fieldDetail,
-                      [`${fieldId}`]: { fieldAttributes, fieldParams, name },
-                    },
+                    ...fieldDetail,
+                    [`${fieldId}`]: { fieldAttributes, fieldParams, name },
+                  },
               {}
             );
             for (const fieldValues of cohortUpdateDto.customFields) {
