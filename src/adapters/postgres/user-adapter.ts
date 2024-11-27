@@ -1138,7 +1138,6 @@ export class PostgresUserService implements IServicelocator {
           errorCollector.addError(`Tenant Id '${tenantId}' does not exist.`);
         }
 
-        console.log("notExistCohort", notExistCohort)
         if (notExistCohort.length > 0) {
           errorCollector.addError(
             `Cohort Id '${notExistCohort}' does not exist for this tenant '${tenantId}'.`
@@ -1167,7 +1166,6 @@ export class PostgresUserService implements IServicelocator {
 
     const notExistCohort = [];
     for (const cohortId of cohortData) {
-      console.log("cohortId", cohortId, "academicYearId", academicYearId)
       const findCohortData =
         await this.cohortAcademicYearService.isCohortExistForYear(
           academicYearId,
