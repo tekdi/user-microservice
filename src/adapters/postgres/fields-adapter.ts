@@ -419,9 +419,9 @@ export class PostgresFieldsService implements IServicelocatorfields {
               return APIResponse.error(
                 response,
                 apiId,
-                "BAD_REQUEST",
+                "CONFLICT",
                 `Error: This code '${sourceFieldName["value"]}' already exists for '${checkSourceData[0].name}' in the '${fieldsData.sourceDetails.table}' table.`,
-                HttpStatus.BAD_REQUEST
+                HttpStatus.CONFLICT
               );
             }
 
@@ -556,9 +556,9 @@ export class PostgresFieldsService implements IServicelocatorfields {
               return APIResponse.error(
                 response,
                 apiId,
-                "BAD_REQUEST",
+                "CONFLICT",
                 `Error: This code '${sourceFieldName["value"]}' already exists for '${checkSourceData[0].name}' in the '${getSourceDetails.sourceDetails.table}' table.`,
-                HttpStatus.BAD_REQUEST
+                HttpStatus.CONFLICT
               );
             }
 
