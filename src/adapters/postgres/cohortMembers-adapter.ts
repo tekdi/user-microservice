@@ -755,7 +755,7 @@ export class PostgresCohortMembersService {
           res,
           apiId,
           [],
-          HttpStatus.CREATED,
+          HttpStatus.OK,
           API_RESPONSES.COHORTMEMBER_UPDATE_SUCCESSFULLY
         );
       }
