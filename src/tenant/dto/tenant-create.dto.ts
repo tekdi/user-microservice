@@ -1,6 +1,6 @@
 import { Expose, Type } from "class-transformer";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { IsNotEmpty, IsString } from "class-validator";
+import { ArrayMinSize, ArrayNotEmpty, IsArray, IsNotEmpty, IsString } from "class-validator";
 
 export class TenantCreateDto {
 
@@ -12,6 +12,12 @@ export class TenantCreateDto {
 
     @Expose()
     updatedAt: string;
+
+    @Expose()
+    createdBy: string;
+
+    @Expose()
+    updatedBy: string;
 
     //tenant name
     @ApiProperty({
@@ -45,9 +51,8 @@ export class TenantCreateDto {
 
     //file path
     @ApiPropertyOptional({
-        type: String,
+        description: 'List of program images (URLs or other related strings)',
     })
-    @IsString()
     @Expose()
     programImages: string[];
 

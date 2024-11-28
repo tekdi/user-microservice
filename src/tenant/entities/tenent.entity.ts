@@ -31,4 +31,17 @@ export class Tenant {
 
     @Column({ type: 'text' })
     description: string; // Text field for tenant's domain
+
+    @Column({
+        type: 'text',
+        default: 'active',
+        enum: ['active', 'inactive', 'archive'],
+    })
+    status: 'active' | 'inactive' | 'archive'; // Status column with enum values
+
+    @Column({ type: 'uuid', nullable: true })
+    createdBy: string | null; // UUID of the user who created the tenant
+
+    @Column({ type: 'uuid', nullable: true })
+    updatedBy: string | null; // UUID of the user who last updated the tenant
 }

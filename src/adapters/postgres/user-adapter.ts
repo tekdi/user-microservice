@@ -1125,13 +1125,13 @@ export class PostgresUserService implements IServicelocator {
         const [tenantExists, notExistCohort, roleExists] = await Promise.all([
           tenantId
             ? this.tenantsRepository.find({ where: { tenantId } })
-            : Promise.resolve(null),
+            : Promise.resolve([]),
           tenantId && cohortIds
             ? this.checkCohortExistsInAcademicYear(academicYearId, cohortIds)
-            : Promise.resolve(null),
+            : Promise.resolve([]),
           roleId
             ? this.roleRepository.find({ where: { roleId, tenantId } })
-            : Promise.resolve(null),
+            : Promise.resolve([]),
         ]);
 
         if (tenantExists.length === 0) {
@@ -1171,12 +1171,6 @@ export class PostgresUserService implements IServicelocator {
           academicYearId,
           cohortId
         );
-      console.log(
-        "findCohortData: ",
-        JSON.stringify(findCohortData),
-        findCohortData.length,
-        !findCohortData?.length
-      );
       if (!findCohortData?.length) {
         notExistCohort.push(cohortId);
       }
