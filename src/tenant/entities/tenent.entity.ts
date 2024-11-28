@@ -38,4 +38,10 @@ export class Tenant {
         enum: ['active', 'inactive', 'archive'],
     })
     status: 'active' | 'inactive' | 'archive'; // Status column with enum values
+
+    @Column({ type: 'uuid', nullable: true })
+    createdBy: string | null; // UUID of the user who created the tenant
+
+    @Column({ type: 'uuid', nullable: true })
+    updatedBy: string | null; // UUID of the user who last updated the tenant
 }

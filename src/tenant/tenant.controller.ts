@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, Patch, Post, Query, Req, Res, SerializeOptions, UploadedFile, UploadedFiles, UseInterceptors, UsePipes, ValidationPipe } from '@nestjs/common';
 import { TenantService } from './tenant.service';
-import { ApiCreatedResponse, ApiForbiddenResponse } from '@nestjs/swagger';
+import { ApiCreatedResponse, ApiForbiddenResponse, ApiQuery } from '@nestjs/swagger';
 import { TenantCreateDto } from './dto/tenant-create.dto';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { FilesUploadService } from 'src/common/services/upload-file';
@@ -32,6 +32,7 @@ export class TenantController {
     @ApiForbiddenResponse({ description: "Forbidden" })
     @UseInterceptors(FilesInterceptor('programImages', 10))
     @UsePipes(ValidationPipe)
+    @ApiQuery({ name: "userId", required: false })
     @SerializeOptions({
         strategy: "excludeAll",
     })
@@ -40,6 +41,7 @@ export class TenantController {
         @Res() response: Response,
         @Body() tenantCreateDto: TenantCreateDto,
         @UploadedFiles() files: Express.Multer.File[],
+        @Query("userId") userId: string | null = null
     ) {
         const uploadedFiles = [];
 
@@ -53,7 +55,7 @@ export class TenantController {
             // Assuming tenantCreateDto needs an array of file paths
             tenantCreateDto.programImages = uploadedFiles.map(file => file.filePath); // Adjust field as needed
         }
-
+        tenantCreateDto.createdBy = userId;
         return await this.tenantService.createTenants(request, tenantCreateDto, response);
     }
 
@@ -63,6 +65,7 @@ export class TenantController {
     @ApiForbiddenResponse({ description: "Forbidden" })
     @UseInterceptors(FilesInterceptor('programImages', 10))
     @UsePipes(ValidationPipe)
+    @ApiQuery({ name: "userId", required: false })
     @SerializeOptions({
         strategy: "excludeAll",
     })
@@ -72,6 +75,7 @@ export class TenantController {
         @Query("id") id: string,
         @Body() tenantUpdateDto: TenantUpdateDto,
         @UploadedFiles() files: Express.Multer.File[],
+        @Query("userId") userId: string | null = null
     ) {
         const uploadedFiles = [];
 
@@ -85,6 +89,7 @@ export class TenantController {
             tenantUpdateDto.programImages = uploadedFiles.map(file => file.filePath); // Adjust field as needed
         }
         const tenantId = id;
+        tenantUpdateDto.updatedBy = userId;
         return await this.tenantService.updateTenants(request, tenantId, tenantUpdateDto, response);
     }
 

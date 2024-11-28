@@ -38,7 +38,6 @@ export class TenantUpdateDto {
     @ApiPropertyOptional({
         type: String,
     })
-    @IsString()
     @IsOptional()
     @Expose()
     programImages: string[];
@@ -63,6 +62,16 @@ export class TenantUpdateDto {
     @IsIn(['active', 'inactive', 'archive'])
     @Expose()
     status: 'active' | 'inactive' | 'archive';
+
+    @Expose()
+    @IsString()
+    @IsOptional()
+    createdBy: string;
+
+    @Expose()
+    @IsString()
+    @IsOptional()
+    updatedBy: string;
 
     constructor(obj?: Partial<TenantUpdateDto>) {
         if (obj) {
