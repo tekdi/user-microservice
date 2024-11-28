@@ -17,7 +17,7 @@ export class TenantService {
     public async getTenants(request, response) {
         let apiId = APIID.TENANT_LIST;
         try {
-            let result = await this.tenantRepository.find();
+            let result = await this.tenantRepository.find({ where: { status: "active" } });
 
             if (result.length === 0) {
                 return APIResponse.error(

@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Patch, Post, Query, Req, Res, SerializeOptions, UploadedFile, UploadedFiles, UseInterceptors } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Patch, Post, Query, Req, Res, SerializeOptions, UploadedFile, UploadedFiles, UseInterceptors, UsePipes, ValidationPipe } from '@nestjs/common';
 import { TenantService } from './tenant.service';
 import { ApiCreatedResponse, ApiForbiddenResponse } from '@nestjs/swagger';
 import { TenantCreateDto } from './dto/tenant-create.dto';
@@ -15,6 +15,7 @@ export class TenantController {
     @Get("/read")
     @ApiCreatedResponse({ description: "Tenant Data Fetch" })
     @ApiForbiddenResponse({ description: "Forbidden" })
+    @UsePipes(ValidationPipe)
     @SerializeOptions({
         strategy: "excludeAll",
     })
@@ -30,6 +31,7 @@ export class TenantController {
     @ApiCreatedResponse({ description: "Tenant Created Successfully" })
     @ApiForbiddenResponse({ description: "Forbidden" })
     @UseInterceptors(FilesInterceptor('programImages', 10))
+    @UsePipes(ValidationPipe)
     @SerializeOptions({
         strategy: "excludeAll",
     })
@@ -60,6 +62,7 @@ export class TenantController {
     @ApiCreatedResponse({ description: "Tenant Data Fetch" })
     @ApiForbiddenResponse({ description: "Forbidden" })
     @UseInterceptors(FilesInterceptor('programImages', 10))
+    @UsePipes(ValidationPipe)
     @SerializeOptions({
         strategy: "excludeAll",
     })
@@ -90,6 +93,7 @@ export class TenantController {
     @Delete("/delete")
     @ApiCreatedResponse({ description: "Tenant Data Fetch" })
     @ApiForbiddenResponse({ description: "Forbidden" })
+    @UsePipes(ValidationPipe)
     @SerializeOptions({
         strategy: "excludeAll",
     })

@@ -31,4 +31,11 @@ export class Tenant {
 
     @Column({ type: 'text' })
     description: string; // Text field for tenant's domain
+
+    @Column({
+        type: 'text',
+        default: 'active',
+        enum: ['active', 'inactive', 'archive'],
+    })
+    status: 'active' | 'inactive' | 'archive'; // Status column with enum values
 }

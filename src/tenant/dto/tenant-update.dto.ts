@@ -1,6 +1,6 @@
 import { Expose, Type } from "class-transformer";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { IsNotEmpty, IsString } from "class-validator";
+import { IsIn, IsNotEmpty, IsOptional, IsString } from "class-validator";
 
 export class TenantUpdateDto {
     //tenant name
@@ -10,6 +10,7 @@ export class TenantUpdateDto {
         default: "",
     })
     @IsString()
+    @IsOptional()
     @Expose()
     name: string;
 
@@ -20,6 +21,7 @@ export class TenantUpdateDto {
         default: "",
     })
     @IsString()
+    @IsOptional()
     @Expose()
     domain: string;
 
@@ -37,14 +39,30 @@ export class TenantUpdateDto {
         type: String,
     })
     @IsString()
+    @IsOptional()
     @Expose()
     programImages: string[];
 
 
     @ApiPropertyOptional({ type: String })
     @IsString()
+    @IsOptional()
     @Expose()
     description: string;
+
+
+    //status
+    @ApiPropertyOptional({
+        type: String,
+        description: "Status of the tenant",
+        enum: ['active', 'inactive', 'archive'],
+        default: 'active',
+    })
+    @IsString()
+    @IsOptional()
+    @IsIn(['active', 'inactive', 'archive'])
+    @Expose()
+    status: 'active' | 'inactive' | 'archive';
 
     constructor(obj?: Partial<TenantUpdateDto>) {
         if (obj) {
