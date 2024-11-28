@@ -667,7 +667,6 @@ export class PostgresCohortMembersService {
     try {
       cohortMembersUpdateDto.updatedBy = loginUser;
       const updateData = {};
-      const customFields = {};
       if (!isUUID(cohortMembershipId)) {
         return APIResponse.error(
           res,
