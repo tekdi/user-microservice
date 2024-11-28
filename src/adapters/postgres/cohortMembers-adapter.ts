@@ -666,6 +666,8 @@ export class PostgresCohortMembersService {
     const apiId = APIID.COHORT_MEMBER_UPDATE;
     try {
       cohortMembersUpdateDto.updatedBy = loginUser;
+      const updateData = {};
+      const customFields = {};
       if (!isUUID(cohortMembershipId)) {
         return APIResponse.error(
           res,
@@ -711,9 +713,23 @@ export class PostgresCohortMembersService {
           HttpStatus.NOT_FOUND
         );
       }
-      let result = await this.cohortMembersRepository.save(
-        cohortMembershipToUpdate
-      );
+
+      // Iterate over all keys in cohortUpdateDto
+      for (const key in cohortMembersUpdateDto) {
+        if (
+          cohortMembersUpdateDto.hasOwnProperty(key) &&
+          cohortMembersUpdateDto[key] !== null
+        ) {
+          if (key !== "customFields") {
+            updateData[key] = cohortMembersUpdateDto[key];
+          }
+        }
+      }
+      let result = await this.cohortMembersRepository.update(cohortMembershipId, updateData);
+      // let result = await this.cohortMembersRepository.save(
+      //   cohortMembersUpdateDto
+      // );
+
       //update custom fields
       let responseForCustomField;
       if (
@@ -734,7 +750,7 @@ export class PostgresCohortMembersService {
             res,
             apiId,
             [],
-            HttpStatus.CREATED,
+            HttpStatus.OK,
             API_RESPONSES.COHORTMEMBER_UPDATE_SUCCESSFULLY
           );
         } else {
