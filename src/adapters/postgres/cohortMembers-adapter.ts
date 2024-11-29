@@ -711,6 +711,7 @@ export class PostgresCohortMembersService {
           HttpStatus.NOT_FOUND
         );
       }
+      Object.assign(cohortMembershipToUpdate, cohortMembersUpdateDto);
       let result = await this.cohortMembersRepository.save(
         cohortMembershipToUpdate
       );
@@ -754,7 +755,7 @@ export class PostgresCohortMembersService {
           res,
           apiId,
           [],
-          HttpStatus.CREATED,
+          HttpStatus.OK,
           API_RESPONSES.COHORTMEMBER_UPDATE_SUCCESSFULLY
         );
       }
