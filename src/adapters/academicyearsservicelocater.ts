@@ -5,14 +5,16 @@ import { AcademicYearSearchDto } from "src/academicyears/dto/academicyears-searc
 export interface IServicelocatorAcademicyear {
   createAcademicYear(
     academicYearDto: AcademicYearDto,
+    userId,
     tenantId,
     response: Response
   ): Promise<any>;
   getActiveAcademicYear(academicYearId: string, tenantId: string);
   getAcademicYearList(
     academicYearSearchDto: AcademicYearSearchDto,
+    userId,
     tenantId,
     response: Response
   );
-  getAcademicYearById(id, response: Response);
+  getAcademicYearById(id, userId, response: Response);
 }

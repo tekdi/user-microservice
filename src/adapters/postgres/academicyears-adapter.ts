@@ -10,6 +10,8 @@ import { APIID } from "@utils/api-id.config";
 import APIResponse from "src/common/responses/response";
 import { AcademicYearSearchDto } from "src/academicyears/dto/academicyears-search.dto";
 import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
+import { LoggerUtil } from "src/common/logger/LoggerUtil";
+
 
 @Injectable()
 export class PostgresAcademicYearService
@@ -23,6 +25,7 @@ export class PostgresAcademicYearService
 
   public async createAcademicYear(
     academicYearDto: AcademicYearDto,
+    userId,
     tenantId,
     response: Response
   ): Promise<any> {
@@ -34,9 +37,12 @@ export class PostgresAcademicYearService
       const endSessionYear = new Date(academicYearDto.endDate).getFullYear();
       academicYearDto.session = `${startSessionYear}-${endSessionYear}`;
       academicYearDto.tenantId = tenantId;
+      academicYearDto.createdBy = userId;
+      academicYearDto.updatedBy = userId;
 
       const tenantExist = await this.tenantRepository.findOne({ where: { tenantId: tenantId } })
       if (!tenantExist) {
+        LoggerUtil.error(API_RESPONSES.TENANT_NOTFOUND, API_RESPONSES.NOT_FOUND, apiId, userId);
         return APIResponse.error(
           response,
           apiId,
@@ -52,6 +58,7 @@ export class PostgresAcademicYearService
         tenantId
       );
       if (checkResult) {
+        LoggerUtil.error(API_RESPONSES.ACADEMICYEAR_EXIST, API_RESPONSES.ACADEMICYEAR_YEAR, apiId, userId);
         return APIResponse.error(
           response,
           apiId,
@@ -84,6 +91,7 @@ export class PostgresAcademicYearService
       );
     } catch (error) {
       const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+      LoggerUtil.error(errorMessage, API_RESPONSES.INTERNAL_SERVER_ERROR, apiId, userId);
       return APIResponse.error(
         response,
         apiId,
@@ -123,6 +131,7 @@ export class PostgresAcademicYearService
 
   async getAcademicYearList(
     academicYearSearchDto: AcademicYearSearchDto,
+    userId,
     tenantId,
     response: Response
   ) {
@@ -156,6 +165,7 @@ export class PostgresAcademicYearService
       );
     } catch (error) {
       const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+      LoggerUtil.error(errorMessage, API_RESPONSES.INTERNAL_SERVER_ERROR, apiId, userId);
       return APIResponse.error(
         response,
         apiId,
@@ -166,7 +176,7 @@ export class PostgresAcademicYearService
     }
   }
 
-  async getAcademicYearById(id, response) {
+  async getAcademicYearById(id, userId, response) {
     const apiId = APIID.ACADEMICYEAR_GET;
     try {
       const academicYearResult = await this.academicYearRespository.findOne({ where: { id: id } });
@@ -188,6 +198,7 @@ export class PostgresAcademicYearService
       );
     } catch (error) {
       const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+      LoggerUtil.error(errorMessage, API_RESPONSES.INTERNAL_SERVER_ERROR, apiId, userId);
       return APIResponse.error(
         response,
         apiId,
