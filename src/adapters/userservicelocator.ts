@@ -14,6 +14,7 @@ export interface IServicelocator {
   // );
   getUsersDetailsById(userData: UserData, response: any);
   updateUser(userDto?: any, response?: any);
+  updateUserByName(userDto?: any, response?: any);
   createUser(request: any, userDto: UserCreateDto, response: Response);
   findUserDetails(userID: any, username: String,tenantId?: string)
   searchUser(

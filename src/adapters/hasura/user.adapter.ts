@@ -165,7 +165,7 @@ export class HasuraUserService implements IServicelocator {
       return e;
     }
   }
-
+  async updateUserByName(userDto, response: Response){}
   public async updateUser(
     userUpdateDto: UserCreateDto,
     userData

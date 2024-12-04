@@ -383,6 +383,57 @@ export class PostgresUserService implements IServicelocator {
     return combinedResult;
   }
 
+  async updateUserByName(userDto, response: Response){
+    const apiId = APIID.USER_UPDATE;
+    try {
+      let updatedData = {};
+      let editIssues = {};
+
+      let getUser = await this.usersRepository.find({where:{name: userDto.name}})
+      for(let user of getUser){
+
+        if (userDto?.customFields?.length > 0) {
+          const getFieldsAttributes = await this.fieldsService.getEditableFieldsAttributes();
+  
+          let isEditableFieldId = [];
+          const fieldIdAndAttributes = {};
+          for (let fieldDetails of getFieldsAttributes) {
+            isEditableFieldId.push(fieldDetails.fieldId);
+            fieldIdAndAttributes[`${fieldDetails.fieldId}`] = fieldDetails;
+          }
+  
+          let unEditableIdes = [];
+          let editFailures = [];
+          for (let data of userDto.customFields) {
+            if (isEditableFieldId.includes(data.fieldId)) {
+              const result = await this.fieldsService.updateCustomFields(user.userId, data, fieldIdAndAttributes[data.fieldId]);
+              if (result.correctValue) {
+                if (!updatedData['customFields'])
+                  updatedData['customFields'] = [];
+                updatedData['customFields'].push(result);
+              } else {
+                editFailures.push(`${data.fieldId}: ${result?.valueIssue} - ${result.fieldName}`)
+              }
+            } else {
+              unEditableIdes.push(data.fieldId)
+            }
+          }
+          if (unEditableIdes.length > 0) {
+            editIssues["uneditableFields"] = unEditableIdes
+          }
+          if (editFailures.length > 0) {
+            editIssues["editFieldsFailure"] = editFailures
+          }
+        }
+      }
+
+      return await APIResponse.success(response, apiId, { ...updatedData, editIssues },
+        HttpStatus.OK, "User has been updated successfully.")
+    } catch (e) {
+      return APIResponse.error(response, apiId, "Internal Server Error", `${e}`, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
   async updateUser(userDto, response: Response) {
     const apiId = APIID.USER_UPDATE;
     try {
