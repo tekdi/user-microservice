@@ -103,6 +103,7 @@ class CustomFieldDTO {
 export class UserUpdateDTO {
 
     userId: string;
+    name:string;
 
     @ApiProperty({ type: () => [UserDataDTO] })
     @Expose()
