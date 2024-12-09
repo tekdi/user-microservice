@@ -48,10 +48,9 @@ import { isUUID } from "class-validator";
 import { API_RESPONSES } from "@utils/response.messages";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
 
-
 @ApiTags("Cohort")
 @Controller("cohort")
-// @UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard)
 export class CohortController {
   constructor(private readonly cohortAdapter: CohortAdapter) {}
 
