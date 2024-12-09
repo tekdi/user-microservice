@@ -790,7 +790,8 @@ export class PostgresFieldsService implements IServicelocatorfields {
       const fieldKeys = this.fieldsRepository.metadata.columns.map(
         (column) => column.propertyName
       );
-      let whereClause = `"tenantId" = '${tenantId}'`;
+      let tenantCond = tenantId? `"tenantId" = ${tenantId}` :`"tenantId" IS NULL`
+      let whereClause = tenantCond;
       if (filters && Object.keys(filters).length > 0) {
         Object.entries(filters).forEach(([key, value]) => {
           if (fieldKeys.includes(key)) {
@@ -813,6 +814,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
           }
         });
       }
+
       const fieldData = await this.getFieldData(whereClause);
       if (!fieldData.length) {
         return APIResponse.error(
