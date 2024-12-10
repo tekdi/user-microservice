@@ -39,6 +39,9 @@ export class Tenant {
     })
     status: 'active' | 'inactive' | 'archive'; // Status column with enum values
 
+    @Column("int4", { nullable: false })
+    ordering: number;
+
     @Column({ type: 'uuid', nullable: true })
     createdBy: string | null; // UUID of the user who created the tenant
 
