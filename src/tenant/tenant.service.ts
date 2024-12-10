@@ -186,7 +186,7 @@ export class TenantService {
                 }
             })
 
-            if (checkExitTenants.length === 0) {
+            if (checkExitTenants.length > 0) {
                 return APIResponse.error(
                     response,
                     apiId,
