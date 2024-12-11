@@ -309,7 +309,7 @@ export class PostgresCohortService {
 
       const academicYearId = cohortCreateDto.academicYearId;
       const tenantId = cohortCreateDto.tenantId;
-
+      cohortCreateDto.name = cohortCreateDto?.name.toLowerCase()
       // verify if the academic year id is valid
       const academicYear =
         await this.postgresAcademicYearService.getActiveAcademicYear(
@@ -353,6 +353,8 @@ export class PostgresCohortService {
       const existData = await this.cohortRepository.find({
         where: {
           name: cohortCreateDto.name,
+          status: "active",
+          type: cohortCreateDto.type,
           parentId: cohortCreateDto.parentId
             ? cohortCreateDto.parentId
             : IsNull(),
@@ -367,7 +369,7 @@ export class PostgresCohortService {
           HttpStatus.CONFLICT
         );
       }
-      cohortCreateDto.name = cohortCreateDto?.name.toLowerCase()
+
       const response = await this.cohortRepository.save(cohortCreateDto);
       const createFailures = [];
 
