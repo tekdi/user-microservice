@@ -1,10 +1,7 @@
-import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 
 
 export class AuthUtils {
-  constructor() { }
-
   generateOtp(otpDigits) {
     const minValue = Math.pow(10, otpDigits - 1);
     const maxValue = Math.pow(10, otpDigits) - 1;

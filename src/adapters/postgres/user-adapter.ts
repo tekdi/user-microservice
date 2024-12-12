@@ -75,7 +75,7 @@ export class PostgresUserService implements IServicelocator {
     private readonly jwtUtil: JwtUtil,
     private configService: ConfigService,
     private postgresAcademicYearService: PostgresAcademicYearService,
-    private cohortAcademicYearService: CohortAcademicYearService,
+    private readonly cohortAcademicYearService: CohortAcademicYearService,
     private readonly authUtils: AuthUtils
   ) {
     this.jwt_secret = this.configService.get<string>("RBAC_JWT_SECRET");
