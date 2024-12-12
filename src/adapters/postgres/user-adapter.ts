@@ -1748,14 +1748,8 @@ export class PostgresUserService implements IServicelocator {
     const apiId = APIID.SEND_OTP;
     try {
       const { mobile } = body;
-      // Step 1: Prepare data for OTP generation
-      const mobileWithCode = this.formatMobileNumber(mobile);
-      const otp = this.authUtils.generateOtp(this.otpDigits).toString();
-      const { hash, expires } = this.generateOtpHash(mobileWithCode, otp);
-
-      // Step 2: Send notification (OTP via SMS)
-      const notificationPayload = this.createNotificationPayload(mobile, otp);
-      const notificationResult = await this.notificationRequest.sendNotification(notificationPayload);
+      // Step 1: Prepare data for OTP generation and send on Mobile
+      const { notificationResult, hash, expires } = await this.sendOTPOnMobile(mobile);
       if (notificationResult?.result?.sms?.errors.length > 0) {
         LoggerUtil.error(
           `${API_RESPONSES.BAD_REQUEST}`,
@@ -1770,7 +1764,7 @@ export class PostgresUserService implements IServicelocator {
           HttpStatus.BAD_REQUEST
         );
       }
-
+      // Step 2: Send success response
       const result = {
         data: {
           message: `OTP sent to ${mobile}`,
@@ -1795,6 +1789,22 @@ export class PostgresUserService implements IServicelocator {
         `Error : ${e?.response}`,
         HttpStatus.INTERNAL_SERVER_ERROR
       );
+    }
+  }
+  async sendOTPOnMobile(mobile) {
+    try {
+      // Step 1: Format mobile number and generate OTP
+      const mobileWithCode = this.formatMobileNumber(mobile);
+      const otp = this.authUtils.generateOtp(this.otpDigits).toString();
+      const { hash, expires } = this.generateOtpHash(mobileWithCode, otp);
+
+      // Step 2: Create notification payload and send OTP via SMS
+      const notificationPayload = this.createNotificationPayload(mobile, otp);
+      const notificationResult = await this.notificationRequest.sendNotification(notificationPayload);
+      return { notificationResult, hash, expires }
+    }
+    catch (error) {
+      throw new Error(`Failed to send OTP: ${error.message}`);
     }
   }
 
