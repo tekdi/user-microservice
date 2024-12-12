@@ -38,6 +38,7 @@ import { TokenExpiredError, JsonWebTokenError } from "jsonwebtoken";
 import { CohortAcademicYearService } from "./cohortAcademicYear-adapter";
 import { PostgresAcademicYearService } from "./academicyears-adapter";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
+import { AuthUtils } from "@utils/auth-utils";
 
 @Injectable()
 export class PostgresUserService implements IServicelocator {
@@ -45,6 +46,10 @@ export class PostgresUserService implements IServicelocator {
   jwt_password_reset_expires_In: any;
   jwt_secret: any;
   reset_frontEnd_url: any;
+  //SMS notification
+  private readonly otpExpiry: number;
+  private readonly otpDigits: number;
+  private readonly smsKey: string;
 
   constructor(
     // private axiosInstance: AxiosInstance,
@@ -70,7 +75,8 @@ export class PostgresUserService implements IServicelocator {
     private readonly jwtUtil: JwtUtil,
     private configService: ConfigService,
     private postgresAcademicYearService: PostgresAcademicYearService,
-    private cohortAcademicYearService: CohortAcademicYearService
+    private cohortAcademicYearService: CohortAcademicYearService,
+    private readonly authUtils: AuthUtils
   ) {
     this.jwt_secret = this.configService.get<string>("RBAC_JWT_SECRET");
     this.jwt_password_reset_expires_In = this.configService.get<string>(
@@ -78,7 +84,11 @@ export class PostgresUserService implements IServicelocator {
     );
     this.reset_frontEnd_url =
       this.configService.get<string>("RESET_FRONTEND_URL");
+    this.otpExpiry = this.configService.get<number>('OTP_EXPIRY') || 10; // default: 10 minutes
+    this.otpDigits = this.configService.get<number>('OTP_DIGITS') || 6;
+    this.smsKey = this.configService.get<string>('SMS_KEY');
   }
+
 
   public async sendPasswordResetLink(
     request: any,
@@ -90,6 +100,7 @@ export class PostgresUserService implements IServicelocator {
     try {
       // Fetch user details
       const userData: any = await this.findUserDetails(null, username);
+
       if (!userData) {
         return APIResponse.error(
           response,
@@ -99,6 +110,7 @@ export class PostgresUserService implements IServicelocator {
           HttpStatus.NOT_FOUND
         );
       }
+
       // Determine email address
       let emailOfUser = userData?.email;
       if (!emailOfUser) {
@@ -174,7 +186,6 @@ export class PostgresUserService implements IServicelocator {
           HttpStatus.BAD_REQUEST
         );
       }
-
       return await APIResponse.success(
         response,
         apiId,
@@ -197,7 +208,6 @@ export class PostgresUserService implements IServicelocator {
       );
     }
   }
-
   async forgotPassword(
     request: any,
     body: any,
@@ -1706,4 +1716,142 @@ export class PostgresUserService implements IServicelocator {
       );
     }
   }
+
+  private formatMobileNumber(mobile: string): string {
+    return `+91${mobile}`;
+  }
+
+  private generateOtpHash(mobileWithCode: string, otp: string) {
+    const ttl = this.otpExpiry * 60 * 1000; // Expiration in milliseconds
+    const expires = Date.now() + ttl;
+    const data = `${mobileWithCode}.${otp}.${expires}`;
+    const hash = this.authUtils.calculateHash(data, this.smsKey); // Create hash
+    return { hash, expires };
+  }
+
+  private createNotificationPayload(mobile: string, otp: string): any {
+    return {
+      isQueue: false,
+      context: "OTP",
+      key: "TEST_SMS",
+      replacements: {
+        "{otp}": otp,
+        "{otpExpiry}": this.otpExpiry,
+      },
+      sms: {
+        receipients: [mobile],
+      },
+    };
+  }
+
+  async sendOtp(body: any, response: Response) {
+    const apiId = APIID.SEND_OTP;
+    try {
+      const { mobile } = body;
+      // Step 1: Prepare data for OTP generation
+      const mobileWithCode = this.formatMobileNumber(mobile);
+      const otp = this.authUtils.generateOtp(this.otpDigits).toString();
+      const { hash, expires } = this.generateOtpHash(mobileWithCode, otp);
+
+      // Step 2: Send notification (OTP via SMS)
+      const notificationPayload = this.createNotificationPayload(mobile, otp);
+      const notificationResult = await this.notificationRequest.sendNotification(notificationPayload);
+      if (notificationResult?.result?.sms?.errors.length > 0) {
+        LoggerUtil.error(
+          `${API_RESPONSES.BAD_REQUEST}`,
+          API_RESPONSES.NOTIFICATION_FAIL_DURING_OTP_SEND,
+          apiId
+        );
+        return APIResponse.error(
+          response,
+          apiId,
+          notificationResult?.result?.email?.errors,
+          API_RESPONSES.NOTIFICATION_FAIL_DURING_OTP_SEND,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      const result = {
+        data: {
+          message: `OTP sent to ${mobile}`,
+          hash: `${hash}.${expires}`,
+          // sid: message.sid, // Twilio Message SID
+        }
+      }
+      return await APIResponse.success(
+        response,
+        apiId,
+        result,
+        HttpStatus.OK,
+        API_RESPONSES.OTP_SEND_SUCESSFULLY
+      );
+    }
+    catch (e) {
+      console.log(e);
+      return APIResponse.error(
+        response,
+        apiId,
+        API_RESPONSES.SERVER_ERROR,
+        `Error : ${e?.response}`,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  async verifyOtp(body: any, response: Response) {
+    const apiId = APIID.VERIFY_OTP;
+    try {
+      const { mobile, otp, hash } = body;
+      const [hashValue, expires] = hash.split('.');
+      const mobileWithCode = this.formatMobileNumber(mobile);
+
+      if (Date.now() > parseInt(expires)) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.OTP_EXPIRED,
+          API_RESPONSES.OTP_ERROR,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      const data = `${mobileWithCode}.${otp}.${expires}`;
+      const calculatedHash = this.authUtils.calculateHash(data, this.smsKey); // Create hash
+      if (calculatedHash === hashValue) {
+        return await APIResponse.success(
+          response,
+          apiId,
+          {
+            success: true,
+            data: {
+              token: calculatedHash
+            }
+          },
+          HttpStatus.OK,
+          API_RESPONSES.OTP_VALID
+        );
+      } else {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.OTP_ERROR,
+          API_RESPONSES.OTP_INVALID,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+    }
+    catch (e) {
+      return APIResponse.error(
+        response,
+        apiId,
+        API_RESPONSES.SERVER_ERROR,
+        `Error : ${e?.response?.data.error}`,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
 }
+
+
+
+

@@ -32,4 +32,7 @@ export interface IServicelocator {
   deleteUserById(userId: string, response: Response): Promise<any>;
   sendPasswordResetLink(request: any, username: string, redirectUrl: string, response: Response);
   forgotPassword(request: any, body: any, response: Response);
+  sendOtp(body, response: Response);
+  verifyOtp(body, response: Response)
+
 }

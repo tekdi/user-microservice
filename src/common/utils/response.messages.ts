@@ -154,4 +154,12 @@ export const API_RESPONSES = {
   TENANT_CREATE: "Tenant created successfully",
   TENANT_UPDATE: "Tenant updated successfully",
   TENANT_DELETE: "Tenant deleted successfully",
+
+  //OTP
+  NOTIFICATION_FAIL_DURING_OTP_SEND: "Send SMS notification failed duing OTP send",
+  OTP_SEND_SUCESSFULLY: "OTP Send Sucessfully",
+  OTP_EXPIRED: 'OTP has expired',
+  OTP_ERROR: "OTP has expired",
+  OTP_INVALID: "OTP invalid",
+  OTP_VALID: 'OTP validation successful'
 };
