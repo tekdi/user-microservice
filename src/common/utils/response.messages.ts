@@ -154,4 +154,6 @@ export const API_RESPONSES = {
   TENANT_CREATE: "Tenant created successfully",
   TENANT_UPDATE: "Tenant updated successfully",
   TENANT_DELETE: "Tenant deleted successfully",
+
+  ROLE_INVALID_REQUEST: "Please do not pass Code.It can not be update"
 };
