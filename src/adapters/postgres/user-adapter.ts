@@ -1781,12 +1781,11 @@ export class PostgresUserService implements IServicelocator {
       );
     }
     catch (e) {
-      console.log(e);
       return APIResponse.error(
         response,
         apiId,
         API_RESPONSES.SERVER_ERROR,
-        `Error : ${e?.response}`,
+        `Error : ${e}`,
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
