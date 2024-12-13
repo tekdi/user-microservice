@@ -15,6 +15,7 @@ import { isUUID } from "class-validator";
 import APIResponse from "src/common/responses/response";
 import { Response } from "express";
 import { APIID } from "src/common/utils/api-id.config";
+import { API_RESPONSES } from "@utils/response.messages";
 
 @Injectable()
 export class PostgresRoleService {
@@ -25,7 +26,7 @@ export class PostgresRoleService {
     private readonly userRoleMappingRepository: Repository<UserRoleMapping>,
     @InjectRepository(RolePrivilegeMapping)
     private readonly roleprivilegeMappingRepository: Repository<RolePrivilegeMapping>
-  ) {}
+  ) { }
   public async createRole(
     request: any,
     createRolesDto: CreateRolesDto,
@@ -130,8 +131,17 @@ export class PostgresRoleService {
   ) {
     const apiId = APIID.ROLE_UPDATE;
     try {
-      const code = roleDto.title.toLowerCase().replace(/\s+/g, "_");
-      roleDto.code = code;
+      // const code = roleDto.title.toLowerCase().replace(/\s+/g, "_");
+      // roleDto.code = code;
+      if (roleDto?.code) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.ROLE_INVALID_REQUEST,
+          API_RESPONSES.BAD_REQUEST,
+          HttpStatus.BAD_REQUEST
+        )
+      }
       const result = await this.roleRepository.update(roleId, roleDto);
       return APIResponse.success(
         response,
