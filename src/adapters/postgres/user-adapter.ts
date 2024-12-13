@@ -39,6 +39,8 @@ import { CohortAcademicYearService } from "./cohortAcademicYear-adapter";
 import { PostgresAcademicYearService } from "./academicyears-adapter";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
 import { AuthUtils } from "@utils/auth-utils";
+import { OtpSendDTO } from "src/user/dto/otpSent.dto";
+import { OtpVerifyDTO } from "src/user/dto/otpVerify.dto";
 
 @Injectable()
 export class PostgresUserService implements IServicelocator {
@@ -1744,10 +1746,19 @@ export class PostgresUserService implements IServicelocator {
     };
   }
 
-  async sendOtp(body: any, response: Response) {
+  async sendOtp(body: OtpSendDTO, response: Response) {
     const apiId = APIID.SEND_OTP;
     try {
       const { mobile } = body;
+      if (!mobile || !/^\d{10}$/.test(mobile)) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          API_RESPONSES.MOBILE_VALID,
+          HttpStatus.BAD_REQUEST
+        );
+      }
       // Step 1: Prepare data for OTP generation and send on Mobile
       const { notificationResult, hash, expires } = await this.sendOTPOnMobile(mobile);
       if (notificationResult?.result?.sms?.errors.length > 0) {
@@ -1759,7 +1770,7 @@ export class PostgresUserService implements IServicelocator {
         return APIResponse.error(
           response,
           apiId,
-          notificationResult?.result?.email?.errors,
+          notificationResult?.result?.sms?.errors,
           API_RESPONSES.NOTIFICATION_FAIL_DURING_OTP_SEND,
           HttpStatus.BAD_REQUEST
         );
@@ -1777,15 +1788,20 @@ export class PostgresUserService implements IServicelocator {
         apiId,
         result,
         HttpStatus.OK,
-        API_RESPONSES.OTP_SEND_SUCESSFULLY
+        API_RESPONSES.OTP_SEND_SUCCESSFULLY
       );
     }
     catch (e) {
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${e.message}`,
+        apiId
+      );
       return APIResponse.error(
         response,
         apiId,
         API_RESPONSES.SERVER_ERROR,
-        `Error : ${e}`,
+        `Error : ${e.message}`,
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
@@ -1807,11 +1823,29 @@ export class PostgresUserService implements IServicelocator {
     }
   }
 
-  async verifyOtp(body: any, response: Response) {
+  async verifyOtp(body: OtpVerifyDTO, response: Response) {
     const apiId = APIID.VERIFY_OTP;
     try {
       const { mobile, otp, hash } = body;
+      if (!mobile || !otp || !hash) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          API_RESPONSES.OTP_VALIDED_REQUIRED_KEY,
+          HttpStatus.BAD_REQUEST
+        );
+      }
       const [hashValue, expires] = hash.split('.');
+      if (!hashValue || !expires || isNaN(parseInt(expires))) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          API_RESPONSES.INVALID_HASH_FORMATE,
+          HttpStatus.BAD_REQUEST
+        );
+      }
       const mobileWithCode = this.formatMobileNumber(mobile);
 
       if (Date.now() > parseInt(expires)) {
@@ -1819,7 +1853,7 @@ export class PostgresUserService implements IServicelocator {
           response,
           apiId,
           API_RESPONSES.OTP_EXPIRED,
-          API_RESPONSES.OTP_ERROR,
+          API_RESPONSES.OTP_EXPIRED,
           HttpStatus.BAD_REQUEST
         );
       }
@@ -1832,9 +1866,6 @@ export class PostgresUserService implements IServicelocator {
           apiId,
           {
             success: true,
-            data: {
-              token: calculatedHash
-            }
           },
           HttpStatus.OK,
           API_RESPONSES.OTP_VALID
@@ -1843,18 +1874,23 @@ export class PostgresUserService implements IServicelocator {
         return APIResponse.error(
           response,
           apiId,
-          API_RESPONSES.OTP_ERROR,
+          API_RESPONSES.OTP_INVALID,
           API_RESPONSES.OTP_INVALID,
           HttpStatus.BAD_REQUEST
         );
       }
     }
     catch (e) {
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error during OTP send: ${e.message}`,
+        apiId
+      );
       return APIResponse.error(
         response,
         apiId,
         API_RESPONSES.SERVER_ERROR,
-        `Error : ${e?.response?.data.error}`,
+        `Error : ${e?.message}`,
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }

@@ -53,5 +53,5 @@ export const APIID = {
   TENANT_DELETE: "api.tenant.delete",
   TENANT_LIST: "api.tenant.list",
   SEND_OTP: "api.send.OTP",
-  VERIFY_OTP: "api.verify.otp"
+  VERIFY_OTP: "api.verify.OTP"
 };

@@ -272,7 +272,7 @@ export class UserController {
   @Post('send-otp')
   @ApiBody({ type: OtpSendDTO })
   @UsePipes(new ValidationPipe({ transform: true }))
-  @ApiOkResponse({ description: API_RESPONSES.OTP_SEND_SUCESSFULLY })
+  @ApiOkResponse({ description: API_RESPONSES.OTP_SEND_SUCCESSFULLY })
   async sendOtp(@Body() body: OtpSendDTO, @Res() response: Response) {
     return await this.userAdapter.buildUserAdapter().sendOtp(body, response)
   }
