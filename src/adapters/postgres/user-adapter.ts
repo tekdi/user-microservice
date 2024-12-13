@@ -1735,7 +1735,7 @@ export class PostgresUserService implements IServicelocator {
     return {
       isQueue: false,
       context: "OTP",
-      key: "TEST_SMS",
+      key: "SEND_OTP",
       replacements: {
         "{otp}": otp,
         "{otpExpiry}": this.otpExpiry,
