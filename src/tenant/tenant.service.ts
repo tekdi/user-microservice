@@ -164,13 +164,29 @@ export class TenantService {
     public async updateTenants(request, tenantId, tenantUpdateDto, response) {
         let apiId = APIID.TENANT_UPDATE;
         try {
-            let checkExitTenants = await this.tenantRepository.find({
+            let checkExitTenantId = await this.tenantRepository.find({
                 where: {
                     "tenantId": tenantId
                 }
+            })
+
+            if (checkExitTenantId.length === 0) {
+                return APIResponse.error(
+                    response,
+                    apiId,
+                    API_RESPONSES.NOT_FOUND,
+                    API_RESPONSES. TENANT_NOTFOUND,
+                    HttpStatus.NOT_FOUND
+                );
             }
-            )
-            if (checkExitTenants.length === 0) {
+
+            let checkExitTenants = await this.tenantRepository.find({
+                where: {
+                    "name": tenantUpdateDto.name
+                }
+            })
+
+            if (checkExitTenants.length > 0) {
                 return APIResponse.error(
                     response,
                     apiId,
