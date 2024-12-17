@@ -1,98 +1,123 @@
-import { 
-    Entity, 
-    Column, 
-    PrimaryColumn, 
-    CreateDateColumn,
-    UpdateDateColumn,
-} from 'typeorm';
+import {
+  Entity,
+  Column,
+  PrimaryColumn,
+  CreateDateColumn,
+  UpdateDateColumn,
+  OneToMany,
+  JoinColumn,
+  PrimaryGeneratedColumn,
+} from "typeorm";
+import { FieldValues } from "./fields-values.entity";
 
-@Entity({ name: 'Fields' })
+export enum FieldType {
+  TEXT = "text", // string
+  NUMERIC = "numeric", // string
+  RADIO = "radio", // string
+  DROPDOWN = "drop_down", // comma seperated string array
+  CHECKBOX = "checkbox", // comma seperated string array
+}
+
+@Entity({ name: "Fields" })
 export class Fields {
-    
-  @PrimaryColumn({ type: "uuid" })
+  @PrimaryGeneratedColumn("uuid", { name: "fieldId" })
   fieldId: string;
 
-  @Column({ type: 'varchar' })
-  assetId: string;
+  @Column("varchar", { nullable: true })
+  assetId?: string;
 
-  @Column({ type: 'varchar' })
+  @Column("varchar", { nullable: false })
   context: string;
 
-  @Column({ type: 'varchar' })
-  groupId: string;
+  @Column("varchar", { nullable: true })
+  groupId?: string;
 
-  @Column({ type: 'varchar' })
+  @Column("varchar", { nullable: false })
   name: string;
 
-  @Column({ type: 'varchar' })
+  @Column("varchar", { nullable: false })
   label: string;
 
-  @Column({ type: 'varchar' })
-  defaultValue: string;
+  @Column("varchar", { nullable: true })
+  defaultValue?: string;
 
-  @Column({ type: 'varchar' })
-  type: string;
+  @Column({
+    type: "enum",
+    enum: FieldType,
+    default: FieldType.TEXT,
+    nullable: false,
+  })
+  type: FieldType;
 
-  @Column({ type: 'text' })
-  note: string;
+  @Column("varchar", { nullable: true })
+  note?: string;
 
-  @Column({ type: 'text' })
-  description: string;
+  @Column("text", { nullable: true })
+  description?: string;
 
-  @Column({ type: 'text' })
+  @Column("text", { nullable: false })
   state: string;
 
-  @Column({ type: 'boolean' })
+  @Column("bool", { nullable: false })
   required: boolean;
 
-  @Column({ type: 'int' })
+  @Column("int4", { nullable: false })
   ordering: number;
 
-  @Column({ type: 'text' })
-  metadata: string;
+  @Column("varchar", { nullable: true })
+  metadata?: string;
 
-  @Column({ type: 'varchar' })
-  access: string;
+  @Column("varchar", { nullable: true })
+  access?: string;
 
-  @Column({ type: 'boolean' })
+  @Column("bool", { nullable: false })
   onlyUseInSubform: boolean;
 
-  @Column({ type: 'uuid' })
+  @Column("uuid", { nullable: false })
   tenantId: string;
 
   @CreateDateColumn({
-    type: "timestamp with time zone",
-    default: () => "CURRENT_TIMESTAMP",
+    type: "timestamptz",
+    default: () => "now()",
+    nullable: false,
   })
   createdAt: Date;
 
   @UpdateDateColumn({
-    type: "timestamp with time zone",
-    default: () => "CURRENT_TIMESTAMP",
+    type: "timestamptz",
+    default: () => "now()",
+    nullable: false,
   })
   updatedAt: Date;
 
-  @CreateDateColumn({
-    type: "timestamp with time zone",
-    default: () => "CURRENT_TIMESTAMP",
-  })
-  createdBy: Date;
+  @Column("varchar", { nullable: true })
+  createdBy?: string;
 
-  @UpdateDateColumn({
-    type: "timestamp with time zone",
-    default: () => "CURRENT_TIMESTAMP",
-  })
-  updatedBy: Date;
+  @Column("varchar", { nullable: true })
+  updatedBy?: string;
 
-  @Column({ type: 'uuid' })
-  contextId: string;
+  @Column("uuid", { nullable: true })
+  contextId?: string;
 
-  @Column({ type: 'varchar' })
-  render: string;
+  @Column("varchar", { nullable: true })
+  render?: string;
 
-  @Column({ type: 'varchar' })
-  contextType: string;
+  @Column("varchar", { nullable: true })
+  contextType?: string;
 
-  @Column({ type: 'jsonb' })
-  fieldParams: object;
+  @Column("jsonb", { nullable: true })
+  fieldParams?: object;
+
+  @Column("json", { nullable: true })
+  fieldAttributes?: any;
+
+  @OneToMany(() => FieldValues, (fieldValues) => fieldValues.field)
+  @JoinColumn({ name: "fieldValuesId" })
+  fieldValues: FieldValues[];
+
+  @Column({ type: "jsonb", nullable: true })
+  sourceDetails: any;
+
+  @Column({ type: "varchar" })
+  dependsOn: string;
 }

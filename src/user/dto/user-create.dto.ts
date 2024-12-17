@@ -19,18 +19,20 @@ export class tenantRoleMappingDto {
     description: "Tenant Id",
   })
   @Expose()
-  @IsUUID(undefined, { message: 'Tenant Id must be a valid UUID' })
-  @IsNotEmpty()
+  @IsOptional()
+  @IsUUID(undefined, { message: "Tenant Id must be a valid UUID" })
   tenantId: string;
 
   @ApiPropertyOptional({
-    type: String,
+    type: [String],
     description: "The cohort id of the user",
+    default: [],
   })
   @Expose()
-  @IsUUID(undefined, { message: 'Cohort Id must be a valid UUID' })
-  @IsNotEmpty()
-  cohortId: string;
+  @IsOptional()
+  @IsArray()
+  @IsUUID(undefined, { each: true })
+  cohortIds: string[];
 
   @ApiPropertyOptional({
     type: String,
@@ -38,20 +40,20 @@ export class tenantRoleMappingDto {
   })
   @IsOptional()
   @Expose()
-  @IsUUID(undefined, { message: 'Role Id must be a valid UUID' })
+  @IsUUID(undefined, { message: "Role Id must be a valid UUID" })
   roleId: string;
 }
 
-export class FieldValuesDto {
-  @ApiPropertyOptional({
+export class FieldValuesOptionDto {
+  @ApiProperty({
     type: String,
     description: "Field Id",
   })
   @Expose()
-  @IsUUID(undefined, { message: 'Field Id must be a valid UUID' })
+  @IsUUID(undefined, { message: "Field Id must be a valid UUID" })
   fieldId: string;
 
-  @ApiPropertyOptional({
+  @ApiProperty({
     type: String,
     description: "Field values",
   })
@@ -63,7 +65,7 @@ export class UserCreateDto {
   @Expose()
   userId: string;
 
-  @ApiProperty({ type: () => User })
+  @ApiProperty({ type: () => String })
   @Expose()
   @IsNotEmpty()
   username: string;
@@ -141,27 +143,24 @@ export class UserCreateDto {
   @Expose()
   updatedBy: string;
 
-  //fieldValues
-  @ApiPropertyOptional({
-    type: [FieldValuesDto],
-    description: "The fieldValues Object",
-  })
-  @ValidateNested({ each: true })
-  @Type(() => FieldValuesDto)
-  fieldValues: FieldValuesDto[];
-
   @ApiProperty({
     type: [tenantRoleMappingDto],
-    description: 'List of user attendance details',
+    description: "List of user attendance details",
   })
   @ValidateNested({ each: true })
   @Type(() => tenantRoleMappingDto)
   tenantCohortRoleMapping: tenantRoleMappingDto[];
 
+  //fieldValues
+  @ApiPropertyOptional({
+    type: [FieldValuesOptionDto],
+    description: "The fieldValues Object",
+  })
+  @ValidateNested({ each: true })
+  @Type(() => FieldValuesOptionDto)
+  customFields: FieldValuesOptionDto[];
+
   constructor(partial: Partial<UserCreateDto>) {
     Object.assign(this, partial);
   }
 }
-
-
-

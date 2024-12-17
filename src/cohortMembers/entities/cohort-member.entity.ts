@@ -4,37 +4,48 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
-  ManyToMany,
-  JoinTable,
 } from "typeorm";
 
-@Entity({ name: "CohortMembers" })
+export enum MemberStatus {
+  ACTIVE = "active",
+  INACTIVE = "inactive",
+  DROPOUT = "dropout",
+  ARCHIVED = "archived",
+}
+
+@Entity("CohortMembers")
 export class CohortMembers {
   @PrimaryGeneratedColumn("uuid")
   cohortMembershipId: string;
 
-  @Column({ type: "uuid", nullable: true })
-  cohortId: string | null;
+  @Column({ type: "uuid" })
+  cohortId: string;
+
+  @Column({ type: "uuid" })
+  cohortAcademicYearId: string;
 
   @Column({ type: "uuid" })
   userId: string;
 
-  @CreateDateColumn({
-    type: "timestamp with time zone",
-    default: () => "CURRENT_TIMESTAMP",
-  })
+  @CreateDateColumn({ type: "date", default: () => "CURRENT_DATE" })
   createdAt: Date;
 
-  @UpdateDateColumn({
-    type: "timestamp with time zone",
-    default: () => "CURRENT_TIMESTAMP",
-  })
+  @UpdateDateColumn({ type: "date", default: () => "CURRENT_DATE" })
   updatedAt: Date;
 
-  @Column({})
+  @Column({ type: "uuid", nullable: true })
   createdBy: string;
 
-  @Column({})
+  @Column({ type: "uuid", nullable: true })
   updatedBy: string;
 
+  @Column({ type: "varchar" })
+  statusReason: string;
+
+  @Column({
+    type: "enum",
+    enum: MemberStatus,
+    default: MemberStatus.ACTIVE,
+  })
+  status: MemberStatus;
 }

@@ -12,19 +12,24 @@ export interface IServicelocator {
   //   accessRole?: string,
   //   request?: any,
   // );
-  getUsersDetailsById(userData: UserData, response:any);
-  getUsersDetailsByCohortId(userData: Record<string, string>, response:any);
-  updateUser(userDto?: any,response?: any);
-  createUser(request: any, userDto: UserCreateDto, response: Response);
-  findUserDetails(userID:any,username:String)
+  getUsersDetailsById(userData: UserData, response: any);
+  updateUser(userDto?: any, response?: any);
+  createUser(request: any, userDto: UserCreateDto, academicYearId: string, response: Response);
+  findUserDetails(userID: any, username: string, tenantId?: string);
   searchUser(
     tenantId: string,
     request: any,
     response: any,
     userSearchDto: UserSearchDto
   );
-  resetUserPassword(request: any, username: string, newPassword: string, response: Response);
-  checkUser(body:any,response);
+  resetUserPassword(
+    request: any,
+    username: string,
+    newPassword: string,
+    response: Response
+  );
+  checkUser(body: any, response);
   deleteUserById(userId: string, response: Response): Promise<any>;
-
+  sendPasswordResetLink(request: any, username: string, redirectUrl: string, response: Response);
+  forgotPassword(request: any, body: any, response: Response);
 }

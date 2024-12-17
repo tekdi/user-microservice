@@ -1,12 +1,12 @@
 import { Expose } from "class-transformer";
 import { ApiProperty } from "@nestjs/swagger";
-import {IsNotEmpty,IsString, IsUUID} from "class-validator"
+import { IsNotEmpty, IsUUID } from "class-validator";
 
 export class CreatePrivilegeRoleDto {
-    @ApiProperty({
-    type: String,
-    description: "Privilege Id",
-    default: "",
+  @ApiProperty({
+    type: Array,
+    description: "Array of Privilege Ids",
+    default: [],
   })
   @Expose()
   privilegeId: string[];
@@ -22,15 +22,22 @@ export class CreatePrivilegeRoleDto {
   roleId: string;
 
   @ApiProperty({
-    type: String,
+    type: Boolean,
     description: "Boolean to Delete Previous Privileges",
+    default: false,
+  })
+  @Expose()
+  @IsNotEmpty()
+  deleteOld: boolean;
+
+  @ApiProperty({
+    type: String,
+    description: "Tenant Id",
     default: "",
   })
   @Expose()
   @IsNotEmpty()
-  deleteOld:boolean;
-
-
+  tenantId: string;
 
   constructor(obj: any) {
     Object.assign(this, obj);
