@@ -163,5 +163,11 @@ export const API_RESPONSES = {
   OTP_VALID: 'OTP validation Sucessfully',
   MOBILE_VALID: 'Invalid mobile number. Must be 10 digits.',
   OTP_VALIDED_REQUIRED_KEY: 'Missing required fields',
-  INVALID_HASH_FORMATE: 'Invalid hash format'
+  INVALID_HASH_FORMATE: 'Invalid hash format',
+  SMS_ERROR: 'SMS notification failed',
+  SMS_NOTIFICATION_ERROR: 'Failed to send SMS notification:',
+  USERNAME_REQUIRED: 'Username Required',
+  INVALID_REASON: 'Invalid Reason',
+  MOBILE_REQUIRED: 'MObile Required',
+  INVALID_HASH_FORMAT: 'Invalid hash format'
 };

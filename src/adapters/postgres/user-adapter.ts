@@ -77,7 +77,7 @@ export class PostgresUserService implements IServicelocator {
     private readonly jwtUtil: JwtUtil,
     private configService: ConfigService,
     private postgresAcademicYearService: PostgresAcademicYearService,
-    private cohortAcademicYearService: CohortAcademicYearService,
+    private readonly cohortAcademicYearService: CohortAcademicYearService,
     private readonly authUtils: AuthUtils
   ) {
     this.jwt_secret = this.configService.get<string>("RBAC_JWT_SECRET");
@@ -1820,7 +1820,7 @@ export class PostgresUserService implements IServicelocator {
             response,
             apiId,
             API_RESPONSES.BAD_REQUEST,
-            "MOBILE_REQUIRED",
+            API_RESPONSES.MOBILE_REQUIRED,
             HttpStatus.BAD_REQUEST
           );
         }
@@ -1831,7 +1831,7 @@ export class PostgresUserService implements IServicelocator {
             response,
             apiId,
             API_RESPONSES.BAD_REQUEST,
-            "USERNAME_REQUIRED",
+            API_RESPONSES.USERNAME_REQUIRED,
             HttpStatus.BAD_REQUEST
           );
         }
@@ -1841,7 +1841,7 @@ export class PostgresUserService implements IServicelocator {
           response,
           apiId,
           API_RESPONSES.BAD_REQUEST,
-          "INVALID_REASON",
+          API_RESPONSES.INVALID_REASON,
           HttpStatus.BAD_REQUEST
         );
       }
@@ -1851,7 +1851,7 @@ export class PostgresUserService implements IServicelocator {
           response,
           apiId,
           API_RESPONSES.BAD_REQUEST,
-          "INVALID_HASH_FORMAT",
+          API_RESPONSES.INVALID_HASH_FORMAT,
           HttpStatus.BAD_REQUEST
         );
       }
@@ -1920,18 +1920,15 @@ export class PostgresUserService implements IServicelocator {
       );
       // Check for errors in the response
       if (mailSend?.result?.sms?.errors && mailSend.result.sms.errors.length > 0) {
-        // Handle the array of errors
         const errorMessages = mailSend.result.sms.errors.map((error: { error: string; }) => error.error);
         const combinedErrorMessage = errorMessages.join(", "); // Combine all error messages into one string
-
-        // Throw custom error with combined error message
-        throw new Error(`SMS Notification failed :${combinedErrorMessage}`);
+        throw new Error(`${API_RESPONSES.SMS_ERROR} :${combinedErrorMessage}`);
       }
       return mailSend;
     }
     catch (error) {
-      LoggerUtil.error("SMS notification error", error.message);
-      throw new Error(`Failed to send SMS notification: ${error.message}`);
+      LoggerUtil.error(API_RESPONSES.SMS_ERROR, error.message);
+      throw new Error(`${API_RESPONSES.SMS_NOTIFICATION_ERROR}:  ${error.message}`);
     }
   }
 
