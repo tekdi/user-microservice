@@ -20,10 +20,9 @@ export class TenantUpdateDto {
         description: "Domain Name",
         default: "",
     })
-    @IsString()
     @IsOptional()
     @Expose()
-    domain: string;
+    domain?: string;
 
     //params
     @ApiPropertyOptional({
@@ -32,7 +31,7 @@ export class TenantUpdateDto {
         default: "",
     })
     @Expose()
-    params: object;
+    params?: object;
 
     //file path
     @ApiPropertyOptional({
@@ -72,6 +71,12 @@ export class TenantUpdateDto {
     @IsString()
     @IsOptional()
     updatedBy: string;
+
+    @ApiPropertyOptional({ type: String })
+    @IsString()
+    @IsOptional()
+    @Expose()
+    woner?: string;
 
     constructor(obj?: Partial<TenantUpdateDto>) {
         if (obj) {

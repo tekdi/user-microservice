@@ -1,6 +1,6 @@
 import { Expose, Type } from "class-transformer";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { ArrayMinSize, ArrayNotEmpty, IsArray, IsNotEmpty, IsString } from "class-validator";
+import { ArrayMinSize, ArrayNotEmpty, IsArray, IsNotEmpty, IsOptional, IsString } from "class-validator";
 
 export class TenantCreateDto {
 
@@ -36,9 +36,8 @@ export class TenantCreateDto {
         description: "Domain Name",
         default: "",
     })
-    @IsString()
     @Expose()
-    domain: string;
+    domain?: string;
 
     //params
     @ApiPropertyOptional({
@@ -55,6 +54,18 @@ export class TenantCreateDto {
     })
     @Expose()
     programImages: string[];
+
+    @ApiPropertyOptional({ type: String })
+    @IsString()
+    @IsOptional()
+    @Expose()
+    description?: string;
+
+    @ApiPropertyOptional({ type: String })
+    @IsString()
+    @IsOptional()
+    @Expose()
+    woner?: string;
 
     constructor(obj?: Partial<TenantCreateDto>) {
         if (obj) {
