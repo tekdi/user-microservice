@@ -38,6 +38,9 @@ import { TokenExpiredError, JsonWebTokenError } from "jsonwebtoken";
 import { CohortAcademicYearService } from "./cohortAcademicYear-adapter";
 import { PostgresAcademicYearService } from "./academicyears-adapter";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
+import { AuthUtils } from "@utils/auth-util";
+import { OtpSendDTO } from "src/user/dto/otpSend.dto";
+import { OtpVerifyDTO } from "src/user/dto/otpVerify.dto";
 
 @Injectable()
 export class PostgresUserService implements IServicelocator {
@@ -45,6 +48,10 @@ export class PostgresUserService implements IServicelocator {
   jwt_password_reset_expires_In: any;
   jwt_secret: any;
   reset_frontEnd_url: any;
+  //SMS notification
+  private readonly otpExpiry: number;
+  private readonly otpDigits: number;
+  private readonly smsKey: string;
 
   constructor(
     // private axiosInstance: AxiosInstance,
@@ -70,7 +77,8 @@ export class PostgresUserService implements IServicelocator {
     private readonly jwtUtil: JwtUtil,
     private configService: ConfigService,
     private postgresAcademicYearService: PostgresAcademicYearService,
-    private cohortAcademicYearService: CohortAcademicYearService
+    private cohortAcademicYearService: CohortAcademicYearService,
+    private readonly authUtils: AuthUtils
   ) {
     this.jwt_secret = this.configService.get<string>("RBAC_JWT_SECRET");
     this.jwt_password_reset_expires_In = this.configService.get<string>(
@@ -78,6 +86,9 @@ export class PostgresUserService implements IServicelocator {
     );
     this.reset_frontEnd_url =
       this.configService.get<string>("RESET_FRONTEND_URL");
+    this.otpExpiry = this.configService.get<number>('OTP_EXPIRY') || 10; // default: 10 minutes
+    this.otpDigits = this.configService.get<number>('OTP_DIGITS') || 6;
+    this.smsKey = this.configService.get<string>('SMS_KEY');
   }
 
   public async sendPasswordResetLink(
@@ -1706,4 +1717,371 @@ export class PostgresUserService implements IServicelocator {
       );
     }
   }
+  private formatMobileNumber(mobile: string): string {
+    return `+91${mobile}`;
+  }
+
+  //Generate Has code as per username or mobile Number
+  private generateOtpHash(mobileOrUsername: string, otp: string, reason: string) {
+    const ttl = this.otpExpiry * 60 * 1000; // Expiration in milliseconds
+    const expires = Date.now() + ttl;
+    const expiresInMinutes = ttl / (60 * 1000);
+    const data = `${mobileOrUsername}.${otp}.${reason}.${expires}`;
+    const hash = this.authUtils.calculateHash(data, this.smsKey); // Create hash
+    return { hash, expires, expiresInMinutes };
+  }
+
+  // send SignUP OTP
+  async sendOtp(body: OtpSendDTO, response: Response) {
+    const apiId = APIID.SEND_OTP;
+    try {
+      const { mobile, reason } = body;
+      if (!mobile || !/^\d{10}$/.test(mobile)) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          API_RESPONSES.MOBILE_VALID,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+      // Step 1: Prepare data for OTP generation and send on Mobile
+      const { notificationPayload, hash, expires } = await this.sendOTPOnMobile(mobile, reason);
+      // Step 2: Send success response
+      const result = {
+        data: {
+          message: `OTP sent to ${mobile}`,
+          hash: `${hash}.${expires}`,
+          sendStatus: notificationPayload.result?.sms?.data[0]
+          // sid: message.sid, // Twilio Message SID
+        }
+      };
+      return await APIResponse.success(
+        response,
+        apiId,
+        result,
+        HttpStatus.OK,
+        API_RESPONSES.OTP_SEND_SUCCESSFULLY
+      );
+    }
+    catch (e) {
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${e.message}`,
+        apiId
+      );
+      return APIResponse.error(
+        response,
+        apiId,
+        API_RESPONSES.SERVER_ERROR,
+        `Error : ${e.message}`,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  async sendOTPOnMobile(mobile: string, reason: string) {
+    try {
+      // Step 1: Format mobile number and generate OTP
+      const mobileWithCode = this.formatMobileNumber(mobile);
+      const otp = this.authUtils.generateOtp(this.otpDigits).toString();
+      const { hash, expires, expiresInMinutes } = this.generateOtpHash(mobileWithCode, otp, reason);
+      const replacements = {
+        "{OTP}": otp,
+        "{otpExpiry}": expiresInMinutes
+      };
+      // Step 2:send SMS notification
+      const notificationPayload = await this.smsNotification("OTP", "SEND_OTP", replacements, [mobile]);
+      return { notificationPayload, hash, expires, expiresInMinutes };
+    }
+    catch (error) {
+      throw new Error(`Failed to send OTP: ${error.message}`);
+    }
+  }
+  //verify OTP based on reason [signup , forgot]
+  async verifyOtp(body: OtpVerifyDTO, response: Response) {
+    const apiId = APIID.VERIFY_OTP;
+    try {
+      const { mobile, otp, hash, reason, username } = body;
+      if (!otp || !hash || !reason) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          API_RESPONSES.OTP_VALIDED_REQUIRED_KEY,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+      // Determine the value to use for verification based on the reason
+      let identifier: string;
+      if (reason === 'signup') {
+        if (!mobile) {
+          return APIResponse.error(
+            response,
+            apiId,
+            API_RESPONSES.BAD_REQUEST,
+            "MOBILE_REQUIRED",
+            HttpStatus.BAD_REQUEST
+          );
+        }
+        identifier = this.formatMobileNumber(mobile); // Assuming this formats the mobile number
+      } else if (reason === 'forgot') {
+        if (!username) {
+          return APIResponse.error(
+            response,
+            apiId,
+            API_RESPONSES.BAD_REQUEST,
+            "USERNAME_REQUIRED",
+            HttpStatus.BAD_REQUEST
+          );
+        }
+        identifier = username;
+      } else {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          "INVALID_REASON",
+          HttpStatus.BAD_REQUEST
+        );
+      }
+      const [hashValue, expires] = hash.split('.');
+      if (!hashValue || !expires || isNaN(parseInt(expires))) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          "INVALID_HASH_FORMAT",
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      if (Date.now() > parseInt(expires)) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.OTP_EXPIRED,
+          API_RESPONSES.OTP_EXPIRED,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+      const data = `${identifier}.${otp}.${reason}.${expires}`;
+      const calculatedHash = this.authUtils.calculateHash(data, this.smsKey); // Create hash
+
+      if (calculatedHash === hashValue) {
+        return await APIResponse.success(
+          response,
+          apiId,
+          { success: true },
+          HttpStatus.OK,
+          API_RESPONSES.OTP_VALID
+        );
+      } else {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.OTP_INVALID,
+          API_RESPONSES.OTP_INVALID,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+    } catch (e) {
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error during OTP verification: ${e.message}`,
+        apiId
+      );
+      return APIResponse.error(
+        response,
+        apiId,
+        API_RESPONSES.SERVER_ERROR,
+        `Error : ${e?.message}`,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  // send Mobile Notification
+  async smsNotification(context: string, key: string, replacements: object, receipients: string[]) {
+    try {
+      //sms notification Body
+      const notificationPayload = {
+        isQueue: false,
+        context: context,
+        key: key,
+        replacements: replacements,
+        sms: {
+          receipients: receipients.map((recipient) => recipient.toString()),
+        },
+      };
+      // send Axios request
+      const mailSend = await this.notificationRequest.sendNotification(
+        notificationPayload
+      );
+      // Check for errors in the response
+      if (mailSend?.result?.sms?.errors && mailSend.result.sms.errors.length > 0) {
+        // Handle the array of errors
+        const errorMessages = mailSend.result.sms.errors.map((error: { error: string; }) => error.error);
+        const combinedErrorMessage = errorMessages.join(", "); // Combine all error messages into one string
+
+        // Throw custom error with combined error message
+        throw new Error(`SMS Notification failed :${combinedErrorMessage}`);
+      }
+      return mailSend;
+    }
+    catch (error) {
+      LoggerUtil.error("SMS notification error", error.message);
+      throw new Error(`Failed to send SMS notification: ${error.message}`);
+    }
+  }
+
+  // async sendOtp(body: OtpSendDTO, response: Response) {
+  //   const apiId = APIID.SEND_OTP;
+  //   try {
+  //     const { mobile } = body;
+  //     if (!mobile || !/^\d{10}$/.test(mobile)) {
+  //       return APIResponse.error(
+  //         response,
+  //         apiId,
+  //         API_RESPONSES.BAD_REQUEST,
+  //         API_RESPONSES.MOBILE_VALID,
+  //         HttpStatus.BAD_REQUEST
+  //       );
+  //     }
+  //     // Step 1: Prepare data for OTP generation and send on Mobile
+  //     const { notificationResult, hash, expires } = await this.sendOTPOnMobile(mobile);
+  //     if (notificationResult?.result?.sms?.errors.length > 0) {
+  //       LoggerUtil.error(
+  //         `${API_RESPONSES.BAD_REQUEST}`,
+  //         API_RESPONSES.NOTIFICATION_FAIL_DURING_OTP_SEND,
+  //         apiId
+  //       );
+  //       return APIResponse.error(
+  //         response,
+  //         apiId,
+  //         notificationResult?.result?.sms?.errors,
+  //         API_RESPONSES.NOTIFICATION_FAIL_DURING_OTP_SEND,
+  //         HttpStatus.BAD_REQUEST
+  //       );
+  //     }
+  //     // Step 2: Send success response
+  //     const result = {
+  //       data: {
+  //         message: `OTP sent to ${mobile}`,
+  //         hash: `${hash}.${expires}`,
+  //         // sid: message.sid, // Twilio Message SID
+  //       }
+  //     }
+  //     return await APIResponse.success(
+  //       response,
+  //       apiId,
+  //       result,
+  //       HttpStatus.OK,
+  //       API_RESPONSES.OTP_SEND_SUCCESSFULLY
+  //     );
+  //   }
+  //   catch (e) {
+  //     LoggerUtil.error(
+  //       `${API_RESPONSES.SERVER_ERROR}`,
+  //       `Error: ${e.message}`,
+  //       apiId
+  //     );
+  //     return APIResponse.error(
+  //       response,
+  //       apiId,
+  //       API_RESPONSES.SERVER_ERROR,
+  //       `Error : ${e.message}`,
+  //       HttpStatus.INTERNAL_SERVER_ERROR
+  //     );
+  //   }
+  // }
+  // async sendOTPOnMobile(mobile) {
+  //   try {
+  //     // Step 1: Format mobile number and generate OTP
+  //     const mobileWithCode = this.formatMobileNumber(mobile);
+  //     const otp = this.authUtils.generateOtp(this.otpDigits).toString();
+  //     const { hash, expires } = this.generateOtpHash(mobileWithCode, otp);
+
+  //     // Step 2: Create notification payload and send OTP via SMS
+  //     const notificationPayload = this.createNotificationPayload(mobile, otp);
+  //     const notificationResult = await this.notificationRequest.sendNotification(notificationPayload);
+  //     return { notificationResult, hash, expires }
+  //   }
+  //   catch (error) {
+  //     throw new Error(`Failed to send OTP: ${error.message}`);
+  //   }
+  // }
+
+  // async verifyOtp(body: OtpVerifyDTO, response: Response) {
+  //   const apiId = APIID.VERIFY_OTP;
+  //   try {
+  //     const { mobile, otp, hash } = body;
+  //     if (!mobile || !otp || !hash) {
+  //       return APIResponse.error(
+  //         response,
+  //         apiId,
+  //         API_RESPONSES.BAD_REQUEST,
+  //         API_RESPONSES.OTP_VALIDED_REQUIRED_KEY,
+  //         HttpStatus.BAD_REQUEST
+  //       );
+  //     }
+  //     const [hashValue, expires] = hash.split('.');
+  //     if (!hashValue || !expires || isNaN(parseInt(expires))) {
+  //       return APIResponse.error(
+  //         response,
+  //         apiId,
+  //         API_RESPONSES.BAD_REQUEST,
+  //         API_RESPONSES.INVALID_HASH_FORMATE,
+  //         HttpStatus.BAD_REQUEST
+  //       );
+  //     }
+  //     const mobileWithCode = this.formatMobileNumber(mobile);
+
+  //     if (Date.now() > parseInt(expires)) {
+  //       return APIResponse.error(
+  //         response,
+  //         apiId,
+  //         API_RESPONSES.OTP_EXPIRED,
+  //         API_RESPONSES.OTP_EXPIRED,
+  //         HttpStatus.BAD_REQUEST
+  //       );
+  //     }
+
+  //     const data = `${mobileWithCode}.${otp}.${expires}`;
+  //     const calculatedHash = this.authUtils.calculateHash(data, this.smsKey); // Create hash
+  //     if (calculatedHash === hashValue) {
+  //       return await APIResponse.success(
+  //         response,
+  //         apiId,
+  //         {
+  //           success: true,
+  //         },
+  //         HttpStatus.OK,
+  //         API_RESPONSES.OTP_VALID
+  //       );
+  //     } else {
+  //       return APIResponse.error(
+  //         response,
+  //         apiId,
+  //         API_RESPONSES.OTP_INVALID,
+  //         API_RESPONSES.OTP_INVALID,
+  //         HttpStatus.BAD_REQUEST
+  //       );
+  //     }
+  //   }
+  //   catch (e) {
+  //     LoggerUtil.error(
+  //       `${API_RESPONSES.SERVER_ERROR}`,
+  //       `Error during OTP send: ${e.message}`,
+  //       apiId
+  //     );
+  //     return APIResponse.error(
+  //       response,
+  //       apiId,
+  //       API_RESPONSES.SERVER_ERROR,
+  //       `Error : ${e?.message}`,
+  //       HttpStatus.INTERNAL_SERVER_ERROR
+  //     );
+  //   }
+  // }
 }
