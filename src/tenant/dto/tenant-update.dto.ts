@@ -53,14 +53,14 @@ export class TenantUpdateDto {
     @ApiPropertyOptional({
         type: String,
         description: "Status of the tenant",
-        enum: ['active', 'inactive', 'archive'],
+        enum: ['active', 'inactive', 'archived'],
         default: 'active',
     })
     @IsString()
     @IsOptional()
-    @IsIn(['active', 'inactive', 'archive'])
+    @IsIn(['active', 'inactive', 'archived'])
     @Expose()
-    status: 'active' | 'inactive' | 'archive';
+    status: 'active' | 'inactive' | 'archived';
 
     @Expose()
     @IsString()

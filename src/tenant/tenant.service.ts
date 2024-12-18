@@ -166,6 +166,7 @@ export class TenantService {
     public async updateTenants(tenantId: string, tenantUpdateDto: TenantUpdateDto, response: Response) {
         let apiId = APIID.TENANT_UPDATE;
         try {
+            let checkExistingTenantName;
             let checkExistingTenant = await this.tenantRepository.findOne({
                 where: {tenantId}
             })
@@ -180,12 +181,14 @@ export class TenantService {
                 );
             }
 
-            let checkExistingTenantName = await this.tenantRepository.findOne({
-                where: {
-                    "name": tenantUpdateDto?.name
-                }
-            })
-
+            if(tenantUpdateDto.name){
+                checkExistingTenantName = await this.tenantRepository.findOne({
+                    where: {
+                        "name": tenantUpdateDto.name
+                    }
+                })
+            }
+            
             if (checkExistingTenantName) {
                 return APIResponse.error(
                     response,

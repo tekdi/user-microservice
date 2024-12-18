@@ -36,9 +36,9 @@ export class Tenant {
     @Column({
         type: 'text',
         default: 'active',
-        enum: ['active', 'inactive', 'archive'],
+        enum: ['active', 'inactive', 'archived'],
     })
-    status: 'active' | 'inactive' | 'archive'; // Status column with enum values
+    status: 'active' | 'inactive' | 'archived'; // Status column with enum values
 
     @Column("int4", { nullable: false })
     @Min(0) 
