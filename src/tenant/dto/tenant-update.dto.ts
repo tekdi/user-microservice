@@ -76,7 +76,7 @@ export class TenantUpdateDto {
     @IsString()
     @IsOptional()
     @Expose()
-    woner?: string;
+    programHead?: string;
 
     constructor(obj?: Partial<TenantUpdateDto>) {
         if (obj) {

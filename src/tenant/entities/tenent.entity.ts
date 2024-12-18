@@ -46,7 +46,7 @@ export class Tenant {
     ordering: number = 0;
 
     @Column({ type: 'text', nullable: true })
-    woner: string | null; // UUID of the user who created the tenant
+    programHead: string | null; // UUID of the user who created the tenant
 
     @Column({ type: 'uuid', nullable: true })
     createdBy: string | null; // UUID of the user who created the tenant

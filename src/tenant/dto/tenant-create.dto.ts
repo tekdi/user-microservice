@@ -55,17 +55,17 @@ export class TenantCreateDto {
     @Expose()
     programImages: string[];
 
-    @ApiPropertyOptional({ type: String })
+    @ApiProperty({ type: String })
     @IsString()
-    @IsOptional()
+    @IsNotEmpty()
     @Expose()
     description?: string;
 
-    @ApiPropertyOptional({ type: String })
+    @ApiProperty({ type: String })
     @IsString()
-    @IsOptional()
+    @IsNotEmpty()
     @Expose()
-    woner?: string;
+    programHead?: string
 
     constructor(obj?: Partial<TenantCreateDto>) {
         if (obj) {

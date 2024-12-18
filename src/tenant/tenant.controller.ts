@@ -1,11 +1,11 @@
-import { BadRequestException, Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query, Req, Res, SerializeOptions, UploadedFile, UploadedFiles, UseInterceptors, UsePipes, ValidationPipe } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query, Req, Res, SerializeOptions, UploadedFiles, UseInterceptors, UsePipes, ValidationPipe } from '@nestjs/common';
 import { TenantService } from './tenant.service';
 import { ApiCreatedResponse, ApiForbiddenResponse, ApiQuery } from '@nestjs/swagger';
 import { TenantCreateDto } from './dto/tenant-create.dto';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { FilesUploadService } from 'src/common/services/upload-file';
 import { TenantUpdateDto } from './dto/tenant-update.dto';
-import { UUID } from 'typeorm/driver/mongodb/bson.typings';
+import { Response } from "express";
 @Controller('tenant')
 export class TenantController {
     constructor(
@@ -32,11 +32,8 @@ export class TenantController {
     @ApiCreatedResponse({ description: "Tenant Created Successfully" })
     @ApiForbiddenResponse({ description: "Forbidden" })
     @UseInterceptors(FilesInterceptor('programImages', 10))
-    // @UsePipes(ValidationPipe)
+    @UsePipes(ValidationPipe)
     @ApiQuery({ name: "userId", required: false })
-    @SerializeOptions({
-        strategy: "excludeAll",
-    })
     public async createTenants(
         @Req() request: Request,
         @Res() response: Response,
@@ -52,7 +49,6 @@ export class TenantController {
                 const uploadedFile = await this.filesUploadService.saveFile(file);
                 uploadedFiles.push(uploadedFile);
             }
-
             // Assuming tenantCreateDto needs an array of file paths
             tenantCreateDto.programImages = uploadedFiles.map(file => file.filePath); // Adjust field as needed
         }
@@ -67,16 +63,12 @@ export class TenantController {
     @UseInterceptors(FilesInterceptor('programImages', 10))
     @UsePipes(ValidationPipe)
     @ApiQuery({ name: "userId", required: false })
-    @SerializeOptions({
-        strategy: "excludeAll",
-    })
     public async updateTenants(
-        @Req() request: Request,
         @Res() response: Response,
         @Param("id", ParseUUIDPipe) id: string,
         @Body() tenantUpdateDto: TenantUpdateDto,
         @UploadedFiles() files: Express.Multer.File[],
-        @Query("userId") userId: string,
+        @Query("userId") userId: string | null = null,
     ) {
         const uploadedFiles = [];
 

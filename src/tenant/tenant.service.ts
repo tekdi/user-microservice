@@ -7,6 +7,7 @@ import { API_RESPONSES } from '@utils/response.messages';
 import { APIID } from '@utils/api-id.config';
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
 import { TenantUpdateDto } from './dto/tenant-update.dto';
+import { Response } from "express";
 
 @Injectable()
 export class TenantService {
@@ -162,7 +163,7 @@ export class TenantService {
         }
     }
 
-    public async updateTenants(tenantId: string, tenantUpdateDto: TenantUpdateDto, response: any) {
+    public async updateTenants(tenantId: string, tenantUpdateDto: TenantUpdateDto, response: Response) {
         let apiId = APIID.TENANT_UPDATE;
         try {
             let checkExistingTenant = await this.tenantRepository.findOne({
