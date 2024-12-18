@@ -1,0 +1,76 @@
+{
+    "options": [
+        {
+            "name": "baner",
+            "label": "Baner",
+            "value": "BA",
+            "controllingfieldfk": "PN"
+        },
+        {
+            "name": "hinjewadi",
+            "label": "Hinjewadi",
+            "value": "HJ",
+            "controllingfieldfk": "PN"
+        },
+        {
+            "name": "wakad",
+            "label": "Wakad",
+            "value": "WK",
+            "controllingfieldfk": "PN"
+        },
+        {
+            "name": "kothrud",
+            "label": "Kothrud",
+            "value": "KR",
+            "controllingfieldfk": "PN"
+        },
+        {
+            "name": "karve_nagar",
+            "label": "Karve Nagar",
+            "value": "KN",
+            "controllingfieldfk": "PN"
+        },
+        {
+            "name": "koramangala",
+            "label": "Koramangala",
+            "value": "KMG",
+            "controllingfieldfk": "BG"
+        },
+        {
+            "name": "indiranagar",
+            "label": "Indiranagar",
+            "value": "IND",
+            "controllingfieldfk": "BG"
+        },
+        {
+            "name": "whitefield",
+            "label": "Whitefield",
+            "value": "WF",
+            "controllingfieldfk": "BG"
+        },
+        {
+            "name": "electronic_city",
+            "label": "Electronic City",
+            "value": "ELC",
+            "controllingfieldfk": "BG"
+        },
+        {
+            "name": "marathahalli",
+            "label": "Marathahalli",
+            "value": "MRH",
+            "controllingfieldfk": "BG"
+        },
+        {
+            "name": "powai",
+            "label": "Powai",
+            "value": "PWI",
+            "controllingfieldfk": "MUM"
+        },
+        {
+            "name": "vile_parle",
+            "label": "Vile Parle",
+            "value": "VPR",
+            "controllingfieldfk": "MUM"
+        }
+    ]
+}

@@ -7,6 +7,7 @@ env:
   AWS_REGION: ${{ secrets.AWS_REGION_NAME }}
 jobs:
   build:
+
     name: Deployment
     runs-on: ubuntu-latest
     steps:
@@ -15,6 +16,8 @@ jobs:
       uses: prompt/actions-commit-hash@v2
     - name: Check out code
       uses: actions/checkout@v2
+      with:
+        fetch-depth: 0 
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v1
       with:
@@ -28,10 +31,18 @@ jobs:
     - name: Copy .env file
       env:
        ENV_FILE_CONTENT: ${{ secrets.ENV_FILE_CONTENT }}
-      run: printf "%s" "$ENV_FILE_CONTENT" > manifest/configmap.yaml
-    - name: Show PWD and list content
+      run: printf "%s" "$ENV_FILE_CONTENT" > manifest/configmap.yaml 
+      #echo "$ENV_FILE_CONTENT" > manifest/configmap.yaml
+    - name: Show PWD and list content and Latest 3 commits 
       run: |
-           echo "Current Working Directory: pwd"
+           echo "Fetching all branches to ensure complete history"
+           git fetch --all
+           echo "Checking out the current branch"
+           git checkout ${{ github.ref_name }}
+           echo "Git Branch cloned"
+           git branch
+           echo "Current 3 merge commits are:"
+           git log --merges -n 3
            pwd
            ls -ltra
     - name: Configure AWS credentials

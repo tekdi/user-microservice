@@ -1,0 +1,34 @@
+{
+    "options": [
+        {
+            "name": "bangalore",
+            "label": "Bangalore",
+            "value": "BG",
+            "controllingfieldfk": "KA"
+        },
+        {
+            "name": "coimbatore",
+            "label": "Coimbatore",
+            "value": "CBT",
+            "controllingfieldfk": "TN"
+        },
+        {
+            "name": "chennai",
+            "label": "Chennai",
+            "value": "CHN",
+            "controllingfieldfk": "TN"
+        },
+        {
+            "name": "mumbai",
+            "label": "Mumbai",
+            "value": "MUM",
+            "controllingfieldfk": "MH"
+        },
+        {
+            "name": "pune",
+            "label": "Pune",
+            "value": "PN",
+            "controllingfieldfk": "MH"
+        }
+    ]
+}

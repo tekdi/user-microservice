@@ -1,7 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { IsNumberString } from "class-validator";
 
-
 export class RoleSearchDto {
   @ApiProperty({
     type: String,

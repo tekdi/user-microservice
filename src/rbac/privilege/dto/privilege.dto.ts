@@ -1,6 +1,12 @@
 import { Expose, Type } from "class-transformer";
 import { ApiProperty } from "@nestjs/swagger";
-import {IsNotEmpty,IsString, IsUUID, Matches, ValidateNested} from "class-validator"
+import {
+  IsNotEmpty,
+  IsString,
+  IsUUID,
+  Matches,
+  ValidateNested,
+} from "class-validator";
 
 export class PrivilegeDto {
   @Expose()
@@ -14,7 +20,6 @@ export class PrivilegeDto {
   @Expose()
   @IsNotEmpty()
   title: string;
-
 
   @ApiProperty({
     type: String,
@@ -42,15 +47,12 @@ export class PrivilegeDto {
   }
 }
 
-
-
 export class CreatePrivilegesDto {
-  @ApiProperty({type:[PrivilegeDto]})
+  @ApiProperty({ type: [PrivilegeDto] })
   @ValidateNested({ each: true })
   @Type(() => PrivilegeDto)
   privileges: PrivilegeDto[];
 }
-
 
 export class PrivilegeResponseDto {
   @Expose()
@@ -66,6 +68,5 @@ export class PrivilegeResponseDto {
     this.privilegeId = privilegeDto.privilegeId;
     this.title = privilegeDto.title;
     this.code = privilegeDto.code;
-
   }
 }

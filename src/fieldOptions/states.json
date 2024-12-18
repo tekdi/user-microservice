@@ -1,0 +1,59 @@
+{
+    "options": [
+        {
+            "label": "Andhra Pradesh",
+            "name": "andhra_pradesh",
+            "value": "AP"
+        },
+        {
+            "label": "Arunachal Pradesh",
+            "name": "arunachal_pradesh",
+            "value": "AR"
+        },
+        {
+            "label": "Assam",
+            "name": "assam",
+            "value": "AS"
+        },
+        {
+            "label": "Bihar",
+            "name": "bihar",
+            "value": "BR"
+        },
+        {
+            "label": "Chhattisgarh",
+            "name": "chhattisgarh",
+            "value": "CG"
+        },
+        {
+            "label": "Goa",
+            "name": "goa",
+            "value": "GA"
+        },
+        {
+            "label": "Gujarat",
+            "name": "gujarat",
+            "value": "GJ"
+        },
+        {
+            "label": "Himachal Pradesh",
+            "name": "himachal_pradesh",
+            "value": "HP"
+        },
+        {
+            "label": "Haryana",
+            "name": "haryana",
+            "value": "HR"
+        },
+        {
+            "label": "Jharkhand",
+            "name": "jharkhand",
+            "value": "JH"
+        },
+        {
+            "label": "Maharashtra",
+            "name": "maharashtra",
+            "value": "MH"
+        }
+    ]
+}

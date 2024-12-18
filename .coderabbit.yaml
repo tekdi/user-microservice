@@ -28,6 +28,7 @@ reviews:
     drafts: false
     base_branches:
     - "master"
+    - "main"
     - "dev"
     - "feat/*"
     - "feat-*"

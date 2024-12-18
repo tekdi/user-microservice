@@ -35,7 +35,6 @@ export class CreateAssignRoleDto {
   constructor(obj: any) {
     Object.assign(this, obj);
   }
-  
 }
 
 export class ResponseAssignRoleDto {
@@ -51,11 +50,13 @@ export class ResponseAssignRoleDto {
   @Expose()
   message: string;
 
-  constructor(data: { userId: string; roleId: string; tenantId: string }, message: string) {
+  constructor(
+    data: { userId: string; roleId: string; tenantId: string },
+    message: string
+  ) {
     this.userId = data.userId;
-    this.roleId = data.roleId; 
+    this.roleId = data.roleId;
     this.tenantId = data.tenantId;
     this.message = message;
   }
 }
-
