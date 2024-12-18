@@ -6,6 +6,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { API_RESPONSES } from '@utils/response.messages';
 import { APIID } from '@utils/api-id.config';
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
+import { TenantUpdateDto } from './dto/tenant-update.dto';
+import { Response } from "express";
 
 @Injectable()
 export class TenantService {
@@ -161,16 +163,30 @@ export class TenantService {
         }
     }
 
-    public async updateTenants(request, tenantId, tenantUpdateDto, response) {
+    public async updateTenants(tenantId: string, tenantUpdateDto: TenantUpdateDto, response: Response) {
         let apiId = APIID.TENANT_UPDATE;
         try {
-            let checkExitTenants = await this.tenantRepository.find({
-                where: {
-                    "tenantId": tenantId
-                }
+            let checkExistingTenant = await this.tenantRepository.findOne({
+                where: {tenantId}
+            })
+            
+            if (!checkExistingTenant) {
+                return APIResponse.error(
+                    response,
+                    apiId,
+                    API_RESPONSES.NOT_FOUND,
+                    API_RESPONSES.TENANT_NOTFOUND,
+                    HttpStatus.NOT_FOUND
+                );
             }
-            )
-            if (checkExitTenants.length === 0) {
+
+            let checkExistingTenantName = await this.tenantRepository.findOne({
+                where: {
+                    "name": tenantUpdateDto?.name
+                }
+            })
+
+            if (checkExistingTenantName) {
                 return APIResponse.error(
                     response,
                     apiId,
@@ -203,7 +219,5 @@ export class TenantService {
                 HttpStatus.INTERNAL_SERVER_ERROR
             );
         }
-
     }
-
 }
