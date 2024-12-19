@@ -154,4 +154,20 @@ export const API_RESPONSES = {
   TENANT_CREATE: "Tenant created successfully",
   TENANT_UPDATE: "Tenant updated successfully",
   TENANT_DELETE: "Tenant deleted successfully",
+
+  //OTP
+  NOTIFICATION_FAIL_DURING_OTP_SEND: "Send SMS notification failed duing OTP send",
+  OTP_SEND_SUCCESSFULLY: "OTP sent successfully",
+  OTP_EXPIRED: 'OTP has expired',
+  OTP_INVALID: "OTP invalid",
+  OTP_VALID: 'OTP validation Sucessfully',
+  MOBILE_VALID: 'Invalid mobile number. Must be 10 digits.',
+  OTP_VALIDED_REQUIRED_KEY: 'Missing required fields',
+  INVALID_HASH_FORMATE: 'Invalid hash format',
+  SMS_ERROR: 'SMS notification failed',
+  SMS_NOTIFICATION_ERROR: 'Failed to send SMS notification:',
+  USERNAME_REQUIRED: 'Username Required',
+  INVALID_REASON: 'Invalid Reason',
+  MOBILE_REQUIRED: 'MObile Required',
+  INVALID_HASH_FORMAT: 'Invalid hash format'
 };
