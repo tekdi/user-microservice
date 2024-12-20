@@ -180,21 +180,24 @@ export class TenantService {
                 );
             }
 
-            let checkExistingTenantName = await this.tenantRepository.findOne({
-                where: {
-                    "name": tenantUpdateDto?.name
+            if(tenantUpdateDto.name){
+                const checkExistingTenantName = await this.tenantRepository.findOne({
+                    where: {
+                        "name": tenantUpdateDto.name
+                    }
+                })
+                if (checkExistingTenantName) {
+                    return APIResponse.error(
+                        response,
+                        apiId,
+                        API_RESPONSES.CONFLICT,
+                        API_RESPONSES.TENANT_EXISTS,
+                        HttpStatus.CONFLICT
+                    );
                 }
-            })
-
-            if (checkExistingTenantName) {
-                return APIResponse.error(
-                    response,
-                    apiId,
-                    API_RESPONSES.CONFLICT,
-                    API_RESPONSES.TENANT_EXISTS,
-                    HttpStatus.CONFLICT
-                );
             }
+            
+
 
             let result = await this.tenantRepository.update(tenantId, tenantUpdateDto);
             return APIResponse.success(
