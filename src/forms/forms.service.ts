@@ -30,8 +30,11 @@ export class FormsService {
           HttpStatus.BAD_REQUEST
         );
       }
+      
+      
       const { context, contextType, tenantId } = requiredData;
       const validationResult = await this.validateFormInput(requiredData);
+      
       if (validationResult.error) {
         return APIResponse.error(
           response,
@@ -160,6 +163,7 @@ export class FormsService {
 
     if (context) {
       const validContextTypes = await this.getValidContextTypes(context);
+      
       if (validContextTypes.length === 0) {
         return { error: `Invalid context: ${context}` };
       }
@@ -175,7 +179,8 @@ export class FormsService {
     return { error: null };
   }
 
-  private async getValidContextTypes(context: string): Promise<string[]> {
+
+  private async getValidContextTypes(context: string): Promise<string[]> {    
     switch (context.toLowerCase()) {
       case "users":
         return await this.getUserContextTypesFromDB();
@@ -183,6 +188,8 @@ export class FormsService {
         return Object.values(CohortContextType);
       case "cohortmember":
         return ["COHORTMEMBER"];
+      case "tenant":
+        return ["TENANT"];
       default:
         return [];
     }

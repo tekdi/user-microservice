@@ -1,10 +1,11 @@
-import { Body, Controller, Delete, Get, Patch, Post, Query, Req, Res, SerializeOptions, UploadedFile, UploadedFiles, UseInterceptors, UsePipes, ValidationPipe } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query, Req, Res, SerializeOptions, UploadedFiles, UseInterceptors, UsePipes, ValidationPipe } from '@nestjs/common';
 import { TenantService } from './tenant.service';
 import { ApiCreatedResponse, ApiForbiddenResponse, ApiQuery } from '@nestjs/swagger';
 import { TenantCreateDto } from './dto/tenant-create.dto';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { FilesUploadService } from 'src/common/services/upload-file';
 import { TenantUpdateDto } from './dto/tenant-update.dto';
+import { Response } from "express";
 @Controller('tenant')
 export class TenantController {
     constructor(
@@ -33,9 +34,6 @@ export class TenantController {
     @UseInterceptors(FilesInterceptor('programImages', 10))
     @UsePipes(ValidationPipe)
     @ApiQuery({ name: "userId", required: false })
-    @SerializeOptions({
-        strategy: "excludeAll",
-    })
     public async createTenants(
         @Req() request: Request,
         @Res() response: Response,
@@ -51,7 +49,6 @@ export class TenantController {
                 const uploadedFile = await this.filesUploadService.saveFile(file);
                 uploadedFiles.push(uploadedFile);
             }
-
             // Assuming tenantCreateDto needs an array of file paths
             tenantCreateDto.programImages = uploadedFiles.map(file => file.filePath); // Adjust field as needed
         }
@@ -60,22 +57,18 @@ export class TenantController {
     }
 
     //Update a tenant
-    @Patch("/update")
+    @Patch("/update/:id")
     @ApiCreatedResponse({ description: "Tenant Data Fetch" })
     @ApiForbiddenResponse({ description: "Forbidden" })
     @UseInterceptors(FilesInterceptor('programImages', 10))
     @UsePipes(ValidationPipe)
     @ApiQuery({ name: "userId", required: false })
-    @SerializeOptions({
-        strategy: "excludeAll",
-    })
     public async updateTenants(
-        @Req() request: Request,
         @Res() response: Response,
-        @Query("id") id: string,
+        @Param("id", ParseUUIDPipe) id: string,
         @Body() tenantUpdateDto: TenantUpdateDto,
         @UploadedFiles() files: Express.Multer.File[],
-        @Query("userId") userId: string | null = null
+        @Query("userId") userId: string | null = null,
     ) {
         const uploadedFiles = [];
 
@@ -88,9 +81,9 @@ export class TenantController {
             // Assuming tenantCreateDto needs an array of file paths
             tenantUpdateDto.programImages = uploadedFiles.map(file => file.filePath); // Adjust field as needed
         }
-        const tenantId = id;
-        tenantUpdateDto.updatedBy = userId;
-        return await this.tenantService.updateTenants(request, tenantId, tenantUpdateDto, response);
+        const tenantId = id;        
+        tenantUpdateDto.updatedBy = userId || null;
+        return await this.tenantService.updateTenants(tenantId, tenantUpdateDto, response);
     }
 
 

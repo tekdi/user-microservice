@@ -20,10 +20,9 @@ export class TenantUpdateDto {
         description: "Domain Name",
         default: "",
     })
-    @IsString()
     @IsOptional()
     @Expose()
-    domain: string;
+    domain?: string;
 
     //params
     @ApiPropertyOptional({
@@ -32,7 +31,7 @@ export class TenantUpdateDto {
         default: "",
     })
     @Expose()
-    params: object;
+    params?: object;
 
     //file path
     @ApiPropertyOptional({
@@ -54,14 +53,14 @@ export class TenantUpdateDto {
     @ApiPropertyOptional({
         type: String,
         description: "Status of the tenant",
-        enum: ['active', 'inactive', 'archive'],
+        enum: ['active', 'inactive', 'archived'],
         default: 'active',
     })
     @IsString()
     @IsOptional()
-    @IsIn(['active', 'inactive', 'archive'])
+    @IsIn(['active', 'inactive', 'archived'])
     @Expose()
-    status: 'active' | 'inactive' | 'archive';
+    status: 'active' | 'inactive' | 'archived';
 
     @Expose()
     @IsString()
@@ -72,6 +71,12 @@ export class TenantUpdateDto {
     @IsString()
     @IsOptional()
     updatedBy: string;
+
+    @ApiPropertyOptional({ type: String })
+    @IsString()
+    @IsOptional()
+    @Expose()
+    programHead?: string;
 
     constructor(obj?: Partial<TenantUpdateDto>) {
         if (obj) {
