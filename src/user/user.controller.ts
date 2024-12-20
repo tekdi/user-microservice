@@ -50,6 +50,8 @@ import {
 import { isUUID } from "class-validator";
 import { API_RESPONSES } from "@utils/response.messages";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
+import { OtpSendDTO } from "./dto/otpSend.dto";
+import { OtpVerifyDTO } from "./dto/otpVerify.dto";
 export interface UserData {
   context: string;
   tenantId: string;
@@ -264,5 +266,21 @@ export class UserController {
     return await this.userAdapter
       .buildUserAdapter()
       .deleteUserById(userId, response);
+  }
+  @UseFilters(new AllExceptionsFilter(APIID.SEND_OTP))
+  @Post('send-otp')
+  @ApiBody({ type: OtpSendDTO })
+  @UsePipes(new ValidationPipe({ transform: true }))
+  @ApiOkResponse({ description: API_RESPONSES.OTP_SEND_SUCCESSFULLY })
+  async sendOtp(@Body() body: OtpSendDTO, @Res() response: Response) {
+    return await this.userAdapter.buildUserAdapter().sendOtp(body, response)
+  }
+  @UseFilters(new AllExceptionsFilter(APIID.VERIFY_OTP))
+  @Post('verify-otp')
+  @ApiBody({ type: OtpVerifyDTO })
+  @UsePipes(new ValidationPipe({ transform: true }))
+  @ApiOkResponse({ description: API_RESPONSES.OTP_VALID })
+  async verifyOtp(@Body() body: OtpVerifyDTO, @Res() response: Response) {
+    return this.userAdapter.buildUserAdapter().verifyOtp(body, response);
   }
 }
