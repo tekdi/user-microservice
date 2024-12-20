@@ -48,6 +48,18 @@ export class setFilters {
     description: "User Id",
   })
   userId: string;
+
+  @ApiPropertyOptional({
+    type: [String],
+    description: "email Ids",
+  })
+  email: string[];
+
+  @ApiPropertyOptional({
+    type: [String],
+    description: "status",
+  })
+  status: string[];
 }
 export class excludeFields {
   @ApiProperty({
