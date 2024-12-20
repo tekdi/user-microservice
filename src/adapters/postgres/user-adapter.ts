@@ -2050,16 +2050,15 @@ export class PostgresUserService implements IServicelocator {
         notificationPayload
       );
       if (mailSend?.result?.email?.errors && mailSend.result.email.errors.length > 0) {
-        // Handle the array of errors
         const errorMessages = mailSend.result.email.errors.map((error: { error: string; }) => error.error);
         const combinedErrorMessage = errorMessages.join(", "); // Combine all error messages into one string
-        // Throw custom error with combined error message
         throw new Error(`error :${combinedErrorMessage}`);
       }
       return mailSend;
     }
     catch (e) {
-      throw e;
+      LoggerUtil.error(API_RESPONSES.EMAIL_ERROR, e.message);
+      throw new Error(`${API_RESPONSES.EMAIL_NOTIFICATION_ERROR}:  ${e.message}`);
     }
   }
 

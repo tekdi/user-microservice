@@ -176,5 +176,7 @@ export const API_RESPONSES = {
   MOBILE_OTP_SEND_FAILED: 'Failed to send OTP to mobile',
   EMAIL_SENT_OTP: 'OTP sent successfully to email',
   EMAIL_OTP_SEND_FAILED: 'Failed to send OTP to email',
-  SEND_OTP: 'OTP sent successfully'
+  SEND_OTP: 'OTP sent successfully',
+  EMAIL_NOTIFICATION_ERROR: 'Failed to send Email notification:',
+  EMAIL_ERROR: 'Email notification failed'
 };
