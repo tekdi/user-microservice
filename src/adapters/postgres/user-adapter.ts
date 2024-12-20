@@ -41,6 +41,7 @@ import { LoggerUtil } from "src/common/logger/LoggerUtil";
 import { AuthUtils } from "@utils/auth-util";
 import { OtpSendDTO } from "src/user/dto/otpSend.dto";
 import { OtpVerifyDTO } from "src/user/dto/otpVerify.dto";
+import { SendPasswordResetOTPDto } from "src/user/dto/passwordReset.dto";
 
 @Injectable()
 export class PostgresUserService implements IServicelocator {
@@ -1929,6 +1930,136 @@ export class PostgresUserService implements IServicelocator {
     catch (error) {
       LoggerUtil.error(API_RESPONSES.SMS_ERROR, error.message);
       throw new Error(`${API_RESPONSES.SMS_NOTIFICATION_ERROR}:  ${error.message}`);
+    }
+  }
+
+  //send OTP on mobile and email for forgot password reset
+  async sendPasswordResetOTP(body: SendPasswordResetOTPDto, response: Response): Promise<any> {
+    const apiId = APIID.SEND_RESET_OTP;
+    try {
+      const username = body.username;
+      let error = [];
+      let success = [];
+      const userData: any = await this.findUserDetails(null, username);
+      if (!userData) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          API_RESPONSES.USER_NOT_EXISTS,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      if (!userData.mobile && !userData.email) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          API_RESPONSES.MOBILE_EMAIL_NOT_FOUND,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+      const programName = userData?.tenantData[0]?.tenantName ?? '';
+      const reason = "forgot";
+      const otp = this.authUtils.generateOtp(this.otpDigits).toString();
+      const { hash, expires, expiresInMinutes } = this.generateOtpHash(username, otp, reason);
+      if (userData.mobile) {
+        const replacements = {
+          "{OTP}": otp,
+          "{otpExpiry}": expiresInMinutes
+        };
+        try {
+          await this.smsNotification("OTP", "Reset_OTP", replacements, [userData.mobile]);
+          success.push({ type: 'SMS', message: API_RESPONSES.MOBILE_SENT_OTP });
+        } catch (e) {
+          error.push({ type: 'SMS', message: `${API_RESPONSES.MOBILE_OTP_SEND_FAILED} ${e.message}` })
+        }
+      }
+      if (userData.email) {
+        const replacements = {
+          "{OTP}": otp,
+          "{otpExpiry}": expiresInMinutes,
+          "{programName}": programName,
+          "{username}": username
+        };
+        try {
+          await this.sendEmailNotification("OTP", "Reset_OTP", replacements, [userData.email]);
+          success.push({ type: 'Email', message: API_RESPONSES.EMAIL_SENT_OTP })
+        } catch (e) {
+          error.push({ type: 'Email', message: `${API_RESPONSES.EMAIL_OTP_SEND_FAILED}: ${e.message}` })
+        }
+      }
+      // Error 
+      if (error.length === 2) { // if both SMS and Email notification fail to sent
+        let errorMessage = '';
+        if (error.some(e => e.type === 'SMS')) {
+          errorMessage += `SMS Error: ${error.filter(e => e.type === 'SMS').map(e => e.message).join(", ")}. `;
+        }
+        if (error.some(e => e.type === 'Email')) {
+          errorMessage += `Email Error: ${error.filter(e => e.type === 'Email').map(e => e.message).join(", ")}.`;
+        }
+
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.NOTIFICATION_ERROR,
+          errorMessage.trim(),
+          HttpStatus.INTERNAL_SERVER_ERROR
+        );
+      }
+      const result = {
+        hash: `${hash}.${expires}`,
+        success: success,
+        Error: error
+      }
+      return await APIResponse.success(
+        response,
+        apiId,
+        result,
+        HttpStatus.OK,
+        API_RESPONSES.SEND_OTP
+      );
+    }
+    catch (e) {
+      return APIResponse.error(
+        response,
+        apiId,
+        API_RESPONSES.SERVER_ERROR,
+        `Error : ${e?.message}`,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+
+  }
+
+  //send Email Notification
+  async sendEmailNotification(context: string, key: string, replacements: object, emailReceipt) {
+    try {
+      //Send Notification
+      const notificationPayload = {
+        isQueue: false,
+        context: context,
+        key: key,
+        replacements: replacements,
+        email: {
+          receipients: emailReceipt,
+        },
+      };
+      const mailSend = await this.notificationRequest.sendNotification(
+        notificationPayload
+      );
+      if (mailSend?.result?.email?.errors && mailSend.result.email.errors.length > 0) {
+        // Handle the array of errors
+        const errorMessages = mailSend.result.email.errors.map((error: { error: string; }) => error.error);
+        const combinedErrorMessage = errorMessages.join(", "); // Combine all error messages into one string
+        // Throw custom error with combined error message
+        throw new Error(`error :${combinedErrorMessage}`);
+      }
+      return mailSend;
+    }
+    catch (e) {
+      throw e;
     }
   }
 
