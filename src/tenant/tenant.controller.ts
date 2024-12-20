@@ -6,6 +6,7 @@ import { FilesInterceptor } from '@nestjs/platform-express';
 import { FilesUploadService } from 'src/common/services/upload-file';
 import { TenantUpdateDto } from './dto/tenant-update.dto';
 import { Response } from "express";
+import { TenantSearchDto } from './dto/tenant-search.dto';
 @Controller('tenant')
 export class TenantController {
     constructor(
@@ -25,6 +26,22 @@ export class TenantController {
         @Res() response: Response
     ) {
         return await this.tenantService.getTenants(request, response);
+    }
+
+    //Search Tenanr deatils
+    @Post("/search")
+    @ApiCreatedResponse({ description: "Tenant Data Fetch" })
+    @ApiForbiddenResponse({ description: "Forbidden" })
+    @UsePipes(ValidationPipe)
+    @SerializeOptions({
+        strategy: "excludeAll",
+    })
+    public async searchTenants(
+        @Body() tenantSearchDto:TenantSearchDto,
+        @Req() request: Request,
+        @Res() response: Response
+    ) {
+        return await this.tenantService.searchTenants(request, tenantSearchDto, response);
     }
 
     //Create a new tenant

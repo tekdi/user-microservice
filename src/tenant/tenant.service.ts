@@ -8,7 +8,7 @@ import { APIID } from '@utils/api-id.config';
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
 import { TenantUpdateDto } from './dto/tenant-update.dto';
 import { Response } from "express";
-
+import { TenantSearchDto } from './dto/tenant-search.dto';
 @Injectable()
 export class TenantService {
     constructor(
@@ -74,6 +74,47 @@ export class TenantService {
         }
     }
 
+    public async searchTenants(request: Request, tenantSearchDto: TenantSearchDto, response: Response) {
+        const apiId = 'api-search-tenants'
+        try {
+            const { limit, offset, filters } = tenantSearchDto;
+            const whereClause: any = {};
+            if (filters && Object.keys(filters).length > 0) {
+                Object.entries(filters).forEach(([key, value]) => {
+                    whereClause[key] = value;
+                });
+            }
+    
+            const getTenantDetails = await this.tenantRepository.find({
+                where: whereClause, // Pass the `whereClause` directly
+                take: limit, // Apply limit
+                skip: offset, // Apply offset
+            });
+            const totalCount = await this.tenantRepository.count(whereClause);
+    
+            return APIResponse.success(
+                response,
+                apiId,
+                {getTenantDetails, totalCount},
+                HttpStatus.CREATED,
+                API_RESPONSES.TENANT_CREATE
+            );  
+        } catch (error) {
+            const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+            LoggerUtil.error(
+                `${API_RESPONSES.SERVER_ERROR}`,
+                `Error: ${errorMessage}`,
+                apiId
+            )
+            return APIResponse.error(
+                response,
+                apiId,
+                API_RESPONSES.INTERNAL_SERVER_ERROR,
+                errorMessage,
+                HttpStatus.INTERNAL_SERVER_ERROR
+            );
+        }
+    }
 
     public async createTenants(request, tenantCreateDto, response) {
         let apiId = APIID.TENANT_CREATE;
@@ -167,9 +208,9 @@ export class TenantService {
         let apiId = APIID.TENANT_UPDATE;
         try {
             let checkExistingTenant = await this.tenantRepository.findOne({
-                where: {tenantId}
+                where: { tenantId }
             })
-            
+
             if (!checkExistingTenant) {
                 return APIResponse.error(
                     response,
@@ -180,7 +221,7 @@ export class TenantService {
                 );
             }
 
-            if(tenantUpdateDto.name){
+            if (tenantUpdateDto.name) {
                 const checkExistingTenantName = await this.tenantRepository.findOne({
                     where: {
                         "name": tenantUpdateDto.name
@@ -196,7 +237,7 @@ export class TenantService {
                     );
                 }
             }
-            
+
 
 
             let result = await this.tenantRepository.update(tenantId, tenantUpdateDto);
