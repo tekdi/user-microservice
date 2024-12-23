@@ -1,5 +1,5 @@
 import { Module } from "@nestjs/common";
-import { ConfigModule } from "@nestjs/config";
+import { ConfigModule, ConfigService } from "@nestjs/config";
 import { AppController } from "./app.controller";
 import { AppService } from "./app.service";
 // import { MulterModule } from "@nestjs/platform-express/multer";
@@ -23,9 +23,26 @@ import { HttpService } from "@utils/http-service";
 import { TenantModule } from "./tenant/tenant.module";
 import { AcademicyearsModule } from "./academicyears/academicyears.module";
 import { CohortAcademicYearModule } from "./cohortAcademicYear/cohortAcademicYear.module";
+import { ServicesModule } from "./services/services.module";
+import { TypeOrmModule } from "@nestjs/typeorm";
+import { Tenant } from "./tenant/entities/tenent.entity";
 
 @Module({
   imports: [
+    // TypeOrmModule.forRootAsync({
+    //   useFactory: async (configService: ConfigService) => ({
+    //     type: "postgres", // Replace with your DB type, e.g., 'mysql', 'postgres'
+    //     host: configService.get("DATABASE_HOST"),
+    //     port: configService.get("DATABASE_PORT"),
+    //     username: configService.get("DATABASE_USERNAME"),
+    //     password: configService.get("DATABASE_PASSWORD"),
+    //     database: configService.get("DATABASE_NAME"),
+    //     entities: [Tenant], // Register your entities here
+    //     synchronize: true, // Set to true for development, false for production
+    //   }),
+    //   inject: [ConfigService], // Inject ConfigService here to make it available to the factory
+    // }),
+    //TypeOrmModule.forFeature([Tenant]), // Register the repositories for your entities
     RbacModule,
     ConfigModule.forRoot({ isGlobal: true }),
     // MulterModule.register({
@@ -43,6 +60,7 @@ import { CohortAcademicYearModule } from "./cohortAcademicYear/cohortAcademicYea
     TenantModule,
     AcademicyearsModule,
     CohortAcademicYearModule,
+    ServicesModule,
   ],
   controllers: [AppController],
   providers: [AppService, HttpService],

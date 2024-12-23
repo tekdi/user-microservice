@@ -456,8 +456,9 @@ export class PostgresUserService implements IServicelocator {
       const userIdsDependsOnCustomFields = getUserIdUsingCustomFields
         .map((userId) => `'${userId}'`)
         .join(",");
-      whereCondition += `${index > 0 ? " AND " : ""
-        } U."userId" IN (${userIdsDependsOnCustomFields})`;
+      whereCondition += `${
+        index > 0 ? " AND " : ""
+      } U."userId" IN (${userIdsDependsOnCustomFields})`;
       index++;
     }
 
@@ -980,9 +981,9 @@ export class PostgresUserService implements IServicelocator {
               fieldDetail[`${fieldId}`]
                 ? fieldDetail
                 : {
-                  ...fieldDetail,
-                  [`${fieldId}`]: { fieldAttributes, fieldParams, name },
-                },
+                    ...fieldDetail,
+                    [`${fieldId}`]: { fieldAttributes, fieldParams, name },
+                  },
             {}
           );
 
@@ -1483,7 +1484,7 @@ export class PostgresUserService implements IServicelocator {
             "{username}": userData?.name,
             "{programName}": userData?.tenantData?.[0]?.tenantName
               ? userData.tenantData[0].tenantName.charAt(0).toUpperCase() +
-              userData.tenantData[0].tenantName.slice(1)
+                userData.tenantData[0].tenantName.slice(1)
               : "",
           },
           email: {
@@ -1590,8 +1591,8 @@ export class PostgresUserService implements IServicelocator {
     const roleIds =
       userCreateDto && userCreateDto.tenantCohortRoleMapping
         ? userCreateDto.tenantCohortRoleMapping.map(
-          (userRole) => userRole.roleId
-        )
+            (userRole) => userRole.roleId
+          )
         : [];
 
     let contextType;
