@@ -167,8 +167,8 @@ export class UserController {
 
   @UseFilters(new AllExceptionsFilter(APIID.USER_LIST))
   @Post("/list")
-  @UseGuards(JwtAuthGuard)
-  @ApiBasicAuth("access-token")
+  // @UseGuards(JwtAuthGuard)
+  // @ApiBasicAuth("access-token")
   @ApiCreatedResponse({ description: "User list." })
   @ApiBody({ type: UserSearchDto })
   @UsePipes(ValidationPipe)
