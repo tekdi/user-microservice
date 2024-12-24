@@ -765,6 +765,33 @@ export class PostgresUserService implements IServicelocator {
       const updatedData = {};
       const editIssues = {};
 
+      const user = await this.usersRepository.findOne({ where: { userId: userDto.userId } });
+      if (!user) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          API_RESPONSES.USER_NOT_FOUND,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      //mutideviceId
+      if (userDto?.userData?.deviceId) {
+        let deviceIds: any;
+        if (userDto.userData.flag === 'login') {
+          // add deviceId
+          deviceIds = await this.loginDeviceIdAction(userDto.userData.deviceId, userDto.userId, user.deviceId)
+          userDto.userData.deviceId = deviceIds;
+
+        } else if (userDto.userData.flag === 'logout') {
+          //remove deviceId
+          deviceIds = await this.onLogoutDeviceId(userDto.userData.deviceId, userDto.userId, user.deviceId)
+          userDto.userData.deviceId = deviceIds;
+        }
+      }
+
+
       if (userDto.userData) {
         await this.updateBasicUserDetails(userDto.userId, userDto.userData);
         updatedData["basicDetails"] = userDto.userData;
@@ -844,6 +871,32 @@ export class PostgresUserService implements IServicelocator {
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
+  }
+
+  async loginDeviceIdAction(userDeviceId: string, userId: string, existingDeviceId: string[]): Promise<string[]> {
+    let deviceIds = existingDeviceId || [];
+    // Check if the device ID already exists
+    if (deviceIds.includes(userDeviceId)) {
+      return deviceIds; // No action if device ID already exists
+    }
+    // If there are already 3 devices, remove the first one (oldest)
+    if (deviceIds.length === 3) {
+      deviceIds.shift(); // Remove the oldest device ID
+    }
+    // Add the new device ID to the list
+    deviceIds.push(userDeviceId);
+    return deviceIds; // Return the updated device list
+  }
+
+  async onLogoutDeviceId(deviceIdforRemove: string, userId: string, existingDeviceId: string[]) {
+    let deviceIds = existingDeviceId || [];
+    // Check if the device ID exists
+    if (!deviceIds.includes(deviceIdforRemove)) {
+      return deviceIds; // No action if device ID does not exist
+    }
+    // Remove the device ID
+    deviceIds = deviceIds.filter(id => id !== deviceIdforRemove);
+    return deviceIds;
   }
 
   async updateBasicUserDetails(userId, userData: Partial<User>): Promise<User> {

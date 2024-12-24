@@ -11,6 +11,11 @@ import { Expose, Type } from "class-transformer";
 import { UserStatus } from "../entities/user-entity";
 import { ApiProperty } from "@nestjs/swagger";
 
+export enum FlagType {
+  LOGIN = 'login',
+  LOGOUT = 'logout',
+}
+
 class UserDataDTO {
   @ApiProperty({ type: () => String })
   @IsString()
@@ -97,6 +102,11 @@ class UserDataDTO {
   @IsString()
   @IsOptional()
   deviceId: string;
+
+  @ApiProperty({ enum: FlagType, required: false })
+  @ValidateIf((o) => o.deviceId)
+  @IsEnum(FlagType, { message: `flag must be either ${Object.values(FlagType).join(' or ')}` }) // Restrict to "login" or "logout"
+  flag: FlagType;
 }
 class CustomFieldDTO {
   @ApiProperty({ type: () => String })
