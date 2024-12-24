@@ -58,8 +58,8 @@ export class User {
   @Column({ nullable: true })
   mobile: number;
 
-  @Column({ nullable: true })
-  deviceId: string;
+  @Column('text', { array: true, nullable: true })
+  deviceId: string[];
 
   @Column({ nullable: false, default: true })
   temporaryPassword: boolean;
