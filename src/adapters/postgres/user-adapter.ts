@@ -779,12 +779,12 @@ export class PostgresUserService implements IServicelocator {
       //mutideviceId
       if (userDto?.userData?.deviceId) {
         let deviceIds: any;
-        if (userDto.userData.flag === 'login') {
+        if (userDto.userData.action === 'add') {
           // add deviceId
           deviceIds = await this.loginDeviceIdAction(userDto.userData.deviceId, userDto.userId, user.deviceId)
           userDto.userData.deviceId = deviceIds;
 
-        } else if (userDto.userData.flag === 'logout') {
+        } else if (userDto.userData.action === 'remove') {
           //remove deviceId
           deviceIds = await this.onLogoutDeviceId(userDto.userData.deviceId, userDto.userId, user.deviceId)
           userDto.userData.deviceId = deviceIds;
