@@ -101,6 +101,8 @@ class UserDataDTO {
   @ApiProperty({ type: () => String })
   @IsString()
   @IsOptional()
+  @ValidateIf((o) => o.action)
+  @IsNotEmpty({ message: 'deviceId is required when action is provided' })
   deviceId: string;
 
   @ApiProperty({ enum: ActionType, required: false })

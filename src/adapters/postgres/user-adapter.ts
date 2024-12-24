@@ -42,6 +42,7 @@ import { AuthUtils } from "@utils/auth-util";
 import { OtpSendDTO } from "src/user/dto/otpSend.dto";
 import { OtpVerifyDTO } from "src/user/dto/otpVerify.dto";
 import { SendPasswordResetOTPDto } from "src/user/dto/passwordReset.dto";
+import { ActionType } from "src/user/dto/user-update.dto";
 
 @Injectable()
 export class PostgresUserService implements IServicelocator {
@@ -779,12 +780,12 @@ export class PostgresUserService implements IServicelocator {
       //mutideviceId
       if (userDto?.userData?.deviceId) {
         let deviceIds: any;
-        if (userDto.userData.action === 'add') {
+        if (userDto.userData.action === ActionType.ADD) {
           // add deviceId
           deviceIds = await this.loginDeviceIdAction(userDto.userData.deviceId, userDto.userId, user.deviceId)
           userDto.userData.deviceId = deviceIds;
 
-        } else if (userDto.userData.action === 'remove') {
+        } else if (userDto.userData.action === ActionType.REMOVE) {
           //remove deviceId
           deviceIds = await this.onLogoutDeviceId(userDto.userData.deviceId, userDto.userId, user.deviceId)
           userDto.userData.deviceId = deviceIds;
