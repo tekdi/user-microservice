@@ -269,6 +269,12 @@ export class PostgresCohortService {
         );
       }
 
+      // Format the cohort name to add leading zeros to times
+      cohortCreateDto.name = cohortCreateDto?.name.replace(
+        /(^|[^0-9])(\d):(\d{2} [AP]M)/g,
+        '$10$2:$3',
+      );
+
       const response = await this.cohortRepository.save(cohortCreateDto);
       const createFailures = [];
 
@@ -334,6 +340,11 @@ export class PostgresCohortService {
       const decoded: any = jwt_decode(request.headers.authorization);
       cohortUpdateDto.updatedBy = decoded?.sub;
       cohortUpdateDto.createdBy = decoded?.sub;
+      // Format the cohort name to add leading zeros to times
+      cohortUpdateDto.name = cohortUpdateDto?.name.replace(
+        /(^|[^0-9])(\d):(\d{2} [AP]M)/g,
+        '$10$2:$3',
+      );
 
       if (!isUUID(cohortId)) {
         return APIResponse.error(
