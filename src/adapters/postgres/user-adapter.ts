@@ -407,7 +407,7 @@ export class PostgresUserService implements IServicelocator {
           if (key === "name") {
             whereCondition += ` U."${key}" ILIKE '%${value}%'`;
           } else {
-            if (key === "status") {
+            if (key === "status" || key === "email") {
               if (
                 Array.isArray(value) &&
                 value.every((item) => typeof item === "string")
@@ -511,7 +511,7 @@ export class PostgresUserService implements IServicelocator {
     if (userDetails.length > 0) {
       result.totalCount = parseInt(userDetails[0].total_count, 10);
 
-      //Get user custom field data
+      // Get user custom field data
       for (const userData of userDetails) {
         const customFields = await this.fieldsService.getUserCustomFieldDetails(
           userData.userId
