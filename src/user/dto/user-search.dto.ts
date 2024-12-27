@@ -9,6 +9,7 @@ import {
   ValidateIf,
   ArrayMinSize,
   ArrayMaxSize,
+  IsEmail,
 } from "class-validator";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 
@@ -53,12 +54,18 @@ export class setFilters {
     type: [String],
     description: "email Ids",
   })
+  @IsOptional()
+  @IsArray()
+  @IsEmail({}, { each: true })
   email: string[];
 
   @ApiPropertyOptional({
     type: [String],
     description: "status",
   })
+  @IsOptional()
+  @IsArray()
+  @IsEnum(['active', 'inactive'], { each: true })
   status: string[];
 }
 export class excludeFields {
