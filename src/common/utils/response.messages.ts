@@ -169,5 +169,14 @@ export const API_RESPONSES = {
   USERNAME_REQUIRED: 'Username Required',
   INVALID_REASON: 'Invalid Reason',
   MOBILE_REQUIRED: 'MObile Required',
-  INVALID_HASH_FORMAT: 'Invalid hash format'
+  INVALID_HASH_FORMAT: 'Invalid hash format',
+  NOTIFICATION_ERROR: 'Notification not send due to getting from notification API',
+  MOBILE_EMAIL_NOT_FOUND: 'Mobile number and email ID not found for sending OTP',
+  MOBILE_SENT_OTP: 'OTP sent successfully to mobile',
+  MOBILE_OTP_SEND_FAILED: 'Failed to send OTP to mobile',
+  EMAIL_SENT_OTP: 'OTP sent successfully to email',
+  EMAIL_OTP_SEND_FAILED: 'Failed to send OTP to email',
+  SEND_OTP: 'OTP sent successfully',
+  EMAIL_NOTIFICATION_ERROR: 'Failed to send Email notification:',
+  EMAIL_ERROR: 'Email notification failed'
 };
