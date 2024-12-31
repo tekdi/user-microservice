@@ -44,9 +44,9 @@ import { API_RESPONSES } from "@utils/response.messages";
 
 @ApiTags("Cohort Member")
 @Controller("cohortmember")
-@UseGuards(JwtAuthGuard)
+// @UseGuards(JwtAuthGuard)
 export class CohortMembersController {
-  constructor(private readonly cohortMemberAdapter: CohortMembersAdapter) {}
+  constructor(private readonly cohortMemberAdapter: CohortMembersAdapter) { }
 
   //create cohort members
   @UseFilters(new AllExceptionsFilter(APIID.COHORT_MEMBER_CREATE))
@@ -236,25 +236,30 @@ export class CohortMembersController {
 
   @UseFilters(new AllExceptionsFilter(APIID.COHORT_MEMBER_CREATE))
   @Post("/bulkCreate")
+  @ApiBody({ type: BulkCohortMember })
   @UsePipes(new ValidationPipe())
-  @ApiBasicAuth("access-token")
+  // @ApiBasicAuth("access-token")
+  @ApiHeader({
+    name: "tenantid", required: true
+  })
+  @ApiHeader({
+    name: "academicyearid", required: true
+  })
+  @ApiQuery({
+    name: 'userId', required: true, type: 'string', description: 'userId required',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+  })
   @ApiCreatedResponse({
     description: "Cohort Member has been created successfully.",
   })
-  @ApiBody({ type: BulkCohortMember })
-  @ApiHeader({
-    name: "tenantid",
-  })
-  @ApiHeader({
-    name: "academicyearid",
-  })
-  public async craeteBulkCohortMembers(
+  public async createBulkCohortMembers(
     @Headers() headers,
     @Req() request,
-    @Body() bulkcohortMembersDto: BulkCohortMember,
+    @Body() bulkCohortMembersDto: BulkCohortMember,
+    @Query('userId') userId: string, // Now using userId from query
     @Res() response: Response
   ) {
-    const loginUser = request.user.userId;
+    const loginUser = userId;
     const tenantId = headers["tenantid"];
     const academicyearId = headers["academicyearid"];
     if (!academicyearId || !isUUID(academicyearId)) {
@@ -266,7 +271,7 @@ export class CohortMembersController {
       .buildCohortMembersAdapter()
       .createBulkCohortMembers(
         loginUser,
-        bulkcohortMembersDto,
+        bulkCohortMembersDto,
         response,
         tenantId,
         academicyearId
