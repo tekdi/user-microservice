@@ -69,10 +69,11 @@ export class CohortMembersController {
   public async createCohortMembers(
     @Headers() headers,
     @Req() request,
+    @Query('userId') userId: string,
     @Body() cohortMembersDto: CohortMembersDto,
     @Res() response: Response
   ) {
-    const loginUser = request.user.userId;
+    const loginUser = userId;
     const tenantId = headers["tenantid"];
     const deviceId = headers["deviceid"];
     const academicyearId = headers["academicyearid"];
@@ -82,6 +83,11 @@ export class CohortMembersController {
     if (!academicyearId || !isUUID(academicyearId)) {
       throw new BadRequestException(
         "academicyearId is required and academicyearId must be a valid UUID."
+      );
+    }
+    if (!loginUser || !isUUID(loginUser)) {
+      throw new BadRequestException(
+        "unauthorized!"
       );
     }
     const result = await this.cohortMemberAdapter
@@ -190,15 +196,20 @@ export class CohortMembersController {
   @ApiNotFoundResponse({ description: "Data not found" })
   @ApiBadRequestResponse({ description: "Bad request" })
   @ApiBody({ type: CohortMembersUpdateDto })
-  @UsePipes(new ValidationPipe())
+  @UsePipes(new ValidationPipe()) 
   public async updateCohortMembers(
     @Param("cohortmembershipid") cohortMembersId: string,
     @Req() request,
     @Body() cohortMemberUpdateDto: CohortMembersUpdateDto,
-    @Res() response: Response
+    @Res() response: Response,
+    @Query('userId') userId: string
   ) {
-    const loginUser = request.user.userId;
-
+    const loginUser = userId;
+    if (!loginUser || !isUUID(loginUser)) {
+      throw new BadRequestException(
+        "unauthorized!"
+      );
+    }
     const result = await this.cohortMemberAdapter
       .buildCohortMembersAdapter()
       .updateCohortMembers(
@@ -262,6 +273,14 @@ export class CohortMembersController {
     const loginUser = userId;
     const tenantId = headers["tenantid"];
     const academicyearId = headers["academicyearid"];
+    if (!loginUser || !isUUID(loginUser)) {
+      throw new BadRequestException(
+        "unauthorized!"
+      );
+    }
+    if (!tenantId || !isUUID(tenantId)) {
+      throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
+    }
     if (!academicyearId || !isUUID(academicyearId)) {
       throw new BadRequestException(
         "academicyearId is required and must be a valid UUID."
