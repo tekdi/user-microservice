@@ -98,7 +98,9 @@ export const API_RESPONSES = {
   //Create user
   USER_CREATE_SUCCESSFULLY: `User created successfully`,
   USER_CREATE_IN_DB: 'User created in user table successfully',
-  USER_CREATE_KEYCLOAK: 'User created successfully on ',
+  USER_CREATE_KEYCLOAK: 'User created successfully on keycloak Service',
+  USER_UPDATE_KEYCLOAK: 'User updated successfully on keycloak Service',
+  UPDATE_USER_KEYCLOAK_ERROR: 'Failure to Create User on Keycloak Service',
   USER_CREATE_FAILED: 'User creation failed',
   USER_CREATE_FAILED_WITH_ERROR: (error) => `User creation failed with error: ${error}`,
   USER_CREATE_FAILED_WITH_ERROR_AND_EMAIL: (error, email) => `User creation failed with error: ${error}. Email: ${email}`,

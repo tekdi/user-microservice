@@ -8,6 +8,7 @@ import jwt_decode from "jwt-decode";
 import {
   getKeycloakAdminToken,
   createUserInKeyCloak,
+  updateUserInKeyCloak,
   checkIfUsernameExistsInKeycloak,
   checkIfEmailExistsInKeycloak,
 } from "../../common/utils/keycloak.adapter.util";
@@ -41,6 +42,7 @@ import { LoggerUtil } from "src/common/logger/LoggerUtil";
 import { AuthUtils } from "@utils/auth-util";
 import { OtpSendDTO } from "src/user/dto/otpSend.dto";
 import { OtpVerifyDTO } from "src/user/dto/otpVerify.dto";
+import { UserUpdateDTO } from "src/user/dto/user-update.dto";
 
 @Injectable()
 export class PostgresUserService implements IServicelocator {
@@ -758,24 +760,80 @@ export class PostgresUserService implements IServicelocator {
     return combinedResult;
   }
 
-  async updateUser(userDto, response: Response) {
+  async updateUser(request: any, userUpdateDto:UserUpdateDTO, response: Response) {
     const apiId = APIID.USER_UPDATE;
     try {
       const updatedData = {};
       const editIssues = {};
+      let errKeycloak = "";
+      let resKeycloak;
 
-      if (userDto.userData) {
-        await this.updateBasicUserDetails(userDto.userId, userDto.userData);
-        updatedData["basicDetails"] = userDto.userData;
+      //If usernaem is exist in update DTO
+      if(userUpdateDto.userData && userUpdateDto.userData.username){
+        
+        userUpdateDto.userData.username = userUpdateDto.userData.username.toLocaleLowerCase();
+    
+        const keycloakResponse = await getKeycloakAdminToken();
+        const token = keycloakResponse.data.access_token;
+  
+        //Check user is exist in keycloakDB or not
+        const checkUserinKeyCloakandDb = await this.checkUserinKeyCloakandDb(userUpdateDto.userData);
+        if (checkUserinKeyCloakandDb) {
+          return APIResponse.error(
+            response,
+            apiId,
+            API_RESPONSES.BAD_REQUEST,
+            API_RESPONSES.USER_EXISTS,
+            HttpStatus.BAD_REQUEST
+          );
+        }
+        
+        //Update user in keyCloakService
+        resKeycloak = await updateUserInKeyCloak(userUpdateDto.userData, token).catch(
+          (error) => {
+            LoggerUtil.error(
+              `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
+              `KeyCloak Error: ${error.message}`,
+              apiId
+            );
+  
+            errKeycloak = error.response?.data.errorMessage;
+            return APIResponse.error(
+              response,
+              apiId,
+              API_RESPONSES.SERVER_ERROR,
+              `${errKeycloak}`,
+              HttpStatus.INTERNAL_SERVER_ERROR
+            );
+          }
+        );        
+        LoggerUtil.log(API_RESPONSES.USER_UPDATE_KEYCLOAK, apiId);
+      }     
+       
+      if(!resKeycloak){
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.SERVER_ERROR,
+          API_RESPONSES.UPDATE_USER_KEYCLOAK_ERROR,
+          HttpStatus.INTERNAL_SERVER_ERROR
+        );
+      }
+
+      //Update user core fields
+      if (userUpdateDto.userData) {
+        await this.updateBasicUserDetails(userUpdateDto.userData.userId, userUpdateDto.userData);
+        updatedData["basicDetails"] = userUpdateDto.userData;
       }
 
       LoggerUtil.log(
         API_RESPONSES.USER_BASIC_DETAILS_UPDATE,
         apiId,
-        userDto?.userId
+        userUpdateDto?.userData?.userId
       );
 
-      if (userDto?.customFields?.length > 0) {
+      // If custom field are exist then update user custom field 
+      if (userUpdateDto?.customFields?.length > 0) {
         const getFieldsAttributes =
           await this.fieldsService.getEditableFieldsAttributes();
 
@@ -788,10 +846,10 @@ export class PostgresUserService implements IServicelocator {
 
         const unEditableIdes = [];
         const editFailures = [];
-        for (const data of userDto.customFields) {
+        for (const data of userUpdateDto.customFields) {
           if (isEditableFieldId.includes(data.fieldId)) {
             const result = await this.fieldsService.updateCustomFields(
-              userDto.userId,
+              userUpdateDto.userData.userId,
               data,
               fieldIdAndAttributes[data.fieldId]
             );
@@ -819,7 +877,7 @@ export class PostgresUserService implements IServicelocator {
       LoggerUtil.log(
         API_RESPONSES.USER_UPDATED_SUCCESSFULLY,
         apiId,
-        userDto?.userId
+        userUpdateDto?.userData?.userId
       );
 
       return await APIResponse.success(
@@ -845,13 +903,14 @@ export class PostgresUserService implements IServicelocator {
     }
   }
 
-  async updateBasicUserDetails(userId, userData: Partial<User>): Promise<User> {
+  async updateBasicUserDetails(userId:string, userData):Promise<User>{
     const user = await this.usersRepository.findOne({
       where: { userId: userId },
     });
     if (!user) {
       return null;
     }
+
     Object.assign(user, userData);
     return this.usersRepository.save(user);
   }

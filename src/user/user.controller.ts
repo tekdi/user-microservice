@@ -159,10 +159,10 @@ export class UserController {
     @Res() response: Response
   ) {
     // userDto.tenantId = headers["tenantid"];
-    userUpdateDto.userId = userId;
+    userUpdateDto.userData.userId = userId;
     return await this.userAdapter
       .buildUserAdapter()
-      .updateUser(userUpdateDto, response);
+      .updateUser(request, userUpdateDto, response);
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.USER_LIST))

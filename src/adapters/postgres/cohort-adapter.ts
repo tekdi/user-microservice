@@ -598,10 +598,15 @@ export class PostgresCohortService {
           }
 
           if (memberStatus) {
-            await this.cohortMembersRepository.update(
-              { cohortId },
-              { status: memberStatus, updatedBy: cohortUpdateDto.updatedBy }
-            );
+            try{
+              await this.cohortMembersRepository.update(
+                { cohortId },
+                { status: memberStatus, updatedBy: cohortUpdateDto.updatedBy }
+              );
+            }catch(error){
+              console.log(error);
+            }
+
           }
         }
 

@@ -6,106 +6,112 @@ import {
   IsNotEmpty,
   IsEnum,
   ValidateIf,
+  IsDate,
 } from "class-validator";
 import { Expose, Type } from "class-transformer";
 import { UserStatus } from "../entities/user-entity";
-import { ApiProperty } from "@nestjs/swagger";
+import { ApiPropertyOptional } from "@nestjs/swagger";
 
 class UserDataDTO {
-  @ApiProperty({ type: () => String })
+  @ApiPropertyOptional({ type: () => String })
+  @IsString()
+  @IsOptional()
+  userId: string;
+
+  @ApiPropertyOptional({ type: () => String })
   @IsString()
   @IsOptional()
   username: string;
 
-  @ApiProperty({ type: () => String })
+  @ApiPropertyOptional({ type: () => String })
   @IsString()
   @IsOptional()
   name: string;
 
-  @ApiProperty({ type: () => String })
+  @ApiPropertyOptional({ type: () => String })
   @IsString()
   @IsOptional()
   role: string;
 
-  @ApiProperty({ type: () => String })
+  @ApiPropertyOptional({ type: () => String })
   @IsOptional()
   @IsString()
   dob: string | null;
 
-  @ApiProperty({ type: () => String })
+  @ApiPropertyOptional({ type: () => String })
   @IsOptional()
   @IsString()
   email: string | null;
 
-  @ApiProperty({ type: () => String })
+  @ApiPropertyOptional({ type: () => String })
   @IsOptional()
   @IsString()
   district: string | null;
 
-  @ApiProperty({ type: () => String })
+  @ApiPropertyOptional({ type: () => String })
   @IsOptional()
   @IsString()
   state: string | null;
 
-  @ApiProperty({ type: () => String })
+  @ApiPropertyOptional({ type: () => String })
   @IsOptional()
   @IsString()
   address: string | null;
 
-  @ApiProperty({ type: () => String })
+  @ApiPropertyOptional({ type: () => String })
   @IsOptional()
   @IsString()
   pincode: string | null;
 
-  @ApiProperty({ type: () => String })
+  @ApiPropertyOptional({ type: () => String })
   @IsString()
   @IsOptional()
   createdAt: string;
 
-  @ApiProperty({ type: () => String })
+  @ApiPropertyOptional({ type: () => String })
   @IsString()
   @IsOptional()
   updatedAt: string;
 
-  @ApiProperty({ type: () => String })
+  @ApiPropertyOptional({ type: () => String })
   @IsString()
   @IsOptional()
   createdBy: string;
 
-  @ApiProperty({ type: () => String })
+  @ApiPropertyOptional({ type: () => String })
   @IsString()
   @IsOptional()
   updatedBy: string;
 
-  @ApiProperty({ type: () => String })
+  @ApiPropertyOptional({ type: () => String })
   @IsString()
   @IsOptional()
   tenantId: string;
 
-  @ApiProperty({ type: () => String })
+  @ApiPropertyOptional({ type: () => String })
   @IsString()
   @IsOptional()
   @IsEnum(UserStatus)
   status: UserStatus;
 
-  @ApiProperty({ type: () => String })
+  @ApiPropertyOptional({ type: () => String })
   @IsString()
   @IsOptional()
   reason: string;
 
-  @ApiProperty({ type: () => String })
+  @ApiPropertyOptional({ type: () => String })
   @IsString()
   @IsOptional()
   deviceId: string;
 }
 class CustomFieldDTO {
-  @ApiProperty({ type: () => String })
+  @ApiPropertyOptional({ type: () => String })
   @IsString()
   @Expose()
   @IsNotEmpty()
   fieldId: string;
 
-  @ApiProperty({ type: () => String })
+  @ApiPropertyOptional({ type: () => String })
   @ValidateIf((o) => o.value !== "")
   @IsNotEmpty()
   @Expose()
@@ -115,14 +121,14 @@ class CustomFieldDTO {
 export class UserUpdateDTO {
   userId: string;
 
-  @ApiProperty({ type: () => [UserDataDTO] })
+  @ApiPropertyOptional({ type: () => [UserDataDTO] })
   @Expose()
   @ValidateNested()
   @IsNotEmpty()
   @Type(() => UserDataDTO)
   userData: UserDataDTO;
 
-  @ApiProperty({ type: () => [CustomFieldDTO] })
+  @ApiPropertyOptional({ type: () => [CustomFieldDTO] })
   @IsArray()
   @IsOptional()
   @ValidateNested({ each: true })

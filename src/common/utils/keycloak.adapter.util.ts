@@ -53,6 +53,58 @@ async function getKeycloakAdminToken() {
   return res;
 }
 
+async function updateUserInKeyCloak(query, token) {
+  const axios = require("axios");
+
+  // Validate required parameters
+  if (!query.userId) {
+    return "User cannot be updated, userId missing";
+  }
+
+  // Prepare name details
+  const name = query.name || "";
+  const nameParts = name.split(" ");
+  let lname = "";
+
+  if (nameParts[2]) {
+    lname = nameParts[2];
+  } else if (nameParts[1]) {
+    lname = nameParts[1];
+  }
+
+  // Prepare data payload
+  const data = JSON.stringify({
+    firstName: nameParts[0],
+    lastName: lname,
+    username: query.username, // New username
+    enabled: query.enabled !== undefined ? query.enabled : true, // Ensure user remains enabled unless specified
+  });
+
+  const config = {
+    method: "put",
+    url: `${process.env.KEYCLOAK}${process.env.KEYCLOAK_ADMIN}/${query.userId}`,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: "Bearer " + token,
+    },
+    data: data,
+  };
+
+  try {
+    const response = await axios(config);
+    console.log("response", response);
+    if(response.status === 204) {
+      return true;
+    }else{
+      return false;
+    }
+  } catch (error) {
+    console.error("Error updating user in Keycloak:", error.response.data);
+    throw new Error(error.response.data.errorMessage || "Failed to update user");
+  }
+}
+
+
 async function createUserInKeyCloak(query, token) {
   const axios = require("axios");
   const name = query.name;
@@ -170,6 +222,7 @@ export {
   getUserRole,
   getKeycloakAdminToken,
   createUserInKeyCloak,
+  updateUserInKeyCloak,
   checkIfEmailExistsInKeycloak,
   checkIfUsernameExistsInKeycloak,
 };
