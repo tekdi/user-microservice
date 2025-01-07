@@ -626,7 +626,7 @@ export class PostgresCohortMembersService {
       INNER JOIN public."UserRolesMapping" UR
       ON UR."userId" = U."userId"
       INNER JOIN public."Roles" R
-      ON R."roleId" = UR."roleId" ${whereCase}`;   
+      ON R."roleId" = UR."roleId" ${whereCase}`;
 
     options.forEach((option) => {
       if (option[0] === "limit") {
@@ -857,11 +857,10 @@ export class PostgresCohortMembersService {
         userId: userId,
         cohortId: cohortId,
         cohortAcademicYearId: cohortAcademicYearId,
+        status: MemberStatus.ACTIVE,
       },
     });
-    if (!mappingExist) {
-      return false;
-    }
+
     return mappingExist;
   }
 
@@ -901,7 +900,7 @@ export class PostgresCohortMembersService {
     }
 
     for (const userId of cohortMembersDto.userId) {
-      // why checking from user table beacuse it is possible to make first time part of any cohort
+      // why checking from user table because it is possible to make first time part of any cohort
       const userExists = await this.checkUserExist(userId);
       if (!userExists) {
         errors.push(API_RESPONSES.USER_NOTEXIST(userId));
@@ -910,8 +909,8 @@ export class PostgresCohortMembersService {
 
       // Handling of Removing Cohort from user
       if (
-        cohortMembersDto.removeCohortId &&
-        cohortMembersDto.removeCohortId.length > 0
+        cohortMembersDto?.removeCohortId &&
+        cohortMembersDto?.removeCohortId.length > 0
       ) {
         for (const removeCohortId of cohortMembersDto.removeCohortId) {
           try {
@@ -966,70 +965,86 @@ export class PostgresCohortMembersService {
       }
 
       // Handling of Addition of User in Cohort
-      for (const cohortId of cohortMembersDto.cohortId) {
-        const cohortMembers = {
-          ...cohortMembersBase,
-          userId: userId,
-          cohortId: cohortId,
-        };
-        try {
-          const cohortExists = await this.isCohortExistForYear(
-            academicyearId,
-            cohortId
-          );
-          if (cohortExists.length === 0) {
-            errors.push(
-              API_RESPONSES.COHORTID_NOTFOUND_FOT_THIS_YEAR(cohortId)
+      if (
+        cohortMembersDto?.cohortId &&
+        cohortMembersDto?.cohortId.length > 0
+      ) {
+        for (const cohortId of cohortMembersDto.cohortId) {
+          const cohortMembers = {
+            ...cohortMembersBase,
+            userId: userId,
+            cohortId: cohortId,
+          };
+          try {
+            const cohortExists = await this.isCohortExistForYear(
+              academicyearId,
+              cohortId
             );
-            continue;
-          }
-          const mappingExists = await this.cohortUserMapping(
-            userId,
-            cohortId,
-            cohortExists[0].cohortAcademicYearId
-          );
-          if (mappingExists) {
-            if (mappingExists.status === MemberStatus.ACTIVE) {
+            if (cohortExists.length === 0) {
+              errors.push(
+                API_RESPONSES.COHORTID_NOTFOUND_FOT_THIS_YEAR(cohortId)
+              );
+              continue;
+            }
+            // get active mapping entries
+            const mappingExists = await this.cohortUserMapping(
+              userId,
+              cohortId,
+              cohortExists[0].cohortAcademicYearId
+            );
+            if (mappingExists) {
+              // if (mappingExists.status === MemberStatus.ACTIVE) {
               // errors.push(`Mapping already exists for userId ${userId} and cohortId ${cohortId} for this academic year`);
               errors.push(
                 API_RESPONSES.MAPPING_EXIST_BW_USER_AND_COHORT(userId, cohortId)
               );
               continue;
-            } else if (mappingExists.status === MemberStatus.ARCHIVED) {
-              const updateCohort = await this.cohortMembersRepository.update(
-                {
-                  userId,
-                  cohortId,
-                  cohortAcademicYearId: cohortExists[0].cohortAcademicYearId,
-                },
-                { status: MemberStatus.ACTIVE }
-              );
-              results.push(updateCohort);
-              continue;
             }
-          }
-          const cohortMemberForAcademicYear = {
-            ...cohortMembers,
-            cohortAcademicYearId: cohortExists[0].cohortAcademicYearId,
-          };
-          // Need to add User in cohort for Academic year
-          const result = await this.cohortMembersRepository.save(
-            cohortMemberForAcademicYear
-          );
-          results.push(result);
-        } catch (error) {
-          LoggerUtil.error(
-            `${API_RESPONSES.SERVER_ERROR}`,
-            `Error: ${error.message}`,
-            apiId
-          )
-          errors.push(
-            API_RESPONSES.ERROR_SAVING_COHORTMEMBER(
-              userId,
-              cohortId,
-              error.message
+            // else if (mappingExists.status === MemberStatus.ARCHIVED) {
+
+            //   const cohortMemberForAcademicYear = {
+            //     ...cohortMembers,
+            //     cohortAcademicYearId: cohortExists[0].cohortAcademicYearId,
+            //   };
+            //   const result = await this.cohortMembersRepository.save(
+            //     cohortMemberForAcademicYear
+            //   );
+            // const updateCohort = await this.cohortMembersRepository.update(
+            //   {
+            //     userId,
+            //     cohortId,
+            //     cohortAcademicYearId: cohortExists[0].cohortAcademicYearId,
+            //   },
+            //   { status: MemberStatus.ACTIVE }
+            // );
+            //   results.push(result);
+            //   continue;
+            // }
+            // }
+            // add new entry
+            const cohortMemberForAcademicYear = {
+              ...cohortMembers,
+              cohortAcademicYearId: cohortExists[0].cohortAcademicYearId,
+            };
+            // Need to add User in cohort for Academic year
+            const result = await this.cohortMembersRepository.save(
+              cohortMemberForAcademicYear
+            );
+            results.push(result);
+          } catch (error) {
+            LoggerUtil.error(
+              `${API_RESPONSES.SERVER_ERROR}`,
+              `Error: ${error.message}`,
+              apiId
             )
-          );
+            errors.push(
+              API_RESPONSES.ERROR_SAVING_COHORTMEMBER(
+                userId,
+                cohortId,
+                error.message
+              )
+            );
+          }
         }
       }
     }

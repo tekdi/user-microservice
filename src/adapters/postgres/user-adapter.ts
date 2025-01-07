@@ -42,7 +42,8 @@ import { LoggerUtil } from "src/common/logger/LoggerUtil";
 import { AuthUtils } from "@utils/auth-util";
 import { OtpSendDTO } from "src/user/dto/otpSend.dto";
 import { OtpVerifyDTO } from "src/user/dto/otpVerify.dto";
-import { UserUpdateDTO } from "src/user/dto/user-update.dto";
+import { SendPasswordResetOTPDto } from "src/user/dto/passwordReset.dto";
+import { ActionType } from "src/user/dto/user-update.dto";
 
 @Injectable()
 export class PostgresUserService implements IServicelocator {
@@ -407,7 +408,7 @@ export class PostgresUserService implements IServicelocator {
           if (key === "name") {
             whereCondition += ` U."${key}" ILIKE '%${value}%'`;
           } else {
-            if (key === "status") {
+            if (key === "status" || key === "email") {
               if (
                 Array.isArray(value) &&
                 value.every((item) => typeof item === "string")
@@ -511,7 +512,7 @@ export class PostgresUserService implements IServicelocator {
     if (userDetails.length > 0) {
       result.totalCount = parseInt(userDetails[0].total_count, 10);
 
-      //Get user custom field data
+      // Get user custom field data
       for (const userData of userDetails) {
         const customFields = await this.fieldsService.getUserCustomFieldDetails(
           userData.userId
@@ -820,10 +821,36 @@ export class PostgresUserService implements IServicelocator {
         );
       }
 
-      //Update user core fields
-      if (userUpdateDto.userData) {
-        await this.updateBasicUserDetails(userUpdateDto.userData.userId, userUpdateDto.userData);
-        updatedData["basicDetails"] = userUpdateDto.userData;
+      const user = await this.usersRepository.findOne({ where: { userId: userDto.userId } });
+      if (!user) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          API_RESPONSES.USER_NOT_FOUND,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      //mutideviceId
+      if (userDto?.userData?.deviceId) {
+        let deviceIds: any;
+        if (userDto.userData.action === ActionType.ADD) {
+          // add deviceId
+          deviceIds = await this.loginDeviceIdAction(userDto.userData.deviceId, userDto.userId, user.deviceId)
+          userDto.userData.deviceId = deviceIds;
+
+        } else if (userDto.userData.action === ActionType.REMOVE) {
+          //remove deviceId
+          deviceIds = await this.onLogoutDeviceId(userDto.userData.deviceId, userDto.userId, user.deviceId)
+          userDto.userData.deviceId = deviceIds;
+        }
+      }
+
+
+      if (userDto.userData) {
+        await this.updateBasicUserDetails(userDto.userId, userDto.userData);
+        updatedData["basicDetails"] = userDto.userData;
       }
 
       LoggerUtil.log(
@@ -903,7 +930,33 @@ export class PostgresUserService implements IServicelocator {
     }
   }
 
-  async updateBasicUserDetails(userId:string, userData):Promise<User>{
+  async loginDeviceIdAction(userDeviceId: string, userId: string, existingDeviceId: string[]): Promise<string[]> {
+    let deviceIds = existingDeviceId || [];
+    // Check if the device ID already exists
+    if (deviceIds.includes(userDeviceId)) {
+      return deviceIds; // No action if device ID already exists
+    }
+    // If there are already 3 devices, remove the first one (oldest)
+    if (deviceIds.length === 3) {
+      deviceIds.shift(); // Remove the oldest device ID
+    }
+    // Add the new device ID to the list
+    deviceIds.push(userDeviceId);
+    return deviceIds; // Return the updated device list
+  }
+
+  async onLogoutDeviceId(deviceIdforRemove: string, userId: string, existingDeviceId: string[]) {
+    let deviceIds = existingDeviceId || [];
+    // Check if the device ID exists
+    if (!deviceIds.includes(deviceIdforRemove)) {
+      return deviceIds; // No action if device ID does not exist
+    }
+    // Remove the device ID
+    deviceIds = deviceIds.filter(id => id !== deviceIdforRemove);
+    return deviceIds;
+  }
+
+  async updateBasicUserDetails(userId, userData: Partial<User>): Promise<User> {
     const user = await this.usersRepository.findOne({
       where: { userId: userId },
     });
@@ -1988,6 +2041,135 @@ export class PostgresUserService implements IServicelocator {
     catch (error) {
       LoggerUtil.error(API_RESPONSES.SMS_ERROR, error.message);
       throw new Error(`${API_RESPONSES.SMS_NOTIFICATION_ERROR}:  ${error.message}`);
+    }
+  }
+
+  //send OTP on mobile and email for forgot password reset
+  async sendPasswordResetOTP(body: SendPasswordResetOTPDto, response: Response): Promise<any> {
+    const apiId = APIID.SEND_RESET_OTP;
+    try {
+      const username = body.username;
+      let error = [];
+      let success = [];
+      const userData: any = await this.findUserDetails(null, username);
+      if (!userData) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          API_RESPONSES.USER_NOT_EXISTS,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      if (!userData.mobile && !userData.email) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          API_RESPONSES.MOBILE_EMAIL_NOT_FOUND,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+      const programName = userData?.tenantData[0]?.tenantName ?? '';
+      const reason = "forgot";
+      const otp = this.authUtils.generateOtp(this.otpDigits).toString();
+      const { hash, expires, expiresInMinutes } = this.generateOtpHash(username, otp, reason);
+      if (userData.mobile) {
+        const replacements = {
+          "{OTP}": otp,
+          "{otpExpiry}": expiresInMinutes
+        };
+        try {
+          await this.smsNotification("OTP", "Reset_OTP", replacements, [userData.mobile]);
+          success.push({ type: 'SMS', message: API_RESPONSES.MOBILE_SENT_OTP });
+        } catch (e) {
+          error.push({ type: 'SMS', message: `${API_RESPONSES.MOBILE_OTP_SEND_FAILED} ${e.message}` })
+        }
+      }
+      if (userData.email) {
+        const replacements = {
+          "{OTP}": otp,
+          "{otpExpiry}": expiresInMinutes,
+          "{programName}": programName,
+          "{username}": username
+        };
+        try {
+          await this.sendEmailNotification("OTP", "Reset_OTP", replacements, [userData.email]);
+          success.push({ type: 'Email', message: API_RESPONSES.EMAIL_SENT_OTP })
+        } catch (e) {
+          error.push({ type: 'Email', message: `${API_RESPONSES.EMAIL_OTP_SEND_FAILED}: ${e.message}` })
+        }
+      }
+      // Error 
+      if (error.length === 2) { // if both SMS and Email notification fail to sent
+        let errorMessage = '';
+        if (error.some(e => e.type === 'SMS')) {
+          errorMessage += `SMS Error: ${error.filter(e => e.type === 'SMS').map(e => e.message).join(", ")}. `;
+        }
+        if (error.some(e => e.type === 'Email')) {
+          errorMessage += `Email Error: ${error.filter(e => e.type === 'Email').map(e => e.message).join(", ")}.`;
+        }
+
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.NOTIFICATION_ERROR,
+          errorMessage.trim(),
+          HttpStatus.INTERNAL_SERVER_ERROR
+        );
+      }
+      const result = {
+        hash: `${hash}.${expires}`,
+        success: success,
+        Error: error
+      }
+      return await APIResponse.success(
+        response,
+        apiId,
+        result,
+        HttpStatus.OK,
+        API_RESPONSES.SEND_OTP
+      );
+    }
+    catch (e) {
+      return APIResponse.error(
+        response,
+        apiId,
+        API_RESPONSES.SERVER_ERROR,
+        `Error : ${e?.message}`,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+
+  }
+
+  //send Email Notification
+  async sendEmailNotification(context: string, key: string, replacements: object, emailReceipt) {
+    try {
+      //Send Notification
+      const notificationPayload = {
+        isQueue: false,
+        context: context,
+        key: key,
+        replacements: replacements,
+        email: {
+          receipients: emailReceipt,
+        },
+      };
+      const mailSend = await this.notificationRequest.sendNotification(
+        notificationPayload
+      );
+      if (mailSend?.result?.email?.errors && mailSend.result.email.errors.length > 0) {
+        const errorMessages = mailSend.result.email.errors.map((error: { error: string; }) => error.error);
+        const combinedErrorMessage = errorMessages.join(", "); // Combine all error messages into one string
+        throw new Error(`error :${combinedErrorMessage}`);
+      }
+      return mailSend;
+    }
+    catch (e) {
+      LoggerUtil.error(API_RESPONSES.EMAIL_ERROR, e.message);
+      throw new Error(`${API_RESPONSES.EMAIL_NOTIFICATION_ERROR}:  ${e.message}`);
     }
   }
 

@@ -46,6 +46,7 @@ import {
   ForgotPasswordDto,
   ResetUserPasswordDto,
   SendPasswordResetLinkDto,
+  SendPasswordResetOTPDto,
 } from "./dto/passwordReset.dto";
 import { isUUID } from "class-validator";
 import { API_RESPONSES } from "@utils/response.messages";
@@ -167,8 +168,8 @@ export class UserController {
 
   @UseFilters(new AllExceptionsFilter(APIID.USER_LIST))
   @Post("/list")
-  @UseGuards(JwtAuthGuard)
-  @ApiBasicAuth("access-token")
+  // @UseGuards(JwtAuthGuard)
+  // @ApiBasicAuth("access-token")
   @ApiCreatedResponse({ description: "User list." })
   @ApiBody({ type: UserSearchDto })
   @UsePipes(ValidationPipe)
@@ -283,4 +284,16 @@ export class UserController {
   async verifyOtp(@Body() body: OtpVerifyDTO, @Res() response: Response) {
     return this.userAdapter.buildUserAdapter().verifyOtp(body, response);
   }
+  @Post("password-reset-otp")
+  @ApiOkResponse({ description: "Password reset link sent successfully." })
+  @UsePipes(new ValidationPipe({ transform: true }))
+  @ApiBody({ type: SendPasswordResetOTPDto })
+  public async sendPasswordResetOTP(
+    @Req() request: Request,
+    @Res() response: Response,
+    @Body() reqBody: SendPasswordResetOTPDto
+  ) {
+    return await this.userAdapter.buildUserAdapter().sendPasswordResetOTP(reqBody, response)
+  }
+
 }

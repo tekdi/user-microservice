@@ -64,8 +64,8 @@ export const API_RESPONSES = {
   INVALID_CONTEXTTYPE: (context, validContextTypes) => `Invalid contextType. For the context '${context}', it must be one of: ${validContextTypes}`,
   COHORTID_NOTFOUND_FOT_THIS_YEAR: (cohortId) => `Cohort with cohortId ${cohortId} does not exist for this academic year.`,
   MAPPING_EXIST_BW_USER_AND_COHORT: (userId, cohortId) => `Mapping already exists for userId ${userId} and cohortId ${cohortId} for this academic year`,
-  COHORT_NOTMAPPED_WITH_USER: (removeCohortId, userId) => `Cohort Id ${removeCohortId} is not mapped to user Id${userId}} for this academic year.`,
-  COHORT_STATUS_UPDATED_FOR_USER: (removeCohortId, userId) => `Cohort Id ${removeCohortId} status updated for This user Id${userId}}`,
+  COHORT_NOTMAPPED_WITH_USER: (removeCohortId, userId) => `CohortId ${removeCohortId} is not mapped to userId ${userId} for this academic year.`,
+  COHORT_STATUS_UPDATED_FOR_USER: (removeCohortId, userId) => `CohortId ${removeCohortId} status updated for This userId ${userId}`,
   ERROR_UPDATE_COHORTMEMBER: (userId, removeCohortId, error) => `Error updating cohort member with userId ${userId} and cohortId ${removeCohortId}: ${error}`,
   ERROR_SAVING_COHORTMEMBER: (userId, cohortId, error) => `Error saving cohort member with userId ${userId} and cohortId ${cohortId}: ${error}`,
   USER_NOTEXIST: (userId) => `User with userId ${userId} does not exist for this academic year.`,
@@ -176,5 +176,14 @@ export const API_RESPONSES = {
   USERNAME_REQUIRED: 'Username Required',
   INVALID_REASON: 'Invalid Reason',
   MOBILE_REQUIRED: 'MObile Required',
-  INVALID_HASH_FORMAT: 'Invalid hash format'
+  INVALID_HASH_FORMAT: 'Invalid hash format',
+  NOTIFICATION_ERROR: 'Notification not send due to getting from notification API',
+  MOBILE_EMAIL_NOT_FOUND: 'Mobile number and email ID not found for sending OTP',
+  MOBILE_SENT_OTP: 'OTP sent successfully to mobile',
+  MOBILE_OTP_SEND_FAILED: 'Failed to send OTP to mobile',
+  EMAIL_SENT_OTP: 'OTP sent successfully to email',
+  EMAIL_OTP_SEND_FAILED: 'Failed to send OTP to email',
+  SEND_OTP: 'OTP sent successfully',
+  EMAIL_NOTIFICATION_ERROR: 'Failed to send Email notification:',
+  EMAIL_ERROR: 'Email notification failed'
 };
