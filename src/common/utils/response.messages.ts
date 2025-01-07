@@ -15,6 +15,7 @@ export const API_RESPONSES = {
   SERVICE_UNAVAILABLE:
     "Notification service is unreachable. Please try again later.",
   INTERNAL_SERVER_ERROR: "Internal Server Error",
+  FORBIDDEN: "Forbidden",
   ERROR: "Error occurred",
   UNEXPECTED_ERROR: "An unexpected error occurred",
   ACADEMICYEAR: "Academic Year Created Successfully",
@@ -63,8 +64,8 @@ export const API_RESPONSES = {
   INVALID_CONTEXTTYPE: (context, validContextTypes) => `Invalid contextType. For the context '${context}', it must be one of: ${validContextTypes}`,
   COHORTID_NOTFOUND_FOT_THIS_YEAR: (cohortId) => `Cohort with cohortId ${cohortId} does not exist for this academic year.`,
   MAPPING_EXIST_BW_USER_AND_COHORT: (userId, cohortId) => `Mapping already exists for userId ${userId} and cohortId ${cohortId} for this academic year`,
-  COHORT_NOTMAPPED_WITH_USER: (removeCohortId, userId) => `CohortId ${removeCohortId} is not mapped to userId ${userId} for this academic year.`,
-  COHORT_STATUS_UPDATED_FOR_USER: (removeCohortId, userId) => `CohortId ${removeCohortId} status updated for This userId ${userId}`,
+  COHORT_NOTMAPPED_WITH_USER: (removeCohortId, userId) => `Cohort Id ${removeCohortId} is not mapped to user Id${userId}} for this academic year.`,
+  COHORT_STATUS_UPDATED_FOR_USER: (removeCohortId, userId) => `Cohort Id ${removeCohortId} status updated for This user Id${userId}}`,
   ERROR_UPDATE_COHORTMEMBER: (userId, removeCohortId, error) => `Error updating cohort member with userId ${userId} and cohortId ${removeCohortId}: ${error}`,
   ERROR_SAVING_COHORTMEMBER: (userId, cohortId, error) => `Error saving cohort member with userId ${userId} and cohortId ${cohortId}: ${error}`,
   USER_NOTEXIST: (userId) => `User with userId ${userId} does not exist for this academic year.`,
@@ -98,7 +99,6 @@ export const API_RESPONSES = {
   //Create user
   USER_CREATE_SUCCESSFULLY: `User created successfully`,
   USER_CREATE_IN_DB: 'User created in user table successfully',
-  USER_CREATE_KEYCLOAK: 'User created successfully on ',
   USER_CREATE_FAILED: 'User creation failed',
   USER_CREATE_FAILED_WITH_ERROR: (error) => `User creation failed with error: ${error}`,
   USER_CREATE_FAILED_WITH_ERROR_AND_EMAIL: (error, email) => `User creation failed with error: ${error}. Email: ${email}`,
@@ -149,11 +149,15 @@ export const API_RESPONSES = {
 
   //Tenant
   TENANT_GET: "Tenant fetched successfully.",
-  TENANT_NOT_FOUND: "Tenant does not exist",
+  TENANT_NOT_FOUND: "No tenants found matching the specified criteria.",
   TENANT_EXISTS: "Tenant already exists",
   TENANT_CREATE: "Tenant created successfully",
   TENANT_UPDATE: "Tenant updated successfully",
   TENANT_DELETE: "Tenant deleted successfully",
+  TENANT_SEARCH_SUCCESS: "Tenant search successfully",
+  TENANT_CREATE_FAILED: "Failed to create tenant, please try again.",
+  REQUIRED_AND_UUID: "tenantId is required and it's must be a valid UUID.",
+
 
   //OTP
   NOTIFICATION_FAIL_DURING_OTP_SEND: "Send SMS notification failed duing OTP send",
@@ -169,14 +173,5 @@ export const API_RESPONSES = {
   USERNAME_REQUIRED: 'Username Required',
   INVALID_REASON: 'Invalid Reason',
   MOBILE_REQUIRED: 'MObile Required',
-  INVALID_HASH_FORMAT: 'Invalid hash format',
-  NOTIFICATION_ERROR: 'Notification not send due to getting from notification API',
-  MOBILE_EMAIL_NOT_FOUND: 'Mobile number and email ID not found for sending OTP',
-  MOBILE_SENT_OTP: 'OTP sent successfully to mobile',
-  MOBILE_OTP_SEND_FAILED: 'Failed to send OTP to mobile',
-  EMAIL_SENT_OTP: 'OTP sent successfully to email',
-  EMAIL_OTP_SEND_FAILED: 'Failed to send OTP to email',
-  SEND_OTP: 'OTP sent successfully',
-  EMAIL_NOTIFICATION_ERROR: 'Failed to send Email notification:',
-  EMAIL_ERROR: 'Email notification failed'
+  INVALID_HASH_FORMAT: 'Invalid hash format'
 };

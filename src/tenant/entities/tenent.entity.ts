@@ -35,10 +35,10 @@ export class Tenant {
 
     @Column({
         type: 'text',
-        default: 'active',
-        enum: ['active', 'inactive', 'archived'],
+        default: 'draft',
+        enum: ['published', 'draft', 'archived'],
     })
-    status: 'active' | 'inactive' | 'archived'; // Status column with enum values
+    status: 'published' | 'draft' | 'archived'; // Status column with enum values
 
     @Column("int4", { nullable: false })
     @Min(0) 
