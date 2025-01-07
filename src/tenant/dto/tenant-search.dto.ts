@@ -1,24 +1,76 @@
-import { ApiProperty } from "@nestjs/swagger";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import {
-    IsNotEmpty,
+  ArrayNotEmpty,
+  IsArray,
+  IsIn,
+  IsNotEmpty,
   IsNumber,
   IsObject,
   IsOptional,
+  IsString,
+  IsUUID,
   Max,
   Min,
-  validateSync,
 } from "class-validator";
-import { BadRequestException } from "@nestjs/common";
-import { Tenant } from "../entities/tenent.entity";
-import { getMetadataArgsStorage } from "typeorm";
 import { Expose } from "class-transformer";
 
-export class TenantSearchDto {
+export class TenantFilters {
+  @ApiPropertyOptional({ type: () => String, description: 'Tenant Id must be a (UUID)' })
+  @IsString()
+  @IsUUID()
+  @IsOptional()
+  tenantId?: string;
+
+  @ApiPropertyOptional({ type: () => String })
+  @IsString()
+  @IsOptional()
+  name?: string;
+
+  @ApiPropertyOptional({ type: () => String })
+  @IsOptional()
+  @IsString()
+  domain?: string;
+
+  @ApiPropertyOptional({
+    type: [String],
+    description: "Status of the tenant",
+    enum: ['published', 'draft', 'archived'],
+    isArray: true,
+    default: ['published'],
+  })
+  @IsArray()
+  @IsOptional()
+  @ArrayNotEmpty() // Ensures the array is not empty (if provided)
+  @IsIn(['published', 'draft', 'archived'], { each: true }) // Validates each array element
+  @IsNotEmpty({ each: true }) // Ensures no empty strings in the array
+  @Expose()
+  status?: ('published' | 'draft' | 'archived')[];
+
+  @ApiPropertyOptional({ type: () => String, description: 'The ID of the creator (UUID)' })
+  @IsString()
+  @IsUUID()
+  @IsOptional()
+  createdBy?: string;
+
+  @ApiPropertyOptional({ type: () => String, description: 'The ID of the updater (UUID)' })
+  @IsString()
+  @IsUUID()
+  @IsOptional()
+  updatedBy?: string;
+
+  @ApiPropertyOptional({ type: () => String })
+  @IsString()
+  @IsOptional()
+  programHead?: string;
+}
+
+export class TenantSearchDTO {
   @ApiProperty({
     type: Number,
     description: "Limit",
     minimum: 1,
     maximum: 100,
+    default: 10,
   })
   @IsNumber()
   @Min(1)
@@ -30,22 +82,16 @@ export class TenantSearchDto {
     description: "Offset",
     minimum: 0,
     maximum: 100,
+    default: 0,
   })
   @IsNumber()
   @Min(0)
   @Max(200)
   offset: number;
 
-  @ApiProperty({
-    type: Object,
-    description: "The customFieldsName of the cohort",
-  })
-  @Expose()
+  @ApiPropertyOptional({ type: () => TenantFilters })
   @IsOptional()
   @IsObject()
   @IsNotEmpty({ each: true })
-  filters?: {};
-
-
-
+  filters?: TenantFilters;
 }

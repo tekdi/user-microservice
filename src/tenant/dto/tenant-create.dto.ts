@@ -20,52 +20,37 @@ export class TenantCreateDto {
     updatedBy: string;
 
     //tenant name
-    @ApiProperty({
-        type: String,
-        description: "Tenant name",
-        default: "",
-    })
+    @ApiProperty({ type: () => String })
     @IsString()
     @IsNotEmpty()
-    @Expose()
     name: string;
 
     //domain
-    @ApiPropertyOptional({
-        type: String,
-        description: "Domain Name",
-        default: "",
-    })
-    @Expose()
+    @ApiPropertyOptional({ type: () => String })
+    @IsString()
+    @IsOptional()
     domain?: string;
 
     //params
-    @ApiPropertyOptional({
-        type: Object,
-        description: "Params",
-        default: "",
-    })
-    @Expose()
-    params: object;
+    @ApiPropertyOptional({ type: () => Object })
+    @IsOptional()
+    params?: object;
 
     //file path
-    @ApiPropertyOptional({
-        description: 'List of program images (URLs or other related strings)',
-    })
-    @Expose()
+    @ApiPropertyOptional({ type: () => [String] })
+    @IsString()
+    @IsOptional()
     programImages: string[];
 
-    @ApiProperty({ type: String })
+    @ApiProperty({ type: () => String })
     @IsString()
     @IsNotEmpty()
-    @Expose()
-    description?: string;
+    description: string;
 
-    @ApiProperty({ type: String })
+    @ApiProperty({ type: () => String })
     @IsString()
     @IsNotEmpty()
-    @Expose()
-    programHead?: string
+    programHead: string
 
     constructor(obj?: Partial<TenantCreateDto>) {
         if (obj) {

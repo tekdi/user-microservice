@@ -15,6 +15,7 @@ export const API_RESPONSES = {
   SERVICE_UNAVAILABLE:
     "Notification service is unreachable. Please try again later.",
   INTERNAL_SERVER_ERROR: "Internal Server Error",
+  FORBIDDEN: "Forbidden",
   ERROR: "Error occurred",
   UNEXPECTED_ERROR: "An unexpected error occurred",
   ACADEMICYEAR: "Academic Year Created Successfully",
@@ -151,11 +152,15 @@ export const API_RESPONSES = {
 
   //Tenant
   TENANT_GET: "Tenant fetched successfully.",
-  TENANT_NOT_FOUND: "Tenant does not exist",
+  TENANT_NOT_FOUND: "No tenants found matching the specified criteria.",
   TENANT_EXISTS: "Tenant already exists",
   TENANT_CREATE: "Tenant created successfully",
   TENANT_UPDATE: "Tenant updated successfully",
   TENANT_DELETE: "Tenant deleted successfully",
+  TENANT_SEARCH_SUCCESS: "Tenant search successfully",
+  TENANT_CREATE_FAILED: "Failed to create tenant, please try again.",
+  REQUIRED_AND_UUID: "tenantId is required and it's must be a valid UUID.",
+
 
   //OTP
   NOTIFICATION_FAIL_DURING_OTP_SEND: "Send SMS notification failed duing OTP send",
