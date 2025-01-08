@@ -144,7 +144,6 @@ export const API_RESPONSES = {
   COHORT_DATA_RESPONSE: 'Fetch cohort data response',
   COHORT_UPDATED_SUCCESSFULLY: 'Cohort updated successfully.',
   TENANT_NOTFOUND: 'Tenant not found',
-
   COHORTMEMBER_UPDATE_SUCCESSFULLY: "Cohort Member updated Successfully",
 
   //Tenant
