@@ -3,13 +3,14 @@ import { Response } from "express";
 import { AcademicYearDto } from "src/academicyears/dto/academicyears-create.dto";
 import { IServicelocatorAcademicyear } from "../academicyearsservicelocater";
 import { InjectRepository } from "@nestjs/typeorm";
-import { AcademicYear } from "src/academicyears/entities/academicyears-entity";
+import { AcademicYear } from "../../academicyears/entities/academicyears-entity";
 import { Repository } from "typeorm";
-import { API_RESPONSES } from "@utils/response.messages";
-import { APIID } from "@utils/api-id.config";
-import APIResponse from "src/common/responses/response";
+import { API_RESPONSES } from "../../common/utils/response.messages";
+import { APIID } from "../../common/utils/api-id.config";
+import APIResponse from "../../common/responses/response";
 import { AcademicYearSearchDto } from "src/academicyears/dto/academicyears-search.dto";
-import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
+import { Tenants } from "../../userTenantMapping/entities/tenant.entity";
+import { TypeormService } from "../../services/typeorm"
 
 @Injectable()
 export class PostgresAcademicYearService
@@ -18,7 +19,8 @@ export class PostgresAcademicYearService
     @InjectRepository(AcademicYear)
     private readonly academicYearRespository: Repository<AcademicYear>,
     @InjectRepository(Tenants)
-    private readonly tenantRepository: Repository<Tenants>
+    private readonly tenantRepository: Repository<Tenants>,
+    private typeormService: TypeormService
   ) { }
 
   public async createAcademicYear(
@@ -116,7 +118,7 @@ export class PostgresAcademicYearService
     academicYearId: string,
     tenantId: string
   ): Promise<AcademicYear> {
-    return await this.academicYearRespository.findOne({
+    return await this.typeormService.findOne(AcademicYear, {
       where: { id: academicYearId, isActive: true, tenantId },
     });
   }
@@ -133,7 +135,7 @@ export class PostgresAcademicYearService
       if (academicYearSearchDto.isActive !== undefined) {
         searchCriteria["isActive"] = academicYearSearchDto.isActive;
       }
-      const academicYearList = await this.academicYearRespository.find({
+      const academicYearList = await this.typeormService.find(AcademicYear, {
         where: searchCriteria,
       });
 
@@ -169,7 +171,7 @@ export class PostgresAcademicYearService
   async getAcademicYearById(id, response) {
     const apiId = APIID.ACADEMICYEAR_GET;
     try {
-      const academicYearResult = await this.academicYearRespository.findOne({ where: { id: id } });
+      const academicYearResult = await this.typeormService.findOne(AcademicYear, { where: { id: id } });
       if (!academicYearResult) {
         return APIResponse.error(
           response,
