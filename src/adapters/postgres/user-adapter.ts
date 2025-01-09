@@ -1007,7 +1007,7 @@ export class PostgresUserService implements IServicelocator {
         }
       );
 
-      // LoggerUtil.log(API_RESPONSES.USER_CREATE_KEYCLOAK, apiId);
+      LoggerUtil.log(API_RESPONSES.USER_CREATE_KEYCLOAK, apiId);
 
       userCreateDto.userId = resKeycloak;
 

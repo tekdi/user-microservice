@@ -95,6 +95,7 @@ export const API_RESPONSES = {
   USER_GET_BY_USER_ID_SUCCESSFULLY: 'User details fetched successfully by userId',
   USER_GET_BY_USER_ID_AND_TENANT_ID_SUCCESSFULLY: 'User details fetched successfully by userId and tenantId',
   USER_GET_BY_EMAIL_AND_TENANT_ID_SUCCESSFULLY: 'User details fetched successfully by email and tenantId',
+  USER_CREATE_KEYCLOAK: 'User created successfully on keycloak',
 
   //Create user
   USER_CREATE_SUCCESSFULLY: `User created successfully`,
