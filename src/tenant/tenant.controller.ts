@@ -53,7 +53,6 @@ export class TenantController {
     @UseInterceptors(FilesInterceptor('programImages', 10))
     @UsePipes(ValidationPipe)
     public async createTenants(
-        @Req() request: Request,
         @Res() response: Response,
         @Body() tenantCreateDto: TenantCreateDto,
         @UploadedFiles() files: Express.Multer.File[],
@@ -71,7 +70,7 @@ export class TenantController {
             tenantCreateDto.programImages = uploadedFiles.map(file => file.filePath); // Adjust field as needed
         }
         tenantCreateDto.createdBy = userId;
-        return await this.tenantService.createTenants(request, tenantCreateDto, response);
+        return await this.tenantService.createTenants(tenantCreateDto, response);
     }
 
     //Update a tenant
