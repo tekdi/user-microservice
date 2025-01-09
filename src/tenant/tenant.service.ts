@@ -78,7 +78,7 @@ export class TenantService {
 
     public async searchTenants(request: Request, tenantSearchDTO: TenantSearchDTO, response: Response): Promise<Response> {
         let apiId = APIID.TENANT_SEARCH;
-        try {            
+        try {                        
             const { limit, offset, filters } = tenantSearchDTO;
 
             const whereClause: Record<string, any> = {};
@@ -149,7 +149,7 @@ export class TenantService {
         }
     }
 
-    public async createTenants(request: Request, tenantCreateDto: TenantCreateDto, response:Response): Promise<Response> {
+    public async createTenants( tenantCreateDto: TenantCreateDto, response:Response): Promise<Response> {
         let apiId = APIID.TENANT_CREATE;
         try {
             let checkExitTenants = await this.tenantRepository.find({

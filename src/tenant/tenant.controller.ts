@@ -53,16 +53,11 @@ export class TenantController {
     @UseInterceptors(FilesInterceptor('programImages', 10))
     @UsePipes(ValidationPipe)
     public async createTenants(
-        @Req() request: Request,
         @Res() response: Response,
         @Body() tenantCreateDto: TenantCreateDto,
         @UploadedFiles() files: Express.Multer.File[],
-        @Query("userId") userId: string
+        @Query("userId", new ParseUUIDPipe()) userId: string
     ): Promise<Response> {
-        if (!userId || !isUUID(userId)) {
-            throw new BadRequestException(API_RESPONSES.UNAUTHORIZED);
-        }
-
         const uploadedFiles = [];
 
         // Loop through each file and upload it
@@ -75,7 +70,7 @@ export class TenantController {
             tenantCreateDto.programImages = uploadedFiles.map(file => file.filePath); // Adjust field as needed
         }
         tenantCreateDto.createdBy = userId;
-        return await this.tenantService.createTenants(request, tenantCreateDto, response);
+        return await this.tenantService.createTenants(tenantCreateDto, response);
     }
 
     //Update a tenant
@@ -86,18 +81,12 @@ export class TenantController {
     @UsePipes(ValidationPipe)
     public async updateTenants(
         @Res() response: Response,
-        @Param("id", ParseUUIDPipe) id: string,
+        @Param("id", new ParseUUIDPipe()) id: string,
         @Body() tenantUpdateDto: TenantUpdateDto,
         @UploadedFiles() files: Express.Multer.File[],
-        @Query("userId") userId: string,
+        @Query("userId", new ParseUUIDPipe()) userId: string,
     ): Promise<Response> {
         const tenantId = id;        
-        if (!userId || !isUUID(userId)) {
-            throw new BadRequestException(API_RESPONSES.UNAUTHORIZED);
-        }
-        if (!tenantId || !isUUID(tenantId)) {
-            throw new BadRequestException(API_RESPONSES.REQUIRED_AND_UUID);
-        }
         const uploadedFiles = [];
 
         // Loop through each file and upload it
@@ -125,16 +114,10 @@ export class TenantController {
     public async deleteTenants(
         @Req() request: Request,
         @Res() response: Response,
-        @Query("id") id: string,
-        @Query("userId") userId: string,
+        @Param("id", new ParseUUIDPipe()) id: string,
+        @Query("userId", new ParseUUIDPipe()) userId: string,
     ) {
         const tenantId = id;        
-        if (!userId || !isUUID(userId)) {
-            throw new BadRequestException(API_RESPONSES.UNAUTHORIZED);
-        }
-        if (!tenantId || !isUUID(tenantId)) {
-            throw new BadRequestException(API_RESPONSES.REQUIRED_AND_UUID);
-        }
         return await this.tenantService.deleteTenants(request, tenantId, response);
     }
 

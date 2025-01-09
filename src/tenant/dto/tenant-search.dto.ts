@@ -69,7 +69,7 @@ export class TenantSearchDTO {
     type: Number,
     description: "Limit",
     minimum: 1,
-    maximum: 100,
+    maximum: 200,
     default: 10,
   })
   @IsNumber()
@@ -81,7 +81,7 @@ export class TenantSearchDTO {
     type: Number,
     description: "Offset",
     minimum: 0,
-    maximum: 100,
+    maximum: 200,
     default: 0,
   })
   @IsNumber()

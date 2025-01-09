@@ -38,8 +38,8 @@ export class TenantCreateDto {
 
     //file path
     @ApiPropertyOptional({ type: () => [String] })
-    @IsString()
-    @IsOptional()
+    @IsArray()
+    @IsString({ each: true })    @IsOptional()
     programImages: string[];
 
     @ApiProperty({ type: () => String })
@@ -50,7 +50,7 @@ export class TenantCreateDto {
     @ApiProperty({ type: () => String })
     @IsString()
     @IsNotEmpty()
-    programHead: string
+    programHead: string;
 
     constructor(obj?: Partial<TenantCreateDto>) {
         if (obj) {

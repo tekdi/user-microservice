@@ -64,8 +64,8 @@ export const API_RESPONSES = {
   INVALID_CONTEXTTYPE: (context, validContextTypes) => `Invalid contextType. For the context '${context}', it must be one of: ${validContextTypes}`,
   COHORTID_NOTFOUND_FOT_THIS_YEAR: (cohortId) => `Cohort with cohortId ${cohortId} does not exist for this academic year.`,
   MAPPING_EXIST_BW_USER_AND_COHORT: (userId, cohortId) => `Mapping already exists for userId ${userId} and cohortId ${cohortId} for this academic year`,
-  COHORT_NOTMAPPED_WITH_USER: (removeCohortId, userId) => `CohortId ${removeCohortId} is not mapped to userId ${userId} for this academic year.`,
-  COHORT_STATUS_UPDATED_FOR_USER: (removeCohortId, userId) => `CohortId ${removeCohortId} status updated for This userId ${userId}`,
+  COHORT_NOTMAPPED_WITH_USER: (removeCohortId, userId) => `Cohort Id ${removeCohortId} is not mapped to user Id${userId}} for this academic year.`,
+  COHORT_STATUS_UPDATED_FOR_USER: (removeCohortId, userId) => `Cohort Id ${removeCohortId} status updated for This user Id${userId}}`,
   ERROR_UPDATE_COHORTMEMBER: (userId, removeCohortId, error) => `Error updating cohort member with userId ${userId} and cohortId ${removeCohortId}: ${error}`,
   ERROR_SAVING_COHORTMEMBER: (userId, cohortId, error) => `Error saving cohort member with userId ${userId} and cohortId ${cohortId}: ${error}`,
   USER_NOTEXIST: (userId) => `User with userId ${userId} does not exist for this academic year.`,
@@ -95,13 +95,11 @@ export const API_RESPONSES = {
   USER_GET_BY_USER_ID_SUCCESSFULLY: 'User details fetched successfully by userId',
   USER_GET_BY_USER_ID_AND_TENANT_ID_SUCCESSFULLY: 'User details fetched successfully by userId and tenantId',
   USER_GET_BY_EMAIL_AND_TENANT_ID_SUCCESSFULLY: 'User details fetched successfully by email and tenantId',
+  USER_CREATE_KEYCLOAK: 'User created successfully on keycloak',
 
   //Create user
   USER_CREATE_SUCCESSFULLY: `User created successfully`,
   USER_CREATE_IN_DB: 'User created in user table successfully',
-  USER_CREATE_KEYCLOAK: 'User created successfully on keycloak Service',
-  USER_UPDATE_KEYCLOAK: 'User updated successfully on keycloak Service',
-  UPDATE_USER_KEYCLOAK_ERROR: 'Failure to Create User on Keycloak Service',
   USER_CREATE_FAILED: 'User creation failed',
   USER_CREATE_FAILED_WITH_ERROR: (error) => `User creation failed with error: ${error}`,
   USER_CREATE_FAILED_WITH_ERROR_AND_EMAIL: (error, email) => `User creation failed with error: ${error}. Email: ${email}`,
@@ -147,7 +145,6 @@ export const API_RESPONSES = {
   COHORT_DATA_RESPONSE: 'Fetch cohort data response',
   COHORT_UPDATED_SUCCESSFULLY: 'Cohort updated successfully.',
   TENANT_NOTFOUND: 'Tenant not found',
-
   COHORTMEMBER_UPDATE_SUCCESSFULLY: "Cohort Member updated Successfully",
 
   //Tenant
