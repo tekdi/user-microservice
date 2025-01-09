@@ -111,7 +111,7 @@ class UserDataDTO {
   @IsNotEmpty({ message: 'deviceId is required when action is provided' })
   deviceId: string;
 
-  @ApiProperty({ enum: ActionType, required: false })
+  @ApiPropertyOptional({ enum: ActionType, required: false })
   @ValidateIf((o) => o.deviceId)
   @IsEnum(ActionType, { message: `Action must be either ${Object.values(ActionType).join(' or ')}` }) // Restrict to "add" or "remove"
   action: ActionType;

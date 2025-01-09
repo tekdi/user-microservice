@@ -821,7 +821,7 @@ export class PostgresUserService implements IServicelocator {
         );
       }
 
-      const user = await this.usersRepository.findOne({ where: { userId: userDto.userId } });
+      const user = await this.usersRepository.findOne({ where: { userId: userUpdateDto.userId } });
       if (!user) {
         return APIResponse.error(
           response,
@@ -833,24 +833,24 @@ export class PostgresUserService implements IServicelocator {
       }
 
       //mutideviceId
-      if (userDto?.userData?.deviceId) {
+      if (userUpdateDto?.userData?.deviceId) {
         let deviceIds: any;
-        if (userDto.userData.action === ActionType.ADD) {
+        if (userUpdateDto.userData.action === ActionType.ADD) {
           // add deviceId
-          deviceIds = await this.loginDeviceIdAction(userDto.userData.deviceId, userDto.userId, user.deviceId)
-          userDto.userData.deviceId = deviceIds;
+          deviceIds = await this.loginDeviceIdAction(userUpdateDto.userData.deviceId, userUpdateDto.userId, user.deviceId)
+          userUpdateDto.userData.deviceId = deviceIds;
 
-        } else if (userDto.userData.action === ActionType.REMOVE) {
+        } else if (userUpdateDto.userData.action === ActionType.REMOVE) {
           //remove deviceId
-          deviceIds = await this.onLogoutDeviceId(userDto.userData.deviceId, userDto.userId, user.deviceId)
-          userDto.userData.deviceId = deviceIds;
+          deviceIds = await this.onLogoutDeviceId(userUpdateDto.userData.deviceId, userUpdateDto.userId, user.deviceId)
+          userUpdateDto.userData.deviceId = deviceIds;
         }
       }
 
 
-      if (userDto.userData) {
-        await this.updateBasicUserDetails(userDto.userId, userDto.userData);
-        updatedData["basicDetails"] = userDto.userData;
+      if (userUpdateDto.userData) {
+        await this.updateBasicUserDetails(userUpdateDto.userId, userUpdateDto.userData);
+        updatedData["basicDetails"] = userUpdateDto.userData;
       }
 
       LoggerUtil.log(

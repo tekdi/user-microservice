@@ -92,15 +92,19 @@ async function updateUserInKeyCloak(query, token) {
 
   try {
     const response = await axios(config);
-    console.log("response", response);
     if(response.status === 204) {
       return true;
     }else{
       return false;
     }
   } catch (error) {
-    console.error("Error updating user in Keycloak:", error.response.data);
-    throw new Error(error.response.data.errorMessage || "Failed to update user");
+    const errorMessage = error.response?.data?.errorMessage || "Failed to update user in Keycloak"; 
+
+    LoggerUtil.error(
+      `${API_RESPONSES.SERVER_ERROR}`,
+      `Error: ${error.message},`
+    )
+    return errorMessage;
   }
 }
 
