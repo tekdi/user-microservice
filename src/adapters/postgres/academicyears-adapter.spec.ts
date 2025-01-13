@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { EntityManager, Repository } from 'typeorm';
-import { TypeOrmModule, getRepositoryToken } from '@nestjs/typeorm';
+import { EntityManager } from 'typeorm';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { Response } from 'express';
 import { PostgresAcademicYearService } from './academicyears-adapter';
 import { AcademicYear } from '../../academicyears/entities/academicyears-entity';
@@ -8,7 +8,7 @@ import { AcademicYearSearchDto } from 'src/academicyears/dto/academicyears-searc
 import { Tenants } from '../../userTenantMapping/entities/tenant.entity';
 import { ConfigModule } from '@nestjs/config';
 import { TypeormService } from '../../services/typeorm';
-import { BadRequestException, HttpStatus, NotFoundException } from '@nestjs/common';
+import { HttpStatus } from '@nestjs/common';
 
 describe('PostgresAcademicYearService', () => {
     let service: PostgresAcademicYearService;
@@ -73,12 +73,12 @@ describe('PostgresAcademicYearService', () => {
         const academicFilter: AcademicYearSearchDto = {
             isActive: false
         }
-        const jsonSpy = jest.spyOn(responseMock, 'json').mockImplementation((result) => {
+        jest.spyOn(responseMock, 'json').mockImplementation((result) => {
             return result; // Just return the result passed to json
         });
         await service.getAcademicYearList(academicFilter, tenantId, responseMock as Response);
         const status = jest.spyOn(responseMock, 'status').mockReturnThis();
-        const result = jsonSpy.mock.calls[0][0].result;
+        // const result = jsonSpy.mock.calls[0][0].result;
         expect(status).toHaveBeenCalledWith(HttpStatus.OK);
     });
     it('should  not filter if academic years is not exist for tenant', async () => {
@@ -102,7 +102,7 @@ describe('PostgresAcademicYearService', () => {
         });
         await service.getAcademicYearById(academicYearId, responseMock as Response);
         const status = jest.spyOn(responseMock, 'status').mockReturnThis();
-        const result = academicYearExist.mock.calls[0][0].result;
+        // const result = academicYearExist.mock.calls[0][0].result;
         expect(status).toHaveBeenCalledWith(HttpStatus.OK);
     });
 
