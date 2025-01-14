@@ -55,22 +55,14 @@ async function getKeycloakAdminToken() {
 
 async function createUserInKeyCloak(query, token) {
   const axios = require("axios");
-  const name = query.name;
-  const nameParts = name.split(" ");
-  let lname = "";
 
-  if (nameParts[2]) {
-    lname = nameParts[2];
-  } else if (nameParts[1]) {
-    lname = nameParts[1];
-  }
   if (!query.password) {
     return "User cannot be created, Password missing";
   }
-
+  
   const data = JSON.stringify({
-    firstName: nameParts[0],
-    lastName: lname,
+    firstName: query.firstName,
+    lastName: query.lastName,
     enabled: "true",
     username: query.username,
     // groups: [getUserGroup(query.role)],
@@ -92,6 +84,8 @@ async function createUserInKeyCloak(query, token) {
     },
     data: data,
   };
+  console.log("hhhhhh");
+  
   let userResponse;
   // try {
   //   userResponse = await axios(config);

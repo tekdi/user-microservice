@@ -404,7 +404,7 @@ export class PostgresUserService implements IServicelocator {
           whereCondition += ` AND `;
         }
         if (userKeys.includes(key)) {
-          if (key === "name") {
+          if (key === "firstName") {
             whereCondition += ` U."${key}" ILIKE '%${value}%'`;
           } else {
             if (key === "status" || key === "email") {
@@ -498,7 +498,7 @@ export class PostgresUserService implements IServicelocator {
     }
 
     //Get user core fields data
-    const query = `SELECT U."userId", U."username",U."email", U."name", R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", U.status, COUNT(*) OVER() AS total_count 
+    const query = `SELECT U."userId", U."username",U."email", U."firstName", U."middleName", U."lastName", U.gender, R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", U.status, COUNT(*) OVER() AS total_count 
       FROM  public."Users" U
       LEFT JOIN public."CohortMembers" CM 
       ON CM."userId" = U."userId"
@@ -688,7 +688,9 @@ export class PostgresUserService implements IServicelocator {
       select: [
         "userId",
         "username",
-        "name",
+        "firstName",
+        "middleName",
+        "lastName",
         "mobile",
         "email",
         "temporaryPassword",
@@ -900,16 +902,35 @@ export class PostgresUserService implements IServicelocator {
     return deviceIds;
   }
 
-  async updateBasicUserDetails(userId, userData: Partial<User>): Promise<User> {
-    const user = await this.usersRepository.findOne({
-      where: { userId: userId },
-    });
-    if (!user) {
-      return null;
+  async updateBasicUserDetails(userId: string, userData: Partial<User>): Promise<User | null> {
+    try {
+      // Fetch the user by ID
+      const user = await this.usersRepository.findOne({ where: { userId } });
+  
+      if (!user) {
+        // If the user is not found, return null
+        return null;
+      }
+  
+      console.log(userId, userData);
+  
+      // Update the user's details
+      await this.usersRepository.update(userId, userData);
+  
+      // Fetch and return the updated user
+      const updatedUser = await this.usersRepository.findOne({ where: { userId } });
+  
+      return updatedUser;
+    } catch (error) {
+      // Log the error for debugging purposes
+      console.error('Error updating user details:', error);
+  
+      // Re-throw or handle the error as needed
+      throw new Error('An error occurred while updating user details');
     }
-    Object.assign(user, userData);
-    return this.usersRepository.save(user);
   }
+  
+  
 
   async createUser(
     request: any,
@@ -987,7 +1008,7 @@ export class PostgresUserService implements IServicelocator {
           HttpStatus.BAD_REQUEST
         );
       }
-
+      
       resKeycloak = await createUserInKeyCloak(userSchema, token).catch(
         (error) => {
           LoggerUtil.error(
@@ -1008,6 +1029,7 @@ export class PostgresUserService implements IServicelocator {
       );
 
       LoggerUtil.log(API_RESPONSES.USER_CREATE_KEYCLOAK, apiId);
+      
 
       userCreateDto.userId = resKeycloak;
 
@@ -1083,7 +1105,7 @@ export class PostgresUserService implements IServicelocator {
         HttpStatus.CREATED,
         API_RESPONSES.USER_CREATE_SUCCESSFULLY
       );
-    } catch (e) {
+    } catch (e) {      
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
         `Error: ${e.message}`,
@@ -1294,17 +1316,15 @@ export class PostgresUserService implements IServicelocator {
     response: Response
   ) {
     const user = new User();
-    (user.username = userCreateDto?.username),
-      (user.name = userCreateDto?.name),
+      (user.userId = userCreateDto?.userId),
+      (user.username = userCreateDto?.username),
+      (user.firstName = userCreateDto?.firstName),
+      (user.middleName = userCreateDto?.middleName),
+      (user.lastName = userCreateDto?.lastName),
+      (user.gender = userCreateDto?.gender),
       (user.email = userCreateDto?.email),
       (user.mobile = Number(userCreateDto?.mobile) || null),
-      (user.createdBy = userCreateDto?.createdBy || userCreateDto?.userId),
-      (user.updatedBy = userCreateDto?.updatedBy || userCreateDto?.userId),
-      (user.userId = userCreateDto?.userId),
-      (user.state = userCreateDto?.state),
-      (user.district = userCreateDto?.district),
-      (user.address = userCreateDto?.address),
-      (user.pincode = userCreateDto?.pincode);
+      (user.createdBy = userCreateDto?.createdBy || userCreateDto?.createdBy);
 
     if (userCreateDto?.dob) {
       user.dob = new Date(userCreateDto.dob);

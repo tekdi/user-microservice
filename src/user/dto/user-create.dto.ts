@@ -9,6 +9,8 @@ import {
   IsUUID,
   ValidateNested,
   IsOptional,
+  Length,
+  IsEnum,
 } from "class-validator";
 import { User } from "../entities/user-entity";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
@@ -70,9 +72,37 @@ export class UserCreateDto {
   @IsNotEmpty()
   username: string;
 
-  @ApiProperty({ type: () => String })
+  @ApiProperty({ type: String, description: 'First name of the user', maxLength: 50 })
   @Expose()
-  name: string;
+  @IsString()
+  @Length(1, 50)
+  firstName: string;
+
+  @ApiPropertyOptional({ type: String, description: 'Middle name of the user (optional)', maxLength: 50, required: false })
+  @Expose()
+  @IsOptional()
+  @IsString()
+  @Length(0, 50)
+  middleName?: string;
+
+  @ApiProperty({ type: String, description: 'Last name of the user', maxLength: 50 })
+  @Expose()
+  @IsString()
+  @Length(1, 50)
+  lastName: string;
+
+  @Expose()
+  name:string;
+  
+  @ApiProperty({ 
+    type: String, 
+    description: 'Gender of the user', 
+    enum: ['male', 'female', 'transgender'] 
+  })
+  @Expose()
+  @IsEnum(['male', 'female', 'transgender'])
+  gender: string;
+
 
   @ApiPropertyOptional({
     type: String,
