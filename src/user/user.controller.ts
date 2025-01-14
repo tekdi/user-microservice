@@ -155,7 +155,6 @@ export class UserController {
   public async updateUser(
     @Headers() headers,
     @Param("userid") userId: string,
-    @Req() request: Request,
     @Body() userUpdateDto: UserUpdateDTO,
     @Res() response: Response
   ) {
@@ -163,7 +162,7 @@ export class UserController {
     userUpdateDto.userId = userId;
     return await this.userAdapter
       .buildUserAdapter()
-      .updateUser(userUpdateDto, response);
+      .updateUser( userUpdateDto, response);
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.USER_LIST))

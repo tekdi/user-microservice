@@ -8,6 +8,7 @@ import jwt_decode from "jwt-decode";
 import {
   getKeycloakAdminToken,
   createUserInKeyCloak,
+  updateUserInKeyCloak,
   checkIfUsernameExistsInKeycloak,
   checkIfEmailExistsInKeycloak,
 } from "../../common/utils/keycloak.adapter.util";
@@ -42,8 +43,13 @@ import { AuthUtils } from "@utils/auth-util";
 import { OtpSendDTO } from "src/user/dto/otpSend.dto";
 import { OtpVerifyDTO } from "src/user/dto/otpVerify.dto";
 import { SendPasswordResetOTPDto } from "src/user/dto/passwordReset.dto";
-import { ActionType } from "src/user/dto/user-update.dto";
+import { ActionType, UserUpdateDTO } from "src/user/dto/user-update.dto";
 
+interface UpdateField {
+  username: string;
+  firstName?: string;
+  lastName?: string;
+}
 @Injectable()
 export class PostgresUserService implements IServicelocator {
   axios = require("axios");
@@ -762,7 +768,7 @@ export class PostgresUserService implements IServicelocator {
     return combinedResult;
   }
 
-  async updateUser(userDto, response: Response) {
+  async updateUser( userDto, response: Response) {
     const apiId = APIID.USER_UPDATE;
     try {
       const updatedData = {};
@@ -794,7 +800,35 @@ export class PostgresUserService implements IServicelocator {
         }
       }
 
-
+      const { username, firstName, lastName } = userDto.userData;
+      const userId = userDto.userId;
+      const keycloakReqBody = {username,firstName,lastName, userId};
+      
+      //Update userdetails on keycloak
+      if(username){
+        const updateuserDataInKeycloak = await this.updateUsernameInKeycloak(keycloakReqBody);
+        
+        if(updateuserDataInKeycloak === 'exists'){
+          return APIResponse.error(
+            response,
+            apiId,
+            API_RESPONSES.BAD_REQUEST,
+            API_RESPONSES.USERNAME_EXISTS_KEYCLOAK,
+            HttpStatus.BAD_REQUEST
+          );
+        }
+  
+        if(updateuserDataInKeycloak === false){
+          return APIResponse.error(
+            response,
+            apiId,
+            API_RESPONSES.SERVER_ERROR,
+            API_RESPONSES.UPDATE_USER_KEYCLOAK_ERROR,
+            HttpStatus.BAD_REQUEST
+          );
+        }
+      }
+      
       if (userDto.userData) {
         await this.updateBasicUserDetails(userDto.userId, userDto.userData);
         updatedData["basicDetails"] = userDto.userData;
@@ -876,6 +910,30 @@ export class PostgresUserService implements IServicelocator {
     }
   }
 
+  async updateUsernameInKeycloak(updateField: UpdateField): Promise<'exists' | false | true> {
+    try {
+
+      const keycloakResponse = await getKeycloakAdminToken();
+      const token = keycloakResponse.data.access_token;
+
+      //Check user is exist in keycloakDB or not
+      const checkUserinKeyCloakandDb = await this.checkUserinKeyCloakandDb(updateField);
+      if (checkUserinKeyCloakandDb) {
+        return 'exists';
+      }
+
+      //Update user in keyCloakService
+      let updateResult = await updateUserInKeyCloak(updateField, token)
+      return updateResult ? true : false;
+
+    } catch (error) {
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `KeyCloak Error: ${error.message}`,
+      );
+    }
+  }
+  
   async loginDeviceIdAction(userDeviceId: string, userId: string, existingDeviceId: string[]): Promise<string[]> {
     let deviceIds = existingDeviceId || [];
     // Check if the device ID already exists
@@ -906,26 +964,26 @@ export class PostgresUserService implements IServicelocator {
     try {
       // Fetch the user by ID
       const user = await this.usersRepository.findOne({ where: { userId } });
-  
+
       if (!user) {
         // If the user is not found, return null
         return null;
       }
-    
+
       // Update the user's details
       await this.usersRepository.update(userId, userData);
-  
+
       // Fetch and return the updated user
       const updatedUser = await this.usersRepository.findOne({ where: { userId } });
-  
+
       return updatedUser;
-    } catch (error) {  
+    } catch (error) {
       // Re-throw or handle the error as needed
       throw new Error('An error occurred while updating user details');
     }
   }
-  
-  
+
+
 
   async createUser(
     request: any,
@@ -1003,7 +1061,7 @@ export class PostgresUserService implements IServicelocator {
           HttpStatus.BAD_REQUEST
         );
       }
-      
+
       resKeycloak = await createUserInKeyCloak(userSchema, token).catch(
         (error) => {
           LoggerUtil.error(
@@ -1024,7 +1082,7 @@ export class PostgresUserService implements IServicelocator {
       );
 
       LoggerUtil.log(API_RESPONSES.USER_CREATE_KEYCLOAK, apiId);
-      
+
 
       userCreateDto.userId = resKeycloak;
 
@@ -1100,7 +1158,7 @@ export class PostgresUserService implements IServicelocator {
         HttpStatus.CREATED,
         API_RESPONSES.USER_CREATE_SUCCESSFULLY
       );
-    } catch (e) {      
+    } catch (e) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
         `Error: ${e.message}`,
@@ -1311,7 +1369,7 @@ export class PostgresUserService implements IServicelocator {
     response: Response
   ) {
     const user = new User();
-      (user.userId = userCreateDto?.userId),
+    (user.userId = userCreateDto?.userId),
       (user.username = userCreateDto?.username),
       (user.firstName = userCreateDto?.firstName),
       (user.middleName = userCreateDto?.middleName),
