@@ -498,7 +498,7 @@ export class PostgresUserService implements IServicelocator {
     }
 
     //Get user core fields data
-    const query = `SELECT U."userId", U."username",U."email", U."firstName", U."middleName", U."lastName", U.gender, R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", U.status, COUNT(*) OVER() AS total_count 
+    const query = `SELECT U."userId", U."username",U."email", U."firstName", U."middleName", U."lastName", U.gender, U.dob, R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", U.status, COUNT(*) OVER() AS total_count 
       FROM  public."Users" U
       LEFT JOIN public."CohortMembers" CM 
       ON CM."userId" = U."userId"
@@ -911,9 +911,7 @@ export class PostgresUserService implements IServicelocator {
         // If the user is not found, return null
         return null;
       }
-  
-      console.log(userId, userData);
-  
+    
       // Update the user's details
       await this.usersRepository.update(userId, userData);
   
@@ -921,10 +919,7 @@ export class PostgresUserService implements IServicelocator {
       const updatedUser = await this.usersRepository.findOne({ where: { userId } });
   
       return updatedUser;
-    } catch (error) {
-      // Log the error for debugging purposes
-      console.error('Error updating user details:', error);
-  
+    } catch (error) {  
       // Re-throw or handle the error as needed
       throw new Error('An error occurred while updating user details');
     }

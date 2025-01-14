@@ -59,7 +59,7 @@ async function createUserInKeyCloak(query, token) {
   if (!query.password) {
     return "User cannot be created, Password missing";
   }
-  
+
   const data = JSON.stringify({
     firstName: query.firstName,
     lastName: query.lastName,
@@ -83,9 +83,7 @@ async function createUserInKeyCloak(query, token) {
       Authorization: "Bearer " + token,
     },
     data: data,
-  };
-  console.log("hhhhhh");
-  
+  };  
   let userResponse;
   // try {
   //   userResponse = await axios(config);
