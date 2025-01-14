@@ -91,9 +91,6 @@ export class UserCreateDto {
   @Length(1, 50)
   lastName: string;
 
-  @Expose()
-  name:string;
-  
   @ApiProperty({ 
     type: String, 
     description: 'Gender of the user', 
