@@ -6,10 +6,11 @@ import { TypeOrmModule } from "@nestjs/typeorm";
 import { PostgresFieldsService } from "src/adapters/postgres/fields-adapter";
 import { Fields } from "src/fields/entities/fields.entity";
 import { FieldValues } from "src/fields/entities/fields-values.entity";
+import { TypeormService } from "src/services/typeorm";
 
 @Module({
   controllers: [FormsController],
   imports: [TypeOrmModule.forFeature([Form, Fields, FieldValues])],
-  providers: [FormsService, PostgresFieldsService],
+  providers: [FormsService, PostgresFieldsService, TypeormService],
 })
-export class FormsModule {}
+export class FormsModule { }

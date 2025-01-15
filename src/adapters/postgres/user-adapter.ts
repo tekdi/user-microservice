@@ -43,6 +43,8 @@ import { OtpSendDTO } from "src/user/dto/otpSend.dto";
 import { OtpVerifyDTO } from "src/user/dto/otpVerify.dto";
 import { SendPasswordResetOTPDto } from "src/user/dto/passwordReset.dto";
 import { ActionType } from "src/user/dto/user-update.dto";
+import { TypeormService } from "src/services/typeorm";
+import { Tenant } from "src/tenant/entities/tenent.entity";
 
 @Injectable()
 export class PostgresUserService implements IServicelocator {
@@ -80,7 +82,8 @@ export class PostgresUserService implements IServicelocator {
     private configService: ConfigService,
     private postgresAcademicYearService: PostgresAcademicYearService,
     private readonly cohortAcademicYearService: CohortAcademicYearService,
-    private readonly authUtils: AuthUtils
+    private readonly authUtils: AuthUtils,
+    private readonly typeormService: TypeormService
   ) {
     this.jwt_secret = this.configService.get<string>("RBAC_JWT_SECRET");
     this.jwt_password_reset_expires_In = this.configService.get<string>(
@@ -115,7 +118,7 @@ export class PostgresUserService implements IServicelocator {
       // Determine email address
       let emailOfUser = userData?.email;
       if (!emailOfUser) {
-        const createdByUser = await this.usersRepository.findOne({
+        const createdByUser = await this.typeormService.findOne(User, {
           where: { userId: userData.createdBy },
         });
         emailOfUser = createdByUser?.email;
@@ -223,7 +226,7 @@ export class PostgresUserService implements IServicelocator {
         body.token,
         jwtSecretKey
       );
-      const userDetail = await this.usersRepository.findOne({
+      const userDetail = await this.typeormService.findOne(User, {
         where: { userId: decoded.sub },
       });
       if (!userDetail) {
@@ -258,7 +261,7 @@ export class PostgresUserService implements IServicelocator {
         //update tempPassword status
         if (apiResponse?.statusCode === 204) {
           if (userData.temporaryPassword) {
-            await this.usersRepository.update(userData.userId, {
+            await this.typeormService.update(User, userData.userId, {
               temporaryPassword: false,
             });
           }
@@ -506,7 +509,7 @@ export class PostgresUserService implements IServicelocator {
       ON UR."userId" = U."userId"
       LEFT JOIN public."Roles" R
       ON R."roleId" = UR."roleId" ${whereCondition} GROUP BY U."userId", R."name" ${orderingCondition} ${offset} ${limit}`;
-    const userDetails = await this.usersRepository.query(query);
+    const userDetails = await this.typeormService.query(User, query);
 
     if (userDetails.length > 0) {
       result.totalCount = parseInt(userDetails[0].total_count, 10);
@@ -543,7 +546,7 @@ export class PostgresUserService implements IServicelocator {
           HttpStatus.BAD_REQUEST
         );
       }
-      const checkExistUser = await this.usersRepository.find({
+      const checkExistUser = await this.typeormService.find(User, {
         where: {
           userId: userData.userId,
         },
@@ -650,15 +653,15 @@ export class PostgresUserService implements IServicelocator {
     }
     let result: any[];
     if (role !== null) {
-      result = await this.usersRepository.query(query, [cohortId, role]);
+      result = await this.typeormService.query(User, query, [cohortId, role]);
     } else {
-      result = await this.usersRepository.query(query, [cohortId]);
+      result = await this.typeormService.query(User, query, [cohortId]);
     }
     return result;
   }
 
   async findUserRoles(userId: string, tenantId: string) {
-    const getRole = await this.userRoleMappingRepository.findOne({
+    const getRole = await this.typeormService.findOne(UserRoleMapping, {
       where: {
         userId: userId,
         tenantId: tenantId,
@@ -668,7 +671,7 @@ export class PostgresUserService implements IServicelocator {
       return false;
     }
     let role;
-    role = await this.roleRepository.findOne({
+    role = await this.typeormService.findOne(Role, {
       where: {
         roleId: getRole.roleId,
       },
@@ -683,7 +686,7 @@ export class PostgresUserService implements IServicelocator {
       delete whereClause.userId;
       whereClause.username = username;
     }
-    const userDetails = await this.usersRepository.findOne({
+    const userDetails = await this.typeormService.findOne(User, {
       where: whereClause,
       select: [
         "userId",
@@ -729,7 +732,7 @@ export class PostgresUserService implements IServicelocator {
   ORDER BY 
     T."tenantId", UTM."Id";`;
 
-    const result = await this.usersRepository.query(query, [userId]);
+    const result = await this.typeormService.query(User, query, [userId]);
     const combinedResult = [];
     const roleArray = [];
     for (const data of result) {
@@ -766,7 +769,7 @@ export class PostgresUserService implements IServicelocator {
       const updatedData = {};
       const editIssues = {};
 
-      const user = await this.usersRepository.findOne({ where: { userId: userDto.userId } });
+      const user = await this.typeormService.findOne(User, { where: { userId: userDto.userId } });
       if (!user) {
         return APIResponse.error(
           response,
@@ -901,14 +904,14 @@ export class PostgresUserService implements IServicelocator {
   }
 
   async updateBasicUserDetails(userId, userData: Partial<User>): Promise<User> {
-    const user = await this.usersRepository.findOne({
+    const user = await this.typeormService.findOne(User, {
       where: { userId: userId },
     });
     if (!user) {
       return null;
     }
     Object.assign(user, userData);
-    return this.usersRepository.save(user);
+    return this.typeormService.save(User, user);
   }
 
   async createUser(
@@ -1190,13 +1193,13 @@ export class PostgresUserService implements IServicelocator {
 
         const [tenantExists, notExistCohort, roleExists] = await Promise.all([
           tenantId
-            ? this.tenantsRepository.find({ where: { tenantId } })
+            ? this.typeormService.find(Tenant, { where: { tenantId } })
             : Promise.resolve([]),
           tenantId && cohortIds
             ? this.checkCohortExistsInAcademicYear(academicYearId, cohortIds)
             : Promise.resolve([]),
           roleId
-            ? this.roleRepository.find({ where: { roleId, tenantId } })
+            ? this.typeormService.find(Role, { where: { roleId, tenantId } })
             : Promise.resolve([]),
         ]);
 
@@ -1309,7 +1312,7 @@ export class PostgresUserService implements IServicelocator {
     if (userCreateDto?.dob) {
       user.dob = new Date(userCreateDto.dob);
     }
-    const result = await this.usersRepository.save(user);
+    const result = await this.typeormService.save(User, user);
 
     if (result && userCreateDto.tenantCohortRoleMapping) {
       for (const mapData of userCreateDto.tenantCohortRoleMapping) {
@@ -1317,7 +1320,7 @@ export class PostgresUserService implements IServicelocator {
           for (const cohortIds of mapData.cohortIds) {
             let query = `SELECT * FROM public."CohortAcademicYear" WHERE "cohortId"= '${cohortIds}' AND "academicYearId" = '${academicYearId}'`;
 
-            let getCohortAcademicYearId = await this.usersRepository.query(
+            let getCohortAcademicYearId = await this.typeormService.query(User,
               query
             );
 
@@ -1350,7 +1353,7 @@ export class PostgresUserService implements IServicelocator {
       const roleId = tenantsData?.tenantRoleMapping?.roleId;
 
       if (roleId) {
-        const data = await this.userRoleMappingRepository.save({
+        await this.typeormService.save(UserRoleMapping, {
           userId: userId,
           tenantId: tenantId,
           roleId: roleId,
@@ -1359,7 +1362,7 @@ export class PostgresUserService implements IServicelocator {
         });
       }
 
-      const data = await this.userTenantMappingRepository.save({
+      await this.typeormService.save(UserTenantMapping, {
         userId: userId,
         tenantId: tenantId,
         createdBy: request["user"]?.userId || userId,
@@ -1378,7 +1381,7 @@ export class PostgresUserService implements IServicelocator {
 
   public async validateUserTenantMapping(userId: string, tenantId: string) {
     // check if tenant exists
-    const tenantExist = await this.tenantsRepository.findOne({
+    const tenantExist = await this.typeormService.findOne(Tenants, {
       where: { tenantId: tenantId },
     });
     if (!tenantExist) {
@@ -1389,7 +1392,7 @@ export class PostgresUserService implements IServicelocator {
   }
 
   async addCohortMember(cohortData) {
-    const result = await this.cohortMemberRepository.save(cohortData);
+    const result = await this.typeormService.save(CohortMembers, cohortData);
     LoggerUtil.log(API_RESPONSES.USER_COHORT);
     return result;
   }
@@ -1454,7 +1457,7 @@ export class PostgresUserService implements IServicelocator {
 
       if (apiResponse.statusCode === 204) {
         if (userData.temporaryPassword) {
-          await this.usersRepository.update(userData.userId, {
+          await this.typeormService.update(User, userData.userId, {
             temporaryPassword: false,
           });
         }
@@ -1662,7 +1665,7 @@ export class PostgresUserService implements IServicelocator {
 
     let contextType;
     if (roleIds) {
-      const getRoleName = await this.roleRepository.find({
+      const getRoleName = await this.typeormService.find(Role, {
         where: { roleId: In(roleIds) },
         select: ["title"],
       });
@@ -1706,7 +1709,7 @@ export class PostgresUserService implements IServicelocator {
 
     try {
       // Check if user exists in usersRepository
-      const user = await this.usersRepository.findOne({
+      const user = await this.typeormService.findOne(User, {
         where: { userId: userId },
       });
       if (!user) {
@@ -1720,24 +1723,24 @@ export class PostgresUserService implements IServicelocator {
       }
 
       // Delete from User table
-      const userResult = await this.usersRepository.delete(userId);
+      const userResult = await this.typeormService.delete(User, userId);
 
       // Delete from CohortMembers table
-      const cohortMembersResult = await this.cohortMemberRepository.delete({
+      const cohortMembersResult = await this.typeormService.delete(CohortMembers, {
         userId: userId,
       });
 
       // Delete from UserTenantMapping table
       const userTenantMappingResult =
-        await this.userTenantMappingRepository.delete({ userId: userId });
+        await this.typeormService.delete(UserTenantMapping, { userId: userId });
 
       // Delete from UserRoleMapping table
-      const userRoleMappingResult = await this.userRoleMappingRepository.delete(
+      await this.typeormService.delete(UserRoleMapping,
         { userId: userId }
       );
 
       // Delete from FieldValues table where ItemId matches userId
-      const fieldValuesResult = await this.fieldsValueRepository.delete({
+      await this.typeormService.delete(FieldValues, {
         itemId: userId,
       });
 

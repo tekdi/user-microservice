@@ -23,6 +23,8 @@ import { LoggerUtil } from "src/common/logger/LoggerUtil";
 import { PostgresUserService } from "./user-adapter";
 import { isValid } from "date-fns";
 import { FieldValuesOptionDto } from "src/user/dto/user-create.dto";
+import { TypeormService } from "src/services/typeorm";
+
 
 @Injectable()
 export class PostgresCohortMembersService {
@@ -40,7 +42,8 @@ export class PostgresCohortMembersService {
     private readonly academicyearService: PostgresAcademicYearService,
     private readonly notificationRequest: NotificationRequest,
     private fieldsService: PostgresFieldsService,
-    private userService: PostgresUserService
+    private readonly userService: PostgresUserService,
+    private readonly typeormService: TypeormService
   ) { }
 
   //Get cohort member
@@ -182,7 +185,7 @@ export class PostgresCohortMembersService {
     const query = `SELECT U."userId",F."fieldId",F."value" FROM public."Users" U
     LEFT JOIN public."FieldValues" F
     ON U."userId" = F."itemId" where U."userId" =$1`;
-    const result = await this.usersRepository.query(query, [userId]);
+    const result = await this.typeormService.query(User, query, [userId]);
     return result;
   }
 
@@ -191,7 +194,7 @@ export class PostgresCohortMembersService {
       cohortId: cohortId,
       cohortAcademicYearId: cohortAcademicYearId,
     };
-    const userDetails = await this.cohortMembersRepository.find({
+    const userDetails = await this.typeormService.find(CohortMembers, {
       where: whereClause,
     });
     if (userDetails.length !== 0) {
@@ -202,7 +205,7 @@ export class PostgresCohortMembersService {
   }
 
   async findCustomFields(role) {
-    const customFields = await this.fieldsRepository.find({
+    const customFields = await this.typeormService.find(Fields, {
       where: {
         context: "USERS",
         contextType: role.toUpperCase(),
@@ -217,7 +220,7 @@ export class PostgresCohortMembersService {
     LEFT JOIN public."Fields" F
     ON F."fieldId" = Fv."fieldId"
     where Fv."itemId" =$1 `;
-    const result = await this.usersRepository.query(query, [userId]);
+    const result = await this.typeormService.query(User, query, [userId]);
     return result;
   }
 
@@ -232,7 +235,7 @@ export class PostgresCohortMembersService {
     LEFT JOIN public."Users" U
     ON CM."userId" = U."userId" ${whereCase}`;
 
-    const result = await this.usersRepository.query(query, [searchData]);
+    const result = await this.typeormService.query(User, query, [searchData]);
     return result;
   }
 
@@ -394,7 +397,7 @@ export class PostgresCohortMembersService {
   }
 
   async isCohortExistForYear(yearId, cohortId) {
-    return await this.cohortAcademicYearRespository.find({
+    return await this.typeormService.find(CohortAcademicYear, {
       where: { academicYearId: yearId, cohortId: cohortId },
     });
   }
@@ -420,7 +423,7 @@ export class PostgresCohortMembersService {
             cm."userId" = $1 AND 
             cay."academicYearId" = $2;
     `;
-    const result = await this.cohortMembersRepository.query(query, [
+    const result = await this.typeormService.query(CohortMembers, query, [
       userId,
       yearId,
     ]);
@@ -482,7 +485,7 @@ export class PostgresCohortMembersService {
   ) {
     const apiId = APIID.COHORT_MEMBER_CREATE;
     try {
-      const existUser = await this.usersRepository.find({
+      const existUser = await this.typeormService.find(User, {
         where: {
           userId: cohortMembers.userId,
         },
@@ -527,7 +530,7 @@ export class PostgresCohortMembersService {
       }
       const cohortacAdemicyearId = isExistAcademicYear.cohortAcademicYearId;
       //check user is already exist in this cohort for this year or not
-      const existrole = await this.cohortMembersRepository.find({
+      const existrole = await this.typeormService.find(CohortMembers, {
         where: {
           userId: cohortMembers.userId,
           cohortId: cohortMembers.cohortId,
@@ -548,7 +551,8 @@ export class PostgresCohortMembersService {
       cohortMembers.updatedBy = loginUser;
       cohortMembers.cohortAcademicYearId = cohortacAdemicyearId;
       // Create a new CohortMembers entity and populate it with cohortMembers data
-      const savedCohortMember = await this.cohortMembersRepository.save(
+      let savedCohortMember;
+      savedCohortMember = await this.typeormService.save(CohortMembers,
         cohortMembers
       );
 
@@ -577,7 +581,7 @@ export class PostgresCohortMembersService {
   }
 
   async findCohortAcademicYearId(academicyearId, cohortMembers) {
-    return await this.cohortAcademicYearRespository.findOne({
+    return await this.typeormService.findOne(CohortAcademicYear, {
       where: {
         academicYearId: academicyearId,
         cohortId: cohortMembers.cohortId,
@@ -652,7 +656,7 @@ export class PostgresCohortMembersService {
       query += ` OFFSET ${offset}`;
     }
 
-    const result = await this.usersRepository.query(query);
+    const result = await this.typeormService.query(User, query);
 
     return result;
   }
@@ -698,7 +702,7 @@ export class PostgresCohortMembersService {
         }
       }
 
-      let cohortMembershipToUpdate = await this.cohortMembersRepository.findOne({
+      let cohortMembershipToUpdate = await this.typeormService.findOne(CohortMembers, {
         where: { cohortMembershipId: cohortMembershipId },
       });
 
@@ -712,7 +716,7 @@ export class PostgresCohortMembersService {
         );
       }
       Object.assign(cohortMembershipToUpdate, cohortMembersUpdateDto);
-      let result = await this.cohortMembersRepository.save(
+      let result = await this.typeormService.save(CohortMembers,
         cohortMembershipToUpdate
       );
       //update custom fields
@@ -786,7 +790,7 @@ export class PostgresCohortMembersService {
     const apiId = APIID.COHORT_MEMBER_DELETE;
 
     try {
-      const cohortMember = await this.cohortMembersRepository.find({
+      const cohortMember = await this.typeormService.find(CohortMembers, {
         where: {
           cohortMembershipId: cohortMembershipId,
         },
@@ -802,7 +806,7 @@ export class PostgresCohortMembersService {
         );
       }
 
-      const result = await this.cohortMembersRepository.delete(
+      const result = await this.typeormService.delete(CohortMembers,
         cohortMembershipId
       );
 
@@ -831,7 +835,7 @@ export class PostgresCohortMembersService {
   }
 
   public async checkUserExist(userId) {
-    const existUser = await this.usersRepository.findOne({
+    const existUser = await this.typeormService.findOne(User, {
       where: {
         userId: userId,
       },
@@ -840,7 +844,7 @@ export class PostgresCohortMembersService {
   }
 
   public async checkCohortExist(cohortId) {
-    const existCohort = await this.cohortRepository.findOne({
+    const existCohort = await this.typeormService.findOne(Cohort, {
       where: {
         cohortId: cohortId,
       },
@@ -852,7 +856,7 @@ export class PostgresCohortMembersService {
   }
 
   public async cohortUserMapping(userId, cohortId, cohortAcademicYearId) {
-    const mappingExist = await this.cohortMembersRepository.findOne({
+    const mappingExist = await this.typeormService.findOne(CohortMembers, {
       where: {
         userId: userId,
         cohortId: cohortId,
@@ -924,13 +928,16 @@ export class PostgresCohortMembersService {
               );
               continue;
             }
+            const updateData = {
+              status: MemberStatus.ARCHIVED,
+            };
             const updateCohort = await this.cohortMembersRepository.update(
               {
                 userId,
                 cohortId: removeCohortId,
                 cohortAcademicYearId: cohortExists[0].cohortAcademicYearId,
               },
-              { status: MemberStatus.ARCHIVED }
+              updateData
             );
             if (updateCohort.affected === 0) {
               results.push({
@@ -1027,7 +1034,7 @@ export class PostgresCohortMembersService {
               cohortAcademicYearId: cohortExists[0].cohortAcademicYearId,
             };
             // Need to add User in cohort for Academic year
-            const result = await this.cohortMembersRepository.save(
+            const result = await this.typeormService.save(CohortMembers,
               cohortMemberForAcademicYear
             );
             results.push(result);

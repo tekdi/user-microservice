@@ -1,17 +1,25 @@
 import { Injectable, OnApplicationShutdown, OnModuleInit } from "@nestjs/common";
-import { DataSource, EntityManager, EntityTarget, Repository } from "typeorm";
+import { DataSource, DeepPartial, EntityManager, EntityTarget, Repository } from "typeorm";
 import { Tenant } from "../tenant/entities/tenent.entity";
 import { ConfigService } from "@nestjs/config";
 import { AcademicYear } from "../academicyears/entities/academicyears-entity";
 import { Tenants } from "../userTenantMapping/entities/tenant.entity";
+import { CohortAcademicYear } from "src/cohortAcademicYear/entities/cohortAcademicYear.entity";
+import { CohortMembers } from "src/cohortMembers/entities/cohort-member.entity";
+import { User } from "src/user/entities/user-entity";
+import { UserTenantMapping } from "src/userTenantMapping/entities/user-tenant-mapping.entity";
+import { Cohort } from "src/cohort/entities/cohort.entity";
+import { Fields } from "src/fields/entities/fields.entity";
+import { FieldValues } from "src/fields/entities/fields-values.entity";
+import { UserRoleMapping } from "src/rbac/assign-role/entities/assign-role.entity";
+import { Role } from "src/rbac/role/entities/role.entity";
 
 @Injectable()
 export class TypeormService implements OnModuleInit, OnApplicationShutdown {
   private dataSource: DataSource;
   private entityManager: EntityManager;
 
-  constructor(private configService: ConfigService) {
-    // this.initialize();
+  constructor(private readonly configService: ConfigService) {
   }
   async onModuleInit() {
     await this.initialize();
@@ -27,14 +35,14 @@ export class TypeormService implements OnModuleInit, OnApplicationShutdown {
         database: this.configService.get("POSTGRES_DATABASE"),
         username: this.configService.get("POSTGRES_USERNAME"),
         password: this.configService.get("POSTGRES_PASSWORD"),
-        entities: [Tenant, AcademicYear, Tenants], // Add your entities here
-        synchronize: false, // For development only, set to false in production
+        entities: [Tenant, AcademicYear, Tenants, CohortAcademicYear, CohortMembers, User, UserTenantMapping, Cohort, Fields, FieldValues, UserRoleMapping, Role], // Add your entities here
+        synchronize: false,
       });
 
       await this.dataSource.initialize();
 
       this.entityManager = this.dataSource.manager;
-      // console.log("DataSource initialized and EntityManager set.");
+      console.log("DataSource initialized and EntityManager set.");
     } catch (error) {
       console.error("Error initializing DataSource:", error);
       throw new Error("TypeORM DataSource initialization failed.");
@@ -81,30 +89,38 @@ export class TypeormService implements OnModuleInit, OnApplicationShutdown {
       throw new Error(err);
     }
   }
-
-  // Save a new entity or update existing
-  async save<T>(entity: T, createData): Promise<T> {
-    try {
-      const repository = this.getRepository(entity.constructor as any);
-      return repository.save(createData);
-    } catch (err) {
-      throw new Error(err);
-    }
-  }
-
-  // Update an entity
-  async update<T>(entity, id: number, updateData): Promise<T> {
+  async findAndCount<T>(entity: EntityTarget<T>,
+    conditions: object) {
     try {
       const repository = this.getRepository(entity);
-      await repository.update(id, updateData);
-      return this.findOne(entity, { where: { id } });
+      return repository.findAndCount(conditions);
     } catch (err) {
       throw new Error(err);
     }
   }
 
+  // Save a new entity or update existing
+  async save<T>(entity: EntityTarget<T>, data: Partial<T>): Promise<T> {
+    return await this.getRepository(entity).save(data as DeepPartial<T>);
+  }
+
+  async update<T>(
+    entity,
+    conditions,
+    updateData
+  ): Promise<T> {
+    try {
+      const repository = this.getRepository(entity);
+      await repository.update(conditions, updateData);
+      return this.findOne(entity, { where: conditions });
+    } catch (err) {
+      throw new Error(err.message || 'Error updating entity');
+    }
+  }
+
+
   // Remove an entity
-  async delete<T>(entity, id: number): Promise<void> {
+  async delete<T>(entity, id): Promise<void> {
     try {
       const repository = this.getRepository(entity);
       const entityToRemove = await this.findOne(entity, { where: { id } });

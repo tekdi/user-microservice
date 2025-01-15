@@ -11,6 +11,7 @@ import APIResponse from "src/common/responses/response";
 import { API_RESPONSES } from "@utils/response.messages";
 import { PostgresAcademicYearService } from "./academicyears-adapter";
 import { Cohort } from "src/cohort/entities/cohort.entity";
+import { TypeormService } from "src/services/typeorm";
 
 @Injectable()
 export class CohortAcademicYearService implements IServiceLocatorCohortAcademicYear {
@@ -21,6 +22,7 @@ export class CohortAcademicYearService implements IServiceLocatorCohortAcademicY
     private readonly cohortRepository: Repository<Cohort>,
     @InjectRepository(CohortAcademicYear)
     private readonly cohortAcademicYearRepository: Repository<CohortAcademicYear>,
+    private readonly typeormService: TypeormService
   ) { }
 
   async createCohortAcademicYear(tenantId: string, request: Request, cohortAcademicYearDto: CohortAcademicYearDto, response: Response) {
@@ -30,7 +32,7 @@ export class CohortAcademicYearService implements IServiceLocatorCohortAcademicY
       cohortAcademicYearDto.createdBy = decoded?.sub;
       cohortAcademicYearDto.updatedBy = decoded?.sub;
 
-      const existingCohort = await this.cohortRepository.findOne({
+      const existingCohort = await this.typeormService.findOne(Cohort, {
         where: { cohortId: cohortAcademicYearDto.cohortId, status: 'active' },
       });
 
@@ -106,7 +108,7 @@ export class CohortAcademicYearService implements IServiceLocatorCohortAcademicY
     cohortAcademicYear.academicYearId = academicYearId;
     cohortAcademicYear.createdBy = createdBy;
     cohortAcademicYear.updatedBy = updatedBy;
-    return await this.cohortAcademicYearRepository.save(cohortAcademicYear);
+    return await this.typeormService.save(CohortAcademicYear, cohortAcademicYear);
   }
 
   async getCohortsAcademicYear(
@@ -121,14 +123,14 @@ export class CohortAcademicYearService implements IServiceLocatorCohortAcademicY
       WHERE cay."academicYearId" = $1
         AND ay."tenantId" = $2`;
 
-    return await this.cohortAcademicYearRepository.query(query, [
+    return await this.typeormService.query(CohortAcademicYear, query, [
       academicYearId,
       tenantId,
     ]);
   }
 
   async isCohortExistForYear(yearId, cohortId) {
-    return await this.cohortAcademicYearRepository.find({
+    return await this.typeormService.find(CohortAcademicYear, {
       where: { academicYearId: yearId, cohortId: cohortId },
     });
   }
