@@ -498,7 +498,7 @@ export class PostgresUserService implements IServicelocator {
     }
 
     //Get user core fields data
-    const query = `SELECT U."userId", U."username",U."email", U."firstName", U."middleName", U."lastName", U.gender, U.dob, R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", U.status, COUNT(*) OVER() AS total_count 
+    const query = `SELECT U."userId", U."username",U."email", U."firstName", U."middleName", U."lastName", U."gender", U."dob", R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", U.status, COUNT(*) OVER() AS total_count 
       FROM  public."Users" U
       LEFT JOIN public."CohortMembers" CM 
       ON CM."userId" = U."userId"
@@ -1311,15 +1311,15 @@ export class PostgresUserService implements IServicelocator {
     response: Response
   ) {
     const user = new User();
-      (user.userId = userCreateDto?.userId),
-      (user.username = userCreateDto?.username),
-      (user.firstName = userCreateDto?.firstName),
-      (user.middleName = userCreateDto?.middleName),
-      (user.lastName = userCreateDto?.lastName),
-      (user.gender = userCreateDto?.gender),
-      (user.email = userCreateDto?.email),
-      (user.mobile = Number(userCreateDto?.mobile) || null),
-      (user.createdBy = userCreateDto?.createdBy || userCreateDto?.createdBy);
+      user.userId = userCreateDto?.userId,
+      user.username = userCreateDto?.username,
+      user.firstName = userCreateDto?.firstName,
+      user.middleName = userCreateDto?.middleName,
+      user.lastName = userCreateDto?.lastName,
+      user.gender = userCreateDto?.gender,
+      user.email = userCreateDto?.email,
+      user.mobile = Number(userCreateDto?.mobile) || null,
+      user.createdBy = userCreateDto?.createdBy || userCreateDto?.createdBy;
 
     if (userCreateDto?.dob) {
       user.dob = new Date(userCreateDto.dob);
