@@ -63,6 +63,7 @@ async function createUserInKeyCloak(query, token) {
   const data = JSON.stringify({
     firstName: query.firstName,
     lastName: query.lastName,
+    email: query.email ? query.email : null,
     enabled: "true",
     username: query.username,
     // groups: [getUserGroup(query.role)],
