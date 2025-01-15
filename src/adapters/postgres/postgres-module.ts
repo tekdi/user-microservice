@@ -23,6 +23,7 @@ import { CohortAcademicYear } from "src/cohortAcademicYear/entities/cohortAcadem
 import { AcademicYear } from "src/academicyears/entities/academicyears-entity";
 import { CohortAcademicYearService } from "./cohortAcademicYear-adapter";
 import { AuthUtils } from "@utils/auth-util";
+import { TypeormService } from "src/services/typeorm";
 
 @Module({
   imports: [
@@ -52,7 +53,8 @@ import { AuthUtils } from "@utils/auth-util";
     JwtService,
     CohortAcademicYearService,
     PostgresAcademicYearService,
-    AuthUtils
+    AuthUtils,
+    TypeormService
   ],
   exports: [
     PostgresUserService,

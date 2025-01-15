@@ -9,6 +9,7 @@ import { PostgresModule } from "src/adapters/postgres/postgres-module";
 import { Cohort } from "src/cohort/entities/cohort.entity";
 import { AcademicYear } from "src/academicyears/entities/academicyears-entity";
 import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
+import { TypeormService } from "src/services/typeorm";
 
 
 @Module({
@@ -22,7 +23,7 @@ import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
     ]),
   ],
   controllers: [CohortAcademicYearController],
-  providers: [CohortAcademicYearAdapter, CohortAcademicYearService, PostgresAcademicYearService],
+  providers: [CohortAcademicYearAdapter, CohortAcademicYearService, PostgresAcademicYearService, TypeormService],
   exports: [CohortAcademicYearService]
 })
 export class CohortAcademicYearModule { }
