@@ -20,7 +20,7 @@ import { readFileSync } from "fs";
 import path, { join } from "path";
 import { FieldFactory } from "src/fields/fieldValidators/fieldFactory";
 import { FieldsUpdateDto } from "src/fields/dto/fields-update.dto";
-import { SchemaField, Option, Field } from "src/fields/fieldValidators/fieldClass";
+import { SchemaField, Field } from "src/fields/fieldValidators/fieldClass";
 import jwt_decode from "jwt-decode";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
 import { API_RESPONSES } from "@utils/response.messages";
@@ -33,7 +33,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
     private fieldsRepository: Repository<Fields>,
     @InjectRepository(FieldValues)
     private fieldsValuesRepository: Repository<FieldValues>,
-    private typeormService: TypeormService
+    private readonly typeormService: TypeormService
   ) { }
 
   async getFormCustomField(requiredData, response) {

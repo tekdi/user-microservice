@@ -1353,7 +1353,7 @@ export class PostgresUserService implements IServicelocator {
       const roleId = tenantsData?.tenantRoleMapping?.roleId;
 
       if (roleId) {
-        const data = await this.typeormService.save(UserRoleMapping, {
+        await this.typeormService.save(UserRoleMapping, {
           userId: userId,
           tenantId: tenantId,
           roleId: roleId,
@@ -1362,7 +1362,7 @@ export class PostgresUserService implements IServicelocator {
         });
       }
 
-      const data = await this.typeormService.save(UserTenantMapping, {
+      await this.typeormService.save(UserTenantMapping, {
         userId: userId,
         tenantId: tenantId,
         createdBy: request["user"]?.userId || userId,
@@ -1735,12 +1735,12 @@ export class PostgresUserService implements IServicelocator {
         await this.typeormService.delete(UserTenantMapping, { userId: userId });
 
       // Delete from UserRoleMapping table
-      const userRoleMappingResult = await this.typeormService.delete(UserRoleMapping,
+      await this.typeormService.delete(UserRoleMapping,
         { userId: userId }
       );
 
       // Delete from FieldValues table where ItemId matches userId
-      const fieldValuesResult = await this.typeormService.delete(FieldValues, {
+      await this.typeormService.delete(FieldValues, {
         itemId: userId,
       });
 

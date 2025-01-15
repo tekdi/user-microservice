@@ -42,8 +42,8 @@ export class PostgresCohortMembersService {
     private readonly academicyearService: PostgresAcademicYearService,
     private readonly notificationRequest: NotificationRequest,
     private fieldsService: PostgresFieldsService,
-    private userService: PostgresUserService,
-    private typeormService: TypeormService
+    private readonly userService: PostgresUserService,
+    private readonly typeormService: TypeormService
   ) { }
 
   //Get cohort member

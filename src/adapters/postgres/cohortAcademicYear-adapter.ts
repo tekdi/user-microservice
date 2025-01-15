@@ -22,7 +22,7 @@ export class CohortAcademicYearService implements IServiceLocatorCohortAcademicY
     private readonly cohortRepository: Repository<Cohort>,
     @InjectRepository(CohortAcademicYear)
     private readonly cohortAcademicYearRepository: Repository<CohortAcademicYear>,
-    private typeormService: TypeormService
+    private readonly typeormService: TypeormService
   ) { }
 
   async createCohortAcademicYear(tenantId: string, request: Request, cohortAcademicYearDto: CohortAcademicYearDto, response: Response) {
