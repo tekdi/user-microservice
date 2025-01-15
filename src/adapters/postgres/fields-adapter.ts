@@ -20,17 +20,20 @@ import { readFileSync } from "fs";
 import path, { join } from "path";
 import { FieldFactory } from "src/fields/fieldValidators/fieldFactory";
 import { FieldsUpdateDto } from "src/fields/dto/fields-update.dto";
-import { SchemaField, Option } from "src/fields/fieldValidators/fieldClass";
+import { SchemaField, Option, Field } from "src/fields/fieldValidators/fieldClass";
 import jwt_decode from "jwt-decode";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
 import { API_RESPONSES } from "@utils/response.messages";
+import { TypeormService } from "src/services/typeorm";
+
 @Injectable()
 export class PostgresFieldsService implements IServicelocatorfields {
   constructor(
     @InjectRepository(Fields)
     private fieldsRepository: Repository<Fields>,
     @InjectRepository(FieldValues)
-    private fieldsValuesRepository: Repository<FieldValues>
+    private fieldsValuesRepository: Repository<FieldValues>,
+    private typeormService: TypeormService
   ) { }
 
   async getFormCustomField(requiredData, response) {
@@ -761,7 +764,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
 
   async getFieldByIdes(fieldId: string) {
     try {
-      const response = await this.fieldsRepository.findOne({
+      const response = await this.typeormService.findOne(Field, {
         where: { fieldId: fieldId },
       });
       return response;
@@ -790,7 +793,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
       const fieldKeys = this.fieldsRepository.metadata.columns.map(
         (column) => column.propertyName
       );
-      let tenantCond = tenantId? `"tenantId" = ${tenantId}` :`"tenantId" IS NULL`
+      let tenantCond = tenantId ? `"tenantId" = ${tenantId}` : `"tenantId" IS NULL`
       let whereClause = tenantCond;
       if (filters && Object.keys(filters).length > 0) {
         Object.entries(filters).forEach(([key, value]) => {
@@ -1445,7 +1448,8 @@ export class PostgresFieldsService implements IServicelocatorfields {
 
     const query = `SELECT *,COUNT(*) OVER() AS total_count FROM public."${tableName}" ${whereCond} ${orderCond} ${offsetCond} ${limitCond}`;
 
-    const result = await this.fieldsRepository.query(query);
+    // const result = await this.fieldsRepository.query(query);
+    const result = await this.typeormService.query(Fields, query);
     if (!result) {
       return null;
     }
@@ -1492,7 +1496,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
     ON U."userId" = F."itemId" where U."userId" =$1`;
     }
 
-    const result = await this.fieldsRepository.query(query, [contextId]);
+    const result = await this.typeormService.query(Field, query, [contextId]);
     return result;
   }
 
@@ -1533,7 +1537,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         SELECT "itemId"
         FROM user_fields ${whereCondition}`;
 
-    const queryData = await this.fieldsValuesRepository.query(query);
+    const queryData = await this.typeormService.query(FieldValues, query);
     const result =
       queryData.length > 0 ? queryData.map((item) => item.itemId) : null;
 
@@ -1623,13 +1627,13 @@ export class PostgresFieldsService implements IServicelocatorfields {
       data.value = data.value.join(",");
     }
 
-    const result: any = await this.fieldsValuesRepository.update(
+    const result: any = await this.typeormService.update(FieldValues,
       { itemId, fieldId: data.fieldId },
       { value: data.value }
     );
     let newResult;
     if (result.affected === 0) {
-      newResult = await this.fieldsValuesRepository.save({
+      newResult = await this.typeormService.save(FieldValues, {
         itemId,
         fieldId: data.fieldId,
         value: data.value,
@@ -1726,7 +1730,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         WHERE u."userId" = $1;
       `;
 
-    let result = await this.fieldsRepository.query(query, [userId]);
+    let result = await this.typeormService.query(Field, query, [userId]);
     result = result.map(async (data) => {
       const originalValue = data.value;
       let processedValue = data.value;
@@ -1764,7 +1768,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
   }
 
   public async getFieldsByIds(fieldIds: string[]) {
-    return this.fieldsRepository.find({
+    return this.typeormService.find(Field, {
       where: {
         fieldId: In(fieldIds),
       },

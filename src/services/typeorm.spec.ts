@@ -32,7 +32,6 @@ describe("TypeormService", () => {
   describe("find", () => {
     it("should return an array of entities", async () => {
       const result = await service.find(Tenant, {}); // Pass entity name and options
-      console.log("result: ", result);
       expect(result).not.toBeNull();
       expect(entityRepository.find).toHaveBeenCalledWith({});
     });

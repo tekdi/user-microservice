@@ -18,10 +18,10 @@ export class CohortCreateDto {
   academicYearId: string;
 
   @Expose()
-  createdAt: string;
+  createdAt: Date;
 
   @Expose()
-  updatedAt: string;
+  updatedAt: Date;
 
   //programId
   @ApiPropertyOptional({

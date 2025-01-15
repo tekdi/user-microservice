@@ -24,6 +24,7 @@ import { API_RESPONSES } from "@utils/response.messages";
 import { CohortAcademicYear } from "src/cohortAcademicYear/entities/cohortAcademicYear.entity";
 import { PostgresCohortMembersService } from "./cohortMembers-adapter";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
+import { TypeormService } from "src/services/typeorm";
 
 @Injectable()
 export class PostgresCohortService {
@@ -41,7 +42,8 @@ export class PostgresCohortService {
     private fieldsService: PostgresFieldsService,
     private readonly cohortAcademicYearService: CohortAcademicYearService,
     private readonly postgresAcademicYearService: PostgresAcademicYearService,
-    private readonly postgresCohortMembersService: PostgresCohortMembersService
+    private readonly postgresCohortMembersService: PostgresCohortMembersService,
+    private readonly typeService: TypeormService
   ) { }
 
   public async getCohortsDetails(requiredData, res) {
@@ -64,7 +66,7 @@ export class PostgresCohortService {
     // }
 
     try {
-      const cohorts = await this.cohortRepository.find({
+      const cohorts = await this.typeService.find(Cohort, {
         where: {
           cohortId: requiredData.cohortId,
         },
@@ -206,7 +208,7 @@ export class PostgresCohortService {
 
     const params = academicYearId ? [userId, academicYearId] : [userId];
 
-    const result = await this.cohortMembersRepository.query(query, params);
+    const result = await this.typeService.query(CohortMembers, query, params);
 
     return result;
   }
@@ -248,7 +250,7 @@ export class PostgresCohortService {
     INNER JOIN public."Fields" f ON fv."fieldId" = f."fieldId"
     WHERE c."cohortId" = $1;
   `;
-    let result = await this.cohortMembersRepository.query(query, [cohortId]);
+    let result = await this.typeService.query(CohortMembers, query, [cohortId]);
     result = result.map(async (data) => {
       const originalValue = data.value;
       let processedValue = data.value;
@@ -350,7 +352,7 @@ export class PostgresCohortService {
       cohortCreateDto.status = cohortCreateDto.status || "active";
       cohortCreateDto.attendanceCaptureImage = false;
 
-      const existData = await this.cohortRepository.find({
+      const existData = await this.typeService.find(Cohort, {
         where: {
           name: cohortCreateDto.name,
           status: "active",
@@ -370,7 +372,7 @@ export class PostgresCohortService {
         );
       }
 
-      const response = await this.cohortRepository.save(cohortCreateDto);
+      const response: any = await this.typeService.save(Cohort, cohortCreateDto);
       const createFailures = [];
 
       //SAVE  in fieldValues table
@@ -469,7 +471,7 @@ export class PostgresCohortService {
       }
 
       // const checkData = await this.checkIfCohortExist(cohortId);
-      const existingCohorDetails = await this.cohortRepository.findOne({
+      const existingCohorDetails = await this.typeService.findOne(Cohort, {
         where: { cohortId: cohortId },
       });
 
@@ -509,7 +511,7 @@ export class PostgresCohortService {
                 cohortUpdateDto.parentId || existingCohorDetails.parentId,
             },
           };
-          const existData = await this.cohortRepository.find(filterOptions);
+          const existData = await this.typeService.find(Cohort, filterOptions);
 
           if (existData.length > 0) {
             return APIResponse.error(
@@ -539,7 +541,7 @@ export class PostgresCohortService {
         let response;
         // save cohort detail in cohort table
         if (Object.keys(updateData).length > 0) {
-          response = await this.cohortRepository.update(cohortId, updateData);
+          response = await this.typeService.update(Cohort, { cohortId }, updateData);
         }
 
         //SAVE customFields  in fieldValues table
@@ -598,7 +600,7 @@ export class PostgresCohortService {
           }
 
           if (memberStatus) {
-            await this.cohortMembersRepository.update(
+            await this.typeService.update(CohortMembers,
               { cohortId },
               { status: memberStatus, updatedBy: cohortUpdateDto.updatedBy }
             );
@@ -678,7 +680,7 @@ export class PostgresCohortService {
       );
 
       //Get custom fields
-      const getCustomFields = await this.fieldsRepository.find({
+      const getCustomFields = await this.typeService.find(Fields, {
         where: [
           { context: In(["COHORT", null, "null", "NULL"]), contextType: null },
           { context: IsNull(), contextType: IsNull() },
@@ -785,7 +787,7 @@ export class PostgresCohortService {
           );
         }
 
-        const userTenantMapExist = await this.UserTenantMappingRepository.find({
+        const userTenantMapExist = await this.typeService.find(UserTenantMapping, {
           where: {
             tenantId: tenantId,
             userId: whereClause["userId"],
@@ -802,7 +804,7 @@ export class PostgresCohortService {
         }
 
         const [data, totalCount] =
-          await this.cohortMembersRepository.findAndCount({
+          await this.typeService.findAndCount(CohortMembers, {
             where: whereClause,
           });
         const userExistCohortGroup = data.slice(offset, offset + limit);
@@ -812,7 +814,7 @@ export class PostgresCohortService {
           (cohortId) => cohortId.cohortId
         );
 
-        const cohortAllData = await this.cohortRepository.find({
+        const cohortAllData = await this.typeService.find(Cohort, {
           where: {
             cohortId: In(cohortIds),
           },
@@ -872,7 +874,7 @@ export class PostgresCohortService {
         //   whereClause["cohortId"] = In(cohortIds);
         // }
 
-        const [data, totalCount] = await this.cohortRepository.findAndCount({
+        const [data, totalCount] = await this.typeService.findAndCount(Cohort, {
           where: whereClause,
           order,
         });
@@ -943,11 +945,11 @@ export class PostgresCohortService {
         SET "status" = 'archived',
         "updatedBy" = '${userId}'
         WHERE "cohortId" = $1`;
-        const affectedrows = await this.cohortRepository.query(query, [
+        const affectedrows = await this.typeService.query(Cohort, query, [
           cohortId,
         ]);
-        await this.cohortMembersRepository.delete({ cohortId: cohortId });
-        await this.fieldValuesRepository.delete({ itemId: cohortId });
+        await this.typeService.delete(CohortMembers, { cohortId: cohortId });
+        await this.typeService.delete(FieldValues, { itemId: cohortId });
 
         return APIResponse.success(
           response,
@@ -983,7 +985,7 @@ export class PostgresCohortService {
   }
 
   public async checkIfCohortExist(id: any) {
-    const existData = await this.cohortRepository.find({
+    const existData = await this.typeService.find(Cohort, {
       where: {
         cohortId: id,
       },
@@ -999,7 +1001,7 @@ export class PostgresCohortService {
     parentId: string,
     customField?: boolean
   ): Promise<any> {
-    const childData = await this.cohortRepository.find({ where: { parentId } });
+    const childData = await this.typeService.find(Cohort, { where: { parentId } });
     const hierarchy = [];
     let customFieldDetails;
     let childHierarchy;

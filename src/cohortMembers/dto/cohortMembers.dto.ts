@@ -8,10 +8,10 @@ export class CohortMembersDto {
   tenantId: string;
   @Expose()
   cohortMembershipId: string;
-  @Expose()
-  createdAt: string;
-  @Expose()
-  updatedAt: string;
+  // @Expose()
+  // createdAt: string;
+  // @Expose()
+  // updatedAt: string;
   @Expose()
   createdBy: string;
   @Expose()
