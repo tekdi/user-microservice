@@ -1,3 +1,4 @@
+import { AxiosError, AxiosRequestConfig, AxiosResponse } from "axios";
 import { API_RESPONSES } from "./response.messages";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
 const axios = require("axios");
@@ -124,50 +125,84 @@ async function createUserInKeyCloak(query, token) {
 }
 
 
-async function updateUserInKeyCloak(query, token) {  
+// Define the structure of the input query
+interface UpdateUserQuery {
+  userId: string; // Required
+  firstName?: string; // Optional
+  lastName?: string; // Optional
+  username?: string; // Optional
+  email?: string; // Optional
+}
 
-  const axios = require("axios");
+// Define the structure of the function response
+interface UpdateUserResponse {
+  success: boolean;
+  statusCode: number;
+  message: string;
+}
 
+async function updateUserInKeyCloak(
+  query: UpdateUserQuery,
+  token: string
+): Promise<UpdateUserResponse> {
   // Validate required parameters
   if (!query.userId) {
-    return "User cannot be updated, userId missing";
+    return {
+      success: false,
+      statusCode: 400,
+      message: "User cannot be updated, userId missing",
+    };
   }
-  
-  // Prepare data payload
+
+  // Prepare the payload for the update
   const data = JSON.stringify({
-    enabled: query.enabled !== undefined ? query.enabled : true, // Default to enabled if not specified
+    enabled: true,
     ...(query.firstName && { firstName: query.firstName }),
     ...(query.lastName && { lastName: query.lastName }),
     ...(query.username && { username: query.username }),
     ...(query.email && { email: query.email }),
-
   });
-  
-  const config = {
+
+  // Axios request configuration
+  const config: AxiosRequestConfig = {
     method: "put",
     url: `${process.env.KEYCLOAK}${process.env.KEYCLOAK_ADMIN}/${query.userId}`,
     headers: {
       "Content-Type": "application/json",
-      Authorization: "Bearer " + token,
+      Authorization: `Bearer ${token}`,
     },
     data: data,
   };
 
   try {
-    const response = await axios(config);
-    if(response.status === 204) {
-      return true;
-    }else{
-      return false;
-    }
-  } catch (error) {
-    const errorMessage = error.response?.data?.errorMessage || "Failed to update user in Keycloak"; 
+    // Perform the Axios request
+    const response: AxiosResponse = await axios(config);
 
-    LoggerUtil.error(
-      `${API_RESPONSES.SERVER_ERROR}`,
-      `Error: ${error.message},`
-    )
-    return errorMessage;
+    // Handle response status codes
+    if (response.status === 204) {
+      return {
+        success: true,
+        statusCode: response.status,
+        message: "User updated successfully in Keycloak",
+      };
+    } else {
+      return {
+        success: false,
+        statusCode: response.status,
+        message: `Unexpected response status: ${response.status}`,
+      };
+    }
+  } catch (error: any) {
+    // Extract error details
+    const axiosError: AxiosError = error;
+    const errorMessage =
+      axiosError.response?.data?.errorMessage || "Failed to update user in Keycloak";
+
+    return {
+      success: false,
+      statusCode: axiosError.response?.status || 500,
+      message: errorMessage,
+    };
   }
 }
 

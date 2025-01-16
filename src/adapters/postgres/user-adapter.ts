@@ -46,9 +46,11 @@ import { SendPasswordResetOTPDto } from "src/user/dto/passwordReset.dto";
 import { ActionType, UserUpdateDTO } from "src/user/dto/user-update.dto";
 
 interface UpdateField {
-  username: string;
-  firstName?: string;
-  lastName?: string;
+  userId: string; // Required
+  firstName?: string; // Optional
+  lastName?: string; // Optional
+  username?: string; // Optional
+  email?: string; // Optional
 }
 @Injectable()
 export class PostgresUserService implements IServicelocator {
@@ -923,7 +925,10 @@ export class PostgresUserService implements IServicelocator {
 
       //Update user in keyCloakService
       let updateResult = await updateUserInKeyCloak(updateField, token)
-      return updateResult ? true : false;
+      if(updateResult.success === false) {
+        return false;
+      }
+      return true;
 
     } catch (error) {
       LoggerUtil.error(
