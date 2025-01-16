@@ -11,6 +11,11 @@ import { Expose, Type } from "class-transformer";
 import { UserStatus } from "../entities/user-entity";
 import { ApiProperty } from "@nestjs/swagger";
 
+export enum ActionType {
+  ADD = 'add',
+  REMOVE = 'remove',
+}
+
 class UserDataDTO {
   @ApiProperty({ type: () => String })
   @IsString()
@@ -96,7 +101,14 @@ class UserDataDTO {
   @ApiProperty({ type: () => String })
   @IsString()
   @IsOptional()
+  @ValidateIf((o) => o.action)
+  @IsNotEmpty({ message: 'deviceId is required when action is provided' })
   deviceId: string;
+
+  @ApiProperty({ enum: ActionType, required: false })
+  @ValidateIf((o) => o.deviceId)
+  @IsEnum(ActionType, { message: `Action must be either ${Object.values(ActionType).join(' or ')}` }) // Restrict to "add" or "remove"
+  action: ActionType;
 }
 class CustomFieldDTO {
   @ApiProperty({ type: () => String })

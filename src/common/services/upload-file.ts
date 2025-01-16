@@ -27,7 +27,8 @@ export class FilesUploadService {
         const fileExtension = extname(file.originalname).toLowerCase();
 
         if (!allowedExtensions.includes(fileExtension)) {
-            throw new BadRequestException(`File type ${fileExtension} is not allowed.`);
+            throw new BadRequestException(`Invalid file type: '${fileExtension}'. Allowed file types are: '.jpg', '.jpeg', '.png', '.gif', '.ico', '.webp'.`
+            );
         }
 
         const uniqueFileName = `${uuidv4()}${fileExtension}`;

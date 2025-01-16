@@ -38,6 +38,11 @@ import { TokenExpiredError, JsonWebTokenError } from "jsonwebtoken";
 import { CohortAcademicYearService } from "./cohortAcademicYear-adapter";
 import { PostgresAcademicYearService } from "./academicyears-adapter";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
+import { AuthUtils } from "@utils/auth-util";
+import { OtpSendDTO } from "src/user/dto/otpSend.dto";
+import { OtpVerifyDTO } from "src/user/dto/otpVerify.dto";
+import { SendPasswordResetOTPDto } from "src/user/dto/passwordReset.dto";
+import { ActionType } from "src/user/dto/user-update.dto";
 
 @Injectable()
 export class PostgresUserService implements IServicelocator {
@@ -45,6 +50,10 @@ export class PostgresUserService implements IServicelocator {
   jwt_password_reset_expires_In: any;
   jwt_secret: any;
   reset_frontEnd_url: any;
+  //SMS notification
+  private readonly otpExpiry: number;
+  private readonly otpDigits: number;
+  private readonly smsKey: string;
 
   constructor(
     // private axiosInstance: AxiosInstance,
@@ -70,7 +79,8 @@ export class PostgresUserService implements IServicelocator {
     private readonly jwtUtil: JwtUtil,
     private configService: ConfigService,
     private postgresAcademicYearService: PostgresAcademicYearService,
-    private cohortAcademicYearService: CohortAcademicYearService
+    private readonly cohortAcademicYearService: CohortAcademicYearService,
+    private readonly authUtils: AuthUtils
   ) {
     this.jwt_secret = this.configService.get<string>("RBAC_JWT_SECRET");
     this.jwt_password_reset_expires_In = this.configService.get<string>(
@@ -78,6 +88,9 @@ export class PostgresUserService implements IServicelocator {
     );
     this.reset_frontEnd_url =
       this.configService.get<string>("RESET_FRONTEND_URL");
+    this.otpExpiry = this.configService.get<number>('OTP_EXPIRY') || 10; // default: 10 minutes
+    this.otpDigits = this.configService.get<number>('OTP_DIGITS') || 6;
+    this.smsKey = this.configService.get<string>('SMS_KEY');
   }
 
   public async sendPasswordResetLink(
@@ -394,7 +407,7 @@ export class PostgresUserService implements IServicelocator {
           if (key === "name") {
             whereCondition += ` U."${key}" ILIKE '%${value}%'`;
           } else {
-            if (key === "status") {
+            if (key === "status" || key === "email") {
               if (
                 Array.isArray(value) &&
                 value.every((item) => typeof item === "string")
@@ -498,7 +511,7 @@ export class PostgresUserService implements IServicelocator {
     if (userDetails.length > 0) {
       result.totalCount = parseInt(userDetails[0].total_count, 10);
 
-      //Get user custom field data
+      // Get user custom field data
       for (const userData of userDetails) {
         const customFields = await this.fieldsService.getUserCustomFieldDetails(
           userData.userId
@@ -753,6 +766,33 @@ export class PostgresUserService implements IServicelocator {
       const updatedData = {};
       const editIssues = {};
 
+      const user = await this.usersRepository.findOne({ where: { userId: userDto.userId } });
+      if (!user) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          API_RESPONSES.USER_NOT_FOUND,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      //mutideviceId
+      if (userDto?.userData?.deviceId) {
+        let deviceIds: any;
+        if (userDto.userData.action === ActionType.ADD) {
+          // add deviceId
+          deviceIds = await this.loginDeviceIdAction(userDto.userData.deviceId, userDto.userId, user.deviceId)
+          userDto.userData.deviceId = deviceIds;
+
+        } else if (userDto.userData.action === ActionType.REMOVE) {
+          //remove deviceId
+          deviceIds = await this.onLogoutDeviceId(userDto.userData.deviceId, userDto.userId, user.deviceId)
+          userDto.userData.deviceId = deviceIds;
+        }
+      }
+
+
       if (userDto.userData) {
         await this.updateBasicUserDetails(userDto.userId, userDto.userData);
         updatedData["basicDetails"] = userDto.userData;
@@ -832,6 +872,32 @@ export class PostgresUserService implements IServicelocator {
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
+  }
+
+  async loginDeviceIdAction(userDeviceId: string, userId: string, existingDeviceId: string[]): Promise<string[]> {
+    let deviceIds = existingDeviceId || [];
+    // Check if the device ID already exists
+    if (deviceIds.includes(userDeviceId)) {
+      return deviceIds; // No action if device ID already exists
+    }
+    // If there are already 3 devices, remove the first one (oldest)
+    if (deviceIds.length === 3) {
+      deviceIds.shift(); // Remove the oldest device ID
+    }
+    // Add the new device ID to the list
+    deviceIds.push(userDeviceId);
+    return deviceIds; // Return the updated device list
+  }
+
+  async onLogoutDeviceId(deviceIdforRemove: string, userId: string, existingDeviceId: string[]) {
+    let deviceIds = existingDeviceId || [];
+    // Check if the device ID exists
+    if (!deviceIds.includes(deviceIdforRemove)) {
+      return deviceIds; // No action if device ID does not exist
+    }
+    // Remove the device ID
+    deviceIds = deviceIds.filter(id => id !== deviceIdforRemove);
+    return deviceIds;
   }
 
   async updateBasicUserDetails(userId, userData: Partial<User>): Promise<User> {
@@ -1706,4 +1772,348 @@ export class PostgresUserService implements IServicelocator {
       );
     }
   }
+  private formatMobileNumber(mobile: string): string {
+    return `+91${mobile}`;
+  }
+
+  //Generate Has code as per username or mobile Number
+  private generateOtpHash(mobileOrUsername: string, otp: string, reason: string) {
+    const ttl = this.otpExpiry * 60 * 1000; // Expiration in milliseconds
+    const expires = Date.now() + ttl;
+    const expiresInMinutes = ttl / (60 * 1000);
+    const data = `${mobileOrUsername}.${otp}.${reason}.${expires}`;
+    const hash = this.authUtils.calculateHash(data, this.smsKey); // Create hash
+    return { hash, expires, expiresInMinutes };
+  }
+
+  // send SignUP OTP
+  async sendOtp(body: OtpSendDTO, response: Response) {
+    const apiId = APIID.SEND_OTP;
+    try {
+      const { mobile, reason } = body;
+      if (!mobile || !/^\d{10}$/.test(mobile)) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          API_RESPONSES.MOBILE_VALID,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+      // Step 1: Prepare data for OTP generation and send on Mobile
+      const { notificationPayload, hash, expires } = await this.sendOTPOnMobile(mobile, reason);
+      // Step 2: Send success response
+      const result = {
+        data: {
+          message: `OTP sent to ${mobile}`,
+          hash: `${hash}.${expires}`,
+          sendStatus: notificationPayload.result?.sms?.data[0]
+          // sid: message.sid, // Twilio Message SID
+        }
+      };
+      return await APIResponse.success(
+        response,
+        apiId,
+        result,
+        HttpStatus.OK,
+        API_RESPONSES.OTP_SEND_SUCCESSFULLY
+      );
+    }
+    catch (e) {
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${e.message}`,
+        apiId
+      );
+      return APIResponse.error(
+        response,
+        apiId,
+        API_RESPONSES.SERVER_ERROR,
+        `Error : ${e.message}`,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  async sendOTPOnMobile(mobile: string, reason: string) {
+    try {
+      // Step 1: Format mobile number and generate OTP
+      const mobileWithCode = this.formatMobileNumber(mobile);
+      const otp = this.authUtils.generateOtp(this.otpDigits).toString();
+      const { hash, expires, expiresInMinutes } = this.generateOtpHash(mobileWithCode, otp, reason);
+      const replacements = {
+        "{OTP}": otp,
+        "{otpExpiry}": expiresInMinutes
+      };
+      // Step 2:send SMS notification
+      const notificationPayload = await this.smsNotification("OTP", "SEND_OTP", replacements, [mobile]);
+      return { notificationPayload, hash, expires, expiresInMinutes };
+    }
+    catch (error) {
+      throw new Error(`Failed to send OTP: ${error.message}`);
+    }
+  }
+  //verify OTP based on reason [signup , forgot]
+  async verifyOtp(body: OtpVerifyDTO, response: Response) {
+    const apiId = APIID.VERIFY_OTP;
+    try {
+      const { mobile, otp, hash, reason, username } = body;
+      if (!otp || !hash || !reason) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          API_RESPONSES.OTP_VALIDED_REQUIRED_KEY,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+      // Determine the value to use for verification based on the reason
+      let identifier: string;
+      if (reason === 'signup') {
+        if (!mobile) {
+          return APIResponse.error(
+            response,
+            apiId,
+            API_RESPONSES.BAD_REQUEST,
+            API_RESPONSES.MOBILE_REQUIRED,
+            HttpStatus.BAD_REQUEST
+          );
+        }
+        identifier = this.formatMobileNumber(mobile); // Assuming this formats the mobile number
+      } else if (reason === 'forgot') {
+        if (!username) {
+          return APIResponse.error(
+            response,
+            apiId,
+            API_RESPONSES.BAD_REQUEST,
+            API_RESPONSES.USERNAME_REQUIRED,
+            HttpStatus.BAD_REQUEST
+          );
+        }
+        identifier = username;
+      } else {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          API_RESPONSES.INVALID_REASON,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+      const [hashValue, expires] = hash.split('.');
+      if (!hashValue || !expires || isNaN(parseInt(expires))) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          API_RESPONSES.INVALID_HASH_FORMAT,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      if (Date.now() > parseInt(expires)) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.OTP_EXPIRED,
+          API_RESPONSES.OTP_EXPIRED,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+      const data = `${identifier}.${otp}.${reason}.${expires}`;
+      const calculatedHash = this.authUtils.calculateHash(data, this.smsKey); // Create hash
+
+      if (calculatedHash === hashValue) {
+        return await APIResponse.success(
+          response,
+          apiId,
+          { success: true },
+          HttpStatus.OK,
+          API_RESPONSES.OTP_VALID
+        );
+      } else {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.OTP_INVALID,
+          API_RESPONSES.OTP_INVALID,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+    } catch (e) {
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error during OTP verification: ${e.message}`,
+        apiId
+      );
+      return APIResponse.error(
+        response,
+        apiId,
+        API_RESPONSES.SERVER_ERROR,
+        `Error : ${e?.message}`,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  // send Mobile Notification
+  async smsNotification(context: string, key: string, replacements: object, receipients: string[]) {
+    try {
+      //sms notification Body
+      const notificationPayload = {
+        isQueue: false,
+        context: context,
+        key: key,
+        replacements: replacements,
+        sms: {
+          receipients: receipients.map((recipient) => recipient.toString()),
+        },
+      };
+      // send Axios request
+      const mailSend = await this.notificationRequest.sendNotification(
+        notificationPayload
+      );
+      // Check for errors in the response
+      if (mailSend?.result?.sms?.errors && mailSend.result.sms.errors.length > 0) {
+        const errorMessages = mailSend.result.sms.errors.map((error: { error: string; }) => error.error);
+        const combinedErrorMessage = errorMessages.join(", "); // Combine all error messages into one string
+        throw new Error(`${API_RESPONSES.SMS_ERROR} :${combinedErrorMessage}`);
+      }
+      return mailSend;
+    }
+    catch (error) {
+      LoggerUtil.error(API_RESPONSES.SMS_ERROR, error.message);
+      throw new Error(`${API_RESPONSES.SMS_NOTIFICATION_ERROR}:  ${error.message}`);
+    }
+  }
+
+  //send OTP on mobile and email for forgot password reset
+  async sendPasswordResetOTP(body: SendPasswordResetOTPDto, response: Response): Promise<any> {
+    const apiId = APIID.SEND_RESET_OTP;
+    try {
+      const username = body.username;
+      let error = [];
+      let success = [];
+      const userData: any = await this.findUserDetails(null, username);
+      if (!userData) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          API_RESPONSES.USER_NOT_EXISTS,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      if (!userData.mobile && !userData.email) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          API_RESPONSES.MOBILE_EMAIL_NOT_FOUND,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+      const programName = userData?.tenantData[0]?.tenantName ?? '';
+      const reason = "forgot";
+      const otp = this.authUtils.generateOtp(this.otpDigits).toString();
+      const { hash, expires, expiresInMinutes } = this.generateOtpHash(username, otp, reason);
+      if (userData.mobile) {
+        const replacements = {
+          "{OTP}": otp,
+          "{otpExpiry}": expiresInMinutes
+        };
+        try {
+          await this.smsNotification("OTP", "Reset_OTP", replacements, [userData.mobile]);
+          success.push({ type: 'SMS', message: API_RESPONSES.MOBILE_SENT_OTP });
+        } catch (e) {
+          error.push({ type: 'SMS', message: `${API_RESPONSES.MOBILE_OTP_SEND_FAILED} ${e.message}` })
+        }
+      }
+      if (userData.email) {
+        const replacements = {
+          "{OTP}": otp,
+          "{otpExpiry}": expiresInMinutes,
+          "{programName}": programName,
+          "{username}": username
+        };
+        try {
+          await this.sendEmailNotification("OTP", "Reset_OTP", replacements, [userData.email]);
+          success.push({ type: 'Email', message: API_RESPONSES.EMAIL_SENT_OTP })
+        } catch (e) {
+          error.push({ type: 'Email', message: `${API_RESPONSES.EMAIL_OTP_SEND_FAILED}: ${e.message}` })
+        }
+      }
+      // Error 
+      if (error.length === 2) { // if both SMS and Email notification fail to sent
+        let errorMessage = '';
+        if (error.some(e => e.type === 'SMS')) {
+          errorMessage += `SMS Error: ${error.filter(e => e.type === 'SMS').map(e => e.message).join(", ")}. `;
+        }
+        if (error.some(e => e.type === 'Email')) {
+          errorMessage += `Email Error: ${error.filter(e => e.type === 'Email').map(e => e.message).join(", ")}.`;
+        }
+
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.NOTIFICATION_ERROR,
+          errorMessage.trim(),
+          HttpStatus.INTERNAL_SERVER_ERROR
+        );
+      }
+      const result = {
+        hash: `${hash}.${expires}`,
+        success: success,
+        Error: error
+      }
+      return await APIResponse.success(
+        response,
+        apiId,
+        result,
+        HttpStatus.OK,
+        API_RESPONSES.SEND_OTP
+      );
+    }
+    catch (e) {
+      return APIResponse.error(
+        response,
+        apiId,
+        API_RESPONSES.SERVER_ERROR,
+        `Error : ${e?.message}`,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+
+  }
+
+  //send Email Notification
+  async sendEmailNotification(context: string, key: string, replacements: object, emailReceipt) {
+    try {
+      //Send Notification
+      const notificationPayload = {
+        isQueue: false,
+        context: context,
+        key: key,
+        replacements: replacements,
+        email: {
+          receipients: emailReceipt,
+        },
+      };
+      const mailSend = await this.notificationRequest.sendNotification(
+        notificationPayload
+      );
+      if (mailSend?.result?.email?.errors && mailSend.result.email.errors.length > 0) {
+        const errorMessages = mailSend.result.email.errors.map((error: { error: string; }) => error.error);
+        const combinedErrorMessage = errorMessages.join(", "); // Combine all error messages into one string
+        throw new Error(`error :${combinedErrorMessage}`);
+      }
+      return mailSend;
+    }
+    catch (e) {
+      LoggerUtil.error(API_RESPONSES.EMAIL_ERROR, e.message);
+      throw new Error(`${API_RESPONSES.EMAIL_NOTIFICATION_ERROR}:  ${e.message}`);
+    }
+  }
+
 }

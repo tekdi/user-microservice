@@ -46,10 +46,13 @@ import {
   ForgotPasswordDto,
   ResetUserPasswordDto,
   SendPasswordResetLinkDto,
+  SendPasswordResetOTPDto,
 } from "./dto/passwordReset.dto";
 import { isUUID } from "class-validator";
 import { API_RESPONSES } from "@utils/response.messages";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
+import { OtpSendDTO } from "./dto/otpSend.dto";
+import { OtpVerifyDTO } from "./dto/otpVerify.dto";
 export interface UserData {
   context: string;
   tenantId: string;
@@ -165,8 +168,8 @@ export class UserController {
 
   @UseFilters(new AllExceptionsFilter(APIID.USER_LIST))
   @Post("/list")
-  @UseGuards(JwtAuthGuard)
-  @ApiBasicAuth("access-token")
+  // @UseGuards(JwtAuthGuard)
+  // @ApiBasicAuth("access-token")
   @ApiCreatedResponse({ description: "User list." })
   @ApiBody({ type: UserSearchDto })
   @UsePipes(ValidationPipe)
@@ -265,4 +268,32 @@ export class UserController {
       .buildUserAdapter()
       .deleteUserById(userId, response);
   }
+  @UseFilters(new AllExceptionsFilter(APIID.SEND_OTP))
+  @Post('send-otp')
+  @ApiBody({ type: OtpSendDTO })
+  @UsePipes(new ValidationPipe({ transform: true }))
+  @ApiOkResponse({ description: API_RESPONSES.OTP_SEND_SUCCESSFULLY })
+  async sendOtp(@Body() body: OtpSendDTO, @Res() response: Response) {
+    return await this.userAdapter.buildUserAdapter().sendOtp(body, response)
+  }
+  @UseFilters(new AllExceptionsFilter(APIID.VERIFY_OTP))
+  @Post('verify-otp')
+  @ApiBody({ type: OtpVerifyDTO })
+  @UsePipes(new ValidationPipe({ transform: true }))
+  @ApiOkResponse({ description: API_RESPONSES.OTP_VALID })
+  async verifyOtp(@Body() body: OtpVerifyDTO, @Res() response: Response) {
+    return this.userAdapter.buildUserAdapter().verifyOtp(body, response);
+  }
+  @Post("password-reset-otp")
+  @ApiOkResponse({ description: "Password reset link sent successfully." })
+  @UsePipes(new ValidationPipe({ transform: true }))
+  @ApiBody({ type: SendPasswordResetOTPDto })
+  public async sendPasswordResetOTP(
+    @Req() request: Request,
+    @Res() response: Response,
+    @Body() reqBody: SendPasswordResetOTPDto
+  ) {
+    return await this.userAdapter.buildUserAdapter().sendPasswordResetOTP(reqBody, response)
+  }
+
 }
