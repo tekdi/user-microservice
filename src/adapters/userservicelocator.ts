@@ -5,6 +5,7 @@ import { UserSearchDto } from "src/user/dto/user-search.dto";
 import { OtpVerifyDTO } from "src/user/dto/otpVerify.dto";
 import { UserData } from "src/user/user.controller";
 import { SendPasswordResetOTPDto } from "src/user/dto/passwordReset.dto";
+import { UserUpdateDTO } from "src/user/dto/user-update.dto";
 
 export interface IServicelocator {
   // getUser(
@@ -16,7 +17,7 @@ export interface IServicelocator {
   //   request?: any,
   // );
   getUsersDetailsById(userData: UserData, response: any);
-  updateUser( userDto?: any, response?: any);
+  updateUser(userDto?: UserUpdateDTO, response?: Response): Promise<void>;
   createUser(request: any, userDto: UserCreateDto, academicYearId: string, response: Response);
   findUserDetails(userID: any, username: string, tenantId?: string);
   searchUser(

@@ -930,6 +930,7 @@ export class PostgresUserService implements IServicelocator {
         `${API_RESPONSES.SERVER_ERROR}`,
         `KeyCloak Error: ${error.message}`,
       );
+      return false; 
     }
   }
   
