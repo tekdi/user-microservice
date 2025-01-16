@@ -6,6 +6,7 @@ import {
   IsNotEmpty,
   IsEnum,
   ValidateIf,
+  Length,
 } from "class-validator";
 import { Expose, Type } from "class-transformer";
 import { UserStatus } from "../entities/user-entity";
@@ -22,10 +23,36 @@ class UserDataDTO {
   @IsOptional()
   username: string;
 
-  @ApiProperty({ type: () => String })
-  @IsString()
+  @ApiProperty({ type: String, description: 'First name of the user', maxLength: 50 })
+  @Expose()
   @IsOptional()
-  name: string;
+  @IsString()
+  @Length(1, 50)
+  firstName?: string;
+
+  @ApiProperty({ type: String, description: 'Middle name of the user (optional)', maxLength: 50, required: false })
+  @Expose()
+  @IsOptional()
+  @IsString()
+  @Length(0, 50)
+  middleName?: string;
+
+  @ApiProperty({ type: String, description: 'Last name of the user', maxLength: 50 })
+  @Expose()
+  @IsOptional()
+  @IsString()
+  @Length(1, 50)
+  lastName?: string;
+
+  @ApiProperty({ 
+    type: String, 
+    description: 'Gender of the user', 
+    enum: ['male', 'female', 'transgender'] 
+  })
+  @Expose()
+  @IsEnum(['male', 'female', 'transgender'])
+  @IsOptional()
+  gender?: string;
 
   @ApiProperty({ type: () => String })
   @IsString()

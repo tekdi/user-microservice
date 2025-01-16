@@ -69,8 +69,6 @@ export class PostgresUserService implements IServicelocator {
     private tenantsRepository: Repository<Tenants>,
     @InjectRepository(UserRoleMapping)
     private userRoleMappingRepository: Repository<UserRoleMapping>,
-    @InjectRepository(Cohort)
-    private cohortRepository: Repository<Cohort>,
     @InjectRepository(Role)
     private roleRepository: Repository<Role>,
     private fieldsService: PostgresFieldsService,
@@ -404,7 +402,7 @@ export class PostgresUserService implements IServicelocator {
           whereCondition += ` AND `;
         }
         if (userKeys.includes(key)) {
-          if (key === "name") {
+          if (key === "firstName") {
             whereCondition += ` U."${key}" ILIKE '%${value}%'`;
           } else {
             if (key === "status" || key === "email") {
@@ -498,7 +496,7 @@ export class PostgresUserService implements IServicelocator {
     }
 
     //Get user core fields data
-    const query = `SELECT U."userId", U."username",U."email", U."name", R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", U.status, COUNT(*) OVER() AS total_count 
+    const query = `SELECT U."userId", U."username",U."email", U."firstName", U."middleName", U."lastName", U."gender", U."dob", R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", U.status, COUNT(*) OVER() AS total_count 
       FROM  public."Users" U
       LEFT JOIN public."CohortMembers" CM 
       ON CM."userId" = U."userId"
@@ -688,7 +686,9 @@ export class PostgresUserService implements IServicelocator {
       select: [
         "userId",
         "username",
-        "name",
+        "firstName",
+        "middleName",
+        "lastName",
         "mobile",
         "email",
         "temporaryPassword",
@@ -900,16 +900,30 @@ export class PostgresUserService implements IServicelocator {
     return deviceIds;
   }
 
-  async updateBasicUserDetails(userId, userData: Partial<User>): Promise<User> {
-    const user = await this.usersRepository.findOne({
-      where: { userId: userId },
-    });
-    if (!user) {
-      return null;
+  async updateBasicUserDetails(userId: string, userData: Partial<User>): Promise<User | null> {
+    try {
+      // Fetch the user by ID
+      const user = await this.usersRepository.findOne({ where: { userId } });
+
+      if (!user) {
+        // If the user is not found, return null
+        return null;
+      }
+
+      // Update the user's details
+      await this.usersRepository.update(userId, userData);
+
+      // Fetch and return the updated user
+      const updatedUser = await this.usersRepository.findOne({ where: { userId } });
+
+      return updatedUser;
+    } catch (error) {
+      // Re-throw or handle the error as needed
+      throw new Error('An error occurred while updating user details');
     }
-    Object.assign(user, userData);
-    return this.usersRepository.save(user);
   }
+
+
 
   async createUser(
     request: any,
@@ -970,7 +984,7 @@ export class PostgresUserService implements IServicelocator {
       const userSchema = new UserCreateDto(userCreateDto);
 
       let errKeycloak = "";
-      let resKeycloak = "";
+      let resKeycloak;
 
       const keycloakResponse = await getKeycloakAdminToken();
       const token = keycloakResponse.data.access_token;
@@ -988,28 +1002,36 @@ export class PostgresUserService implements IServicelocator {
         );
       }
 
-      resKeycloak = await createUserInKeyCloak(userSchema, token).catch(
-        (error) => {
-          LoggerUtil.error(
-            `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
-            `KeyCloak Error: ${error.message}`,
-            apiId
-          );
+      resKeycloak = await createUserInKeyCloak(userSchema, token)
 
-          errKeycloak = error.response?.data.errorMessage;
+
+      if(resKeycloak.statusCode !== 201 ){
+        if (resKeycloak.statusCode === 409) {
+          LoggerUtil.log(API_RESPONSES.EMAIL_EXIST, apiId);
+  
+          return APIResponse.error(
+            response,
+            apiId,
+            API_RESPONSES.EMAIL_EXIST,
+            `${resKeycloak.message} ${resKeycloak.email}`,
+            HttpStatus.CONFLICT
+          );
+        }else{
+          LoggerUtil.log(API_RESPONSES.SERVER_ERROR, apiId);
           return APIResponse.error(
             response,
             apiId,
             API_RESPONSES.SERVER_ERROR,
-            `${errKeycloak}`,
+            `${resKeycloak.message}`,
             HttpStatus.INTERNAL_SERVER_ERROR
           );
         }
-      );
+      }
 
       LoggerUtil.log(API_RESPONSES.USER_CREATE_KEYCLOAK, apiId);
 
-      userCreateDto.userId = resKeycloak;
+
+      userCreateDto.userId = resKeycloak.userId;
 
       // if cohort given then check for academic year
 
@@ -1294,17 +1316,15 @@ export class PostgresUserService implements IServicelocator {
     response: Response
   ) {
     const user = new User();
-    (user.username = userCreateDto?.username),
-      (user.name = userCreateDto?.name),
-      (user.email = userCreateDto?.email),
-      (user.mobile = Number(userCreateDto?.mobile) || null),
-      (user.createdBy = userCreateDto?.createdBy || userCreateDto?.userId),
-      (user.updatedBy = userCreateDto?.updatedBy || userCreateDto?.userId),
-      (user.userId = userCreateDto?.userId),
-      (user.state = userCreateDto?.state),
-      (user.district = userCreateDto?.district),
-      (user.address = userCreateDto?.address),
-      (user.pincode = userCreateDto?.pincode);
+    user.userId = userCreateDto?.userId,
+      user.username = userCreateDto?.username,
+      user.firstName = userCreateDto?.firstName,
+      user.middleName = userCreateDto?.middleName,
+      user.lastName = userCreateDto?.lastName,
+      user.gender = userCreateDto?.gender,
+      user.email = userCreateDto?.email,
+      user.mobile = Number(userCreateDto?.mobile) || null,
+      user.createdBy = userCreateDto?.createdBy || userCreateDto?.createdBy;
 
     if (userCreateDto?.dob) {
       user.dob = new Date(userCreateDto.dob);
