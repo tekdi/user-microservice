@@ -75,8 +75,6 @@ export class PostgresUserService implements IServicelocator {
     private tenantsRepository: Repository<Tenants>,
     @InjectRepository(UserRoleMapping)
     private userRoleMappingRepository: Repository<UserRoleMapping>,
-    @InjectRepository(Cohort)
-    private cohortRepository: Repository<Cohort>,
     @InjectRepository(Role)
     private roleRepository: Repository<Role>,
     private fieldsService: PostgresFieldsService,
@@ -504,7 +502,7 @@ export class PostgresUserService implements IServicelocator {
     }
 
     //Get user core fields data
-    const query = `SELECT U."userId", U."username",U."email", U."firstName", U."middleName", U."lastName", U.gender, U.dob, R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", U.status, COUNT(*) OVER() AS total_count 
+    const query = `SELECT U."userId", U."username",U."email", U."firstName", U."middleName", U."lastName", U."gender", U."dob", R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", U.status, COUNT(*) OVER() AS total_count 
       FROM  public."Users" U
       LEFT JOIN public."CohortMembers" CM 
       ON CM."userId" = U."userId"
@@ -800,12 +798,12 @@ export class PostgresUserService implements IServicelocator {
         }
       }
 
-      const { username, firstName, lastName } = userDto.userData;
+      const { username, firstName, lastName, email } = userDto.userData;
       const userId = userDto.userId;
-      const keycloakReqBody = {username,firstName,lastName, userId};
+      const keycloakReqBody = {username,firstName,lastName, userId, email};
       
       //Update userdetails on keycloak
-      if(username){
+      if(username || firstName || lastName || email){
         const updateuserDataInKeycloak = await this.updateUsernameInKeycloak(keycloakReqBody);
         
         if(updateuserDataInKeycloak === 'exists'){
@@ -900,6 +898,7 @@ export class PostgresUserService implements IServicelocator {
         `Error: ${e.message}`,
         apiId
       );
+      
       return APIResponse.error(
         response,
         apiId,
@@ -1044,7 +1043,7 @@ export class PostgresUserService implements IServicelocator {
       const userSchema = new UserCreateDto(userCreateDto);
 
       let errKeycloak = "";
-      let resKeycloak = "";
+      let resKeycloak;
 
       const keycloakResponse = await getKeycloakAdminToken();
       const token = keycloakResponse.data.access_token;
@@ -1062,29 +1061,36 @@ export class PostgresUserService implements IServicelocator {
         );
       }
 
-      resKeycloak = await createUserInKeyCloak(userSchema, token).catch(
-        (error) => {
-          LoggerUtil.error(
-            `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
-            `KeyCloak Error: ${error.message}`,
-            apiId
-          );
+      resKeycloak = await createUserInKeyCloak(userSchema, token)
 
-          errKeycloak = error.response?.data.errorMessage;
+
+      if(resKeycloak.statusCode !== 201 ){
+        if (resKeycloak.statusCode === 409) {
+          LoggerUtil.log(API_RESPONSES.EMAIL_EXIST, apiId);
+  
+          return APIResponse.error(
+            response,
+            apiId,
+            API_RESPONSES.EMAIL_EXIST,
+            `${resKeycloak.message} ${resKeycloak.email}`,
+            HttpStatus.CONFLICT
+          );
+        }else{
+          LoggerUtil.log(API_RESPONSES.SERVER_ERROR, apiId);
           return APIResponse.error(
             response,
             apiId,
             API_RESPONSES.SERVER_ERROR,
-            `${errKeycloak}`,
+            `${resKeycloak.message}`,
             HttpStatus.INTERNAL_SERVER_ERROR
           );
         }
-      );
+      }
 
       LoggerUtil.log(API_RESPONSES.USER_CREATE_KEYCLOAK, apiId);
 
 
-      userCreateDto.userId = resKeycloak;
+      userCreateDto.userId = resKeycloak.userId;
 
       // if cohort given then check for academic year
 
@@ -1369,15 +1375,15 @@ export class PostgresUserService implements IServicelocator {
     response: Response
   ) {
     const user = new User();
-    (user.userId = userCreateDto?.userId),
-      (user.username = userCreateDto?.username),
-      (user.firstName = userCreateDto?.firstName),
-      (user.middleName = userCreateDto?.middleName),
-      (user.lastName = userCreateDto?.lastName),
-      (user.gender = userCreateDto?.gender),
-      (user.email = userCreateDto?.email),
-      (user.mobile = Number(userCreateDto?.mobile) || null),
-      (user.createdBy = userCreateDto?.createdBy || userCreateDto?.createdBy);
+    user.userId = userCreateDto?.userId,
+      user.username = userCreateDto?.username,
+      user.firstName = userCreateDto?.firstName,
+      user.middleName = userCreateDto?.middleName,
+      user.lastName = userCreateDto?.lastName,
+      user.gender = userCreateDto?.gender,
+      user.email = userCreateDto?.email,
+      user.mobile = Number(userCreateDto?.mobile) || null,
+      user.createdBy = userCreateDto?.createdBy || userCreateDto?.createdBy;
 
     if (userCreateDto?.dob) {
       user.dob = new Date(userCreateDto.dob);

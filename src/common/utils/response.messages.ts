@@ -1,5 +1,6 @@
 export const API_RESPONSES = {
   USERNAME_NOT_FOUND: "Username does not exist",
+  EMAIL_EXIST: "Email already exists",
   USER_NOT_FOUND: "User does not exist",
   FORGOT_PASSWORD_SUCCESS: "Forgot password Reset successfully",
   EMAIL_NOT_FOUND_FOR_RESET:
