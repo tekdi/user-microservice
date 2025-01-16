@@ -1,5 +1,7 @@
 import { API_RESPONSES } from "./response.messages";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
+const axios = require("axios");
+
 function getUserRole(userRoles: string[]) {
   if (userRoles.includes("systemAdmin")) {
     return "systemAdmin";
@@ -53,9 +55,8 @@ async function getKeycloakAdminToken() {
   return res;
 }
 
-async function createUserInKeyCloak(query, token) {
-  const axios = require("axios");
 
+async function createUserInKeyCloak(query, token) {
   if (!query.password) {
     return "User cannot be created, Password missing";
   }
@@ -63,47 +64,69 @@ async function createUserInKeyCloak(query, token) {
   const data = JSON.stringify({
     firstName: query.firstName,
     lastName: query.lastName,
-    email: query.email ? query.email : null,
-    enabled: "true",
+    email: query.email || null, // Use `||` for simpler null/undefined handling
     username: query.username,
-    // groups: [getUserGroup(query.role)],
+    enabled: true, // Changed "true" (string) to true (boolean)
     credentials: [
       {
-        temporary: "false",
+        temporary: false, // Changed "false" (string) to false (boolean)
         type: "password",
         value: query.password,
       },
     ],
   });
 
+  console.log("Payload for Keycloak:", data);
+
   const config = {
     method: "post",
-    url: process.env.KEYCLOAK + process.env.KEYCLOAK_ADMIN,
+    url: `${process.env.KEYCLOAK}${process.env.KEYCLOAK_ADMIN}`,
     headers: {
       "Content-Type": "application/json",
-      Authorization: "Bearer " + token,
+      Authorization: `Bearer ${token}`,
     },
-    data: data,
-  };  
-  let userResponse;
-  // try {
-  //   userResponse = await axios(config);
-  // } catch (e) {
-  //   return e;
-  // }
+    data,
+  };
 
-  // const userString = userResponse.headers.location;
-  // const index = userString.lastIndexOf("/");
-  // const userId = userString.substring(index + 1);
-
-  // return userId;
   try {
-    const userResponse = await axios(config);
-    return userResponse.headers.location.split("/").pop();
+    // Make the request and wait for the response
+    const response = await axios(config);
+
+    // Log and return the created user's ID
+    console.log("User created successfully:", response.data);
+    const userId = response.headers.location.split("/").pop(); // Extract user ID from the location header
+    console.log("Created User ID:", userId);
+    return { statusCode: response.status, message: "User created successfully", userId : userId };
   } catch (error) {
-    return "Error creating user: " + error.response.data.error;
+    // Handle errors and log relevant details
+    if (error.response) {
+      console.error("Error Response Status:", error.response.status);
+      console.error("Error Response Data:", error.response.data);
+      console.error("Error Response Headers:", error.response.headers);
+
+      return {
+        statusCode: error.response.status,
+        message: error.response.data.errorMessage || "Error occurred during user creation",
+        email: query.email || "No email provided",
+      };
+    } else if (error.request) {
+      console.error("No response received:", error.request);
+      return {
+        statusCode: 500,
+        message: "No response received from Keycloak",
+        email: query.email || "No email provided",
+      };
+    } else {
+      console.error("Error setting up request:", error.message);
+      return {
+        statusCode: 500,
+        message: `Error setting up request: ${error.message}`,
+        email: query.email || "No email provided",
+      };
+    }
   }
 }
+
 
 async function checkIfEmailExistsInKeycloak(email, token) {
   const axios = require("axios");

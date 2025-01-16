@@ -69,8 +69,6 @@ export class PostgresUserService implements IServicelocator {
     private tenantsRepository: Repository<Tenants>,
     @InjectRepository(UserRoleMapping)
     private userRoleMappingRepository: Repository<UserRoleMapping>,
-    @InjectRepository(Cohort)
-    private cohortRepository: Repository<Cohort>,
     @InjectRepository(Role)
     private roleRepository: Repository<Role>,
     private fieldsService: PostgresFieldsService,
@@ -906,26 +904,26 @@ export class PostgresUserService implements IServicelocator {
     try {
       // Fetch the user by ID
       const user = await this.usersRepository.findOne({ where: { userId } });
-  
+
       if (!user) {
         // If the user is not found, return null
         return null;
       }
-    
+
       // Update the user's details
       await this.usersRepository.update(userId, userData);
-  
+
       // Fetch and return the updated user
       const updatedUser = await this.usersRepository.findOne({ where: { userId } });
-  
+
       return updatedUser;
-    } catch (error) {  
+    } catch (error) {
       // Re-throw or handle the error as needed
       throw new Error('An error occurred while updating user details');
     }
   }
-  
-  
+
+
 
   async createUser(
     request: any,
@@ -986,7 +984,7 @@ export class PostgresUserService implements IServicelocator {
       const userSchema = new UserCreateDto(userCreateDto);
 
       let errKeycloak = "";
-      let resKeycloak = "";
+      let resKeycloak;
 
       const keycloakResponse = await getKeycloakAdminToken();
       const token = keycloakResponse.data.access_token;
@@ -1003,30 +1001,37 @@ export class PostgresUserService implements IServicelocator {
           HttpStatus.BAD_REQUEST
         );
       }
-      
-      resKeycloak = await createUserInKeyCloak(userSchema, token).catch(
-        (error) => {
-          LoggerUtil.error(
-            `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
-            `KeyCloak Error: ${error.message}`,
-            apiId
-          );
 
-          errKeycloak = error.response?.data.errorMessage;
+      resKeycloak = await createUserInKeyCloak(userSchema, token)
+
+
+      if(resKeycloak.statusCode !== 201 ){
+        if (resKeycloak.statusCode === 409) {
+          LoggerUtil.log(API_RESPONSES.EMAIL_EXIST, apiId);
+  
+          return APIResponse.error(
+            response,
+            apiId,
+            API_RESPONSES.EMAIL_EXIST,
+            `${resKeycloak.message} ${resKeycloak.email}`,
+            HttpStatus.CONFLICT
+          );
+        }else{
+          LoggerUtil.log(API_RESPONSES.SERVER_ERROR, apiId);
           return APIResponse.error(
             response,
             apiId,
             API_RESPONSES.SERVER_ERROR,
-            `${errKeycloak}`,
+            `${resKeycloak.message}`,
             HttpStatus.INTERNAL_SERVER_ERROR
           );
         }
-      );
+      }
 
       LoggerUtil.log(API_RESPONSES.USER_CREATE_KEYCLOAK, apiId);
-      
 
-      userCreateDto.userId = resKeycloak;
+
+      userCreateDto.userId = resKeycloak.userId;
 
       // if cohort given then check for academic year
 
@@ -1100,7 +1105,7 @@ export class PostgresUserService implements IServicelocator {
         HttpStatus.CREATED,
         API_RESPONSES.USER_CREATE_SUCCESSFULLY
       );
-    } catch (e) {      
+    } catch (e) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
         `Error: ${e.message}`,
@@ -1311,7 +1316,7 @@ export class PostgresUserService implements IServicelocator {
     response: Response
   ) {
     const user = new User();
-      user.userId = userCreateDto?.userId,
+    user.userId = userCreateDto?.userId,
       user.username = userCreateDto?.username,
       user.firstName = userCreateDto?.firstName,
       user.middleName = userCreateDto?.middleName,
