@@ -768,7 +768,7 @@ export class PostgresUserService implements IServicelocator {
     return combinedResult;
   }
 
-  async updateUser( userDto, response: Response) {
+  async updateUser(userDto, response: Response) {
     const apiId = APIID.USER_UPDATE;
     try {
       const updatedData = {};
@@ -802,33 +802,48 @@ export class PostgresUserService implements IServicelocator {
 
       const { username, firstName, lastName, email } = userDto.userData;
       const userId = userDto.userId;
-      const keycloakReqBody = {username,firstName,lastName, userId, email};
-      
+      const keycloakReqBody = { username, firstName, lastName, userId, email };
+
       //Update userdetails on keycloak
-      if(username || firstName || lastName || email){
-        const updateuserDataInKeycloak = await this.updateUsernameInKeycloak(keycloakReqBody);
-        
-        if(updateuserDataInKeycloak === 'exists'){
-          return APIResponse.error(
-            response,
-            apiId,
-            API_RESPONSES.BAD_REQUEST,
-            API_RESPONSES.USERNAME_EXISTS_KEYCLOAK,
-            HttpStatus.BAD_REQUEST
+      if (username || firstName || lastName || email) {
+        try {
+          const keycloakUpdateResult = await this.updateUsernameInKeycloak(keycloakReqBody);
+
+          if (keycloakUpdateResult === 'exists') {
+            return APIResponse.error(
+              response,
+              apiId,
+              API_RESPONSES.USERNAME_EXISTS_KEYCLOAK,
+              API_RESPONSES.USERNAME_EXISTS_KEYCLOAK,
+              HttpStatus.CONFLICT
+            );
+          }
+
+          if (!keycloakUpdateResult) {
+            return APIResponse.error(
+              response,
+              apiId,
+              API_RESPONSES.UPDATE_USER_KEYCLOAK_ERROR,
+              API_RESPONSES.UPDATE_USER_KEYCLOAK_ERROR,
+              HttpStatus.BAD_REQUEST
+            );
+          }
+        } catch (error) {
+          LoggerUtil.error(
+            API_RESPONSES.SERVER_ERROR,
+            `Keycloak update failed: ${error.message}`,
+            apiId
           );
-        }
-  
-        if(updateuserDataInKeycloak === false){
           return APIResponse.error(
             response,
             apiId,
             API_RESPONSES.SERVER_ERROR,
             API_RESPONSES.UPDATE_USER_KEYCLOAK_ERROR,
-            HttpStatus.BAD_REQUEST
+            HttpStatus.INTERNAL_SERVER_ERROR
           );
         }
       }
-      
+
       if (userDto.userData) {
         await this.updateBasicUserDetails(userDto.userId, userDto.userData);
         updatedData["basicDetails"] = userDto.userData;
@@ -900,7 +915,7 @@ export class PostgresUserService implements IServicelocator {
         `Error: ${e.message}`,
         apiId
       );
-      
+
       return APIResponse.error(
         response,
         apiId,
@@ -925,7 +940,7 @@ export class PostgresUserService implements IServicelocator {
 
       //Update user in keyCloakService
       let updateResult = await updateUserInKeyCloak(updateField, token)
-      if(updateResult.success === false) {
+      if (updateResult.success === false) {
         return false;
       }
       return true;
@@ -935,10 +950,10 @@ export class PostgresUserService implements IServicelocator {
         `${API_RESPONSES.SERVER_ERROR}`,
         `KeyCloak Error: ${error.message}`,
       );
-      return false; 
+      return false;
     }
   }
-  
+
   async loginDeviceIdAction(userDeviceId: string, userId: string, existingDeviceId: string[]): Promise<string[]> {
     let deviceIds = existingDeviceId || [];
     // Check if the device ID already exists
@@ -1070,10 +1085,10 @@ export class PostgresUserService implements IServicelocator {
       resKeycloak = await createUserInKeyCloak(userSchema, token)
 
 
-      if(resKeycloak.statusCode !== 201 ){
+      if (resKeycloak.statusCode !== 201) {
         if (resKeycloak.statusCode === 409) {
           LoggerUtil.log(API_RESPONSES.EMAIL_EXIST, apiId);
-  
+
           return APIResponse.error(
             response,
             apiId,
@@ -1081,7 +1096,7 @@ export class PostgresUserService implements IServicelocator {
             `${resKeycloak.message} ${resKeycloak.email}`,
             HttpStatus.CONFLICT
           );
-        }else{
+        } else {
           LoggerUtil.log(API_RESPONSES.SERVER_ERROR, apiId);
           return APIResponse.error(
             response,
