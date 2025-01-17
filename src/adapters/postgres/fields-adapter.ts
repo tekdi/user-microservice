@@ -309,10 +309,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
 
   async getFieldData(whereClause): Promise<any> {
     const query = `select * from public."Fields" where ${whereClause}`;
-    const result = await this.fieldsRepository.query(query);
-
-
-    // const result = await this.typeormService.query(Field, query);
+    const result = await this.typeormService.query(Field, query);
     if (!result) {
       return false;
     }
