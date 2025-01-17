@@ -190,7 +190,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
       };
     }
     const context = "COHORT";
-    const getFieldIds = await this.getFieldIds(context, contextType);
+    const getFieldIds: any = await this.getFieldIds(context, contextType);
 
     const validFieldIds = new Set(getFieldIds.map((field) => field.fieldId));
 
@@ -286,7 +286,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         error: `Invalid fields found: ${invalidateFields}`,
       };
     }
-    const getFieldIds = await this.getFieldIds(context, contextType);
+    const getFieldIds: any = await this.getFieldIds(context, contextType);
 
     const validFieldIds = new Set(getFieldIds.map((field) => field.fieldId));
 
@@ -309,8 +309,10 @@ export class PostgresFieldsService implements IServicelocatorfields {
 
   async getFieldData(whereClause): Promise<any> {
     const query = `select * from public."Fields" where ${whereClause}`;
-
     const result = await this.fieldsRepository.query(query);
+
+
+    // const result = await this.typeormService.query(Field, query);
     if (!result) {
       return false;
     }
@@ -352,7 +354,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
       });
       fieldsData["required"] = true;
 
-      const checkFieldExist = await this.fieldsRepository.find({
+      const checkFieldExist = await this.typeormService.find(Fields, {
         where: {
           context: fieldsData.context,
           contextType: fieldsData.contextType,
@@ -390,7 +392,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
           WHERE value = '${sourceFieldName["value"]}' 
           GROUP BY  "name", "value"`
 
-          const checkSourceData = await this.fieldsValuesRepository.query(
+          const checkSourceData = await this.typeormService.query(FieldValues,
             query
           );
 
@@ -446,7 +448,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         error = `Wrong Data: ${wrongControllingField} This field is dependent on another field and cannot be created without specifying the controllingfieldfk.`;
       }
 
-      const result = await this.fieldsRepository.save(fieldsData);
+      const result = await this.typeormService.save(Fields, fieldsData);
 
       return await APIResponse.success(
         response,
@@ -500,7 +502,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         }
       });
 
-      const getSourceDetails = await this.fieldsRepository.findOne({
+      const getSourceDetails: any = await this.typeormService.findOne(Fields, {
         where: { fieldId: fieldId },
       });
 
@@ -527,7 +529,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
           WHERE value = '${sourceFieldName["value"]}' 
           GROUP BY  "name", "value"`;
 
-          const checkSourceData = await this.fieldsValuesRepository.query(
+          const checkSourceData = await this.typeormService.query(FieldValues,
             query
           );
 
@@ -595,7 +597,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
 
           // check options exits in fieldParams column or not
           const query = `SELECT COUNT(*) FROM public."Fields" WHERE "fieldId"='${fieldId}' AND "fieldParams" -> 'options' @> '[{"value": "${sourceFieldName["value"]}"}]' `;
-          const checkSourceData = await this.fieldsRepository.query(query);
+          const checkSourceData = await this.typeormService.query(Fields, query);
 
           //If fields is not present then create a new options
           if (checkSourceData[0].count == 0) {
@@ -622,7 +624,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         error = `Wrong Data: ${wrongControllingField} This field is dependent on another field and cannot be created without specifying the controllingfieldfk.`;
       }
 
-      const result = await this.fieldsRepository.update(fieldId, fieldsData);
+      const result = await this.typeormService.update(Fields, fieldId, fieldsData);
       return await APIResponse.success(
         response,
         apiId,
@@ -649,7 +651,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
 
   async addOptionsInFieldParams(fieldId: string, newParams: any) {
     try {
-      const existingField = await this.fieldsRepository.findOne({
+      const existingField: any = await this.typeormService.findOne(Fields, {
         where: { fieldId },
       });
 
@@ -665,7 +667,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
       const fieldParams = { options: updatedOptions };
       existingField.fieldParams = fieldParams;
 
-      await this.fieldsRepository.update(fieldId, {
+      await this.typeormService.update(Fields, fieldId, {
         fieldParams: existingField.fieldParams,
       });
       return true;
@@ -708,7 +710,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
     }
 
     //Insert data into source table
-    const checkSourceData = await this.fieldsValuesRepository.query(
+    const checkSourceData = await this.typeormService.query(FieldValues,
       createSourceFields
     );
     if (checkSourceData.length == 0) {
@@ -731,7 +733,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
 
     updateSourceDetails += ` WHERE value='${value}';`;
 
-    const updateSourceData = await this.fieldsValuesRepository.query(
+    const updateSourceData = await this.typeormService.query(FieldValues,
       updateSourceDetails
     );
     if (updateSourceData.length == 0) {
@@ -754,7 +756,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
       },
     ];
 
-    const result = await this.fieldsRepository.find({
+    const result = await this.typeormService.find(Fields, {
       where: condition,
       select: ["fieldId"],
     });
@@ -793,7 +795,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
       const fieldKeys = this.fieldsRepository.metadata.columns.map(
         (column) => column.propertyName
       );
-      let tenantCond = tenantId ? `"tenantId" = ${tenantId}` : `"tenantId" IS NULL`
+      let tenantCond = tenantId ? `"tenantId" = '${tenantId}'` : `"tenantId" IS NULL`
       let whereClause = tenantCond;
       if (filters && Object.keys(filters).length > 0) {
         Object.entries(filters).forEach(([key, value]) => {
@@ -836,6 +838,8 @@ export class PostgresFieldsService implements IServicelocatorfields {
         "Fields fetched successfully."
       );
     } catch (error) {
+      console.log(error, "error");
+
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error: ${error.message}`,
@@ -865,7 +869,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
       queryOptions.take = parseInt(limit);
     }
 
-    const [results, totalCount] = await this.fieldsRepository.findAndCount(
+    const [results, totalCount] = await this.typeormService.findAndCount(Fields,
       queryOptions
     );
 
@@ -980,7 +984,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
     }
     try {
       const [results, totalCount] =
-        await this.fieldsValuesRepository.findAndCount(queryOptions);
+        await this.typeormService.findAndCount(FieldValues, queryOptions);
       const mappedResponse = await this.mappedResponse(results);
 
       return { mappedResponse, totalCount };
@@ -1009,7 +1013,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
     }
     try {
       const [results, totalCount] =
-        await this.fieldsValuesRepository.findAndCount(queryOptions);
+        await this.typeormService.findAndCount(FieldValues, queryOptions);
       const mappedResponse = await this.mappedResponse(results);
 
       return { mappedResponse, totalCount };
@@ -1024,7 +1028,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
       whereClause.itemId = itemId;
     }
 
-    const response = await this.fieldsValuesRepository.findOne({
+    const response = await this.typeormService.findOne(FieldValues, {
       where: whereClause,
     });
     return response;
@@ -1045,7 +1049,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
           }
         }
       });
-      const response = await this.fieldsValuesRepository.update(
+      const response = await this.typeormService.update(FieldValues,
         id,
         fieldValuesUpdateDto
       );
@@ -1067,7 +1071,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
     const query = `SELECT FV."value",FV."itemId", FV."fieldId", F."name" AS fieldname, F."label", F."context",F."type", F."state", F."contextType", F."fieldParams" FROM public."FieldValues" FV 
         LEFT JOIN public."Fields" F
         ON FV."fieldId" = F."fieldId" where FV."itemId" =$1`;
-    const results = await this.fieldsValuesRepository.query(query, [itemId]);
+    const results = await this.typeormService.query(FieldValues, query, [itemId]);
     return results;
   }
 
@@ -1129,12 +1133,12 @@ export class PostgresFieldsService implements IServicelocatorfields {
   }
 
   public async findAndSaveFieldValues(fieldValuesDto: FieldValuesDto) {
-    const checkFieldValueExist = await this.fieldsValuesRepository.find({
+    const checkFieldValueExist = await this.typeormService.find(FieldValues, {
       where: { itemId: fieldValuesDto.itemId, fieldId: fieldValuesDto.fieldId },
     });
 
     if (checkFieldValueExist.length == 0) {
-      const result = await this.fieldsValuesRepository.save(fieldValuesDto);
+      const result = await this.typeormService.save(FieldValues, fieldValuesDto);
 
       return result;
     }
@@ -1196,7 +1200,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         condition.contextType = contextType;
       }
 
-      const fetchFieldParams = await this.fieldsRepository.findOne({
+      const fetchFieldParams: any = await this.typeormService.findOne(Fields, {
         where: condition,
       });
 
@@ -1330,7 +1334,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         );
       }
 
-      const getField = await this.fieldsRepository.findOne({
+      const getField: any = await this.typeormService.findOne(Fields, {
         where: condition,
       });
 
@@ -1350,7 +1354,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
           ? `WHERE "value"='${requiredData.option}'`
           : "";
         const query = `DELETE FROM public.${getField?.sourceDetails?.table} ${whereCond}`;
-        const [_, affectedRow] = await this.fieldsRepository.query(query);
+        const [_, affectedRow] = await this.typeormService.query(Fields, query);
 
         if (affectedRow === 0) {
           return await APIResponse.error(
@@ -1367,7 +1371,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
       if (getField?.sourceDetails?.source == "fieldparams") {
         // check options exits in fieldParams column or not
         const query = `SELECT * FROM public."Fields" WHERE "fieldId"='${getField.fieldId}' AND "fieldParams" -> 'options' @> '[{"value": "${removeOption}"}]' `;
-        const checkSourceData = await this.fieldsRepository.query(query);
+        const checkSourceData = await this.typeormService.query(Fields, query);
 
         if (checkSourceData.length > 0) {
           let fieldParamsOptions = checkSourceData[0].fieldParams.options;
@@ -1383,7 +1387,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
               ? { options: fieldParamsOptions }
               : null;
 
-          result = await this.fieldsRepository.update(
+          result = await this.typeormService.update(Fields,
             { fieldId: getField.fieldId },
             { fieldParams: fieldParamsData }
           );
@@ -1480,7 +1484,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
       condition.contextType = IsNull();
     }
 
-    const customFields = await this.fieldsRepository.find({ where: condition });
+    const customFields: any = await this.typeormService.find(Fields, { where: condition });
     return customFields;
   }
 
@@ -1616,7 +1620,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
           WHERE "fieldAttributes"->>'isEditable' = $1 
         `;
     const getFieldsAttributesParams = ["true"];
-    return await this.fieldsRepository.query(
+    return await this.typeormService.query(Fields,
       getFieldsAttributesQuery,
       getFieldsAttributesParams
     );

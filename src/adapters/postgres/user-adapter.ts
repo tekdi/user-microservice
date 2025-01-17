@@ -1675,7 +1675,7 @@ export class PostgresUserService implements IServicelocator {
     }
 
     const context = "USERS";
-    const getFieldIds = await this.fieldsService.getFieldIds(
+    const getFieldIds: any = await this.fieldsService.getFieldIds(
       context,
       contextType
     );
