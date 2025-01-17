@@ -156,6 +156,12 @@ export class PostgresCohortMembersService {
     );
 
     for (const data of getUserDetails) {
+      // Concatenate firstName, middleName, and lastName with spaces if they exist
+      // const fullName = 
+      // (data?.firstName || "") + 
+      // (data?.middleName ? ` ${data.middleName}` : "") + 
+      // (data?.lastName ? ` ${data.lastName}` : "");
+
       const userDetails = {
         userId: data?.userId,
         userName: data?.userName,
@@ -228,7 +234,20 @@ export class PostgresCohortMembersService {
     } else {
       whereCase = `where CM."userId" =$1`;
     }
-    const query = `SELECT U."userId", U.username, U.name, U.district, U.state,U.mobile FROM public."CohortMembers" CM
+    const query = `SELECT U."userId", U."username", 
+        TRIM(
+      CONCAT(U."firstName", 
+        CASE 
+          WHEN COALESCE(U."middleName", '') <> '' THEN ' ' || U."middleName" 
+          ELSE '' 
+        END, 
+        CASE 
+          WHEN COALESCE(U."lastName", '') <> '' THEN ' ' || U."lastName" 
+          ELSE '' 
+        END
+      )
+    ) AS "name",
+     U."district", U."state",U."mobile" FROM public."CohortMembers" CM
     LEFT JOIN public."Users" U
     ON CM."userId" = U."userId" ${whereCase}`;
 
@@ -602,8 +621,8 @@ export class PostgresCohortMembersService {
               : `'${value}'`;
             return `CM."status" IN (${statusValues})`;
           }
-          case "name": {
-            return `U."name" ILIKE '%${value}%'`;
+          case "firstName": {
+            return `U."firstName" ILIKE '%${value}%'`;
           }
           case "cohortAcademicYearId": {
             const cohortIdAcademicYear = Array.isArray(value)
@@ -619,7 +638,21 @@ export class PostgresCohortMembersService {
       whereCase += where.map(processCondition).join(" AND ");
     }
 
-    let query = `SELECT U."userId", U.username, U.name, R.name AS role, U.district, U.state,U.mobile,U."deviceId",
+    let query = `SELECT U."userId", U."username", 
+    TRIM(
+      CONCAT(U."firstName", 
+        CASE 
+          WHEN COALESCE(U."middleName", '') <> '' THEN ' ' || U."middleName" 
+          ELSE '' 
+        END, 
+        CASE 
+          WHEN COALESCE(U."lastName", '') <> '' THEN ' ' || U."lastName" 
+          ELSE '' 
+        END
+      )
+    ) AS "name",
+
+     R."name" AS role, U."district", U."state",U."mobile",U."deviceId",
       CM."status", CM."statusReason",CM."cohortMembershipId",CM."status",CM."createdAt", CM."updatedAt",U."createdBy",U."updatedBy", COUNT(*) OVER() AS total_count  FROM public."CohortMembers" CM
       INNER JOIN public."Users" U
       ON CM."userId" = U."userId"
