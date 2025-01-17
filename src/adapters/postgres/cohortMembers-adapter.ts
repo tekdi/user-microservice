@@ -156,12 +156,6 @@ export class PostgresCohortMembersService {
     );
 
     for (const data of getUserDetails) {
-      // Concatenate firstName, middleName, and lastName with spaces if they exist
-      // const fullName = 
-      // (data?.firstName || "") + 
-      // (data?.middleName ? ` ${data.middleName}` : "") + 
-      // (data?.lastName ? ` ${data.lastName}` : "");
-
       const userDetails = {
         userId: data?.userId,
         userName: data?.userName,
