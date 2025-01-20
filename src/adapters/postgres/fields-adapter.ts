@@ -790,7 +790,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
       const fieldKeys = this.fieldsRepository.metadata.columns.map(
         (column) => column.propertyName
       );
-      let tenantCond = tenantId? `"tenantId" = ${tenantId}` :`"tenantId" IS NULL`
+      let tenantCond = tenantId? `"tenantId" = '${tenantId}'` :`"tenantId" IS NULL`
       let whereClause = tenantCond;
       if (filters && Object.keys(filters).length > 0) {
         Object.entries(filters).forEach(([key, value]) => {
