@@ -1198,7 +1198,7 @@ export class PostgresUserService implements IServicelocator {
             tenantId
           );
 
-        if (!checkAcadmicYear && cohortIds) {          
+        if (!checkAcadmicYear && cohortIds) {
           errorCollector.addError(API_RESPONSES.ACADEMIC_YEAR_NOT_FOUND);
         }
 
