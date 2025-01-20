@@ -1191,10 +1191,7 @@ export class PostgresUserService implements IServicelocator {
           );
         }
 
-        // check academic year exists for tenant
-        console.log(            academicYearId,
-          tenantId);
-        
+        // check academic year exists for tenant        
         const checkAcadmicYear =
           await this.postgresAcademicYearService.getActiveAcademicYear(
             academicYearId,
