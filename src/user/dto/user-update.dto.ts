@@ -7,6 +7,7 @@ import {
   IsEnum,
   ValidateIf,
   Length,
+  IsDate,
 } from "class-validator";
 import { Expose, Type } from "class-transformer";
 import { UserStatus } from "../entities/user-entity";
@@ -59,10 +60,11 @@ class UserDataDTO {
   @IsOptional()
   role: string;
 
-  @ApiProperty({ type: () => String })
+  @ApiProperty({ type: () => String, format: 'date-time', example: '1990-01-01' })
   @IsOptional()
-  @IsString()
-  dob: string | null;
+  @Type(() => Date) // Ensures validation correctly parses strings into Date objects
+  @IsDate()
+  dob: Date | null;
 
   @ApiProperty({ type: () => String })
   @IsOptional()
@@ -89,15 +91,17 @@ class UserDataDTO {
   @IsString()
   pincode: string | null;
 
-  @ApiProperty({ type: () => String })
-  @IsString()
+  @ApiProperty({ type: () => Date, format: 'date-time' })
   @IsOptional()
-  createdAt: string;
+  @Type(() => Date)
+  @IsDate()
+  createdAt: Date;
 
-  @ApiProperty({ type: () => String })
-  @IsString()
+  @ApiProperty({ type: () => Date, format: 'date-time' })
   @IsOptional()
-  updatedAt: string;
+  @Type(() => Date)
+  @IsDate()
+  updatedAt: Date;
 
   @ApiProperty({ type: () => String })
   @IsString()

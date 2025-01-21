@@ -88,7 +88,6 @@ export const API_RESPONSES = {
 
   //get User Details
   USER_GET_SUCCESSFULLY: 'User details fetched successfully.',
-
   USER_GET_BY_EMAIL_SUCCESSFULLY: 'User details fetched successfully by email',
   USER_GET_BY_PHONE_SUCCESSFULLY: 'User details fetched successfully by phone',
   USER_GET_BY_USERNAME_SUCCESSFULLY: 'User details fetched successfully by username',
@@ -97,6 +96,8 @@ export const API_RESPONSES = {
   USER_GET_BY_USER_ID_AND_TENANT_ID_SUCCESSFULLY: 'User details fetched successfully by userId and tenantId',
   USER_GET_BY_EMAIL_AND_TENANT_ID_SUCCESSFULLY: 'User details fetched successfully by email and tenantId',
   USER_CREATE_KEYCLOAK: 'User created successfully on keycloak',
+  USERNAME_EXISTS_KEYCLOAK: 'Username is already exists in keycloak',
+  UPDATE_USER_KEYCLOAK_ERROR:'Failed to update username details in Keycloak.',
 
   //Create user
   USER_CREATE_SUCCESSFULLY: `User created successfully`,
