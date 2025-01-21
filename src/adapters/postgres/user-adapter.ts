@@ -760,7 +760,7 @@ export class PostgresUserService implements IServicelocator {
     return combinedResult;
   }
 
-  async updateUser(userDto, response: Response) {
+  async updateUser(userDto, response: Response) {    
     const apiId = APIID.USER_UPDATE;
     try {
       const updatedData = {};
@@ -776,7 +776,7 @@ export class PostgresUserService implements IServicelocator {
           HttpStatus.BAD_REQUEST
         );
       }
-
+      
       //mutideviceId
       if (userDto?.userData?.deviceId) {
         let deviceIds: any;
@@ -901,22 +901,17 @@ export class PostgresUserService implements IServicelocator {
   }
 
   async updateBasicUserDetails(userId: string, userData: Partial<User>): Promise<User | null> {
-    try {
+    try {      
       // Fetch the user by ID
       const user = await this.usersRepository.findOne({ where: { userId } });
 
       if (!user) {
-        // If the user is not found, return null
         return null;
       }
 
-      // Update the user's details
-      await this.usersRepository.update(userId, userData);
+      await Object.assign(user, userData);
+      return this.usersRepository.save(user);
 
-      // Fetch and return the updated user
-      const updatedUser = await this.usersRepository.findOne({ where: { userId } });
-
-      return updatedUser;
     } catch (error) {
       // Re-throw or handle the error as needed
       throw new Error('An error occurred while updating user details');
