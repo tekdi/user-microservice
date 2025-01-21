@@ -981,28 +981,22 @@ export class PostgresUserService implements IServicelocator {
   }
 
   async updateBasicUserDetails(userId: string, userData: Partial<User>): Promise<User | null> {
-    try {
+    try {      
       // Fetch the user by ID
       const user = await this.usersRepository.findOne({ where: { userId } });
 
       if (!user) {
-        // If the user is not found, return null
         return null;
       }
 
-      // Update the user's details
-      await this.usersRepository.update(userId, userData);
+      await Object.assign(user, userData);
+      return this.usersRepository.save(user);
 
-      // Fetch and return the updated user
-      const updatedUser = await this.usersRepository.findOne({ where: { userId } });
-
-      return updatedUser;
     } catch (error) {
       // Re-throw or handle the error as needed
       throw new Error('An error occurred while updating user details');
     }
   }
-
 
 
   async createUser(
