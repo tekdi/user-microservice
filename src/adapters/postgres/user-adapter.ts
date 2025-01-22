@@ -697,6 +697,8 @@ export class PostgresUserService implements IServicelocator {
         "firstName",
         "middleName",
         "lastName",
+        "gender",
+        "dob",
         "mobile",
         "email",
         "temporaryPassword",
