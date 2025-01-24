@@ -163,7 +163,7 @@ export class PostgresUserService implements IServicelocator {
         context: "USER",
         key: "OnForgotPasswordReset",
         replacements: {
-          "{username}": userData?.name,
+          "{username}": userData?.firstName + " " + userData?.lastName,
           "{resetToken}": resetToken,
           "{programName}": capilatizeFirstLettterOfProgram,
           "{expireTime}": time,
