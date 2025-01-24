@@ -750,12 +750,15 @@ export class PostgresFieldsService implements IServicelocatorfields {
         contextType: IsNull(),
       },
     ];
+    console.log("condition",condition);
+    
 
     const result = await this.fieldsRepository.find({
       where: condition,
       select: ["fieldId"],
     });
-
+    console.log("result",result);
+    
     return result;
   }
 

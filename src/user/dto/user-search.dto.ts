@@ -135,6 +135,31 @@ export class tenantCohortRoleMappingDto {
   roleId: string;
 }
 
+export class SuggestUserDto{
+  @ApiProperty({ type: String, description: 'First name of the user', maxLength: 50 })
+  @Expose()
+  @IsNotEmpty()
+  @Length(1, 50)
+  firstName: string;
+
+  @ApiProperty({ type: String, description: 'Middle name of the user (optional)', maxLength: 50, required: false })
+  @Expose()
+  @IsOptional()
+  @Length(0, 50)
+  middleName?: string;
+
+  @ApiProperty({ type: String, description: 'Last name of the user', maxLength: 50 })
+  @Expose()
+  @IsNotEmpty()
+  @Length(1, 50)
+  lastName: string;
+  
+  @ApiPropertyOptional({ type: String, description: "User Name" })
+  @Expose()
+  @IsNotEmpty()
+  username: string;
+}
+
 export class ExistUserDto {  
     @ApiProperty({ type: String, description: 'First name of the user', maxLength: 50 })
     @Expose()

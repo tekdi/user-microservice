@@ -34,7 +34,7 @@ import {
   ApiConflictResponse,
 } from "@nestjs/swagger";
 
-import { ExistUserDto, UserSearchDto } from "./dto/user-search.dto";
+import { ExistUserDto, SuggestUserDto, UserSearchDto } from "./dto/user-search.dto";
 import { UserAdapter } from "./useradapter";
 import { UserCreateDto } from "./dto/user-create.dto";
 import { UserUpdateDTO } from "./dto/user-update.dto";
@@ -162,7 +162,7 @@ export class UserController {
     userUpdateDto.userId = userId;
     return await this.userAdapter
       .buildUserAdapter()
-      .updateUser( userUpdateDto, response);
+      .updateUser(userUpdateDto, response);
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.USER_LIST))
@@ -250,9 +250,27 @@ export class UserController {
   ) {
     const result = await this.userAdapter
       .buildUserAdapter()
-      .checkUser(request,response,existUserDto);
+      .checkUser(request, response, existUserDto);
     return response.status(result.statusCode).json(result);
   }
+
+
+  // required for FTL
+  @UseFilters(new AllExceptionsFilter(APIID.USER_CREATE))
+  @Post("/suggest-username")
+  @ApiBody({ type: SuggestUserDto })
+  @UsePipes(new ValidationPipe())
+  async suggestUsername(
+    @Req() request: Request,
+    @Body() suggestUserDto: SuggestUserDto,
+    @Res() response: Response
+  ) {
+    const result = await this.userAdapter
+      .buildUserAdapter()
+      .suggestUsername(request, response, suggestUserDto);
+    return response.status(result.statusCode).json(result);
+  }
+
 
   //delete
   @UseFilters(new AllExceptionsFilter(APIID.USER_DELETE))
