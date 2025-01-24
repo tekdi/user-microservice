@@ -1,3 +1,4 @@
+import { Max, Min } from 'class-validator';
 import {
     Entity,
     PrimaryGeneratedColumn,
@@ -14,8 +15,8 @@ export class Tenant {
     @Column({ type: 'text' })
     name: string; // Text field for tenant's name
 
-    @Column({ type: 'text' })
-    domain: string; // Text field for tenant's domain
+    @Column({ type: 'text', nullable: true  })
+    domain: string | null; // Text field for tenant's domain
 
     @CreateDateColumn({ type: 'timestamptz', default: () => 'CURRENT_TIMESTAMP' })
     createdAt: Date; // Timestamp for creation date with timezone
@@ -34,10 +35,18 @@ export class Tenant {
 
     @Column({
         type: 'text',
-        default: 'active',
-        enum: ['active', 'inactive', 'archive'],
+        default: 'draft',
+        enum: ['published', 'draft', 'archived'],
     })
-    status: 'active' | 'inactive' | 'archive'; // Status column with enum values
+    status: 'published' | 'draft' | 'archived'; // Status column with enum values
+
+    @Column("int4", { nullable: false })
+    @Min(0) 
+    @Max(999999) 
+    ordering: number = 0;
+
+    @Column({ type: 'text', nullable: true })
+    programHead: string | null; // UUID of the user who created the tenant
 
     @Column({ type: 'uuid', nullable: true })
     createdBy: string | null; // UUID of the user who created the tenant

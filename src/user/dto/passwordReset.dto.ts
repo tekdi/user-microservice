@@ -31,3 +31,12 @@ export class ForgotPasswordDto {
   @IsNotEmpty()
   token: string;
 }
+
+
+export class SendPasswordResetOTPDto {
+
+  @ApiProperty({ type: () => String, example: 'John' })
+  @IsString()
+  @IsNotEmpty()
+  username: string;
+}

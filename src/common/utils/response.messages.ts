@@ -1,5 +1,6 @@
 export const API_RESPONSES = {
   USERNAME_NOT_FOUND: "Username does not exist",
+  EMAIL_EXIST: "Email already exists",
   USER_NOT_FOUND: "User does not exist",
   FORGOT_PASSWORD_SUCCESS: "Forgot password Reset successfully",
   EMAIL_NOT_FOUND_FOR_RESET:
@@ -15,6 +16,7 @@ export const API_RESPONSES = {
   SERVICE_UNAVAILABLE:
     "Notification service is unreachable. Please try again later.",
   INTERNAL_SERVER_ERROR: "Internal Server Error",
+  FORBIDDEN: "Forbidden",
   ERROR: "Error occurred",
   UNEXPECTED_ERROR: "An unexpected error occurred",
   ACADEMICYEAR: "Academic Year Created Successfully",
@@ -86,7 +88,6 @@ export const API_RESPONSES = {
 
   //get User Details
   USER_GET_SUCCESSFULLY: 'User details fetched successfully.',
-
   USER_GET_BY_EMAIL_SUCCESSFULLY: 'User details fetched successfully by email',
   USER_GET_BY_PHONE_SUCCESSFULLY: 'User details fetched successfully by phone',
   USER_GET_BY_USERNAME_SUCCESSFULLY: 'User details fetched successfully by username',
@@ -94,11 +95,13 @@ export const API_RESPONSES = {
   USER_GET_BY_USER_ID_SUCCESSFULLY: 'User details fetched successfully by userId',
   USER_GET_BY_USER_ID_AND_TENANT_ID_SUCCESSFULLY: 'User details fetched successfully by userId and tenantId',
   USER_GET_BY_EMAIL_AND_TENANT_ID_SUCCESSFULLY: 'User details fetched successfully by email and tenantId',
+  USER_CREATE_KEYCLOAK: 'User created successfully on keycloak',
+  USERNAME_EXISTS_KEYCLOAK: 'Username is already exists in keycloak',
+  UPDATE_USER_KEYCLOAK_ERROR:'Failed to update username details in Keycloak.',
 
   //Create user
   USER_CREATE_SUCCESSFULLY: `User created successfully`,
   USER_CREATE_IN_DB: 'User created in user table successfully',
-  USER_CREATE_KEYCLOAK: 'User created successfully on ',
   USER_CREATE_FAILED: 'User creation failed',
   USER_CREATE_FAILED_WITH_ERROR: (error) => `User creation failed with error: ${error}`,
   USER_CREATE_FAILED_WITH_ERROR_AND_EMAIL: (error, email) => `User creation failed with error: ${error}. Email: ${email}`,
@@ -144,14 +147,42 @@ export const API_RESPONSES = {
   COHORT_DATA_RESPONSE: 'Fetch cohort data response',
   COHORT_UPDATED_SUCCESSFULLY: 'Cohort updated successfully.',
   TENANT_NOTFOUND: 'Tenant not found',
-
   COHORTMEMBER_UPDATE_SUCCESSFULLY: "Cohort Member updated Successfully",
 
   //Tenant
   TENANT_GET: "Tenant fetched successfully.",
-  TENANT_NOT_FOUND: "Tenant does not exist",
+  TENANT_NOT_FOUND: "No tenants found matching the specified criteria.",
   TENANT_EXISTS: "Tenant already exists",
   TENANT_CREATE: "Tenant created successfully",
   TENANT_UPDATE: "Tenant updated successfully",
   TENANT_DELETE: "Tenant deleted successfully",
+  TENANT_SEARCH_SUCCESS: "Tenant search successfully",
+  TENANT_CREATE_FAILED: "Failed to create tenant, please try again.",
+  REQUIRED_AND_UUID: "tenantId is required and it's must be a valid UUID.",
+
+
+  //OTP
+  NOTIFICATION_FAIL_DURING_OTP_SEND: "Send SMS notification failed duing OTP send",
+  OTP_SEND_SUCCESSFULLY: "OTP sent successfully",
+  OTP_EXPIRED: 'OTP has expired',
+  OTP_INVALID: "OTP invalid",
+  OTP_VALID: 'OTP validation Sucessfully',
+  MOBILE_VALID: 'Invalid mobile number. Must be 10 digits.',
+  OTP_VALIDED_REQUIRED_KEY: 'Missing required fields',
+  INVALID_HASH_FORMATE: 'Invalid hash format',
+  SMS_ERROR: 'SMS notification failed',
+  SMS_NOTIFICATION_ERROR: 'Failed to send SMS notification:',
+  USERNAME_REQUIRED: 'Username Required',
+  INVALID_REASON: 'Invalid Reason',
+  MOBILE_REQUIRED: 'MObile Required',
+  INVALID_HASH_FORMAT: 'Invalid hash format',
+  NOTIFICATION_ERROR: 'Notification not send due to getting from notification API',
+  MOBILE_EMAIL_NOT_FOUND: 'Mobile number and email ID not found for sending OTP',
+  MOBILE_SENT_OTP: 'OTP sent successfully to mobile',
+  MOBILE_OTP_SEND_FAILED: 'Failed to send OTP to mobile',
+  EMAIL_SENT_OTP: 'OTP sent successfully to email',
+  EMAIL_OTP_SEND_FAILED: 'Failed to send OTP to email',
+  SEND_OTP: 'OTP sent successfully',
+  EMAIL_NOTIFICATION_ERROR: 'Failed to send Email notification:',
+  EMAIL_ERROR: 'Email notification failed'
 };

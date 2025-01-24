@@ -51,5 +51,9 @@ export const APIID = {
   TENANT_CREATE: "api.tenant.create",
   TENANT_UPDATE: "api.tenant.update",
   TENANT_DELETE: "api.tenant.delete",
+  TENANT_SEARCH: "api.tenant.search",
   TENANT_LIST: "api.tenant.list",
+  SEND_OTP: "api.send.OTP",
+  VERIFY_OTP: "api.verify.OTP",
+  SEND_RESET_OTP: 'api.send.reset.otp'
 };

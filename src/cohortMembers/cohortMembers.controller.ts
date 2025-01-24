@@ -44,9 +44,9 @@ import { API_RESPONSES } from "@utils/response.messages";
 
 @ApiTags("Cohort Member")
 @Controller("cohortmember")
-@UseGuards(JwtAuthGuard)
+// @UseGuards(JwtAuthGuard)
 export class CohortMembersController {
-  constructor(private readonly cohortMemberAdapter: CohortMembersAdapter) {}
+  constructor(private readonly cohortMemberAdapter: CohortMembersAdapter) { }
 
   //create cohort members
   @UseFilters(new AllExceptionsFilter(APIID.COHORT_MEMBER_CREATE))
@@ -69,10 +69,11 @@ export class CohortMembersController {
   public async createCohortMembers(
     @Headers() headers,
     @Req() request,
+    @Query('userId') userId: string,
     @Body() cohortMembersDto: CohortMembersDto,
     @Res() response: Response
   ) {
-    const loginUser = request.user.userId;
+    const loginUser = userId;
     const tenantId = headers["tenantid"];
     const deviceId = headers["deviceid"];
     const academicyearId = headers["academicyearid"];
@@ -82,6 +83,11 @@ export class CohortMembersController {
     if (!academicyearId || !isUUID(academicyearId)) {
       throw new BadRequestException(
         "academicyearId is required and academicyearId must be a valid UUID."
+      );
+    }
+    if (!loginUser || !isUUID(loginUser)) {
+      throw new BadRequestException(
+        "unauthorized!"
       );
     }
     const result = await this.cohortMemberAdapter
@@ -190,15 +196,20 @@ export class CohortMembersController {
   @ApiNotFoundResponse({ description: "Data not found" })
   @ApiBadRequestResponse({ description: "Bad request" })
   @ApiBody({ type: CohortMembersUpdateDto })
-  @UsePipes(new ValidationPipe())
+  @UsePipes(new ValidationPipe()) 
   public async updateCohortMembers(
     @Param("cohortmembershipid") cohortMembersId: string,
     @Req() request,
     @Body() cohortMemberUpdateDto: CohortMembersUpdateDto,
-    @Res() response: Response
+    @Res() response: Response,
+    @Query('userId') userId: string
   ) {
-    const loginUser = request.user.userId;
-
+    const loginUser = userId;
+    if (!loginUser || !isUUID(loginUser)) {
+      throw new BadRequestException(
+        "unauthorized!"
+      );
+    }
     const result = await this.cohortMemberAdapter
       .buildCohortMembersAdapter()
       .updateCohortMembers(
@@ -236,27 +247,40 @@ export class CohortMembersController {
 
   @UseFilters(new AllExceptionsFilter(APIID.COHORT_MEMBER_CREATE))
   @Post("/bulkCreate")
+  @ApiBody({ type: BulkCohortMember })
   @UsePipes(new ValidationPipe())
-  @ApiBasicAuth("access-token")
+  // @ApiBasicAuth("access-token")
+  @ApiHeader({
+    name: "tenantid", required: true
+  })
+  @ApiHeader({
+    name: "academicyearid", required: true
+  })
+  @ApiQuery({
+    name: 'userId', required: true, type: 'string', description: 'userId required',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+  })
   @ApiCreatedResponse({
     description: "Cohort Member has been created successfully.",
   })
-  @ApiBody({ type: BulkCohortMember })
-  @ApiHeader({
-    name: "tenantid",
-  })
-  @ApiHeader({
-    name: "academicyearid",
-  })
-  public async craeteBulkCohortMembers(
+  public async createBulkCohortMembers(
     @Headers() headers,
     @Req() request,
-    @Body() bulkcohortMembersDto: BulkCohortMember,
+    @Body() bulkCohortMembersDto: BulkCohortMember,
+    @Query('userId') userId: string, // Now using userId from query
     @Res() response: Response
   ) {
-    const loginUser = request.user.userId;
+    const loginUser = userId;
     const tenantId = headers["tenantid"];
     const academicyearId = headers["academicyearid"];
+    if (!loginUser || !isUUID(loginUser)) {
+      throw new BadRequestException(
+        "unauthorized!"
+      );
+    }
+    if (!tenantId || !isUUID(tenantId)) {
+      throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
+    }
     if (!academicyearId || !isUUID(academicyearId)) {
       throw new BadRequestException(
         "academicyearId is required and must be a valid UUID."
@@ -266,7 +290,7 @@ export class CohortMembersController {
       .buildCohortMembersAdapter()
       .createBulkCohortMembers(
         loginUser,
-        bulkcohortMembersDto,
+        bulkCohortMembersDto,
         response,
         tenantId,
         academicyearId

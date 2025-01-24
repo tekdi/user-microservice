@@ -22,8 +22,17 @@ export class User {
   @Column({ unique: true })
   username: string;
 
-  @Column()
-  name: string;
+  @Column({ type: 'varchar', length: 50, nullable: false })
+  firstName: string;
+
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  middleName: string;
+
+  @Column({ type: 'varchar', length: 50, nullable: false })
+  lastName: string;
+
+  @Column({ type: 'enum', enum: ['male', 'female', 'transgender'], nullable: false })
+  gender: string;
 
   @Column({ type: "date", nullable: true })
   dob: Date;
@@ -58,8 +67,8 @@ export class User {
   @Column({ nullable: true })
   mobile: number;
 
-  @Column({ nullable: true })
-  deviceId: string;
+  @Column('text', { array: true, nullable: true })
+  deviceId: string[];
 
   @Column({ nullable: false, default: true })
   temporaryPassword: boolean;
