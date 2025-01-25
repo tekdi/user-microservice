@@ -47,6 +47,7 @@ export const APIID = {
   ACADEMICYEAR_GET: "api.academicyear.get",
   FORM_GET: "api.form.read",
   FORM_CREATE: "api.form.create",
+  FORM_UPDATE: "api.form.update",
   ADD_COHORT_TO_ACADEMIC_YEAR: "api.create.cohortAcademicYear",
   TENANT_CREATE: "api.tenant.create",
   TENANT_UPDATE: "api.tenant.update",
@@ -56,4 +57,5 @@ export const APIID = {
   SEND_OTP: "api.send.OTP",
   VERIFY_OTP: "api.verify.OTP",
   SEND_RESET_OTP: 'api.send.reset.otp'
+
 };

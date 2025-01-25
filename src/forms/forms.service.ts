@@ -9,6 +9,7 @@ import { CohortContextType } from "./utils/form-class";
 import { FormCreateDto } from "./dto/form-create.dto";
 import { APIID } from "@utils/api-id.config";
 import { API_RESPONSES } from "@utils/response.messages";
+import { FormUpdateDto } from "./dto/form-update.dto";
 
 @Injectable()
 export class FormsService {
@@ -194,6 +195,54 @@ export class FormsService {
         return [];
     }
   }
+
+  public async updateForm(formId: string, request, formUpdateDto: FormUpdateDto, response) {
+    let apiId = APIID.FORM_UPDATE;
+  
+    try {  
+      console.log("hiii");
+      
+      const form = await this.formRepository.findOneBy({ formid: formId });
+      if (!form) {
+        return APIResponse.error(
+          response,
+          apiId,
+          "NOT_FOUND",
+          API_RESPONSES.FORM_NOT_FOUND,
+          HttpStatus.NOT_FOUND
+        );
+      }
+  
+      // Update properties only if provided
+      form.title = formUpdateDto.title?.toUpperCase() || form.title;
+      form.context = formUpdateDto.context?.toUpperCase() || form.context;
+      form.contextType = formUpdateDto.contextType?.toUpperCase() || form.contextType;
+      form.fields = formUpdateDto.fields || form.fields;
+  
+      // Save the updated form
+      const result = await this.formRepository.save(form);
+  
+      return APIResponse.success(
+        response,
+        apiId,
+        result,
+        HttpStatus.OK,
+        API_RESPONSES.FORM_UPDATED_SUCCESSFULLY
+      );
+    } catch (error) {
+      console.log(error);
+      
+      const errorMessage = error.message || "Internal server error";
+      return APIResponse.error(
+        response,
+        apiId,
+        "INTERNAL_SERVER_ERROR",
+        errorMessage,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+  
 
   public async createForm(request, formCreateDto: FormCreateDto, response) {
     let apiId = APIID.FORM_CREATE;
