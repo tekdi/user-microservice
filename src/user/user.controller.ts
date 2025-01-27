@@ -256,7 +256,7 @@ export class UserController {
 
 
   // required for FTL
-  @UseFilters(new AllExceptionsFilter(APIID.USER_CREATE))
+  @UseFilters(new AllExceptionsFilter(APIID.SUGGEST_USERNAME))
   @Post("/suggest-username")
   @ApiBody({ type: SuggestUserDto })
   @UsePipes(new ValidationPipe())

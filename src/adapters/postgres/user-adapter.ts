@@ -2329,7 +2329,7 @@ export class PostgresUserService implements IServicelocator {
         return await APIResponse.success(
           response,
           apiId,
-          {username: newUsername},
+          {suggestedUsername: newUsername},
           HttpStatus.OK,
           API_RESPONSES.USERNAME_SUGGEST_SUCCESSFULLY
         );
