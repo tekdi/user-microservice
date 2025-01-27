@@ -2211,13 +2211,15 @@ export class PostgresUserService implements IServicelocator {
         Object.entries(filters).forEach(([key, value]) => {
           if (value !== undefined && value !== null) {
             if (key === 'firstName' || key === 'middleName' || key === 'lastName') {
-              whereClause[key] = Like(`%${value}%`);
+              const sanitizedValue = this.sanitizeInput(value);
+              whereClause[key] = Like(`%${sanitizedValue}%`);
             } else {
-              whereClause[key] = value;
+              whereClause[key] = this.sanitizeInput(value);
             }
           }
         });
       }
+      
   
       // Use the dynamic where clause to fetch matching data
       const findData = await this.usersRepository.find({
@@ -2259,5 +2261,14 @@ export class PostgresUserService implements IServicelocator {
       );
     }
   }
+  sanitizeInput(value) {
+    if (typeof value === 'string') {
+      // Escape special characters for SQL
+      return value.replace(/[%_\\]/g, '\\$&');
+    }
+    // For other types, return the value as is or implement specific sanitization logic
+    return value;
+  }
+  
 
 }
