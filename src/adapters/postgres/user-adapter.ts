@@ -1759,14 +1759,10 @@ export class PostgresUserService implements IServicelocator {
     );
 
     const validFieldIds = new Set(getFieldIds.map((field) => field.fieldId));
-    console.log("validFieldIds",validFieldIds);
-    console.log("customFields",userCreateDto.customFields);
 
     const invalidFieldIds = userCreateDto.customFields
       .filter((fieldValue) => !validFieldIds.has(fieldValue.fieldId))
       .map((fieldValue) => fieldValue.fieldId);
-
-      console.log("invalidFieldIds",invalidFieldIds);
       
     if (invalidFieldIds.length > 0) {
       return `The following fields are not valid for this user: ${invalidFieldIds.join(
