@@ -1343,21 +1343,6 @@ export class PostgresUserService implements IServicelocator {
     return notExistCohort.length > 0 ? notExistCohort : [];
   }
 
-  // async checkUser(body) {
-  //   const checkUserinKeyCloakandDb = await this.checkUserinKeyCloakandDb(body);
-  //   if (checkUserinKeyCloakandDb) {
-  //     return new SuccessResponse({
-  //       statusCode: 200,
-  //       message: API_RESPONSES.USER_EXISTS_SEND_MAIL,
-  //       data: { data: true },
-  //     });
-  //   }
-  //   return new SuccessResponse({
-  //     statusCode: HttpStatus.BAD_REQUEST,
-  //     message: API_RESPONSES.INVALID_USERNAME_EMAIL,
-  //     data: { data: false },
-  //   });
-  // }
 
   // Can be Implemeneted after we know what are the unique entties
   async checkUserinKeyCloakandDb(userDto) {
@@ -2212,21 +2197,7 @@ export class PostgresUserService implements IServicelocator {
     }
   }
 
-  // async checkUser(body) {
-  //   const checkUserinKeyCloakandDb = await this.checkUserinKeyCloakandDb(body);
-  //   if (checkUserinKeyCloakandDb) {
-  //     return new SuccessResponse({
-  //       statusCode: 200,
-  //       message: API_RESPONSES.USER_EXISTS_SEND_MAIL,
-  //       data: { data: true },
-  //     });
-  //   }
-  //   return new SuccessResponse({
-  //     statusCode: HttpStatus.BAD_REQUEST,
-  //     message: API_RESPONSES.INVALID_USERNAME_EMAIL,
-  //     data: { data: false },
-  //   });
-  // }
+
   async checkUser(
     request: any,
     response: any,
