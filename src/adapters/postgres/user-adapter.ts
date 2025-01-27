@@ -1343,21 +1343,6 @@ export class PostgresUserService implements IServicelocator {
     return notExistCohort.length > 0 ? notExistCohort : [];
   }
 
-  // async checkUser(body) {
-  //   const checkUserinKeyCloakandDb = await this.checkUserinKeyCloakandDb(body);
-  //   if (checkUserinKeyCloakandDb) {
-  //     return new SuccessResponse({
-  //       statusCode: 200,
-  //       message: API_RESPONSES.USER_EXISTS_SEND_MAIL,
-  //       data: { data: true },
-  //     });
-  //   }
-  //   return new SuccessResponse({
-  //     statusCode: HttpStatus.BAD_REQUEST,
-  //     message: API_RESPONSES.INVALID_USERNAME_EMAIL,
-  //     data: { data: false },
-  //   });
-  // }
 
   // Can be Implemeneted after we know what are the unique entties
   async checkUserinKeyCloakandDb(userDto) {
@@ -2216,21 +2201,7 @@ export class PostgresUserService implements IServicelocator {
     }
   }
 
-  // async checkUser(body) {
-  //   const checkUserinKeyCloakandDb = await this.checkUserinKeyCloakandDb(body);
-  //   if (checkUserinKeyCloakandDb) {
-  //     return new SuccessResponse({
-  //       statusCode: 200,
-  //       message: API_RESPONSES.USER_EXISTS_SEND_MAIL,
-  //       data: { data: true },
-  //     });
-  //   }
-  //   return new SuccessResponse({
-  //     statusCode: HttpStatus.BAD_REQUEST,
-  //     message: API_RESPONSES.INVALID_USERNAME_EMAIL,
-  //     data: { data: false },
-  //   });
-  // }
+
   async checkUser(
     request: any,
     response: any,
@@ -2244,14 +2215,14 @@ export class PostgresUserService implements IServicelocator {
         Object.entries(filters).forEach(([key, value]) => {
           if (value !== undefined && value !== null) {
             if (key === 'firstName' || key === 'middleName' || key === 'lastName') {
-              whereClause[key] = Like(`%${value}%`);
+              const sanitizedValue = this.sanitizeInput(value);
+              whereClause[key] = Like(`%${sanitizedValue}%`);
             } else {
-              whereClause[key] = value;
+              whereClause[key] = this.sanitizeInput(value);
             }
           }
         });
       }
-
       // Use the dynamic where clause to fetch matching data
       const findData = await this.usersRepository.find({
         where: whereClause,
@@ -2292,6 +2263,15 @@ export class PostgresUserService implements IServicelocator {
       );
     }
   }
+  sanitizeInput(value) {
+    if (typeof value === 'string') {
+      // Escape special characters for SQL
+      return value.replace(/[%_\\]/g, '\\$&');
+    }
+    // For other types, return the value as is or implement specific sanitization logic
+    return value;
+  }
+  
 
   async suggestUsername(request: Request, response: Response, suggestUserDto: SuggestUserDto) {
     const apiId = APIID.USER_LIST;

@@ -241,7 +241,7 @@ export class UserController {
   // required for FTL
   @UseFilters(new AllExceptionsFilter(APIID.USER_CREATE))
   @Post("/check")
-  @ApiBody({ type: UserSearchDto })
+  @ApiBody({ type: ExistUserDto })
   @UsePipes(new ValidationPipe())
   async checkUser(
     @Req() request: Request,
