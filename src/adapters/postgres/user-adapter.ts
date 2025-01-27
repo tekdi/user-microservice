@@ -44,6 +44,7 @@ import { OtpSendDTO } from "src/user/dto/otpSend.dto";
 import { OtpVerifyDTO } from "src/user/dto/otpVerify.dto";
 import { SendPasswordResetOTPDto } from "src/user/dto/passwordReset.dto";
 import { ActionType, UserUpdateDTO } from "src/user/dto/user-update.dto";
+import { randomInt } from 'crypto';
 
 interface UpdateField {
   userId: string; // Required
@@ -2278,12 +2279,12 @@ export class PostgresUserService implements IServicelocator {
       });
   
       if (findData) {
-        // Define a function to generate a username
+        // Define a function to generate a username  
         const generateUsername = (): string => {
-          const randomNum = Math.floor(Math.random() * 900) + 100; // Random 3 digit number
+          const randomNum = randomInt(100, 1000); // Secure random 3-digit number
           return `${suggestUserDto.firstName}${suggestUserDto.lastName}${randomNum}`;
         };
-  
+        
         // Check if the generated username exists in the database
         let newUsername = generateUsername();
         let isUnique = false;

@@ -259,6 +259,8 @@ export class UserController {
   @UseFilters(new AllExceptionsFilter(APIID.SUGGEST_USERNAME))
   @Post("/suggest-username")
   @ApiBody({ type: SuggestUserDto })
+  @ApiOkResponse({ description: "Username suggestion generated successfully" }) 
+  @ApiBadRequestResponse({ description: "Invalid input parameters" }) 
   @UsePipes(new ValidationPipe())
   async suggestUsername(
     @Req() request: Request,
