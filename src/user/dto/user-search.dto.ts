@@ -10,6 +10,10 @@ import {
   ArrayMinSize,
   ArrayMaxSize,
   IsEmail,
+  IsString,
+  Length,
+  IsPhoneNumber,
+  Matches,
 } from "class-validator";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 
@@ -129,6 +133,38 @@ export class tenantCohortRoleMappingDto {
   @IsOptional()
   @IsUUID()
   roleId: string;
+}
+
+export class ExistUserDto {  
+    @ApiProperty({ type: String, description: 'First name of the user', maxLength: 50 })
+    @Expose()
+    @IsOptional()
+    @Length(1, 50)
+    firstName?: string;
+  
+    @ApiProperty({ type: String, description: 'Middle name of the user (optional)', maxLength: 50, required: false })
+    @Expose()
+    @IsOptional()
+    @Length(0, 50)
+    middleName?: string;
+
+    @ApiProperty({ type: String, description: 'Middle name of the user (optional)', maxLength: 50, required: false })
+    @Expose()
+    @IsOptional()
+    @Length(0, 50)
+    lastName?: string;
+
+    @ApiProperty({ type: () => String })
+    @IsOptional()
+    @IsEmail()
+    email?: string;
+
+    @ApiProperty({ type: () => String, description: 'Mobile number of the user (optional)' })
+    @Expose()
+    @IsOptional()
+    @IsString({ message: 'Mobile number must be a string' })
+    @Matches(/^[0-9]{10}$/, { message: 'Mobile number must be between 10 digits and contain only numbers' })
+    mobile?: string;
 }
 
 export class UserSearchDto {

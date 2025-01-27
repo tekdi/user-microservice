@@ -34,7 +34,7 @@ import {
   ApiConflictResponse,
 } from "@nestjs/swagger";
 
-import { UserSearchDto } from "./dto/user-search.dto";
+import { ExistUserDto, UserSearchDto } from "./dto/user-search.dto";
 import { UserAdapter } from "./useradapter";
 import { UserCreateDto } from "./dto/user-create.dto";
 import { UserUpdateDTO } from "./dto/user-update.dto";
@@ -239,11 +239,18 @@ export class UserController {
   }
 
   // required for FTL
+  @UseFilters(new AllExceptionsFilter(APIID.USER_CREATE))
   @Post("/check")
-  async checkUser(@Body() body, @Res() response: Response) {
+  @ApiBody({ type: ExistUserDto })
+  @UsePipes(new ValidationPipe())
+  async checkUser(
+    @Req() request: Request,
+    @Body() existUserDto: ExistUserDto,
+    @Res() response: Response
+  ) {
     const result = await this.userAdapter
       .buildUserAdapter()
-      .checkUser(body, response);
+      .checkUser(request,response,existUserDto);
     return response.status(result.statusCode).json(result);
   }
 
