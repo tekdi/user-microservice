@@ -14,19 +14,20 @@ import { IServicelocatorAssignTenant } from "../usertenantmappinglocator";
 import APIResponse from "src/common/responses/response";
 import { Response } from "express";
 import { APIID } from "src/common/utils/api-id.config";
+import { TypeormService } from "src/services/typeorm";
 
 @Injectable()
 export class PostgresAssignTenantService
-  implements IServicelocatorAssignTenant
-{
+  implements IServicelocatorAssignTenant {
   constructor(
     @InjectRepository(UserTenantMapping)
     private userTenantMappingRepository: Repository<UserTenantMapping>,
     @InjectRepository(User)
     private userRepository: Repository<User>,
     @InjectRepository(Tenants)
-    private tenantsRepository: Repository<Tenants>
-  ) {}
+    private tenantsRepository: Repository<Tenants>,
+    private readonly typeOrmService: TypeormService
+  ) { }
 
   public async validateUserTenantMapping(
     userId: string,
@@ -34,7 +35,7 @@ export class PostgresAssignTenantService
     errors: any[]
   ) {
     // check if user tenant mapping exists.
-    const existingMapping = await this.userTenantMappingRepository.findOne({
+    const existingMapping = await this.typeOrmService.findOne(UserTenantMapping, {
       where: { userId, tenantId },
     });
     if (existingMapping) {
@@ -45,14 +46,14 @@ export class PostgresAssignTenantService
     }
 
     // check if user exists
-    const userExist = await this.userRepository.findOne({ where: { userId } });
+    const userExist = await this.typeOrmService.findOne(User, { where: { userId } });
     if (!userExist) {
       errors.push({ errorMessage: `User ${userId} does not exist.` });
       return false;
     }
 
     // check if tenant exists
-    const tenantExist = await this.tenantsRepository.findOne({
+    const tenantExist = await this.typeOrmService.findOne(Tenants, {
       where: { tenantId },
     });
     if (!tenantExist) {
@@ -98,7 +99,7 @@ export class PostgresAssignTenantService
           continue;
         }
 
-        const data = await this.userTenantMappingRepository.save({
+        const data = await this.typeOrmService.save(UserTenantMapping, {
           userId: userId,
           tenantId: tenantId,
           createdBy: request["user"].userId,

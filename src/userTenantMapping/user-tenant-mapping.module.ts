@@ -6,6 +6,7 @@ import { AssignTenantAdapter } from "./user-tenant-mapping.adapter";
 import { PostgresAssignTenantService } from "src/adapters/postgres/userTenantMapping-adapter";
 import { User } from "src/user/entities/user-entity";
 import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
+import { TypeormService } from "src/services/typeorm";
 
 @Module({
   imports: [
@@ -13,9 +14,9 @@ import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
     HttpModule,
   ],
   controllers: [AssignTenantController],
-  providers: [AssignTenantAdapter, PostgresAssignTenantService],
+  providers: [AssignTenantAdapter, PostgresAssignTenantService, TypeormService],
 })
-export class AssignTenantModule {}
+export class AssignTenantModule { }
 
 // import { Module } from '@nestjs/common';
 // import { AssignRoleAdapter } from './assign-role.apater';
