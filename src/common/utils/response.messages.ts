@@ -100,6 +100,7 @@ export const API_RESPONSES = {
   USER_CREATE_KEYCLOAK: 'User created successfully on keycloak',
   USERNAME_EXISTS_KEYCLOAK: 'Username is already exists in keycloak',
   UPDATE_USER_KEYCLOAK_ERROR:'Failed to update username details in Keycloak.',
+  USERNAME_SUGGEST_SUCCESSFULLY:'Username is already taken. Suggested a new unique username.',
 
   //Create user
   USER_CREATE_SUCCESSFULLY: `User created successfully`,
