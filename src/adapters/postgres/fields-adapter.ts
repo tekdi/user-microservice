@@ -190,7 +190,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
       };
     }
     const context = "COHORT";
-    const getFieldIds: any = await this.getFieldIds(context, contextType);
+    const getFieldIds = await this.getFieldIds(context, contextType);
 
     const validFieldIds = new Set(getFieldIds.map((field) => field.fieldId));
 
@@ -286,7 +286,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         error: `Invalid fields found: ${invalidateFields}`,
       };
     }
-    const getFieldIds: any = await this.getFieldIds(context, contextType);
+    const getFieldIds = await this.getFieldIds(context, contextType);
 
     const validFieldIds = new Set(getFieldIds.map((field) => field.fieldId));
 
@@ -499,7 +499,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         }
       });
 
-      const getSourceDetails: any = await this.typeormService.findOne(Fields, {
+      const getSourceDetails = await this.typeormService.findOne(Fields, {
         where: { fieldId: fieldId },
       });
 
@@ -648,7 +648,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
 
   async addOptionsInFieldParams(fieldId: string, newParams: any) {
     try {
-      const existingField: any = await this.typeormService.findOne(Fields, {
+      const existingField = await this.typeormService.findOne(Fields, {
         where: { fieldId },
       });
 
@@ -835,8 +835,6 @@ export class PostgresFieldsService implements IServicelocatorfields {
         "Fields fetched successfully."
       );
     } catch (error) {
-      console.log(error, "error");
-
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error: ${error.message}`,
@@ -1197,7 +1195,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         condition.contextType = contextType;
       }
 
-      const fetchFieldParams: any = await this.typeormService.findOne(Fields, {
+      const fetchFieldParams = await this.typeormService.findOne(Fields, {
         where: condition,
       });
 
@@ -1331,7 +1329,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         );
       }
 
-      const getField: any = await this.typeormService.findOne(Fields, {
+      const getField = await this.typeormService.findOne(Fields, {
         where: condition,
       });
 
@@ -1481,7 +1479,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
       condition.contextType = IsNull();
     }
 
-    const customFields: any = await this.typeormService.find(Fields, { where: condition });
+    const customFields = await this.typeormService.find(Fields, { where: condition });
     return customFields;
   }
 
