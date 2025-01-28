@@ -257,7 +257,7 @@ export class UserController {
 
   // required for FTL
   @UseFilters(new AllExceptionsFilter(APIID.SUGGEST_USERNAME))
-  @Post("/suggest-username")
+  @Post("/suggestUsername")
   @ApiBody({ type: SuggestUserDto })
   @ApiOkResponse({ description: "Username suggestion generated successfully" }) 
   @ApiBadRequestResponse({ description: "Invalid input parameters" }) 
