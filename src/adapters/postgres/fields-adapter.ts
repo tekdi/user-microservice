@@ -755,7 +755,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
       where: condition,
       select: ["fieldId"],
     });
-
+    
     return result;
   }
 

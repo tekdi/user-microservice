@@ -16,7 +16,7 @@ import { ErrorResponse } from "src/error-response";
 import { SuccessResponse } from "src/success-response";
 import { CohortMembers } from "src/cohortMembers/entities/cohort-member.entity";
 import { isUUID } from "class-validator";
-import { ExistUserDto, UserSearchDto } from "src/user/dto/user-search.dto";
+import { ExistUserDto, SuggestUserDto, UserSearchDto } from "src/user/dto/user-search.dto";
 import { UserTenantMapping } from "src/userTenantMapping/entities/user-tenant-mapping.entity";
 import { UserRoleMapping } from "src/rbac/assign-role/entities/assign-role.entity";
 import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
@@ -24,7 +24,7 @@ import { Cohort } from "src/cohort/entities/cohort.entity";
 import { Role } from "src/rbac/role/entities/role.entity";
 import { UserData } from "src/user/user.controller";
 import APIResponse from "src/common/responses/response";
-import { Response, query } from "express";
+import { Request, Response, query } from "express";
 import { APIID } from "src/common/utils/api-id.config";
 import { IServicelocator } from "../userservicelocator";
 import { PostgresFieldsService } from "./fields-adapter";
@@ -44,6 +44,7 @@ import { OtpSendDTO } from "src/user/dto/otpSend.dto";
 import { OtpVerifyDTO } from "src/user/dto/otpVerify.dto";
 import { SendPasswordResetOTPDto } from "src/user/dto/passwordReset.dto";
 import { ActionType, UserUpdateDTO } from "src/user/dto/user-update.dto";
+import { randomInt } from 'crypto';
 
 interface UpdateField {
   userId: string; // Required
@@ -1763,7 +1764,7 @@ export class PostgresUserService implements IServicelocator {
     const invalidFieldIds = userCreateDto.customFields
       .filter((fieldValue) => !validFieldIds.has(fieldValue.fieldId))
       .map((fieldValue) => fieldValue.fieldId);
-
+      
     if (invalidFieldIds.length > 0) {
       return `The following fields are not valid for this user: ${invalidFieldIds.join(
         ", "
@@ -2219,8 +2220,6 @@ export class PostgresUserService implements IServicelocator {
           }
         });
       }
-      
-  
       // Use the dynamic where clause to fetch matching data
       const findData = await this.usersRepository.find({
         where: whereClause,
@@ -2271,4 +2270,68 @@ export class PostgresUserService implements IServicelocator {
   }
   
 
+  async suggestUsername(request: Request, response: Response, suggestUserDto: SuggestUserDto) {
+    const apiId = APIID.USER_LIST;
+    try {
+      // Fetch user data from the database to check if the username already exists
+      const findData = await this.usersRepository.findOne({
+        where: { username: suggestUserDto?.username },
+      });
+  
+      if (findData) {
+        // Define a function to generate a username  
+        const generateUsername = (): string => {
+          const randomNum = randomInt(100, 1000); // Secure random 3-digit number
+          return `${suggestUserDto.firstName}${suggestUserDto.lastName}${randomNum}`;
+        };
+        
+        // Check if the generated username exists in the database
+        let newUsername = generateUsername();
+        let isUnique = false;
+  
+        while (!isUnique) {
+          const existingUser = await this.usersRepository.findOne({
+            where: { username: newUsername },
+          });
+  
+          if (!existingUser) {
+            isUnique = true; // Username is unique
+          } else {
+            // Generate a new username and try again
+            newUsername = generateUsername();
+          }
+        }
+  
+        // Return the unique suggested username
+        return await APIResponse.success(
+          response,
+          apiId,
+          {suggestedUsername: newUsername},
+          HttpStatus.OK,
+          API_RESPONSES.USERNAME_SUGGEST_SUCCESSFULLY
+        );
+      }
+  
+      // If findData is not present, return a message indicating that the user was not found
+      return APIResponse.error(
+        response,
+        apiId,
+        API_RESPONSES.USER_NOT_FOUND,
+        API_RESPONSES.NOT_FOUND,
+        HttpStatus.NOT_FOUND
+      );
+        
+    } catch (error) {
+      // Handle errors gracefully
+      const errorMessage = error.message || API_RESPONSES.SERVER_ERROR;
+      return APIResponse.error(
+        response,
+        apiId,
+        API_RESPONSES.SERVER_ERROR,
+        errorMessage,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+  
 }
