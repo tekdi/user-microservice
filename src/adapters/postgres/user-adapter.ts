@@ -1060,7 +1060,6 @@ export class PostgresUserService implements IServicelocator {
       userCreateDto.username = userCreateDto.username.toLocaleLowerCase();
       const userSchema = new UserCreateDto(userCreateDto);
 
-      let errKeycloak = "";
       let resKeycloak;
 
       const keycloakResponse = await getKeycloakAdminToken();
@@ -1079,8 +1078,8 @@ export class PostgresUserService implements IServicelocator {
         );
       }
 
-      resKeycloak = await createUserInKeyCloak(userSchema, token)
-
+      // Multi tenant for roles is not currently supported in keycloak
+      resKeycloak = await createUserInKeyCloak(userSchema, token, validatedRoles[0]?.title)
 
       if (resKeycloak.statusCode !== 201) {
         if (resKeycloak.statusCode === 409) {
@@ -1345,7 +1344,7 @@ export class PostgresUserService implements IServicelocator {
   }
 
 
-  // Can be Implemeneted after we know what are the unique entties
+  // Can be Implemented after we know what are the unique entities
   async checkUserinKeyCloakandDb(userDto) {
     const keycloakResponse = await getKeycloakAdminToken();
     const token = keycloakResponse.data.access_token;
@@ -1403,7 +1402,7 @@ export class PostgresUserService implements IServicelocator {
               query
             );
 
-            // will add data only if cohort is found with acadmic year
+            // will add data only if cohort is found with academic year
             let cohortData = {
               userId: result?.userId,
               cohortId: cohortIds,
@@ -1764,7 +1763,7 @@ export class PostgresUserService implements IServicelocator {
     const invalidFieldIds = userCreateDto.customFields
       .filter((fieldValue) => !validFieldIds.has(fieldValue.fieldId))
       .map((fieldValue) => fieldValue.fieldId);
-      
+
     if (invalidFieldIds.length > 0) {
       return `The following fields are not valid for this user: ${invalidFieldIds.join(
         ", "
@@ -2268,7 +2267,7 @@ export class PostgresUserService implements IServicelocator {
     // For other types, return the value as is or implement specific sanitization logic
     return value;
   }
-  
+
 
   async suggestUsername(request: Request, response: Response, suggestUserDto: SuggestUserDto) {
     const apiId = APIID.USER_LIST;
@@ -2277,23 +2276,23 @@ export class PostgresUserService implements IServicelocator {
       const findData = await this.usersRepository.findOne({
         where: { username: suggestUserDto?.username },
       });
-  
+
       if (findData) {
         // Define a function to generate a username  
         const generateUsername = (): string => {
           const randomNum = randomInt(100, 1000); // Secure random 3-digit number
           return `${suggestUserDto.firstName}${suggestUserDto.lastName}${randomNum}`;
         };
-        
+
         // Check if the generated username exists in the database
         let newUsername = generateUsername();
         let isUnique = false;
-  
+
         while (!isUnique) {
           const existingUser = await this.usersRepository.findOne({
             where: { username: newUsername },
           });
-  
+
           if (!existingUser) {
             isUnique = true; // Username is unique
           } else {
@@ -2301,17 +2300,17 @@ export class PostgresUserService implements IServicelocator {
             newUsername = generateUsername();
           }
         }
-  
+
         // Return the unique suggested username
         return await APIResponse.success(
           response,
           apiId,
-          {suggestedUsername: newUsername},
+          { suggestedUsername: newUsername },
           HttpStatus.OK,
           API_RESPONSES.USERNAME_SUGGEST_SUCCESSFULLY
         );
       }
-  
+
       // If findData is not present, return a message indicating that the user was not found
       return APIResponse.error(
         response,
@@ -2320,7 +2319,7 @@ export class PostgresUserService implements IServicelocator {
         API_RESPONSES.NOT_FOUND,
         HttpStatus.NOT_FOUND
       );
-        
+
     } catch (error) {
       // Handle errors gracefully
       const errorMessage = error.message || API_RESPONSES.SERVER_ERROR;
@@ -2333,5 +2332,5 @@ export class PostgresUserService implements IServicelocator {
       );
     }
   }
-  
+
 }

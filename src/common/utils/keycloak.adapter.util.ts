@@ -57,7 +57,7 @@ async function getKeycloakAdminToken() {
 }
 
 
-async function createUserInKeyCloak(query, token) {
+async function createUserInKeyCloak(query, token, role: string) {
   if (!query.password) {
     return "User cannot be created, Password missing";
   }
@@ -75,6 +75,10 @@ async function createUserInKeyCloak(query, token) {
         value: query.password,
       },
     ],
+    attributes : {
+      // Multi tenant for roles is not currently supported in keycloak
+      pratham_role: [role]  // Added in attribute and mappers
+    }
   });
 
   const config = {
