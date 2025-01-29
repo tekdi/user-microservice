@@ -16,7 +16,6 @@ import {
   Delete,
   ParseUUIDPipe,
   UseFilters,
-  BadRequestException,
 } from "@nestjs/common";
 
 import {
@@ -204,6 +203,7 @@ export class UserController {
 
   @Post("/forgot-password")
   @ApiOkResponse({ description: "Forgot password reset successfully." })
+  @ApiBody({ type: ForgotPasswordDto })
   @UsePipes(new ValidationPipe({ transform: true }))
   public async forgotPassword(
     @Req() request: Request,
@@ -222,7 +222,7 @@ export class UserController {
   @ApiOkResponse({ description: "Password reset successfully." })
   @UsePipes(new ValidationPipe({ transform: true }))
   @ApiForbiddenResponse({ description: "Forbidden" })
-  @ApiBody({ type: Object })
+  @ApiBody({ type: ResetUserPasswordDto })
   public async resetUserPassword(
     @Req() request: Request,
     @Res() response: Response,
@@ -259,8 +259,8 @@ export class UserController {
   @UseFilters(new AllExceptionsFilter(APIID.SUGGEST_USERNAME))
   @Post("/suggestUsername")
   @ApiBody({ type: SuggestUserDto })
-  @ApiOkResponse({ description: "Username suggestion generated successfully" }) 
-  @ApiBadRequestResponse({ description: "Invalid input parameters" }) 
+  @ApiOkResponse({ description: "Username suggestion generated successfully" })
+  @ApiBadRequestResponse({ description: "Invalid input parameters" })
   @UsePipes(new ValidationPipe())
   async suggestUsername(
     @Req() request: Request,
@@ -294,6 +294,7 @@ export class UserController {
       .buildUserAdapter()
       .deleteUserById(userId, response);
   }
+
   @UseFilters(new AllExceptionsFilter(APIID.SEND_OTP))
   @Post('send-otp')
   @ApiBody({ type: OtpSendDTO })
@@ -302,6 +303,7 @@ export class UserController {
   async sendOtp(@Body() body: OtpSendDTO, @Res() response: Response) {
     return await this.userAdapter.buildUserAdapter().sendOtp(body, response)
   }
+
   @UseFilters(new AllExceptionsFilter(APIID.VERIFY_OTP))
   @Post('verify-otp')
   @ApiBody({ type: OtpVerifyDTO })
@@ -310,6 +312,7 @@ export class UserController {
   async verifyOtp(@Body() body: OtpVerifyDTO, @Res() response: Response) {
     return this.userAdapter.buildUserAdapter().verifyOtp(body, response);
   }
+
   @Post("password-reset-otp")
   @ApiOkResponse({ description: "Password reset link sent successfully." })
   @UsePipes(new ValidationPipe({ transform: true }))
