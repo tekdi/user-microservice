@@ -1,5 +1,6 @@
 import { HttpStatus, Injectable, NestMiddleware } from "@nestjs/common";
 import { Request, Response, NextFunction } from "express";
+import { LoggerUtil } from "src/common/logger/LoggerUtil";
 import APIResponse from "src/common/responses/response";
 import { RolePermissionService } from "src/permissionRbac/rolePermissionMapping/role-permission-mapping.service";
 
@@ -8,7 +9,7 @@ export class PermissionMiddleware implements NestMiddleware {
   constructor(private readonly rolePermissionService: RolePermissionService) {}
 
   async use(req: Request, res: Response, next: NextFunction) {
-    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+    LoggerUtil.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
     let role = "";
     if (req.headers.authorization) {
       role = this.getRole(req.headers.authorization);
@@ -31,7 +32,6 @@ export class PermissionMiddleware implements NestMiddleware {
       );
     }
   }
-
   async checkPermissions(
     roleTitle: string,
     requestPath: string,
@@ -49,18 +49,14 @@ export class PermissionMiddleware implements NestMiddleware {
       permission.requestType.includes(requestMethod)
     );
   }
-
   getApiPaths(parts: string[]) {
-    //user/v1/tenant/update --> /user/v1/tenant/*
-    //user/v1/list ==> user/v1/*
     let apiPath = "";
     if (parts.length == 3) apiPath = `/${parts[0]}/${parts[1]}/*`;
     if (parts.length > 3) apiPath = `/${parts[0]}/${parts[1]}/${parts[2]}/*`;
 
-    console.log("apiPath: ", apiPath);
+    LoggerUtil.log("apiPath: ", apiPath);
     return apiPath;
   }
-
   async fetchPermissions(roleTitle: string, apiPath: string) {
     return await this.rolePermissionService.getPermissionForMiddleware(
       roleTitle,

@@ -5,6 +5,7 @@ import { RolePermission } from "./entities/rolePermissionMapping";
 import { Response } from "express";
 import APIResponse from "src/common/responses/response";
 import { RolePermissionCreateDto } from "./dto/role-permission-create-dto";
+import { LoggerUtil } from "src/common/logger/LoggerUtil";
 @Injectable()
 export class RolePermissionService {
   constructor(
@@ -21,7 +22,7 @@ export class RolePermissionService {
       let result = await this.rolePermissionRepository.find({
         where: { roleTitle: roleTitle, apiPath: apiPath },
       });
-      console.log("result: ", result);
+      LoggerUtil.log("Permission from DB: " + result);
       return result;
     } catch (error) {
       return error;
@@ -37,7 +38,6 @@ export class RolePermissionService {
       let result = await this.rolePermissionRepository.find({
         where: { roleTitle: roleTitle, apiPath: apiPath },
       });
-      console.log("result: ", result);
       return APIResponse.success(
         response,
         apiId,
