@@ -43,10 +43,12 @@ export class setFilters {
   role: string;
 
   @ApiPropertyOptional({
-    type: String,
+    type: [String],
     description: "User Name",
   })
-  username: string;
+  @IsOptional()
+  @IsArray()
+  username: string[];
 
   @ApiPropertyOptional({
     type: String,
