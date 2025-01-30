@@ -404,9 +404,9 @@ export class FormsService {
   async getFormDetail(context: string, contextType: string, tenantId: string) {    
     return await this.formRepository.find({
       where: {
-        context: context || IsNull(),
-        contextType: contextType || IsNull(),
-        tenantId: tenantId || null,
+        context: context || null || IsNull(),
+        contextType: contextType || null || IsNull(),
+        tenantId: tenantId || null || IsNull(),
       },
     });
   }
