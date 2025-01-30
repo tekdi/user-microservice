@@ -4,12 +4,11 @@ import {
   IsString,
   IsObject,
   IsNotEmptyObject,
+  IsUUID,
 } from "class-validator";
 import { ApiProperty } from "@nestjs/swagger";
 
 export class FormCreateDto {
-  tenantId: string;
-
   @ApiProperty({
     type: String,
     description: 'title',
@@ -25,7 +24,7 @@ export class FormCreateDto {
     example: 'Context',
   })
   @IsString()
-  @IsNotEmpty()
+  @IsOptional()
   context: string;
 
   @ApiProperty({
@@ -34,8 +33,17 @@ export class FormCreateDto {
     example: 'Context',
   })
   @IsString()
-  @IsNotEmpty()
+  @IsOptional()
   contextType: string;
+
+  @ApiProperty({
+    type: String,
+    description: 'Tenant ID',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+  })
+  @IsUUID()
+  @IsOptional()
+  tenantId: string;
 
   @ApiProperty({
     description: 'fields',
