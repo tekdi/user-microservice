@@ -52,7 +52,7 @@ export class FormsController {
       contextType: query.contextType?.toUpperCase(),
     };
 
-    const requiredData = { ...normalizedQuery, tenantId: tenantId || null };
+    const requiredData = { ...normalizedQuery, tenantId: tenantId };
     return await this.formsService.getForm(requiredData, response);
   }
 
@@ -64,33 +64,25 @@ export class FormsController {
   @ApiInternalServerErrorResponse({ description: "Internal Server Error." })
   @UsePipes(new ValidationPipe())
   @ApiBody({ type: FormCreateDto })
-  @ApiHeader({
-    name: "tenantid",
-  })
   public async createCohort(
     @Headers() headers,
     @Req() request: Request,
     @Body() formCreateDto: FormCreateDto,
     @Res() response: Response
   ) {
-    let tenantId = headers["tenantid"];
-    if (tenantId && !isUUID(tenantId)) {
-      throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
-    }
-    formCreateDto.tenantId = tenantId;
     return await this.formsService.createForm(request, formCreateDto, response);
   }
 
 
   @UseFilters(new AllExceptionsFilter(APIID.FORM_UPDATE))
   @Patch("/update/:formId")
-  // @ApiBasicAuth("access-token")
+  @ApiBasicAuth("access-token")
   @ApiOkResponse({ description: "Form has been updated successfully." })
   @ApiBadRequestResponse({ description: "Bad request." })
   @ApiInternalServerErrorResponse({ description: "Internal Server Error." })
   @UsePipes(new ValidationPipe())
   @ApiBody({ type: FormUpdateDto })
-  public async updateCohort(
+  public async updateForm(
     @Req() request: Request,
     @Param('formId') formId: string,
     @Body() formUpdateDto: FormUpdateDto,
