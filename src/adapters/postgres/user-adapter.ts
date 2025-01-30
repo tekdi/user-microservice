@@ -414,7 +414,7 @@ export class PostgresUserService implements IServicelocator {
           if (key === "firstName") {
             whereCondition += ` U."${key}" ILIKE '%${value}%'`;
           } else {
-            if (key === "status" || key === "email") {
+            if (key === "status" || key === "email" || key === "username") {
               if (
                 Array.isArray(value) &&
                 value.every((item) => typeof item === "string")
