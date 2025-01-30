@@ -1,13 +1,10 @@
 import { HttpStatus, Injectable } from "@nestjs/common";
 import { Repository } from "typeorm";
-import APIResponse from "src/common/responses/response";
 import { InjectRepository } from "@nestjs/typeorm";
-import { API_RESPONSES } from "@utils/response.messages";
-import { APIID } from "@utils/api-id.config";
-import { LoggerUtil } from "src/common/logger/LoggerUtil";
-import { Request, Response } from "express";
 import { RolePermission } from "./entities/rolePermissionMapping";
-
+import { Response } from "express";
+import APIResponse from "src/common/responses/response";
+import { RolePermissionCreateDto } from "./dto/role-permission-create-dto";
 @Injectable()
 export class RolePermissionService {
   constructor(
@@ -16,8 +13,10 @@ export class RolePermissionService {
   ) {}
 
   //getPermission for middleware
-  public async getPermission(roleTitle: string, apiPath: string): Promise<any> {
-    let apiId = APIID.TENANT_LIST;
+  public async getPermissionForMiddleware(
+    roleTitle: string,
+    apiPath: string
+  ): Promise<any> {
     try {
       let result = await this.rolePermissionRepository.find({
         where: { roleTitle: roleTitle, apiPath: apiPath },
@@ -25,62 +24,122 @@ export class RolePermissionService {
       console.log("result: ", result);
       return result;
     } catch (error) {
-      const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
-      LoggerUtil.error(
-        `${API_RESPONSES.SERVER_ERROR}`,
-        `Error: ${errorMessage}`,
-        apiId
-      );
       return error;
     }
   }
-
-  public async createRolePermission(
-    permissionCreateDto: any,
+  public async getPermission(
+    roleTitle: string,
+    apiPath: string,
     response: Response
-  ): Promise<Response> {
-    let apiId = APIID.TENANT_CREATE;
+  ): Promise<any> {
+    const apiId = "api.get.permission";
     try {
-      let checkExitsMapping = await this.rolePermissionRepository.find({
-        where: {
-          apiPath: permissionCreateDto?.apiPath,
-          roleTitle: permissionCreateDto?.role,
-        },
+      let result = await this.rolePermissionRepository.find({
+        where: { roleTitle: roleTitle, apiPath: apiPath },
       });
-      if (checkExitsMapping.length > 0) {
-        return APIResponse.error(
-          response,
-          apiId,
-          API_RESPONSES.CONFLICT,
-          API_RESPONSES.TENANT_EXISTS,
-          HttpStatus.CONFLICT
-        );
-      }
-
-      let result = await this.rolePermissionRepository.save(
-        permissionCreateDto
+      console.log("result: ", result);
+      return APIResponse.success(
+        response,
+        apiId,
+        result,
+        HttpStatus.OK,
+        "Permission fetch successfully."
       );
-      if (result) {
-        return APIResponse.success(
-          response,
-          apiId,
-          result,
-          HttpStatus.CREATED,
-          API_RESPONSES.TENANT_CREATE
-        );
-      }
     } catch (error) {
-      const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
-      LoggerUtil.error(
-        `${API_RESPONSES.SERVER_ERROR}`,
-        `Error: ${errorMessage}`,
-        apiId
-      );
       return APIResponse.error(
         response,
         apiId,
-        API_RESPONSES.INTERNAL_SERVER_ERROR,
-        errorMessage,
+        "Failed to fetch permission data.",
+        error.message,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  //create permission
+  public async createPermission(
+    permissionCreateDto: RolePermissionCreateDto,
+    response: Response
+  ): Promise<any> {
+    const apiId = "api.create.permission";
+    try {
+      let result = await this.rolePermissionRepository.save({
+        roleTitle: permissionCreateDto.roleTitle,
+        apiPath: permissionCreateDto.apiPath,
+        requestType: permissionCreateDto.requestType,
+      });
+      return APIResponse.success(
+        response,
+        apiId,
+        result,
+        HttpStatus.OK,
+        "Permission added succesfully."
+      );
+    } catch (error) {
+      return APIResponse.error(
+        response,
+        apiId,
+        "Failed to add permission data.",
+        error.message,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  //update permission by permissionId
+  public async updatePermission(
+    rolePermissionCreateDto: RolePermissionCreateDto,
+    response: Response
+  ): Promise<any> {
+    const apiId = "api.update.permission";
+    try {
+      let result = await this.rolePermissionRepository.update(
+        rolePermissionCreateDto.permissionId,
+        {
+          roleTitle: rolePermissionCreateDto.roleTitle,
+          apiPath: rolePermissionCreateDto.apiPath,
+          requestType: rolePermissionCreateDto.requestType,
+        }
+      );
+      return APIResponse.success(
+        response,
+        apiId,
+        result,
+        HttpStatus.OK,
+        "Permission updated succesfully."
+      );
+    } catch (error) {
+      return APIResponse.error(
+        response,
+        apiId,
+        "Failed to update permission data.",
+        error.message,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  //delete permission by permissionId
+  public async deletePermission(
+    rolePermissionId: string,
+    response: Response
+  ): Promise<any> {
+    const apiId = "api.delete.permission";
+    try {
+      let result = await this.rolePermissionRepository.delete(rolePermissionId);
+      return APIResponse.success(
+        response,
+        apiId,
+        result,
+        HttpStatus.OK,
+        "Permission deleted succesfully."
+      );
+    } catch (error) {
+      return APIResponse.error(
+        response,
+        apiId,
+        "Failed to delete permission data.",
+        error.message,
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }

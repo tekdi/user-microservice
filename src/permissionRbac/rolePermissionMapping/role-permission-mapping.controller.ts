@@ -1,20 +1,8 @@
-import {
-  Controller,
-  Res,
-  Body,
-  ParseUUIDPipe,
-  Post,
-  Query,
-} from "@nestjs/common";
-import {
-  ApiCreatedResponse,
-  ApiForbiddenResponse,
-  ApiTags,
-} from "@nestjs/swagger";
-import { Response } from "express";
-import { API_RESPONSES } from "@utils/response.messages";
+import { Body, Controller, Delete, Post, Res } from "@nestjs/common";
+import { ApiTags } from "@nestjs/swagger";
 import { RolePermissionService } from "./role-permission-mapping.service";
-
+import { RolePermissionCreateDto } from "./dto/role-permission-create-dto";
+import { Response } from "express";
 @ApiTags("RolePermissionMapping")
 @Controller("role-permission")
 export class RolePermissionMappingController {
@@ -22,15 +10,48 @@ export class RolePermissionMappingController {
 
   //Create a new permission
   @Post("/create")
-  @ApiCreatedResponse({ description: API_RESPONSES.TENANT_CREATE })
-  @ApiForbiddenResponse({ description: API_RESPONSES.FORBIDDEN })
   public async createPermission(
     @Res() response: Response,
-    @Body() permissionCreateDto: any,
-    @Query("userId", new ParseUUIDPipe()) userId: string
+    @Body() permissionCreateDto: RolePermissionCreateDto
   ): Promise<Response> {
-    return await this.rolePermissionService.createRolePermission(
+    return await this.rolePermissionService.createPermission(
       permissionCreateDto,
+      response
+    );
+  }
+
+  //get permission
+  @Post("/get")
+  public async getPermission(
+    @Res() response: Response,
+    @Body() roleTitle: string,
+    @Body() apiPath: string
+  ): Promise<Response> {
+    return await this.rolePermissionService.getPermission(
+      roleTitle,
+      apiPath,
+      response
+    );
+  }
+  //update permission
+  @Post("/update")
+  public async updatePermission(
+    @Res() response: Response,
+    @Body() permissionCreateDto: RolePermissionCreateDto
+  ): Promise<Response> {
+    return await this.rolePermissionService.updatePermission(
+      permissionCreateDto,
+      response
+    );
+  }
+  //delete permission
+  @Delete("/delete")
+  public async deletePermission(
+    @Res() response: Response,
+    @Body() rolePermissionId: string
+  ): Promise<Response> {
+    return await this.rolePermissionService.deletePermission(
+      rolePermissionId,
       response
     );
   }
