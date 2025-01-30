@@ -77,7 +77,7 @@ async function createUserInKeyCloak(query, token, role: string) {
     ],
     attributes : {
       // Multi tenant for roles is not currently supported in keycloak
-      pratham_role: [role]  // Added in attribute and mappers
+      user_roles: [role]  // Added in attribute and mappers
     }
   });
 
