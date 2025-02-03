@@ -37,6 +37,7 @@ export const APIID = {
   FIELDS_SEARCH: "api.fields.search",
   FIELDVALUES_CREATE: "api.fieldValues.create",
   FIELDVALUES_SEARCH: "api.fieldValues.search",
+  FIELDVALUES_DELETE: "api.fieldValues.delete",
   FIELD_OPTIONS_DELETE: "api.fields.options.delete",
   LOGIN: "api.login",
   LOGOUT: "api.logout",
@@ -56,5 +57,5 @@ export const APIID = {
   TENANT_LIST: "api.tenant.list",
   SEND_OTP: "api.send.OTP",
   VERIFY_OTP: "api.verify.OTP",
-  SEND_RESET_OTP: 'api.send.reset.otp'
+  SEND_RESET_OTP: "api.send.reset.otp",
 };
