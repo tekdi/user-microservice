@@ -233,6 +233,8 @@ export class FieldsController {
   }
   //delete field values
   @Delete("/values/delete")
+  @UseGuards(JwtAuthGuard)
+  @ApiBasicAuth("access-token")
   @ApiCreatedResponse({ description: "Field Values deleted successfully." })
   @UsePipes(ValidationPipe)
   @ApiBody({ type: FieldValuesDeleteDto })
