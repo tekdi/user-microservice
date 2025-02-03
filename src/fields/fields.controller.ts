@@ -234,6 +234,7 @@ export class FieldsController {
   //delete field values
   @Delete("/values/delete")
   @ApiCreatedResponse({ description: "Field Values deleted successfully." })
+  @UsePipes(ValidationPipe)
   @ApiBody({ type: FieldValuesDeleteDto })
   public async deleteFieldValues(
     @Body() fieldValuesDeleteDto: FieldValuesDeleteDto,
