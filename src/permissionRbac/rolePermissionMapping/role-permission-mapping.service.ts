@@ -22,7 +22,7 @@ export class RolePermissionService {
       let result = await this.rolePermissionRepository.find({
         where: { roleTitle: roleTitle, apiPath: apiPath },
       });
-      LoggerUtil.log("Permission from DB: " + result);
+      LoggerUtil.log("Permission from DB: " + JSON.stringify(result));
       return result;
     } catch (error) {
       return error;
