@@ -41,11 +41,12 @@ import { FieldValuesSearchDto } from "./dto/field-values-search.dto";
 import { JwtAuthGuard } from "src/common/guards/keycloak.guard";
 import { AllExceptionsFilter } from "src/common/filters/exception.filter";
 import { APIID } from "src/common/utils/api-id.config";
+import { FieldValuesDeleteDto } from "./dto/field-values-delete.dto";
 
 @ApiTags("Fields")
 @Controller("fields")
 export class FieldsController {
-  constructor(private fieldsAdapter: FieldsAdapter) { }
+  constructor(private fieldsAdapter: FieldsAdapter) {}
 
   //fields
   //create fields
@@ -229,5 +230,20 @@ export class FieldsController {
     return await this.fieldsAdapter
       .buildFieldsAdapter()
       .getFormCustomField(requiredData, response);
+  }
+  //delete field values
+  @Delete("/values/delete")
+  @UseGuards(JwtAuthGuard)
+  @ApiBasicAuth("access-token")
+  @ApiCreatedResponse({ description: "Field Values deleted successfully." })
+  @UsePipes(ValidationPipe)
+  @ApiBody({ type: FieldValuesDeleteDto })
+  public async deleteFieldValues(
+    @Body() fieldValuesDeleteDto: FieldValuesDeleteDto,
+    @Res() response: Response
+  ) {
+    return await this.fieldsAdapter
+      .buildFieldsAdapter()
+      .deleteFieldValues(fieldValuesDeleteDto, response);
   }
 }

@@ -24,6 +24,7 @@ import { SchemaField, Option } from "src/fields/fieldValidators/fieldClass";
 import jwt_decode from "jwt-decode";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
 import { API_RESPONSES } from "@utils/response.messages";
+import { FieldValuesDeleteDto } from "src/fields/dto/field-values-delete.dto";
 @Injectable()
 export class PostgresFieldsService implements IServicelocatorfields {
   constructor(
@@ -31,7 +32,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
     private fieldsRepository: Repository<Fields>,
     @InjectRepository(FieldValues)
     private fieldsValuesRepository: Repository<FieldValues>
-  ) { }
+  ) {}
 
   async getFormCustomField(requiredData, response) {
     const apiId = "FormData";
@@ -101,7 +102,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error: ${error.message}`,
         apiId
-      )
+      );
 
       const errorMessage = error.message || API_RESPONSES.SERVER_ERROR;
       return APIResponse.error(
@@ -385,7 +386,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
           const query = `SELECT "name", "value" 
           FROM public.${fieldsData.sourceDetails.table} 
           WHERE value = '${sourceFieldName["value"]}' 
-          GROUP BY  "name", "value"`
+          GROUP BY  "name", "value"`;
 
           const checkSourceData = await this.fieldsValuesRepository.query(
             query
@@ -457,7 +458,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error: ${e.message}`,
         apiId
-      )
+      );
       const errorMessage = e?.message || API_RESPONSES.SERVER_ERROR;
       return APIResponse.error(
         response,
@@ -506,7 +507,9 @@ export class PostgresFieldsService implements IServicelocatorfields {
       //Update field options
       //Update data in source table
       if (
-        getSourceDetails.sourceDetails && fieldsData.fieldParams && fieldsData.fieldParams.options &&
+        getSourceDetails.sourceDetails &&
+        fieldsData.fieldParams &&
+        fieldsData.fieldParams.options &&
         getSourceDetails.sourceDetails.source == "table"
       ) {
         for (const sourceFieldName of fieldsData.fieldParams.options) {
@@ -632,7 +635,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error: ${e.message}`,
         apiId
-      )
+      );
       const errorMessage = e?.message || API_RESPONSES.SERVER_ERROR;
       return APIResponse.error(
         response,
@@ -667,10 +670,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
       });
       return true;
     } catch (e) {
-      LoggerUtil.error(
-        `${API_RESPONSES.SERVER_ERROR}`,
-        `Error: ${e.message}`,
-      )
+      LoggerUtil.error(`${API_RESPONSES.SERVER_ERROR}`, `Error: ${e.message}`);
       const errorMessage = e?.message || API_RESPONSES.SERVER_ERROR;
       return errorMessage;
     }
@@ -755,7 +755,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
       where: condition,
       select: ["fieldId"],
     });
-    
+
     return result;
   }
 
@@ -766,10 +766,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
       });
       return response;
     } catch (e) {
-      LoggerUtil.error(
-        `${API_RESPONSES.SERVER_ERROR}`,
-        `Error: ${e.message}`,
-      )
+      LoggerUtil.error(`${API_RESPONSES.SERVER_ERROR}`, `Error: ${e.message}`);
       return { error: e };
     }
   }
@@ -790,7 +787,9 @@ export class PostgresFieldsService implements IServicelocatorfields {
       const fieldKeys = this.fieldsRepository.metadata.columns.map(
         (column) => column.propertyName
       );
-      let tenantCond = tenantId? `"tenantId" = '${tenantId}'` :`"tenantId" IS NULL`
+      let tenantCond = tenantId
+        ? `"tenantId" = '${tenantId}'`
+        : `"tenantId" IS NULL`;
       let whereClause = tenantCond;
       if (filters && Object.keys(filters).length > 0) {
         Object.entries(filters).forEach(([key, value]) => {
@@ -837,7 +836,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error: ${error.message}`,
         apiId
-      )
+      );
       const errorMessage = error.message || API_RESPONSES.SERVER_ERROR;
       return APIResponse.error(
         response,
@@ -900,7 +899,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error: ${error.message}`,
         apiId
-      )
+      );
       const errorMessage = error.message || API_RESPONSES.SERVER_ERROR;
       return APIResponse.error(
         res,
@@ -947,7 +946,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error: ${e.message}`,
         apiId
-      )
+      );
       const errorMessage = e?.message || API_RESPONSES.SERVER_ERROR;
       return APIResponse.error(
         response,
@@ -1049,10 +1048,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
 
       return response;
     } catch (e) {
-      LoggerUtil.error(
-        `${API_RESPONSES.SERVER_ERROR}`,
-        `Error: ${e.message}`,
-      )
+      LoggerUtil.error(`${API_RESPONSES.SERVER_ERROR}`, `Error: ${e.message}`);
       return new ErrorResponse({
         errorCode: "400",
         errorMessage: e,
@@ -1278,10 +1274,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         "Field options fetched successfully."
       );
     } catch (e) {
-      LoggerUtil.error(
-        `${API_RESPONSES.SERVER_ERROR}`,
-        `Error: ${e.message}`,
-      )
+      LoggerUtil.error(`${API_RESPONSES.SERVER_ERROR}`, `Error: ${e.message}`);
       const errorMessage = e?.message || API_RESPONSES.SERVER_ERROR;
       return APIResponse.error(
         response,
@@ -1404,10 +1397,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         );
       }
     } catch (e) {
-      LoggerUtil.error(
-        `${API_RESPONSES.SERVER_ERROR}`,
-        `Error: ${e.message}`,
-      )
+      LoggerUtil.error(`${API_RESPONSES.SERVER_ERROR}`, `Error: ${e.message}`);
       const errorMessage = e?.message || API_RESPONSES.SERVER_ERROR;
       return APIResponse.error(
         response,
@@ -1465,8 +1455,8 @@ export class PostgresFieldsService implements IServicelocatorfields {
       ...(getFields?.includes("All")
         ? {}
         : getFields?.length
-          ? { name: In(getFields.filter(Boolean)) }
-          : {}),
+        ? { name: In(getFields.filter(Boolean)) }
+        : {}),
     };
 
     const validContextTypes = contextType?.filter(Boolean);
@@ -1650,10 +1640,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
       const isValid = fieldInstance.validate(value);
       return isValid;
     } catch (e) {
-      LoggerUtil.error(
-        `${API_RESPONSES.SERVER_ERROR}`,
-        `Error: ${e.message}`,
-      )
+      LoggerUtil.error(`${API_RESPONSES.SERVER_ERROR}`, `Error: ${e.message}`);
       return { error: e };
     }
   }
@@ -1769,5 +1756,62 @@ export class PostgresFieldsService implements IServicelocatorfields {
         fieldId: In(fieldIds),
       },
     });
+  }
+  async deleteFieldValues(
+    fieldValuesDeleteDto: FieldValuesDeleteDto,
+    response: Response
+  ) {
+    const apiId = APIID.FIELDVALUES_DELETE;
+    try {
+      const fieldValues = fieldValuesDeleteDto.fieldValues;
+
+      // Create the list of conditions from fieldValues
+      const conditions = fieldValues.map((value) => ({
+        fieldId: value.fieldId,
+        itemId: value.itemId,
+      }));
+
+      // Use QueryBuilder to delete matching records
+      const result = await this.fieldsValuesRepository
+        .createQueryBuilder()
+        .delete()
+        .from("FieldValues")
+        .where(
+          conditions
+            .map(
+              (condition, index) =>
+                `(fieldId = :fieldId${index} AND itemId = :itemId${index})`
+            )
+            .join(" OR "),
+          conditions.reduce((acc, condition, index) => {
+            acc[`fieldId${index}`] = condition.fieldId;
+            acc[`itemId${index}`] = condition.itemId;
+            return acc;
+          }, {})
+        )
+        .execute();
+
+      return await APIResponse.success(
+        response,
+        apiId,
+        result,
+        HttpStatus.OK,
+        "Field Values deleted successfully."
+      );
+    } catch (e) {
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${e.message}`,
+        apiId
+      );
+      const errorMessage = e?.message || API_RESPONSES.SERVER_ERROR;
+      return APIResponse.error(
+        response,
+        apiId,
+        API_RESPONSES.SERVER_ERROR,
+        `Error : ${errorMessage}`,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
   }
 }
