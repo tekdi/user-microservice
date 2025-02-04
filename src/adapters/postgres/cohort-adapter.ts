@@ -506,7 +506,7 @@ export class PostgresCohortService {
             where: {
               name: cohortUpdateDto.name || existingCohorDetails.name,
               parentId: cohortUpdateDto.parentId || existingCohorDetails.parentId,
-              cohortId: Not(cohortId), // বর্তমান cohortId বাদ দেওয়া হলো
+              cohortId: Not(cohortId),
             },
           };
           const existData = await this.cohortRepository.find(filterOptions);
