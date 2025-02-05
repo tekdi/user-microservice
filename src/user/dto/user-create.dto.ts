@@ -72,41 +72,53 @@ export class UserCreateDto {
   @IsNotEmpty()
   username: string;
 
-  @ApiProperty({ type: String, description: 'First name of the user', maxLength: 50 })
+  @ApiProperty({
+    type: String,
+    description: "First name of the user",
+    maxLength: 50,
+  })
   @Expose()
   @IsString()
   @Length(1, 50)
   firstName: string;
 
-  @ApiPropertyOptional({ type: String, description: 'Middle name of the user (optional)', maxLength: 50, required: false })
+  @ApiPropertyOptional({
+    type: String,
+    description: "Middle name of the user (optional)",
+    maxLength: 50,
+    required: false,
+  })
   @Expose()
   @IsOptional()
   @IsString()
   @Length(0, 50)
   middleName?: string;
 
-  @ApiProperty({ type: String, description: 'Last name of the user', maxLength: 50 })
+  @ApiProperty({
+    type: String,
+    description: "Last name of the user",
+    maxLength: 50,
+  })
   @Expose()
   @IsString()
   @Length(1, 50)
   lastName: string;
 
-  @ApiProperty({ 
-    type: String, 
-    description: 'Gender of the user', 
-    enum: ['male', 'female', 'transgender'] 
-  })
-  @Expose()
-  @IsEnum(['male', 'female', 'transgender'])
-  gender: string;
+  // @ApiProperty({
+  //   type: String,
+  //   description: 'Gender of the user',
+  //   enum: ['male', 'female', 'transgender']
+  // })
+  // @Expose()
+  // @IsEnum(['male', 'female', 'transgender'])
+  // gender: string;
 
-
-  @ApiPropertyOptional({
-    type: String,
-    description: "The date of Birth of the user",
-  })
-  @Expose()
-  dob: string;
+  // @ApiPropertyOptional({
+  //   type: String,
+  //   description: "The date of Birth of the user",
+  // })
+  // @Expose()
+  // dob: string;
 
   @ApiPropertyOptional({
     type: String,
@@ -132,10 +144,10 @@ export class UserCreateDto {
 
   @ApiPropertyOptional({
     type: String,
-    description: "The district of the user",
+    description: "The country of the user",
   })
   @Expose()
-  district: string;
+  country: string;
 
   @ApiPropertyOptional({
     type: String,
@@ -146,17 +158,24 @@ export class UserCreateDto {
 
   @ApiPropertyOptional({
     type: String,
+    description: "The city of the user",
+  })
+  @Expose()
+  city: string;
+
+  @ApiPropertyOptional({
+    type: String,
     description: "The address of the user",
   })
   @Expose()
   address: string;
 
-  @ApiPropertyOptional({
-    type: String,
-    description: "The pincode of the user",
-  })
-  @Expose()
-  pincode: string;
+  // @ApiPropertyOptional({
+  //   type: String,
+  //   description: "The pincode of the user",
+  // })
+  // @Expose()
+  // pincode: string;
 
   @Expose()
   createdAt: string;
@@ -170,10 +189,10 @@ export class UserCreateDto {
   @Expose()
   updatedBy: string;
 
-  @ApiProperty({
-    type: [tenantRoleMappingDto],
-    description: "List of user attendance details",
-  })
+  // @ApiProperty({
+  //   type: [tenantRoleMappingDto],
+  //   description: "List of user attendance details",
+  // })
   @ValidateNested({ each: true })
   @Type(() => tenantRoleMappingDto)
   tenantCohortRoleMapping: tenantRoleMappingDto[];
