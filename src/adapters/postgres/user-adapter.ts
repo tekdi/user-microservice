@@ -2,7 +2,7 @@ import { HttpStatus, Injectable } from "@nestjs/common";
 import { User } from "../../user/entities/user-entity";
 import { FieldValues } from "src/fields/entities/fields-values.entity";
 import { InjectRepository } from "@nestjs/typeorm";
-import { In, Like, Repository } from "typeorm";
+import { ILike, In, Repository } from "typeorm";
 import { UserCreateDto } from "../../user/dto/user-create.dto";
 import jwt_decode from "jwt-decode";
 import {
@@ -2212,7 +2212,7 @@ export class PostgresUserService implements IServicelocator {
           if (value !== undefined && value !== null) {
             if (key === 'firstName' || key === 'middleName' || key === 'lastName') {
               const sanitizedValue = this.sanitizeInput(value);
-              whereClause[key] = Like(`%${sanitizedValue}%`);
+              whereClause[key] = ILike(`%${sanitizedValue}%`);
             } else {
               whereClause[key] = this.sanitizeInput(value);
             }
