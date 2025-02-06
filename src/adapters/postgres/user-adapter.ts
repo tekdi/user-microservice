@@ -471,7 +471,6 @@ export class PostgresUserService implements IServicelocator {
         return false;
       }
     }
-
     if (getUserIdUsingCustomFields && getUserIdUsingCustomFields.length > 0) {
       const userIdsDependsOnCustomFields = getUserIdUsingCustomFields
         .map((userId) => `'${userId}'`)
@@ -480,7 +479,6 @@ export class PostgresUserService implements IServicelocator {
         } U."userId" IN (${userIdsDependsOnCustomFields})`;
       index++;
     }
-
     const userIds =
       excludeUserIdes?.length > 0
         ? excludeUserIdes.map((userId) => `'${userId}'`).join(",")
@@ -1672,7 +1670,7 @@ export class PostgresUserService implements IServicelocator {
     let error = "";
     for (const fieldsData of fieldValues) {
       const fieldId = fieldsData["fieldId"];
-      const getFieldDetails: any = await this.fieldsService.getFieldByIdes(
+      const getFieldDetails: any = await this.fieldsService.getFieldByIds(
         fieldId
       );
 
@@ -1685,23 +1683,41 @@ export class PostgresUserService implements IServicelocator {
       } else {
         encounteredKeys.push(fieldId);
       }
-
       if (
         (getFieldDetails.type == "checkbox" ||
           getFieldDetails.type == "drop_down" ||
           getFieldDetails.type == "radio") &&
         getFieldDetails.sourceDetails.source == "table"
       ) {
+        let fieldValue = fieldsData["value"][0];
         const getOption = await this.fieldsService.findDynamicOptions(
-          getFieldDetails.sourceDetails.table
+          getFieldDetails.sourceDetails.table,
+          `"${getFieldDetails?.sourceDetails?.table}_id"='${fieldValue}'`,
         );
-
+        if(!getOption.length){
+          return APIResponse.error(
+            response,
+            apiId,
+            API_RESPONSES.BAD_REQUEST,
+            API_RESPONSES.UUID_VALIDATION,
+            HttpStatus.BAD_REQUEST
+          );
+        }
         const transformedFieldParams = {
-          options: getOption.map((param) => ({
-            value: param.value,
-            label: param.label,
-          })),
+          options: getOption.flatMap((param) => {
+            return Object.keys(param)
+              .filter((key) => key.endsWith("_id")) 
+              .map((idKey) => {
+                const nameKey = idKey.replace("_id", "_name"); 
+                return {
+                  value: param[idKey],
+                  label: param[nameKey] || "Unknown",
+                };
+              });
+          }),
         };
+        
+        
         getFieldDetails["fieldParams"] = transformedFieldParams;
 
         // getFieldDetails['fieldParams'] = getOption

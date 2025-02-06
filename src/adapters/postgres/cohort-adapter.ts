@@ -263,10 +263,13 @@ export class PostgresCohortService {
         } else if (data.sourceDetails.source === "table") {
           const labels = await this.fieldsService.findDynamicOptions(
             data.sourceDetails.table,
-            `value='${data.value}'`
+            `${data.sourceDetails.table}_id='${data.value}'`
           );
           if (labels && labels.length > 0) {
-            processedValue = labels[0].name;
+            const nameKey = Object.keys(labels[0]).find(key => key.endsWith("name"));
+            if (nameKey) {
+              processedValue = labels[0][nameKey]?.toLowerCase();
+            }
           }
         }
       }
@@ -369,7 +372,6 @@ export class PostgresCohortService {
           HttpStatus.CONFLICT
         );
       }
-
       const response = await this.cohortRepository.save(cohortCreateDto);
       const createFailures = [];
 
@@ -405,7 +407,6 @@ export class PostgresCohortService {
           }
         }
       }
-
       // add the year mapping entry in table with cohortId and academicYearId
       await this.cohortAcademicYearService.insertCohortAcademicYear(
         response.cohortId,
@@ -685,7 +686,6 @@ export class PostgresCohortService {
         ],
         select: ["fieldId", "name", "label", "contextType"],
       });
-
       // Extract custom field names
       const customFieldsKeys = getCustomFields.map(
         (customFields) => customFields.name
@@ -696,7 +696,6 @@ export class PostgresCohortService {
 
       const whereClause = {};
       const searchCustomFields = {};
-
       if (academicYearId) {
         // check if the tenantId and academic year exist together
         cohortsByAcademicYear =
@@ -715,7 +714,6 @@ export class PostgresCohortService {
           );
         }
       }
-
       if (filters && Object.keys(filters).length > 0) {
         if (filters?.customFieldsName) {
           Object.entries(filters.customFieldsName).forEach(([key, value]) => {
@@ -724,7 +722,6 @@ export class PostgresCohortService {
             }
           });
         }
-
         Object.entries(filters).forEach(([key, value]) => {
           if (!allowedKeys.includes(key) && key !== "customFieldsName") {
             return APIResponse.error(
@@ -818,7 +815,6 @@ export class PostgresCohortService {
           },
           order,
         });
-
         for (const data of cohortAllData) {
           const customFieldsData = await this.getCohortDataWithCustomfield(
             data.cohortId

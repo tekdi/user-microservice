@@ -125,12 +125,12 @@ export class PostgresFieldsService implements IServicelocatorfields {
 
     for (const fieldsData of fieldValues) {
       const fieldId = fieldsData["fieldId"];
-      const getFieldDetails: any = await this.getFieldByIdes(fieldId);
+      const getFieldDetails: any = await this.getFieldByIds(fieldId);
 
       if (getFieldDetails == null) {
         return {
           isValid: false,
-          error: `Field not found`,
+          error: `Field not found ${fieldId}`,
         };
       }
 
@@ -146,20 +146,28 @@ export class PostgresFieldsService implements IServicelocatorfields {
           getFieldDetails.type == "radio") &&
         getFieldDetails.sourceDetails.source == "table"
       ) {
+        let fieldValue = fieldsData["value"][0];
         const getOption = await this.findDynamicOptions(
-          getFieldDetails.sourceDetails.table
+          getFieldDetails.sourceDetails.table,
+          `"${getFieldDetails?.sourceDetails?.table}_id"='${fieldValue}'`
         );
         const transformedFieldParams = {
-          options: getOption.map((param) => ({
-            value: param.value,
-            label: param.label,
-          })),
+          options: getOption.flatMap((param) => {
+            return Object.keys(param)
+              .filter((key) => key.endsWith("_id"))
+              .map((idKey) => {
+                const nameKey = idKey.replace("_id", "_name");
+                return {
+                  value: param[idKey],
+                  label: param[nameKey] || "Unknown",
+                };
+              });
+          }),
         };
         getFieldDetails["fieldParams"] = transformedFieldParams;
       } else {
         getFieldDetails["fieldParams"] = getFieldDetails?.fieldParams ?? {};
       }
-
       const checkValidation = this.validateFieldValue(
         getFieldDetails,
         fieldsData["value"]
@@ -222,7 +230,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
 
     for (const fieldsData of fieldValues) {
       const fieldId = fieldsData["fieldId"];
-      const getFieldDetails: any = await this.getFieldByIdes(fieldId);
+      const getFieldDetails: any = await this.getFieldByIds(fieldId);
 
       if (getFieldDetails == null) {
         return {
@@ -759,7 +767,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
     return result;
   }
 
-  async getFieldByIdes(fieldId: string) {
+  async getFieldByIds(fieldId: string) {
     try {
       const response = await this.fieldsRepository.findOne({
         where: { fieldId: fieldId },
@@ -1192,7 +1200,6 @@ export class PostgresFieldsService implements IServicelocatorfields {
       const fetchFieldParams = await this.fieldsRepository.findOne({
         where: condition,
       });
-
       let order;
       if (sort?.length) {
         const orderKey = sort[1].toUpperCase();
@@ -1200,11 +1207,19 @@ export class PostgresFieldsService implements IServicelocatorfields {
       } else {
         order = `ORDER BY name ASC`;
       }
-
       if (fetchFieldParams?.sourceDetails?.source === "table") {
         let whereClause;
         if (controllingfieldfk) {
-          whereClause = `"controllingfieldfk" = '${controllingfieldfk}'`;
+          if(!fetchFieldParams.dependsOn) {
+            return await APIResponse.error(
+              response,
+              apiId,
+              `No ControllingFields Found for this Field`,
+              `NOT_FOUND`,
+              HttpStatus.NOT_FOUND
+            );
+          }
+          whereClause = `"${fetchFieldParams?.dependsOn}_id" = '${controllingfieldfk}'`;
         }
 
         dynamicOptions = await this.findDynamicOptions(
@@ -1212,7 +1227,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
           whereClause,
           offset,
           limit,
-          order,
+          // order,
           optionName
         );
       } else if (fetchFieldParams?.sourceDetails?.source === "jsonFile") {
@@ -1251,14 +1266,34 @@ export class PostgresFieldsService implements IServicelocatorfields {
         );
       }
 
-      const queryData = dynamicOptions.map((result) => ({
-        value: result?.value,
-        label: result?.name,
-        createdAt: result?.createdAt,
-        updatedAt: result?.updatedAt,
-        createdBy: result?.createdBy,
-        updatedBy: result?.updatedBy,
-      }));
+      // const queryData = dynamicOptions.map((result) => ({
+      //   value: result?.value,
+      //   label: result?.name,
+      //   createdAt: result?.createdAt,
+      //   updatedAt: result?.updatedAt,
+      //   createdBy: result?.createdBy,
+      //   updatedBy: result?.updatedBy,
+      // }));
+
+      /* Structing Into new Format */
+
+      const queryData = dynamicOptions.map((item) => {
+        const keys = Object.keys(item);
+        const valueField = keys.find(key => key.endsWith('_id')) || keys[0];
+        const labelField = keys.find(key => key.endsWith('_name')) || keys[1];
+        
+        return {
+          value: item[valueField],
+          label: item[labelField],
+          ...Object.fromEntries(
+            Object.entries(item).filter(([key]) => 
+              !['value', 'label'].includes(key)
+            )
+          )
+        };
+      });
+      
+      
 
       const result = {
         totalCount: parseInt(dynamicOptions[0]?.total_count, 10),
@@ -1415,29 +1450,27 @@ export class PostgresFieldsService implements IServicelocatorfields {
     offset?: any,
     limit?: any,
     order?: any,
-    optionName?: any
+    optionSelected?: any
   ) {
     const orderCond = order || "";
     const offsetCond = offset ? `offset ${offset}` : "";
     const limitCond = limit ? `limit ${limit}` : "";
     let whereCond = `WHERE `;
     whereCond = whereClause ? (whereCond += `${whereClause}`) : "";
-
-    if (optionName) {
-      if (whereCond) {
-        whereCond += `AND "name" ILike '%${optionName}%'`;
-      } else {
-        whereCond += `WHERE "name" ILike '%${optionName}%'`;
-      }
-    } else {
-      whereCond += "";
-    }
+    // if (optionSelected) {
+    //   if (whereCond) {
+    //     whereCond += `AND "name" ILike '%${optionSelected}%'`;
+    //   } else {
+    //     whereCond += `WHERE "name" ILike '%${optionSelected}%'`;
+    //   }
+    // } else {
+    //   whereCond += "";
+    // }
 
     const query = `SELECT *,COUNT(*) OVER() AS total_count FROM public."${tableName}" ${whereCond} ${orderCond} ${offsetCond} ${limitCond}`;
-
     const result = await this.fieldsRepository.query(query);
     if (!result) {
-      return null;
+      return null; 
     }
 
     return result;
@@ -1526,7 +1559,6 @@ export class PostgresFieldsService implements IServicelocatorfields {
     const queryData = await this.fieldsValuesRepository.query(query);
     const result =
       queryData.length > 0 ? queryData.map((item) => item.itemId) : null;
-
     return result;
   }
 
@@ -1728,10 +1760,13 @@ export class PostgresFieldsService implements IServicelocatorfields {
         } else if (data.sourceDetails.source === "table") {
           const labels = await this.findDynamicOptions(
             data.sourceDetails.table,
-            `value='${data.value}'`
+            `"${data.sourceDetails.table}_id"='${data.value}'`
           );
           if (labels && labels.length > 0) {
-            processedValue = labels[0].name;
+            const nameKey = Object.keys(labels[0]).find(key => key.endsWith("name"));
+            if (nameKey) {
+              processedValue = labels[0][nameKey]?.toLowerCase();
+            }
           }
         }
       }
@@ -1815,3 +1850,4 @@ export class PostgresFieldsService implements IServicelocatorfields {
     }
   }
 }
+

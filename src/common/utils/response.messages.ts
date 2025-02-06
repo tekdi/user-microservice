@@ -72,6 +72,7 @@ export const API_RESPONSES = {
   USER_NOTEXIST: (userId) => `User with userId ${userId} does not exist for this academic year.`,
   UNAUTHORIZED: 'Unauthorized',
   INVALID_TOKEN: 'Token Invalid',
+  INVALID_OPTION: 'Invalid Option Selected',
 
   //User Api messages
   USER_UPDATED_SUCCESSFULLY: 'User updated successfully.',
