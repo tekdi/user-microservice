@@ -1699,6 +1699,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
     const query = `
         SELECT DISTINCT 
           f."fieldId",
+          f."name",
           f."label", 
           fv."value", 
           f."type", 

@@ -525,6 +525,7 @@ export class PostgresUserService implements IServicelocator {
         );
         userData["customFields"] = customFields.map((data) => ({
           fieldId: data?.fieldId,
+          name: data?.name,
           label: data?.label,
           value: data?.value,
           code: data?.code,
