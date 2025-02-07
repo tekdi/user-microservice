@@ -415,6 +415,6 @@
 			"packageName": "shiksha-user"
 		  }
 		]
-	  },
+	  }
 	]
   }
