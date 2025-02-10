@@ -415,6 +415,32 @@
 			"packageName": "shiksha-user"
 		  }
 		]
+	  },
+	  {
+		"sourceRoute": "/interface/v1/tenant/delete",
+		"type": "DELETE",
+		"priority": "MUST_HAVE",
+		"inSequence": false,
+		"orchestrated": false,
+		"targetPackages": [
+		  {
+			"basePackageName": "user",
+			"packageName": "shiksha-user"
+		  }
+		]
+	  },
+	  {
+		"sourceRoute": "/interface/v1/tenant/search",
+		"type": "Post",
+		"priority": "MUST_HAVE",
+		"inSequence": false,
+		"orchestrated": false,
+		"targetPackages": [
+		  {
+			"basePackageName": "user",
+			"packageName": "shiksha-user"
+		  }
+		]
 	  }
 	]
   }
