@@ -9,6 +9,7 @@ import { Request, Response } from "express";
 import { TenantSearchDTO } from './dto/tenant-search.dto';
 import { API_RESPONSES } from '@utils/response.messages';
 import { isUUID } from 'class-validator';
+import { GetUserId } from 'src/common/decorators/getUserId.decorator';
 
 @ApiTags("Tenant")
 @Controller('tenant')
@@ -56,7 +57,7 @@ export class TenantController {
         @Res() response: Response,
         @Body() tenantCreateDto: TenantCreateDto,
         @UploadedFiles() files: Express.Multer.File[],
-        @Query("userId", new ParseUUIDPipe()) userId: string
+        @GetUserId("userId", ParseUUIDPipe) userId: string,
     ): Promise<Response> {
         const uploadedFiles = [];
 
@@ -84,7 +85,7 @@ export class TenantController {
         @Param("id", new ParseUUIDPipe()) id: string,
         @Body() tenantUpdateDto: TenantUpdateDto,
         @UploadedFiles() files: Express.Multer.File[],
-        @Query("userId", new ParseUUIDPipe()) userId: string,
+        @GetUserId("userId", ParseUUIDPipe) userId: string,
     ): Promise<Response> {
         const tenantId = id;        
         const uploadedFiles = [];
@@ -115,7 +116,7 @@ export class TenantController {
         @Req() request: Request,
         @Res() response: Response,
         @Param("id", new ParseUUIDPipe()) id: string,
-        @Query("userId", new ParseUUIDPipe()) userId: string,
+        @GetUserId("userId", ParseUUIDPipe) userId: string,
     ) {
         const tenantId = id;        
         return await this.tenantService.deleteTenants(request, tenantId, response);
