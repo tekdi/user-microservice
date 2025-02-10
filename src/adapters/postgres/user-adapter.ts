@@ -525,6 +525,7 @@ export class PostgresUserService implements IServicelocator {
         );
         userData["customFields"] = customFields.map((data) => ({
           fieldId: data?.fieldId,
+          name: data?.name,
           label: data?.label,
           value: data?.value,
           code: data?.code,
@@ -847,6 +848,8 @@ export class PostgresUserService implements IServicelocator {
         }
       }
 
+      console.log("hii",userDto);
+      
       if (userDto.userData) {
         await this.updateBasicUserDetails(userDto.userId, userDto.userData);
         updatedData["basicDetails"] = userDto.userData;
@@ -991,7 +994,7 @@ export class PostgresUserService implements IServicelocator {
       if (!user) {
         return null;
       }
-
+      
       await Object.assign(user, userData);
       return this.usersRepository.save(user);
 

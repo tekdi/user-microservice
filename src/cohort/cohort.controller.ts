@@ -47,6 +47,7 @@ import { APIID } from "src/common/utils/api-id.config";
 import { isUUID } from "class-validator";
 import { API_RESPONSES } from "@utils/response.messages";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
+import { GetUserId } from "src/common/decorators/getUserId.decorator";
 
 @ApiTags("Cohort")
 @Controller("cohort")
@@ -114,7 +115,7 @@ export class CohortController {
     @Body() cohortCreateDto: CohortCreateDto,
     @UploadedFile() image,
     @Res() response: Response,
-    @Query("userId") userId: string | null = null
+    @GetUserId("userId", ParseUUIDPipe) userId: string
   ) {
     const tenantId = headers["tenantid"];
     const academicYearId = headers["academicyearid"];
@@ -193,7 +194,7 @@ export class CohortController {
     @Body() cohortUpdateDto: CohortUpdateDto,
     @UploadedFile() image,
     @Res() response: Response,
-    @Query("userId") userId: string
+    @GetUserId("userId", ParseUUIDPipe) userId: string
   ) {
     cohortUpdateDto.updatedBy = userId;
     return await this.cohortAdapter
@@ -209,7 +210,7 @@ export class CohortController {
   public async updateCohortStatus(
     @Param("cohortId") cohortId: string,
     @Res() response: Response,
-    @Query("userId") userId: string
+    @GetUserId("userId", ParseUUIDPipe) userId: string
   ) {
     return await this.cohortAdapter
       .buildCohortAdapter()

@@ -52,6 +52,7 @@ import { API_RESPONSES } from "@utils/response.messages";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
 import { OtpSendDTO } from "./dto/otpSend.dto";
 import { OtpVerifyDTO } from "./dto/otpVerify.dto";
+import { GetUserId } from "src/common/decorators/getUserId.decorator"
 export interface UserData {
   context: string;
   tenantId: string;
@@ -84,8 +85,8 @@ export class UserController {
     @Req() request: Request,
     @Res() response: Response,
     @Param("userId", ParseUUIDPipe) userId: string,
-    @Query("fieldvalue") fieldvalue: string | null = null
-  ) {
+    @Query("fieldvalue") fieldvalue: string | null = null,
+  ) {    
     const tenantId = headers["tenantid"];
     if (!tenantId) {
       LoggerUtil.warn(
@@ -154,10 +155,11 @@ export class UserController {
   public async updateUser(
     @Headers() headers,
     @Param("userid") userId: string,
+    @GetUserId("loginUserId", ParseUUIDPipe) loginUserId: string,
     @Body() userUpdateDto: UserUpdateDTO,
     @Res() response: Response
   ) {
-    // userDto.tenantId = headers["tenantid"];
+    userUpdateDto.userData.updatedBy = loginUserId;
     userUpdateDto.userId = userId;
     return await this.userAdapter
       .buildUserAdapter()
@@ -166,8 +168,8 @@ export class UserController {
 
   @UseFilters(new AllExceptionsFilter(APIID.USER_LIST))
   @Post("/list")
-  // @UseGuards(JwtAuthGuard)
-  // @ApiBasicAuth("access-token")
+  @UseGuards(JwtAuthGuard)
+  @ApiBasicAuth("access-token")
   @ApiCreatedResponse({ description: "User list." })
   @ApiBody({ type: UserSearchDto })
   @UsePipes(ValidationPipe)
