@@ -431,7 +431,7 @@
 	  },
 	  {
 		"sourceRoute": "/interface/v1/tenant/search",
-		"type": "Post",
+		"type": "POST",
 		"priority": "MUST_HAVE",
 		"inSequence": false,
 		"orchestrated": false,
