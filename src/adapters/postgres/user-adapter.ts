@@ -847,9 +847,7 @@ export class PostgresUserService implements IServicelocator {
           );
         }
       }
-
-      console.log("hii",userDto);
-      
+            
       if (userDto.userData) {
         await this.updateBasicUserDetails(userDto.userId, userDto.userData);
         updatedData["basicDetails"] = userDto.userData;

@@ -270,7 +270,7 @@ export class CohortMembersController {
     @Headers() headers,
     @Req() request,
     @Body() bulkCohortMembersDto: BulkCohortMember,
-    @Query('userId') userId: string, // Now using userId from query
+    @GetUserId("userId", ParseUUIDPipe) userId: string,
     @Res() response: Response
   ) {
     const loginUser = userId;
