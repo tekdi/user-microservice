@@ -9,7 +9,7 @@ import {
   ApiNotFoundResponse,
   ApiConflictResponse,
   ApiQuery,
-} from "@nestjs/swagger";
+} from '@nestjs/swagger';
 import {
   Controller,
   Get,
@@ -31,48 +31,48 @@ import {
   UseFilters,
   ParseUUIDPipe,
   Query,
-} from "@nestjs/common";
-import { CohortSearchDto } from "./dto/cohort-search.dto";
-import { Request } from "@nestjs/common";
-import { FileInterceptor } from "@nestjs/platform-express";
-import { editFileName, imageFileFilter } from "./utils/file-upload.utils";
-import { diskStorage } from "multer";
-import { Response } from "express";
-import { CohortAdapter } from "./cohortadapter";
-import { CohortCreateDto } from "./dto/cohort-create.dto";
-import { CohortUpdateDto } from "./dto/cohort-update.dto";
-import { JwtAuthGuard } from "src/common/guards/keycloak.guard";
-import { AllExceptionsFilter } from "src/common/filters/exception.filter";
-import { APIID } from "src/common/utils/api-id.config";
-import { isUUID } from "class-validator";
-import { API_RESPONSES } from "@utils/response.messages";
-import { LoggerUtil } from "src/common/logger/LoggerUtil";
+} from '@nestjs/common';
+import { CohortSearchDto } from './dto/cohort-search.dto';
+import { Request } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { editFileName, imageFileFilter } from './utils/file-upload.utils';
+import { diskStorage } from 'multer';
+import { Response } from 'express';
+import { CohortAdapter } from './cohortadapter';
+import { CohortCreateDto } from './dto/cohort-create.dto';
+import { CohortUpdateDto } from './dto/cohort-update.dto';
+import { JwtAuthGuard } from 'src/common/guards/keycloak.guard';
+import { AllExceptionsFilter } from 'src/common/filters/exception.filter';
+import { APIID } from 'src/common/utils/api-id.config';
+import { isUUID } from 'class-validator';
+import { API_RESPONSES } from '@utils/response.messages';
+import { LoggerUtil } from 'src/common/logger/LoggerUtil';
 
-@ApiTags("Cohort")
-@Controller("cohort")
+@ApiTags('Cohort')
+@Controller('cohort')
 @UseGuards(JwtAuthGuard)
 export class CohortController {
   constructor(private readonly cohortAdapter: CohortAdapter) {}
 
   @UseFilters(new AllExceptionsFilter(APIID.COHORT_READ))
-  @Get("/cohortHierarchy/:cohortId")
-  @ApiOkResponse({ description: "Cohort details Fetched Successfully" })
-  @ApiNotFoundResponse({ description: "Cohort Not Found" })
-  @ApiInternalServerErrorResponse({ description: "Internal Server Error." })
-  @ApiBadRequestResponse({ description: "Bad Request" })
-  @SerializeOptions({ strategy: "excludeAll" })
-  @ApiQuery({ name: "children", required: false, type: Boolean })
-  @ApiQuery({ name: "customField", required: false, type: Boolean })
+  @Get('/cohortHierarchy/:cohortId')
+  @ApiOkResponse({ description: 'Cohort details Fetched Successfully' })
+  @ApiNotFoundResponse({ description: 'Cohort Not Found' })
+  @ApiInternalServerErrorResponse({ description: 'Internal Server Error.' })
+  @ApiBadRequestResponse({ description: 'Bad Request' })
+  @SerializeOptions({ strategy: 'excludeAll' })
+  @ApiQuery({ name: 'children', required: false, type: Boolean })
+  @ApiQuery({ name: 'customField', required: false, type: Boolean })
   public async getCohortsDetails(
     @Headers() headers,
-    @Param("cohortId") cohortId: string,
+    @Param('cohortId') cohortId: string,
     @Res() response: Response,
-    @Query("children") children: string,
-    @Query("customField") customField: string
+    @Query('children') children: string,
+    @Query('customField') customField: string,
   ) {
-    const academicYearId = headers["academicyearid"];
-    const getChildDataValueBoolean = children === "true";
-    const fieldValueBooelan = customField === "true";
+    const academicYearId = headers['academicyearid'];
+    const getChildDataValueBoolean = children === 'true';
+    const fieldValueBooelan = customField === 'true';
     const requiredData = {
       cohortId: cohortId,
       academicYearId: academicYearId,
@@ -85,28 +85,28 @@ export class CohortController {
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.COHORT_CREATE))
-  @Post("/create")
-  @ApiCreatedResponse({ description: "Cohort has been created successfully." })
-  @ApiBadRequestResponse({ description: "Bad request." })
-  @ApiInternalServerErrorResponse({ description: "Internal Server Error." })
-  @ApiConflictResponse({ description: "Cohort already exists." })
+  @Post('/create')
+  @ApiCreatedResponse({ description: 'Cohort has been created successfully.' })
+  @ApiBadRequestResponse({ description: 'Bad request.' })
+  @ApiInternalServerErrorResponse({ description: 'Internal Server Error.' })
+  @ApiConflictResponse({ description: 'Cohort already exists.' })
   @UseInterceptors(
-    FileInterceptor("image", {
+    FileInterceptor('image', {
       storage: diskStorage({
         destination: process.env.IMAGEPATH,
         filename: editFileName,
       }),
       fileFilter: imageFileFilter,
-    })
+    }),
   )
   @UsePipes(new ValidationPipe())
   @ApiBody({ type: CohortCreateDto })
-  @ApiQuery({ name: "userId", required: false })
+  @ApiQuery({ name: 'userId', required: false })
   @ApiHeader({
-    name: "tenantid",
+    name: 'tenantid',
   })
   @ApiHeader({
-    name: "academicyearid",
+    name: 'academicyearid',
   })
   public async createCohort(
     @Headers() headers,
@@ -114,10 +114,10 @@ export class CohortController {
     @Body() cohortCreateDto: CohortCreateDto,
     @UploadedFile() image,
     @Res() response: Response,
-    @Query("userId") userId: string | null = null
+    @Query('userId') userId: string | null = null,
   ) {
-    const tenantId = headers["tenantid"];
-    const academicYearId = headers["academicyearid"];
+    const tenantId = headers['tenantid'];
+    const academicYearId = headers['academicyearid'];
     if (!tenantId || !isUUID(tenantId)) {
       throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
     }
@@ -137,29 +137,29 @@ export class CohortController {
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.COHORT_LIST))
-  @Post("/search")
+  @Post('/search')
   @ApiBody({ type: CohortSearchDto })
-  @ApiOkResponse({ description: "Cohort list" })
-  @ApiBadRequestResponse({ description: "Bad request." })
-  @ApiInternalServerErrorResponse({ description: "Internal Server Error." })
+  @ApiOkResponse({ description: 'Cohort list' })
+  @ApiBadRequestResponse({ description: 'Bad request.' })
+  @ApiInternalServerErrorResponse({ description: 'Internal Server Error.' })
   @UsePipes(new ValidationPipe())
   @SerializeOptions({
-    strategy: "excludeAll",
+    strategy: 'excludeAll',
   })
   @ApiHeader({
-    name: "tenantid",
+    name: 'tenantid',
   })
   @ApiHeader({
-    name: "academicyearid",
+    name: 'academicyearid',
   })
   public async searchCohort(
     @Headers() headers,
     @Req() request: Request,
     @Body() cohortSearchDto: CohortSearchDto,
-    @Res() response: Response
+    @Res() response: Response,
   ) {
-    const tenantId = headers["tenantid"];
-    const academicYearId = headers["academicyearid"];
+    const tenantId = headers['tenantid'];
+    const academicYearId = headers['academicyearid'];
     if (!tenantId || !isUUID(tenantId)) {
       throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
     }
@@ -172,28 +172,28 @@ export class CohortController {
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.COHORT_UPDATE))
-  @Put("/update/:cohortId")
+  @Put('/update/:cohortId')
   @UseInterceptors(
-    FileInterceptor("image", {
+    FileInterceptor('image', {
       storage: diskStorage({
         destination: process.env.IMAGEPATH,
         filename: editFileName,
       }),
       fileFilter: imageFileFilter,
-    })
+    }),
   )
   @ApiBody({ type: CohortUpdateDto })
-  @ApiOkResponse({ description: "Cohort has been updated successfully" })
-  @ApiBadRequestResponse({ description: "Bad request." })
-  @ApiInternalServerErrorResponse({ description: "Internal Server Error." })
+  @ApiOkResponse({ description: 'Cohort has been updated successfully' })
+  @ApiBadRequestResponse({ description: 'Bad request.' })
+  @ApiInternalServerErrorResponse({ description: 'Internal Server Error.' })
   @UsePipes(new ValidationPipe({ transform: true }))
   public async updateCohort(
-    @Param("cohortId") cohortId: string,
+    @Param('cohortId') cohortId: string,
     @Req() request: Request,
     @Body() cohortUpdateDto: CohortUpdateDto,
     @UploadedFile() image,
     @Res() response: Response,
-    @Query("userId") userId: string
+    @Query('userId') userId: string,
   ) {
     cohortUpdateDto.updatedBy = userId;
     return await this.cohortAdapter
@@ -202,14 +202,14 @@ export class CohortController {
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.COHORT_DELETE))
-  @Delete("/delete/:cohortId")
-  @ApiOkResponse({ description: "Cohort has been deleted successfully." })
-  @ApiBadRequestResponse({ description: "Bad request." })
-  @ApiInternalServerErrorResponse({ description: "Internal Server Error." })
+  @Delete('/delete/:cohortId')
+  @ApiOkResponse({ description: 'Cohort has been deleted successfully.' })
+  @ApiBadRequestResponse({ description: 'Bad request.' })
+  @ApiInternalServerErrorResponse({ description: 'Internal Server Error.' })
   public async updateCohortStatus(
-    @Param("cohortId") cohortId: string,
+    @Param('cohortId') cohortId: string,
     @Res() response: Response,
-    @Query("userId") userId: string
+    @Query('userId') userId: string,
   ) {
     return await this.cohortAdapter
       .buildCohortAdapter()
@@ -217,34 +217,34 @@ export class CohortController {
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.COHORT_READ))
-  @Get("/mycohorts/:userId")
-  @ApiOkResponse({ description: "Cohort details Fetched Successfully" })
-  @ApiNotFoundResponse({ description: "User Not Found" })
-  @ApiInternalServerErrorResponse({ description: "Internal Server Error." })
-  @ApiBadRequestResponse({ description: "Bad Request" })
-  @ApiHeader({ name: "tenantid" })
+  @Get('/mycohorts/:userId')
+  @ApiOkResponse({ description: 'Cohort details Fetched Successfully' })
+  @ApiNotFoundResponse({ description: 'User Not Found' })
+  @ApiInternalServerErrorResponse({ description: 'Internal Server Error.' })
+  @ApiBadRequestResponse({ description: 'Bad Request' })
+  @ApiHeader({ name: 'tenantid' })
   @ApiHeader({
-    name: "academicyearid",
+    name: 'academicyearid',
   })
-  @ApiQuery({ name: "children", required: false, type: Boolean })
-  @ApiQuery({ name: "customField", required: false, type: Boolean })
+  @ApiQuery({ name: 'children', required: false, type: Boolean })
+  @ApiQuery({ name: 'customField', required: false, type: Boolean })
   public async getCohortsHierarachyData(
     @Headers() headers,
-    @Param("userId", ParseUUIDPipe) userId: string,
-    @Query("children") children: string,
-    @Query("customField") customField: string | null = null,
-    @Res() response: Response
+    @Param('userId', ParseUUIDPipe) userId: string,
+    @Query('children') children: string,
+    @Query('customField') customField: string | null = null,
+    @Res() response: Response,
   ) {
-    const tenantId = headers["tenantid"];
-    const academicYearId = headers["academicyearid"];
+    const tenantId = headers['tenantid'];
+    const academicYearId = headers['academicyearid'];
     if (!tenantId || !isUUID(tenantId)) {
       throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
     }
     if (!academicYearId || !isUUID(academicYearId)) {
       throw new BadRequestException(API_RESPONSES.ACADEMICYEARID_VALIDATION);
     }
-    const getChildDataValueBoolean = children === "true";
-    const fieldValueBooelan = customField === "true";
+    const getChildDataValueBoolean = children === 'true';
+    const fieldValueBooelan = customField === 'true';
     const requiredData = {
       userId: userId,
       academicYearId: academicYearId,
