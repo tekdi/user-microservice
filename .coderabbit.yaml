@@ -1,4 +1,4 @@
-language: "en"
+language: 'en'
 
 early_access: false
 
@@ -9,11 +9,11 @@ reviews:
   review_status: true
   collapse_walkthrough: false
   path_filters:
-    - "!**/.xml"
+    - '!**/.xml'
   path_instructions:
-    - path: "**/*.js"
-      instructions: "Review the JavaScript code for conformity with the Google JavaScript style guide, highlighting any deviations."
-    - path: "**/*.ts"
+    - path: '**/*.js'
+      instructions: 'Review the JavaScript code for conformity with the Google JavaScript style guide, highlighting any deviations.'
+    - path: '**/*.ts'
       instructions: |
         "Review the JavaScript code for conformity with the Google JavaScript style guide, highlighting any deviations. Ensure that:
         - The code adheres to best practices associated with nodejs.
@@ -23,17 +23,18 @@ reviews:
   auto_review:
     enabled: true
     ignore_title_keywords:
-      - "WIP"
-      - "DO NOT MERGE"
+      - 'WIP'
+      - 'DO NOT MERGE'
     drafts: false
     base_branches:
-    - "master"
-    - "main"
-    - "dev"
-    - "feat/*"
-    - "feat-*"
-    - "release-*"
-    - "Shiksha-2.0"
+      - 'master'
+      - 'main'
+      - 'dev'
+      - 'feat/*'
+      - 'feat-*'
+      - 'release-*'
+      - 'Shiksha-2.0'
+      - 'youth-management'
 
 chat:
   auto_reply: true
