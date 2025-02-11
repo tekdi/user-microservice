@@ -1205,7 +1205,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         const orderKey = sort[1].toUpperCase();
         order = `ORDER BY "${sort[0]}" ${orderKey}`;
       } else {
-        order = `ORDER BY name ASC`;
+        order = `ORDER BY ${fieldName}_name ASC`;
       }
       if (fetchFieldParams?.sourceDetails?.source === "table") {
         let whereClause;
@@ -1227,7 +1227,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
           whereClause,
           offset,
           limit,
-          // order,
+          order,
           optionName
         );
       } else if (fetchFieldParams?.sourceDetails?.source === "jsonFile") {
