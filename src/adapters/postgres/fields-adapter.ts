@@ -1724,7 +1724,6 @@ export class PostgresFieldsService implements IServicelocatorfields {
     result = result.map(async (data) => {
       const originalValue = data.value;
       let processedValue = data.value;
-      console.log('ssss', originalValue, processedValue);
 
       if (data?.sourceDetails) {
         if (data.sourceDetails.source === 'fieldparams') {
