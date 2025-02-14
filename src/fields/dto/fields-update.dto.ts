@@ -1,4 +1,4 @@
-import { Exclude, Expose } from "class-transformer";
+import { Exclude, Expose } from 'class-transformer';
 import {
   MaxLength,
   IsNotEmpty,
@@ -12,15 +12,15 @@ import {
   IsObject,
   ValidateIf,
   IsDefined,
-} from "class-validator";
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { FieldType } from "../entities/fields.entity";
-import { Type } from "class-transformer";
+} from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { FieldType } from '../entities/fields.entity';
+import { Type } from 'class-transformer';
 
 class FieldParams {
   @ApiPropertyOptional({
     type: Boolean,
-    description: "Specifies if the field can be created",
+    description: 'Specifies if the field can be created',
     default: false,
   })
   @IsBoolean()
@@ -29,7 +29,7 @@ class FieldParams {
 
   @ApiPropertyOptional({
     type: Array,
-    description: "Options for the field",
+    description: 'Options for the field',
     default: [],
   })
   @IsOptional()
@@ -45,8 +45,8 @@ export class FieldsUpdateDto {
   // Name
   @ApiPropertyOptional({
     type: String,
-    description: "The name of the fields",
-    default: "",
+    description: 'The name of the fields',
+    default: '',
   })
   @Expose()
   name: string;
@@ -54,8 +54,8 @@ export class FieldsUpdateDto {
   // Label
   @ApiPropertyOptional({
     type: String,
-    description: "The label of the fields",
-    default: "",
+    description: 'The label of the fields',
+    default: '',
   })
   @Expose()
   label: string;
@@ -63,8 +63,8 @@ export class FieldsUpdateDto {
   // Context
   @ApiPropertyOptional({
     type: String,
-    description: "The context of the fields",
-    default: "",
+    description: 'The context of the fields',
+    default: '',
   })
   @Expose()
   context: string;
@@ -72,8 +72,8 @@ export class FieldsUpdateDto {
   // Context Type
   @ApiPropertyOptional({
     type: String,
-    description: "The contextType of the fields",
-    default: "",
+    description: 'The contextType of the fields',
+    default: '',
   })
   @Expose()
   contextType: string;
@@ -89,11 +89,10 @@ export class FieldsUpdateDto {
   @Expose()
   type: string;
 
-
   // Ordering
   @ApiPropertyOptional({
     type: Number,
-    description: "The ordering of the fields",
+    description: 'The ordering of the fields',
     default: 0,
   })
   @Expose()
@@ -102,7 +101,7 @@ export class FieldsUpdateDto {
   // Required
   @ApiPropertyOptional({
     type: Boolean,
-    description: "The required of the fields",
+    description: 'The required of the fields',
     default: true,
   })
   @Expose()
@@ -111,8 +110,8 @@ export class FieldsUpdateDto {
   // Tenant ID
   @ApiPropertyOptional({
     type: String,
-    description: "The tenantId of the fields",
-    default: "",
+    description: 'The tenantId of the fields',
+    default: '',
   })
   @Expose()
   tenantId: string;
@@ -120,7 +119,7 @@ export class FieldsUpdateDto {
   // FieldParams
   @ApiPropertyOptional({
     type: FieldParams,
-    description: "The fieldParams of the fields",
+    description: 'The fieldParams of the fields',
     default: {},
   })
   @ValidateNested()
@@ -132,7 +131,7 @@ export class FieldsUpdateDto {
   // FieldAttributes
   @ApiPropertyOptional({
     type: Object,
-    description: "The fieldAttributes of the fields",
+    description: 'The fieldAttributes of the fields',
     default: {},
   })
   @Expose()
@@ -141,7 +140,7 @@ export class FieldsUpdateDto {
   // SourceDetails
   @ApiPropertyOptional({
     type: Object,
-    description: "The sourceDetails of the fields",
+    description: 'The sourceDetails of the fields',
     default: {},
   })
   @Expose()
@@ -150,7 +149,7 @@ export class FieldsUpdateDto {
   // DependsOn
   @ApiPropertyOptional({
     type: String,
-    description: "The dependsOn of the fields",
+    description: 'The dependsOn of the fields',
     default: {},
   })
   @Expose()

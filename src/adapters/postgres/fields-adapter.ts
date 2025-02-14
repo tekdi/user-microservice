@@ -24,6 +24,7 @@ import { SchemaField, Option } from 'src/fields/fieldValidators/fieldClass';
 import jwt_decode from 'jwt-decode';
 import { LoggerUtil } from 'src/common/logger/LoggerUtil';
 import { API_RESPONSES } from '@utils/response.messages';
+import { v4 as uuidv4 } from 'uuid';
 @Injectable()
 export class PostgresFieldsService implements IServicelocatorfields {
   constructor(
@@ -477,6 +478,183 @@ export class PostgresFieldsService implements IServicelocatorfields {
     }
   }
 
+  // async updateFields(
+  //   fieldId: any,
+  //   request: any,
+  //   fieldsUpdateDto: FieldsUpdateDto,
+  //   response: Response,
+  // ) {
+  //   const apiId = APIID.FIELDS_CREATE;
+  //   try {
+  //     const decoded: any = jwt_decode(request.headers.authorization);
+  //     const createdBy = decoded?.sub;
+  //     const updatedBy = decoded?.sub;
+
+  //     const fieldsData: any = {}; // Define an empty object to store field data
+  //     const storeWithoutControllingField = [];
+  //     let error = '';
+
+  //     Object.keys(fieldsUpdateDto).forEach((e) => {
+  //       if (fieldsUpdateDto[e] && fieldsUpdateDto[e] !== '') {
+  //         if (e === 'render') {
+  //           fieldsData[e] = fieldsUpdateDto[e];
+  //         } else if (Array.isArray(fieldsUpdateDto[e])) {
+  //           fieldsData[e] = JSON.stringify(fieldsUpdateDto[e]);
+  //         } else {
+  //           fieldsData[e] = fieldsUpdateDto[e];
+  //         }
+  //       }
+  //     });
+
+  //     const getSourceDetails = await this.fieldsRepository.findOne({
+  //       where: { fieldId: fieldId },
+  //     });
+
+  //     fieldsData['type'] = fieldsData.type || getSourceDetails.type;
+
+  //     //Update field options
+  //     //Update data in source table
+  //     if (
+  //       getSourceDetails.sourceDetails &&
+  //       fieldsData.fieldParams &&
+  //       fieldsData.fieldParams.options &&
+  //       getSourceDetails.sourceDetails.source == 'table'
+  //     ) {
+  //       for (const sourceFieldName of fieldsData.fieldParams.options) {
+  //         if (
+  //           getSourceDetails.dependsOn &&
+  //           (!sourceFieldName['controllingfieldfk'] ||
+  //             sourceFieldName['controllingfieldfk'] === '')
+  //         ) {
+  //           storeWithoutControllingField.push(sourceFieldName['name']);
+  //         }
+
+  //         // check options exits in source table column or not
+  //         const query = `SELECT "name", "value"
+  //         FROM public.${getSourceDetails.sourceDetails.table}
+  //         WHERE value = '${sourceFieldName['value']}'
+  //         GROUP BY  "name", "value"`;
+
+  //         const checkSourceData = await this.fieldsValuesRepository.query(
+  //           query,
+  //         );
+
+  //         //If code is not exist in db
+  //         if (checkSourceData.length === 0) {
+  //           //If code is not exist in db and isCreate flag is false
+  //           if (!fieldsData.fieldParams.isCreate) {
+  //             return APIResponse.error(
+  //               response,
+  //               apiId,
+  //               'BAD_REQUEST',
+  //               `Error: This code '${sourceFieldName['value']}' does not exist in the '${getSourceDetails.sourceDetails.table}' table.`,
+  //               HttpStatus.BAD_REQUEST,
+  //             );
+  //           }
+
+  //           // If not exist and isCreate is true, create the record
+  //           await this.createSourceDetailsTableFields(
+  //             getSourceDetails.sourceDetails.table,
+  //             sourceFieldName['name'],
+  //             sourceFieldName['value'],
+  //             createdBy,
+  //             sourceFieldName['controllingfieldfk'],
+  //             getSourceDetails.dependsOn,
+  //           );
+  //         } else {
+  //           //If code is exist in db and isCreate flag is true
+  //           if (fieldsData.fieldParams.isCreate) {
+  //             return APIResponse.error(
+  //               response,
+  //               apiId,
+  //               'CONFLICT',
+  //               `Error: This code '${sourceFieldName['value']}' already exists for '${checkSourceData[0].name}' in the '${getSourceDetails.sourceDetails.table}' table.`,
+  //               HttpStatus.CONFLICT,
+  //             );
+  //           }
+
+  //           // If exist and isCreate is false, update the record
+  //           await this.updateSourceDetailsTableFields(
+  //             getSourceDetails.sourceDetails.table,
+  //             sourceFieldName['name'],
+  //             sourceFieldName['value'],
+  //             updatedBy,
+  //             sourceFieldName['controllingfieldfk'],
+  //           );
+  //         }
+  //       }
+  //       delete fieldsData.fieldParams;
+  //     }
+
+  //     //Update data in field params
+  //     if (
+  //       getSourceDetails.sourceDetails &&
+  //       getSourceDetails.sourceDetails.source == 'fieldparams'
+  //     ) {
+  //       for (const sourceFieldName of fieldsData.fieldParams.options) {
+  //         //Store those fields is depends on another fields but did not provide controlling field foreign key
+  //         if (
+  //           fieldsData.dependsOn &&
+  //           (!sourceFieldName['controllingfieldfk'] ||
+  //             sourceFieldName['controllingfieldfk'] === '')
+  //         ) {
+  //           storeWithoutControllingField.push(sourceFieldName['name']);
+  //         }
+
+  //         // check options exits in fieldParams column or not
+  //         const query = `SELECT COUNT(*) FROM public."Fields" WHERE "fieldId"='${fieldId}' AND "fieldParams" -> 'options' @> '[{"value": "${sourceFieldName['value']}"}]' `;
+  //         const checkSourceData = await this.fieldsRepository.query(query);
+
+  //         //If fields is not present then create a new options
+  //         if (checkSourceData[0].count == 0) {
+  //           const addFieldParamsValue = await this.addOptionsInFieldParams(
+  //             fieldId,
+  //             sourceFieldName,
+  //           );
+  //           if (addFieldParamsValue !== true) {
+  //             return APIResponse.error(
+  //               response,
+  //               apiId,
+  //               'Internal Server Error',
+  //               `Error : ${addFieldParamsValue}`,
+  //               HttpStatus.INTERNAL_SERVER_ERROR,
+  //             );
+  //           }
+  //         }
+  //       }
+  //     }
+
+  //     //If fields is depends on another fields but did not provide controlling field foreign key
+  //     if (storeWithoutControllingField.length > 0) {
+  //       const wrongControllingField = storeWithoutControllingField.join(',');
+  //       error = `Wrong Data: ${wrongControllingField} This field is dependent on another field and cannot be created without specifying the controllingfieldfk.`;
+  //     }
+
+  //     const result = await this.fieldsRepository.update(fieldId, fieldsData);
+  //     return await APIResponse.success(
+  //       response,
+  //       apiId,
+  //       result,
+  //       HttpStatus.CREATED,
+  //       'Fields updated successfully.',
+  //     );
+  //   } catch (e) {
+  //     LoggerUtil.error(
+  //       `${API_RESPONSES.SERVER_ERROR}`,
+  //       `Error: ${e.message}`,
+  //       apiId,
+  //     );
+  //     const errorMessage = e?.message || API_RESPONSES.SERVER_ERROR;
+  //     return APIResponse.error(
+  //       response,
+  //       apiId,
+  //       API_RESPONSES.SERVER_ERROR,
+  //       `Error : ${errorMessage}`,
+  //       HttpStatus.INTERNAL_SERVER_ERROR,
+  //     );
+  //   }
+  // }
+
   async updateFields(
     fieldId: any,
     request: any,
@@ -511,8 +689,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
 
       fieldsData['type'] = fieldsData.type || getSourceDetails.type;
 
-      //Update field options
-      //Update data in source table
+      // Update field options
       if (
         getSourceDetails.sourceDetails &&
         fieldsData.fieldParams &&
@@ -528,55 +705,35 @@ export class PostgresFieldsService implements IServicelocatorfields {
             storeWithoutControllingField.push(sourceFieldName['name']);
           }
 
-          // check options exits in source table column or not
+          // Generate UUID instead of auto-incremented integer
+          const nextValue = uuidv4();
+
+          // Check if the name already exists in the source table
           const query = `SELECT "name", "value" 
           FROM public.${getSourceDetails.sourceDetails.table} 
-          WHERE value = '${sourceFieldName['value']}' 
-          GROUP BY  "name", "value"`;
+          WHERE name = '${sourceFieldName['name']}' 
+          GROUP BY "name", "value"`;
 
           const checkSourceData = await this.fieldsValuesRepository.query(
             query,
           );
 
-          //If code is not exist in db
+          // If name does not exist, create a new record
           if (checkSourceData.length === 0) {
-            //If code is not exist in db and isCreate flag is false
-            if (!fieldsData.fieldParams.isCreate) {
-              return APIResponse.error(
-                response,
-                apiId,
-                'BAD_REQUEST',
-                `Error: This code '${sourceFieldName['value']}' does not exist in the '${getSourceDetails.sourceDetails.table}' table.`,
-                HttpStatus.BAD_REQUEST,
-              );
-            }
-
-            // If not exist and isCreate is true, create the record
             await this.createSourceDetailsTableFields(
               getSourceDetails.sourceDetails.table,
               sourceFieldName['name'],
-              sourceFieldName['value'],
+              nextValue, // Use UUID instead of integer
               createdBy,
               sourceFieldName['controllingfieldfk'],
               getSourceDetails.dependsOn,
             );
           } else {
-            //If code is exist in db and isCreate flag is true
-            if (fieldsData.fieldParams.isCreate) {
-              return APIResponse.error(
-                response,
-                apiId,
-                'CONFLICT',
-                `Error: This code '${sourceFieldName['value']}' already exists for '${checkSourceData[0].name}' in the '${getSourceDetails.sourceDetails.table}' table.`,
-                HttpStatus.CONFLICT,
-              );
-            }
-
-            // If exist and isCreate is false, update the record
+            // If the name exists, update the record
             await this.updateSourceDetailsTableFields(
               getSourceDetails.sourceDetails.table,
               sourceFieldName['name'],
-              sourceFieldName['value'],
+              checkSourceData[0].value, // Keep the existing UUID
               updatedBy,
               sourceFieldName['controllingfieldfk'],
             );
@@ -585,13 +742,11 @@ export class PostgresFieldsService implements IServicelocatorfields {
         delete fieldsData.fieldParams;
       }
 
-      //Update data in field params
       if (
         getSourceDetails.sourceDetails &&
         getSourceDetails.sourceDetails.source == 'fieldparams'
       ) {
         for (const sourceFieldName of fieldsData.fieldParams.options) {
-          //Store those fields is depends on another fields but did not provide controlling field foreign key
           if (
             fieldsData.dependsOn &&
             (!sourceFieldName['controllingfieldfk'] ||
@@ -600,11 +755,9 @@ export class PostgresFieldsService implements IServicelocatorfields {
             storeWithoutControllingField.push(sourceFieldName['name']);
           }
 
-          // check options exits in fieldParams column or not
-          const query = `SELECT COUNT(*) FROM public."Fields" WHERE "fieldId"='${fieldId}' AND "fieldParams" -> 'options' @> '[{"value": "${sourceFieldName['value']}"}]' `;
+          const query = `SELECT COUNT(*) FROM public."Fields" WHERE "fieldId"='${fieldId}' AND "fieldParams" -> 'options' @> '[{"name": "${sourceFieldName['name']}"}]' `;
           const checkSourceData = await this.fieldsRepository.query(query);
 
-          //If fields is not present then create a new options
           if (checkSourceData[0].count == 0) {
             const addFieldParamsValue = await this.addOptionsInFieldParams(
               fieldId,
@@ -623,7 +776,6 @@ export class PostgresFieldsService implements IServicelocatorfields {
         }
       }
 
-      //If fields is depends on another fields but did not provide controlling field foreign key
       if (storeWithoutControllingField.length > 0) {
         const wrongControllingField = storeWithoutControllingField.join(',');
         error = `Wrong Data: ${wrongControllingField} This field is dependent on another field and cannot be created without specifying the controllingfieldfk.`;
@@ -1441,6 +1593,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
     }
 
     const query = `SELECT *,COUNT(*) OVER() AS total_count FROM public."${tableName}" ${whereCond} ${orderCond} ${offsetCond} ${limitCond}`;
+    console.log('sss', query);
 
     const result = await this.fieldsRepository.query(query);
     if (!result) {
