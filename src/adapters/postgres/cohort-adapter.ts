@@ -1,4 +1,4 @@
-import { HttpStatus, Injectable } from "@nestjs/common";
+import { ConsoleLogger, HttpStatus, Injectable } from "@nestjs/common";
 import jwt_decode from "jwt-decode";
 import { ReturnResponseBody } from "src/cohort/dto/cohort.dto";
 import { CohortSearchDto } from "src/cohort/dto/cohort-search.dto";
@@ -24,6 +24,7 @@ import { API_RESPONSES } from "@utils/response.messages";
 import { CohortAcademicYear } from "src/cohortAcademicYear/entities/cohortAcademicYear.entity";
 import { PostgresCohortMembersService } from "./cohortMembers-adapter";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
+import { AutomaticMemberService } from "src/automatic-member/automatic-member.service";
 
 @Injectable()
 export class PostgresCohortService {
@@ -41,7 +42,8 @@ export class PostgresCohortService {
     private fieldsService: PostgresFieldsService,
     private readonly cohortAcademicYearService: CohortAcademicYearService,
     private readonly postgresAcademicYearService: PostgresAcademicYearService,
-    private readonly postgresCohortMembersService: PostgresCohortMembersService
+    private readonly postgresCohortMembersService: PostgresCohortMembersService,
+    private readonly automaticMemberService:AutomaticMemberService
   ) { }
 
   public async getCohortsDetails(requiredData, res) {
@@ -1029,37 +1031,71 @@ export class PostgresCohortService {
     return hierarchy;
   }
 
+  public async getCohortDetailsByIds(ids: string[]) {
+    return await this.cohortRepository.find({
+        where: {
+            cohortId: In(ids),
+        },
+        select: ["cohortId", "name", "parentId", "type","status"],
+    });
+}
+
+  public async automaticMemberCohortHierarchy(requiredData,academicYearId) {
+    const { condition: { value,fieldId } } = requiredData?.rules;
+
+    // Pass fieldId to getSearchFieldValueData
+    let filledValues = await this.fieldsService.getSearchFieldValueData(
+        0, 
+        "0", 
+        { fieldId: fieldId,value:value }  // Passing extracted fieldId
+    );
+    const cohortIds = filledValues.mappedResponse.map(item => item.itemId);
+
+    if (cohortIds.length === 0) {
+        throw new Error("No cohort IDs found for the given fieldId and value.");
+    }
+
+    const existingCohortIds = await this.getCohortDetailsByIds(cohortIds);
+    return existingCohortIds;
+}
+
   public async getCohortHierarchyData(requiredData, res) {
     // my cohort
     const apiId = APIID.COHORT_LIST;
 
-    const userAcademicYear: any[] =
-      await this.postgresCohortMembersService.isUserExistForYear(
-        requiredData.academicYearId,
-        requiredData.userId
-      );
+    // const userAcademicYear: any[] =
+    //   await this.postgresCohortMembersService.isUserExistForYear(
+    //     requiredData.academicYearId,
+    //     requiredData.userId
+    //   );
 
-    if (userAcademicYear.length === 0) {
-      return APIResponse.error(
-        res,
-        apiId,
-        API_RESPONSES.BAD_REQUEST,
-        API_RESPONSES.USER_NOT_IN_ACADEMIC_YEAR,
-        HttpStatus.BAD_REQUEST
-      );
-    }
+    // if (userAcademicYear.length === 0) {
+    //   return APIResponse.error(
+    //     res,
+    //     apiId,
+    //     API_RESPONSES.BAD_REQUEST,
+    //     API_RESPONSES.USER_NOT_IN_ACADEMIC_YEAR,
+    //     HttpStatus.BAD_REQUEST
+    //   );
+    // }
+    const checkAutomaticMember = await this.automaticMemberService.checkMemberById(requiredData.userId);
 
     if (!requiredData.getChildData) {
       try {
-        const findCohortId = await this.findCohortName(requiredData.userId, requiredData?.academicYearId);
-        if (!findCohortId.length) {
+        let findCohortId;
+        if(checkAutomaticMember){
+          findCohortId = await this.automaticMemberCohortHierarchy(checkAutomaticMember,requiredData?.academicYearId);
+        }else{
+          findCohortId = await this.findCohortName(requiredData.userId, requiredData?.academicYearId);
+          if (!findCohortId.length) {
           return APIResponse.error(
             res,
             apiId,
-            API_RESPONSES.BAD_REQUEST,
+            "BAD_REQUEST",
             `No Cohort Found for this User ID`,
             HttpStatus.BAD_REQUEST
           );
+        }
         }
         const result = {
           cohortData: [],
@@ -1108,9 +1144,12 @@ export class PostgresCohortService {
     }
     if (requiredData.getChildData) {
       try {
-        const findCohortId = await this.findCohortName(requiredData.userId, requiredData?.academicYearId);
-
-        if (!findCohortId.length) {
+        let findCohortId;
+        if(checkAutomaticMember){
+          findCohortId = await this.automaticMemberCohortHierarchy(checkAutomaticMember,requiredData?.academicYearId);
+        }else{
+          findCohortId = await this.findCohortName(requiredData.userId, requiredData?.academicYearId);
+          if (!findCohortId.length) {
           return APIResponse.error(
             res,
             apiId,
@@ -1118,6 +1157,7 @@ export class PostgresCohortService {
             `No Cohort Found for this User ID`,
             HttpStatus.BAD_REQUEST
           );
+        }
         }
         const resultDataList = [];
 
@@ -1130,7 +1170,9 @@ export class PostgresCohortService {
             cohortMembershipId: cohort?.cohortMembershipId,
             cohortStatus: cohort?.cohortstatus,
             type: cohort?.type,
+            status: cohort?.status
           };
+          console.log(cohort);
           if (requiredData.customField) {
             resultData["customField"] = await this.getCohortCustomFieldDetails(
               cohort.cohortId

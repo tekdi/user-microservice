@@ -23,6 +23,7 @@ import { HttpService } from "@utils/http-service";
 import { TenantModule } from "./tenant/tenant.module";
 import { AcademicyearsModule } from "./academicyears/academicyears.module";
 import { CohortAcademicYearModule } from "./cohortAcademicYear/cohortAcademicYear.module";
+import { AutomaticMemberModule } from './automatic-member/automatic-member.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { CohortAcademicYearModule } from "./cohortAcademicYear/cohortAcademicYea
     TenantModule,
     AcademicyearsModule,
     CohortAcademicYearModule,
+    AutomaticMemberModule,
   ],
   controllers: [AppController],
   providers: [AppService, HttpService],
