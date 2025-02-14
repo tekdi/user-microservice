@@ -1416,7 +1416,6 @@ export class PostgresFieldsService implements IServicelocatorfields {
     }
 
     const query = `SELECT *,COUNT(*) OVER() AS total_count FROM public."${tableName}" ${whereCond} ${orderCond} ${offsetCond} ${limitCond}`;
-    console.log('sss', query);
 
     const result = await this.fieldsRepository.query(query);
     if (!result) {
