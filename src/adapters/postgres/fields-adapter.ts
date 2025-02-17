@@ -532,10 +532,6 @@ export class PostgresFieldsService implements IServicelocatorfields {
           const nextValue = uuidv4();
 
           // Check if the name already exists in the source table
-          // const query = `SELECT "name", "value"
-          // FROM public.${getSourceDetails.sourceDetails.table}
-          // WHERE name = '${sourceFieldName['name']}'
-          // GROUP BY "name", "value"`;
           const query = `SELECT "name", "value" 
           FROM public.${getSourceDetails.sourceDetails.table} 
           WHERE value = '${sourceFieldName['value']}' 
