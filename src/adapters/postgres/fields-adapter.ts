@@ -577,7 +577,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
             storeWithoutControllingField.push(sourceFieldName['name']);
           }
 
-          const query = `SELECT COUNT(*) FROM public."Fields" WHERE "fieldId"='${fieldId}' AND "fieldParams" -> 'options' @> '[{"name": "${sourceFieldName['name']}"}]' `;
+          const query = `SELECT COUNT(*) FROM public."Fields" WHERE "fieldId"='${fieldId}' AND "fieldParams" -> 'options' @> '[{"value": "${sourceFieldName['value']}"}]' `;
           const checkSourceData = await this.fieldsRepository.query(query);
 
           if (checkSourceData[0].count == 0) {
