@@ -536,7 +536,6 @@ export class PostgresFieldsService implements IServicelocatorfields {
           FROM public.${getSourceDetails.sourceDetails.table} 
           WHERE value = '${sourceFieldName['value']}' 
           GROUP BY  "name", "value"`;
-
           const checkSourceData = await this.fieldsValuesRepository.query(
             query,
           );
