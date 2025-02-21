@@ -12,12 +12,22 @@ import { Fields } from "src/fields/entities/fields.entity";
 import { CohortMembers } from "src/cohortMembers/entities/cohort-member.entity";
 import { KeycloakService } from "src/common/utils/keycloak.service";
 import { PostgresModule } from "src/adapters/postgres/postgres-module";
+import { RolePermissionModule } from "src/permissionRbac/rolePermissionMapping/role-permission.module";
+import { RolePermissionService } from "src/permissionRbac/rolePermissionMapping/role-permission-mapping.service";
+import { RolePermission } from "src/permissionRbac/rolePermissionMapping/entities/rolePermissionMapping";
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, FieldValues, Fields, CohortMembers]),
+    TypeOrmModule.forFeature([
+      User,
+      FieldValues,
+      Fields,
+      CohortMembers,
+      RolePermission,
+    ]),
     HttpModule,
     PostgresModule,
+    RolePermissionModule,
   ],
   controllers: [AuthController],
   providers: [
@@ -26,6 +36,7 @@ import { PostgresModule } from "src/adapters/postgres/postgres-module";
     RbacJwtStrategy,
     KeycloakService,
     UserAdapter,
+    RolePermissionService,
   ],
 })
 export class AuthModule {}
