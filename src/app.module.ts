@@ -53,7 +53,7 @@ import { RolePermissionModule } from "./permissionRbac/rolePermissionMapping/rol
   providers: [AppService, HttpService],
 })
 export class AppModule {
-  configure(consumer: MiddlewareConsumer) {
-    consumer.apply(PermissionMiddleware).forRoutes("*"); // Apply middleware to the all routes
-  }
+  // configure(consumer: MiddlewareConsumer) {
+  //   consumer.apply(PermissionMiddleware).forRoutes("*"); // Apply middleware to the all routes
+  // }
 }
