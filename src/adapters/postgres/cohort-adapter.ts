@@ -113,7 +113,7 @@ export class PostgresCohortService {
         name: data.name,
         parentId: data.parentId,
         type: data.type,
-        customField: await this.getCohortCustomFieldDetails(data.cohortId),
+        customField: await this.fieldsService.getCustomFieldDetails(data.cohortId,'Cohort'),
       };
       result.cohortData.push(cohortData);
     }
@@ -140,7 +140,7 @@ export class PostgresCohortService {
         type: cohort.type,
         status: cohort?.status,
         customField: requiredData.customField
-          ? await this.getCohortCustomFieldDetails(cohort.cohortId)
+          ? await this.fieldsService.getCustomFieldDetails(cohort.cohortId,'Cohort')
           : undefined,
         childData: await this.getCohortHierarchy(
           cohort.cohortId,
@@ -167,7 +167,7 @@ export class PostgresCohortService {
     cohortId: string,
     contextType?: string
   ) {
-    const fieldValues = await this.getCohortCustomFieldDetails(cohortId);
+    const fieldValues = await this.fieldsService.getCustomFieldDetails(cohortId,'Cohort');    
     return fieldValues;
   }
 
@@ -651,7 +651,7 @@ export class PostgresCohortService {
     response
   ) {
     const apiId = APIID.COHORT_LIST;
-    try {
+    try {      
       const { sort, filters } = cohortSearchDto;
       let { limit, offset } = cohortSearchDto;
       let cohortsByAcademicYear: CohortAcademicYear[];
@@ -1007,8 +1007,8 @@ export class PostgresCohortService {
           data.cohortId,
           customField
         );
-        customFieldDetails = await this.getCohortCustomFieldDetails(
-          data.cohortId
+        customFieldDetails = await this.fieldsService.getCustomFieldDetails(
+          data.cohortId,'Cohort'
         );
       } else {
         childHierarchy = await this.getCohortHierarchy(data.cohortId);
@@ -1112,8 +1112,8 @@ export class PostgresCohortService {
             cohortStatus: data?.cohortstatus,
             customField: {},
           };
-          const getDetails = await this.getCohortCustomFieldDetails(
-            data.cohortId
+          const getDetails = await this.fieldsService.getCustomFieldDetails(
+            data.cohortId,'Cohort'
           );
           cohortData.customField = getDetails;
           result.cohortData.push(cohortData);
@@ -1172,10 +1172,9 @@ export class PostgresCohortService {
             type: cohort?.type,
             status: cohort?.status
           };
-          console.log(cohort);
           if (requiredData.customField) {
-            resultData["customField"] = await this.getCohortCustomFieldDetails(
-              cohort.cohortId
+            resultData["customField"] = await this.fieldsService.getCustomFieldDetails(
+              cohort.cohortId,'Cohort'
             );
             resultData["childData"] = await this.getCohortHierarchy(
               cohort.cohortId,

@@ -2,7 +2,7 @@ import { HttpStatus, Injectable } from "@nestjs/common";
 import { User } from "../../user/entities/user-entity";
 import { FieldValues } from "src/fields/entities/fields-values.entity";
 import { InjectRepository } from "@nestjs/typeorm";
-import { ILike, In, Repository } from "typeorm";
+import { DataSource, ILike, In, Repository } from "typeorm";
 import { UserCreateDto } from "../../user/dto/user-create.dto";
 import jwt_decode from "jwt-decode";
 import {
@@ -63,6 +63,7 @@ export class PostgresUserService implements IServicelocator {
   private readonly otpExpiry: number;
   private readonly otpDigits: number;
   private readonly smsKey: string;
+  private readonly dataSource: DataSource;
 
   constructor(
     // private axiosInstance: AxiosInstance,
@@ -87,7 +88,8 @@ export class PostgresUserService implements IServicelocator {
     private configService: ConfigService,
     private postgresAcademicYearService: PostgresAcademicYearService,
     private readonly cohortAcademicYearService: CohortAcademicYearService,
-    private readonly authUtils: AuthUtils
+    private readonly authUtils: AuthUtils,
+    dataSource: DataSource
   ) {
     this.jwt_secret = this.configService.get<string>("RBAC_JWT_SECRET");
     this.jwt_password_reset_expires_In = this.configService.get<string>(
@@ -98,7 +100,16 @@ export class PostgresUserService implements IServicelocator {
     this.otpExpiry = this.configService.get<number>('OTP_EXPIRY') || 10; // default: 10 minutes
     this.otpDigits = this.configService.get<number>('OTP_DIGITS') || 6;
     this.smsKey = this.configService.get<string>('SMS_KEY');
+    this.dataSource = dataSource; // Store dataSource in class property
   }
+
+
+  public async getCoreColumnNames() {
+    const userMetadata = this.dataSource.getMetadata(User);
+    const columnNames = userMetadata.columns.map((column) => column.propertyName);
+    return columnNames;
+  }
+
 
   public async sendPasswordResetLink(
     request: any,
@@ -382,6 +393,7 @@ export class PostgresUserService implements IServicelocator {
     }
   }
 
+  
   async findAllUserDetails(userSearchDto) {
     let { limit, offset, filters, exclude, sort } = userSearchDto;
     let excludeCohortIdes;
@@ -406,40 +418,63 @@ export class PostgresUserService implements IServicelocator {
     );
 
     if (filters && Object.keys(filters).length > 0) {
+      //Fwtch all core fields
+      let coreFields = await this.getCoreColumnNames();
+      const allCoreField = [...coreFields, 'fromDate', 'toDate'];
+
       for (const [key, value] of Object.entries(filters)) {
-        if (index > 0) {
-          whereCondition += ` AND `;
-        }
-        if (userKeys.includes(key)) {
-          if (key === "firstName") {
-            whereCondition += ` U."${key}" ILIKE '%${value}%'`;
-          } else {
-            if (key === "status" || key === "email" || key === "username") {
-              if (
-                Array.isArray(value) &&
-                value.every((item) => typeof item === "string")
-              ) {
-                const status = value
-                  .map((item) => `'${item.trim().toLowerCase()}'`)
-                  .join(",");
+        //Check request filter are proesent on core file or cutom fields
+        if (allCoreField.includes(key)) {
+          if (index > 0 && index < Object.keys(filters).length) {
+            whereCondition += ` AND `;
+          }
+
+          switch (key) {
+            case "firstName":
+              whereCondition += ` U."${key}" ILIKE '%${value}%'`;
+              index++;
+              break;
+
+            case "status":
+            case "email":
+            case "username":
+            case "userId":
+              if (Array.isArray(value) && value.every((item) => typeof item === "string")) {
+                const status = value.map((item) => `'${item.trim().toLowerCase()}'`).join(",");
                 whereCondition += ` U."${key}" IN(${status})`;
+              } else {
+                whereCondition += ` U."${key}" = '${value}'`;
               }
-            } else {
+              index++;
+              break;
+
+            case "role":
+              whereCondition += ` R."name" = '${value}'`;
+              index++;
+              break;
+
+            case "fromDate":
+              whereCondition += ` DATE(U."createdAt") >= '${value}'`;
+              index++;
+              break;
+
+            case "toDate":
+              whereCondition += ` DATE(U."createdAt") <= '${value}'`;
+              index++;
+              break;
+
+            default:
               whereCondition += ` U."${key}" = '${value}'`;
-            }
+              index++;
+              break;
           }
-          index++;
-        } else {
-          if (key == "role") {
-            whereCondition += ` R."name" = '${value}'`;
-            index++;
-          } else {
-            searchCustomFields[key] = value;
-          }
+        }else{
+          //For custom field store the data in key value pear
+          searchCustomFields[key] = value;
         }
       }
     }
-
+    
     if (exclude && Object.keys(exclude).length > 0) {
       Object.entries(exclude).forEach(([key, value]) => {
         if (key == "cohortIds") {
@@ -460,6 +495,7 @@ export class PostgresUserService implements IServicelocator {
 
     //If source config in source details from fields table is not exist then return false
     if (Object.keys(searchCustomFields).length > 0) {
+      
       const context = "USERS";
       getUserIdUsingCustomFields =
         await this.fieldsService.filterUserUsingCustomFields(
@@ -471,14 +507,15 @@ export class PostgresUserService implements IServicelocator {
         return false;
       }
     }
+
     if (getUserIdUsingCustomFields && getUserIdUsingCustomFields.length > 0) {
       const userIdsDependsOnCustomFields = getUserIdUsingCustomFields
         .map((userId) => `'${userId}'`)
         .join(",");
-      whereCondition += `${index > 0 ? " AND " : ""
-        } U."userId" IN (${userIdsDependsOnCustomFields})`;
+      whereCondition += `${index > 0 ? " AND " : ""} U."userId" IN (${userIdsDependsOnCustomFields})`;
       index++;
     }
+
     const userIds =
       excludeUserIdes?.length > 0
         ? excludeUserIdes.map((userId) => `'${userId}'`).join(",")
@@ -511,6 +548,7 @@ export class PostgresUserService implements IServicelocator {
       ON UR."userId" = U."userId"
       LEFT JOIN public."Roles" R
       ON R."roleId" = UR."roleId" ${whereCondition} GROUP BY U."userId", R."name" ${orderingCondition} ${offset} ${limit}`;
+
     const userDetails = await this.usersRepository.query(query);
 
     if (userDetails.length > 0) {
@@ -518,14 +556,15 @@ export class PostgresUserService implements IServicelocator {
 
       // Get user custom field data
       for (const userData of userDetails) {
-        const customFields = await this.fieldsService.getUserCustomFieldDetails(
-          userData.userId
+        const customFields = await this.fieldsService.getCustomFieldDetails(
+          userData.userId,'Users'
         );
+        
+        
         userData["customFields"] = customFields.map((data) => ({
           fieldId: data?.fieldId,
           label: data?.label,
-          value: data?.value,
-          code: data?.code,
+          selectedValues: data?.selectedValues,
           type: data?.type,
         }));
         result.getUserDetails.push(userData);
@@ -607,13 +646,12 @@ export class PostgresUserService implements IServicelocator {
         const context = "USERS";
         const contextType = roleInUpper;
         // customFields = await this.fieldsService.getFieldValuesData(userData.userId, context, contextType, ['All'], true);
-        customFields = await this.fieldsService.getUserCustomFieldDetails(
-          userData.userId
+        customFields = await this.fieldsService.getCustomFieldDetails(
+          userData.userId, 'Users'
         );
-      }
+      }      
 
       result.userData = userDetails;
-
       result.userData["customFields"] = customFields;
 
       LoggerUtil.log(
@@ -1694,7 +1732,7 @@ export class PostgresUserService implements IServicelocator {
           getFieldDetails.sourceDetails.table,
           `"${getFieldDetails?.sourceDetails?.table}_id"='${fieldValue}'`,
         );
-        if(!getOption.length){
+        if (!getOption.length) {
           return APIResponse.error(
             response,
             apiId,
@@ -1706,9 +1744,9 @@ export class PostgresUserService implements IServicelocator {
         const transformedFieldParams = {
           options: getOption.flatMap((param) => {
             return Object.keys(param)
-              .filter((key) => key.endsWith("_id")) 
+              .filter((key) => key.endsWith("_id"))
               .map((idKey) => {
-                const nameKey = idKey.replace("_id", "_name"); 
+                const nameKey = idKey.replace("_id", "_name");
                 return {
                   value: param[idKey],
                   label: param[nameKey] || "Unknown",
@@ -1716,8 +1754,8 @@ export class PostgresUserService implements IServicelocator {
               });
           }),
         };
-        
-        
+
+
         getFieldDetails["fieldParams"] = transformedFieldParams;
 
         // getFieldDetails['fieldParams'] = getOption

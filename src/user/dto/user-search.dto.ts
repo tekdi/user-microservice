@@ -14,27 +14,34 @@ import {
   Length,
   IsPhoneNumber,
   Matches,
+  IsDateString,
 } from "class-validator";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 
 export class setFilters {
   @ApiPropertyOptional({
-    type: String,
+    type: [String],
     description: "State",
   })
   state: string;
 
   @ApiPropertyOptional({
-    type: String,
+    type: [String],
     description: "District",
   })
   district: string;
 
   @ApiPropertyOptional({
-    type: String,
+    type: [String],
     description: "Block",
   })
   block: string;
+
+  @ApiPropertyOptional({
+    type: [String],
+    description: "Block",
+  })
+  village: string;
 
   @ApiPropertyOptional({
     type: String,
@@ -50,11 +57,17 @@ export class setFilters {
   @IsArray()
   username: string[];
 
-  @ApiPropertyOptional({
-    type: String,
-    description: "User Id",
+
+  @ApiProperty({
+    type: [String],
+    description: " User IDs",
+    default: [],
   })
-  userId: string;
+  @IsOptional()
+  @IsArray()
+  @IsNotEmpty({ each: true })
+  @IsUUID(undefined, { each: true })
+  userId?: string[]; //This is dynamically used in db query
 
   @ApiPropertyOptional({
     type: [String],
@@ -73,6 +86,16 @@ export class setFilters {
   @IsArray()
   @IsEnum(['active', 'inactive'], { each: true })
   status: string[];
+
+  @ApiPropertyOptional({ type: String, description: 'Start date in YYYY-MM-DD format' })
+  @IsOptional()
+  @IsDateString({}, { message: 'fromDate must be a valid date string (YYYY-MM-DD)' })
+  fromDate?: string;
+
+  @ApiPropertyOptional({ type: String, description: 'End date in YYYY-MM-DD format' })
+  @IsOptional()
+  @IsDateString({}, { message: 'toDate must be a valid date string (YYYY-MM-DD)' })
+  toDate?: string;
 }
 export class excludeFields {
   @ApiProperty({
