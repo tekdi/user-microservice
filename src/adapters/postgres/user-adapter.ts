@@ -1179,9 +1179,7 @@ export class PostgresUserService implements IServicelocator {
         HttpStatus.CREATED,
         API_RESPONSES.USER_CREATE_SUCCESSFULLY
       );
-    } catch (e) {
-      console.log(e);
-      
+    } catch (e) {      
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
         `Error: ${e.message}`,
@@ -1285,10 +1283,7 @@ export class PostgresUserService implements IServicelocator {
         // if ((tenantId && !roleId) || (!tenantId && roleId)) {
         //   errorCollector.addError(API_RESPONSES.INVALID_PARAMETERS);
         // }
-        if(tenantId){
-          console.log("hiii")
-        }
-        console.log(roleId, tenantId)
+        
         const [tenantExists, notExistCohort, roleExists] = await Promise.all([
           tenantId
             ? this.tenantsRepository.find({ where: { tenantId } })
@@ -1299,10 +1294,7 @@ export class PostgresUserService implements IServicelocator {
           roleId
             ? this.roleRepository.find({ where: { roleId } })
             : Promise.resolve([]),
-        ]);
-
-        console.log("roleExists", roleExists);
-        
+        ]);        
 
         if (tenantExists.length === 0) {
           errorCollector.addError(`Tenant Id '${tenantId}' does not exist.`);
