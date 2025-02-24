@@ -16,7 +16,7 @@ export class FormsService {
     private readonly fieldsService: PostgresFieldsService,
     @InjectRepository(Form)
     private readonly formRepository: Repository<Form>
-  ) {}
+  ) { }
 
   async getForm(requiredData, response) {
     let apiId = APIID.FORM_GET;
@@ -30,11 +30,11 @@ export class FormsService {
           HttpStatus.BAD_REQUEST
         );
       }
-      
-      
+
+
       const { context, contextType, tenantId } = requiredData;
       const validationResult = await this.validateFormInput(requiredData);
-      
+
       if (validationResult.error) {
         return APIResponse.error(
           response,
@@ -74,7 +74,7 @@ export class FormsService {
               whereClause
             );
             customFieldData.order = data.order;
-            return customFieldData;
+            return { ...data, ...customFieldData };
           }
           return data;
         })
@@ -163,7 +163,7 @@ export class FormsService {
 
     if (context) {
       const validContextTypes = await this.getValidContextTypes(context);
-      
+
       if (validContextTypes.length === 0) {
         return { error: `Invalid context: ${context}` };
       }
@@ -180,7 +180,7 @@ export class FormsService {
   }
 
 
-  private async getValidContextTypes(context: string): Promise<string[]> {    
+  private async getValidContextTypes(context: string): Promise<string[]> {
     switch (context.toLowerCase()) {
       case "users":
         return await this.getUserContextTypesFromDB();
