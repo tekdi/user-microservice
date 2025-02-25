@@ -230,69 +230,69 @@ export class PostgresCohortService {
   //     return results;
   // }
 
-  public async getCohortCustomFieldDetails(
-    cohortId: string,
-    fieldOption?: boolean
-  ) {
-    const query = `
-    SELECT DISTINCT 
-      f."fieldId",
-      f."label", 
-      fv."value", 
-      f."type", 
-      f."fieldParams",
-      f."sourceDetails"
-    FROM public."Cohort" c
-    LEFT JOIN (
-      SELECT DISTINCT ON (fv."fieldId", fv."itemId") fv.*
-      FROM public."FieldValues" fv
-    ) fv ON fv."itemId" = c."cohortId"
-    INNER JOIN public."Fields" f ON fv."fieldId" = f."fieldId"
-    WHERE c."cohortId" = $1;
-  `;
-    let result = await this.cohortMembersRepository.query(query, [cohortId]);
-    result = result.map(async (data) => {
-      const originalValue = data.value;
-      let processedValue = data.value;
+  // public async getCohortCustomFieldDetails(
+  //   cohortId: string,
+  //   fieldOption?: boolean
+  // ) {
+  //   const query = `
+  //   SELECT DISTINCT 
+  //     f."fieldId",
+  //     f."label", 
+  //     fv."value", 
+  //     f."type", 
+  //     f."fieldParams",
+  //     f."sourceDetails"
+  //   FROM public."Cohort" c
+  //   LEFT JOIN (
+  //     SELECT DISTINCT ON (fv."fieldId", fv."itemId") fv.*
+  //     FROM public."FieldValues" fv
+  //   ) fv ON fv."itemId" = c."cohortId"
+  //   INNER JOIN public."Fields" f ON fv."fieldId" = f."fieldId"
+  //   WHERE c."cohortId" = $1;
+  // `;
+  //   let result = await this.cohortMembersRepository.query(query, [cohortId]);
+  //   result = result.map(async (data) => {
+  //     const originalValue = data.value;
+  //     let processedValue = data.value;
 
-      if (data?.sourceDetails) {
-        if (data.sourceDetails.source === "fieldparams") {
-          data.fieldParams.options.forEach((option) => {
-            if (data.value === option.value) {
-              processedValue = option.label;
-            }
-          });
-        } else if (data.sourceDetails.source === "table") {
-          const labels = await this.fieldsService.findDynamicOptions(
-            data.sourceDetails.table,
-            `${data.sourceDetails.table}_id='${data.value}'`
-          );
-          if (labels && labels.length > 0) {
-            const nameKey = Object.keys(labels[0]).find(key => key.endsWith("name"));
-            if (nameKey) {
-              processedValue = labels[0][nameKey]?.toLowerCase();
-            }
-          }
-        }
-      }
+  //     if (data?.sourceDetails) {
+  //       if (data.sourceDetails.source === "fieldparams") {
+  //         data.fieldParams.options.forEach((option) => {
+  //           if (data.value === option.value) {
+  //             processedValue = option.label;
+  //           }
+  //         });
+  //       } else if (data.sourceDetails.source === "table") {
+  //         const labels = await this.fieldsService.findDynamicOptions(
+  //           data.sourceDetails.table,
+  //           `${data.sourceDetails.table}_id='${data.value}'`
+  //         );
+  //         if (labels && labels.length > 0) {
+  //           const nameKey = Object.keys(labels[0]).find(key => key.endsWith("name"));
+  //           if (nameKey) {
+  //             processedValue = labels[0][nameKey]?.toLowerCase();
+  //           }
+  //         }
+  //       }
+  //     }
 
-      delete data.fieldParams;
-      delete data.sourceDetails;
+  //     delete data.fieldParams;
+  //     delete data.sourceDetails;
 
-      return {
-        ...data,
-        value: processedValue,
-        code: originalValue,
-      };
-    });
+  //     return {
+  //       ...data,
+  //       value: processedValue,
+  //       code: originalValue,
+  //     };
+  //   });
 
-    LoggerUtil.log(
-      API_RESPONSES.COHORT_FIELD_DETAILS,
-    )
+  //   LoggerUtil.log(
+  //     API_RESPONSES.COHORT_FIELD_DETAILS,
+  //   )
 
-    result = await Promise.all(result);
-    return result;
-  }
+  //   result = await Promise.all(result);
+  //   return result;
+  // }
 
   public async validateFieldValues(field_value_array: string[]) {
     const encounteredKeys = [];
