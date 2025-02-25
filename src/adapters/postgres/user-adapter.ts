@@ -376,8 +376,6 @@ export class PostgresUserService implements IServicelocator {
         API_RESPONSES.USER_GET_SUCCESSFULLY
       );
     } catch (e) {
-      console.log(e);
-
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
         `Error: ${e.message}`,
@@ -422,7 +420,7 @@ export class PostgresUserService implements IServicelocator {
     if (filters && Object.keys(filters).length > 0) {
       //Fwtch all core fields
       let coreFields = await this.getCoreColumnNames();
-      const allCoreField = [...coreFields, 'fromDate', 'toDate'];
+      const allCoreField = [...coreFields, 'fromDate', 'toDate', 'role'];
 
       for (const [key, value] of Object.entries(filters)) {
         //Check request filter are proesent on core file or cutom fields
@@ -430,7 +428,6 @@ export class PostgresUserService implements IServicelocator {
           if (index > 0 && index < Object.keys(filters).length) {
             whereCondition += ` AND `;
           }
-
           switch (key) {
             case "firstName":
               whereCondition += ` U."${key}" ILIKE '%${value}%'`;
@@ -454,6 +451,10 @@ export class PostgresUserService implements IServicelocator {
               whereCondition += ` R."name" = '${value}'`;
               index++;
               break;
+            
+            case "status":
+              whereCondition += ` U."status" IN('${value}')`;
+              index++;
 
             case "fromDate":
               whereCondition += ` DATE(U."createdAt") >= '${value}'`;
@@ -476,8 +477,6 @@ export class PostgresUserService implements IServicelocator {
         }
       }
     }
-    console.log("wherecond", searchCustomFields);
-
 
     if (exclude && Object.keys(exclude).length > 0) {
       Object.entries(exclude).forEach(([key, value]) => {
@@ -552,12 +551,8 @@ export class PostgresUserService implements IServicelocator {
       ON UR."userId" = U."userId"
       LEFT JOIN public."Roles" R
       ON R."roleId" = UR."roleId" ${whereCondition} GROUP BY U."userId", R."name" ${orderingCondition} ${offset} ${limit}`;
-
-      console.log(query);
-      
+            
     const userDetails = await this.usersRepository.query(query);
-    // console.log(userDetails);
-
 
     if (userDetails.length > 0) {
       result.totalCount = parseInt(userDetails[0].total_count, 10);
