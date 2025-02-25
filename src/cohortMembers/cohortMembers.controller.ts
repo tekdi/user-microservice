@@ -85,11 +85,7 @@ export class CohortMembersController {
         "academicyearId is required and academicyearId must be a valid UUID."
       );
     }
-    if (!loginUser || !isUUID(loginUser)) {
-      throw new BadRequestException(
-        "unauthorized!"
-      );
-    }
+
     const result = await this.cohortMemberAdapter
       .buildCohortMembersAdapter()
       .createCohortMembers(
