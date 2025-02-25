@@ -1546,9 +1546,9 @@ export class PostgresFieldsService implements IServicelocatorfields {
       if (index > 0) {
         whereCondition += ` AND `;
       }
-      // whereCondition += `fields->>'${key}' = '${value}'`;
-      whereCondition += `fields->'${key}' @> '["${value}"]'::jsonb`;
 
+      // using the ?| array[] operator to search for both single and multiple values in a JSONB column.
+      whereCondition += `fields->'${key}' ?| array[${(Array.isArray(value) ? value : [value]).map(v => `'${v}'`).join(',')}]`;
       index++;
     }
 

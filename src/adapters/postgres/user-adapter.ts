@@ -376,6 +376,8 @@ export class PostgresUserService implements IServicelocator {
         API_RESPONSES.USER_GET_SUCCESSFULLY
       );
     } catch (e) {
+      console.log(e);
+
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
         `Error: ${e.message}`,
@@ -393,7 +395,7 @@ export class PostgresUserService implements IServicelocator {
     }
   }
 
-  
+
   async findAllUserDetails(userSearchDto) {
     let { limit, offset, filters, exclude, sort } = userSearchDto;
     let excludeCohortIdes;
@@ -468,13 +470,15 @@ export class PostgresUserService implements IServicelocator {
               index++;
               break;
           }
-        }else{
+        } else {
           //For custom field store the data in key value pear
           searchCustomFields[key] = value;
         }
       }
     }
-    
+    console.log("wherecond", searchCustomFields);
+
+
     if (exclude && Object.keys(exclude).length > 0) {
       Object.entries(exclude).forEach(([key, value]) => {
         if (key == "cohortIds") {
@@ -495,7 +499,7 @@ export class PostgresUserService implements IServicelocator {
 
     //If source config in source details from fields table is not exist then return false
     if (Object.keys(searchCustomFields).length > 0) {
-      
+
       const context = "USERS";
       getUserIdUsingCustomFields =
         await this.fieldsService.filterUserUsingCustomFields(
@@ -549,7 +553,11 @@ export class PostgresUserService implements IServicelocator {
       LEFT JOIN public."Roles" R
       ON R."roleId" = UR."roleId" ${whereCondition} GROUP BY U."userId", R."name" ${orderingCondition} ${offset} ${limit}`;
 
+      console.log(query);
+      
     const userDetails = await this.usersRepository.query(query);
+    // console.log(userDetails);
+
 
     if (userDetails.length > 0) {
       result.totalCount = parseInt(userDetails[0].total_count, 10);
@@ -557,16 +565,18 @@ export class PostgresUserService implements IServicelocator {
       // Get user custom field data
       for (const userData of userDetails) {
         const customFields = await this.fieldsService.getCustomFieldDetails(
-          userData.userId,'Users'
+          userData.userId, 'Users'
         );
-        
-        
-        userData["customFields"] = customFields.map((data) => ({
-          fieldId: data?.fieldId,
-          label: data?.label,
-          selectedValues: data?.selectedValues,
-          type: data?.type,
-        }));
+
+        userData["customFields"] = Array.isArray(customFields)
+          ? customFields.map((data) => ({
+            fieldId: data?.fieldId,
+            label: data?.label,
+            selectedValues: data?.selectedValues,
+            type: data?.type,
+          }))
+          : [];
+
         result.getUserDetails.push(userData);
       }
     } else {
@@ -649,7 +659,7 @@ export class PostgresUserService implements IServicelocator {
         customFields = await this.fieldsService.getCustomFieldDetails(
           userData.userId, 'Users'
         );
-      }      
+      }
 
       result.userData = userDetails;
       result.userData["customFields"] = customFields;
@@ -1217,7 +1227,7 @@ export class PostgresUserService implements IServicelocator {
         HttpStatus.CREATED,
         API_RESPONSES.USER_CREATE_SUCCESSFULLY
       );
-    } catch (e) {      
+    } catch (e) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
         `Error: ${e.message}`,
@@ -1317,11 +1327,11 @@ export class PostgresUserService implements IServicelocator {
         if (duplicateTenet.includes(tenantId)) {
           errorCollector.addError(API_RESPONSES.DUPLICAT_TENANTID);
         }
-        
+
         // if ((tenantId && !roleId) || (!tenantId && roleId)) {
         //   errorCollector.addError(API_RESPONSES.INVALID_PARAMETERS);
         // }
-        
+
         const [tenantExists, notExistCohort, roleExists] = await Promise.all([
           tenantId
             ? this.tenantsRepository.find({ where: { tenantId } })
@@ -1332,7 +1342,7 @@ export class PostgresUserService implements IServicelocator {
           roleId
             ? this.roleRepository.find({ where: { roleId } })
             : Promise.resolve([]),
-        ]);        
+        ]);
 
         if (tenantExists.length === 0) {
           errorCollector.addError(`Tenant Id '${tenantId}' does not exist.`);
@@ -1344,18 +1354,18 @@ export class PostgresUserService implements IServicelocator {
           );
         }
 
-        
 
-        if (roleExists && roleExists?.length === 0) {          
+
+        if (roleExists && roleExists?.length === 0) {
           errorCollector.addError(
             `Role Id '${roleId}' does not exist.`
           );
         } else if (roleExists) {
-          if((roleExists[0].tenantId || roleExists[0].tenantId !== null) && roleExists[0].tenantId !== tenantId){
+          if ((roleExists[0].tenantId || roleExists[0].tenantId !== null) && roleExists[0].tenantId !== tenantId) {
             errorCollector.addError(
               `Role Id '${roleId}' does not exist for this tenant '${tenantId}'.`
-            );          
-          }else{
+            );
+          } else {
             roleData = [...roleData, ...roleExists];
           }
         }
@@ -1484,7 +1494,7 @@ export class PostgresUserService implements IServicelocator {
         });
       }
 
-      if(tenantId){
+      if (tenantId) {
         const data = await this.userTenantMappingRepository.save({
           userId: userId,
           tenantId: tenantId,

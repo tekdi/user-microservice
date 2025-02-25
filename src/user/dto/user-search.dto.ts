@@ -29,18 +29,21 @@ export class setFilters {
     type: [String],
     description: "District",
   })
+  @IsArray()
   district: string;
 
   @ApiPropertyOptional({
     type: [String],
     description: "Block",
   })
+  @IsArray()
   block: string;
 
   @ApiPropertyOptional({
     type: [String],
     description: "Block",
   })
+  @IsArray()
   village: string;
 
   @ApiPropertyOptional({
