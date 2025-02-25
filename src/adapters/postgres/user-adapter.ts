@@ -1217,7 +1217,7 @@ export class PostgresUserService implements IServicelocator {
         HttpStatus.CREATED,
         API_RESPONSES.USER_CREATE_SUCCESSFULLY
       );
-    } catch (e) {
+    } catch (e) {      
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
         `Error: ${e.message}`,
@@ -1317,11 +1317,11 @@ export class PostgresUserService implements IServicelocator {
         if (duplicateTenet.includes(tenantId)) {
           errorCollector.addError(API_RESPONSES.DUPLICAT_TENANTID);
         }
-
-        if ((tenantId && !roleId) || (!tenantId && roleId)) {
-          errorCollector.addError(API_RESPONSES.INVALID_PARAMETERS);
-        }
-
+        
+        // if ((tenantId && !roleId) || (!tenantId && roleId)) {
+        //   errorCollector.addError(API_RESPONSES.INVALID_PARAMETERS);
+        // }
+        
         const [tenantExists, notExistCohort, roleExists] = await Promise.all([
           tenantId
             ? this.tenantsRepository.find({ where: { tenantId } })
@@ -1330,9 +1330,9 @@ export class PostgresUserService implements IServicelocator {
             ? this.checkCohortExistsInAcademicYear(academicYearId, cohortIds)
             : Promise.resolve([]),
           roleId
-            ? this.roleRepository.find({ where: { roleId, tenantId } })
+            ? this.roleRepository.find({ where: { roleId } })
             : Promise.resolve([]),
-        ]);
+        ]);        
 
         if (tenantExists.length === 0) {
           errorCollector.addError(`Tenant Id '${tenantId}' does not exist.`);
@@ -1344,12 +1344,20 @@ export class PostgresUserService implements IServicelocator {
           );
         }
 
-        if (roleExists && roleExists?.length === 0) {
+        
+
+        if (roleExists && roleExists?.length === 0) {          
           errorCollector.addError(
-            `Role Id '${roleId}' does not exist for this tenant '${tenantId}'.`
+            `Role Id '${roleId}' does not exist.`
           );
         } else if (roleExists) {
-          roleData = [...roleData, ...roleExists];
+          if((roleExists[0].tenantId || roleExists[0].tenantId !== null) && roleExists[0].tenantId !== tenantId){
+            errorCollector.addError(
+              `Role Id '${roleId}' does not exist for this tenant '${tenantId}'.`
+            );          
+          }else{
+            roleData = [...roleData, ...roleExists];
+          }
         }
       }
     } else {
@@ -1476,12 +1484,14 @@ export class PostgresUserService implements IServicelocator {
         });
       }
 
-      const data = await this.userTenantMappingRepository.save({
-        userId: userId,
-        tenantId: tenantId,
-        createdBy: request["user"]?.userId || userId,
-        updatedBy: request["user"]?.userId || userId,
-      });
+      if(tenantId){
+        const data = await this.userTenantMappingRepository.save({
+          userId: userId,
+          tenantId: tenantId,
+          createdBy: request["user"]?.userId || userId,
+          updatedBy: request["user"]?.userId || userId,
+        });
+      }
 
       LoggerUtil.log(API_RESPONSES.USER_TENANT);
     } catch (error) {
