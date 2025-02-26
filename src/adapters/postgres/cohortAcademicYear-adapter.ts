@@ -2,7 +2,6 @@ import { HttpStatus, Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { CohortAcademicYear } from "src/cohortAcademicYear/entities/cohortAcademicYear.entity";
 import { Repository } from "typeorm";
-import jwt_decode from "jwt-decode";
 import { IServiceLocatorCohortAcademicYear } from "../cohortacademicyearservicelocator";
 import { Request, Response } from "express";
 import { CohortAcademicYearDto } from "src/cohortAcademicYear/dto/cohort-academicyear.dto";
@@ -26,10 +25,6 @@ export class CohortAcademicYearService implements IServiceLocatorCohortAcademicY
   async createCohortAcademicYear(tenantId: string, request: Request, cohortAcademicYearDto: CohortAcademicYearDto, response: Response) {
     const apiId = APIID.ADD_COHORT_TO_ACADEMIC_YEAR;
     try {
-      const decoded: any = jwt_decode(request.headers.authorization);
-      cohortAcademicYearDto.createdBy = decoded?.sub;
-      cohortAcademicYearDto.updatedBy = decoded?.sub;
-
       const existingCohort = await this.cohortRepository.findOne({
         where: { cohortId: cohortAcademicYearDto.cohortId, status: 'active' },
       });

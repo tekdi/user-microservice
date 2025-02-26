@@ -7,6 +7,7 @@ import {
   SerializeOptions,
   UseFilters, UsePipes,
   ValidationPipe,
+  ParseUUIDPipe,
 } from "@nestjs/common";
 import { FormsService } from "./forms.service";
 import {
@@ -21,6 +22,7 @@ import { FormCreateDto } from './dto/form-create.dto';
 import { APIID } from '@utils/api-id.config';
 import { isUUID } from 'class-validator';
 import { API_RESPONSES } from '@utils/response.messages';
+import { GetUserId } from "src/common/decorators/getUserId.decorator";
 
 @Controller("form")
 @ApiTags("Forms")
@@ -68,9 +70,12 @@ export class FormsController {
     @Headers() headers,
     @Req() request: Request,
     @Body() formCreateDto: FormCreateDto,
-    @Res() response: Response
+    @Res() response: Response,
+    @GetUserId("userId", ParseUUIDPipe) userId: string,
   ) {
     let tenantId = headers["tenantid"];
+    formCreateDto.createdBy = userId;
+    
     if (tenantId && !isUUID(tenantId)) {
       throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
     }

@@ -52,6 +52,7 @@ import { API_RESPONSES } from "@utils/response.messages";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
 import { OtpSendDTO } from "./dto/otpSend.dto";
 import { OtpVerifyDTO } from "./dto/otpVerify.dto";
+import { GetUserId } from "src/common/decorators/getUserId.decorator";
 export interface UserData {
   context: string;
   tenantId: string;
@@ -154,10 +155,11 @@ export class UserController {
   public async updateUser(
     @Headers() headers,
     @Param("userid") userId: string,
+    @GetUserId("loginUserId", ParseUUIDPipe) loginUserId: string,
     @Body() userUpdateDto: UserUpdateDTO,
     @Res() response: Response
   ) {
-    // userDto.tenantId = headers["tenantid"];
+    userUpdateDto.userData.updatedBy = loginUserId;
     userUpdateDto.userId = userId;
     return await this.userAdapter
       .buildUserAdapter()
