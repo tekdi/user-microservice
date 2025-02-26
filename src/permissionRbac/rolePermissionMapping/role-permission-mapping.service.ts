@@ -67,6 +67,7 @@ export class RolePermissionService {
         roleTitle: permissionCreateDto.roleTitle,
         apiPath: permissionCreateDto.apiPath,
         requestType: permissionCreateDto.requestType,
+        module: permissionCreateDto.module,
       });
       return APIResponse.success(
         response,
@@ -94,11 +95,12 @@ export class RolePermissionService {
     const apiId = "api.update.permission";
     try {
       let result = await this.rolePermissionRepository.update(
-        rolePermissionCreateDto.permissionId,
+        rolePermissionCreateDto.rolePermissionId,
         {
           roleTitle: rolePermissionCreateDto.roleTitle,
           apiPath: rolePermissionCreateDto.apiPath,
           requestType: rolePermissionCreateDto.requestType,
+          module: rolePermissionCreateDto.module,
         }
       );
       return APIResponse.success(

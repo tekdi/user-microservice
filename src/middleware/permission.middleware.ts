@@ -67,6 +67,6 @@ export class PermissionMiddleware implements NestMiddleware {
     const payloadBase64 = token.split(".")[1]; // Get the payload part
     const payloadJson = Buffer.from(payloadBase64, "base64").toString("utf-8"); // Decode Base64
     const payload = JSON.parse(payloadJson); // Convert to JSON
-    return payload.pratham_role;
+    return payload.user_roles;
   }
 }
