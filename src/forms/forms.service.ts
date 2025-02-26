@@ -207,7 +207,7 @@ export class FormsService {
       formCreateDto.context = formCreateDto.context.toUpperCase();
       formCreateDto.title = formCreateDto.title.toUpperCase();
 
-      formCreateDto.tenantId = formCreateDto.tenantId.trim().length
+      formCreateDto.tenantId = formCreateDto?.tenantId?.trim()?.length
         ? formCreateDto.tenantId
         : null;
       const checkFormExists = await this.getFormDetail(
