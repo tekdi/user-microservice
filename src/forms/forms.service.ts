@@ -199,10 +199,6 @@ export class FormsService {
     let apiId = APIID.FORM_CREATE;
 
     try {
-      const decoded: any = jwt_decode(request.headers.authorization);
-      formCreateDto.createdBy = decoded?.sub;
-      formCreateDto.updatedBy = decoded?.sub;
-
       formCreateDto.contextType = formCreateDto.contextType.toUpperCase();
       formCreateDto.context = formCreateDto.context.toUpperCase();
       formCreateDto.title = formCreateDto.title.toUpperCase();
