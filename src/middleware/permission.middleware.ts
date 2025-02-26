@@ -6,30 +6,35 @@ import { RolePermissionService } from "src/permissionRbac/rolePermissionMapping/
 
 @Injectable()
 export class PermissionMiddleware implements NestMiddleware {
-  constructor(private readonly rolePermissionService: RolePermissionService) {}
+  constructor(private readonly rolePermissionService: RolePermissionService) { }
 
   async use(req: Request, res: Response, next: NextFunction) {
-    LoggerUtil.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
-    let role = "";
-    if (req.headers.authorization) {
-      role = this.getRole(req.headers.authorization);
-    } else {
-      role = "public";
-    }
-    const isPermissionValid = await this.checkPermissions(
-      role,
-      req.baseUrl,
-      req.method
-    );
-    if (isPermissionValid) return next();
-    else {
-      return APIResponse.error(
-        res,
-        "",
-        "You do not have permission to access this resource",
-        "You do not have permission to access this resource",
-        HttpStatus.FORBIDDEN
+    try {
+      LoggerUtil.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+      let role = "";
+      if (req.headers.authorization) {
+        role = this.getRole(req.headers.authorization);
+      } else {
+        role = "public";
+      }
+      const isPermissionValid = await this.checkPermissions(
+        role,
+        req.baseUrl,
+        req.method
       );
+
+      if (isPermissionValid) next();
+      else {
+        return APIResponse.error(
+          res,
+          "",
+          "You do not have permission to access this resource",
+          "You do not have permission to access this resource",
+          HttpStatus.FORBIDDEN
+        );
+      }
+    } catch (e) {
+      return APIResponse.error(res, "Something went wrong", e, "Internal error", HttpStatus.INTERNAL_SERVER_ERROR)
     }
   }
   async checkPermissions(
@@ -67,6 +72,6 @@ export class PermissionMiddleware implements NestMiddleware {
     const payloadBase64 = token.split(".")[1]; // Get the payload part
     const payloadJson = Buffer.from(payloadBase64, "base64").toString("utf-8"); // Decode Base64
     const payload = JSON.parse(payloadJson); // Convert to JSON
-    return payload.pratham_role;
+    return payload.user_roles;
   }
 }
