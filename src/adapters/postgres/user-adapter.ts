@@ -1716,6 +1716,8 @@ export class PostgresUserService implements IServicelocator {
   }
 
   public async validateCustomField(userCreateDto, response, apiId) {
+    // Taking Consideration of One tenant id
+    const tenantId = userCreateDto.tenantCohortRoleMapping[0]?.tenantId;
     const fieldValues = userCreateDto ? userCreateDto.customFields : [];
     const encounteredKeys = [];
     const invalidateFields = [];
@@ -1736,6 +1738,8 @@ export class PostgresUserService implements IServicelocator {
       } else {
         encounteredKeys.push(fieldId);
       }
+      const fieldAttributes = getFieldDetails?.fieldAttributes || {};
+      getFieldDetails["fieldAttributes"] = fieldAttributes[tenantId] || fieldAttributes["general"];
       if (
         (getFieldDetails.type == "checkbox" ||
           getFieldDetails.type == "drop_down" ||
@@ -1770,17 +1774,14 @@ export class PostgresUserService implements IServicelocator {
           }),
         };
 
-
         getFieldDetails["fieldParams"] = transformedFieldParams;
-
         // getFieldDetails['fieldParams'] = getOption
       } else {
         getFieldDetails["fieldParams"] = getFieldDetails?.fieldParams || {};
       }
-
       const checkValidation = this.fieldsService.validateFieldValue(
         getFieldDetails,
-        fieldsData["value"]
+        fieldsData["value"] 
       );
 
       if (typeof checkValidation === "object" && "error" in checkValidation) {
