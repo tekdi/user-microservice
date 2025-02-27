@@ -33,6 +33,10 @@ export class Tenant {
     @Column({ type: 'text' })
     description: string; // Text field for tenant's domain
 
+    @Column({ type: 'varchar', length: 255, nullable: true })
+    templateId: string;
+    
+
     @Column({
         type: 'text',
         default: 'draft',
