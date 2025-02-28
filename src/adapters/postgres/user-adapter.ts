@@ -420,7 +420,7 @@ export class PostgresUserService implements IServicelocator {
     if (filters && Object.keys(filters).length > 0) {
       //Fwtch all core fields
       let coreFields = await this.getCoreColumnNames();
-      const allCoreField = [...coreFields, 'fromDate', 'toDate', 'role'];
+      const allCoreField = [...coreFields, 'fromDate', 'toDate', 'role','tenantId'];
 
       for (const [key, value] of Object.entries(filters)) {
         //Check request filter are proesent on core file or cutom fields
@@ -465,6 +465,11 @@ export class PostgresUserService implements IServicelocator {
               whereCondition += ` DATE(U."createdAt") <= '${value}'`;
               index++;
               break;
+            
+            case "tenantId":
+              whereCondition += `UTM."tenantId" = '${value}'`;
+              index++;
+              break;
 
             default:
               whereCondition += ` U."${key}" = '${value}'`;
@@ -477,7 +482,7 @@ export class PostgresUserService implements IServicelocator {
         }
       }
     }
-
+    
     if (exclude && Object.keys(exclude).length > 0) {
       Object.entries(exclude).forEach(([key, value]) => {
         if (key == "cohortIds") {
@@ -549,6 +554,8 @@ export class PostgresUserService implements IServicelocator {
       ON CM."userId" = U."userId"
       LEFT JOIN public."UserRolesMapping" UR
       ON UR."userId" = U."userId"
+      LEFT JOIN public."UserTenantMapping" UTM
+      ON UTM."userId" = U."userId"
       LEFT JOIN public."Roles" R
       ON R."roleId" = UR."roleId" ${whereCondition} GROUP BY U."userId", R."name" ${orderingCondition} ${offset} ${limit}`;
             
