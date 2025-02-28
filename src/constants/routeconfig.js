@@ -442,7 +442,7 @@
 		  }
 		]
 	  },
-	  {
+		{
 		"sourceRoute": "/interface/v1/user/send-otp",
 		"type": "POST",
 		"priority": "MUST_HAVE",
