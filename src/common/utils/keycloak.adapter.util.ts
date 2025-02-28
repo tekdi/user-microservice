@@ -35,8 +35,6 @@ async function getKeycloakAdminToken() {
       client_id: 'admin-cli',
     });
 
-    console.log(data);
-
     const config = {
       method: 'post',
       url: process.env.KEYCLOAK + process.env.KEYCLOAK_ADMIN_TOKEN,
@@ -45,8 +43,6 @@ async function getKeycloakAdminToken() {
       },
       data: data,
     };
-
-    console.log('config', config);
 
     let res;
     try {
@@ -59,9 +55,7 @@ async function getKeycloakAdminToken() {
     }
 
     return res;
-  } catch (error) {
-    console.log('ketcloak', error);
-  }
+  } catch (error) {}
 }
 
 async function createUserInKeyCloak(query, token) {
