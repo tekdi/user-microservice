@@ -1206,7 +1206,7 @@ export class PostgresUserService implements IServicelocator {
         API_RESPONSES.USER_CREATE_SUCCESSFULLY
       );
     } catch (e) {
-      console.log('catch log');
+      console.log('catch log', e);
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
         `Error: ${e.message}`,
