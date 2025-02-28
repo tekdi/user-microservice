@@ -313,7 +313,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
     };
   }
 
-  async getFieldData(whereClause): Promise<any> {
+  async getFieldData(whereClause:any, tenantId?:string): Promise<any> {
     const query = `select * from public."Fields" where ${whereClause}`;
 
     const result = await this.fieldsRepository.query(query);
@@ -333,7 +333,8 @@ export class PostgresFieldsService implements IServicelocatorfields {
         data.fieldParams.options = options;
       }
     }
-    const schema = this.mappedFields(result);
+
+    const schema = this.mappedFields(result,tenantId);
     return schema;
   }
 
@@ -1696,7 +1697,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
     return fieldValue;
   }
 
-  mappedFields(fieldDataList) {
+  mappedFields(fieldDataList,tenantId) {
     const mappedFields: SchemaField[] = fieldDataList.map((field) => {
       const options =
         field.fieldParams?.options?.map((opt) => ({
@@ -1704,6 +1705,8 @@ export class PostgresFieldsService implements IServicelocatorfields {
           value: opt.value,
         })) || [];
 
+        let fieldValidation = field.fieldAttributes[tenantId] || field.fieldAttributes['default'];
+        
       return {
         label: field.label,
         name: field.name,
@@ -1714,7 +1717,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         isHidden: field.fieldAttributes?.isHidden ?? null,
         isPIIField: field.fieldAttributes?.isPIIField ?? null,
         placeholder: field.fieldAttributes?.placeholder ?? "",
-        validation: field.fieldAttributes?.validation || [],
+        validation: fieldValidation || [],
         options: options,
         isMultiSelect: field.fieldAttributes?.isMultiSelect ?? false,
         maxSelections: field.fieldAttributes?.maxSelections ?? null,
