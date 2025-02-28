@@ -86,11 +86,11 @@ export class PostgresUserService implements IServicelocator {
     private configService: ConfigService,
     private postgresAcademicYearService: PostgresAcademicYearService,
     private readonly cohortAcademicYearService: CohortAcademicYearService,
-    private readonly authUtils: AuthUtils,
+    private readonly authUtils: AuthUtils
   ) {
     this.jwt_secret = this.configService.get<string>('RBAC_JWT_SECRET');
     this.jwt_password_reset_expires_In = this.configService.get<string>(
-      'PASSWORD_RESET_JWT_EXPIRES_IN',
+      'PASSWORD_RESET_JWT_EXPIRES_IN'
     );
     this.reset_frontEnd_url =
       this.configService.get<string>('RESET_FRONTEND_URL');
@@ -103,7 +103,7 @@ export class PostgresUserService implements IServicelocator {
     request: any,
     username: string,
     redirectUrl: string,
-    response: Response,
+    response: Response
   ) {
     const apiId = APIID.USER_RESET_PASSWORD_LINK;
     try {
@@ -115,7 +115,7 @@ export class PostgresUserService implements IServicelocator {
           apiId,
           API_RESPONSES.NOT_FOUND,
           API_RESPONSES.USERNAME_NOT_FOUND,
-          HttpStatus.NOT_FOUND,
+          HttpStatus.NOT_FOUND
         );
       }
       // Determine email address
@@ -132,7 +132,7 @@ export class PostgresUserService implements IServicelocator {
           apiId,
           API_RESPONSES.BAD_REQUEST,
           API_RESPONSES.EMAIL_NOT_FOUND_FOR_RESET,
-          HttpStatus.BAD_REQUEST,
+          HttpStatus.BAD_REQUEST
         );
       }
 
@@ -147,7 +147,7 @@ export class PostgresUserService implements IServicelocator {
       const resetToken = await this.jwtUtil.generateTokenForForgotPassword(
         tokenPayload,
         jwtExpireTime,
-        jwtSecretKey,
+        jwtSecretKey
       );
 
       // Format expiration time
@@ -176,21 +176,21 @@ export class PostgresUserService implements IServicelocator {
       };
 
       const mailSend = await this.notificationRequest.sendNotification(
-        notificationPayload,
+        notificationPayload
       );
 
       if (mailSend?.result?.email?.errors.length > 0) {
         LoggerUtil.error(
           `${API_RESPONSES.BAD_REQUEST}`,
           `Error: ${API_RESPONSES.RESET_PASSWORD_LINK_FAILED}`,
-          apiId,
+          apiId
         );
         return APIResponse.error(
           response,
           apiId,
           mailSend?.result?.email?.errors,
           API_RESPONSES.RESET_PASSWORD_LINK_FAILED,
-          HttpStatus.BAD_REQUEST,
+          HttpStatus.BAD_REQUEST
         );
       }
 
@@ -199,20 +199,20 @@ export class PostgresUserService implements IServicelocator {
         apiId,
         { email: emailOfUser },
         HttpStatus.OK,
-        API_RESPONSES.RESET_PASSWORD_LINK_SUCCESS,
+        API_RESPONSES.RESET_PASSWORD_LINK_SUCCESS
       );
     } catch (e) {
       LoggerUtil.error(
         `${API_RESPONSES.INTERNAL_SERVER_ERROR}`,
         `Error: ${e.message}`,
-        apiId,
+        apiId
       );
       return APIResponse.error(
         response,
         apiId,
         API_RESPONSES.INTERNAL_SERVER_ERROR,
         `Error : ${e.message}`,
-        HttpStatus.INTERNAL_SERVER_ERROR,
+        HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }
@@ -220,14 +220,14 @@ export class PostgresUserService implements IServicelocator {
   async forgotPassword(
     request: any,
     body: any,
-    response: Response<any, Record<string, any>>,
+    response: Response<any, Record<string, any>>
   ) {
     const apiId = APIID.USER_FORGOT_PASSWORD;
     try {
       const jwtSecretKey = this.jwt_secret;
       const decoded = await this.jwtUtil.validateToken(
         body.token,
-        jwtSecretKey,
+        jwtSecretKey
       );
       const userDetail = await this.usersRepository.findOne({
         where: { userId: decoded.sub },
@@ -236,19 +236,19 @@ export class PostgresUserService implements IServicelocator {
         LoggerUtil.error(
           `${API_RESPONSES.NOT_FOUND}`,
           API_RESPONSES.USERNAME_NOT_FOUND,
-          apiId,
+          apiId
         );
         return APIResponse.error(
           response,
           apiId,
           API_RESPONSES.NOT_FOUND,
           API_RESPONSES.USER_NOT_FOUND,
-          HttpStatus.NOT_FOUND,
+          HttpStatus.NOT_FOUND
         );
       }
       const userData: any = await this.findUserDetails(
         null,
-        userDetail.username,
+        userDetail.username
       );
       const keycloakResponse = await getKeycloakAdminToken();
       const keyClocktoken = keycloakResponse.data.access_token;
@@ -259,7 +259,7 @@ export class PostgresUserService implements IServicelocator {
           userData,
           keyClocktoken,
           body.newPassword,
-          userDetail.userId,
+          userDetail.userId
         );
         //update tempPassword status
         if (apiResponse?.statusCode === 204) {
@@ -273,7 +273,7 @@ export class PostgresUserService implements IServicelocator {
         LoggerUtil.error(
           `${API_RESPONSES.INTERNAL_SERVER_ERROR}`,
           `Error: ${e.message}`,
-          apiId,
+          apiId
         );
 
         return APIResponse.error(
@@ -281,7 +281,7 @@ export class PostgresUserService implements IServicelocator {
           apiId,
           API_RESPONSES.INTERNAL_SERVER_ERROR,
           `Error : ${e?.response?.data.error}`,
-          HttpStatus.INTERNAL_SERVER_ERROR,
+          HttpStatus.INTERNAL_SERVER_ERROR
         );
       }
 
@@ -290,7 +290,7 @@ export class PostgresUserService implements IServicelocator {
         apiId,
         {},
         HttpStatus.OK,
-        API_RESPONSES.FORGOT_PASSWORD_SUCCESS,
+        API_RESPONSES.FORGOT_PASSWORD_SUCCESS
       );
     } catch (e) {
       if (e instanceof TokenExpiredError) {
@@ -300,7 +300,7 @@ export class PostgresUserService implements IServicelocator {
           apiId,
           API_RESPONSES.LINK_EXPIRED,
           API_RESPONSES.INVALID_LINK,
-          HttpStatus.UNAUTHORIZED,
+          HttpStatus.UNAUTHORIZED
         );
       } else if (e.name === 'InvalidTokenError') {
         // Handle the case where the token is invalid
@@ -309,7 +309,7 @@ export class PostgresUserService implements IServicelocator {
           apiId,
           API_RESPONSES.INVALID_TOKEN,
           API_RESPONSES.UNAUTHORIZED,
-          HttpStatus.UNAUTHORIZED,
+          HttpStatus.UNAUTHORIZED
         );
       } else if (e instanceof JsonWebTokenError) {
         // Handle the case where the token is invalid
@@ -318,7 +318,7 @@ export class PostgresUserService implements IServicelocator {
           apiId,
           API_RESPONSES.INVALID_TOKEN,
           API_RESPONSES.UNAUTHORIZED,
-          HttpStatus.UNAUTHORIZED,
+          HttpStatus.UNAUTHORIZED
         );
       }
       return APIResponse.error(
@@ -326,7 +326,7 @@ export class PostgresUserService implements IServicelocator {
         apiId,
         API_RESPONSES.INTERNAL_SERVER_ERROR,
         `Error : ${e?.response?.data.error}`,
-        HttpStatus.INTERNAL_SERVER_ERROR,
+        HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }
@@ -335,7 +335,7 @@ export class PostgresUserService implements IServicelocator {
     tenantId: string,
     request: any,
     response: any,
-    userSearchDto: UserSearchDto,
+    userSearchDto: UserSearchDto
   ) {
     const apiId = APIID.USER_LIST;
     try {
@@ -345,14 +345,14 @@ export class PostgresUserService implements IServicelocator {
         LoggerUtil.error(
           `${API_RESPONSES.NOT_FOUND}: ${request.url}`,
           API_RESPONSES.USER_NOT_FOUND,
-          apiId,
+          apiId
         );
         return APIResponse.error(
           response,
           apiId,
           API_RESPONSES.USER_NOT_FOUND,
           API_RESPONSES.NOT_FOUND,
-          HttpStatus.NOT_FOUND,
+          HttpStatus.NOT_FOUND
         );
       }
       LoggerUtil.log(API_RESPONSES.USER_GET_SUCCESSFULLY, apiId);
@@ -361,13 +361,13 @@ export class PostgresUserService implements IServicelocator {
         apiId,
         findData,
         HttpStatus.OK,
-        API_RESPONSES.USER_GET_SUCCESSFULLY,
+        API_RESPONSES.USER_GET_SUCCESSFULLY
       );
     } catch (e) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
         `Error: ${e.message}`,
-        apiId,
+        apiId
       );
 
       const errorMessage = e.message || API_RESPONSES.SERVER_ERROR;
@@ -376,7 +376,7 @@ export class PostgresUserService implements IServicelocator {
         apiId,
         API_RESPONSES.SERVER_ERROR,
         errorMessage,
-        HttpStatus.INTERNAL_SERVER_ERROR,
+        HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }
@@ -398,10 +398,10 @@ export class PostgresUserService implements IServicelocator {
     const searchCustomFields: any = {};
 
     const userAllKeys = this.usersRepository.metadata.columns.map(
-      (column) => column.propertyName,
+      (column) => column.propertyName
     );
     const userKeys = userAllKeys.filter(
-      (key) => key !== 'district' && key !== 'state',
+      (key) => key !== 'district' && key !== 'state'
     );
 
     if (filters && Object.keys(filters).length > 0) {
@@ -463,7 +463,7 @@ export class PostgresUserService implements IServicelocator {
       getUserIdUsingCustomFields =
         await this.fieldsService.filterUserUsingCustomFields(
           context,
-          searchCustomFields,
+          searchCustomFields
         );
 
       if (getUserIdUsingCustomFields == null) {
@@ -521,7 +521,7 @@ export class PostgresUserService implements IServicelocator {
       // Get user custom field data
       for (const userData of userDetails) {
         const customFields = await this.fieldsService.getUserCustomFieldDetails(
-          userData.userId,
+          userData.userId
         );
         userData['customFields'] = customFields.map((data) => ({
           fieldId: data?.fieldId,
@@ -547,7 +547,7 @@ export class PostgresUserService implements IServicelocator {
           apiId,
           API_RESPONSES.BAD_REQUEST,
           `Error: ${API_RESPONSES.UUID_VALIDATION}`,
-          HttpStatus.BAD_REQUEST,
+          HttpStatus.BAD_REQUEST
         );
       }
       const checkExistUser = await this.usersRepository.find({
@@ -562,7 +562,7 @@ export class PostgresUserService implements IServicelocator {
           apiId,
           API_RESPONSES.NOT_FOUND,
           API_RESPONSES.USERID_NOT_FOUND(userData.userId),
-          HttpStatus.NOT_FOUND,
+          HttpStatus.NOT_FOUND
         );
       }
 
@@ -589,7 +589,7 @@ export class PostgresUserService implements IServicelocator {
           apiId,
           API_RESPONSES.NOT_FOUND,
           API_RESPONSES.USERNAME_NOT_FOUND,
-          HttpStatus.NOT_FOUND,
+          HttpStatus.NOT_FOUND
         );
       }
       if (!userData.fieldValue) {
@@ -599,7 +599,7 @@ export class PostgresUserService implements IServicelocator {
           apiId,
           { userData: userDetails },
           HttpStatus.OK,
-          API_RESPONSES.USER_GET_SUCCESSFULLY,
+          API_RESPONSES.USER_GET_SUCCESSFULLY
         );
       }
 
@@ -610,7 +610,7 @@ export class PostgresUserService implements IServicelocator {
         const contextType = roleInUpper;
         // customFields = await this.fieldsService.getFieldValuesData(userData.userId, context, contextType, ['All'], true);
         customFields = await this.fieldsService.getUserCustomFieldDetails(
-          userData.userId,
+          userData.userId
         );
       }
 
@@ -621,7 +621,7 @@ export class PostgresUserService implements IServicelocator {
       LoggerUtil.log(
         API_RESPONSES.USER_GET_SUCCESSFULLY,
         apiId,
-        userData?.userId,
+        userData?.userId
       );
 
       return await APIResponse.success(
@@ -629,20 +629,20 @@ export class PostgresUserService implements IServicelocator {
         apiId,
         { ...result },
         HttpStatus.OK,
-        API_RESPONSES.USER_GET_SUCCESSFULLY,
+        API_RESPONSES.USER_GET_SUCCESSFULLY
       );
     } catch (e) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error: ${e.message}`,
-        apiId,
+        apiId
       );
       return APIResponse.error(
         response,
         apiId,
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error: ${e.message}`,
-        HttpStatus.INTERNAL_SERVER_ERROR,
+        HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }
@@ -746,7 +746,7 @@ export class PostgresUserService implements IServicelocator {
     for (const data of result) {
       const roleData = await this.postgresRoleService.findUserRoleData(
         userId,
-        data.tenantId,
+        data.tenantId
       );
       if (roleData.length > 0) {
         roleArray.push(roleData[0].roleid);
@@ -786,7 +786,7 @@ export class PostgresUserService implements IServicelocator {
           apiId,
           API_RESPONSES.BAD_REQUEST,
           API_RESPONSES.USER_NOT_FOUND,
-          HttpStatus.BAD_REQUEST,
+          HttpStatus.BAD_REQUEST
         );
       }
 
@@ -798,7 +798,7 @@ export class PostgresUserService implements IServicelocator {
           deviceIds = await this.loginDeviceIdAction(
             userDto.userData.deviceId,
             userDto.userId,
-            user.deviceId,
+            user.deviceId
           );
           userDto.userData.deviceId = deviceIds;
         } else if (userDto.userData.action === ActionType.REMOVE) {
@@ -806,7 +806,7 @@ export class PostgresUserService implements IServicelocator {
           deviceIds = await this.onLogoutDeviceId(
             userDto.userData.deviceId,
             userDto.userId,
-            user.deviceId,
+            user.deviceId
           );
           userDto.userData.deviceId = deviceIds;
         }
@@ -820,7 +820,7 @@ export class PostgresUserService implements IServicelocator {
       if (username || firstName || lastName || email) {
         try {
           const keycloakUpdateResult = await this.updateUsernameInKeycloak(
-            keycloakReqBody,
+            keycloakReqBody
           );
 
           if (keycloakUpdateResult === 'exists') {
@@ -829,7 +829,7 @@ export class PostgresUserService implements IServicelocator {
               apiId,
               API_RESPONSES.USERNAME_EXISTS_KEYCLOAK,
               API_RESPONSES.USERNAME_EXISTS_KEYCLOAK,
-              HttpStatus.CONFLICT,
+              HttpStatus.CONFLICT
             );
           }
 
@@ -839,21 +839,21 @@ export class PostgresUserService implements IServicelocator {
               apiId,
               API_RESPONSES.UPDATE_USER_KEYCLOAK_ERROR,
               API_RESPONSES.UPDATE_USER_KEYCLOAK_ERROR,
-              HttpStatus.BAD_REQUEST,
+              HttpStatus.BAD_REQUEST
             );
           }
         } catch (error) {
           LoggerUtil.error(
             API_RESPONSES.SERVER_ERROR,
             `Keycloak update failed: ${error.message}`,
-            apiId,
+            apiId
           );
           return APIResponse.error(
             response,
             apiId,
             API_RESPONSES.SERVER_ERROR,
             API_RESPONSES.UPDATE_USER_KEYCLOAK_ERROR,
-            HttpStatus.INTERNAL_SERVER_ERROR,
+            HttpStatus.INTERNAL_SERVER_ERROR
           );
         }
       }
@@ -866,7 +866,7 @@ export class PostgresUserService implements IServicelocator {
       LoggerUtil.log(
         API_RESPONSES.USER_BASIC_DETAILS_UPDATE,
         apiId,
-        userDto?.userId,
+        userDto?.userId
       );
 
       if (userDto?.customFields?.length > 0) {
@@ -887,7 +887,7 @@ export class PostgresUserService implements IServicelocator {
             const result = await this.fieldsService.updateCustomFields(
               userDto.userId,
               data,
-              fieldIdAndAttributes[data.fieldId],
+              fieldIdAndAttributes[data.fieldId]
             );
             if (result.correctValue) {
               if (!updatedData['customFields'])
@@ -895,7 +895,7 @@ export class PostgresUserService implements IServicelocator {
               updatedData['customFields'].push(result);
             } else {
               editFailures.push(
-                `${data.fieldId}: ${result?.valueIssue} - ${result.fieldName}`,
+                `${data.fieldId}: ${result?.valueIssue} - ${result.fieldName}`
               );
             }
           } else {
@@ -913,7 +913,7 @@ export class PostgresUserService implements IServicelocator {
       LoggerUtil.log(
         API_RESPONSES.USER_UPDATED_SUCCESSFULLY,
         apiId,
-        userDto?.userId,
+        userDto?.userId
       );
 
       return await APIResponse.success(
@@ -921,13 +921,13 @@ export class PostgresUserService implements IServicelocator {
         apiId,
         { ...updatedData, editIssues },
         HttpStatus.OK,
-        API_RESPONSES.USER_UPDATED_SUCCESSFULLY,
+        API_RESPONSES.USER_UPDATED_SUCCESSFULLY
       );
     } catch (e) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error: ${e.message}`,
-        apiId,
+        apiId
       );
 
       return APIResponse.error(
@@ -935,13 +935,13 @@ export class PostgresUserService implements IServicelocator {
         apiId,
         API_RESPONSES.SERVER_ERROR,
         API_RESPONSES.SOMETHING_WRONG,
-        HttpStatus.INTERNAL_SERVER_ERROR,
+        HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }
 
   async updateUsernameInKeycloak(
-    updateField: UpdateField,
+    updateField: UpdateField
   ): Promise<'exists' | false | true> {
     try {
       const keycloakResponse = await getKeycloakAdminToken();
@@ -949,7 +949,7 @@ export class PostgresUserService implements IServicelocator {
 
       //Check user is exist in keycloakDB or not
       const checkUserinKeyCloakandDb = await this.checkUserinKeyCloakandDb(
-        updateField,
+        updateField
       );
       if (checkUserinKeyCloakandDb) {
         return 'exists';
@@ -964,7 +964,7 @@ export class PostgresUserService implements IServicelocator {
     } catch (error) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
-        `KeyCloak Error: ${error.message}`,
+        `KeyCloak Error: ${error.message}`
       );
       return false;
     }
@@ -973,7 +973,7 @@ export class PostgresUserService implements IServicelocator {
   async loginDeviceIdAction(
     userDeviceId: string,
     userId: string,
-    existingDeviceId: string[],
+    existingDeviceId: string[]
   ): Promise<string[]> {
     let deviceIds = existingDeviceId || [];
     // Check if the device ID already exists
@@ -992,7 +992,7 @@ export class PostgresUserService implements IServicelocator {
   async onLogoutDeviceId(
     deviceIdforRemove: string,
     userId: string,
-    existingDeviceId: string[],
+    existingDeviceId: string[]
   ) {
     let deviceIds = existingDeviceId || [];
     // Check if the device ID exists
@@ -1006,7 +1006,7 @@ export class PostgresUserService implements IServicelocator {
 
   async updateBasicUserDetails(
     userId: string,
-    userData: Partial<User>,
+    userData: Partial<User>
   ): Promise<User | null> {
     try {
       // Fetch the user by ID
@@ -1028,8 +1028,10 @@ export class PostgresUserService implements IServicelocator {
     request: any,
     userCreateDto: UserCreateDto,
     academicYearId: string,
-    response: Response,
+    response: Response
   ) {
+    console.log('create shart here');
+
     const apiId = APIID.USER_CREATE;
     // It is considered that if user is not present in keycloak it is not present in database as well
 
@@ -1045,8 +1047,9 @@ export class PostgresUserService implements IServicelocator {
         customFieldError = await this.validateCustomField(
           userCreateDto,
           response,
-          apiId,
+          apiId
         );
+        console.log('customFieldErrorr', customFieldError);
 
         if (customFieldError) {
           return APIResponse.error(
@@ -1054,7 +1057,7 @@ export class PostgresUserService implements IServicelocator {
             apiId,
             API_RESPONSES.BAD_REQUEST,
             `${customFieldError}`,
-            HttpStatus.BAD_REQUEST,
+            HttpStatus.BAD_REQUEST
           );
         }
       }
@@ -1062,7 +1065,7 @@ export class PostgresUserService implements IServicelocator {
       // check and validate all fields
       const validatedRoles: any = await this.validateRequestBody(
         userCreateDto,
-        academicYearId,
+        academicYearId
       );
 
       // check if roles are invalid and academic year is provided
@@ -1075,7 +1078,7 @@ export class PostgresUserService implements IServicelocator {
           apiId,
           'BAD_REQUEST',
           validatedRoles.join('; '),
-          HttpStatus.BAD_REQUEST,
+          HttpStatus.BAD_REQUEST
         );
       }
 
@@ -1088,7 +1091,7 @@ export class PostgresUserService implements IServicelocator {
       const keycloakResponse = await getKeycloakAdminToken();
       const token = keycloakResponse.data.access_token;
       const checkUserinKeyCloakandDb = await this.checkUserinKeyCloakandDb(
-        userCreateDto,
+        userCreateDto
       );
       // let checkUserinDb = await this.checkUserinKeyCloakandDb(userCreateDto.username);
       if (checkUserinKeyCloakandDb) {
@@ -1097,7 +1100,7 @@ export class PostgresUserService implements IServicelocator {
           apiId,
           API_RESPONSES.BAD_REQUEST,
           API_RESPONSES.USER_EXISTS,
-          HttpStatus.BAD_REQUEST,
+          HttpStatus.BAD_REQUEST
         );
       }
 
@@ -1112,7 +1115,7 @@ export class PostgresUserService implements IServicelocator {
             apiId,
             API_RESPONSES.EMAIL_EXIST,
             `${resKeycloak.message} ${resKeycloak.email}`,
-            HttpStatus.CONFLICT,
+            HttpStatus.CONFLICT
           );
         } else {
           LoggerUtil.log(API_RESPONSES.SERVER_ERROR, apiId);
@@ -1121,7 +1124,7 @@ export class PostgresUserService implements IServicelocator {
             apiId,
             API_RESPONSES.SERVER_ERROR,
             `${resKeycloak.message}`,
-            HttpStatus.INTERNAL_SERVER_ERROR,
+            HttpStatus.INTERNAL_SERVER_ERROR
           );
         }
       }
@@ -1136,7 +1139,7 @@ export class PostgresUserService implements IServicelocator {
         request,
         userCreateDto,
         academicYearId,
-        response,
+        response
       );
 
       LoggerUtil.log(API_RESPONSES.USER_CREATE_IN_DB, apiId);
@@ -1156,7 +1159,7 @@ export class PostgresUserService implements IServicelocator {
 
         const customFields = await this.fieldsService.findCustomFields(
           'USERS',
-          roles,
+          roles
         );
 
         if (customFields) {
@@ -1168,7 +1171,7 @@ export class PostgresUserService implements IServicelocator {
                     ...fieldDetail,
                     [`${fieldId}`]: { fieldAttributes, fieldParams, name },
                   },
-            {},
+            {}
           );
 
           for (const fieldValues of userCreateDto.customFields) {
@@ -1180,7 +1183,7 @@ export class PostgresUserService implements IServicelocator {
             const res = await this.fieldsService.updateCustomFields(
               userId,
               fieldData,
-              customFieldAttributes[fieldData.fieldId],
+              customFieldAttributes[fieldData.fieldId]
             );
 
             if (res.correctValue) {
@@ -1188,7 +1191,7 @@ export class PostgresUserService implements IServicelocator {
               result['customFields'].push(res);
             } else {
               createFailures.push(
-                `${fieldData.fieldId}: ${res?.valueIssue} - ${res.fieldName}`,
+                `${fieldData.fieldId}: ${res?.valueIssue} - ${res.fieldName}`
               );
             }
           }
@@ -1200,13 +1203,14 @@ export class PostgresUserService implements IServicelocator {
         apiId,
         { userData: { ...result, createFailures } },
         HttpStatus.CREATED,
-        API_RESPONSES.USER_CREATE_SUCCESSFULLY,
+        API_RESPONSES.USER_CREATE_SUCCESSFULLY
       );
     } catch (e) {
+      console.log('catch log');
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
         `Error: ${e.message}`,
-        apiId,
+        apiId
       );
       const errorMessage = e.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
       return APIResponse.error(
@@ -1214,7 +1218,7 @@ export class PostgresUserService implements IServicelocator {
         apiId,
         API_RESPONSES.INTERNAL_SERVER_ERROR,
         errorMessage,
-        HttpStatus.INTERNAL_SERVER_ERROR,
+        HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }
@@ -1248,7 +1252,7 @@ export class PostgresUserService implements IServicelocator {
       if (key === 'email') {
         const checkValidEmail = CustomFieldsValidation.validate(
           'email',
-          userCreateDto.email,
+          userCreateDto.email
         );
         if (!checkValidEmail) {
           errorCollector.addError(`Invalid email address`);
@@ -1258,7 +1262,7 @@ export class PostgresUserService implements IServicelocator {
       if (key === 'mobile') {
         const checkValidMobile = CustomFieldsValidation.validate(
           'mobile',
-          userCreateDto.mobile,
+          userCreateDto.mobile
         );
         if (!checkValidMobile) {
           errorCollector.addError(`Mobile number must be 10 digits long`);
@@ -1268,11 +1272,11 @@ export class PostgresUserService implements IServicelocator {
       if (key === 'dob') {
         const checkValidDob = CustomFieldsValidation.validate(
           'date',
-          userCreateDto.dob,
+          userCreateDto.dob
         );
         if (!checkValidDob) {
           errorCollector.addError(
-            `Date of birth must be in the format yyyy-mm-dd`,
+            `Date of birth must be in the format yyyy-mm-dd`
           );
         }
       }
@@ -1284,7 +1288,7 @@ export class PostgresUserService implements IServicelocator {
 
         if (!academicYearId && cohortIds) {
           errorCollector.addError(
-            'Academic Year ID is required when a Cohort ID is provided.',
+            'Academic Year ID is required when a Cohort ID is provided.'
           );
         }
 
@@ -1292,7 +1296,7 @@ export class PostgresUserService implements IServicelocator {
         const checkAcadmicYear =
           await this.postgresAcademicYearService.getActiveAcademicYear(
             academicYearId,
-            tenantId,
+            tenantId
           );
 
         if (!checkAcadmicYear && cohortIds) {
@@ -1325,13 +1329,13 @@ export class PostgresUserService implements IServicelocator {
 
         if (notExistCohort.length > 0) {
           errorCollector.addError(
-            `Cohort Id '${notExistCohort}' does not exist for this tenant '${tenantId}'.`,
+            `Cohort Id '${notExistCohort}' does not exist for this tenant '${tenantId}'.`
           );
         }
 
         if (roleExists && roleExists?.length === 0) {
           errorCollector.addError(
-            `Role Id '${roleId}' does not exist for this tenant '${tenantId}'.`,
+            `Role Id '${roleId}' does not exist for this tenant '${tenantId}'.`
           );
         } else if (roleExists) {
           roleData = [...roleData, ...roleExists];
@@ -1345,7 +1349,7 @@ export class PostgresUserService implements IServicelocator {
 
   async checkCohortExistsInAcademicYear(
     academicYearId: any,
-    cohortData: any[],
+    cohortData: any[]
   ) {
     // The method ensures that all cohorts provided in the cohortData array are associated with the given academicYearId. If any cohort does not exist in the academic year, it collects their IDs and returns them as a list.
 
@@ -1354,7 +1358,7 @@ export class PostgresUserService implements IServicelocator {
       const findCohortData =
         await this.cohortAcademicYearService.isCohortExistForYear(
           academicYearId,
-          cohortId,
+          cohortId
         );
       if (!findCohortData?.length) {
         notExistCohort.push(cohortId);
@@ -1388,7 +1392,7 @@ export class PostgresUserService implements IServicelocator {
     if (userDto?.username) {
       const usernameExistsInKeycloak = await checkIfUsernameExistsInKeycloak(
         userDto?.username,
-        token,
+        token
       );
       if (usernameExistsInKeycloak?.data?.length > 0) {
         return usernameExistsInKeycloak;
@@ -1397,7 +1401,7 @@ export class PostgresUserService implements IServicelocator {
     } else {
       const usernameExistsInKeycloak = await checkIfEmailExistsInKeycloak(
         userDto?.email,
-        token,
+        token
       );
       if (usernameExistsInKeycloak.data.length > 0) {
         return usernameExistsInKeycloak;
@@ -1410,7 +1414,7 @@ export class PostgresUserService implements IServicelocator {
     request: any,
     userCreateDto: UserCreateDto,
     academicYearId: string,
-    response: Response,
+    response: Response
   ) {
     const user = new User();
     (user.userId = userCreateDto?.userId),
@@ -1435,7 +1439,7 @@ export class PostgresUserService implements IServicelocator {
             let query = `SELECT * FROM public."CohortAcademicYear" WHERE "cohortId"= '${cohortIds}' AND "academicYearId" = '${academicYearId}'`;
 
             let getCohortAcademicYearId = await this.usersRepository.query(
-              query,
+              query
             );
 
             // will add data only if cohort is found with acadmic year
@@ -1487,7 +1491,7 @@ export class PostgresUserService implements IServicelocator {
     } catch (error) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
-        `Error: ${error.message}`,
+        `Error: ${error.message}`
       );
       throw new Error(error);
     }
@@ -1515,7 +1519,7 @@ export class PostgresUserService implements IServicelocator {
     request: any,
     extraField: string,
     newPassword: string,
-    response: Response,
+    response: Response
   ) {
     const apiId = APIID.USER_RESET_PASSWORD;
     try {
@@ -1532,7 +1536,7 @@ export class PostgresUserService implements IServicelocator {
           apiId,
           API_RESPONSES.NOT_FOUND,
           API_RESPONSES.USERID_NOT_FOUND(userId),
-          HttpStatus.NOT_FOUND,
+          HttpStatus.NOT_FOUND
         );
       }
 
@@ -1552,20 +1556,20 @@ export class PostgresUserService implements IServicelocator {
           userData,
           resToken,
           newPassword,
-          userId,
+          userId
         );
       } catch (e) {
         LoggerUtil.error(
           `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
           `Error: ${e.message}`,
-          apiId,
+          apiId
         );
         return APIResponse.error(
           response,
           apiId,
           API_RESPONSES.SERVER_ERROR,
           `Error : ${e?.response?.data.error}`,
-          HttpStatus.INTERNAL_SERVER_ERROR,
+          HttpStatus.INTERNAL_SERVER_ERROR
         );
       }
 
@@ -1580,7 +1584,7 @@ export class PostgresUserService implements IServicelocator {
           apiId,
           {},
           HttpStatus.OK,
-          API_RESPONSES.USER_PASSWORD_UPDATE,
+          API_RESPONSES.USER_PASSWORD_UPDATE
         );
       } else {
         return APIResponse.error(
@@ -1588,21 +1592,21 @@ export class PostgresUserService implements IServicelocator {
           apiId,
           API_RESPONSES.BAD_REQUEST,
           `Error : ${apiResponse?.errors}`,
-          HttpStatus.BAD_REQUEST,
+          HttpStatus.BAD_REQUEST
         );
       }
     } catch (e) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
         `Error: ${e.message}`,
-        apiId,
+        apiId
       );
       return APIResponse.error(
         response,
         apiId,
         API_RESPONSES.INTERNAL_SERVER_ERROR,
         `Error : ${e?.response?.data.error}`,
-        HttpStatus.INTERNAL_SERVER_ERROR,
+        HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }
@@ -1612,7 +1616,7 @@ export class PostgresUserService implements IServicelocator {
     userData: any,
     token: string,
     newPassword: string,
-    userId: string,
+    userId: string
   ) {
     const data = JSON.stringify({
       temporary: 'false',
@@ -1647,7 +1651,7 @@ export class PostgresUserService implements IServicelocator {
     } catch (e) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
-        `Error: ${e.message}`,
+        `Error: ${e.message}`
       );
       return new ErrorResponse({
         errorCode: `${e.response.status}`,
@@ -1675,7 +1679,7 @@ export class PostgresUserService implements IServicelocator {
         };
         try {
           const mailSend = await this.notificationRequest.sendNotification(
-            notificationPayload,
+            notificationPayload
           );
           if (mailSend?.result?.email?.errors.length > 0) {
             // error messgae if generated by notification service
@@ -1683,7 +1687,7 @@ export class PostgresUserService implements IServicelocator {
         } catch (error) {
           LoggerUtil.error(
             `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
-            `Error: ${error.message}`,
+            `Error: ${error.message}`
           );
         }
       }
@@ -1709,7 +1713,7 @@ export class PostgresUserService implements IServicelocator {
     for (const fieldsData of fieldValues) {
       const fieldId = fieldsData['fieldId'];
       const getFieldDetails: any = await this.fieldsService.getFieldByIdes(
-        fieldId,
+        fieldId
       );
 
       if (getFieldDetails == null) {
@@ -1729,7 +1733,7 @@ export class PostgresUserService implements IServicelocator {
         getFieldDetails.sourceDetails.source == 'table'
       ) {
         const getOption = await this.fieldsService.findDynamicOptions(
-          getFieldDetails.sourceDetails.table,
+          getFieldDetails.sourceDetails.table
         );
 
         const transformedFieldParams = {
@@ -1747,12 +1751,12 @@ export class PostgresUserService implements IServicelocator {
 
       const checkValidation = this.fieldsService.validateFieldValue(
         getFieldDetails,
-        fieldsData['value'],
+        fieldsData['value']
       );
 
       if (typeof checkValidation === 'object' && 'error' in checkValidation) {
         invalidateFields.push(
-          `${fieldId}: ${getFieldDetails['name']} - ${checkValidation?.error?.message}`,
+          `${fieldId}: ${getFieldDetails['name']} - ${checkValidation?.error?.message}`
         );
       }
     }
@@ -1773,7 +1777,7 @@ export class PostgresUserService implements IServicelocator {
     const roleIds =
       userCreateDto && userCreateDto.tenantCohortRoleMapping
         ? userCreateDto.tenantCohortRoleMapping.map(
-            (userRole) => userRole.roleId,
+            (userRole) => userRole.roleId
           )
         : [];
 
@@ -1791,7 +1795,7 @@ export class PostgresUserService implements IServicelocator {
     const context = 'USERS';
     const getFieldIds = await this.fieldsService.getFieldIds(
       context,
-      contextType,
+      contextType
     );
 
     const validFieldIds = new Set(getFieldIds.map((field) => field.fieldId));
@@ -1802,7 +1806,7 @@ export class PostgresUserService implements IServicelocator {
 
     if (invalidFieldIds.length > 0) {
       return `The following fields are not valid for this user: ${invalidFieldIds.join(
-        ', ',
+        ', '
       )}.`;
     }
   }
@@ -1817,7 +1821,7 @@ export class PostgresUserService implements IServicelocator {
         apiId,
         API_RESPONSES.BAD_REQUEST,
         API_RESPONSES.UUID_VALIDATION,
-        HttpStatus.BAD_REQUEST,
+        HttpStatus.BAD_REQUEST
       );
     }
 
@@ -1832,7 +1836,7 @@ export class PostgresUserService implements IServicelocator {
           apiId,
           API_RESPONSES.NOT_FOUND,
           API_RESPONSES.USERNAME_NOT_FOUND,
-          HttpStatus.NOT_FOUND,
+          HttpStatus.NOT_FOUND
         );
       }
 
@@ -1850,7 +1854,7 @@ export class PostgresUserService implements IServicelocator {
 
       // Delete from UserRoleMapping table
       const userRoleMappingResult = await this.userRoleMappingRepository.delete(
-        { userId: userId },
+        { userId: userId }
       );
 
       // Delete from FieldValues table where ItemId matches userId
@@ -1872,20 +1876,20 @@ export class PostgresUserService implements IServicelocator {
         apiId,
         userResult,
         HttpStatus.OK,
-        API_RESPONSES.USER_RELATEDENTITY_DELETE,
+        API_RESPONSES.USER_RELATEDENTITY_DELETE
       );
     } catch (e) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error: ${e.message}`,
-        apiId,
+        apiId
       );
       return APIResponse.error(
         response,
         apiId,
         API_RESPONSES.SERVER_ERROR,
         `Error : ${e?.response?.data.error}`,
-        HttpStatus.INTERNAL_SERVER_ERROR,
+        HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }
@@ -1897,7 +1901,7 @@ export class PostgresUserService implements IServicelocator {
   private generateOtpHash(
     mobileOrUsername: string,
     otp: string,
-    reason: string,
+    reason: string
   ) {
     const ttl = this.otpExpiry * 60 * 1000; // Expiration in milliseconds
     const expires = Date.now() + ttl;
@@ -1918,13 +1922,13 @@ export class PostgresUserService implements IServicelocator {
           apiId,
           API_RESPONSES.BAD_REQUEST,
           API_RESPONSES.MOBILE_VALID,
-          HttpStatus.BAD_REQUEST,
+          HttpStatus.BAD_REQUEST
         );
       }
       // Step 1: Prepare data for OTP generation and send on Mobile
       const { notificationPayload, hash, expires } = await this.sendOTPOnMobile(
         mobile,
-        reason,
+        reason
       );
       // Step 2: Send success response
       const result = {
@@ -1940,20 +1944,20 @@ export class PostgresUserService implements IServicelocator {
         apiId,
         result,
         HttpStatus.OK,
-        API_RESPONSES.OTP_SEND_SUCCESSFULLY,
+        API_RESPONSES.OTP_SEND_SUCCESSFULLY
       );
     } catch (e) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error: ${e.message}`,
-        apiId,
+        apiId
       );
       return APIResponse.error(
         response,
         apiId,
         API_RESPONSES.SERVER_ERROR,
         `Error : ${e.message}`,
-        HttpStatus.INTERNAL_SERVER_ERROR,
+        HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }
@@ -1966,7 +1970,7 @@ export class PostgresUserService implements IServicelocator {
       const { hash, expires, expiresInMinutes } = this.generateOtpHash(
         mobileWithCode,
         otp,
-        reason,
+        reason
       );
       const replacements = {
         '{OTP}': otp,
@@ -1977,7 +1981,7 @@ export class PostgresUserService implements IServicelocator {
         'OTP',
         'SEND_OTP',
         replacements,
-        [mobile],
+        [mobile]
       );
       return { notificationPayload, hash, expires, expiresInMinutes };
     } catch (error) {
@@ -1995,7 +1999,7 @@ export class PostgresUserService implements IServicelocator {
           apiId,
           API_RESPONSES.BAD_REQUEST,
           API_RESPONSES.OTP_VALIDED_REQUIRED_KEY,
-          HttpStatus.BAD_REQUEST,
+          HttpStatus.BAD_REQUEST
         );
       }
       // Determine the value to use for verification based on the reason
@@ -2007,7 +2011,7 @@ export class PostgresUserService implements IServicelocator {
             apiId,
             API_RESPONSES.BAD_REQUEST,
             API_RESPONSES.MOBILE_REQUIRED,
-            HttpStatus.BAD_REQUEST,
+            HttpStatus.BAD_REQUEST
           );
         }
         identifier = this.formatMobileNumber(mobile); // Assuming this formats the mobile number
@@ -2018,7 +2022,7 @@ export class PostgresUserService implements IServicelocator {
             apiId,
             API_RESPONSES.BAD_REQUEST,
             API_RESPONSES.USERNAME_REQUIRED,
-            HttpStatus.BAD_REQUEST,
+            HttpStatus.BAD_REQUEST
           );
         }
         identifier = username;
@@ -2028,7 +2032,7 @@ export class PostgresUserService implements IServicelocator {
           apiId,
           API_RESPONSES.BAD_REQUEST,
           API_RESPONSES.INVALID_REASON,
-          HttpStatus.BAD_REQUEST,
+          HttpStatus.BAD_REQUEST
         );
       }
       const [hashValue, expires] = hash.split('.');
@@ -2038,7 +2042,7 @@ export class PostgresUserService implements IServicelocator {
           apiId,
           API_RESPONSES.BAD_REQUEST,
           API_RESPONSES.INVALID_HASH_FORMAT,
-          HttpStatus.BAD_REQUEST,
+          HttpStatus.BAD_REQUEST
         );
       }
 
@@ -2048,7 +2052,7 @@ export class PostgresUserService implements IServicelocator {
           apiId,
           API_RESPONSES.OTP_EXPIRED,
           API_RESPONSES.OTP_EXPIRED,
-          HttpStatus.BAD_REQUEST,
+          HttpStatus.BAD_REQUEST
         );
       }
       const data = `${identifier}.${otp}.${reason}.${expires}`;
@@ -2060,7 +2064,7 @@ export class PostgresUserService implements IServicelocator {
           apiId,
           { success: true },
           HttpStatus.OK,
-          API_RESPONSES.OTP_VALID,
+          API_RESPONSES.OTP_VALID
         );
       } else {
         return APIResponse.error(
@@ -2068,21 +2072,21 @@ export class PostgresUserService implements IServicelocator {
           apiId,
           API_RESPONSES.OTP_INVALID,
           API_RESPONSES.OTP_INVALID,
-          HttpStatus.BAD_REQUEST,
+          HttpStatus.BAD_REQUEST
         );
       }
     } catch (e) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error during OTP verification: ${e.message}`,
-        apiId,
+        apiId
       );
       return APIResponse.error(
         response,
         apiId,
         API_RESPONSES.SERVER_ERROR,
         `Error : ${e?.message}`,
-        HttpStatus.INTERNAL_SERVER_ERROR,
+        HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }
@@ -2092,7 +2096,7 @@ export class PostgresUserService implements IServicelocator {
     context: string,
     key: string,
     replacements: object,
-    receipients: string[],
+    receipients: string[]
   ) {
     try {
       //sms notification Body
@@ -2107,7 +2111,7 @@ export class PostgresUserService implements IServicelocator {
       };
       // send Axios request
       const mailSend = await this.notificationRequest.sendNotification(
-        notificationPayload,
+        notificationPayload
       );
       // Check for errors in the response
       if (
@@ -2115,7 +2119,7 @@ export class PostgresUserService implements IServicelocator {
         mailSend.result.sms.errors.length > 0
       ) {
         const errorMessages = mailSend.result.sms.errors.map(
-          (error: { error: string }) => error.error,
+          (error: { error: string }) => error.error
         );
         const combinedErrorMessage = errorMessages.join(', '); // Combine all error messages into one string
         throw new Error(`${API_RESPONSES.SMS_ERROR} :${combinedErrorMessage}`);
@@ -2124,7 +2128,7 @@ export class PostgresUserService implements IServicelocator {
     } catch (error) {
       LoggerUtil.error(API_RESPONSES.SMS_ERROR, error.message);
       throw new Error(
-        `${API_RESPONSES.SMS_NOTIFICATION_ERROR}:  ${error.message}`,
+        `${API_RESPONSES.SMS_NOTIFICATION_ERROR}:  ${error.message}`
       );
     }
   }
@@ -2132,7 +2136,7 @@ export class PostgresUserService implements IServicelocator {
   //send OTP on mobile and email for forgot password reset
   async sendPasswordResetOTP(
     body: SendPasswordResetOTPDto,
-    response: Response,
+    response: Response
   ): Promise<any> {
     const apiId = APIID.SEND_RESET_OTP;
     try {
@@ -2146,7 +2150,7 @@ export class PostgresUserService implements IServicelocator {
           apiId,
           API_RESPONSES.BAD_REQUEST,
           API_RESPONSES.USER_NOT_EXISTS,
-          HttpStatus.BAD_REQUEST,
+          HttpStatus.BAD_REQUEST
         );
       }
 
@@ -2156,7 +2160,7 @@ export class PostgresUserService implements IServicelocator {
           apiId,
           API_RESPONSES.BAD_REQUEST,
           API_RESPONSES.MOBILE_EMAIL_NOT_FOUND,
-          HttpStatus.BAD_REQUEST,
+          HttpStatus.BAD_REQUEST
         );
       }
       const programName = userData?.tenantData[0]?.tenantName ?? '';
@@ -2165,7 +2169,7 @@ export class PostgresUserService implements IServicelocator {
       const { hash, expires, expiresInMinutes } = this.generateOtpHash(
         username,
         otp,
-        reason,
+        reason
       );
       if (userData.mobile) {
         const replacements = {
@@ -2228,7 +2232,7 @@ export class PostgresUserService implements IServicelocator {
           apiId,
           API_RESPONSES.NOTIFICATION_ERROR,
           errorMessage.trim(),
-          HttpStatus.INTERNAL_SERVER_ERROR,
+          HttpStatus.INTERNAL_SERVER_ERROR
         );
       }
       const result = {
@@ -2241,7 +2245,7 @@ export class PostgresUserService implements IServicelocator {
         apiId,
         result,
         HttpStatus.OK,
-        API_RESPONSES.SEND_OTP,
+        API_RESPONSES.SEND_OTP
       );
     } catch (e) {
       return APIResponse.error(
@@ -2249,7 +2253,7 @@ export class PostgresUserService implements IServicelocator {
         apiId,
         API_RESPONSES.SERVER_ERROR,
         `Error : ${e?.message}`,
-        HttpStatus.INTERNAL_SERVER_ERROR,
+        HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }
@@ -2259,7 +2263,7 @@ export class PostgresUserService implements IServicelocator {
     context: string,
     key: string,
     replacements: object,
-    emailReceipt,
+    emailReceipt
   ) {
     try {
       //Send Notification
@@ -2273,14 +2277,14 @@ export class PostgresUserService implements IServicelocator {
         },
       };
       const mailSend = await this.notificationRequest.sendNotification(
-        notificationPayload,
+        notificationPayload
       );
       if (
         mailSend?.result?.email?.errors &&
         mailSend.result.email.errors.length > 0
       ) {
         const errorMessages = mailSend.result.email.errors.map(
-          (error: { error: string }) => error.error,
+          (error: { error: string }) => error.error
         );
         const combinedErrorMessage = errorMessages.join(', '); // Combine all error messages into one string
         throw new Error(`error :${combinedErrorMessage}`);
@@ -2289,7 +2293,7 @@ export class PostgresUserService implements IServicelocator {
     } catch (e) {
       LoggerUtil.error(API_RESPONSES.EMAIL_ERROR, e.message);
       throw new Error(
-        `${API_RESPONSES.EMAIL_NOTIFICATION_ERROR}:  ${e.message}`,
+        `${API_RESPONSES.EMAIL_NOTIFICATION_ERROR}:  ${e.message}`
       );
     }
   }
