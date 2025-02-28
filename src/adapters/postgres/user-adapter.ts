@@ -1030,7 +1030,7 @@ export class PostgresUserService implements IServicelocator {
     academicYearId: string,
     response: Response
   ) {
-    console.log('create shart here', request, userCreateDto, academicYearId);
+    console.log('create shart here');
 
     const apiId = APIID.USER_CREATE;
     // It is considered that if user is not present in keycloak it is not present in database as well
@@ -1049,7 +1049,7 @@ export class PostgresUserService implements IServicelocator {
           response,
           apiId
         );
-        console.log('customFieldErrorr', customFieldError);
+        console.log('customFieldErrorr');
 
         if (customFieldError) {
           return APIResponse.error(
@@ -1067,8 +1067,6 @@ export class PostgresUserService implements IServicelocator {
         userCreateDto,
         academicYearId
       );
-
-      console.log('hi', validatedRoles);
 
       // check if roles are invalid and academic year is provided
       if (
