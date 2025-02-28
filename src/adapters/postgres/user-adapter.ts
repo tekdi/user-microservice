@@ -1739,7 +1739,7 @@ export class PostgresUserService implements IServicelocator {
         encounteredKeys.push(fieldId);
       }
       const fieldAttributes = getFieldDetails?.fieldAttributes || {};
-      getFieldDetails["fieldAttributes"] = fieldAttributes[tenantId] || fieldAttributes["general"];
+      getFieldDetails["fieldAttributes"] = fieldAttributes[tenantId] || fieldAttributes["default"];
       if (
         (getFieldDetails.type == "checkbox" ||
           getFieldDetails.type == "drop_down" ||

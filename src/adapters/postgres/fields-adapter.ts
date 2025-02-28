@@ -333,7 +333,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         data.fieldParams.options = options;
       }
     }
-        
+
     const schema = this.mappedFields(result,tenantId);
     return schema;
   }
@@ -1705,7 +1705,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
           value: opt.value,
         })) || [];
 
-        let fieldValidation = tenantId ? field.fieldAttributes[tenantId] : field.fieldAttributes['general'];
+        let fieldValidation = field.fieldAttributes[tenantId] || field.fieldAttributes['default'];
         
       return {
         label: field.label,
@@ -1717,7 +1717,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         isHidden: field.fieldAttributes?.isHidden ?? null,
         isPIIField: field.fieldAttributes?.isPIIField ?? null,
         placeholder: field.fieldAttributes?.placeholder ?? "",
-        validation: fieldValidation || field.fieldAttributes['general'],
+        validation: fieldValidation || [],
         options: options,
         isMultiSelect: field.fieldAttributes?.isMultiSelect ?? false,
         maxSelections: field.fieldAttributes?.maxSelections ?? null,
