@@ -99,6 +99,12 @@ export class setFilters {
   @IsOptional()
   @IsDateString({}, { message: 'toDate must be a valid date string (YYYY-MM-DD)' })
   toDate?: string;
+
+  @ApiPropertyOptional({
+    type: String,
+    description: "Role",
+  })
+  tenantId: string;
 }
 export class excludeFields {
   @ApiProperty({
