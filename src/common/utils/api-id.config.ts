@@ -55,5 +55,6 @@ export const APIID = {
   TENANT_LIST: "api.tenant.list",
   SEND_OTP: "api.send.OTP",
   VERIFY_OTP: "api.verify.OTP",
-  SEND_RESET_OTP: 'api.send.reset.otp'
+  SEND_RESET_OTP: 'api.send.reset.otp',
+  SIGNED_URL: 'api.get.signedURL'
 };
