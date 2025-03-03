@@ -51,24 +51,24 @@ import { RolePermissionModule } from "./permissionRbac/rolePermissionMapping/rol
   providers: [AppService, HttpService],
 })
 export class AppModule {
-  configure(consumer: MiddlewareConsumer) {
-    consumer
-      .apply(PermissionMiddleware)
-      .exclude(
-        {
-          path: "user/v1/role-permission/create",
-          method: RequestMethod.POST,
-        }, // Exclude POST /auth/login
-        {
-          path: "user/v1/role-permission/get",
-          method: RequestMethod.POST,
-        }, // Exclude POST /auth/login
-        {
-          path: "user/v1/role-permission/update",
-          method: RequestMethod.POST,
-        } // Exclude POST /auth/login
-        // Exclude GET /health
-      )
-      .forRoutes("*"); // Apply middleware to the all routes
-  }
+  // configure(consumer: MiddlewareConsumer) {
+  //   consumer
+  //     .apply(PermissionMiddleware)
+  //     .exclude(
+  //       {
+  //         path: "user/v1/role-permission/create",
+  //         method: RequestMethod.POST,
+  //       }, // Exclude POST /auth/login
+  //       {
+  //         path: "user/v1/role-permission/get",
+  //         method: RequestMethod.POST,
+  //       }, // Exclude POST /auth/login
+  //       {
+  //         path: "user/v1/role-permission/update",
+  //         method: RequestMethod.POST,
+  //       } // Exclude POST /auth/login
+  //       // Exclude GET /health
+  //     )
+  //     .forRoutes("*"); // Apply middleware to the all routes
+  // }
 }
