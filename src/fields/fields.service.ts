@@ -3,7 +3,6 @@ import { FieldsDto } from "src/fields/dto/fields.dto";
 import { FieldsSearchDto } from "src/fields/dto/fields-search.dto";
 import { FieldValuesDto } from "src/fields/dto/field-values.dto";
 import { FieldValuesSearchDto } from "src/fields/dto/field-values-search.dto";
-import jwt_decode from "jwt-decode";
 import { ErrorResponse } from "src/error-response";
 import { Fields } from "./entities/fields.entity";
 import { FieldValues } from "./entities/fields-values.entity";

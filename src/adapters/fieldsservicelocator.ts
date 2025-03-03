@@ -7,6 +7,7 @@ import { FieldValuesDto } from "src/fields/dto/field-values.dto";
 import { FieldValuesSearchDto } from "src/fields/dto/field-values-search.dto";
 import { Response } from "express";
 import { FieldsUpdateDto } from "src/fields/dto/fields-update.dto";
+import { FieldValuesDeleteDto } from "src/fields/dto/field-values-delete.dto";
 
 export interface IServicelocatorfields {
   //fields
@@ -45,4 +46,5 @@ export interface IServicelocatorfields {
   );
   deleteFieldOptions(requiredData, response);
   getFormCustomField(requiredData, response);
+  deleteFieldValues(requiredData: FieldValuesDeleteDto, response: Response);
 }

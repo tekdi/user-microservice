@@ -1,5 +1,6 @@
 export const API_RESPONSES = {
   USERNAME_NOT_FOUND: "Username does not exist",
+  EMAIL_EXIST: "Email already exists",
   USER_NOT_FOUND: "User does not exist",
   FORGOT_PASSWORD_SUCCESS: "Forgot password Reset successfully",
   EMAIL_NOT_FOUND_FOR_RESET:
@@ -79,6 +80,7 @@ export const API_RESPONSES = {
     `User with userId ${userId} does not exist for this academic year.`,
   UNAUTHORIZED: "Unauthorized",
   INVALID_TOKEN: "Token Invalid",
+  INVALID_OPTION: 'Invalid Option Selected',
 
   //User Api messages
   USER_UPDATED_SUCCESSFULLY: "User updated successfully.",
@@ -94,7 +96,6 @@ export const API_RESPONSES = {
 
   //get User Details
   USER_GET_SUCCESSFULLY: "User details fetched successfully.",
-
   USER_GET_BY_EMAIL_SUCCESSFULLY: "User details fetched successfully by email",
   USER_GET_BY_PHONE_SUCCESSFULLY: "User details fetched successfully by phone",
   USER_GET_BY_USERNAME_SUCCESSFULLY:
@@ -108,6 +109,9 @@ export const API_RESPONSES = {
   USER_GET_BY_EMAIL_AND_TENANT_ID_SUCCESSFULLY:
     "User details fetched successfully by email and tenantId",
   USER_CREATE_KEYCLOAK: "User created successfully on keycloak",
+  USERNAME_EXISTS_KEYCLOAK: 'Username is already exists in keycloak',
+  UPDATE_USER_KEYCLOAK_ERROR:'Failed to update username details in Keycloak.',
+  USERNAME_SUGGEST_SUCCESSFULLY:'Username is already taken. Suggested a new unique username.',
 
   //Create user
   USER_CREATE_SUCCESSFULLY: `User created successfully`,

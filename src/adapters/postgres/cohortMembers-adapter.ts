@@ -228,7 +228,8 @@ export class PostgresCohortMembersService {
     } else {
       whereCase = `where CM."userId" =$1`;
     }
-    const query = `SELECT U."userId", U.username, U.name, U.district, U.state,U.mobile FROM public."CohortMembers" CM
+    const query = `SELECT U."userId", U."username", "firstName", "middleName", "lastName",
+     U."district", U."state",U."mobile" FROM public."CohortMembers" CM
     LEFT JOIN public."Users" U
     ON CM."userId" = U."userId" ${whereCase}`;
 
@@ -354,12 +355,14 @@ export class PostgresCohortMembersService {
         const [sortField, sortOrder] = sort;
         order[sortField] = sortOrder;
       }
+
       results = await this.getCohortMemberUserDetails(
         where,
         "true",
         options,
         order
       );
+
       if (results["userDetails"].length == 0) {
         return APIResponse.error(
           res,
@@ -437,33 +440,33 @@ export class PostgresCohortMembersService {
       totalCount: 0,
       userDetails: [],
     };
+
     const getUserDetails = await this.getUsers(where, options, order);
 
     if (getUserDetails.length > 0) {
       results.totalCount = parseInt(getUserDetails[0].total_count, 10);
+
       for (const data of getUserDetails) {
         if (fieldShowHide === "false") {
           results.userDetails.push(data);
         } else {
           const fieldValues =
-            await this.fieldsService.getUserCustomFieldDetails(data.userId);
+            await this.fieldsService.getCustomFieldDetails(data.userId, 'Users');
           //get data by cohort membership Id
           let fieldValuesForCohort =
             await this.fieldsService.getFieldsAndFieldsValues(
               data.cohortMembershipId
             );
-
           fieldValuesForCohort = fieldValuesForCohort.map((field) => {
             return {
-              fieldId: field.fieldId,
-              label: field.label,
-              value: field.value,
-              type: field.type,
-              code: field.code,
+              fieldId: field?.fieldId,
+              label: field?.label,
+              selectedValues: field?.selectedValues,
+              type: field?.type,
             };
           });
 
-          data["customField"] = fieldValues.concat(fieldValuesForCohort);
+          data["customField"] = fieldValues?.concat(fieldValuesForCohort);
           results.userDetails.push(data);
         }
       }
@@ -602,8 +605,8 @@ export class PostgresCohortMembersService {
               : `'${value}'`;
             return `CM."status" IN (${statusValues})`;
           }
-          case "name": {
-            return `U."name" ILIKE '%${value}%'`;
+          case "firstName": {
+            return `U."firstName" ILIKE '%${value}%'`;
           }
           case "cohortAcademicYearId": {
             const cohortIdAcademicYear = Array.isArray(value)
@@ -619,7 +622,7 @@ export class PostgresCohortMembersService {
       whereCase += where.map(processCondition).join(" AND ");
     }
 
-    let query = `SELECT U."userId", U.username, U.name, R.name AS role, U.district, U.state,U.mobile,U."deviceId",
+    let query = `SELECT U."userId", U."username", "firstName", "middleName", "lastName", R."name" AS role, U."mobile",U."deviceId",
       CM."status", CM."statusReason",CM."cohortMembershipId",CM."status",CM."createdAt", CM."updatedAt",U."createdBy",U."updatedBy", COUNT(*) OVER() AS total_count  FROM public."CohortMembers" CM
       INNER JOIN public."Users" U
       ON CM."userId" = U."userId"
@@ -651,7 +654,6 @@ export class PostgresCohortMembersService {
     if (offset !== undefined) {
       query += ` OFFSET ${offset}`;
     }
-
     const result = await this.usersRepository.query(query);
 
     return result;
