@@ -1457,15 +1457,16 @@ export class PostgresFieldsService implements IServicelocatorfields {
       const limitCond = limit ? `limit ${limit}` : "";
       let whereCond = `WHERE `;
       whereCond = whereClause ? (whereCond += `${whereClause}`) : "";
-      // if (optionSelected) {
-      //   if (whereCond) {
-      //     whereCond += `AND "name" ILike '%${optionSelected}%'`;
-      //   } else {
-      //     whereCond += `WHERE "name" ILike '%${optionSelected}%'`;
-      //   }
-      // } else {
-      //   whereCond += "";
-      // }
+      
+      if (optionSelected) {
+        if (whereCond) {
+          whereCond += `AND "${tableName}_name" ILike '%${optionSelected}%'`;
+        } else {
+          whereCond += `WHERE "${tableName}_name" ILike '%${optionSelected}%'`;
+        }
+      } else {
+        whereCond += "";
+      }
 
       const query = `SELECT *,COUNT(*) OVER() AS total_count FROM public."${tableName}" ${whereCond} ${orderCond} ${offsetCond} ${limitCond}`;
 
