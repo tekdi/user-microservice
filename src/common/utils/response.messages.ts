@@ -213,4 +213,9 @@ export const API_RESPONSES = {
   EMAIL_ERROR: "Email notification failed",
   SIGNED_URL_SUCCESS: "Signed URL generated successfully",
   SIGNED_URL_FAILED: "Error while generating signed URL",
+
+  //Role
+  ROLE_NOT_FOUND: "No roles found matching the specified criteria.",
+  ROLE_SEARCH_SUCCESS: "Role search successfully",
+
 };
