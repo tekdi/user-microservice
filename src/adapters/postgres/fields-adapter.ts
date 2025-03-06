@@ -1460,9 +1460,9 @@ export class PostgresFieldsService implements IServicelocatorfields {
       
       if (optionSelected) {
         if (whereCond) {
-          whereCond += `AND "name" ILike '%${optionSelected}%'`;
+          whereCond += `AND "${tableName}_name" ILike '%${optionSelected}%'`;
         } else {
-          whereCond += `WHERE "name" ILike '%${optionSelected}%'`;
+          whereCond += `WHERE "${tableName}_name" ILike '%${optionSelected}%'`;
         }
       } else {
         whereCond += "";
