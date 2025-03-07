@@ -14,7 +14,7 @@ jobs:
       - name: Deploy Stack
         uses: appleboy/ssh-action@master
         with:
-          host: ${{ secrets.HOST_NAME_DEVPYMPYM }}
+          host: ${{ secrets.HOST_NAME_DEVPYM }}
           username: ${{ secrets.USERNAME_DEVPYM }}
           key: ${{ secrets.EC2_SSH_KEY_DEV }}
           port: ${{ secrets.PORT_DEV }}
