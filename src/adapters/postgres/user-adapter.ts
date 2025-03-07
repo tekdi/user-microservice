@@ -476,6 +476,7 @@ export class PostgresUserService implements IServicelocator {
               index++;
               break;
           }
+        console.log(whereCondition,"Shubham");
         } else {
           //For custom field store the data in key value pear
           searchCustomFields[key] = value;
@@ -548,7 +549,8 @@ export class PostgresUserService implements IServicelocator {
     }
 
     //Get user core fields data
-    const query = `SELECT U."userId", U."username",U."email", U."firstName", U."middleName", U."lastName", U."gender", U."dob", R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", U.status, COUNT(*) OVER() AS total_count 
+    console.log(whereCondition,"Sanket")
+    const query = `SELECT U."userId", U."username",U."email", U."firstName",UTM."tenantId", U."middleName", U."lastName", U."gender", U."dob", R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", U."status", COUNT(*) OVER() AS total_count 
       FROM  public."Users" U
       LEFT JOIN public."CohortMembers" CM 
       ON CM."userId" = U."userId"
@@ -557,8 +559,8 @@ export class PostgresUserService implements IServicelocator {
       LEFT JOIN public."UserTenantMapping" UTM
       ON UTM."userId" = U."userId"
       LEFT JOIN public."Roles" R
-      ON R."roleId" = UR."roleId" ${whereCondition} GROUP BY U."userId", R."name" ${orderingCondition} ${offset} ${limit}`;
-            
+      ON R."roleId" = UR."roleId" ${whereCondition} GROUP BY U."userId",UTM."tenantId", R."name" ${orderingCondition} ${offset} ${limit}`;
+      console.log(query);       
     const userDetails = await this.usersRepository.query(query);
 
     if (userDetails.length > 0) {
