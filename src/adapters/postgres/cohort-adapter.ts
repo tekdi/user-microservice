@@ -337,7 +337,7 @@ export class PostgresCohortService {
       ) {
         const validationResponse = await this.fieldsService.validateCustomField(
           cohortCreateDto,
-          cohortCreateDto.type
+          "COHORT"
         );
 
         // Check the validation response
