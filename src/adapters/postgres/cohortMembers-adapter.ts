@@ -362,7 +362,7 @@ export class PostgresCohortMembersService {
         options,
         order
       );
-      
+
       if (results["userDetails"].length == 0) {
         return APIResponse.error(
           res,
@@ -457,7 +457,6 @@ export class PostgresCohortMembersService {
             await this.fieldsService.getFieldsAndFieldsValues(
               data.cohortMembershipId
             );
-            
           fieldValuesForCohort = fieldValuesForCohort.map((field) => {
             return {
               fieldId: field?.fieldId,
@@ -467,7 +466,7 @@ export class PostgresCohortMembersService {
             };
           });
 
-          data["customField"] = fieldValues.concat(fieldValuesForCohort);
+          data["customField"] = fieldValues?.concat(fieldValuesForCohort);
           results.userDetails.push(data);
         }
       }

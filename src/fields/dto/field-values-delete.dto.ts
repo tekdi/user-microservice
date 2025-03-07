@@ -15,13 +15,13 @@ export class FieldValueDto {
     type: String,
     description: "fieldId",
   })
-  @IsNotEmpty()
-  @IsString()
   fieldId: string;
   @ApiProperty({
     type: String,
     description: "itemId",
   })
+  @IsNotEmpty()
+  @IsString()
   itemId: string;
 
   constructor(obj: Partial<FieldValuesDeleteDto>) {
@@ -39,6 +39,7 @@ export class FieldValuesDeleteDto {
   @ArrayNotEmpty()
   @ValidateNested({ each: true })
   @Type(() => FieldValueDto)
+  @ValidateNested({ each: true })
   fieldValues: FieldValueDto[];
 
   constructor(obj: any) {
