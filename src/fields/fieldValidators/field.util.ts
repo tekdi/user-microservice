@@ -1,9 +1,9 @@
 import { ConsoleLogger } from "@nestjs/common";
 
 export function validateMultiSelect(value, fieldDetails) {
-  const fieldParamsOptions = fieldDetails.fieldParams.options.map(
-    ({ value }) => value
-  );
+  // const fieldParamsOptions = fieldDetails?.fieldParams?.options.map(
+  //   ({ value }) => value
+  // );
   if (fieldDetails.fieldAttributes.isMultiSelect) {
     if (!Array.isArray(value)) {
       throw new Error("Value must be an array for multiple selections.");

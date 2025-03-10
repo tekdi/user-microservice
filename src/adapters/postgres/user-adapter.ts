@@ -420,7 +420,7 @@ export class PostgresUserService implements IServicelocator {
     if (filters && Object.keys(filters).length > 0) {
       //Fwtch all core fields
       let coreFields = await this.getCoreColumnNames();
-      const allCoreField = [...coreFields, 'fromDate', 'toDate', 'role'];
+      const allCoreField = [...coreFields, 'fromDate', 'toDate', 'role','tenantId'];
 
       for (const [key, value] of Object.entries(filters)) {
         //Check request filter are proesent on core file or cutom fields
@@ -465,6 +465,11 @@ export class PostgresUserService implements IServicelocator {
               whereCondition += ` DATE(U."createdAt") <= '${value}'`;
               index++;
               break;
+            
+            case "tenantId":
+              whereCondition += `UTM."tenantId" = '${value}'`;
+              index++;
+              break;
 
             default:
               whereCondition += ` U."${key}" = '${value}'`;
@@ -477,7 +482,7 @@ export class PostgresUserService implements IServicelocator {
         }
       }
     }
-
+    
     if (exclude && Object.keys(exclude).length > 0) {
       Object.entries(exclude).forEach(([key, value]) => {
         if (key == "cohortIds") {
@@ -543,15 +548,17 @@ export class PostgresUserService implements IServicelocator {
     }
 
     //Get user core fields data
-    const query = `SELECT U."userId", U."username",U."email", U."firstName", U."middleName", U."lastName", U."gender", U."dob", R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", U.status, COUNT(*) OVER() AS total_count 
+    const query = `SELECT U."userId", U."username",U."email", U."firstName",UTM."tenantId", U."middleName", U."lastName", U."gender", U."dob", R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", U."status", COUNT(*) OVER() AS total_count 
       FROM  public."Users" U
       LEFT JOIN public."CohortMembers" CM 
       ON CM."userId" = U."userId"
       LEFT JOIN public."UserRolesMapping" UR
       ON UR."userId" = U."userId"
+      LEFT JOIN public."UserTenantMapping" UTM
+      ON UTM."userId" = U."userId"
       LEFT JOIN public."Roles" R
-      ON R."roleId" = UR."roleId" ${whereCondition} GROUP BY U."userId", R."name" ${orderingCondition} ${offset} ${limit}`;
-            
+      ON R."roleId" = UR."roleId" ${whereCondition} GROUP BY U."userId",UTM."tenantId", R."name" ${orderingCondition} ${offset} ${limit}`;
+      console.log(query);       
     const userDetails = await this.usersRepository.query(query);
 
     if (userDetails.length > 0) {

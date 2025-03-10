@@ -52,6 +52,7 @@ import { API_RESPONSES } from "@utils/response.messages";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
 import { OtpSendDTO } from "./dto/otpSend.dto";
 import { OtpVerifyDTO } from "./dto/otpVerify.dto";
+import { UploadS3Service } from "src/common/services/upload-S3.service";
 import { GetUserId } from "src/common/decorators/getUserId.decorator";
 export interface UserData {
   context: string;
@@ -63,7 +64,10 @@ export interface UserData {
 @ApiTags("User")
 @Controller()
 export class UserController {
-  constructor(private userAdapter: UserAdapter) { }
+  constructor(
+    private userAdapter: UserAdapter,
+    private readonly uploadS3Service: UploadS3Service
+  ) {}
 
   @UseFilters(new AllExceptionsFilter(APIID.USER_GET))
   @Get("read/:userId")
@@ -71,7 +75,9 @@ export class UserController {
   @ApiBasicAuth("access-token")
   @ApiOkResponse({ description: API_RESPONSES.USER_GET_SUCCESSFULLY })
   @ApiNotFoundResponse({ description: API_RESPONSES.USER_NOT_FOUND })
-  @ApiInternalServerErrorResponse({ description: API_RESPONSES.INTERNAL_SERVER_ERROR })
+  @ApiInternalServerErrorResponse({
+    description: API_RESPONSES.INTERNAL_SERVER_ERROR,
+  })
   @ApiBadRequestResponse({ description: API_RESPONSES.BAD_REQUEST })
   @SerializeOptions({ strategy: "excludeAll" })
   @ApiHeader({ name: "tenantid" })
@@ -91,8 +97,8 @@ export class UserController {
     if (!tenantId) {
       LoggerUtil.warn(
         `${API_RESPONSES.BAD_REQUEST}`,
-        `Error: Missing tenantId in request headers for user ${userId}`,
-      )
+        `Error: Missing tenantId in request headers for user ${userId}`
+      );
       return response
         .status(400)
         .json({ statusCode: 400, error: "Please provide a tenantId." });
@@ -120,7 +126,9 @@ export class UserController {
   @ApiCreatedResponse({ description: API_RESPONSES.USER_CREATE_SUCCESSFULLY })
   @ApiBody({ type: UserCreateDto })
   @ApiForbiddenResponse({ description: API_RESPONSES.USER_EXISTS })
-  @ApiInternalServerErrorResponse({ description: API_RESPONSES.INTERNAL_SERVER_ERROR })
+  @ApiInternalServerErrorResponse({
+    description: API_RESPONSES.INTERNAL_SERVER_ERROR,
+  })
   @ApiConflictResponse({ description: API_RESPONSES.DUPLICATE_DATA })
   @ApiHeader({
     name: "academicyearid",
@@ -200,7 +208,14 @@ export class UserController {
     @Res() response: Response,
     @Body() reqBody: SendPasswordResetLinkDto
   ) {
-    return await this.userAdapter.buildUserAdapter().sendPasswordResetLink(request, reqBody.username, reqBody.redirectUrl, response)
+    return await this.userAdapter
+      .buildUserAdapter()
+      .sendPasswordResetLink(
+        request,
+        reqBody.username,
+        reqBody.redirectUrl,
+        response
+      );
   }
 
   @Post("/forgot-password")
@@ -298,16 +313,16 @@ export class UserController {
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.SEND_OTP))
-  @Post('send-otp')
+  @Post("send-otp")
   @ApiBody({ type: OtpSendDTO })
   @UsePipes(new ValidationPipe({ transform: true }))
   @ApiOkResponse({ description: API_RESPONSES.OTP_SEND_SUCCESSFULLY })
   async sendOtp(@Body() body: OtpSendDTO, @Res() response: Response) {
-    return await this.userAdapter.buildUserAdapter().sendOtp(body, response)
+    return await this.userAdapter.buildUserAdapter().sendOtp(body, response);
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.VERIFY_OTP))
-  @Post('verify-otp')
+  @Post("verify-otp")
   @ApiBody({ type: OtpVerifyDTO })
   @UsePipes(new ValidationPipe({ transform: true }))
   @ApiOkResponse({ description: API_RESPONSES.OTP_VALID })
@@ -324,7 +339,21 @@ export class UserController {
     @Res() response: Response,
     @Body() reqBody: SendPasswordResetOTPDto
   ) {
-    return await this.userAdapter.buildUserAdapter().sendPasswordResetOTP(reqBody, response)
+    return await this.userAdapter
+      .buildUserAdapter()
+      .sendPasswordResetOTP(reqBody, response);
   }
-
+  @Get("presigned-url")
+  async getPresignedUrl(
+    @Query("key") key: string,
+    @Query("fileType") fileType: string,
+    @Res() response
+  ) {
+    const url = await this.uploadS3Service.getPresignedUrl(
+      key,
+      fileType,
+      response
+    );
+    return { url };
+  }
 }
