@@ -33,7 +33,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
     private fieldsRepository: Repository<Fields>,
     @InjectRepository(FieldValues)
     private fieldsValuesRepository: Repository<FieldValues>
-  ) {}
+  ) { }
 
   async getFormCustomField(requiredData, response) {
     const apiId = "FormData";
@@ -118,7 +118,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
 
   //validate cohort Create/update API Custom field
   public async validateCustomField(cohortCreateDto, contextType) {
-    const tenantId =  cohortCreateDto?.tenantId;
+    const tenantId = cohortCreateDto?.tenantId;
     const fieldValues = cohortCreateDto ? cohortCreateDto.customFields : [];
     const encounteredKeys = [];
     const invalidateFields = [];
@@ -1457,7 +1457,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
       const limitCond = limit ? `limit ${limit}` : "";
       let whereCond = `WHERE `;
       whereCond = whereClause ? (whereCond += `${whereClause}`) : "";
-      
+
       if (optionSelected) {
         if (whereCond) {
           whereCond += `AND "${tableName}_name" ILike '%${optionSelected}%'`;
@@ -1493,8 +1493,8 @@ export class PostgresFieldsService implements IServicelocatorfields {
       ...(getFields?.includes("All")
         ? {}
         : getFields?.length
-        ? { name: In(getFields.filter(Boolean)) }
-        : {}),
+          ? { name: In(getFields.filter(Boolean)) }
+          : {}),
     };
 
     const validContextTypes = contextType?.filter(Boolean);
@@ -1827,6 +1827,8 @@ export class PostgresFieldsService implements IServicelocatorfields {
               id: data[idField],
               value: data[nameField],
             }));
+          } else if (data.sourceDetails?.externalsource) {
+              processedValue = data?.value
           }
         } else {
           processedValue = selectedValues[0];
