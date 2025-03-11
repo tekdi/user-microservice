@@ -97,11 +97,13 @@ export class FieldsOptionsSearchDto {
   @IsNotEmpty()
   fieldName: string;
 
-  @ApiPropertyOptional({ type: () => String })
+  @ApiPropertyOptional({ type: () => [String] })
   @IsOptional()
   @IsNotEmpty()
   @Expose()
-  controllingfieldfk: string;
+  @IsArray()
+  @IsNotEmpty({ each: true })
+  controllingfieldfk: string[];
 
   @ApiPropertyOptional({ type: () => String })
   @IsOptional()
