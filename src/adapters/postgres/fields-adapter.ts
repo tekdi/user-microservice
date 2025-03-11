@@ -25,6 +25,7 @@ import jwt_decode from "jwt-decode";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
 import { API_RESPONSES } from "@utils/response.messages";
 import { FieldValuesDeleteDto } from "src/fields/dto/field-values-delete.dto";
+import { check } from "prettier";
 @Injectable()
 export class PostgresFieldsService implements IServicelocatorfields {
   constructor(
@@ -117,6 +118,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
 
   //validate cohort Create/update API Custom field
   public async validateCustomField(cohortCreateDto, contextType) {
+    const tenantId =  cohortCreateDto?.tenantId;
     const fieldValues = cohortCreateDto ? cohortCreateDto.customFields : [];
     const encounteredKeys = [];
     const invalidateFields = [];
@@ -139,7 +141,8 @@ export class PostgresFieldsService implements IServicelocatorfields {
       } else {
         encounteredKeys.push(fieldId);
       }
-
+      const fieldAttributes = getFieldDetails?.fieldAttributes || {};
+      getFieldDetails["fieldAttributes"] = fieldAttributes[tenantId] || fieldAttributes["default"];
       if (
         (getFieldDetails.type == "checkbox" ||
           getFieldDetails.type == "drop_down" ||
@@ -172,7 +175,6 @@ export class PostgresFieldsService implements IServicelocatorfields {
         getFieldDetails,
         fieldsData["value"]
       );
-
       if (typeof checkValidation === "object" && "error" in checkValidation) {
         invalidateFields.push(
           `${fieldId}: ${getFieldDetails["name"]} - ${checkValidation?.error?.message}`
@@ -197,9 +199,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
     }
     const context = "COHORT";
     const getFieldIds = await this.getFieldIds(context, contextType);
-
     const validFieldIds = new Set(getFieldIds.map((field) => field.fieldId));
-
     const invalidFieldIds = cohortCreateDto.customFields
       .filter((fieldValue) => !validFieldIds.has(fieldValue.fieldId))
       .map((fieldValue) => fieldValue.fieldId);
