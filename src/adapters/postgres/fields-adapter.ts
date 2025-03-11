@@ -1220,9 +1220,10 @@ export class PostgresFieldsService implements IServicelocatorfields {
               HttpStatus.NOT_FOUND
             );
           }
-          whereClause = `"${fetchFieldParams?.dependsOn}_id" = '${controllingfieldfk}'`;
+          let foreignKeys = controllingfieldfk.toString();
+          whereClause = `"${fetchFieldParams?.dependsOn}_id" IN(${foreignKeys})`;
         }
-
+        
         dynamicOptions = await this.findDynamicOptions(
           fieldName,
           whereClause,
