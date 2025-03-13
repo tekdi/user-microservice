@@ -1230,6 +1230,7 @@ export class PostgresUserService implements IServicelocator {
         API_RESPONSES.USER_CREATE_SUCCESSFULLY
       );
     } catch (e) {
+      console.log(e)
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
         `Error: ${e.message}`,
@@ -1758,12 +1759,13 @@ export class PostgresUserService implements IServicelocator {
           getFieldDetails.sourceDetails.table,
           `"${getFieldDetails?.sourceDetails?.table}_id"='${fieldValue}'`,
         );
-        if (!getOption.length) {
+        
+        if (!getOption?.length) {
           return APIResponse.error(
             response,
             apiId,
             API_RESPONSES.BAD_REQUEST,
-            API_RESPONSES.UUID_VALIDATION,
+            API_RESPONSES.UUID_VALIDATION, // which uuid is needed ?
             HttpStatus.BAD_REQUEST
           );
         }
