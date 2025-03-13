@@ -114,7 +114,7 @@ export class filtersProperty {
   @IsOptional()
   @IsArray()
   @IsNotEmpty({ each: true })
-  states: string[];
+  state: string[];
 
   @ApiPropertyOptional({
     type: [String],
@@ -123,7 +123,7 @@ export class filtersProperty {
   @IsOptional()
   @IsArray()
   @IsNotEmpty({ each: true })
-  districts: string[];
+  district: string[];
 
   @ApiPropertyOptional({
     type: [String],
@@ -132,7 +132,17 @@ export class filtersProperty {
   @IsOptional()
   @IsArray()
   @IsNotEmpty({ each: true })
-  blocks: string[];
+  block: string[];
+
+
+  @ApiPropertyOptional({
+    type: [String],
+    description: "Block",
+  })
+  @IsOptional()
+  @IsArray()
+  @IsNotEmpty({ each: true })
+  village: string[];
 
   //customFieldsName
   @ApiProperty({
