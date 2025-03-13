@@ -420,7 +420,7 @@ export class PostgresUserService implements IServicelocator {
     if (filters && Object.keys(filters).length > 0) {
       //Fwtch all core fields
       let coreFields = await this.getCoreColumnNames();
-      const allCoreField = [...coreFields, 'fromDate', 'toDate', 'role','tenantId'];
+      const allCoreField = [...coreFields, 'fromDate', 'toDate', 'role', 'tenantId'];
 
       for (const [key, value] of Object.entries(filters)) {
         //Check request filter are proesent on core file or cutom fields
@@ -451,7 +451,7 @@ export class PostgresUserService implements IServicelocator {
               whereCondition += ` R."name" = '${value}'`;
               index++;
               break;
-            
+
             case "status":
               whereCondition += ` U."status" IN('${value}')`;
               index++;
@@ -465,7 +465,7 @@ export class PostgresUserService implements IServicelocator {
               whereCondition += ` DATE(U."createdAt") <= '${value}'`;
               index++;
               break;
-            
+
             case "tenantId":
               whereCondition += `UTM."tenantId" = '${value}'`;
               index++;
@@ -482,7 +482,7 @@ export class PostgresUserService implements IServicelocator {
         }
       }
     }
-    
+
     if (exclude && Object.keys(exclude).length > 0) {
       Object.entries(exclude).forEach(([key, value]) => {
         if (key == "cohortIds") {
@@ -558,7 +558,6 @@ export class PostgresUserService implements IServicelocator {
       ON UTM."userId" = U."userId"
       LEFT JOIN public."Roles" R
       ON R."roleId" = UR."roleId" ${whereCondition} GROUP BY U."userId",UTM."tenantId", R."name" ${orderingCondition} ${offset} ${limit}`;
-      console.log(query);       
     const userDetails = await this.usersRepository.query(query);
 
     if (userDetails.length > 0) {
@@ -1751,14 +1750,13 @@ export class PostgresUserService implements IServicelocator {
         (getFieldDetails.type == "checkbox" ||
           getFieldDetails.type == "drop_down" ||
           getFieldDetails.type == "radio") &&
-        getFieldDetails.sourceDetails.source == "table"
+        getFieldDetails?.sourceDetails?.source == "table"
       ) {
         let fieldValue = fieldsData["value"][0];
         const getOption = await this.fieldsService.findDynamicOptions(
           getFieldDetails.sourceDetails.table,
           `"${getFieldDetails?.sourceDetails?.table}_id"='${fieldValue}'`,
         );
-        
         if (!getOption?.length) {
           return APIResponse.error(
             response,
@@ -1789,7 +1787,7 @@ export class PostgresUserService implements IServicelocator {
       }
       const checkValidation = this.fieldsService.validateFieldValue(
         getFieldDetails,
-        fieldsData["value"] 
+        fieldsData["value"]
       );
 
       if (typeof checkValidation === "object" && "error" in checkValidation) {
