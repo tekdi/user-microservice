@@ -108,22 +108,31 @@ export class filtersProperty {
   status?: string[];
 
   @ApiPropertyOptional({
-    type: String,
+    type: [String],
     description: "State",
   })
-  states: string;
+  @IsOptional()
+  @IsArray()
+  @IsNotEmpty({ each: true })
+  states: string[];
 
   @ApiPropertyOptional({
-    type: String,
+    type: [String],
     description: "District",
   })
-  districts: string;
+  @IsOptional()
+  @IsArray()
+  @IsNotEmpty({ each: true })
+  districts: string[];
 
   @ApiPropertyOptional({
-    type: String,
+    type: [String],
     description: "Block",
   })
-  blocks: string;
+  @IsOptional()
+  @IsArray()
+  @IsNotEmpty({ each: true })
+  blocks: string[];
 
   //customFieldsName
   @ApiProperty({
