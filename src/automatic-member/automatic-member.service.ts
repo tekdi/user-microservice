@@ -59,7 +59,7 @@ export class AutomaticMemberService {
     const member = await this.automaticMemberRepository.findOne({ where: { userId:id } });
     
     if (!member) {
-      throw new NotFoundException(`AutomaticMember with ID ${id} not found`);
+     return false;
     }
   
     return member;
