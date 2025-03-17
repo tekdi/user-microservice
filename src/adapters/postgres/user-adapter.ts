@@ -1418,14 +1418,14 @@ export class PostgresUserService implements IServicelocator {
       (user.firstName = userCreateDto?.firstName),
       (user.middleName = userCreateDto?.middleName),
       (user.lastName = userCreateDto?.lastName),
-      // user.gender = userCreateDto?.gender,
+      (user.gender = userCreateDto?.gender),
       (user.email = userCreateDto?.email),
       (user.mobile = Number(userCreateDto?.mobile) || null),
       (user.createdBy = userCreateDto?.createdBy || userCreateDto?.createdBy);
 
-    // if (userCreateDto?.dob) {
-    //   user.dob = new Date(userCreateDto.dob);
-    // }
+    if (userCreateDto?.dob) {
+      user.dob = new Date(userCreateDto.dob);
+    }
     const result = await this.usersRepository.save(user);
 
     if (result && userCreateDto.tenantCohortRoleMapping) {
