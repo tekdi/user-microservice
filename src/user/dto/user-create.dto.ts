@@ -1,4 +1,4 @@
-import { Expose, Type } from "class-transformer";
+import { Expose, Type } from 'class-transformer';
 import {
   MaxLength,
   IsNotEmpty,
@@ -11,23 +11,23 @@ import {
   IsOptional,
   Length,
   IsEnum,
-} from "class-validator";
-import { User } from "../entities/user-entity";
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+} from 'class-validator';
+import { User } from '../entities/user-entity';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class tenantRoleMappingDto {
   @ApiProperty({
     type: String,
-    description: "Tenant Id",
+    description: 'Tenant Id',
   })
   @Expose()
   @IsOptional()
-  @IsUUID(undefined, { message: "Tenant Id must be a valid UUID" })
+  @IsUUID(undefined, { message: 'Tenant Id must be a valid UUID' })
   tenantId: string;
 
   @ApiPropertyOptional({
     type: [String],
-    description: "The cohort id of the user",
+    description: 'The cohort id of the user',
     default: [],
   })
   @Expose()
@@ -38,26 +38,26 @@ export class tenantRoleMappingDto {
 
   @ApiPropertyOptional({
     type: String,
-    description: "User Role",
+    description: 'User Role',
   })
   @IsOptional()
   @Expose()
-  @IsUUID(undefined, { message: "Role Id must be a valid UUID" })
+  @IsUUID(undefined, { message: 'Role Id must be a valid UUID' })
   roleId: string;
 }
 
 export class FieldValuesOptionDto {
   @ApiProperty({
     type: String,
-    description: "Field Id",
+    description: 'Field Id',
   })
   @Expose()
-  @IsUUID(undefined, { message: "Field Id must be a valid UUID" })
+  @IsUUID(undefined, { message: 'Field Id must be a valid UUID' })
   fieldId: string;
 
   @ApiProperty({
     type: String,
-    description: "Field values",
+    description: 'Field values',
   })
   @Expose()
   value: string;
@@ -74,7 +74,7 @@ export class UserCreateDto {
 
   @ApiProperty({
     type: String,
-    description: "First name of the user",
+    description: 'First name of the user',
     maxLength: 50,
   })
   @Expose()
@@ -84,7 +84,7 @@ export class UserCreateDto {
 
   @ApiPropertyOptional({
     type: String,
-    description: "Middle name of the user (optional)",
+    description: 'Middle name of the user (optional)',
     maxLength: 50,
     required: false,
   })
@@ -96,7 +96,7 @@ export class UserCreateDto {
 
   @ApiProperty({
     type: String,
-    description: "Last name of the user",
+    description: 'Last name of the user',
     maxLength: 50,
   })
   @Expose()
@@ -104,39 +104,39 @@ export class UserCreateDto {
   @Length(1, 50)
   lastName: string;
 
-  // @ApiProperty({
-  //   type: String,
-  //   description: 'Gender of the user',
-  //   enum: ['male', 'female', 'transgender']
-  // })
-  // @Expose()
-  // @IsEnum(['male', 'female', 'transgender'])
-  // gender: string;
-
-  // @ApiPropertyOptional({
-  //   type: String,
-  //   description: "The date of Birth of the user",
-  // })
-  // @Expose()
-  // dob: string;
+  @ApiProperty({
+    type: String,
+    description: 'Gender of the user',
+    enum: ['male', 'female', 'transgender'],
+  })
+  @Expose()
+  @IsEnum(['male', 'female', 'transgender'])
+  gender: string;
 
   @ApiPropertyOptional({
     type: String,
-    description: "The contact number of the user",
+    description: 'The date of Birth of the user',
+  })
+  @Expose()
+  dob: string;
+
+  @ApiPropertyOptional({
+    type: String,
+    description: 'The contact number of the user',
   })
   @Expose()
   mobile: string;
 
   @ApiPropertyOptional({
     type: String,
-    description: "The email of the user",
+    description: 'The email of the user',
   })
   @Expose()
   email: string;
 
   @ApiProperty({
     type: String,
-    description: "The password of the user",
+    description: 'The password of the user',
   })
   @IsNotEmpty()
   @Expose()
@@ -144,28 +144,28 @@ export class UserCreateDto {
 
   @ApiPropertyOptional({
     type: String,
-    description: "The country of the user",
+    description: 'The country of the user',
   })
   @Expose()
   country: string;
 
   @ApiPropertyOptional({
     type: String,
-    description: "The state of the user",
+    description: 'The state of the user',
   })
   @Expose()
   state: string;
 
   @ApiPropertyOptional({
     type: String,
-    description: "The city of the user",
+    description: 'The city of the user',
   })
   @Expose()
   city: string;
 
   @ApiPropertyOptional({
     type: String,
-    description: "The address of the user",
+    description: 'The address of the user',
   })
   @Expose()
   address: string;
@@ -200,7 +200,7 @@ export class UserCreateDto {
   //fieldValues
   @ApiPropertyOptional({
     type: [FieldValuesOptionDto],
-    description: "The fieldValues Object",
+    description: 'The fieldValues Object',
   })
   @ValidateNested({ each: true })
   @Type(() => FieldValuesOptionDto)
