@@ -1561,7 +1561,6 @@ export class PostgresFieldsService implements IServicelocatorfields {
           name: data?.name,
           label: data?.label,
           order: data?.ordering,
-          sourceOption: data?.fieldAttributes?.sourceOption,
           isRequired: data?.fieldAttributes?.isRequired,
           isEditable: data?.fieldAttributes?.isEditable,
           isHidden: data?.fieldAttributes?.isHidden,
