@@ -574,7 +574,7 @@
 	  },
 	  {
 		"sourceRoute": "/interface/v1/user/locations/search",
-		"type": "search",
+		"type": "POST",
 		"priority": "MUST_HAVE",
 		"inSequence": false,
 		"orchestrated": false,
