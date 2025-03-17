@@ -519,6 +519,71 @@
 			"packageName": "shiksha-user"
 		  }
 		]
-	  }  
+	  },
+	  {
+		"sourceRoute": "/interface/v1/user/locations",
+		"type": "POST",
+		"priority": "MUST_HAVE",
+		"inSequence": false,
+		"orchestrated": false,
+		"targetPackages": [
+		  {
+			"basePackageName": "user",
+			"packageName": "shiksha-user"
+		  }
+		]
+	  },
+	  {
+		"sourceRoute": "/interface/v1/user/locations/:id",
+		"type": "GET",
+		"priority": "MUST_HAVE",
+		"inSequence": false,
+		"orchestrated": false,
+		"targetPackages": [
+		  {
+			"basePackageName": "user",
+			"packageName": "shiksha-user"
+		  }
+		]
+	  },
+	  {
+		"sourceRoute": "/interface/v1/user/locations/update/:id",
+		"type": "PATCH",
+		"priority": "MUST_HAVE",
+		"inSequence": false,
+		"orchestrated": false,
+		"targetPackages": [
+		  {
+			"basePackageName": "user",
+			"packageName": "shiksha-user"
+		  }
+		]
+	  },
+	  {
+		"sourceRoute": "/interface/v1/user/locations/delete/:id",
+		"type": "DELETE",
+		"priority": "MUST_HAVE",
+		"inSequence": false,
+		"orchestrated": false,
+		"targetPackages": [
+		  {
+			"basePackageName": "user",
+			"packageName": "shiksha-user"
+		  }
+		]
+	  },
+	  {
+		"sourceRoute": "/interface/v1/user/locations/search",
+		"type": "search",
+		"priority": "MUST_HAVE",
+		"inSequence": false,
+		"orchestrated": false,
+		"targetPackages": [
+		  {
+			"basePackageName": "user",
+			"packageName": "shiksha-user"
+		  }
+		]
+	  }
 	]
   }
