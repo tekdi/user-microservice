@@ -1,10 +1,14 @@
 export function validateMultiSelect(value, fieldDetails) {
+  if (!fieldDetails?.fieldParams?.options) {
+    // If fieldParams or options are missing, skip validation
+    return true;
+  }
   const fieldParamsOptions = fieldDetails.fieldParams.options.map(
     ({ value }) => value
   );
   if (fieldDetails.fieldAttributes.isMultiSelect) {
     if (!Array.isArray(value)) {
-      throw new Error("Value must be an array for multiple selections.");
+      throw new Error('Value must be an array for multiple selections.');
     }
     if (
       !(
@@ -17,10 +21,10 @@ export function validateMultiSelect(value, fieldDetails) {
       );
     }
     if (!value.every((val: any) => fieldParamsOptions.includes(val))) {
-      throw new Error("Invalid option selected.");
+      throw new Error('Invalid option selected.');
     }
     return true;
   } else {
-    throw new Error("Field not of type multiselect");
+    throw new Error('Field not of type multiselect');
   }
 }
