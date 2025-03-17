@@ -1,8 +1,4 @@
 export function validateMultiSelect(value, fieldDetails) {
-  if (!fieldDetails?.fieldParams?.options) {
-    // If fieldParams or options are missing, skip validation
-    return true;
-  }
   const fieldParamsOptions = fieldDetails.fieldParams.options.map(
     ({ value }) => value
   );
