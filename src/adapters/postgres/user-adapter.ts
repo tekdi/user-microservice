@@ -120,7 +120,6 @@ export class PostgresUserService implements IServicelocator {
       }
       // Determine email address
       let emailOfUser = userData?.email;
-      console.log('sss', emailOfUser);
 
       if (!emailOfUser) {
         const createdByUser = await this.usersRepository.findOne({
@@ -155,8 +154,6 @@ export class PostgresUserService implements IServicelocator {
       // Format expiration time
       const time = formatTime(jwtExpireTime);
       const programName = userData?.tenantData[0]?.tenantName;
-      console.log('programName', userData);
-
       const capilatizeFirstLettterOfProgram = programName
         ? programName.charAt(0).toUpperCase() + programName.slice(1)
         : 'Learner Account';
@@ -178,7 +175,6 @@ export class PostgresUserService implements IServicelocator {
           receipients: [emailOfUser],
         },
       };
-      console.log('notificationPayload', notificationPayload);
 
       const mailSend = await this.notificationRequest.sendNotification(
         notificationPayload
@@ -1045,6 +1041,28 @@ export class PostgresUserService implements IServicelocator {
         userCreateDto.updatedBy = decoded?.sub;
       }
 
+      //First, check the age before any validation
+      if (userCreateDto?.dob) {
+        const dob = new Date(userCreateDto.dob);
+        const today = new Date();
+
+        // Calculate age
+        const age = today.getFullYear() - dob.getFullYear();
+        const isBirthdayPassed =
+          today.getMonth() > dob.getMonth() ||
+          (today.getMonth() === dob.getMonth() &&
+            today.getDate() >= dob.getDate());
+
+        if (age < 18 || (age === 18 && !isBirthdayPassed)) {
+          return APIResponse.error(
+            response,
+            apiId,
+            API_RESPONSES.BAD_REQUEST,
+            'User must be at least 18 years old.',
+            HttpStatus.BAD_REQUEST
+          );
+        }
+      }
       let customFieldError;
       if (userCreateDto.customFields && userCreateDto.customFields.length > 0) {
         customFieldError = await this.validateCustomField(
