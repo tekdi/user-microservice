@@ -120,6 +120,8 @@ export class PostgresUserService implements IServicelocator {
       }
       // Determine email address
       let emailOfUser = userData?.email;
+      console.log('sss', emailOfUser);
+
       if (!emailOfUser) {
         const createdByUser = await this.usersRepository.findOne({
           where: { userId: userData.createdBy },
@@ -153,6 +155,8 @@ export class PostgresUserService implements IServicelocator {
       // Format expiration time
       const time = formatTime(jwtExpireTime);
       const programName = userData?.tenantData[0]?.tenantName;
+      console.log('programName', userData);
+
       const capilatizeFirstLettterOfProgram = programName
         ? programName.charAt(0).toUpperCase() + programName.slice(1)
         : 'Learner Account';
@@ -163,7 +167,7 @@ export class PostgresUserService implements IServicelocator {
         context: 'USER',
         key: 'OnForgotPasswordReset',
         replacements: {
-          '{username}': userData?.name,
+          '{username}': userData?.username,
           '{resetToken}': resetToken,
           '{programName}': capilatizeFirstLettterOfProgram,
           '{expireTime}': time,
@@ -174,6 +178,7 @@ export class PostgresUserService implements IServicelocator {
           receipients: [emailOfUser],
         },
       };
+      console.log('notificationPayload', notificationPayload);
 
       const mailSend = await this.notificationRequest.sendNotification(
         notificationPayload
