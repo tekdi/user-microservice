@@ -24,6 +24,8 @@ import { SchemaField, Option } from 'src/fields/fieldValidators/fieldClass';
 import jwt_decode from 'jwt-decode';
 import { LoggerUtil } from 'src/common/logger/LoggerUtil';
 import { API_RESPONSES } from '@utils/response.messages';
+import { v4 as uuidv4 } from 'uuid';
+
 @Injectable()
 export class PostgresFieldsService implements IServicelocatorfields {
   constructor(
@@ -528,6 +530,9 @@ export class PostgresFieldsService implements IServicelocatorfields {
             storeWithoutControllingField.push(sourceFieldName['name']);
           }
 
+          // Generate UUID instead of auto-incremented integer
+          const nextValue = uuidv4();
+
           // check options exits in source table column or not
           const query = `SELECT "name", "value" 
           FROM public.${getSourceDetails.sourceDetails.table} 
@@ -555,7 +560,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
             await this.createSourceDetailsTableFields(
               getSourceDetails.sourceDetails.table,
               sourceFieldName['name'],
-              sourceFieldName['value'],
+              nextValue, // Use UUID instead of integer
               createdBy,
               sourceFieldName['controllingfieldfk'],
               getSourceDetails.dependsOn
@@ -576,7 +581,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
             await this.updateSourceDetailsTableFields(
               getSourceDetails.sourceDetails.table,
               sourceFieldName['name'],
-              sourceFieldName['value'],
+              checkSourceData[0].value, // Keep the existing UUID
               updatedBy,
               sourceFieldName['controllingfieldfk']
             );

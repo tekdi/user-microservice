@@ -2,20 +2,20 @@ export class CustomFieldsValidation {
   static validate(fieldType: string, fieldValue: string) {
     let result = true;
     switch (fieldType) {
-      case "email":
+      case 'email':
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (typeof fieldValue !== "string" || !emailRegex.test(fieldValue)) {
+        if (typeof fieldValue !== 'string' || !emailRegex.test(fieldValue)) {
           result = false;
         }
         break;
 
-      case "mobile":
-        if (fieldValue.length !== 10) {
+      case 'mobile':
+        if (fieldValue.length !== 9) {
           result = false;
         }
         break;
 
-      case "date":
+      case 'date':
         const regex = /^\d{4}-\d{2}-\d{2}$/;
 
         if (!regex.test(fieldValue)) {
