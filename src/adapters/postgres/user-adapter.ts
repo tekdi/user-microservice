@@ -44,7 +44,7 @@ import { OtpSendDTO } from 'src/user/dto/otpSend.dto';
 import { OtpVerifyDTO } from 'src/user/dto/otpVerify.dto';
 import { SendPasswordResetOTPDto } from 'src/user/dto/passwordReset.dto';
 import { ActionType, UserUpdateDTO } from 'src/user/dto/user-update.dto';
-
+import config from '../../common/config';
 interface UpdateField {
   userId: string; // Required
   firstName?: string; // Optional
@@ -120,7 +120,6 @@ export class PostgresUserService implements IServicelocator {
       }
       // Determine email address
       let emailOfUser = userData?.email;
-      console.log('sss', emailOfUser);
 
       if (!emailOfUser) {
         const createdByUser = await this.usersRepository.findOne({
@@ -155,8 +154,6 @@ export class PostgresUserService implements IServicelocator {
       // Format expiration time
       const time = formatTime(jwtExpireTime);
       const programName = userData?.tenantData[0]?.tenantName;
-      console.log('programName', userData);
-
       const capilatizeFirstLettterOfProgram = programName
         ? programName.charAt(0).toUpperCase() + programName.slice(1)
         : 'Learner Account';
@@ -178,7 +175,6 @@ export class PostgresUserService implements IServicelocator {
           receipients: [emailOfUser],
         },
       };
-      console.log('notificationPayload', notificationPayload);
 
       const mailSend = await this.notificationRequest.sendNotification(
         notificationPayload
@@ -1043,6 +1039,17 @@ export class PostgresUserService implements IServicelocator {
         const decoded: any = jwt_decode(request.headers.authorization);
         userCreateDto.createdBy = decoded?.sub;
         userCreateDto.updatedBy = decoded?.sub;
+      }
+
+      //First, check the age before any validation
+      if (userCreateDto?.dob && !config.isUserOldEnough(userCreateDto.dob)) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          `User must be at least ${config.MINIMUM_AGE} years old.`,
+          HttpStatus.BAD_REQUEST
+        );
       }
 
       let customFieldError;
