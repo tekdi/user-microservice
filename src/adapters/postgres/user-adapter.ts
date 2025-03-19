@@ -44,7 +44,7 @@ import { OtpSendDTO } from 'src/user/dto/otpSend.dto';
 import { OtpVerifyDTO } from 'src/user/dto/otpVerify.dto';
 import { SendPasswordResetOTPDto } from 'src/user/dto/passwordReset.dto';
 import { ActionType, UserUpdateDTO } from 'src/user/dto/user-update.dto';
-
+import config from '../../common/config';
 interface UpdateField {
   userId: string; // Required
   firstName?: string; // Optional
@@ -1042,27 +1042,16 @@ export class PostgresUserService implements IServicelocator {
       }
 
       //First, check the age before any validation
-      if (userCreateDto?.dob) {
-        const dob = new Date(userCreateDto.dob);
-        const today = new Date();
-
-        // Calculate age
-        const age = today.getFullYear() - dob.getFullYear();
-        const isBirthdayPassed =
-          today.getMonth() > dob.getMonth() ||
-          (today.getMonth() === dob.getMonth() &&
-            today.getDate() >= dob.getDate());
-
-        if (age < 18 || (age === 18 && !isBirthdayPassed)) {
-          return APIResponse.error(
-            response,
-            apiId,
-            API_RESPONSES.BAD_REQUEST,
-            'User must be at least 18 years old.',
-            HttpStatus.BAD_REQUEST
-          );
-        }
+      if (userCreateDto?.dob && !config.isUserOldEnough(userCreateDto.dob)) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          `User must be at least ${config.MINIMUM_AGE} years old.`,
+          HttpStatus.BAD_REQUEST
+        );
       }
+
       let customFieldError;
       if (userCreateDto.customFields && userCreateDto.customFields.length > 0) {
         customFieldError = await this.validateCustomField(
