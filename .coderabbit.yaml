@@ -35,6 +35,7 @@ reviews:
       - 'release-*'
       - 'Shiksha-2.0'
       - 'youth-management'
+      - 'east-africa-ym'
 
 chat:
   auto_reply: true

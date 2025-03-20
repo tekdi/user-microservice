@@ -542,9 +542,16 @@ export class PostgresFieldsService implements IServicelocatorfields {
           const checkSourceData = await this.fieldsValuesRepository.query(
             query
           );
+          // **Check if `name` exists in the database**
+          const queryNameCheck = `SELECT "name" FROM public.${getSourceDetails.sourceDetails.table} 
+ WHERE name = '${sourceFieldName['name']}'`;
+
+          const checkNameData = await this.fieldsValuesRepository.query(
+            queryNameCheck
+          );
 
           //If code is not exist in db
-          if (checkSourceData.length === 0) {
+          if (checkSourceData.length === 0 && checkNameData.length === 0) {
             //If code is not exist in db and isCreate flag is false
             if (!fieldsData.fieldParams.isCreate) {
               return APIResponse.error(
@@ -568,6 +575,15 @@ export class PostgresFieldsService implements IServicelocatorfields {
           } else {
             //If code is exist in db and isCreate flag is true
             if (fieldsData.fieldParams.isCreate) {
+              if (checkNameData.length > 0) {
+                return APIResponse.error(
+                  response,
+                  apiId,
+                  'CONFLICT',
+                  `Error: The name '${sourceFieldName['name']}' already exists in the '${getSourceDetails.sourceDetails.table}' table.`,
+                  HttpStatus.CONFLICT
+                );
+              }
               return APIResponse.error(
                 response,
                 apiId,
