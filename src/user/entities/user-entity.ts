@@ -5,18 +5,18 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   OneToMany,
-} from "typeorm";
-import { UserTenantMapping } from "src/userTenantMapping/entities/user-tenant-mapping.entity";
+} from 'typeorm';
+import { UserTenantMapping } from 'src/userTenantMapping/entities/user-tenant-mapping.entity';
 
 export enum UserStatus {
-  ACTIVE = "active",
-  INACTIVE = "inactive",
-  ARCHIVED = "archived",
+  ACTIVE = 'active',
+  INACTIVE = 'inactive',
+  ARCHIVED = 'archived',
 }
 
-@Entity({ name: "Users" })
+@Entity({ name: 'Users' })
 export class User {
-  @PrimaryColumn({ type: "uuid" })
+  @PrimaryColumn({ type: 'uuid' })
   userId: string;
 
   @Column({ unique: true })
@@ -31,10 +31,14 @@ export class User {
   @Column({ type: 'varchar', length: 50, nullable: false })
   lastName: string;
 
-  @Column({ type: 'enum', enum: ['male', 'female', 'transgender'], nullable: false })
+  @Column({
+    type: 'enum',
+    enum: ['male', 'female', 'transgender'],
+    nullable: false,
+  })
   gender: string;
 
-  @Column({ type: "date", nullable: true })
+  @Column({ type: 'date', nullable: true })
   dob: Date;
 
   @Column({ nullable: true })
@@ -53,14 +57,14 @@ export class User {
   pincode: string;
 
   @CreateDateColumn({
-    type: "timestamp with time zone",
-    default: () => "CURRENT_TIMESTAMP",
+    type: 'timestamp with time zone',
+    default: () => 'CURRENT_TIMESTAMP',
   })
   createdAt: Date;
 
   @UpdateDateColumn({
-    type: "timestamp with time zone",
-    default: () => "CURRENT_TIMESTAMP",
+    type: 'timestamp with time zone',
+    default: () => 'CURRENT_TIMESTAMP',
   })
   updatedAt: Date;
 
@@ -80,7 +84,7 @@ export class User {
   updatedBy: string;
 
   @Column({
-    type: "enum",
+    type: 'enum',
     enum: UserStatus,
     default: UserStatus.ACTIVE,
   })
@@ -99,4 +103,7 @@ export class User {
     (userTenantMapping) => userTenantMapping.user
   )
   userTenantMapping: UserTenantMapping[];
+
+  @Column({ nullable: true })
+  mobile_country_code: string;
 }

@@ -1433,11 +1433,13 @@ export class PostgresUserService implements IServicelocator {
       (user.gender = userCreateDto?.gender),
       (user.email = userCreateDto?.email),
       (user.mobile = Number(userCreateDto?.mobile) || null),
+      (user.mobile_country_code = userCreateDto?.mobile_country_code),
       (user.createdBy = userCreateDto?.createdBy || userCreateDto?.createdBy);
 
     if (userCreateDto?.dob) {
       user.dob = new Date(userCreateDto.dob);
     }
+
     const result = await this.usersRepository.save(user);
 
     if (result && userCreateDto.tenantCohortRoleMapping) {

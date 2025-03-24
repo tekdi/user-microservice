@@ -209,4 +209,7 @@ export class UserCreateDto {
   constructor(partial: Partial<UserCreateDto>) {
     Object.assign(this, partial);
   }
+
+  @Expose()
+  mobile_country_code: string;
 }
