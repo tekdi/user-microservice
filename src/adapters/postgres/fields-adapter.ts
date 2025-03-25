@@ -1761,12 +1761,26 @@ export class PostgresFieldsService implements IServicelocatorfields {
             }
           });
         } else if (data.sourceDetails.source === 'table') {
+          let whereCondition = `value='${data.value}'`;
+
+          // Check if `data.value` contains multiple comma-separated values
+          if (data.value.includes(',')) {
+            const values = data.value
+              .split(',')
+              .map((val) => `'${val.trim()}'`)
+              .join(', ');
+
+            whereCondition = `"value" IN (${values})`;
+          }
+
           const labels = await this.findDynamicOptions(
             data.sourceDetails.table,
-            `value='${data.value}'`
+            whereCondition
           );
+
           if (labels && labels.length > 0) {
-            processedValue = labels[0].name;
+            // Extract all names and join them into a string
+            processedValue = labels.map((label) => label.name).join(', ');
           }
         }
       }
