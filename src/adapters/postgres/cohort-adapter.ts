@@ -1046,7 +1046,7 @@ export class PostgresCohortService {
     let filledValues = await this.fieldsService.getSearchFieldValueData(
         0, 
         "0", 
-        { fieldId: fieldId,value:value }  // Passing extracted fieldId
+        { fieldId: fieldId,value:[value] }  // Passing extracted fieldId
     );
     const cohortIds = filledValues.mappedResponse.map(item => item.itemId);
 
@@ -1078,7 +1078,6 @@ export class PostgresCohortService {
     //   );
     // }
     const checkAutomaticMember = await this.automaticMemberService.checkMemberById(requiredData.userId);
-
     if (!requiredData.getChildData) {
       try {
         let findCohortId;
