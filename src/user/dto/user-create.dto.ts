@@ -1,19 +1,18 @@
 import { Expose, Type } from "class-transformer";
 import {
-  MaxLength,
   IsNotEmpty,
-  IsEmail,
   IsString,
-  IsNumber,
   IsArray,
   IsUUID,
   ValidateNested,
   IsOptional,
   Length,
   IsEnum,
+  IsDateString,
 } from "class-validator";
 import { User } from "../entities/user-entity";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { NotInFuture } from "src/utils/dob-not-in-future.validator";
 
 export class tenantRoleMappingDto {
   @ApiProperty({
@@ -91,10 +90,10 @@ export class UserCreateDto {
   @Length(1, 50)
   lastName: string;
 
-  @ApiProperty({ 
-    type: String, 
-    description: 'Gender of the user', 
-    enum: ['male', 'female', 'transgender'] 
+  @ApiProperty({
+    type: String,
+    description: 'Gender of the user',
+    enum: ['male', 'female', 'transgender']
   })
   @Expose()
   @IsEnum(['male', 'female', 'transgender'])
@@ -106,6 +105,9 @@ export class UserCreateDto {
     description: "The date of Birth of the user",
   })
   @Expose()
+  @IsNotEmpty()
+  @IsDateString() // Ensures it's a valid date format
+  @NotInFuture({ message: 'The birth date cannot be in the future' })
   dob: string;
 
   @ApiPropertyOptional({
