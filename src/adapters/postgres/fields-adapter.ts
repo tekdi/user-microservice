@@ -1640,12 +1640,13 @@ export class PostgresFieldsService implements IServicelocatorfields {
     return fieldsArr;
   }
 
-  async getEditableFieldsAttributes() {
+  async getEditableFieldsAttributes(tenantId: string) {
+    let tenantData = tenantId ? tenantId : 'default'
     const getFieldsAttributesQuery = `
           SELECT * 
           FROM "public"."Fields" 
-          WHERE "fieldAttributes"->'default'->>'isEditable' = $1; 
-        `;
+          WHERE "fieldAttributes"->'${tenantData}'->>'isEditable' = $1; 
+        `;        
     const getFieldsAttributesParams = ["true"];
     return await this.fieldsRepository.query(
       getFieldsAttributesQuery,

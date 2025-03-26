@@ -169,6 +169,9 @@ export class UserController {
   ) {
     userUpdateDto.userData.updatedBy = loginUserId;
     userUpdateDto.userId = userId;
+    const tenantId = headers["tenantid"];
+    userUpdateDto.userData.tenantId = tenantId ? tenantId : null;
+
     return await this.userAdapter
       .buildUserAdapter()
       .updateUser(userUpdateDto, response);
