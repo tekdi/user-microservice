@@ -850,6 +850,7 @@ export class PostgresUserService implements IServicelocator {
         }
       }
 
+      
       const { username, firstName, lastName, email } = userDto.userData;
       const userId = userDto.userId;
       const keycloakReqBody = { username, firstName, lastName, userId, email };
@@ -907,7 +908,7 @@ export class PostgresUserService implements IServicelocator {
 
       if (userDto?.customFields?.length > 0) {
         const getFieldsAttributes =
-          await this.fieldsService.getEditableFieldsAttributes();
+          await this.fieldsService.getEditableFieldsAttributes(userDto.userData.tenantId);
 
         const isEditableFieldId = [];
         const fieldIdAndAttributes = {};

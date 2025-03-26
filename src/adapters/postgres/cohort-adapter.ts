@@ -179,7 +179,7 @@ export class PostgresCohortService {
                       c."parentId", 
                       c."type", 
                       cm."status" AS cohortmemberstatus, 
-                      c."status" AS cohortstatus, 
+                      c."status", 
                       cm."cohortMembershipId"
                   `;
 
@@ -1166,9 +1166,8 @@ export class PostgresCohortService {
             parentID: cohort?.parentId,
             cohortMemberStatus: cohort?.cohortmemberstatus,
             cohortMembershipId: cohort?.cohortMembershipId,
-            cohortStatus: cohort?.cohortstatus,
+            cohortStatus: cohort?.status,
             type: cohort?.type,
-            status: cohort?.status
           };
           if (requiredData.customField) {
             resultData["customField"] = await this.fieldsService.getCustomFieldDetails(
