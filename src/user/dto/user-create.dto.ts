@@ -210,6 +210,10 @@ export class UserCreateDto {
     Object.assign(this, partial);
   }
 
+  @ApiPropertyOptional({
+    type: String,
+    description: 'The country code',
+  })
   @Expose()
   mobile_country_code: string;
 }
