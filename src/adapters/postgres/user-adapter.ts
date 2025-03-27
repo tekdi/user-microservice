@@ -706,6 +706,7 @@ export class PostgresUserService implements IServicelocator {
         'temporaryPassword',
         'createdBy',
         'deviceId',
+        'mobile_country_code',
       ],
     });
     if (!userDetails) {
