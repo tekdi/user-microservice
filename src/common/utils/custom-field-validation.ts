@@ -10,7 +10,7 @@ export class CustomFieldsValidation {
         break;
 
       case 'mobile':
-        if (fieldValue.length !== 9) {
+        if (fieldValue.length < 7 || fieldValue.length > 9) {
           result = false;
         }
         break;
