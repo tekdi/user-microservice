@@ -1244,7 +1244,6 @@ export class PostgresUserService implements IServicelocator {
         API_RESPONSES.USER_CREATE_SUCCESSFULLY
       );
     } catch (e) {
-      console.log(e);
 
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
@@ -1530,7 +1529,6 @@ export class PostgresUserService implements IServicelocator {
       if (foundField) {
         fieldValue = foundField.value;
       }
-      console.log("fieldValue", fieldValue);
 
       let createAutomaticMember = {
         userId: userId,
@@ -1549,8 +1547,7 @@ export class PostgresUserService implements IServicelocator {
         tenantId: tenantCohortRoleMapping[0].tenantId,
         isActive: true
       }
-      // console.log("createAutomaticMember",createAutomaticMember);
-
+      
       //Assgn member to sdb
       await this.automaticMemberService.create(createAutomaticMember)
     } catch (error) {
