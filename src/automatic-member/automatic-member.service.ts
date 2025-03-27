@@ -17,20 +17,15 @@ export class AutomaticMemberService {
 
   async create(dto: CreateAutomaticMemberDto) {
     try {
-      const checkExistUser = await this.userRepository.find({
-        where: {
-          userId: dto.userId,
-        },
-      });
-      if (checkExistUser) {
-        throw new ConflictException('User id is not Valid.');
-      }
+      
       const exists = await this.automaticMemberRepository.findOne({
         where: { userId: dto.userId, tenantId: dto.tenantId},
       });
+
       if (exists) {
         throw new ConflictException('AutomaticMember already exists for this user and tenant.');
       }
+      
       const newMember = this.automaticMemberRepository.create(dto);
       return this.automaticMemberRepository.save(newMember);
     } catch (error) {

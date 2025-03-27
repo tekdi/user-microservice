@@ -23,6 +23,9 @@ import { CohortAcademicYear } from "src/cohortAcademicYear/entities/cohortAcadem
 import { AcademicYear } from "src/academicyears/entities/academicyears-entity";
 import { CohortAcademicYearService } from "./cohortAcademicYear-adapter";
 import { AuthUtils } from "@utils/auth-util";
+import { AutomaticMemberService } from "src/automatic-member/automatic-member.service";
+import { AutomaticMember } from "src/automatic-member/entity/automatic-member.entity";
+
 
 @Module({
   imports: [
@@ -41,6 +44,7 @@ import { AuthUtils } from "@utils/auth-util";
       RolePrivilegeMapping,
       CohortAcademicYear,
       AcademicYear,
+      AutomaticMember,
     ]),
   ],
   providers: [
@@ -52,7 +56,8 @@ import { AuthUtils } from "@utils/auth-util";
     JwtService,
     CohortAcademicYearService,
     PostgresAcademicYearService,
-    AuthUtils
+    AuthUtils,
+    AutomaticMemberService,
   ],
   exports: [
     PostgresUserService,
@@ -62,6 +67,7 @@ import { AuthUtils } from "@utils/auth-util";
     JwtService,
     CohortAcademicYearService,
     PostgresAcademicYearService,
+    AutomaticMemberService,
   ],
 })
 export class PostgresModule { }
