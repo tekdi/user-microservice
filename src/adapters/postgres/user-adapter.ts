@@ -1273,7 +1273,7 @@ export class PostgresUserService implements IServicelocator {
           userCreateDto.mobile
         );
         if (!checkValidMobile) {
-          errorCollector.addError(`Mobile number must be 9 digits long`);
+          errorCollector.addError(`Mobile number must be 7 to 9 digits long`);
         }
       }
 
