@@ -30,9 +30,10 @@ export class AutomaticMemberService {
       }
 
       const exists = await this.checkAutomaticMemberExists(dto.userId, dto.tenantId, dto.rules.condition.value[0]);
-      if (exists && exists.isActive === true) {
+      if (exists.length > 0 && exists[0].isActive === true) {
         throw new ConflictException('AutomaticMember already exists for this user and tenant.');
       }
+      
       const newMember = this.automaticMemberRepository.create(dto);
       return this.automaticMemberRepository.save(newMember);
     } catch (error) {
