@@ -62,7 +62,7 @@ export class FieldValuesOptionDto {
   value: string;
 }
 
-class AutomaticMemberDto {
+export class AutomaticMemberDto {
   @ApiProperty({ type: Boolean, description: 'Indicates whether the member is automatic or not' })
   @Expose()
   value: boolean;
