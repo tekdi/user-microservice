@@ -1435,8 +1435,8 @@ export class PostgresUserService implements IServicelocator {
       (user.email = userCreateDto?.email),
       (user.mobile = Number(userCreateDto?.mobile) || null),
       (user.mobile_country_code = userCreateDto?.mobile_country_code),
-      (user.createdBy = userCreateDto?.createdBy || userCreateDto?.createdBy),
-      (user.updatedBy = userCreateDto?.updatedBy || userCreateDto?.updatedBy);
+      (user.createdBy = userCreateDto?.createdBy || null),
+      (user.updatedBy = userCreateDto?.updatedBy || null);
     if (userCreateDto?.dob) {
       user.dob = new Date(userCreateDto.dob);
     }
