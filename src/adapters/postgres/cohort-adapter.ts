@@ -881,7 +881,6 @@ export class PostgresCohortService {
               where: { cohortId: data.cohortId, status: MemberStatus.ACTIVE },
             });
             data['youthCount'] = userCount;
-            console.log('youthCount', userCount);
           }
 
           data['customFields'] = customFieldsData || [];
