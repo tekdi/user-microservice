@@ -1,29 +1,29 @@
-import { HttpStatus, Injectable } from "@nestjs/common";
-import jwt_decode from "jwt-decode";
-import { ReturnResponseBody } from "src/cohort/dto/cohort.dto";
-import { CohortSearchDto } from "src/cohort/dto/cohort-search.dto";
-import { CohortCreateDto } from "src/cohort/dto/cohort-create.dto";
-import { CohortUpdateDto } from "src/cohort/dto/cohort-update.dto";
-import { IsNull, Repository, In, ILike } from "typeorm";
-import { Cohort } from "src/cohort/entities/cohort.entity";
-import { Fields } from "src/fields/entities/fields.entity";
-import { InjectRepository } from "@nestjs/typeorm";
-import { PostgresFieldsService } from "./fields-adapter";
-import { FieldValues } from "../../fields/entities/fields-values.entity";
+import { HttpStatus, Injectable } from '@nestjs/common';
+import jwt_decode from 'jwt-decode';
+import { ReturnResponseBody } from 'src/cohort/dto/cohort.dto';
+import { CohortSearchDto } from 'src/cohort/dto/cohort-search.dto';
+import { CohortCreateDto } from 'src/cohort/dto/cohort-create.dto';
+import { CohortUpdateDto } from 'src/cohort/dto/cohort-update.dto';
+import { IsNull, Repository, In, ILike } from 'typeorm';
+import { Cohort } from 'src/cohort/entities/cohort.entity';
+import { Fields } from 'src/fields/entities/fields.entity';
+import { InjectRepository } from '@nestjs/typeorm';
+import { PostgresFieldsService } from './fields-adapter';
+import { FieldValues } from '../../fields/entities/fields-values.entity';
 import {
   CohortMembers,
   MemberStatus,
-} from "src/cohortMembers/entities/cohort-member.entity";
-import { isUUID } from "class-validator";
-import { UserTenantMapping } from "src/userTenantMapping/entities/user-tenant-mapping.entity";
-import APIResponse from "src/common/responses/response";
-import { APIID } from "src/common/utils/api-id.config";
-import { CohortAcademicYearService } from "./cohortAcademicYear-adapter";
-import { PostgresAcademicYearService } from "./academicyears-adapter";
-import { API_RESPONSES } from "@utils/response.messages";
-import { CohortAcademicYear } from "src/cohortAcademicYear/entities/cohortAcademicYear.entity";
-import { PostgresCohortMembersService } from "./cohortMembers-adapter";
-import { LoggerUtil } from "src/common/logger/LoggerUtil";
+} from 'src/cohortMembers/entities/cohort-member.entity';
+import { isUUID } from 'class-validator';
+import { UserTenantMapping } from 'src/userTenantMapping/entities/user-tenant-mapping.entity';
+import APIResponse from 'src/common/responses/response';
+import { APIID } from 'src/common/utils/api-id.config';
+import { CohortAcademicYearService } from './cohortAcademicYear-adapter';
+import { PostgresAcademicYearService } from './academicyears-adapter';
+import { API_RESPONSES } from '@utils/response.messages';
+import { CohortAcademicYear } from 'src/cohortAcademicYear/entities/cohortAcademicYear.entity';
+import { PostgresCohortMembersService } from './cohortMembers-adapter';
+import { LoggerUtil } from 'src/common/logger/LoggerUtil';
 
 @Injectable()
 export class PostgresCohortService {
@@ -249,13 +249,13 @@ export class PostgresCohortService {
       let processedValue = data.value;
 
       if (data?.sourceDetails) {
-        if (data.sourceDetails.source === "fieldparams") {
+        if (data.sourceDetails.source === 'fieldparams') {
           data.fieldParams.options.forEach((option) => {
             if (data.value === option.value) {
               processedValue = option.label;
             }
           });
-        } else if (data.sourceDetails.source === "table") {
+        } else if (data.sourceDetails.source === 'table') {
           const labels = await this.fieldsService.findDynamicOptions(
             data.sourceDetails.table,
             `value='${data.value}'`
@@ -285,13 +285,13 @@ export class PostgresCohortService {
   public async validateFieldValues(field_value_array: string[]) {
     const encounteredKeys = [];
     for (const fieldValue of field_value_array) {
-      const [fieldId] = fieldValue.split(":").map((value) => value.trim());
+      const [fieldId] = fieldValue.split(':').map((value) => value.trim());
       if (encounteredKeys.includes(fieldId)) {
         return { valid: false, fieldId: fieldId };
       }
       encounteredKeys.push(fieldId);
     }
-    return { valid: true, fieldId: "true" };
+    return { valid: true, fieldId: 'true' };
   }
 
   public async createCohort(cohortCreateDto: CohortCreateDto, res) {
@@ -335,18 +335,18 @@ export class PostgresCohortService {
             res,
             apiId,
             validationResponse.error,
-            "Validation Error",
+            'Validation Error',
             HttpStatus.BAD_REQUEST
           );
         }
       }
-      cohortCreateDto.status = cohortCreateDto.status || "active";
+      cohortCreateDto.status = cohortCreateDto.status || 'active';
       cohortCreateDto.attendanceCaptureImage = false;
 
       const existData = await this.cohortRepository.find({
         where: {
           name: cohortCreateDto.name,
-          status: "active",
+          status: 'active',
           type: cohortCreateDto.type,
           parentId: cohortCreateDto.parentId
             ? cohortCreateDto.parentId
@@ -373,12 +373,12 @@ export class PostgresCohortService {
         cohortCreateDto.customFields.length > 0
       ) {
         const cohortId = response?.cohortId;
-        console.log("cohortId: ", response.cohortId);
+        console.log('cohortId: ', response.cohortId);
         if (cohortCreateDto.customFields.length > 0) {
           for (const fieldValues of cohortCreateDto.customFields) {
             const fieldData = {
-              fieldId: fieldValues["fieldId"],
-              value: fieldValues["value"],
+              fieldId: fieldValues['fieldId'],
+              value: fieldValues['value'],
             };
 
             const resfields = await this.fieldsService.updateCustomFields(
@@ -387,9 +387,9 @@ export class PostgresCohortService {
               cohortCreateDto.customFields[0].fieldId
             );
             if (resfields.correctValue) {
-              if (!response["customFieldsValue"])
-                response["customFieldsValue"] = [];
-              response["customFieldsValue"].push(resfields);
+              if (!response['customFieldsValue'])
+                response['customFieldsValue'] = [];
+              response['customFieldsValue'].push(resfields);
             } else {
               createFailures.push(
                 `${fieldData.fieldId}: ${resfields?.valueIssue} - ${resfields.fieldName}`
@@ -444,9 +444,9 @@ export class PostgresCohortService {
     const apiId = APIID.COHORT_UPDATE;
     // Define valid status transitions
     const validTransitions = {
-      archived: ["active", "inactive"],
-      active: ["archived", "inactive"],
-      inactive: ["active", "archived"],
+      archived: ['active', 'inactive'],
+      active: ['archived', 'inactive'],
+      inactive: ['active', 'archived'],
     };
     try {
       if (!isUUID(cohortId)) {
@@ -485,7 +485,7 @@ export class PostgresCohortService {
               res,
               apiId,
               validationResponse.error,
-              "Validation Error",
+              'Validation Error',
               HttpStatus.BAD_REQUEST
             );
           }
@@ -519,7 +519,7 @@ export class PostgresCohortService {
             cohortUpdateDto.hasOwnProperty(key) &&
             cohortUpdateDto[key] !== null
           ) {
-            if (key !== "customFields") {
+            if (key !== 'customFields') {
               updateData[key] = cohortUpdateDto[key];
             } else {
               customFields[key] = cohortUpdateDto[key];
@@ -544,7 +544,7 @@ export class PostgresCohortService {
             ? [existingCohorDetails.type]
             : [];
           const allCustomFields = await this.fieldsService.findCustomFields(
-            "COHORT",
+            'COHORT',
             contextType
           );
 
@@ -561,8 +561,8 @@ export class PostgresCohortService {
             );
             for (const fieldValues of cohortUpdateDto.customFields) {
               const fieldData = {
-                fieldId: fieldValues["fieldId"],
-                value: fieldValues["value"],
+                fieldId: fieldValues['fieldId'],
+                value: fieldValues['value'],
               };
               await this.fieldsService.updateCustomFields(
                 cohortId,
@@ -580,11 +580,11 @@ export class PostgresCohortService {
           )
         ) {
           let memberStatus;
-          if (cohortUpdateDto.status === "archived") {
+          if (cohortUpdateDto.status === 'archived') {
             memberStatus = MemberStatus.ARCHIVED;
-          } else if (cohortUpdateDto.status === "active") {
+          } else if (cohortUpdateDto.status === 'active') {
             memberStatus = MemberStatus.ACTIVE;
-          } else if (cohortUpdateDto.status === "inactive") {
+          } else if (cohortUpdateDto.status === 'inactive') {
             memberStatus = MemberStatus.INACTIVE;
           }
 
@@ -646,7 +646,7 @@ export class PostgresCohortService {
       limit = limit || 200;
 
       const emptyValueKeys = {};
-      let emptyKeysString = "";
+      let emptyKeysString = '';
 
       const MAX_LIMIT = 200;
 
@@ -669,10 +669,10 @@ export class PostgresCohortService {
       //Get custom fields
       const getCustomFields = await this.fieldsRepository.find({
         where: [
-          { context: In(["COHORT", null, "null", "NULL"]), contextType: null },
+          { context: In(['COHORT', null, 'null', 'NULL']), contextType: null },
           { context: IsNull(), contextType: IsNull() },
         ],
-        select: ["fieldId", "name", "label", "contextType"],
+        select: ['fieldId', 'name', 'label', 'contextType'],
       });
 
       // Extract custom field names
@@ -681,7 +681,7 @@ export class PostgresCohortService {
       );
 
       // Combine the arrays
-      const allowedKeys = ["userId", ...cohortAllKeys, ...customFieldsKeys];
+      const allowedKeys = ['userId', ...cohortAllKeys, ...customFieldsKeys];
 
       const whereClause = {};
       const searchCustomFields = {};
@@ -715,7 +715,7 @@ export class PostgresCohortService {
         }
 
         Object.entries(filters).forEach(([key, value]) => {
-          if (!allowedKeys.includes(key) && key !== "customFieldsName") {
+          if (!allowedKeys.includes(key) && key !== 'customFieldsName') {
             return APIResponse.error(
               response,
               apiId,
@@ -724,10 +724,10 @@ export class PostgresCohortService {
               HttpStatus.BAD_REQUEST
             );
           }
-          if (value === "") {
+          if (value === '') {
             emptyValueKeys[key] = value;
-            emptyKeysString += (emptyKeysString ? ", " : "") + key;
-          } else if (key === "name") {
+            emptyKeysString += (emptyKeysString ? ', ' : '') + key;
+          } else if (key === 'name') {
             whereClause[key] = ILike(`%${value}%`);
           } else if (cohortAllKeys.includes(key)) {
             whereClause[key] = value;
@@ -737,11 +737,11 @@ export class PostgresCohortService {
         });
       }
 
-      if (whereClause["parentId"]) {
-        whereClause["parentId"] = In(whereClause["parentId"]);
+      if (whereClause['parentId']) {
+        whereClause['parentId'] = In(whereClause['parentId']);
       }
-      if (whereClause["status"]) {
-        whereClause["status"] = In(whereClause["status"]);
+      if (whereClause['status']) {
+        whereClause['status'] = In(whereClause['status']);
       }
 
       const results = {
@@ -750,18 +750,18 @@ export class PostgresCohortService {
 
       const order = {};
       if (sort?.length) {
-        order[sort[0]] = ["ASC", "DESC"].includes(sort[1].toUpperCase())
+        order[sort[0]] = ['ASC', 'DESC'].includes(sort[1].toUpperCase())
           ? sort[1].toUpperCase()
-          : "ASC";
+          : 'ASC';
       } else {
-        order["name"] = "ASC";
+        order['name'] = 'ASC';
       }
 
       let count = 0;
 
-      if (whereClause["userId"]) {
+      if (whereClause['userId']) {
         const additionalFields = Object.keys(whereClause).filter(
-          (key) => key !== "userId" && key !== "academicYearId"
+          (key) => key !== 'userId' && key !== 'academicYearId'
         );
         if (additionalFields.length > 0) {
           // Handle the case where userId is provided along with other fields
@@ -769,7 +769,7 @@ export class PostgresCohortService {
             response,
             apiId,
             `When filtering by userId, do not include additional fields`,
-            "Invalid filters",
+            'Invalid filters',
             HttpStatus.BAD_REQUEST
           );
         }
@@ -777,7 +777,7 @@ export class PostgresCohortService {
         const userTenantMapExist = await this.UserTenantMappingRepository.find({
           where: {
             tenantId: tenantId,
-            userId: whereClause["userId"],
+            userId: whereClause['userId'],
           },
         });
         if (userTenantMapExist.length == 0) {
@@ -785,7 +785,7 @@ export class PostgresCohortService {
             response,
             apiId,
             `User is not mapped for this tenant`,
-            "Invalid combination of userId and tenantId",
+            'Invalid combination of userId and tenantId',
             HttpStatus.BAD_REQUEST
           );
         }
@@ -812,7 +812,7 @@ export class PostgresCohortService {
           const customFieldsData = await this.getCohortDataWithCustomfield(
             data.cohortId
           );
-          data["customFields"] = customFieldsData;
+          data['customFields'] = customFieldsData;
           results.cohortDetails.push(data);
         }
       } else {
@@ -821,7 +821,7 @@ export class PostgresCohortService {
         //If source config in source details from fields table is not exist then return false
 
         if (Object.keys(searchCustomFields).length > 0) {
-          const context = "COHORT";
+          const context = 'COHORT';
           getCohortIdUsingCustomFields =
             await this.fieldsService.filterUserUsingCustomFields(
               context,
@@ -832,8 +832,8 @@ export class PostgresCohortService {
             return APIResponse.error(
               response,
               apiId,
-              "No data found",
-              "NOT FOUND",
+              'No data found',
+              'NOT FOUND',
               HttpStatus.NOT_FOUND
             );
           }
@@ -852,7 +852,7 @@ export class PostgresCohortService {
           const cohortIds = cohortIdsByFieldAndAcademicYear?.map(
             ({ cohortId }) => cohortId
           );
-          whereClause["cohortId"] = In(cohortIds);
+          whereClause['cohortId'] = In(cohortIds);
         }
         // } else if (cohortsByAcademicYear?.length >= 1) {
         //   const cohortIds = cohortsByAcademicYear?.map(
@@ -874,7 +874,17 @@ export class PostgresCohortService {
             data.cohortId,
             data.type
           );
-          data["customFields"] = customFieldsData || [];
+
+          // Fetch number of users if the type is 'cohort'
+          if (data.type === 'COHORT') {
+            const userCount = await this.cohortMembersRepository.count({
+              where: { cohortId: data.cohortId, status: MemberStatus.ACTIVE },
+            });
+            data['youthCount'] = userCount;
+          }
+
+          data['customFields'] = customFieldsData || [];
+
           results.cohortDetails.push(data);
         }
       }
@@ -885,14 +895,14 @@ export class PostgresCohortService {
           apiId,
           { count, results },
           HttpStatus.OK,
-          "Cohort details fetched successfully"
+          'Cohort details fetched successfully'
         );
       } else {
         return APIResponse.error(
           response,
           apiId,
           `No data found.`,
-          "No data found.",
+          'No data found.',
           HttpStatus.NOT_FOUND
         );
       }
@@ -921,7 +931,7 @@ export class PostgresCohortService {
           response,
           apiId,
           `Invalid Cohort Id format. It must be a valid UUID`,
-          "Invalid cohortId",
+          'Invalid cohortId',
           HttpStatus.BAD_REQUEST
         );
       }
@@ -943,14 +953,14 @@ export class PostgresCohortService {
           apiId,
           affectedrows[1],
           HttpStatus.OK,
-          "Cohort Deleted Successfully."
+          'Cohort Deleted Successfully.'
         );
       } else {
         return APIResponse.error(
           response,
           apiId,
           `Cohort not found`,
-          "Invalid cohortId",
+          'Invalid cohortId',
           HttpStatus.BAD_REQUEST
         );
       }
@@ -1082,7 +1092,7 @@ export class PostgresCohortService {
           apiId,
           result,
           HttpStatus.OK,
-          "Cohort list fetched successfully"
+          'Cohort list fetched successfully'
         );
       } catch (error) {
         LoggerUtil.error(
@@ -1111,7 +1121,7 @@ export class PostgresCohortService {
           return APIResponse.error(
             res,
             apiId,
-            "BAD_REQUEST",
+            'BAD_REQUEST',
             `No Cohort Found for this User ID`,
             HttpStatus.BAD_REQUEST
           );
@@ -1129,15 +1139,15 @@ export class PostgresCohortService {
             type: cohort?.type,
           };
           if (requiredData.customField) {
-            resultData["customField"] = await this.getCohortCustomFieldDetails(
+            resultData['customField'] = await this.getCohortCustomFieldDetails(
               cohort.cohortId
             );
-            resultData["childData"] = await this.getCohortHierarchy(
+            resultData['childData'] = await this.getCohortHierarchy(
               cohort.cohortId,
               requiredData.customField
             );
           } else {
-            resultData["childData"] = await this.getCohortHierarchy(
+            resultData['childData'] = await this.getCohortHierarchy(
               cohort.cohortId
             );
           }
