@@ -24,6 +24,7 @@ import { API_RESPONSES } from '@utils/response.messages';
 import { CohortAcademicYear } from 'src/cohortAcademicYear/entities/cohortAcademicYear.entity';
 import { PostgresCohortMembersService } from './cohortMembers-adapter';
 import { LoggerUtil } from 'src/common/logger/LoggerUtil';
+import { User } from 'src/user/entities/user-entity';
 
 @Injectable()
 export class PostgresCohortService {
@@ -41,7 +42,9 @@ export class PostgresCohortService {
     private fieldsService: PostgresFieldsService,
     private readonly cohortAcademicYearService: CohortAcademicYearService,
     private readonly postgresAcademicYearService: PostgresAcademicYearService,
-    private readonly postgresCohortMembersService: PostgresCohortMembersService
+    private readonly postgresCohortMembersService: PostgresCohortMembersService,
+    @InjectRepository(User)
+    private usersRepository: Repository<User>
   ) {}
 
   public async getCohortsDetails(requiredData, res) {
@@ -638,7 +641,7 @@ export class PostgresCohortService {
   ) {
     const apiId = APIID.COHORT_LIST;
     try {
-      const { sort, filters } = cohortSearchDto;
+      const { sort, filters, is_csvexport } = cohortSearchDto;
       let { limit, offset } = cohortSearchDto;
       let cohortsByAcademicYear: CohortAcademicYear[];
 
@@ -889,6 +892,39 @@ export class PostgresCohortService {
         }
       }
 
+      // Check if CSV export is enabled
+      if (is_csvexport === true) {
+        const userIds: string[] = Array.from(
+          new Set(
+            results.cohortDetails
+              .map((cohort) => [cohort.createdBy, cohort.updatedBy])
+              .flat()
+              .filter((id) => typeof id === 'string')
+          )
+        );
+
+        if (userIds.length > 0) {
+          try {
+            const userDetails = await this.getUserNamesByIds(userIds);
+            results.cohortDetails = results.cohortDetails.map((cohort) => ({
+              ...cohort,
+              createdByName: cohort.createdBy
+                ? userDetails[cohort.createdBy] || null
+                : null,
+              updatedByName: cohort.updatedBy
+                ? userDetails[cohort.updatedBy] || null
+                : null,
+            }));
+          } catch (error) {
+            LoggerUtil.error(
+              `${API_RESPONSES.SERVER_ERROR}`,
+              `Error fetching user names: ${error.message}`,
+              apiId
+            );
+          }
+        }
+      }
+
       if (results.cohortDetails.length > 0) {
         return APIResponse.success(
           response,
@@ -921,6 +957,20 @@ export class PostgresCohortService {
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
+  }
+
+  //get user name by id
+  async getUserNamesByIds(userIds: string[]): Promise<Record<string, string>> {
+    if (!userIds || userIds.length === 0) {
+      return {};
+    }
+    const query = `SELECT U."userId",U."firstName",U."lastName" FROM public."Users" U WHERE U."userId" = ANY($1)`;
+    const users = await this.usersRepository.query(query, [userIds]);
+
+    return users.reduce((acc, user) => {
+      acc[user.userId] = `${user.firstName} ${user.lastName}`;
+      return acc;
+    }, {} as Record<string, string>);
   }
 
   public async updateCohortStatus(cohortId: string, response, userId: string) {

@@ -1,5 +1,5 @@
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { Type } from "class-transformer";
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayMinSize,
@@ -10,28 +10,29 @@ import {
   IsString,
   ValidateNested,
   IsUUID,
-} from "class-validator";
+  IsBoolean,
+} from 'class-validator';
 
 enum SortDirection {
-  ASC = "asc",
-  DESC = "desc",
+  ASC = 'asc',
+  DESC = 'desc',
 }
 class FiltersDto {
-  @ApiPropertyOptional({ type: String, description: "Cohort ID", example: "" })
+  @ApiPropertyOptional({ type: String, description: 'Cohort ID', example: '' })
   // @IsOptional()
   @IsString()
   @IsUUID()
   @ValidateIf((o) => !o.userId)
   cohortId?: string;
 
-  @ApiPropertyOptional({ type: String, description: "User ID", example: "" })
+  @ApiPropertyOptional({ type: String, description: 'User ID', example: '' })
   // @IsOptional()
   @IsString()
   @IsUUID()
   @ValidateIf((o) => !o.cohortId)
   userId?: string;
 
-  @ApiPropertyOptional({ type: String, description: "Role", example: "" })
+  @ApiPropertyOptional({ type: String, description: 'Role', example: '' })
   @IsOptional()
   @IsString()
   role?: string;
@@ -51,7 +52,7 @@ class FiltersDto {
   @IsString()
   lastName?: string;
 
-  @ApiPropertyOptional({ type: Array, description: "Status", example: [] })
+  @ApiPropertyOptional({ type: Array, description: 'Status', example: [] })
   @IsOptional()
   @IsArray()
   status?: string[]; // Assuming status is an array of strings
@@ -59,24 +60,24 @@ class FiltersDto {
 export class CohortMembersSearchDto {
   @ApiProperty({
     type: Number,
-    description: "Limit",
+    description: 'Limit',
   })
   limit: number;
 
   @ApiProperty({
     type: Number,
-    description: "Offset",
+    description: 'Offset',
   })
   offset: number;
 
   @ApiProperty({
     type: FiltersDto,
-    description: "Filters",
+    description: 'Filters',
     example: {
-      cohortId: "",
-      userId: "",
-      role: "",
-      name: "",
+      cohortId: '',
+      userId: '',
+      role: '',
+      name: '',
       status: [],
       academicYearIds: [],
     }, // Adding example for Swagger
@@ -87,19 +88,19 @@ export class CohortMembersSearchDto {
   filters?: FiltersDto; // Define cohortId and userId properties
 
   @ApiPropertyOptional({
-    description: "Sort",
-    example: ["createdAt", "asc"],
+    description: 'Sort',
+    example: ['createdAt', 'asc'],
   })
   @IsArray()
   @IsOptional()
-  @ArrayMinSize(2, { message: "Sort array must contain exactly two elements" })
-  @ArrayMaxSize(2, { message: "Sort array must contain exactly two elements" })
+  @ArrayMinSize(2, { message: 'Sort array must contain exactly two elements' })
+  @ArrayMaxSize(2, { message: 'Sort array must contain exactly two elements' })
   sort: [string, string];
 
   @ValidateIf((o) => o.sort !== undefined)
   @IsEnum(SortDirection, {
     each: true,
-    message: "Sort[1] must be either asc or desc",
+    message: 'Sort[1] must be either asc or desc',
   })
   get sortDirection(): string | undefined {
     return this.sort ? this.sort[1] : undefined;
@@ -108,4 +109,13 @@ export class CohortMembersSearchDto {
   constructor(partial: Partial<CohortMembersSearchDto>) {
     Object.assign(this, partial);
   }
+
+  @ApiPropertyOptional({
+    type: Boolean,
+    description: 'Flag to export as CSV',
+    example: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  is_csvexport?: boolean;
 }

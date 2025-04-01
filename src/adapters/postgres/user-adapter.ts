@@ -340,7 +340,7 @@ export class PostgresUserService implements IServicelocator {
   ) {
     const apiId = APIID.USER_LIST;
     try {
-      const findData = await this.findAllUserDetails(userSearchDto);
+      let findData = await this.findAllUserDetails(userSearchDto);
 
       if (findData === false) {
         LoggerUtil.error(
@@ -356,6 +356,46 @@ export class PostgresUserService implements IServicelocator {
           HttpStatus.NOT_FOUND
         );
       }
+
+      // Check if CSV export is enabled
+      if (userSearchDto.is_csvexport === true) {
+        // Ensure findData contains an array before mapping
+        const userArray = Array.isArray(findData.getUserDetails)
+          ? findData.getUserDetails
+          : [];
+
+        const userIds: string[] = Array.from(
+          new Set(
+            userArray
+              .map((user) => user.createdBy)
+              .filter((id) => typeof id === 'string')
+          )
+        );
+
+        if (userIds.length > 0) {
+          try {
+            const userDetails = await this.getUserNamesByIds(userIds);
+
+            // Map userDetails into findData
+            findData.getUserDetails = userArray.map((user) => ({
+              ...user,
+              createdByName: user.createdBy
+                ? userDetails[user.createdBy] || null
+                : null,
+              updatedByName: user.updatedBy
+                ? userDetails[user.updatedBy] || null
+                : null,
+            }));
+          } catch (error) {
+            LoggerUtil.error(
+              `${API_RESPONSES.SERVER_ERROR}`,
+              `Error fetching user names: ${error.message}`,
+              apiId
+            );
+          }
+        }
+      }
+
       LoggerUtil.log(API_RESPONSES.USER_GET_SUCCESSFULLY, apiId);
       return await APIResponse.success(
         response,
@@ -380,6 +420,20 @@ export class PostgresUserService implements IServicelocator {
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
+  }
+
+  //get user name by id
+  async getUserNamesByIds(userIds: string[]): Promise<Record<string, string>> {
+    if (!userIds || userIds.length === 0) {
+      return {};
+    }
+    const query = `SELECT U."userId",U."firstName",U."lastName" FROM public."Users" U WHERE U."userId" = ANY($1)`;
+    const users = await this.usersRepository.query(query, [userIds]);
+
+    return users.reduce((acc, user) => {
+      acc[user.userId] = `${user.firstName} ${user.lastName}`;
+      return acc;
+    }, {} as Record<string, string>);
   }
 
   async findAllUserDetails(userSearchDto) {

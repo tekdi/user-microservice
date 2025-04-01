@@ -256,7 +256,7 @@ export class PostgresCohortMembersService {
       }
 
       let { limit, offset } = cohortMembersSearchDto;
-      const { sort, filters } = cohortMembersSearchDto;
+      const { sort, filters, is_csvexport = false } = cohortMembersSearchDto;
       offset = offset || 0;
       limit = limit || 0;
       let results = {};
@@ -370,6 +370,46 @@ export class PostgresCohortMembersService {
           HttpStatus.NOT_FOUND
         );
       }
+
+      // Check if CSV export is requested
+      if (is_csvexport == true) {
+        // Extract unique createdBy and updatedBy user IDs
+        const userIds: string[] = Array.from(
+          new Set(
+            results['userDetails']
+              .map((user) => [user.createdBy, user.updatedBy])
+              .flat()
+              .filter((id) => typeof id === 'string')
+          )
+        ) as string[];
+
+        if (userIds.length > 0) {
+          try {
+            // Fetch user details based on IDs
+            const userDetails = await this.getUserNamesByIds(userIds);
+
+            if (userDetails && Object.keys(userDetails).length > 0) {
+              // Update userDetails with createdByName and updatedByName
+              results['userDetails'] = results['userDetails'].map((user) => ({
+                ...user,
+                createdByName: user.createdBy
+                  ? userDetails[user.createdBy] || null
+                  : null,
+                updatedByName: user.updatedBy
+                  ? userDetails[user.updatedBy] || null
+                  : null,
+              }));
+            }
+          } catch (error) {
+            LoggerUtil.error(
+              `${API_RESPONSES.SERVER_ERROR}`,
+              `Error fetching user names: ${error.message}`,
+              apiId
+            );
+          }
+        }
+      }
+
       return APIResponse.success(
         res,
         apiId,
@@ -392,6 +432,20 @@ export class PostgresCohortMembersService {
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
+  }
+
+  //get user name by id
+  async getUserNamesByIds(userIds: string[]): Promise<Record<string, string>> {
+    if (!userIds || userIds.length === 0) {
+      return {};
+    }
+    const query = `SELECT U."userId",U."firstName",U."lastName" FROM public."Users" U WHERE U."userId" = ANY($1)`;
+    const users = await this.usersRepository.query(query, [userIds]);
+
+    return users.reduce((acc, user) => {
+      acc[user.userId] = `${user.firstName} ${user.lastName}`;
+      return acc;
+    }, {} as Record<string, string>);
   }
 
   async isCohortExistForYear(yearId, cohortId) {
