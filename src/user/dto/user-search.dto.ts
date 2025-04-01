@@ -1,4 +1,4 @@
-import { Expose } from "class-transformer";
+import { Expose } from 'class-transformer';
 import {
   IsNotEmpty,
   IsObject,
@@ -10,49 +10,50 @@ import {
   ArrayMinSize,
   ArrayMaxSize,
   IsEmail,
-} from "class-validator";
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+  IsBoolean,
+} from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class setFilters {
   @ApiPropertyOptional({
     type: String,
-    description: "State",
+    description: 'State',
   })
   state: string;
 
   @ApiPropertyOptional({
     type: String,
-    description: "District",
+    description: 'District',
   })
   district: string;
 
   @ApiPropertyOptional({
     type: String,
-    description: "Block",
+    description: 'Block',
   })
   block: string;
 
   @ApiPropertyOptional({
     type: String,
-    description: "Role",
+    description: 'Role',
   })
   role: string;
 
   @ApiPropertyOptional({
     type: String,
-    description: "User Name",
+    description: 'User Name',
   })
   username: string;
 
   @ApiPropertyOptional({
     type: String,
-    description: "User Id",
+    description: 'User Id',
   })
   userId: string;
 
   @ApiPropertyOptional({
     type: [String],
-    description: "email Ids",
+    description: 'email Ids',
   })
   @IsOptional()
   @IsArray()
@@ -61,7 +62,7 @@ export class setFilters {
 
   @ApiPropertyOptional({
     type: [String],
-    description: "status",
+    description: 'status',
   })
   @IsOptional()
   @IsArray()
@@ -71,7 +72,7 @@ export class setFilters {
 export class excludeFields {
   @ApiProperty({
     type: [String],
-    description: "Exclude User IDs",
+    description: 'Exclude User IDs',
     default: [],
   })
   @Expose()
@@ -83,7 +84,7 @@ export class excludeFields {
 
   @ApiProperty({
     type: [String],
-    description: "Exclude Cohort IDs",
+    description: 'Exclude Cohort IDs',
     default: [],
   })
   @Expose()
@@ -95,14 +96,14 @@ export class excludeFields {
 }
 
 enum SortDirection {
-  ASC = "asc",
-  DESC = "desc",
+  ASC = 'asc',
+  DESC = 'desc',
 }
 
 export class tenantCohortRoleMappingDto {
   @ApiPropertyOptional({
     type: String,
-    description: "Tenant Id",
+    description: 'Tenant Id',
   })
   @Expose()
   @IsOptional()
@@ -111,7 +112,7 @@ export class tenantCohortRoleMappingDto {
 
   @ApiProperty({
     type: [String],
-    description: "Cohort Id",
+    description: 'Cohort Id',
     default: [],
   })
   @Expose()
@@ -123,7 +124,7 @@ export class tenantCohortRoleMappingDto {
 
   @ApiPropertyOptional({
     type: String,
-    description: "Role Id",
+    description: 'Role Id',
   })
   @Expose()
   @IsOptional()
@@ -134,7 +135,7 @@ export class tenantCohortRoleMappingDto {
 export class UserSearchDto {
   @ApiProperty({
     type: Number,
-    description: "Limit",
+    description: 'Limit',
   })
   @Expose()
   @IsOptional()
@@ -142,7 +143,7 @@ export class UserSearchDto {
 
   @ApiProperty({
     type: Number,
-    description: "Offset",
+    description: 'Offset',
   })
   @Expose()
   @IsOptional()
@@ -150,7 +151,7 @@ export class UserSearchDto {
 
   @ApiProperty({
     type: setFilters,
-    description: "Filters",
+    description: 'Filters',
   })
   @Expose()
   @IsOptional()
@@ -159,7 +160,7 @@ export class UserSearchDto {
 
   @ApiProperty({
     type: [String],
-    description: "Custom Fields Name",
+    description: 'Custom Fields Name',
     default: [],
   })
   @Expose()
@@ -168,7 +169,7 @@ export class UserSearchDto {
 
   @ApiPropertyOptional({
     type: tenantCohortRoleMappingDto,
-    description: "Tenant Cohort RoleMapping",
+    description: 'Tenant Cohort RoleMapping',
   })
   @Expose()
   @IsOptional()
@@ -177,7 +178,7 @@ export class UserSearchDto {
 
   @ApiPropertyOptional({
     type: excludeFields,
-    description: "Filters",
+    description: 'Filters',
   })
   @Expose()
   @IsOptional()
@@ -185,19 +186,19 @@ export class UserSearchDto {
   exclude: excludeFields;
 
   @ApiPropertyOptional({
-    description: "Sort",
-    example: ["username", "asc"],
+    description: 'Sort',
+    example: ['username', 'asc'],
   })
   @IsArray()
   @IsOptional()
-  @ArrayMinSize(2, { message: "Sort array must contain exactly two elements" })
-  @ArrayMaxSize(2, { message: "Sort array must contain exactly two elements" })
+  @ArrayMinSize(2, { message: 'Sort array must contain exactly two elements' })
+  @ArrayMaxSize(2, { message: 'Sort array must contain exactly two elements' })
   sort: [string, string];
 
   @ValidateIf((o) => o.sort !== undefined)
   @IsEnum(SortDirection, {
     each: true,
-    message: "Sort[1] must be either asc or desc",
+    message: 'Sort[1] must be either asc or desc',
   })
   get sortDirection(): string | undefined {
     return this.sort ? this.sort[1] : undefined;
@@ -206,4 +207,13 @@ export class UserSearchDto {
   constructor(partial: Partial<UserSearchDto>) {
     Object.assign(this, partial);
   }
+
+  @ApiPropertyOptional({
+    type: Boolean,
+    description: 'Flag to export as CSV',
+    example: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  includeDisplayValues?: boolean;
 }

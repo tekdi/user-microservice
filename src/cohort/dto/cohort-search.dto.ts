@@ -1,4 +1,4 @@
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   ArrayMaxSize,
   ArrayMinSize,
@@ -16,16 +16,16 @@ import {
   ValidationArguments,
   ValidationOptions,
   registerDecorator,
-} from "class-validator";
-import { CohortDto } from "./cohort.dto";
-import { Expose } from "class-transformer";
+} from 'class-validator';
+import { CohortDto } from './cohort.dto';
+import { Expose } from 'class-transformer';
 
 export class filtersProperty {
   //userIdBy
   @ApiProperty({
     type: String,
-    description: "User Id",
-    default: "",
+    description: 'User Id',
+    default: '',
   })
   @Expose()
   @IsOptional()
@@ -36,8 +36,8 @@ export class filtersProperty {
   //cohortIdBy
   @ApiProperty({
     type: String,
-    description: "Cohort Id",
-    default: "",
+    description: 'Cohort Id',
+    default: '',
   })
   @Expose()
   @IsOptional()
@@ -48,8 +48,8 @@ export class filtersProperty {
   //academicYearId
   @ApiProperty({
     type: String,
-    description: "Academic Year Id",
-    default: "",
+    description: 'Academic Year Id',
+    default: '',
   })
   @Expose()
   @IsOptional()
@@ -60,8 +60,8 @@ export class filtersProperty {
   //name
   @ApiProperty({
     type: String,
-    description: "The name of the cohort",
-    default: "",
+    description: 'The name of the cohort',
+    default: '',
   })
   @Expose()
   @IsOptional()
@@ -72,7 +72,7 @@ export class filtersProperty {
   //parentId
   @ApiProperty({
     type: [String],
-    description: "Parent Id",
+    description: 'Parent Id',
     default: [],
   })
   @Expose()
@@ -85,8 +85,8 @@ export class filtersProperty {
   //type
   @ApiProperty({
     type: String,
-    description: "The type of the cohort",
-    default: "",
+    description: 'The type of the cohort',
+    default: '',
   })
   @Expose()
   @IsOptional()
@@ -97,7 +97,7 @@ export class filtersProperty {
   //type
   @ApiProperty({
     type: [String],
-    description: "The status of the cohort",
+    description: 'The status of the cohort',
     default: [],
   })
   @Expose()
@@ -109,26 +109,26 @@ export class filtersProperty {
 
   @ApiPropertyOptional({
     type: String,
-    description: "State",
+    description: 'State',
   })
   states: string;
 
   @ApiPropertyOptional({
     type: String,
-    description: "District",
+    description: 'District',
   })
   districts: string;
 
   @ApiPropertyOptional({
     type: String,
-    description: "Block",
+    description: 'Block',
   })
   blocks: string;
 
   //customFieldsName
   @ApiProperty({
     type: Object,
-    description: "The customFieldsName of the cohort",
+    description: 'The customFieldsName of the cohort',
   })
   @Expose()
   @IsOptional()
@@ -137,45 +137,45 @@ export class filtersProperty {
   customFieldsName?: {};
 }
 enum SortDirection {
-  ASC = "asc",
-  DESC = "desc",
+  ASC = 'asc',
+  DESC = 'desc',
 }
 export class CohortSearchDto {
   @ApiProperty({
     type: Number,
-    description: "Limit",
+    description: 'Limit',
   })
   @IsNumber()
   limit: number;
 
   @ApiProperty({
     type: Number,
-    description: "Offset",
+    description: 'Offset',
   })
   @IsNumber()
   offset: number;
 
   @ApiProperty({
     type: filtersProperty,
-    description: "Filters",
+    description: 'Filters',
   })
   @IsObject()
   filters: filtersProperty;
 
   @ApiPropertyOptional({
-    description: "Sort",
-    example: ["name", "asc"],
+    description: 'Sort',
+    example: ['name', 'asc'],
   })
   @IsArray()
   @IsOptional()
-  @ArrayMinSize(2, { message: "Sort array must contain exactly two elements" })
-  @ArrayMaxSize(2, { message: "Sort array must contain exactly two elements" })
+  @ArrayMinSize(2, { message: 'Sort array must contain exactly two elements' })
+  @ArrayMaxSize(2, { message: 'Sort array must contain exactly two elements' })
   sort: [string, string];
 
   @ValidateIf((o) => o.sort !== undefined)
   @IsEnum(SortDirection, {
     each: true,
-    message: "Sort[1] must be either asc or desc",
+    message: 'Sort[1] must be either asc or desc',
   })
   get sortDirection(): string | undefined {
     return this.sort ? this.sort[1] : undefined;
@@ -184,4 +184,13 @@ export class CohortSearchDto {
   constructor(partial: Partial<CohortSearchDto>) {
     Object.assign(this, partial);
   }
+
+  @ApiPropertyOptional({
+    type: Boolean,
+    description: 'Flag to export as CSV',
+    example: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  includeDisplayValues?: boolean;
 }
