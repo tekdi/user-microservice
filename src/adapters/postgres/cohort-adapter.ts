@@ -641,7 +641,7 @@ export class PostgresCohortService {
   ) {
     const apiId = APIID.COHORT_LIST;
     try {
-      const { sort, filters, is_csvexport } = cohortSearchDto;
+      const { sort, filters, includeDisplayValues } = cohortSearchDto;
       let { limit, offset } = cohortSearchDto;
       let cohortsByAcademicYear: CohortAcademicYear[];
 
@@ -893,7 +893,7 @@ export class PostgresCohortService {
       }
 
       // Check if CSV export is enabled
-      if (is_csvexport === true) {
+      if (includeDisplayValues === true) {
         const userIds: string[] = Array.from(
           new Set(
             results.cohortDetails

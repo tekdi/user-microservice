@@ -256,7 +256,11 @@ export class PostgresCohortMembersService {
       }
 
       let { limit, offset } = cohortMembersSearchDto;
-      const { sort, filters, is_csvexport = false } = cohortMembersSearchDto;
+      const {
+        sort,
+        filters,
+        includeDisplayValues = false,
+      } = cohortMembersSearchDto;
       offset = offset || 0;
       limit = limit || 0;
       let results = {};
@@ -372,7 +376,7 @@ export class PostgresCohortMembersService {
       }
 
       // Check if CSV export is requested
-      if (is_csvexport == true) {
+      if (includeDisplayValues == true) {
         // Extract unique createdBy and updatedBy user IDs
         const userIds: string[] = Array.from(
           new Set(

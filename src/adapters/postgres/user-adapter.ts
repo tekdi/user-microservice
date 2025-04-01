@@ -358,7 +358,7 @@ export class PostgresUserService implements IServicelocator {
       }
 
       // Check if CSV export is enabled
-      if (userSearchDto.is_csvexport === true) {
+      if (userSearchDto.includeDisplayValues === true) {
         // Ensure findData contains an array before mapping
         const userArray = Array.isArray(findData.getUserDetails)
           ? findData.getUserDetails

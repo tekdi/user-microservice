@@ -192,5 +192,5 @@ export class CohortSearchDto {
   })
   @IsOptional()
   @IsBoolean()
-  is_csvexport?: boolean;
+  includeDisplayValues?: boolean;
 }

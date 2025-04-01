@@ -215,5 +215,5 @@ export class UserSearchDto {
   })
   @IsOptional()
   @IsBoolean()
-  is_csvexport?: boolean;
+  includeDisplayValues?: boolean;
 }
