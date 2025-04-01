@@ -3,7 +3,7 @@ import { User } from "../../user/entities/user-entity";
 import { FieldValues } from "src/fields/entities/fields-values.entity";
 import { InjectRepository } from "@nestjs/typeorm";
 import { DataSource, ILike, In, Repository } from "typeorm";
-import { UserCreateDto } from "../../user/dto/user-create.dto";
+import { tenantRoleMappingDto, UserCreateDto } from "../../user/dto/user-create.dto";
 import jwt_decode from "jwt-decode";
 import {
   getKeycloakAdminToken,
@@ -45,6 +45,8 @@ import { OtpVerifyDTO } from "src/user/dto/otpVerify.dto";
 import { SendPasswordResetOTPDto } from "src/user/dto/passwordReset.dto";
 import { ActionType, UserUpdateDTO } from "src/user/dto/user-update.dto";
 import { randomInt } from 'crypto';
+import { UUID } from "aws-sdk/clients/cloudtrail";
+import { AutomaticMemberService } from "src/automatic-member/automatic-member.service";
 
 interface UpdateField {
   userId: string; // Required
@@ -89,6 +91,7 @@ export class PostgresUserService implements IServicelocator {
     private postgresAcademicYearService: PostgresAcademicYearService,
     private readonly cohortAcademicYearService: CohortAcademicYearService,
     private readonly authUtils: AuthUtils,
+    private readonly automaticMemberService: AutomaticMemberService,
     dataSource: DataSource
   ) {
     this.jwt_secret = this.configService.get<string>("RBAC_JWT_SECRET");
@@ -850,6 +853,7 @@ export class PostgresUserService implements IServicelocator {
         }
       }
 
+
       const { username, firstName, lastName, email } = userDto.userData;
       const userId = userDto.userId;
       const keycloakReqBody = { username, firstName, lastName, userId, email };
@@ -907,7 +911,7 @@ export class PostgresUserService implements IServicelocator {
 
       if (userDto?.customFields?.length > 0) {
         const getFieldsAttributes =
-          await this.fieldsService.getEditableFieldsAttributes();
+          await this.fieldsService.getEditableFieldsAttributes(userDto.userData.tenantId);
 
         const isEditableFieldId = [];
         const fieldIdAndAttributes = {};
@@ -1104,6 +1108,17 @@ export class PostgresUserService implements IServicelocator {
         );
       }
 
+      //Validaion if try to assign on cohort and automaticMember
+      if ( userCreateDto.automaticMember?.value === true && userCreateDto.tenantCohortRoleMapping?.[0]?.cohortIds?.length > 0)  {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          `Error : Invalid operation: A user cannot be assigned as an automatic member while also being assigned to a center simultaneously. Please select only one option.`,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
       userCreateDto.username = userCreateDto.username.toLocaleLowerCase();
       const userSchema = new UserCreateDto(userCreateDto);
 
@@ -1229,6 +1244,7 @@ export class PostgresUserService implements IServicelocator {
         API_RESPONSES.USER_CREATE_SUCCESSFULLY
       );
     } catch (e) {
+
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
         `Error: ${e.message}`,
@@ -1430,7 +1446,7 @@ export class PostgresUserService implements IServicelocator {
     userCreateDto: UserCreateDto,
     academicYearId: string,
     response: Response
-  ) {
+  ): Promise<User> {
     const user = new User();
     user.userId = userCreateDto?.userId,
       user.username = userCreateDto?.username,
@@ -1446,9 +1462,21 @@ export class PostgresUserService implements IServicelocator {
       user.dob = new Date(userCreateDto.dob);
     }
     const result = await this.usersRepository.save(user);
+    const createdBy = request.user?.userId || result.userId;
 
-    if (result && userCreateDto.tenantCohortRoleMapping) {
-      for (const mapData of userCreateDto.tenantCohortRoleMapping) {
+    if (userCreateDto.tenantCohortRoleMapping) {
+      if (userCreateDto.automaticMember && userCreateDto?.automaticMember?.value === true) {
+        await this.automaticMemberMapping(userCreateDto.automaticMember, userCreateDto.customFields, userCreateDto.tenantCohortRoleMapping, result.userId, createdBy)
+      } else {
+        await this.tenantCohortRollMapping(userCreateDto.tenantCohortRoleMapping, academicYearId, result.userId, createdBy);
+      }
+    }
+    return result;
+  }
+
+  async tenantCohortRollMapping(tenantCohortRoleMapping: tenantRoleMappingDto[], academicYearId: UUID, userId: UUID, createdBy: UUID): Promise<void> {
+    try {
+      for (const mapData of tenantCohortRoleMapping) {
         if (mapData.cohortIds) {
           for (const cohortIds of mapData.cohortIds) {
             let query = `SELECT * FROM public."CohortAcademicYear" WHERE "cohortId"= '${cohortIds}' AND "academicYearId" = '${academicYearId}'`;
@@ -1459,7 +1487,7 @@ export class PostgresUserService implements IServicelocator {
 
             // will add data only if cohort is found with academic year
             let cohortData = {
-              userId: result?.userId,
+              userId: userId,
               cohortId: cohortIds,
               cohortAcademicYearId:
                 getCohortAcademicYearId[0]["cohortAcademicYearId"] || null,
@@ -1469,17 +1497,70 @@ export class PostgresUserService implements IServicelocator {
         }
 
         const tenantRoleMappingData = {
-          userId: result?.userId,
+          userId: userId,
           tenantRoleMapping: mapData,
         };
 
-        await this.assignUserToTenant(tenantRoleMappingData, request);
+        await this.assignUserToTenantAndRoll(tenantRoleMappingData, createdBy);
       }
+    } catch (error) {
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${error.message}`
+      );
+      throw new Error(error);
     }
-    return result;
   }
 
-  async assignUserToTenant(tenantsData, request) {
+
+  async automaticMemberMapping(automaticMember: any, customFields: any, tenantCohortRoleMapping: tenantRoleMappingDto[], userId: UUID, createdBy: UUID): Promise<void> {
+
+    try {
+      // Tenant and role mapping
+      for (const mapData of tenantCohortRoleMapping) {
+        const tenantRoleMappingData = {
+          userId: userId,
+          tenantRoleMapping: mapData,
+        };
+        await this.assignUserToTenantAndRoll(tenantRoleMappingData, createdBy);
+      }
+      let fieldValue;
+      let foundField = customFields.find(field => field.fieldId === automaticMember.fieldId);
+      if (foundField) {
+        fieldValue = foundField.value;
+      }
+
+      let createAutomaticMember = {
+        userId: userId,
+        rules: {
+          condition: {
+            value: fieldValue,
+            fieldId: automaticMember.fieldId,
+            // "operator": "="
+          },
+          cohortField: automaticMember.fieldName,
+          // allowedActions: {
+          //   user: ["create","view", "edit", "delete"],
+          //   cohort: ["create","view", "edit", "delete"]
+          // }
+        },
+        tenantId: tenantCohortRoleMapping[0].tenantId,
+        isActive: true
+      }
+      
+      //Assgn member to sdb
+      await this.automaticMemberService.create(createAutomaticMember)
+    } catch (error) {
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${error.message}`
+      );
+      throw new Error(error);
+    }
+  }
+
+
+  async assignUserToTenantAndRoll(tenantsData, createdBy) {
     try {
       const tenantId = tenantsData?.tenantRoleMapping?.tenantId;
       const userId = tenantsData?.userId;
@@ -1490,8 +1571,7 @@ export class PostgresUserService implements IServicelocator {
           userId: userId,
           tenantId: tenantId,
           roleId: roleId,
-          createdBy: request["user"]?.userId || userId,
-          updatedBy: request["user"]?.userId || userId,
+          createdBy: createdBy,
         });
       }
 
@@ -1499,15 +1579,14 @@ export class PostgresUserService implements IServicelocator {
         const data = await this.userTenantMappingRepository.save({
           userId: userId,
           tenantId: tenantId,
-          createdBy: request["user"]?.userId || userId,
-          updatedBy: request["user"]?.userId || userId,
+          createdBy: createdBy,
         });
       }
 
       LoggerUtil.log(API_RESPONSES.USER_TENANT);
     } catch (error) {
       LoggerUtil.error(
-        `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
+        `${API_RESPONSES.SERVER_ERROR}`,
         `Error: ${error.message}`
       );
       throw new Error(error);

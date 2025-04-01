@@ -15,6 +15,8 @@ import { Cohort } from "src/cohort/entities/cohort.entity";
 import { Role } from "src/rbac/role/entities/role.entity";
 import { CohortMembersModule } from "src/cohortMembers/cohortMembers.module";
 import { UploadS3Service } from "src/common/services/upload-S3.service";
+import { AutomaticMemberService } from "src/automatic-member/automatic-member.service";
+import { AutomaticMember } from "src/automatic-member/entity/automatic-member.entity";
 
 @Module({
   imports: [
@@ -28,12 +30,14 @@ import { UploadS3Service } from "src/common/services/upload-S3.service";
       UserRoleMapping,
       Cohort,
       Role,
+      AutomaticMember,
     ]),
     HttpModule,
     PostgresModule,
     CohortMembersModule,
+    
   ],
   controllers: [UserController],
-  providers: [UserAdapter, UploadS3Service],
+  providers: [UserAdapter, UploadS3Service, AutomaticMemberService],
 })
 export class UserModule {}

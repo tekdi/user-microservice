@@ -972,6 +972,14 @@ export class PostgresFieldsService implements IServicelocatorfields {
     limit: string,
     searchData: any
   ) {
+
+    // Assign user in multiple block
+    // const results = await this.fieldsValuesRepository
+    // .createQueryBuilder("fieldValues")
+    // .where("fieldValues.fieldId = :fieldId", { fieldId: searchData.fieldId })
+    // .andWhere("fieldValues.value && :values", { values: searchData.value })
+    // .getMany();
+
     const queryOptions: any = {
       where: searchData,
     };
@@ -1640,12 +1648,13 @@ export class PostgresFieldsService implements IServicelocatorfields {
     return fieldsArr;
   }
 
-  async getEditableFieldsAttributes() {
+  async getEditableFieldsAttributes(tenantId: string) {
+    let tenantData = tenantId ? tenantId : 'default'
     const getFieldsAttributesQuery = `
           SELECT * 
           FROM "public"."Fields" 
-          WHERE "fieldAttributes"->'default'->>'isEditable' = $1; 
-        `;
+          WHERE "fieldAttributes"->'${tenantData}'->>'isEditable' = $1; 
+        `;        
     const getFieldsAttributesParams = ["true"];
     return await this.fieldsRepository.query(
       getFieldsAttributesQuery,

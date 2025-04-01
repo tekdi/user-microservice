@@ -42,7 +42,7 @@ export class PostgresCohortService {
     private readonly cohortAcademicYearService: CohortAcademicYearService,
     private readonly postgresAcademicYearService: PostgresAcademicYearService,
     private readonly postgresCohortMembersService: PostgresCohortMembersService,
-    private readonly automaticMemberService:AutomaticMemberService
+    private readonly automaticMemberService: AutomaticMemberService
   ) { }
 
   public async getCohortsDetails(requiredData, res) {
@@ -112,7 +112,7 @@ export class PostgresCohortService {
         name: data.name,
         parentId: data.parentId,
         type: data.type,
-        customField: await this.fieldsService.getCustomFieldDetails(data.cohortId,'Cohort'),
+        customField: await this.fieldsService.getCustomFieldDetails(data.cohortId, 'Cohort'),
       };
       result.cohortData.push(cohortData);
     }
@@ -139,7 +139,7 @@ export class PostgresCohortService {
         type: cohort.type,
         status: cohort?.status,
         customField: requiredData.customField
-          ? await this.fieldsService.getCustomFieldDetails(cohort.cohortId,'Cohort')
+          ? await this.fieldsService.getCustomFieldDetails(cohort.cohortId, 'Cohort')
           : undefined,
         childData: await this.getCohortHierarchy(
           cohort.cohortId,
@@ -166,7 +166,7 @@ export class PostgresCohortService {
     cohortId: string,
     contextType?: string
   ) {
-    const fieldValues = await this.fieldsService.getCustomFieldDetails(cohortId,'Cohort');    
+    const fieldValues = await this.fieldsService.getCustomFieldDetails(cohortId, 'Cohort');
     return fieldValues;
   }
 
@@ -179,7 +179,7 @@ export class PostgresCohortService {
                       c."parentId", 
                       c."type", 
                       cm."status" AS cohortmemberstatus, 
-                      c."status" AS cohortstatus, 
+                      c."status", 
                       cm."cohortMembershipId"
                   `;
 
@@ -650,7 +650,7 @@ export class PostgresCohortService {
     response
   ) {
     const apiId = APIID.COHORT_LIST;
-    try {      
+    try {
       const { sort, filters } = cohortSearchDto;
       let { limit, offset } = cohortSearchDto;
       let cohortsByAcademicYear: CohortAcademicYear[];
@@ -1007,7 +1007,7 @@ export class PostgresCohortService {
           customField
         );
         customFieldDetails = await this.fieldsService.getCustomFieldDetails(
-          data.cohortId,'Cohort'
+          data.cohortId, 'Cohort'
         );
       } else {
         childHierarchy = await this.getCohortHierarchy(data.cohortId);
@@ -1032,61 +1032,47 @@ export class PostgresCohortService {
 
   public async getCohortDetailsByIds(ids: string[]) {
     return await this.cohortRepository.find({
-        where: {
-            cohortId: In(ids),
-        },
-        select: ["cohortId", "name", "parentId", "type","status"],
+      where: {
+        cohortId: In(ids),
+      },
+      select: ["cohortId", "name", "parentId", "type", "status"],
     });
-}
+  }
 
-  public async automaticMemberCohortHierarchy(requiredData,academicYearId) {
-    const { condition: { value,fieldId } } = requiredData?.rules;
+  public async automaticMemberCohortHierarchy(requiredData, academicYearId) {
+    const { condition: { value, fieldId } } = requiredData?.rules;
 
     // Pass fieldId to getSearchFieldValueData
     let filledValues = await this.fieldsService.getSearchFieldValueData(
-        0, 
-        "0", 
-        { fieldId: fieldId,value:value }  // Passing extracted fieldId
+      0,
+      "0",
+      {
+        fieldId: fieldId,
+        value: value
+      }  // Passing extracted fieldId
     );
     const cohortIds = filledValues.mappedResponse.map(item => item.itemId);
 
     if (cohortIds.length === 0) {
-        throw new Error("No cohort IDs found for the given fieldId and value.");
+      throw new Error("No cohort IDs found for the given fieldId and value.");
     }
 
     const existingCohortIds = await this.getCohortDetailsByIds(cohortIds);
     return existingCohortIds;
-}
+  }
 
   public async getCohortHierarchyData(requiredData, res) {
-    // my cohort
     const apiId = APIID.COHORT_LIST;
 
-    // const userAcademicYear: any[] =
-    //   await this.postgresCohortMembersService.isUserExistForYear(
-    //     requiredData.academicYearId,
-    //     requiredData.userId
-    //   );
+    try {
+      const checkAutomaticMember = await this.automaticMemberService.checkMemberById(requiredData.userId);
 
-    // if (userAcademicYear.length === 0) {
-    //   return APIResponse.error(
-    //     res,
-    //     apiId,
-    //     API_RESPONSES.BAD_REQUEST,
-    //     API_RESPONSES.USER_NOT_IN_ACADEMIC_YEAR,
-    //     HttpStatus.BAD_REQUEST
-    //   );
-    // }
-    const checkAutomaticMember = await this.automaticMemberService.checkMemberById(requiredData.userId);
-
-    if (!requiredData.getChildData) {
-      try {
-        let findCohortId;
-        if(checkAutomaticMember){
-          findCohortId = await this.automaticMemberCohortHierarchy(checkAutomaticMember,requiredData?.academicYearId);
-        }else{
-          findCohortId = await this.findCohortName(requiredData.userId, requiredData?.academicYearId);
-          if (!findCohortId.length) {
+      let findCohortId;
+      if (checkAutomaticMember) {
+        findCohortId = await this.automaticMemberCohortHierarchy(checkAutomaticMember, requiredData?.academicYearId);
+      } else {
+        findCohortId = await this.findCohortName(requiredData.userId, requiredData?.academicYearId);
+        if (!findCohortId.length) {
           return APIResponse.error(
             res,
             apiId,
@@ -1095,119 +1081,50 @@ export class PostgresCohortService {
             HttpStatus.BAD_REQUEST
           );
         }
-        }
-        const result = {
-          cohortData: [],
+      }
+
+      const resultDataList = [];
+
+      for (const cohort of findCohortId) {
+        const resultData = {
+          cohortName: cohort?.name,
+          cohortId: cohort?.cohortId,
+          parentID: cohort?.parentId,
+          cohortMemberStatus: cohort?.cohortmemberstatus,
+          cohortMembershipId: cohort?.cohortMembershipId,
+          cohortStatus: cohort?.cohortstatus || cohort?.status,
+          type: cohort?.type,
+          customField: await this.fieldsService.getCustomFieldDetails(cohort.cohortId, 'Cohort'),
+          childData: requiredData.getChildData
+            ? await this.getCohortHierarchy(cohort.cohortId, requiredData.customField)
+            : []
         };
 
-        for (const data of findCohortId) {
-          const cohortData = {
-            cohortId: data?.cohortId,
-            name: data?.name,
-            parentId: data?.parentId,
-            type: data?.type,
-            cohortMemberStatus: data?.cohortmemberstatus,
-            cohortMembershipId: data?.cohortMembershipId,
-            cohortStatus: data?.cohortstatus,
-            customField: {},
-          };
-          const getDetails = await this.fieldsService.getCustomFieldDetails(
-            data.cohortId,'Cohort'
-          );
-          cohortData.customField = getDetails;
-          result.cohortData.push(cohortData);
-        }
-
-        return APIResponse.success(
-          res,
-          apiId,
-          result,
-          HttpStatus.OK,
-          "Cohort list fetched successfully"
-        );
-      } catch (error) {
-        LoggerUtil.error(
-          `${API_RESPONSES.SERVER_ERROR}`,
-          `Error: ${error.message}`,
-          apiId
-        )
-        const errorMessage = error.message || API_RESPONSES.SERVER_ERROR;
-        return APIResponse.error(
-          res,
-          apiId,
-          API_RESPONSES.SERVER_ERROR,
-          errorMessage,
-          HttpStatus.INTERNAL_SERVER_ERROR
-        );
+        resultDataList.push(resultData);
       }
-    }
-    if (requiredData.getChildData) {
-      try {
-        let findCohortId;
-        if(checkAutomaticMember){
-          findCohortId = await this.automaticMemberCohortHierarchy(checkAutomaticMember,requiredData?.academicYearId);
-        }else{
-          findCohortId = await this.findCohortName(requiredData.userId, requiredData?.academicYearId);
-          if (!findCohortId.length) {
-          return APIResponse.error(
-            res,
-            apiId,
-            "BAD_REQUEST",
-            `No Cohort Found for this User ID`,
-            HttpStatus.BAD_REQUEST
-          );
-        }
-        }
-        const resultDataList = [];
 
-        for (const cohort of findCohortId) {
-          const resultData = {
-            cohortName: cohort?.name,
-            cohortId: cohort?.cohortId,
-            parentID: cohort?.parentId,
-            cohortMemberStatus: cohort?.cohortmemberstatus,
-            cohortMembershipId: cohort?.cohortMembershipId,
-            cohortStatus: cohort?.cohortstatus,
-            type: cohort?.type,
-            status: cohort?.status
-          };
-          if (requiredData.customField) {
-            resultData["customField"] = await this.fieldsService.getCustomFieldDetails(
-              cohort.cohortId,'Cohort'
-            );
-            resultData["childData"] = await this.getCohortHierarchy(
-              cohort.cohortId,
-              requiredData.customField
-            );
-          } else {
-            resultData["childData"] = await this.getCohortHierarchy(
-              cohort.cohortId
-            );
-          }
-          resultDataList.push(resultData);
-        }
-        return APIResponse.success(
-          res,
-          apiId,
-          resultDataList,
-          HttpStatus.OK,
-          API_RESPONSES.COHORT_HIERARCHY
-        );
-      } catch (error) {
-        LoggerUtil.error(
-          `${API_RESPONSES.SERVER_ERROR}`,
-          `Error: ${error.message}`,
-          apiId
-        )
-        const errorMessage = error.message || API_RESPONSES.SERVER_ERROR;
-        return APIResponse.error(
-          res,
-          apiId,
-          API_RESPONSES.SERVER_ERROR,
-          errorMessage,
-          HttpStatus.INTERNAL_SERVER_ERROR
-        );
-      }
+      return APIResponse.success(
+        res,
+        apiId,
+        resultDataList,
+        HttpStatus.OK,
+        API_RESPONSES.COHORT_HIERARCHY
+      );
+
+    } catch (error) {
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${error.message}`,
+        apiId
+      );
+      const errorMessage = error.message || API_RESPONSES.SERVER_ERROR;
+      return APIResponse.error(
+        res,
+        apiId,
+        API_RESPONSES.SERVER_ERROR,
+        errorMessage,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
     }
   }
 }
