@@ -11,7 +11,8 @@ import {
 } from "class-validator";
 import { Expose, Type } from "class-transformer";
 import { UserStatus } from "../entities/user-entity";
-import { ApiProperty } from "@nestjs/swagger";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import {AutomaticMemberDto} from "src/user/dto/user-create.dto";
 
 export enum ActionType {
   ADD = 'add',
@@ -45,10 +46,10 @@ class UserDataDTO {
   @Length(1, 50)
   lastName?: string;
 
-  @ApiProperty({ 
-    type: String, 
-    description: 'Gender of the user', 
-    enum: ['male', 'female', 'transgender'] 
+  @ApiProperty({
+    type: String,
+    description: 'Gender of the user',
+    enum: ['male', 'female', 'transgender']
   })
   @Expose()
   @IsEnum(['male', 'female', 'transgender'])
@@ -155,6 +156,7 @@ class CustomFieldDTO {
   value: string | string[];
 }
 
+
 export class UserUpdateDTO {
   userId: string;
 
@@ -164,6 +166,10 @@ export class UserUpdateDTO {
   @IsNotEmpty()
   @Type(() => UserDataDTO)
   userData: UserDataDTO;
+
+  @ApiPropertyOptional({ type: () => AutomaticMemberDto, description: 'Details of automatic membership' })
+  @Expose()
+  automaticMember?: AutomaticMemberDto;
 
   @ApiProperty({ type: () => [CustomFieldDTO] })
   @IsArray()
