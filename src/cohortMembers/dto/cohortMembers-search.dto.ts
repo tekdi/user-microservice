@@ -19,11 +19,10 @@ enum SortDirection {
 }
 class FiltersDto {
   @ApiPropertyOptional({ type: String, description: 'Cohort ID', example: '' })
-  // @IsOptional()
-  @IsString()
-  @IsUUID()
+  @IsArray()
+  @IsUUID('4', { each: true })
   @ValidateIf((o) => !o.userId)
-  cohortId?: string;
+  cohortId?: string[];
 
   @ApiPropertyOptional({ type: String, description: 'User ID', example: '' })
   // @IsOptional()

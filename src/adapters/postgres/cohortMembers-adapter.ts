@@ -23,6 +23,7 @@ import { LoggerUtil } from 'src/common/logger/LoggerUtil';
 import { PostgresUserService } from './user-adapter';
 import { isValid } from 'date-fns';
 import { FieldValuesOptionDto } from 'src/user/dto/user-create.dto';
+import { In } from 'typeorm';
 
 @Injectable()
 export class PostgresCohortMembersService {
@@ -264,13 +265,29 @@ export class PostgresCohortMembersService {
       offset = offset || 0;
       limit = limit || 0;
       let results = {};
-      const where = [];
+      let where: any[] = [];
       const options = [];
 
       const whereClause = {};
       if (filters && Object.keys(filters).length > 0) {
         Object.entries(filters).forEach(([key, value]) => {
-          whereClause[key] = value;
+          if (key === 'cohortId') {
+            if (Array.isArray(value)) {
+              whereClause[key] = value;
+            } else if (typeof value === 'string') {
+              whereClause[key] = value.split(',').map((id) => id.trim()); // Convert to array
+            } else {
+              return APIResponse.error(
+                res,
+                apiId,
+                API_RESPONSES.BAD_REQUEST,
+                `Invalid cohortId format. Expected an array of UUIDs.`,
+                HttpStatus.BAD_REQUEST
+              );
+            }
+          } else {
+            whereClause[key] = value;
+          }
         });
       }
 
@@ -281,7 +298,7 @@ export class PostgresCohortMembersService {
       if (whereClause['cohortId']) {
         const getYearExistRecord = await this.isCohortExistForYear(
           academicyearId,
-          cohortMembersSearchDto.filters.cohortId
+          whereClause['cohortId']
         );
         if (getYearExistRecord.length === 0) {
           return APIResponse.error(
@@ -302,7 +319,8 @@ export class PostgresCohortMembersService {
       if (whereClause['userId']) {
         const getYearExitUser = await this.isUserExistForYear(
           academicyearId,
-          cohortMembersSearchDto.filters.userId
+          // cohortMembersSearchDto.filters.userId
+          whereClause['userId']
         );
         if (getYearExitUser.length === 0) {
           return APIResponse.error(
@@ -359,6 +377,20 @@ export class PostgresCohortMembersService {
         const [sortField, sortOrder] = sort;
         order[sortField] = sortOrder;
       }
+      const uniqueWhere = new Map(); // Store unique conditions
+      whereKeys.forEach((key) => {
+        if (whereClause[key]) {
+          const value = Array.isArray(whereClause[key])
+            ? whereClause[key] //Ensure it's an array
+            : [whereClause[key]]; // Wrap single value in an array
+
+          if (!uniqueWhere.has(key)) {
+            uniqueWhere.set(key, value);
+          }
+        }
+      });
+      // Convert Map to an array for `where`
+      where = Array.from(uniqueWhere.entries());
       results = await this.getCohortMemberUserDetails(
         where,
         'true',
@@ -454,7 +486,10 @@ export class PostgresCohortMembersService {
 
   async isCohortExistForYear(yearId, cohortId) {
     return await this.cohortAcademicYearRespository.find({
-      where: { academicYearId: yearId, cohortId: cohortId },
+      where: {
+        academicYearId: yearId,
+        cohortId: Array.isArray(cohortId) ? In(cohortId) : cohortId,
+      },
     });
   }
 
@@ -669,6 +704,13 @@ export class PostgresCohortMembersService {
               ? value.map((id) => `'${id}'`).join(', ')
               : `'${value}'`;
             return `CM."cohortAcademicYearId" IN (${cohortIdAcademicYear})`;
+          }
+          case 'cohortId': {
+            //Handles UUID array properly
+            const formattedIds = Array.isArray(value)
+              ? value.map((id) => `'${id}'`).join(', ')
+              : `'${value}'`;
+            return `CM."${key}" IN (${formattedIds})`;
           }
           default: {
             return `CM."${key}"='${value}'`;
