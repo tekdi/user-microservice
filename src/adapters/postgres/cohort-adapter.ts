@@ -1078,6 +1078,7 @@ export class PostgresCohortService {
     //   );
     // }
     const checkAutomaticMember = await this.automaticMemberService.checkMemberById(requiredData.userId);
+    console.log(checkAutomaticMember);
     if (!requiredData.getChildData) {
       try {
         let findCohortId;
