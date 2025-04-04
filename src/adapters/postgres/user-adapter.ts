@@ -950,6 +950,51 @@ export class PostgresUserService implements IServicelocator {
         }
       }
 
+      if (userDto.automaticMember && userDto?.automaticMember?.value === true) {
+
+        let assignTo;
+        //Find Assign field value from custom fields
+        let foundField = userDto.customFields.find(field => field.fieldId === userDto.automaticMember.fieldId);
+        if (foundField) {
+          assignTo = foundField.value;
+        }
+
+        // Check if an active automated member exists for the given userId, tenantId, and assigned ID.
+        const checkAutomaticMemberExists = await this.automaticMemberService.checkAutomaticMemberExists(userId, userDto.userData.tenantId, foundField.value[0]);
+
+        if (checkAutomaticMemberExists.length > 0 && checkAutomaticMemberExists[0].isActive === true) {
+          return APIResponse.error(
+            response,
+            apiId,
+            API_RESPONSES.BAD_REQUEST,
+            `User already assign to that ${userDto.automaticMember.fieldName}`, // which uuid is needed ?
+            HttpStatus.BAD_REQUEST
+          );
+        }
+
+
+        if (checkAutomaticMemberExists.length > 0 && checkAutomaticMemberExists[0].isActive === false) {
+          // deactivate the current active automatic membership for the user in tenantId.
+          const getActiveAutomaticMembershipId = await this.automaticMemberService.getUserbyUserIdAndTenantId(userId, userDto.userData.tenantId, true);
+
+          if (getActiveAutomaticMembershipId && getActiveAutomaticMembershipId.isActive === true) {
+            await this.automaticMemberService.update(getActiveAutomaticMembershipId.id, { isActive: false })
+          }
+
+          // Activate the old inactive automatic membership for the user in tenantId and assigned ID.
+          await this.automaticMemberService.update(checkAutomaticMemberExists[0].id, { isActive: true })
+          return await APIResponse.success(
+            response,
+            apiId,
+            { ...updatedData, editIssues },
+            HttpStatus.OK,
+            API_RESPONSES.USER_UPDATED_SUCCESSFULLY
+          );
+        }
+
+        await this.updateAutomaticMemberMapping(userDto.automaticMember, assignTo, userId, userDto.userData.tenantId)
+      }
+
       LoggerUtil.log(
         API_RESPONSES.USER_UPDATED_SUCCESSFULLY,
         apiId,
@@ -977,6 +1022,49 @@ export class PostgresUserService implements IServicelocator {
         API_RESPONSES.SOMETHING_WRONG,
         HttpStatus.INTERNAL_SERVER_ERROR
       );
+    }
+  }
+  checkAutomaticMemberExists(userId: any, tenantId: any, arg2: any) {
+    throw new Error("Method not implemented.");
+  }
+
+  async updateAutomaticMemberMapping(automaticMember: any, fieldValue: any, userId: UUID, tenantId: UUID) {
+
+    try {
+      // deactivate the current active automatic membership for the user in tenantId.
+      const getActiveAutomaticMembershipId = await this.automaticMemberService.getUserbyUserIdAndTenantId(userId, tenantId, true);
+
+      if (getActiveAutomaticMembershipId && getActiveAutomaticMembershipId.isActive === true) {
+        await this.automaticMemberService.update(getActiveAutomaticMembershipId.id, { isActive: false })
+      }
+
+      let createAutomaticMember = {
+        userId: userId,
+        rules: {
+          condition: {
+            value: fieldValue,
+            fieldId: automaticMember.fieldId,
+            // "operator": "="
+          },
+          cohortField: automaticMember.fieldName,
+          // allowedActions: {
+          //   user: ["create","view", "edit", "delete"],
+          //   cohort: ["create","view", "edit", "delete"]
+          // }
+        },
+        tenantId: tenantId,
+        isActive: true
+      }
+
+      //Assgn member to sdb
+      await this.automaticMemberService.create(createAutomaticMember)
+
+    } catch (error) {
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${error.message}`
+      );
+      throw new Error(error);
     }
   }
 
@@ -1109,7 +1197,7 @@ export class PostgresUserService implements IServicelocator {
       }
 
       //Validaion if try to assign on cohort and automaticMember
-      if ( userCreateDto.automaticMember?.value === true && userCreateDto.tenantCohortRoleMapping?.[0]?.cohortIds?.length > 0)  {
+      if (userCreateDto.automaticMember?.value === true && userCreateDto.tenantCohortRoleMapping?.[0]?.cohortIds?.length > 0) {
         return APIResponse.error(
           response,
           apiId,
@@ -1547,7 +1635,7 @@ export class PostgresUserService implements IServicelocator {
         tenantId: tenantCohortRoleMapping[0].tenantId,
         isActive: true
       }
-      
+
       //Assgn member to sdb
       await this.automaticMemberService.create(createAutomaticMember)
     } catch (error) {
