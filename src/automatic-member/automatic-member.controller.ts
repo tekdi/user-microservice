@@ -10,7 +10,6 @@ export class AutomaticMemberController {
   @Post()
   @UsePipes(new ValidationPipe()) 
   create(@Body() createDto: CreateAutomaticMemberDto) {
-    console.log(createDto)
     return this.automaticMemberService.create(createDto);
   }
 
