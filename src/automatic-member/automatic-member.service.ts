@@ -59,7 +59,8 @@ export class AutomaticMemberService {
   }
 
   async checkMemberById(id: string) {
-    const member = await this.automaticMemberRepository.findOne({ where: { userId: id } });
+    const member = await this.automaticMemberRepository.findOne({ where: { userId:id,isActive:true } });
+  
 
     if (!member) {
       return false;

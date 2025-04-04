@@ -991,9 +991,11 @@ export class PostgresFieldsService implements IServicelocatorfields {
     if (limit !== undefined) {
       queryOptions.take = parseInt(limit);
     }
+    console.log("queryOptions",queryOptions);
     try {
       const [results, totalCount] =
         await this.fieldsValuesRepository.findAndCount(queryOptions);
+        console.log("allCohortData",results)
       const mappedResponse = await this.mappedResponse(results);
 
       return { mappedResponse, totalCount };
