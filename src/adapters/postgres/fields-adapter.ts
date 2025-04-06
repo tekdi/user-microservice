@@ -1784,7 +1784,6 @@ export class PostgresFieldsService implements IServicelocatorfields {
     `;
 
       let result = await this.fieldsRepository.query(query, [itemId]);
-
       result = result.map(async (data) => {
         const allIds = data.value;
         let optionValues;
@@ -1843,7 +1842,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
               processedValue = data?.value
           }
         } else {
-          processedValue = selectedValues[0];
+          processedValue = selectedValues;
         }
         delete data.fieldParams;
         delete data.sourceDetails;
