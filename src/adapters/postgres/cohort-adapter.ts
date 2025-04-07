@@ -548,7 +548,7 @@ export class PostgresCohortService {
         if (
           cohortUpdateDto.customFields &&
           cohortUpdateDto.customFields.length > 0
-        ) {
+        ) {          
           const contextType = cohortUpdateDto.type
             ? [cohortUpdateDto.type]
             : existingCohorDetails?.type
@@ -558,7 +558,7 @@ export class PostgresCohortService {
             "COHORT",
             contextType
           );
-
+          
           if (allCustomFields.length > 0) {
             const customFieldAttributes = allCustomFields.reduce(
               (fieldDetail, { fieldId, fieldAttributes, fieldParams, name }) =>

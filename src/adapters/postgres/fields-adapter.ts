@@ -991,11 +991,9 @@ export class PostgresFieldsService implements IServicelocatorfields {
     if (limit !== undefined) {
       queryOptions.take = parseInt(limit);
     }
-    console.log("queryOptions",queryOptions);
     try {
       const [results, totalCount] =
         await this.fieldsValuesRepository.findAndCount(queryOptions);
-        console.log("allCohortData",results)
       const mappedResponse = await this.mappedResponse(results);
 
       return { mappedResponse, totalCount };
@@ -1515,7 +1513,8 @@ export class PostgresFieldsService implements IServicelocatorfields {
       condition.contextType = IsNull();
     }
 
-    const customFields = await this.fieldsRepository.find({ where: condition });
+    const customFields = await this.fieldsRepository.find({ where: [condition, {context: IsNull(), contextType: IsNull()}] });
+    
     return customFields;
   }
 
