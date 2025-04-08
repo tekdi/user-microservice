@@ -1,19 +1,18 @@
 import { Expose, Type } from "class-transformer";
 import {
-  MaxLength,
   IsNotEmpty,
-  IsEmail,
   IsString,
-  IsNumber,
   IsArray,
   IsUUID,
   ValidateNested,
   IsOptional,
   Length,
   IsEnum,
+  IsDateString,
 } from "class-validator";
 import { User } from "../entities/user-entity";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { NotInFuture } from "src/utils/dob-not-in-future.validator";
 
 export class tenantRoleMappingDto {
   @ApiProperty({
@@ -63,6 +62,22 @@ export class FieldValuesOptionDto {
   value: string;
 }
 
+export class AutomaticMemberDto {
+  @ApiProperty({ type: Boolean, description: 'Indicates whether the member is automatic or not' })
+  @Expose()
+  value: boolean;
+
+  @ApiProperty({ type: String})
+  @Expose()
+  @IsUUID(undefined, { message: "Field Id must be a valid UUID" })
+  fieldId: string;
+
+  @ApiProperty({ type: String})
+  @Expose()
+  @IsString()
+  fieldName: string;
+}
+
 export class UserCreateDto {
   @Expose()
   userId: string;
@@ -91,10 +106,10 @@ export class UserCreateDto {
   @Length(1, 50)
   lastName: string;
 
-  @ApiProperty({ 
-    type: String, 
-    description: 'Gender of the user', 
-    enum: ['male', 'female', 'transgender'] 
+  @ApiProperty({
+    type: String,
+    description: 'Gender of the user',
+    enum: ['male', 'female', 'transgender']
   })
   @Expose()
   @IsEnum(['male', 'female', 'transgender'])
@@ -106,6 +121,9 @@ export class UserCreateDto {
     description: "The date of Birth of the user",
   })
   @Expose()
+  @IsOptional()
+  @IsDateString() // Ensures it's a valid date format
+  @NotInFuture({ message: 'The birth date cannot be in the future' })
   dob: string;
 
   @ApiPropertyOptional({
@@ -169,6 +187,10 @@ export class UserCreateDto {
 
   @Expose()
   updatedBy: string;
+
+  @ApiPropertyOptional({ type: () => AutomaticMemberDto, description: 'Details of automatic membership' })
+  @Expose()
+  automaticMember ?: AutomaticMemberDto;
 
   @ApiProperty({
     type: [tenantRoleMappingDto],

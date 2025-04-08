@@ -1,4 +1,4 @@
-import { Module } from "@nestjs/common";
+import { MiddlewareConsumer, Module, RequestMethod } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { AppController } from "./app.controller";
 import { AppService } from "./app.service";
@@ -23,6 +23,10 @@ import { HttpService } from "@utils/http-service";
 import { TenantModule } from "./tenant/tenant.module";
 import { AcademicyearsModule } from "./academicyears/academicyears.module";
 import { CohortAcademicYearModule } from "./cohortAcademicYear/cohortAcademicYear.module";
+import { AutomaticMemberModule } from "./automatic-member/automatic-member.module";
+import { PermissionMiddleware } from "./middleware/permission.middleware";
+import { RolePermissionModule } from "./permissionRbac/rolePermissionMapping/role-permission.module";
+import { LocationModule } from "./location/location.module";
 
 @Module({
   imports: [
@@ -43,8 +47,15 @@ import { CohortAcademicYearModule } from "./cohortAcademicYear/cohortAcademicYea
     TenantModule,
     AcademicyearsModule,
     CohortAcademicYearModule,
+    AutomaticMemberModule,
+    RolePermissionModule,
+    LocationModule,
   ],
   controllers: [AppController],
   providers: [AppService, HttpService],
 })
-export class AppModule {}
+export class AppModule {
+  // configure(consumer: MiddlewareConsumer) {
+  //   consumer.apply(PermissionMiddleware).forRoutes("*"); // Apply middleware to the all routes
+  // }
+}

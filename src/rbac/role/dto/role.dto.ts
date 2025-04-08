@@ -2,10 +2,8 @@ import { Expose, Type } from "class-transformer";
 import { ApiProperty } from "@nestjs/swagger";
 import {
   IsNotEmpty,
-  IsString,
-  IsUUID,
+  IsOptional,
   ValidateNested,
-  isUUID,
 } from "class-validator";
 
 export class RoleDto {
@@ -47,8 +45,7 @@ export class CreateRolesDto {
     description: "Tenant",
   })
   @Expose()
-  @IsNotEmpty()
-  @IsUUID()
+  @IsOptional()
   tenantId: string;
 
   @ApiProperty({ type: [RoleDto] })

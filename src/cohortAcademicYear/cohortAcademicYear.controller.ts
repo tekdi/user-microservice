@@ -2,7 +2,8 @@ import {
   Controller, Headers, Post, UseFilters, UsePipes, Req,
   Res, ValidationPipe,
   BadRequestException,
-  Body
+  Body,
+  ParseUUIDPipe
 } from '@nestjs/common';
 import { ApiBadRequestResponse, ApiBasicAuth, ApiBody, ApiCreatedResponse, ApiHeader, ApiInternalServerErrorResponse, ApiTags } from '@nestjs/swagger';
 import { APIID } from '@utils/api-id.config';
@@ -12,6 +13,7 @@ import { Response, Request } from 'express';
 import { AllExceptionsFilter } from 'src/common/filters/exception.filter';
 import { CohortAcademicYearDto } from './dto/cohort-academicyear.dto';
 import { CohortAcademicYearAdapter } from './cohortacademicyearsadaptor';
+import { GetUserId } from 'src/common/decorators/getUserId.decorator';
 
 @ApiTags("CohortAcademicYear")
 @Controller('cohort-academic-year')
@@ -34,12 +36,14 @@ export class CohortAcademicYearController {
     @Headers() headers,
     @Req() request: Request,
     @Body() cohortAcademicYearDto: CohortAcademicYearDto,
-    @Res() response: Response
+    @Res() response: Response,
+    @GetUserId("userId", ParseUUIDPipe) userId: string,
   ) {
     let tenantId = headers["tenantid"];
     if (tenantId && !isUUID(tenantId)) {
       throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
     }
+    cohortAcademicYearDto.createdBy = userId;
     return this.cohortAcademicYearAdapter.buildAcademicYears().createCohortAcademicYear(tenantId, request, cohortAcademicYearDto, response);
   }
 }

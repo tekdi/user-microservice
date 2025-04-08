@@ -16,7 +16,6 @@ import { UserRoleMapping } from "src/rbac/assign-role/entities/assign-role.entit
 import { Role } from "src/rbac/role/entities/role.entity";
 import { IsAlpha, IsUUID, isUUID } from "class-validator";
 import { executionAsyncResource } from "async_hooks";
-import jwt_decode from "jwt-decode";
 import { DeleteAssignRoleDto } from "src/rbac/assign-role/dto/delete-assign-role.dto";
 import { Response } from "express";
 import { APIID } from "src/common/utils/api-id.config";
@@ -37,7 +36,6 @@ export class PostgresAssignroleService {
   ) {
     const apiId = APIID.USERROLE_CREATE;
     try {
-      // const decoded: any = jwt_decode(request.headers.authorization);
       const userId = createAssignRoleDto.userId;
       const roles = createAssignRoleDto.roleId;
       const tenantId = createAssignRoleDto.tenantId;

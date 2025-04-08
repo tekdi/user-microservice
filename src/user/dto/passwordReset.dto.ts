@@ -15,18 +15,23 @@ export class SendPasswordResetLinkDto {
 }
 
 export class ResetUserPasswordDto {
+  @ApiProperty()
   userName: string;
 
+  @ApiProperty()
   @IsString()
   @IsNotEmpty()
   newPassword: string;
 }
 
 export class ForgotPasswordDto {
+
+  @ApiProperty()
   @IsString()
   @IsNotEmpty()
   newPassword: string;
 
+  @ApiProperty()
   @IsString()
   @IsNotEmpty()
   token: string;

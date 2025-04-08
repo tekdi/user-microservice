@@ -28,6 +28,7 @@ import {
   Query,
   UseFilters,
   BadRequestException,
+  ParseUUIDPipe,
 } from "@nestjs/common";
 import { CohortMembersSearchDto } from "./dto/cohortMembers-search.dto";
 import { Request } from "@nestjs/common";
@@ -41,10 +42,11 @@ import { APIID } from "src/common/utils/api-id.config";
 import { BulkCohortMember } from "./dto/bulkMember-create.dto";
 import { isUUID } from "class-validator";
 import { API_RESPONSES } from "@utils/response.messages";
+import { GetUserId } from "src/common/decorators/getUserId.decorator";
 
 @ApiTags("Cohort Member")
 @Controller("cohortmember")
-// @UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard)
 export class CohortMembersController {
   constructor(private readonly cohortMemberAdapter: CohortMembersAdapter) { }
 
@@ -69,7 +71,7 @@ export class CohortMembersController {
   public async createCohortMembers(
     @Headers() headers,
     @Req() request,
-    @Query('userId') userId: string,
+    @GetUserId("userId", ParseUUIDPipe) userId: string,
     @Body() cohortMembersDto: CohortMembersDto,
     @Res() response: Response
   ) {
@@ -85,11 +87,7 @@ export class CohortMembersController {
         "academicyearId is required and academicyearId must be a valid UUID."
       );
     }
-    if (!loginUser || !isUUID(loginUser)) {
-      throw new BadRequestException(
-        "unauthorized!"
-      );
-    }
+
     const result = await this.cohortMemberAdapter
       .buildCohortMembersAdapter()
       .createCohortMembers(
@@ -202,7 +200,8 @@ export class CohortMembersController {
     @Req() request,
     @Body() cohortMemberUpdateDto: CohortMembersUpdateDto,
     @Res() response: Response,
-    @Query('userId') userId: string
+    // @Query('userId') userId: string
+    @GetUserId("userId", ParseUUIDPipe) userId: string
   ) {
     const loginUser = userId;
     if (!loginUser || !isUUID(loginUser)) {
@@ -267,7 +266,7 @@ export class CohortMembersController {
     @Headers() headers,
     @Req() request,
     @Body() bulkCohortMembersDto: BulkCohortMember,
-    @Query('userId') userId: string, // Now using userId from query
+    @GetUserId("userId", ParseUUIDPipe) userId: string, // Now using userId from query
     @Res() response: Response
   ) {
     const loginUser = userId;

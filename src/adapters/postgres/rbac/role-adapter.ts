@@ -2,7 +2,7 @@ import { HttpStatus, Injectable } from "@nestjs/common";
 import { Role } from "src/rbac/role/entities/role.entity";
 import { RolePrivilegeMapping } from "src/rbac/assign-privilege/entities/assign-privilege.entity";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { IsNull, Repository } from "typeorm";
 import {
   CreateRolesDto,
   RoleDto,
@@ -15,6 +15,8 @@ import { isUUID } from "class-validator";
 import APIResponse from "src/common/responses/response";
 import { Response } from "express";
 import { APIID } from "src/common/utils/api-id.config";
+import { validate as uuidValidate } from 'uuid';
+
 
 @Injectable()
 export class PostgresRoleService {
@@ -25,34 +27,46 @@ export class PostgresRoleService {
     private readonly userRoleMappingRepository: Repository<UserRoleMapping>,
     @InjectRepository(RolePrivilegeMapping)
     private readonly roleprivilegeMappingRepository: Repository<RolePrivilegeMapping>
-  ) {}
+  ) { }
   public async createRole(
     request: any,
     createRolesDto: CreateRolesDto,
     response: Response
   ) {
     const apiId = APIID.ROLE_CREATE;
-    const tenant = await this.checkTenantID(createRolesDto.tenantId);
-    if (!tenant) {
-      return APIResponse.error(
-        response,
-        apiId,
-        `Please enter valid tenantId`,
-        "Invalid Tenant Id",
-        HttpStatus.BAD_REQUEST
-      );
-    }
     const roles = [];
     const errors = [];
+
     try {
+      if (createRolesDto?.tenantId?.trim() !== '' && !uuidValidate(createRolesDto?.tenantId)) {
+        return APIResponse.error(
+          response,
+          apiId,
+          `Please enter valid tenantId or keep blank`,
+          "Invalid Tenant Id",
+          HttpStatus.BAD_REQUEST
+        );
+      } else if (uuidValidate(createRolesDto?.tenantId)) {
+        const tenant = await this.checkTenantID(createRolesDto.tenantId);
+        if (!tenant) {
+          return APIResponse.error(
+            response,
+            apiId,
+            `Tenant Id not found`,
+            "Tenant Id not found",
+            HttpStatus.NOT_FOUND
+          );
+        }
+      }
+
       // Convert role name to lowercase
+      const tenantId = createRolesDto.tenantId;
       for (const roleDto of createRolesDto.roles) {
-        const tenantId = createRolesDto.tenantId;
         const code = roleDto.title.toLowerCase().replace(/\s+/g, "_");
 
         // Check if role name already exists
         const existingRole = await this.roleRepository.findOne({
-          where: { code: code, tenantId: tenantId },
+          where: { code: code, tenantId: tenantId ? tenantId : IsNull() },
         });
         if (existingRole) {
           errors.push({
@@ -68,7 +82,7 @@ export class PostgresRoleService {
           updatedAt: new Date(),
           createdBy: request.user.userId, // Assuming you have a user object in the request
           updatedBy: request.user.userId,
-          tenantId, // Add the tenantId to the RoleDto
+          tenantId: tenantId ? tenantId : null, // Add the tenantId to the RoleDto
         });
         // Convert roleDto to lowercase
         // const response = await this.roleRepository.save(roleDto);

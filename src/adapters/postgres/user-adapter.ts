@@ -2,8 +2,8 @@ import { HttpStatus, Injectable } from "@nestjs/common";
 import { User } from "../../user/entities/user-entity";
 import { FieldValues } from "src/fields/entities/fields-values.entity";
 import { InjectRepository } from "@nestjs/typeorm";
-import { In, Repository } from "typeorm";
-import { UserCreateDto } from "../../user/dto/user-create.dto";
+import { DataSource, ILike, In, Repository } from "typeorm";
+import { tenantRoleMappingDto, UserCreateDto } from "../../user/dto/user-create.dto";
 import jwt_decode from "jwt-decode";
 import {
   getKeycloakAdminToken,
@@ -16,7 +16,7 @@ import { ErrorResponse } from "src/error-response";
 import { SuccessResponse } from "src/success-response";
 import { CohortMembers } from "src/cohortMembers/entities/cohort-member.entity";
 import { isUUID } from "class-validator";
-import { UserSearchDto } from "src/user/dto/user-search.dto";
+import { ExistUserDto, SuggestUserDto, UserSearchDto } from "src/user/dto/user-search.dto";
 import { UserTenantMapping } from "src/userTenantMapping/entities/user-tenant-mapping.entity";
 import { UserRoleMapping } from "src/rbac/assign-role/entities/assign-role.entity";
 import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
@@ -24,7 +24,7 @@ import { Cohort } from "src/cohort/entities/cohort.entity";
 import { Role } from "src/rbac/role/entities/role.entity";
 import { UserData } from "src/user/user.controller";
 import APIResponse from "src/common/responses/response";
-import { Response, query } from "express";
+import { Request, Response, query } from "express";
 import { APIID } from "src/common/utils/api-id.config";
 import { IServicelocator } from "../userservicelocator";
 import { PostgresFieldsService } from "./fields-adapter";
@@ -44,6 +44,9 @@ import { OtpSendDTO } from "src/user/dto/otpSend.dto";
 import { OtpVerifyDTO } from "src/user/dto/otpVerify.dto";
 import { SendPasswordResetOTPDto } from "src/user/dto/passwordReset.dto";
 import { ActionType, UserUpdateDTO } from "src/user/dto/user-update.dto";
+import { randomInt } from 'crypto';
+import { UUID } from "aws-sdk/clients/cloudtrail";
+import { AutomaticMemberService } from "src/automatic-member/automatic-member.service";
 
 interface UpdateField {
   userId: string; // Required
@@ -62,6 +65,7 @@ export class PostgresUserService implements IServicelocator {
   private readonly otpExpiry: number;
   private readonly otpDigits: number;
   private readonly smsKey: string;
+  private readonly dataSource: DataSource;
 
   constructor(
     // private axiosInstance: AxiosInstance,
@@ -86,7 +90,9 @@ export class PostgresUserService implements IServicelocator {
     private configService: ConfigService,
     private postgresAcademicYearService: PostgresAcademicYearService,
     private readonly cohortAcademicYearService: CohortAcademicYearService,
-    private readonly authUtils: AuthUtils
+    private readonly authUtils: AuthUtils,
+    private readonly automaticMemberService: AutomaticMemberService,
+    dataSource: DataSource
   ) {
     this.jwt_secret = this.configService.get<string>("RBAC_JWT_SECRET");
     this.jwt_password_reset_expires_In = this.configService.get<string>(
@@ -97,7 +103,16 @@ export class PostgresUserService implements IServicelocator {
     this.otpExpiry = this.configService.get<number>('OTP_EXPIRY') || 10; // default: 10 minutes
     this.otpDigits = this.configService.get<number>('OTP_DIGITS') || 6;
     this.smsKey = this.configService.get<string>('SMS_KEY');
+    this.dataSource = dataSource; // Store dataSource in class property
   }
+
+
+  public async getCoreColumnNames() {
+    const userMetadata = this.dataSource.getMetadata(User);
+    const columnNames = userMetadata.columns.map((column) => column.propertyName);
+    return columnNames;
+  }
+
 
   public async sendPasswordResetLink(
     request: any,
@@ -163,7 +178,7 @@ export class PostgresUserService implements IServicelocator {
         context: "USER",
         key: "OnForgotPasswordReset",
         replacements: {
-          "{username}": userData?.name,
+          "{username}": userData?.firstName + " " + userData?.lastName,
           "{resetToken}": resetToken,
           "{programName}": capilatizeFirstLettterOfProgram,
           "{expireTime}": time,
@@ -381,6 +396,7 @@ export class PostgresUserService implements IServicelocator {
     }
   }
 
+
   async findAllUserDetails(userSearchDto) {
     let { limit, offset, filters, exclude, sort } = userSearchDto;
     let excludeCohortIdes;
@@ -405,36 +421,67 @@ export class PostgresUserService implements IServicelocator {
     );
 
     if (filters && Object.keys(filters).length > 0) {
+      //Fwtch all core fields
+      let coreFields = await this.getCoreColumnNames();
+      const allCoreField = [...coreFields, 'fromDate', 'toDate', 'role', 'tenantId'];
+
       for (const [key, value] of Object.entries(filters)) {
-        if (index > 0) {
-          whereCondition += ` AND `;
-        }
-        if (userKeys.includes(key)) {
-          if (key === "firstName") {
-            whereCondition += ` U."${key}" ILIKE '%${value}%'`;
-          } else {
-            if (key === "status" || key === "email") {
-              if (
-                Array.isArray(value) &&
-                value.every((item) => typeof item === "string")
-              ) {
-                const status = value
-                  .map((item) => `'${item.trim().toLowerCase()}'`)
-                  .join(",");
+        //Check request filter are proesent on core file or cutom fields
+        if (allCoreField.includes(key)) {
+          if (index > 0 && index < Object.keys(filters).length) {
+            whereCondition += ` AND `;
+          }
+          switch (key) {
+            case "firstName":
+              whereCondition += ` U."${key}" ILIKE '%${value}%'`;
+              index++;
+              break;
+
+            case "status":
+            case "email":
+            case "username":
+            case "userId":
+              if (Array.isArray(value) && value.every((item) => typeof item === "string")) {
+                const status = value.map((item) => `'${item.trim().toLowerCase()}'`).join(",");
                 whereCondition += ` U."${key}" IN(${status})`;
+              } else {
+                whereCondition += ` U."${key}" = '${value}'`;
               }
-            } else {
+              index++;
+              break;
+
+            case "role":
+              whereCondition += ` R."name" = '${value}'`;
+              index++;
+              break;
+
+            case "status":
+              whereCondition += ` U."status" IN('${value}')`;
+              index++;
+
+            case "fromDate":
+              whereCondition += ` DATE(U."createdAt") >= '${value}'`;
+              index++;
+              break;
+
+            case "toDate":
+              whereCondition += ` DATE(U."createdAt") <= '${value}'`;
+              index++;
+              break;
+
+            case "tenantId":
+              whereCondition += `UTM."tenantId" = '${value}'`;
+              index++;
+              break;
+
+            default:
               whereCondition += ` U."${key}" = '${value}'`;
-            }
+              index++;
+              break;
           }
-          index++;
         } else {
-          if (key == "role") {
-            whereCondition += ` R."name" = '${value}'`;
-            index++;
-          } else {
-            searchCustomFields[key] = value;
-          }
+          //For custom field store the data in key value pear
+          searchCustomFields[key] = value;
         }
       }
     }
@@ -459,6 +506,7 @@ export class PostgresUserService implements IServicelocator {
 
     //If source config in source details from fields table is not exist then return false
     if (Object.keys(searchCustomFields).length > 0) {
+
       const context = "USERS";
       getUserIdUsingCustomFields =
         await this.fieldsService.filterUserUsingCustomFields(
@@ -475,8 +523,7 @@ export class PostgresUserService implements IServicelocator {
       const userIdsDependsOnCustomFields = getUserIdUsingCustomFields
         .map((userId) => `'${userId}'`)
         .join(",");
-      whereCondition += `${index > 0 ? " AND " : ""
-        } U."userId" IN (${userIdsDependsOnCustomFields})`;
+      whereCondition += `${index > 0 ? " AND " : ""} U."userId" IN (${userIdsDependsOnCustomFields})`;
       index++;
     }
 
@@ -504,14 +551,16 @@ export class PostgresUserService implements IServicelocator {
     }
 
     //Get user core fields data
-    const query = `SELECT U."userId", U."username",U."email", U."firstName", U."middleName", U."lastName", U."gender", U."dob", R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", U.status, COUNT(*) OVER() AS total_count 
+    const query = `SELECT U."userId", U."username",U."email", U."firstName",UTM."tenantId", U."middleName", U."lastName", U."gender", U."dob", R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", U."status", COUNT(*) OVER() AS total_count 
       FROM  public."Users" U
       LEFT JOIN public."CohortMembers" CM 
       ON CM."userId" = U."userId"
       LEFT JOIN public."UserRolesMapping" UR
       ON UR."userId" = U."userId"
+      LEFT JOIN public."UserTenantMapping" UTM
+      ON UTM."userId" = U."userId"
       LEFT JOIN public."Roles" R
-      ON R."roleId" = UR."roleId" ${whereCondition} GROUP BY U."userId", R."name" ${orderingCondition} ${offset} ${limit}`;
+      ON R."roleId" = UR."roleId" ${whereCondition} GROUP BY U."userId",UTM."tenantId", R."name" ${orderingCondition} ${offset} ${limit}`;
     const userDetails = await this.usersRepository.query(query);
 
     if (userDetails.length > 0) {
@@ -519,16 +568,19 @@ export class PostgresUserService implements IServicelocator {
 
       // Get user custom field data
       for (const userData of userDetails) {
-        const customFields = await this.fieldsService.getUserCustomFieldDetails(
-          userData.userId
+        const customFields = await this.fieldsService.getCustomFieldDetails(
+          userData.userId, 'Users'
         );
-        userData["customFields"] = customFields.map((data) => ({
-          fieldId: data?.fieldId,
-          label: data?.label,
-          value: data?.value,
-          code: data?.code,
-          type: data?.type,
-        }));
+
+        userData["customFields"] = Array.isArray(customFields)
+          ? customFields.map((data) => ({
+            fieldId: data?.fieldId,
+            label: data?.label,
+            selectedValues: data?.selectedValues,
+            type: data?.type,
+          }))
+          : [];
+
         result.getUserDetails.push(userData);
       }
     } else {
@@ -608,13 +660,12 @@ export class PostgresUserService implements IServicelocator {
         const context = "USERS";
         const contextType = roleInUpper;
         // customFields = await this.fieldsService.getFieldValuesData(userData.userId, context, contextType, ['All'], true);
-        customFields = await this.fieldsService.getUserCustomFieldDetails(
-          userData.userId
+        customFields = await this.fieldsService.getCustomFieldDetails(
+          userData.userId, 'Users'
         );
       }
 
       result.userData = userDetails;
-
       result.userData["customFields"] = customFields;
 
       LoggerUtil.log(
@@ -802,6 +853,7 @@ export class PostgresUserService implements IServicelocator {
         }
       }
 
+
       const { username, firstName, lastName, email } = userDto.userData;
       const userId = userDto.userId;
       const keycloakReqBody = { username, firstName, lastName, userId, email };
@@ -859,7 +911,7 @@ export class PostgresUserService implements IServicelocator {
 
       if (userDto?.customFields?.length > 0) {
         const getFieldsAttributes =
-          await this.fieldsService.getEditableFieldsAttributes();
+          await this.fieldsService.getEditableFieldsAttributes(userDto.userData.tenantId);
 
         const isEditableFieldId = [];
         const fieldIdAndAttributes = {};
@@ -898,6 +950,51 @@ export class PostgresUserService implements IServicelocator {
         }
       }
 
+      if (userDto.automaticMember && userDto?.automaticMember?.value === true) {
+
+        let assignTo;
+        //Find Assign field value from custom fields
+        let foundField = userDto.customFields.find(field => field.fieldId === userDto.automaticMember.fieldId);
+        if (foundField) {
+          assignTo = foundField.value;
+        }
+
+        // Check if an active automated member exists for the given userId, tenantId, and assigned ID.
+        const checkAutomaticMemberExists = await this.automaticMemberService.checkAutomaticMemberExists(userId, userDto.userData.tenantId, foundField.value[0]);
+
+        if (checkAutomaticMemberExists.length > 0 && checkAutomaticMemberExists[0].isActive === true) {
+          return APIResponse.error(
+            response,
+            apiId,
+            API_RESPONSES.BAD_REQUEST,
+            `User already assign to that ${userDto.automaticMember.fieldName}`, // which uuid is needed ?
+            HttpStatus.BAD_REQUEST
+          );
+        }
+
+
+        if (checkAutomaticMemberExists.length > 0 && checkAutomaticMemberExists[0].isActive === false) {
+          // deactivate the current active automatic membership for the user in tenantId.
+          const getActiveAutomaticMembershipId = await this.automaticMemberService.getUserbyUserIdAndTenantId(userId, userDto.userData.tenantId, true);
+
+          if (getActiveAutomaticMembershipId && getActiveAutomaticMembershipId.isActive === true) {
+            await this.automaticMemberService.update(getActiveAutomaticMembershipId.id, { isActive: false })
+          }
+
+          // Activate the old inactive automatic membership for the user in tenantId and assigned ID.
+          await this.automaticMemberService.update(checkAutomaticMemberExists[0].id, { isActive: true })
+          return await APIResponse.success(
+            response,
+            apiId,
+            { ...updatedData, editIssues },
+            HttpStatus.OK,
+            API_RESPONSES.USER_UPDATED_SUCCESSFULLY
+          );
+        }
+
+        await this.updateAutomaticMemberMapping(userDto.automaticMember, assignTo, userId, userDto.userData.tenantId)
+      }
+
       LoggerUtil.log(
         API_RESPONSES.USER_UPDATED_SUCCESSFULLY,
         apiId,
@@ -925,6 +1022,49 @@ export class PostgresUserService implements IServicelocator {
         API_RESPONSES.SOMETHING_WRONG,
         HttpStatus.INTERNAL_SERVER_ERROR
       );
+    }
+  }
+  checkAutomaticMemberExists(userId: any, tenantId: any, arg2: any) {
+    throw new Error("Method not implemented.");
+  }
+
+  async updateAutomaticMemberMapping(automaticMember: any, fieldValue: any, userId: UUID, tenantId: UUID) {
+
+    try {
+      // deactivate the current active automatic membership for the user in tenantId.
+      const getActiveAutomaticMembershipId = await this.automaticMemberService.getUserbyUserIdAndTenantId(userId, tenantId, true);
+
+      if (getActiveAutomaticMembershipId && getActiveAutomaticMembershipId.isActive === true) {
+        await this.automaticMemberService.update(getActiveAutomaticMembershipId.id, { isActive: false })
+      }
+
+      let createAutomaticMember = {
+        userId: userId,
+        rules: {
+          condition: {
+            value: fieldValue,
+            fieldId: automaticMember.fieldId,
+            // "operator": "="
+          },
+          cohortField: automaticMember.fieldName,
+          // allowedActions: {
+          //   user: ["create","view", "edit", "delete"],
+          //   cohort: ["create","view", "edit", "delete"]
+          // }
+        },
+        tenantId: tenantId,
+        isActive: true
+      }
+
+      //Assgn member to sdb
+      await this.automaticMemberService.create(createAutomaticMember)
+
+    } catch (error) {
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${error.message}`
+      );
+      throw new Error(error);
     }
   }
 
@@ -983,7 +1123,7 @@ export class PostgresUserService implements IServicelocator {
   }
 
   async updateBasicUserDetails(userId: string, userData: Partial<User>): Promise<User | null> {
-    try {      
+    try {
       // Fetch the user by ID
       const user = await this.usersRepository.findOne({ where: { userId } });
 
@@ -1056,10 +1196,20 @@ export class PostgresUserService implements IServicelocator {
         );
       }
 
+      //Validaion if try to assign on cohort and automaticMember
+      if (userCreateDto.automaticMember?.value === true && userCreateDto.tenantCohortRoleMapping?.[0]?.cohortIds?.length > 0) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          `Error : Invalid operation: A user cannot be assigned as an automatic member while also being assigned to a center simultaneously. Please select only one option.`,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
       userCreateDto.username = userCreateDto.username.toLocaleLowerCase();
       const userSchema = new UserCreateDto(userCreateDto);
 
-      let errKeycloak = "";
       let resKeycloak;
 
       const keycloakResponse = await getKeycloakAdminToken();
@@ -1078,8 +1228,8 @@ export class PostgresUserService implements IServicelocator {
         );
       }
 
-      resKeycloak = await createUserInKeyCloak(userSchema, token)
-
+      // Multi tenant for roles is not currently supported in keycloak
+      resKeycloak = await createUserInKeyCloak(userSchema, token, validatedRoles[0]?.title)
 
       if (resKeycloak.statusCode !== 201) {
         if (resKeycloak.statusCode === 409) {
@@ -1182,6 +1332,7 @@ export class PostgresUserService implements IServicelocator {
         API_RESPONSES.USER_CREATE_SUCCESSFULLY
       );
     } catch (e) {
+
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
         `Error: ${e.message}`,
@@ -1282,9 +1433,9 @@ export class PostgresUserService implements IServicelocator {
           errorCollector.addError(API_RESPONSES.DUPLICAT_TENANTID);
         }
 
-        if ((tenantId && !roleId) || (!tenantId && roleId)) {
-          errorCollector.addError(API_RESPONSES.INVALID_PARAMETERS);
-        }
+        // if ((tenantId && !roleId) || (!tenantId && roleId)) {
+        //   errorCollector.addError(API_RESPONSES.INVALID_PARAMETERS);
+        // }
 
         const [tenantExists, notExistCohort, roleExists] = await Promise.all([
           tenantId
@@ -1294,7 +1445,7 @@ export class PostgresUserService implements IServicelocator {
             ? this.checkCohortExistsInAcademicYear(academicYearId, cohortIds)
             : Promise.resolve([]),
           roleId
-            ? this.roleRepository.find({ where: { roleId, tenantId } })
+            ? this.roleRepository.find({ where: { roleId } })
             : Promise.resolve([]),
         ]);
 
@@ -1308,12 +1459,20 @@ export class PostgresUserService implements IServicelocator {
           );
         }
 
+
+
         if (roleExists && roleExists?.length === 0) {
           errorCollector.addError(
-            `Role Id '${roleId}' does not exist for this tenant '${tenantId}'.`
+            `Role Id '${roleId}' does not exist.`
           );
         } else if (roleExists) {
-          roleData = [...roleData, ...roleExists];
+          if ((roleExists[0].tenantId || roleExists[0].tenantId !== null) && roleExists[0].tenantId !== tenantId) {
+            errorCollector.addError(
+              `Role Id '${roleId}' does not exist for this tenant '${tenantId}'.`
+            );
+          } else {
+            roleData = [...roleData, ...roleExists];
+          }
         }
       }
     } else {
@@ -1343,23 +1502,8 @@ export class PostgresUserService implements IServicelocator {
     return notExistCohort.length > 0 ? notExistCohort : [];
   }
 
-  async checkUser(body) {
-    const checkUserinKeyCloakandDb = await this.checkUserinKeyCloakandDb(body);
-    if (checkUserinKeyCloakandDb) {
-      return new SuccessResponse({
-        statusCode: 200,
-        message: API_RESPONSES.USER_EXISTS_SEND_MAIL,
-        data: { data: true },
-      });
-    }
-    return new SuccessResponse({
-      statusCode: HttpStatus.BAD_REQUEST,
-      message: API_RESPONSES.INVALID_USERNAME_EMAIL,
-      data: { data: false },
-    });
-  }
 
-  // Can be Implemeneted after we know what are the unique entties
+  // Can be Implemented after we know what are the unique entities
   async checkUserinKeyCloakandDb(userDto) {
     const keycloakResponse = await getKeycloakAdminToken();
     const token = keycloakResponse.data.access_token;
@@ -1390,7 +1534,7 @@ export class PostgresUserService implements IServicelocator {
     userCreateDto: UserCreateDto,
     academicYearId: string,
     response: Response
-  ) {
+  ): Promise<User> {
     const user = new User();
     user.userId = userCreateDto?.userId,
       user.username = userCreateDto?.username,
@@ -1406,9 +1550,21 @@ export class PostgresUserService implements IServicelocator {
       user.dob = new Date(userCreateDto.dob);
     }
     const result = await this.usersRepository.save(user);
+    const createdBy = request.user?.userId || result.userId;
 
-    if (result && userCreateDto.tenantCohortRoleMapping) {
-      for (const mapData of userCreateDto.tenantCohortRoleMapping) {
+    if (userCreateDto.tenantCohortRoleMapping) {
+      if (userCreateDto.automaticMember && userCreateDto?.automaticMember?.value === true) {
+        await this.automaticMemberMapping(userCreateDto.automaticMember, userCreateDto.customFields, userCreateDto.tenantCohortRoleMapping, result.userId, createdBy)
+      } else {
+        await this.tenantCohortRollMapping(userCreateDto.tenantCohortRoleMapping, academicYearId, result.userId, createdBy);
+      }
+    }
+    return result;
+  }
+
+  async tenantCohortRollMapping(tenantCohortRoleMapping: tenantRoleMappingDto[], academicYearId: UUID, userId: UUID, createdBy: UUID): Promise<void> {
+    try {
+      for (const mapData of tenantCohortRoleMapping) {
         if (mapData.cohortIds) {
           for (const cohortIds of mapData.cohortIds) {
             let query = `SELECT * FROM public."CohortAcademicYear" WHERE "cohortId"= '${cohortIds}' AND "academicYearId" = '${academicYearId}'`;
@@ -1417,9 +1573,9 @@ export class PostgresUserService implements IServicelocator {
               query
             );
 
-            // will add data only if cohort is found with acadmic year
+            // will add data only if cohort is found with academic year
             let cohortData = {
-              userId: result?.userId,
+              userId: userId,
               cohortId: cohortIds,
               cohortAcademicYearId:
                 getCohortAcademicYearId[0]["cohortAcademicYearId"] || null,
@@ -1429,17 +1585,70 @@ export class PostgresUserService implements IServicelocator {
         }
 
         const tenantRoleMappingData = {
-          userId: result?.userId,
+          userId: userId,
           tenantRoleMapping: mapData,
         };
 
-        await this.assignUserToTenant(tenantRoleMappingData, request);
+        await this.assignUserToTenantAndRoll(tenantRoleMappingData, createdBy);
       }
+    } catch (error) {
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${error.message}`
+      );
+      throw new Error(error);
     }
-    return result;
   }
 
-  async assignUserToTenant(tenantsData, request) {
+
+  async automaticMemberMapping(automaticMember: any, customFields: any, tenantCohortRoleMapping: tenantRoleMappingDto[], userId: UUID, createdBy: UUID): Promise<void> {
+
+    try {
+      // Tenant and role mapping
+      for (const mapData of tenantCohortRoleMapping) {
+        const tenantRoleMappingData = {
+          userId: userId,
+          tenantRoleMapping: mapData,
+        };
+        await this.assignUserToTenantAndRoll(tenantRoleMappingData, createdBy);
+      }
+      let fieldValue;
+      let foundField = customFields.find(field => field.fieldId === automaticMember.fieldId);
+      if (foundField) {
+        fieldValue = foundField.value;
+      }
+
+      let createAutomaticMember = {
+        userId: userId,
+        rules: {
+          condition: {
+            value: fieldValue,
+            fieldId: automaticMember.fieldId,
+            // "operator": "="
+          },
+          cohortField: automaticMember.fieldName,
+          // allowedActions: {
+          //   user: ["create","view", "edit", "delete"],
+          //   cohort: ["create","view", "edit", "delete"]
+          // }
+        },
+        tenantId: tenantCohortRoleMapping[0].tenantId,
+        isActive: true
+      }
+
+      //Assgn member to sdb
+      await this.automaticMemberService.create(createAutomaticMember)
+    } catch (error) {
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${error.message}`
+      );
+      throw new Error(error);
+    }
+  }
+
+
+  async assignUserToTenantAndRoll(tenantsData, createdBy) {
     try {
       const tenantId = tenantsData?.tenantRoleMapping?.tenantId;
       const userId = tenantsData?.userId;
@@ -1450,22 +1659,22 @@ export class PostgresUserService implements IServicelocator {
           userId: userId,
           tenantId: tenantId,
           roleId: roleId,
-          createdBy: request["user"]?.userId || userId,
-          updatedBy: request["user"]?.userId || userId,
+          createdBy: createdBy,
         });
       }
 
-      const data = await this.userTenantMappingRepository.save({
-        userId: userId,
-        tenantId: tenantId,
-        createdBy: request["user"]?.userId || userId,
-        updatedBy: request["user"]?.userId || userId,
-      });
+      if (tenantId) {
+        const data = await this.userTenantMappingRepository.save({
+          userId: userId,
+          tenantId: tenantId,
+          createdBy: createdBy,
+        });
+      }
 
       LoggerUtil.log(API_RESPONSES.USER_TENANT);
     } catch (error) {
       LoggerUtil.error(
-        `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
+        `${API_RESPONSES.SERVER_ERROR}`,
         `Error: ${error.message}`
       );
       throw new Error(error);
@@ -1680,6 +1889,8 @@ export class PostgresUserService implements IServicelocator {
   }
 
   public async validateCustomField(userCreateDto, response, apiId) {
+    // Taking Consideration of One tenant id
+    const tenantId = userCreateDto.tenantCohortRoleMapping[0]?.tenantId;
     const fieldValues = userCreateDto ? userCreateDto.customFields : [];
     const encounteredKeys = [];
     const invalidateFields = [];
@@ -1687,7 +1898,7 @@ export class PostgresUserService implements IServicelocator {
     let error = "";
     for (const fieldsData of fieldValues) {
       const fieldId = fieldsData["fieldId"];
-      const getFieldDetails: any = await this.fieldsService.getFieldByIdes(
+      const getFieldDetails: any = await this.fieldsService.getFieldByIds(
         fieldId
       );
 
@@ -1700,30 +1911,47 @@ export class PostgresUserService implements IServicelocator {
       } else {
         encounteredKeys.push(fieldId);
       }
-
+      const fieldAttributes = getFieldDetails?.fieldAttributes || {};
+      getFieldDetails["fieldAttributes"] = fieldAttributes[tenantId] || fieldAttributes["default"];
       if (
         (getFieldDetails.type == "checkbox" ||
           getFieldDetails.type == "drop_down" ||
           getFieldDetails.type == "radio") &&
-        getFieldDetails.sourceDetails.source == "table"
+        getFieldDetails?.sourceDetails?.source == "table"
       ) {
+        let fieldValue = fieldsData["value"][0];
         const getOption = await this.fieldsService.findDynamicOptions(
-          getFieldDetails.sourceDetails.table
+          getFieldDetails.sourceDetails.table,
+          `"${getFieldDetails?.sourceDetails?.table}_id"='${fieldValue}'`,
         );
-
+        if (!getOption?.length) {
+          return APIResponse.error(
+            response,
+            apiId,
+            API_RESPONSES.BAD_REQUEST,
+            API_RESPONSES.UUID_VALIDATION, // which uuid is needed ?
+            HttpStatus.BAD_REQUEST
+          );
+        }
         const transformedFieldParams = {
-          options: getOption.map((param) => ({
-            value: param.value,
-            label: param.label,
-          })),
+          options: getOption.flatMap((param) => {
+            return Object.keys(param)
+              .filter((key) => key.endsWith("_id"))
+              .map((idKey) => {
+                const nameKey = idKey.replace("_id", "_name");
+                return {
+                  value: param[idKey],
+                  label: param[nameKey] || "Unknown",
+                };
+              });
+          }),
         };
-        getFieldDetails["fieldParams"] = transformedFieldParams;
 
+        getFieldDetails["fieldParams"] = transformedFieldParams;
         // getFieldDetails['fieldParams'] = getOption
       } else {
         getFieldDetails["fieldParams"] = getFieldDetails?.fieldParams || {};
       }
-
       const checkValidation = this.fieldsService.validateFieldValue(
         getFieldDetails,
         fieldsData["value"]
@@ -2209,6 +2437,142 @@ export class PostgresUserService implements IServicelocator {
     catch (e) {
       LoggerUtil.error(API_RESPONSES.EMAIL_ERROR, e.message);
       throw new Error(`${API_RESPONSES.EMAIL_NOTIFICATION_ERROR}:  ${e.message}`);
+    }
+  }
+
+
+  async checkUser(
+    request: any,
+    response: any,
+    filters: ExistUserDto
+  ) {
+    const apiId = APIID.USER_LIST;
+    try {
+      const whereClause: any = {};
+
+      if (filters && Object.keys(filters).length > 0) {
+        Object.entries(filters).forEach(([key, value]) => {
+          if (value !== undefined && value !== null) {
+            if (key === 'firstName' || key === 'middleName' || key === 'lastName') {
+              const sanitizedValue = this.sanitizeInput(value);
+              whereClause[key] = ILike(`%${sanitizedValue}%`);
+            } else {
+              whereClause[key] = this.sanitizeInput(value);
+            }
+          }
+        });
+      }
+      // Use the dynamic where clause to fetch matching data
+      const findData = await this.usersRepository.find({
+        where: whereClause,
+        select: ['username', 'firstName', 'middleName', 'lastName'], // Select only these fields
+      });
+
+      if (findData.length === 0) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.USER_NOT_FOUND,
+          API_RESPONSES.NOT_FOUND,
+          HttpStatus.NOT_FOUND
+        );
+      }
+
+      return await APIResponse.success(
+        response,
+        apiId,
+        findData,
+        HttpStatus.OK,
+        API_RESPONSES.USER_GET_SUCCESSFULLY
+      );
+    } catch (e) {
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
+        `Error: ${e.message}`,
+        apiId
+      );
+
+      const errorMessage = e.message || API_RESPONSES.SERVER_ERROR;
+      return APIResponse.error(
+        response,
+        apiId,
+        API_RESPONSES.SERVER_ERROR,
+        errorMessage,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+  sanitizeInput(value) {
+    if (typeof value === 'string') {
+      // Escape special characters for SQL
+      return value.replace(/[%_\\]/g, '\\$&');
+    }
+    // For other types, return the value as is or implement specific sanitization logic
+    return value;
+  }
+
+
+  async suggestUsername(request: Request, response: Response, suggestUserDto: SuggestUserDto) {
+    const apiId = APIID.USER_LIST;
+    try {
+      // Fetch user data from the database to check if the username already exists
+      const findData = await this.usersRepository.findOne({
+        where: { username: suggestUserDto?.username },
+      });
+
+      if (findData) {
+        // Define a function to generate a username  
+        const generateUsername = (): string => {
+          const randomNum = randomInt(100, 1000); // Secure random 3-digit number
+          return `${suggestUserDto.firstName}${suggestUserDto.lastName}${randomNum}`;
+        };
+
+        // Check if the generated username exists in the database
+        let newUsername = generateUsername();
+        let isUnique = false;
+
+        while (!isUnique) {
+          const existingUser = await this.usersRepository.findOne({
+            where: { username: newUsername },
+          });
+
+          if (!existingUser) {
+            isUnique = true; // Username is unique
+          } else {
+            // Generate a new username and try again
+            newUsername = generateUsername();
+          }
+        }
+
+        // Return the unique suggested username
+        return await APIResponse.success(
+          response,
+          apiId,
+          { suggestedUsername: newUsername },
+          HttpStatus.OK,
+          API_RESPONSES.USERNAME_SUGGEST_SUCCESSFULLY
+        );
+      }
+
+      // If findData is not present, return a message indicating that the user was not found
+      return APIResponse.error(
+        response,
+        apiId,
+        API_RESPONSES.USER_NOT_FOUND,
+        API_RESPONSES.NOT_FOUND,
+        HttpStatus.NOT_FOUND
+      );
+
+    } catch (error) {
+      // Handle errors gracefully
+      const errorMessage = error.message || API_RESPONSES.SERVER_ERROR;
+      return APIResponse.error(
+        response,
+        apiId,
+        API_RESPONSES.SERVER_ERROR,
+        errorMessage,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
     }
   }
 
