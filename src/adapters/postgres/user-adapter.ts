@@ -778,6 +778,9 @@ export class PostgresUserService implements IServicelocator {
     DISTINCT ON (T."tenantId") 
     T."tenantId", 
     T."templateId",
+    T."contentFramework",
+    T."collectionFramework",
+    T."channelId",
     T.name AS tenantName, 
     UTM."Id" AS userTenantMappingId
   FROM 
@@ -813,6 +816,9 @@ export class PostgresUserService implements IServicelocator {
           tenantName: data.tenantname,
           tenantId: data.tenantId,
           templateId: data.templateId,
+          contentFramework: data.contentFramework,
+          collectionFramework: data.collectionFramework,
+          channelId: data.channelId,
           userTenantMappingId: data.usertenantmappingid,
           roleId: roleId,
           roleName: roleName,
