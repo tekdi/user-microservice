@@ -766,7 +766,7 @@ export class PostgresUserService implements IServicelocator {
     }
     const tenantData = tenantId
       ? tenentDetails.filter((item) => item.tenantId === tenantId)
-      : tenentDetails;
+      : tenentDetails;    
     userDetails["tenantData"] = tenantData;
 
     return userDetails;
@@ -777,6 +777,10 @@ export class PostgresUserService implements IServicelocator {
   SELECT 
     DISTINCT ON (T."tenantId") 
     T."tenantId", 
+    T."templateId",
+    T."contentFramework",
+    T."collectionFramework",
+    T."channelId",
     T.name AS tenantName, 
     UTM."Id" AS userTenantMappingId
   FROM 
@@ -789,7 +793,7 @@ export class PostgresUserService implements IServicelocator {
     UTM."userId" = $1
   ORDER BY 
     T."tenantId", UTM."Id";`;
-
+    
     const result = await this.usersRepository.query(query, [userId]);
     const combinedResult = [];
     const roleArray = [];
@@ -798,22 +802,27 @@ export class PostgresUserService implements IServicelocator {
         userId,
         data.tenantId
       );
+      
       if (roleData.length > 0) {
         roleArray.push(roleData[0].roleid);
         const roleId = roleData[0].roleid;
         const roleName = roleData[0].title;
 
-        const privilegeData =
-          await this.postgresRoleService.findPrivilegeByRoleId(roleArray);
-        const privileges = privilegeData.map((priv) => priv.name);
+        // const privilegeData =
+        //   await this.postgresRoleService.findPrivilegeByRoleId(roleArray);
+        // const privileges = privilegeData.map((priv) => priv.name);
 
         combinedResult.push({
           tenantName: data.tenantname,
           tenantId: data.tenantId,
+          templateId: data.templateId,
+          contentFramework: data.contentFramework,
+          collectionFramework: data.collectionFramework,
+          channelId: data.channelId,
           userTenantMappingId: data.usertenantmappingid,
           roleId: roleId,
           roleName: roleName,
-          privileges: privileges,
+          // privileges: privileges,
         });
       }
     }
