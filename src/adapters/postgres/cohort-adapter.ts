@@ -135,7 +135,7 @@ export class PostgresCohortService {
       const resultData = {
         cohortName: cohort.name,
         cohortId: cohort.cohortId,
-        parentID: cohort.parentId,
+        parentId: cohort.parentId,
         type: cohort.type,
         status: cohort?.status,
         customField: requiredData.customField
@@ -1089,7 +1089,7 @@ export class PostgresCohortService {
         const resultData = {
           cohortName: cohort?.name,
           cohortId: cohort?.cohortId,
-          parentID: cohort?.parentId,
+          parentId: cohort?.parentId,
           cohortMemberStatus: cohort?.cohortmemberstatus,
           cohortMembershipId: cohort?.cohortMembershipId,
           cohortStatus: cohort?.cohortstatus || cohort?.status,
