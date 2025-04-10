@@ -104,6 +104,7 @@ export class RoleController {
   @ApiCreatedResponse({ description: "Role List." })
   @ApiBody({ type: RoleSearchDto })
   @ApiForbiddenResponse({ description: "Forbidden" })
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   // @UsePipes(ValidationPipe)
   @SerializeOptions({ strategy: "excludeAll" })
   @ApiHeader({ name: "tenantid" })
