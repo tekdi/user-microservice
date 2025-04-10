@@ -5,6 +5,7 @@ import {
   ApiCreatedResponse,
   ApiBasicAuth,
   ApiHeader,
+  ApiQuery,
 } from "@nestjs/swagger";
 import {
   Controller,
@@ -16,53 +17,74 @@ import {
   UseGuards,
   Res,
   UseFilters,
+  Get,
+  Query,
+  Param,
+  UsePipes,
+  ValidationPipe,
+  Patch,
+  Delete,
 } from "@nestjs/common";
-import { FieldsSearchDto } from "./dto/fields-search.dto";
+import {
+  FieldsOptionsSearchDto,
+  FieldsSearchDto,
+} from "./dto/fields-search.dto";
 import { Request } from "@nestjs/common";
 import { FieldsDto } from "./dto/fields.dto";
+import { FieldsUpdateDto } from "./dto/fields-update.dto";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { diskStorage } from "multer";
 import { Response } from "express";
 import { FieldsAdapter } from "./fieldsadapter";
 import { FieldValuesDto } from "./dto/field-values.dto";
 import { FieldValuesSearchDto } from "./dto/field-values-search.dto";
-import { FieldsService } from "./fields.service";
 import { JwtAuthGuard } from "src/common/guards/keycloak.guard";
 import { AllExceptionsFilter } from "src/common/filters/exception.filter";
 import { APIID } from "src/common/utils/api-id.config";
+import { FieldValuesDeleteDto } from "./dto/field-values-delete.dto";
 
 @ApiTags("Fields")
 @Controller("fields")
-@UseGuards(JwtAuthGuard)
 export class FieldsController {
-  constructor(
-    private fieldsAdapter: FieldsAdapter,
-    private readonly fieldsService: FieldsService
-  ) {}
+  constructor(private fieldsAdapter: FieldsAdapter) {}
 
   //fields
   //create fields
   @Post("/create")
+  @UseGuards(JwtAuthGuard)
   @ApiBasicAuth("access-token")
+  @UsePipes(new ValidationPipe())
   @ApiCreatedResponse({ description: "Fields has been created successfully." })
   @ApiBody({ type: FieldsDto })
   @ApiForbiddenResponse({ description: "Forbidden" })
-  // @UseInterceptors(ClassSerializerInterceptor)
-  @ApiHeader({
-    name: "tenantid",
-  })
   public async createFields(
     @Headers() headers,
     @Req() request: Request,
     @Body() fieldsDto: FieldsDto,
     @Res() response: Response
   ) {
-    let tenantid = headers["tenantid"];
-    const payload = {
-      tenantId: tenantid,
-    };
-    Object.assign(fieldsDto, payload);
-    return await this.fieldsAdapter.buildFieldsAdapter().createFields(request, fieldsDto, response);
+    return await this.fieldsAdapter
+      .buildFieldsAdapter()
+      .createFields(request, fieldsDto, response);
+  }
+
+  //create fields
+  @Patch("/update/:fieldId")
+  @ApiBasicAuth("access-token")
+  @ApiCreatedResponse({ description: "Fields has been created successfully." })
+  @ApiBody({ type: FieldsUpdateDto })
+  @UsePipes(new ValidationPipe())
+  @ApiForbiddenResponse({ description: "Forbidden" })
+  public async updateFields(
+    @Param("fieldId") fieldId: string,
+    @Headers() headers,
+    @Req() request: Request,
+    @Body() fieldsUpdateDto: FieldsUpdateDto,
+    @Res() response: Response
+  ) {
+    return await this.fieldsAdapter
+      .buildFieldsAdapter()
+      .updateFields(fieldId, request, fieldsUpdateDto, response);
   }
 
   //search
@@ -84,19 +106,17 @@ export class FieldsController {
     @Body() fieldsSearchDto: FieldsSearchDto,
     @Res() response: Response
   ) {
-    let tenantid = headers["tenantid"];
-    return await this.fieldsAdapter.buildFieldsAdapter().searchFields(
-      tenantid,
-      request,
-      fieldsSearchDto,
-      response
-    );
+    const tenantid = headers["tenantid"];
+    return await this.fieldsAdapter
+      .buildFieldsAdapter()
+      .searchFields(tenantid, request, fieldsSearchDto, response);
   }
 
   //field values
   //create fields values
   @UseFilters(new AllExceptionsFilter(APIID.FIELDVALUES_CREATE))
   @Post("/values/create")
+  @UseGuards(JwtAuthGuard)
   @ApiBasicAuth("access-token")
   @ApiCreatedResponse({
     description: "Fields Values has been created successfully.",
@@ -109,16 +129,15 @@ export class FieldsController {
     @Body() fieldValuesDto: FieldValuesDto,
     @Res() response: Response
   ) {
-    return await this.fieldsAdapter.buildFieldsAdapter().createFieldValues(
-      request,
-      fieldValuesDto,
-      response
-    );  
+    return await this.fieldsAdapter
+      .buildFieldsAdapter()
+      .createFieldValues(request, fieldValuesDto, response);
   }
 
   //search fields values
   @Post("/values/search")
   @ApiBasicAuth("access-token")
+  @UseGuards(JwtAuthGuard)
   @ApiCreatedResponse({ description: "Fields Values list." })
   @ApiBody({ type: FieldValuesSearchDto })
   @ApiForbiddenResponse({ description: "Forbidden" })
@@ -131,10 +150,100 @@ export class FieldsController {
     @Body() fieldValuesSearchDto: FieldValuesSearchDto,
     @Res() response: Response
   ) {
-    return await this.fieldsAdapter.buildFieldsAdapter().searchFieldValues(
-      request,
-      fieldValuesSearchDto,
-      response
-    );
+    return await this.fieldsAdapter
+      .buildFieldsAdapter()
+      .searchFieldValues(request, fieldValuesSearchDto, response);
+  }
+
+  //Get Field Option
+  @Post("/options/read")
+  @UsePipes(new ValidationPipe())
+  @ApiBasicAuth("access-token")
+  @ApiCreatedResponse({ description: "Field Options list." })
+  @ApiBody({ type: FieldsOptionsSearchDto })
+  @ApiForbiddenResponse({ description: "Forbidden" })
+  @SerializeOptions({
+    strategy: "excludeAll",
+  })
+  public async getFieldOptions(
+    @Headers() headers,
+    @Req() request: Request,
+    @Body() fieldsOptionsSearchDto: FieldsOptionsSearchDto,
+    @Res() response: Response
+  ) {
+    return await this.fieldsAdapter
+      .buildFieldsAdapter()
+      .getFieldOptions(fieldsOptionsSearchDto, response);
+  }
+
+  //Delete Field Option
+  @Delete("/options/delete/:fieldName")
+  @UseGuards(JwtAuthGuard)
+  @ApiBasicAuth("access-token")
+  @ApiCreatedResponse({ description: "Field Options Delete." })
+  @ApiForbiddenResponse({ description: "Forbidden" })
+  @SerializeOptions({
+    strategy: "excludeAll",
+  })
+  @ApiQuery({ name: "context", required: null })
+  @ApiQuery({ name: "option", required: null })
+  @ApiQuery({ name: "contextType", required: null })
+  public async deleteFieldOptions(
+    @Headers() headers,
+    @Req() request: Request,
+    @Param("fieldName") fieldName: string,
+    @Query("option") option: string | null = null,
+    @Query("context") context: string | null = null,
+    @Query("contextType") contextType: string | null = null,
+    @Res() response: Response
+  ) {
+    const requiredData = {
+      fieldName: fieldName || null,
+      option: option || null,
+      context: context || null,
+      contextType: contextType || null,
+    };
+    return await this.fieldsAdapter
+      .buildFieldsAdapter()
+      .deleteFieldOptions(requiredData, response);
+  }
+
+  @Get("/formFields")
+  @ApiCreatedResponse({ description: "Form Data Fetch" })
+  @ApiForbiddenResponse({ description: "Forbidden" })
+  @SerializeOptions({
+    strategy: "excludeAll",
+  })
+  @ApiQuery({ name: "context", required: false })
+  @ApiQuery({ name: "contextType", required: false })
+  public async getFormData(
+    @Headers() headers,
+    @Req() request: Request,
+    @Query("context") context: string | null = null,
+    @Query("contextType") contextType: string | null = null,
+    @Res() response: Response
+  ) {
+    const requiredData = {
+      context: context || false,
+      contextType: contextType || false,
+    };
+    return await this.fieldsAdapter
+      .buildFieldsAdapter()
+      .getFormCustomField(requiredData, response);
+  }
+  //delete field values
+  @Delete("/values/delete")
+  @UseGuards(JwtAuthGuard)
+  @ApiBasicAuth("access-token")
+  @ApiCreatedResponse({ description: "Field Values deleted successfully." })
+  @UsePipes(ValidationPipe)
+  @ApiBody({ type: FieldValuesDeleteDto })
+  public async deleteFieldValues(
+    @Body() fieldValuesDeleteDto: FieldValuesDeleteDto,
+    @Res() response: Response
+  ) {
+    return await this.fieldsAdapter
+      .buildFieldsAdapter()
+      .deleteFieldValues(fieldValuesDeleteDto, response);
   }
 }

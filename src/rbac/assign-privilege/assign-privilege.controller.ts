@@ -1,27 +1,57 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UsePipes, ValidationPipe, Req, Res, SerializeOptions, UseGuards } from '@nestjs/common';
-import { AssignPrivilegeAdapter } from './assign-privilege.apater';
-import { CreatePrivilegeRoleDto } from './dto/create-assign-privilege.dto';
-import { Response, Request} from "express";
-import { ApiBasicAuth, ApiCreatedResponse, ApiBody, ApiForbiddenResponse, ApiHeader, ApiOkResponse, ApiTags } from '@nestjs/swagger';
-import { JwtAuthGuard } from 'src/common/guards/keycloak.guard';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  UsePipes,
+  ValidationPipe,
+  Req,
+  Res,
+  SerializeOptions,
+  UseGuards,
+} from "@nestjs/common";
+import { AssignPrivilegeAdapter } from "./assign-privilege.apater";
+import { CreatePrivilegeRoleDto } from "./dto/create-assign-privilege.dto";
+import { Response, Request } from "express";
+import {
+  ApiBasicAuth,
+  ApiCreatedResponse,
+  ApiBody,
+  ApiForbiddenResponse,
+  ApiHeader,
+  ApiOkResponse,
+  ApiTags,
+} from "@nestjs/swagger";
+import { JwtAuthGuard } from "src/common/guards/keycloak.guard";
 
-@ApiTags('rbac')
-@Controller('assignprivilege')
+@ApiTags("rbac")
+@Controller("assignprivilege")
 @UseGuards(JwtAuthGuard)
 export class AssignPrivilegeController {
-  constructor(private readonly assignPrivilegeAdpater: AssignPrivilegeAdapter) {}
+  constructor(
+    private readonly assignPrivilegeAdpater: AssignPrivilegeAdapter
+  ) {}
 
   @Post()
   @UsePipes(new ValidationPipe())
   @ApiBasicAuth("access-token")
-  @ApiCreatedResponse({ description: "Privilege has been Assigned successfully." })
+  @ApiCreatedResponse({
+    description: "Privilege has been Assigned successfully.",
+  })
   @ApiBody({ type: CreatePrivilegeRoleDto })
   @ApiForbiddenResponse({ description: "Forbidden" })
   @ApiHeader({ name: "tenantid" })
-  public async create(@Req() request: Request,
-  @Body() createAssignPrivilegeDto:CreatePrivilegeRoleDto ,
-  @Res() response: Response) {
-    return await this.assignPrivilegeAdpater.buildPrivilegeRoleAdapter().createPrivilegeRole(request,createAssignPrivilegeDto,response);
+  public async create(
+    @Req() request: Request,
+    @Body() createAssignPrivilegeDto: CreatePrivilegeRoleDto,
+    @Res() response: Response
+  ) {
+    return await this.assignPrivilegeAdpater
+      .buildPrivilegeRoleAdapter()
+      .createPrivilegeRole(request, createAssignPrivilegeDto, response);
   }
 
   @Get("/:roleid")
@@ -29,13 +59,15 @@ export class AssignPrivilegeController {
   @ApiOkResponse({ description: "Privilege Details." })
   @ApiHeader({ name: "tenantid" })
   @ApiForbiddenResponse({ description: "Forbidden" })
-  @SerializeOptions({strategy: "excludeAll",})
+  @SerializeOptions({ strategy: "excludeAll" })
   public async getRole(
     @Param("roleid") roleId: string,
     @Req() request: Request,
     @Res() response: Response
   ) {
-    return await this.assignPrivilegeAdpater.buildPrivilegeRoleAdapter().getPrivilegeRole(roleId, request, response);
+    return await this.assignPrivilegeAdpater
+      .buildPrivilegeRoleAdapter()
+      .getPrivilegeRole(roleId, request, response);
   }
 
   // @Delete("/:id")
@@ -49,5 +81,4 @@ export class AssignPrivilegeController {
   //   const result = await this.assignPrivilegeAdpater.buildPrivilegeRoleAdapter().deletePrivilegeRole(userId);
   //   return response.status(result.statusCode).json(result);
   // }
-  
 }

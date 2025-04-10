@@ -1,18 +1,25 @@
-import { BadRequestException, ConsoleLogger, HttpStatus, Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
-import { SuccessResponse } from 'src/success-response';
-import { ErrorResponseTypeOrm } from 'src/error-response-typeorm';
-import { CreateAssignRoleDto, ResponseAssignRoleDto } from 'src/rbac/assign-role/dto/create-assign-role.dto';
-import { UserRoleMapping } from 'src/rbac/assign-role/entities/assign-role.entity';
+import {
+  BadRequestException,
+  ConsoleLogger,
+  HttpStatus,
+  Injectable,
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { In, Repository } from "typeorm";
+import { SuccessResponse } from "src/success-response";
+import { ErrorResponseTypeOrm } from "src/error-response-typeorm";
+import {
+  CreateAssignRoleDto,
+  ResponseAssignRoleDto,
+} from "src/rbac/assign-role/dto/create-assign-role.dto";
+import { UserRoleMapping } from "src/rbac/assign-role/entities/assign-role.entity";
 import { Role } from "src/rbac/role/entities/role.entity";
-import { IsAlpha, IsUUID, isUUID } from 'class-validator';
-import { executionAsyncResource } from 'async_hooks';
-import jwt_decode from "jwt-decode";
-import { DeleteAssignRoleDto } from 'src/rbac/assign-role/dto/delete-assign-role.dto';
-import { Response } from 'express';
-import { APIID } from 'src/common/utils/api-id.config';
-import APIResponse from 'src/common/responses/response';
+import { IsAlpha, IsUUID, isUUID } from "class-validator";
+import { executionAsyncResource } from "async_hooks";
+import { DeleteAssignRoleDto } from "src/rbac/assign-role/dto/delete-assign-role.dto";
+import { Response } from "express";
+import { APIID } from "src/common/utils/api-id.config";
+import APIResponse from "src/common/responses/response";
 
 @Injectable()
 export class PostgresAssignroleService {
@@ -21,11 +28,14 @@ export class PostgresAssignroleService {
     private userRoleMappingRepository: Repository<UserRoleMapping>,
     @InjectRepository(Role)
     private roleRepository: Repository<Role>
-  ) { }
-  public async createAssignRole(request: Request, createAssignRoleDto: CreateAssignRoleDto, response: Response) {
-    const apiId = APIID.USERROLE_CREATE
+  ) {}
+  public async createAssignRole(
+    request: Request,
+    createAssignRoleDto: CreateAssignRoleDto,
+    response: Response
+  ) {
+    const apiId = APIID.USERROLE_CREATE;
     try {
-      // const decoded: any = jwt_decode(request.headers.authorization);
       const userId = createAssignRoleDto.userId;
       const roles = createAssignRoleDto.roleId;
       const tenantId = createAssignRoleDto.tenantId;
@@ -36,16 +46,16 @@ export class PostgresAssignroleService {
           response,
           apiId,
           `Roles array cannot be empty.`,
-          'empty array found',
+          "empty array found",
           HttpStatus.BAD_REQUEST
-        )
+        );
       }
-      let result = [];
-      let errors = [];
+      const result = [];
+      const errors = [];
 
       for (const roleId of roles) {
         // If role already exists for user, return error response
-        let findExistingRole = await this.userRoleMappingRepository.findOne({
+        const findExistingRole = await this.userRoleMappingRepository.findOne({
           where: {
             userId: userId,
             roleId: roleId,
@@ -59,7 +69,7 @@ export class PostgresAssignroleService {
         }
 
         //Rele is belong for this tenent
-        let roleExistforTenant = await this.roleRepository.findOne({
+        const roleExistforTenant = await this.roleRepository.findOne({
           where: {
             roleId: roleId,
             tenantId: tenantId,
@@ -76,10 +86,15 @@ export class PostgresAssignroleService {
           userId: userId,
           roleId: roleId,
           tenantId: tenantId,
-          createdBy: request['user'].userId,
-          updatedBy: request['user'].userId
-        })
-        result.push(new ResponseAssignRoleDto(data, `Role assigned successfully to the user in the specified tenant.`));
+          createdBy: request["user"].userId,
+          updatedBy: request["user"].userId,
+        });
+        result.push(
+          new ResponseAssignRoleDto(
+            data,
+            `Role assigned successfully to the user in the specified tenant.`
+          )
+        );
       }
 
       if (result.length == 0) {
@@ -87,28 +102,48 @@ export class PostgresAssignroleService {
           response,
           apiId,
           `Please Enter Valid User ID`,
-          'Invalid User ID',
+          "Invalid User ID",
           HttpStatus.BAD_REQUEST
-        )
+        );
       }
-      return APIResponse.success(response, apiId, { successCount: result.length, errorCount: errors.length, result, errors },
-        HttpStatus.CREATED, 'Role successfully Created')
+      return APIResponse.success(
+        response,
+        apiId,
+        {
+          successCount: result.length,
+          errorCount: errors.length,
+          result,
+          errors,
+        },
+        HttpStatus.CREATED,
+        "Role successfully Created"
+      );
     } catch (error) {
-      if (error.code === '23503') {
+      if (error.code === "23503") {
         return APIResponse.error(
           response,
           apiId,
           `User Id or Role Id Doesn't Exist in Database`,
-          'Not found',
+          "Not found",
           HttpStatus.NOT_FOUND
-        )
+        );
       }
-      const errorMessage = error.message || 'Internal server error';
-      return APIResponse.error(response, apiId, "Internal Server Error", errorMessage, HttpStatus.INTERNAL_SERVER_ERROR);
+      const errorMessage = error.message || "Internal server error";
+      return APIResponse.error(
+        response,
+        apiId,
+        "Internal Server Error",
+        errorMessage,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
     }
   }
 
-  public async getAssignedRole(userId: string, request: Request, response: Response) {
+  public async getAssignedRole(
+    userId: string,
+    request: Request,
+    response: Response
+  ) {
     const apiId = APIID.USERROLE_GET;
     try {
       if (!isUUID(userId)) {
@@ -116,30 +151,44 @@ export class PostgresAssignroleService {
           response,
           apiId,
           `Please Enter Valid User ID`,
-          'Invalid User ID',
+          "Invalid User ID",
           HttpStatus.BAD_REQUEST
-        )
+        );
       }
 
-      let result = await this.checkExistingRole(userId);
+      const result = await this.checkExistingRole(userId);
       if (!result) {
         return APIResponse.error(
           response,
           apiId,
           `User Id or Role Id Doesn't Exist in Database`,
-          'Not found',
+          "Not found",
           HttpStatus.NOT_FOUND
-        )
+        );
       }
-      return APIResponse.success(response, apiId, result, HttpStatus.OK, 'User role fetched successfully')
+      return APIResponse.success(
+        response,
+        apiId,
+        result,
+        HttpStatus.OK,
+        "User role fetched successfully"
+      );
     } catch (error) {
-      const errorMessage = error.message || 'Internal server error';
-      return APIResponse.error(response, apiId, "Internal Server Error", errorMessage, HttpStatus.INTERNAL_SERVER_ERROR);
+      const errorMessage = error.message || "Internal server error";
+      return APIResponse.error(
+        response,
+        apiId,
+        "Internal Server Error",
+        errorMessage,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
     }
-
   }
 
-  public async deleteAssignedRole(deleteAssignRoleDto: DeleteAssignRoleDto, res: Response) {
+  public async deleteAssignedRole(
+    deleteAssignRoleDto: DeleteAssignRoleDto,
+    res: Response
+  ) {
     const apiId = APIID.USERROLE_DELETE;
     try {
       // Validate userId format
@@ -148,10 +197,9 @@ export class PostgresAssignroleService {
           res,
           apiId,
           `Invalid userId format. Please provide a valid UUID.`,
-          'Invalid UUID',
+          "Invalid UUID",
           HttpStatus.BAD_REQUEST
-        )
-
+        );
       }
       // Validate roleId format
       for (const roleId of deleteAssignRoleDto.roleId) {
@@ -160,9 +208,9 @@ export class PostgresAssignroleService {
             res,
             apiId,
             `Invalid roleId format. Please provide valid UUIDs`,
-            'Invalid UUID',
+            "Invalid UUID",
             HttpStatus.BAD_REQUEST
-          )
+          );
         }
       }
       // Check if the userId exists in userRoleMapping table
@@ -174,9 +222,9 @@ export class PostgresAssignroleService {
           res,
           apiId,
           `User not found in userRoleMapping table`,
-          'User not found',
+          "User not found",
           HttpStatus.BAD_REQUEST
-        )
+        );
       }
       // Check if all roleId(s) exist
       const roleExists = await this.userRoleMappingRepository.find({
@@ -191,35 +239,45 @@ export class PostgresAssignroleService {
           res,
           apiId,
           `Roles not found for the user`,
-          'Roles not found',
+          "Roles not found",
           HttpStatus.BAD_REQUEST
-        )
+        );
       }
       // If all validations pass, proceed with deletion
       const response = await this.userRoleMappingRepository.delete({
         userId: deleteAssignRoleDto.userId,
         roleId: In(deleteAssignRoleDto.roleId),
       });
-      return APIResponse.success(res, apiId, { rowCount: response.affected },
-        HttpStatus.OK, 'Roles deleted successfully.')
+      return APIResponse.success(
+        res,
+        apiId,
+        { rowCount: response.affected },
+        HttpStatus.OK,
+        "Roles deleted successfully."
+      );
     } catch (e) {
-      const errorMessage = e.message || 'Internal server error';
-      return APIResponse.error(res, apiId, "Internal Server Error", errorMessage, HttpStatus.INTERNAL_SERVER_ERROR);
+      const errorMessage = e.message || "Internal server error";
+      return APIResponse.error(
+        res,
+        apiId,
+        "Internal Server Error",
+        errorMessage,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
     }
   }
 
   //    async checkAndAddUserRole(data){
   //     let existingUser = await this.checkExistingRole(data.userId) ;
   //     if(existingUser){
-  //         let update  = 
+  //         let update  =
   //     }
   //    }
 
   async checkExistingRole(userId) {
     const result = await this.userRoleMappingRepository.findOne({
       where: { userId },
-    })
+    });
     return result;
   }
-
 }

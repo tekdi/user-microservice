@@ -1,7 +1,7 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { AssignTenantController } from './user-tenant-mapping.controller';
+import { Test, TestingModule } from "@nestjs/testing";
+import { AssignTenantController } from "./user-tenant-mapping.controller";
 
-describe('AssignTenantController', () => {
+describe("AssignTenantController", () => {
   let controller: AssignTenantController;
 
   beforeEach(async () => {
@@ -12,7 +12,7 @@ describe('AssignTenantController', () => {
     controller = module.get<AssignTenantController>(AssignTenantController);
   });
 
-  it('should be defined', () => {
+  it("should be defined", () => {
     expect(controller).toBeDefined();
   });
 });

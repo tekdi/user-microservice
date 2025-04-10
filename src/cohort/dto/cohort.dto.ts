@@ -1,12 +1,6 @@
-import { Exclude, Expose } from "class-transformer";
-import {
-  MaxLength,
-  IsNotEmpty,
-  IsEmail,
-  IsString,
-  IsNumber,
-} from "class-validator";
+import { Expose } from "class-transformer";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { CohortCreateDto } from "./cohort-create.dto";
 
 export class CohortDto {
   //generated fields
@@ -64,15 +58,14 @@ export class CohortDto {
   @Expose()
   type: string;
 
-  
   //status
   @ApiPropertyOptional({
-    type: Boolean,
+    type: String,
     description: "The status of the cohort",
     default: true,
   })
   @Expose()
-  status: boolean;
+  status: string;
 
   //image
   @Expose()
@@ -86,7 +79,7 @@ export class CohortDto {
     default: false,
   })
   @Expose()
-  attendanceCaptureImage: Boolean;
+  attendanceCaptureImage: boolean;
 
   //metadata
   @ApiPropertyOptional({
@@ -120,7 +113,7 @@ export class CohortDto {
   }
 }
 
-export class ReturnResponseBody{
+export class ReturnResponseBody {
   @Expose()
   cohortId: string;
   @Expose()
@@ -130,16 +123,19 @@ export class ReturnResponseBody{
   @Expose()
   type: string;
   @Expose()
-  status: boolean;
+  status: string;
   @Expose()
   tenantId: string;
+  @Expose()
+  academicYearId: string;
 
-  constructor(cohortDto: CohortDto) {
+  constructor(cohortDto: CohortCreateDto) {
     this.cohortId = cohortDto.cohortId;
     this.parentId = cohortDto.parentId;
     this.name = cohortDto.name;
     this.type = cohortDto.type;
     this.status = cohortDto.status;
     this.tenantId = cohortDto.tenantId;
+    this.academicYearId = cohortDto.academicYearId;
   }
 }

@@ -7,22 +7,27 @@ import { RbacJwtStrategy } from "src/common/guards/rbac.strategy";
 import { UserAdapter } from "../user/useradapter";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { User } from "../user/entities/user-entity";
-import { FieldValues } from "../user/entities/field-value-entities";
-import { Field } from "src/user/entities/field-entity";
+import { FieldValues } from "src/fields/entities/fields-values.entity";
+import { Fields } from "src/fields/entities/fields.entity";
 import { CohortMembers } from "src/cohortMembers/entities/cohort-member.entity";
 import { KeycloakService } from "src/common/utils/keycloak.service";
-import { HasuraUserService } from "src/adapters/hasura/user.adapter";
-import { PostgresUserService } from "src/adapters/postgres/user-adapter";
-import { FieldsService } from "src/adapters/hasura/services/fields.service";
-import { HasuraModule } from "src/adapters/hasura/hasura.module";
-import { PostgresModule } from "src/adapters/postgres/potsgres-module";
+import { PostgresModule } from "src/adapters/postgres/postgres-module";
+import { RolePermissionModule } from "src/permissionRbac/rolePermissionMapping/role-permission.module";
+import { RolePermissionService } from "src/permissionRbac/rolePermissionMapping/role-permission-mapping.service";
+import { RolePermission } from "src/permissionRbac/rolePermissionMapping/entities/rolePermissionMapping";
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, FieldValues, Field, CohortMembers]),
+    TypeOrmModule.forFeature([
+      User,
+      FieldValues,
+      Fields,
+      CohortMembers,
+      RolePermission,
+    ]),
     HttpModule,
-    HasuraModule,
     PostgresModule,
+    RolePermissionModule,
   ],
   controllers: [AuthController],
   providers: [
@@ -31,6 +36,7 @@ import { PostgresModule } from "src/adapters/postgres/potsgres-module";
     RbacJwtStrategy,
     KeycloakService,
     UserAdapter,
+    RolePermissionService,
   ],
 })
 export class AuthModule {}
