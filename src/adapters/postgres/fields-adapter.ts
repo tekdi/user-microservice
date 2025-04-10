@@ -25,6 +25,7 @@ import jwt_decode from "jwt-decode";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
 import { API_RESPONSES } from "@utils/response.messages";
 import { FieldValuesDeleteDto } from "src/fields/dto/field-values-delete.dto";
+import { check } from "prettier";
 @Injectable()
 export class PostgresFieldsService implements IServicelocatorfields {
   constructor(
@@ -117,6 +118,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
 
   //validate cohort Create/update API Custom field
   public async validateCustomField(cohortCreateDto, contextType) {
+    const tenantId = cohortCreateDto?.tenantId;
     const fieldValues = cohortCreateDto ? cohortCreateDto.customFields : [];
     const encounteredKeys = [];
     const invalidateFields = [];
@@ -139,7 +141,8 @@ export class PostgresFieldsService implements IServicelocatorfields {
       } else {
         encounteredKeys.push(fieldId);
       }
-
+      const fieldAttributes = getFieldDetails?.fieldAttributes || {};
+      getFieldDetails["fieldAttributes"] = fieldAttributes[tenantId] || fieldAttributes["default"];
       if (
         (getFieldDetails.type == "checkbox" ||
           getFieldDetails.type == "drop_down" ||
@@ -172,7 +175,6 @@ export class PostgresFieldsService implements IServicelocatorfields {
         getFieldDetails,
         fieldsData["value"]
       );
-
       if (typeof checkValidation === "object" && "error" in checkValidation) {
         invalidateFields.push(
           `${fieldId}: ${getFieldDetails["name"]} - ${checkValidation?.error?.message}`
@@ -197,9 +199,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
     }
     const context = "COHORT";
     const getFieldIds = await this.getFieldIds(context, contextType);
-
     const validFieldIds = new Set(getFieldIds.map((field) => field.fieldId));
-
     const invalidFieldIds = cohortCreateDto.customFields
       .filter((fieldValue) => !validFieldIds.has(fieldValue.fieldId))
       .map((fieldValue) => fieldValue.fieldId);
@@ -313,7 +313,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
     };
   }
 
-  async getFieldData(whereClause): Promise<any> {
+  async getFieldData(whereClause: any, tenantId?: string): Promise<any> {
     const query = `select * from public."Fields" where ${whereClause}`;
 
     const result = await this.fieldsRepository.query(query);
@@ -333,7 +333,8 @@ export class PostgresFieldsService implements IServicelocatorfields {
         data.fieldParams.options = options;
       }
     }
-    const schema = this.mappedFields(result);
+
+    const schema = this.mappedFields(result, tenantId);
     return schema;
   }
 
@@ -971,6 +972,14 @@ export class PostgresFieldsService implements IServicelocatorfields {
     limit: string,
     searchData: any
   ) {
+
+    // Assign user in multiple block
+    // const results = await this.fieldsValuesRepository
+    // .createQueryBuilder("fieldValues")
+    // .where("fieldValues.fieldId = :fieldId", { fieldId: searchData.fieldId })
+    // .andWhere("fieldValues.value && :values", { values: searchData.value })
+    // .getMany();
+
     const queryOptions: any = {
       where: searchData,
     };
@@ -1065,7 +1074,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
   }
 
   public async getFieldsAndFieldsValues(itemId: string) {
-    const query = `SELECT FV."value",FV."itemId", FV."fieldId", F."name" AS fieldname, F."label", F."context",F."type", F."state", F."contextType", F."fieldParams" FROM public."FieldValues" FV 
+    const query = `SELECT FV."value" AS "selectedValues",FV."itemId", FV."fieldId", F."name" AS fieldname, F."label", F."context",F."type", F."state", F."contextType", F."fieldParams" FROM public."FieldValues" FV 
         LEFT JOIN public."Fields" F
         ON FV."fieldId" = F."fieldId" where FV."itemId" =$1`;
     const results = await this.fieldsValuesRepository.query(query, [itemId]);
@@ -1219,9 +1228,10 @@ export class PostgresFieldsService implements IServicelocatorfields {
               HttpStatus.NOT_FOUND
             );
           }
-          whereClause = `"${fetchFieldParams?.dependsOn}_id" = '${controllingfieldfk}'`;
+          let foreignKeys = controllingfieldfk.toString();
+          whereClause = `"${fetchFieldParams?.dependsOn}_id" IN(${foreignKeys})`;
         }
-
+        
         dynamicOptions = await this.findDynamicOptions(
           fieldName,
           whereClause,
@@ -1279,21 +1289,19 @@ export class PostgresFieldsService implements IServicelocatorfields {
 
       const queryData = dynamicOptions.map((item) => {
         const keys = Object.keys(item);
-        const valueField = keys.find(key => key.endsWith('_id')) || keys[0];
-        const labelField = keys.find(key => key.endsWith('_name')) || keys[1];
+        const valueField = keys.find((key) => key.endsWith("_id")) || keys[0];
+        const labelField = keys.find((key) => key.endsWith("_name")) || keys[1];
 
         return {
           value: item[valueField],
           label: item[labelField],
           ...Object.fromEntries(
-            Object.entries(item).filter(([key]) =>
-              !['value', 'label'].includes(key)
+            Object.entries(item).filter(
+              ([key]) => !["value", "label"].includes(key)
             )
-          )
+          ),
         };
       });
-
-
 
       const result = {
         totalCount: parseInt(dynamicOptions[0]?.total_count, 10),
@@ -1458,16 +1466,16 @@ export class PostgresFieldsService implements IServicelocatorfields {
       const limitCond = limit ? `limit ${limit}` : "";
       let whereCond = `WHERE `;
       whereCond = whereClause ? (whereCond += `${whereClause}`) : "";
-      // if (optionSelected) {
-      //   if (whereCond) {
-      //     whereCond += `AND "name" ILike '%${optionSelected}%'`;
-      //   } else {
-      //     whereCond += `WHERE "name" ILike '%${optionSelected}%'`;
-      //   }
-      // } else {
-      //   whereCond += "";
-      // }
 
+      if (optionSelected) {
+        if (whereCond) {
+          whereCond += `AND "${tableName}_name" ILike '%${optionSelected}%'`;
+        } else {
+          whereCond += `WHERE "${tableName}_name" ILike '%${optionSelected}%'`;
+        }
+      } else {
+        whereCond += "";
+      }
 
       const query = `SELECT *,COUNT(*) OVER() AS total_count FROM public."${tableName}" ${whereCond} ${orderCond} ${offsetCond} ${limitCond}`;
 
@@ -1480,7 +1488,6 @@ export class PostgresFieldsService implements IServicelocatorfields {
     } catch (error) {
       return null;
     }
-
   }
   async findCustomFields(
     context: string,
@@ -1506,7 +1513,8 @@ export class PostgresFieldsService implements IServicelocatorfields {
       condition.contextType = IsNull();
     }
 
-    const customFields = await this.fieldsRepository.find({ where: condition });
+    const customFields = await this.fieldsRepository.find({ where: [condition, {context: IsNull(), contextType: IsNull()}] });
+    
     return customFields;
   }
 
@@ -1548,7 +1556,12 @@ export class PostgresFieldsService implements IServicelocatorfields {
       }
 
       // using the ?| array[] operator to search for both single and multiple values in a JSONB column.
-      whereCondition += `fields->'${key}' ?| array[${(Array.isArray(value) ? value : [value]).map(v => `'${v}'`).join(',')}]`;
+      whereCondition += `fields->'${key}' ?| array[${(Array.isArray(value)
+        ? value
+        : [value]
+      )
+        .map((v) => `'${v}'`)
+        .join(",")}]`;
       index++;
     }
 
@@ -1564,7 +1577,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         )
         SELECT "itemId"
         FROM user_fields ${whereCondition}`;
-        
+
     const queryData = await this.fieldsValuesRepository.query(query);
     const result =
       queryData.length > 0 ? queryData.map((item) => item.itemId) : null;
@@ -1636,12 +1649,13 @@ export class PostgresFieldsService implements IServicelocatorfields {
     return fieldsArr;
   }
 
-  async getEditableFieldsAttributes() {
+  async getEditableFieldsAttributes(tenantId: string) {
+    let tenantData = tenantId ? tenantId : 'default'
     const getFieldsAttributesQuery = `
           SELECT * 
           FROM "public"."Fields" 
-          WHERE "fieldAttributes"->>'isEditable' = $1 
-        `;
+          WHERE "fieldAttributes"->'${tenantData}'->>'isEditable' = $1; 
+        `;        
     const getFieldsAttributesParams = ["true"];
     return await this.fieldsRepository.query(
       getFieldsAttributesQuery,
@@ -1652,27 +1666,27 @@ export class PostgresFieldsService implements IServicelocatorfields {
   async updateCustomFields(itemId, data, fieldAttributesAndParams) {
     // Ensure value is stored as an array
     if (!Array.isArray(data.value)) {
-        data.value = [data.value]; // Convert single value to array
+      data.value = [data.value]; // Convert single value to array
     }
 
     const result: any = await this.fieldsValuesRepository.update(
-        { itemId, fieldId: data.fieldId },
-        { value: data.value }
+      { itemId, fieldId: data.fieldId },
+      { value: data.value }
     );
 
     let newResult;
     if (result.affected === 0) {
-        newResult = await this.fieldsValuesRepository.save({
-            itemId,
-            fieldId: data.fieldId,
-            value: data.value,
-        });
+      newResult = await this.fieldsValuesRepository.save({
+        itemId,
+        fieldId: data.fieldId,
+        value: data.value,
+      });
     }
 
     Object.assign(result, newResult);
     result["correctValue"] = true;
     return result;
-}
+  }
 
   validateFieldValue(field: any, value: any) {
     try {
@@ -1696,13 +1710,16 @@ export class PostgresFieldsService implements IServicelocatorfields {
     return fieldValue;
   }
 
-  mappedFields(fieldDataList) {
+  mappedFields(fieldDataList, tenantId) {
     const mappedFields: SchemaField[] = fieldDataList.map((field) => {
       const options =
         field.fieldParams?.options?.map((opt) => ({
           label: opt.label,
           value: opt.value,
         })) || [];
+
+      let fieldValidation =
+        field.fieldAttributes[tenantId] || field.fieldAttributes["default"];
 
       return {
         label: field.label,
@@ -1714,7 +1731,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         isHidden: field.fieldAttributes?.isHidden ?? null,
         isPIIField: field.fieldAttributes?.isPIIField ?? null,
         placeholder: field.fieldAttributes?.placeholder ?? "",
-        validation: field.fieldAttributes?.validation || [],
+        validation: fieldValidation || [],
         options: options,
         isMultiSelect: field.fieldAttributes?.isMultiSelect ?? false,
         maxSelections: field.fieldAttributes?.maxSelections ?? null,
@@ -1742,9 +1759,9 @@ export class PostgresFieldsService implements IServicelocatorfields {
     fieldOption?: boolean
   ) {
     let joinCond;
-    if(tableName === 'Users'){
+    if (tableName === "Users") {
       joinCond = `fv."itemId" = u."userId"`;
-    }else if(tableName=== 'Cohort'){
+    } else if (tableName === "Cohort") {
       joinCond = `fv."itemId" = u."cohortId"`;
     }
     try {
@@ -1764,36 +1781,33 @@ export class PostgresFieldsService implements IServicelocatorfields {
       INNER JOIN public."Fields" f ON fv."fieldId" = f."fieldId"
       WHERE fv."itemId" = $1;
     `;
-    
-      let result = await this.fieldsRepository.query(query, [itemId]);
 
+      let result = await this.fieldsRepository.query(query, [itemId]);
       result = result.map(async (data) => {
         const allIds = data.value;
         let optionValues;
 
         // let processedValue = data.value;
         let selectedValues = data.value;
-        const allFieldsOptions = data?.fieldParams?.options ? data.fieldParams.options : null;
-        let processedValue=[];
+        const allFieldsOptions = data?.fieldParams?.options
+          ? data.fieldParams.options
+          : null;
+        let processedValue = [];
         let allSelectedValues;
-
 
         if (data.sourceDetails) {
           if (data.sourceDetails.source === "fieldparams") {
-
             allFieldsOptions.forEach((option) => {
               const selectedOptionKey = option.value;
 
               if (data.type === "checkbox" || data.type === "drop_down") {
-
-                if (selectedValues.includes(selectedOptionKey) ) {
-                  
-                    allSelectedValues = {
-                      id: option?.value,
-                      value: option?.value,
-                      label: option?.label,
-                    }
-                    processedValue.push(allSelectedValues)
+                if (selectedValues.includes(selectedOptionKey)) {
+                  allSelectedValues = {
+                    id: option?.value,
+                    value: option?.value,
+                    label: option?.label,
+                  };
+                  processedValue.push(allSelectedValues);
                 }
               } else {
                 if (selectedValues.includes(selectedOptionKey)) {
@@ -1802,28 +1816,32 @@ export class PostgresFieldsService implements IServicelocatorfields {
                     value: option?.value,
                     label: option?.label,
                     order: option?.order,
-                  }
-                  processedValue.push(allSelectedValues)
+                  };
+                  processedValue.push(allSelectedValues);
                 }
               }
             });
           } else if (data.sourceDetails.source === "table") {
-
-            const whereCond = `"${data.sourceDetails.table}_id" IN (${allIds})`            
-            const labels = await this.findDynamicOptions(data.sourceDetails.table, whereCond);
+            const whereCond = `"${data.sourceDetails.table}_id" IN (${allIds})`;
+            const labels = await this.findDynamicOptions(
+              data.sourceDetails.table,
+              whereCond
+            );
             const tableName = data.sourceDetails.table;
 
             // Dynamically construct field names
             const idField = `${tableName}_id`;
             const nameField = `${tableName}_name`;
-            
-            processedValue = labels.map(data => ({
+
+            processedValue = labels.map((data) => ({
               id: data[idField],
               value: data[nameField],
-            }))
+            }));
+          } else if (data.sourceDetails?.externalsource) {
+              processedValue = data?.value
           }
-        }else{          
-          processedValue = selectedValues[0];
+        } else {
+          processedValue = selectedValues;
         }
         delete data.fieldParams;
         delete data.sourceDetails;
@@ -1834,16 +1852,15 @@ export class PostgresFieldsService implements IServicelocatorfields {
           selectedValues: processedValue,
         };
       });
-      result = await Promise.all(result);      
+      result = await Promise.all(result);
       return result;
     } catch (error) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
-        `Error: ${error.message}`,
+        `Error: ${error.message}`
       );
     }
   }
-
 
   public async getFieldsByIds(fieldIds: string[]) {
     return this.fieldsRepository.find({
@@ -1910,4 +1927,3 @@ export class PostgresFieldsService implements IServicelocatorfields {
     }
   }
 }
-

@@ -14,6 +14,9 @@ import { UserRoleMapping } from "src/rbac/assign-role/entities/assign-role.entit
 import { Cohort } from "src/cohort/entities/cohort.entity";
 import { Role } from "src/rbac/role/entities/role.entity";
 import { CohortMembersModule } from "src/cohortMembers/cohortMembers.module";
+import { UploadS3Service } from "src/common/services/upload-S3.service";
+import { AutomaticMemberService } from "src/automatic-member/automatic-member.service";
+import { AutomaticMember } from "src/automatic-member/entity/automatic-member.entity";
 
 @Module({
   imports: [
@@ -27,12 +30,14 @@ import { CohortMembersModule } from "src/cohortMembers/cohortMembers.module";
       UserRoleMapping,
       Cohort,
       Role,
+      AutomaticMember,
     ]),
     HttpModule,
     PostgresModule,
-    CohortMembersModule
+    CohortMembersModule,
+    
   ],
   controllers: [UserController],
-  providers: [UserAdapter],
+  providers: [UserAdapter, UploadS3Service, AutomaticMemberService],
 })
 export class UserModule {}

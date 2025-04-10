@@ -1,6 +1,7 @@
 export class RolePermissionCreateDto {
   roleTitle: string;
-  permissionId?: string;
+  module: string;
   apiPath: string;
   requestType: string;
+  rolePermissionId?: string;
 }

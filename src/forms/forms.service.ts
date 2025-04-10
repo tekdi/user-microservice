@@ -20,7 +20,7 @@ export class FormsService {
 
   async getForm(requiredData, response) {
     let apiId = APIID.FORM_GET;
-    try {
+    try {      
       if (!requiredData.context && !requiredData.contextType) {
         return APIResponse.error(
           response,
@@ -69,10 +69,12 @@ export class FormsService {
       const mappedResponse = await Promise.all(
         formData.fields.result.map(async (data) => {
           if (!data.coreField) {
-            const whereClause = `"fieldId" = '${data.fieldId}'`;
+            const whereClause = `"fieldId" = '${data.fieldId}'`;            
             const [customFieldData] = await this.fieldsService.getFieldData(
-              whereClause
+              whereClause,
+              tenantId
             );
+            
             customFieldData.order = data.order;
             return { ...data, ...customFieldData };
           }

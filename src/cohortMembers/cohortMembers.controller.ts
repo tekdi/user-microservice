@@ -200,7 +200,8 @@ export class CohortMembersController {
     @Req() request,
     @Body() cohortMemberUpdateDto: CohortMembersUpdateDto,
     @Res() response: Response,
-    @Query('userId') userId: string
+    // @Query('userId') userId: string
+    @GetUserId("userId", ParseUUIDPipe) userId: string
   ) {
     const loginUser = userId;
     if (!loginUser || !isUUID(loginUser)) {
