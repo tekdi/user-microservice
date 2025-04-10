@@ -48,6 +48,9 @@ export class Tenant {
   @Column({ type: "text", nullable: true })
   programHead: string | null; // UUID of the user who created the tenant
 
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  templateId: string;
+    
   @Column({ type: "text" })
   contentFramework: string;
 
