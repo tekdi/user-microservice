@@ -1,0 +1,34 @@
+#server
+POSTGRES_HOST="add-here"
+POSTGRES_PORT="add-here"
+POSTGRES_USERNAME="add-here"
+POSTGRES_PASSWORD="add-here"
+POSTGRES_DATABASE="add-here"
+POSTGRES_SCHEMA="add-here"
+
+#KEYCLOAK
+KEYCLOAK="add-here"
+KEYCLOAK_ADMIN="add-here"
+KEYCLOAK_ADMIN="add-here"
+KEYCLOAK_USER_TOKEN="add-here"
+KEYCLOAK_REALM_RSA_PUBLIC_KEY="add-here"
+KEYCLOAK_CLIENT_ID="add-here"
+KEYCLOAK_REALM="add-here"
+KEYCLOAK_CLIENT_SECRET="add-here"
+KEYCLOAK_USERNAME="add-here"
+KEYCLOAK_PASSWORD="add-here"
+KEYCLOAK_ADMIN_TOKEN="add-here"
+
+#Course Planner
+AUTH_TOKEN="add-here"
+INTERNAL_ACCESS_TOKEN="add-here"
+#AWS
+AWS_BUCKET_NAME = "add-here"
+AWS_ACCESS_KEY_ID = "add-here"
+AWS_SECRET_ACCESS_KEY= "add-here"
+AWS_REGION = "add-here"
+
+# sms for reset password and phone verification during signup
+SMS_KEY="add-here"
+OTP_EXPIRY="add-no-of-minutes"
+OTP_DIGITS="add-no-of-digits"
