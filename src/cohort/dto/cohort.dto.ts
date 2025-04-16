@@ -1,6 +1,7 @@
 import { Expose } from "class-transformer";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { CohortCreateDto } from "./cohort-create.dto";
+import { IsArray, IsOptional, IsString } from "class-validator";
 
 export class CohortDto {
   //generated fields
@@ -68,10 +69,14 @@ export class CohortDto {
   status: string;
 
   //image
-  @Expose()
-  @ApiPropertyOptional({ type: "string", format: "binary" })
-  image: string;
+  //file path
+  @ApiPropertyOptional({ type: () => [String] })
+  @IsArray()
+  @IsString({ each: true })    
+  @IsOptional()
+  image: string[];
 
+  
   //attendanceCaptureImage
   @ApiProperty({
     type: Boolean,
@@ -128,6 +133,8 @@ export class ReturnResponseBody {
   tenantId: string;
   @Expose()
   academicYearId: string;
+  @Expose()
+  image: string[];
 
   constructor(cohortDto: CohortCreateDto) {
     this.cohortId = cohortDto.cohortId;
@@ -137,5 +144,6 @@ export class ReturnResponseBody {
     this.status = cohortDto.status;
     this.tenantId = cohortDto.tenantId;
     this.academicYearId = cohortDto.academicYearId;
+    this.image = cohortDto.image;
   }
 }

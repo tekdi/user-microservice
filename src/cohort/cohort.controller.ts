@@ -51,7 +51,7 @@ import { GetUserId } from "src/common/decorators/getUserId.decorator";
 
 @ApiTags("Cohort")
 @Controller("cohort")
-@UseGuards(JwtAuthGuard)
+// @UseGuards(JwtAuthGuard)
 export class CohortController {
   constructor(private readonly cohortAdapter: CohortAdapter) {}
 
@@ -91,15 +91,6 @@ export class CohortController {
   @ApiBadRequestResponse({ description: "Bad request." })
   @ApiInternalServerErrorResponse({ description: "Internal Server Error." })
   @ApiConflictResponse({ description: "Cohort already exists." })
-  @UseInterceptors(
-    FileInterceptor("image", {
-      storage: diskStorage({
-        destination: process.env.IMAGEPATH,
-        filename: editFileName,
-      }),
-      fileFilter: imageFileFilter,
-    })
-  )
   @UsePipes(new ValidationPipe())
   @ApiBody({ type: CohortCreateDto })
   @ApiQuery({ name: "userId", required: false })
@@ -115,7 +106,8 @@ export class CohortController {
     @Body() cohortCreateDto: CohortCreateDto,
     @UploadedFile() image,
     @Res() response: Response,
-    @GetUserId("userId", ParseUUIDPipe) userId: string  ) {
+    @GetUserId("userId", ParseUUIDPipe) userId: string  
+  ) {
       
     const tenantId = headers["tenantid"];
     const academicYearId = headers["academicyearid"];

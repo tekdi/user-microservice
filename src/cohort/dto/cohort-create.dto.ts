@@ -4,6 +4,8 @@ import {
   IsOptional,
   ValidateNested,
   IsEnum,
+  IsArray,
+  IsString,
 } from "class-validator";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { FieldValuesOptionDto } from "src/user/dto/user-create.dto";
@@ -83,10 +85,12 @@ export class CohortCreateDto {
   @Expose()
   attendanceCaptureImage: boolean;
 
-  //image need for future
-  // @Expose()
-  // @ApiPropertyOptional({ type: "string", format: "binary" })
-  // image: string;
+  //file path
+  @ApiPropertyOptional({ type: () => [String] })
+  @IsArray()
+  @IsString({ each: true })    
+  @IsOptional()
+  image: string[];
 
   //metadata
   @Expose()
