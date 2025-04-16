@@ -1,5 +1,5 @@
 import { ConsoleLogger, HttpStatus, Injectable } from "@nestjs/common";
-import { ReturnResponseBody } from "src/cohort/dto/cohort.dto";
+import { ReturnResponseBody } from "src/cohort/dto/cohort-create.dto";
 import { CohortSearchDto } from "src/cohort/dto/cohort-search.dto";
 import { CohortCreateDto } from "src/cohort/dto/cohort-create.dto";
 import { CohortUpdateDto } from "src/cohort/dto/cohort-update.dto";

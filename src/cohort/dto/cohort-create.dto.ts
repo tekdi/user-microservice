@@ -128,3 +128,33 @@ export class CohortCreateDto {
     }
   }
 }
+
+export class ReturnResponseBody {
+  @Expose()
+  cohortId: string;
+  @Expose()
+  parentId: string;
+  @Expose()
+  name: string;
+  @Expose()
+  type: string;
+  @Expose()
+  status: string;
+  @Expose()
+  tenantId: string;
+  @Expose()
+  academicYearId: string;
+  @Expose()
+  image: string[];
+
+  constructor(cohortDto: CohortCreateDto) {
+    this.cohortId = cohortDto.cohortId;
+    this.parentId = cohortDto.parentId;
+    this.name = cohortDto.name;
+    this.type = cohortDto.type;
+    this.status = cohortDto.status;
+    this.tenantId = cohortDto.tenantId;
+    this.academicYearId = cohortDto.academicYearId;
+    this.image = cohortDto.image;
+  }
+}
