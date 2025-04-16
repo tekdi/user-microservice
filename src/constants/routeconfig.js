@@ -404,7 +404,7 @@
 		]
 	  },
 	  {
-		"sourceRoute": "/interface/v1/fields/values/delete/:id",
+		"sourceRoute": "/interface/v1/fields/values/delete",
 		"type": "DELETE",
 		"priority": "MUST_HAVE",
 		"inSequence": false,
