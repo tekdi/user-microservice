@@ -51,7 +51,7 @@ import { GetUserId } from "src/common/decorators/getUserId.decorator";
 
 @ApiTags("Cohort")
 @Controller("cohort")
-// @UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard)
 export class CohortController {
   constructor(private readonly cohortAdapter: CohortAdapter) {}
 
