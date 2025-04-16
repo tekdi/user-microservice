@@ -17,7 +17,6 @@ import {
   ValidationOptions,
   registerDecorator,
 } from "class-validator";
-import { CohortDto } from "./cohort.dto";
 import { Expose } from "class-transformer";
 
 export class filtersProperty {
