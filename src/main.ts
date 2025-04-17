@@ -47,13 +47,13 @@ async function bootstrap() {
     exclude: [{ path: "health", method: RequestMethod.GET }],
   });
 
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true,
-      forbidNonWhitelisted: true,
-      transform: true,
-    }),
-  );
+  // app.useGlobalPipes(
+  //   new ValidationPipe({
+  //     whitelist: true,
+  //     forbidNonWhitelisted: true,
+  //     transform: true,
+  //   }),
+  // );
   
   const config = new DocumentBuilder()
     .setTitle("Shiksha Platform")
