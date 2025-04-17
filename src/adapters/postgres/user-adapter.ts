@@ -2474,7 +2474,7 @@ export class PostgresUserService implements IServicelocator {
       // Use the dynamic where clause to fetch matching data
       const findData = await this.usersRepository.find({
         where: whereClause,
-        select: ['username', 'firstName', 'middleName', 'lastName'], // Select only these fields
+        select: ['username', 'firstName', 'middleName', 'lastName','mobile'], // Select only these fields
       });
 
       if (findData.length === 0) {
