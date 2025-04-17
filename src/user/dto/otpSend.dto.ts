@@ -11,6 +11,6 @@ export class OtpSendDTO {
 
     @ApiProperty()
     @IsString({ message: 'Reason must be a string.' })
-    @IsIn(['signup'], { message: 'Reason must be "signup".' })
+    @IsIn(['signup','login','forgot'], { message: 'Reason must be "signup,login or forgot".' })
     reason: string
 }
