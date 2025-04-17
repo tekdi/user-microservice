@@ -32,7 +32,7 @@
 import { NestFactory } from "@nestjs/core";
 import { AppModule } from "./app.module";
 import { SwaggerModule, DocumentBuilder } from "@nestjs/swagger";
-import { RequestMethod } from "@nestjs/common";
+import { RequestMethod, ValidationPipe } from "@nestjs/common";
 import { join } from "path";
 import express = require("express");
 import { AllExceptionsFilter } from "./common/filters/exception.filter";
@@ -47,6 +47,14 @@ async function bootstrap() {
     exclude: [{ path: "health", method: RequestMethod.GET }],
   });
 
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  );
+  
   const config = new DocumentBuilder()
     .setTitle("Shiksha Platform")
     .setDescription("CRUD API")
