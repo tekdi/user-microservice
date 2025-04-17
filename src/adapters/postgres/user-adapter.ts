@@ -2191,6 +2191,8 @@ export class PostgresUserService implements IServicelocator {
     const apiId = APIID.VERIFY_OTP;
     try {
       const { mobile, otp, hash, reason, username } = body;
+      
+      // Validate required fields for all requests
       if (!otp || !hash || !reason) {
         return APIResponse.error(
           response,
@@ -2200,39 +2202,8 @@ export class PostgresUserService implements IServicelocator {
           HttpStatus.BAD_REQUEST
         );
       }
-      // Determine the value to use for verification based on the reason
-      let identifier: string;
-      if (reason === 'signup') {
-        if (!mobile) {
-          return APIResponse.error(
-            response,
-            apiId,
-            API_RESPONSES.BAD_REQUEST,
-            API_RESPONSES.MOBILE_REQUIRED,
-            HttpStatus.BAD_REQUEST
-          );
-        }
-        identifier = this.formatMobileNumber(mobile); // Assuming this formats the mobile number
-      } else if (reason === 'forgot') {
-        if (!username) {
-          return APIResponse.error(
-            response,
-            apiId,
-            API_RESPONSES.BAD_REQUEST,
-            API_RESPONSES.USERNAME_REQUIRED,
-            HttpStatus.BAD_REQUEST
-          );
-        }
-        identifier = username;
-      } else {
-        return APIResponse.error(
-          response,
-          apiId,
-          API_RESPONSES.BAD_REQUEST,
-          API_RESPONSES.INVALID_REASON,
-          HttpStatus.BAD_REQUEST
-        );
-      }
+  
+      // Validate hash format
       const [hashValue, expires] = hash.split('.');
       if (!hashValue || !expires || isNaN(parseInt(expires))) {
         return APIResponse.error(
@@ -2243,7 +2214,8 @@ export class PostgresUserService implements IServicelocator {
           HttpStatus.BAD_REQUEST
         );
       }
-
+  
+      // Check for OTP expiration
       if (Date.now() > parseInt(expires)) {
         return APIResponse.error(
           response,
@@ -2253,14 +2225,85 @@ export class PostgresUserService implements IServicelocator {
           HttpStatus.BAD_REQUEST
         );
       }
-      const data = `${identifier}.${otp}.${reason}.${expires}`;
-      const calculatedHash = this.authUtils.calculateHash(data, this.smsKey); // Create hash
-
-      if (calculatedHash === hashValue) {
-        return await APIResponse.success(
+  
+      let identifier: string;
+      let resetToken: string | null = null;
+      
+      // Process based on reason
+      if (reason === 'signup') {
+        if (!mobile) {
+          return APIResponse.error(
+            response,
+            apiId,
+            API_RESPONSES.BAD_REQUEST,
+            API_RESPONSES.MOBILE_REQUIRED,
+            HttpStatus.BAD_REQUEST
+          );
+        }
+        identifier = this.formatMobileNumber(mobile);
+      } 
+      else if (reason === 'forgot') {
+        if (!username) {
+          return APIResponse.error(
+            response,
+            apiId,
+            API_RESPONSES.BAD_REQUEST,
+            API_RESPONSES.USERNAME_REQUIRED,
+            HttpStatus.BAD_REQUEST
+          );
+        }
+        
+        identifier = this.formatMobileNumber(mobile);
+        const userData = await this.findUserDetails(null, username);
+        
+        if (!userData) {
+          return APIResponse.error(
+            response,
+            apiId,
+            API_RESPONSES.NOT_FOUND,
+            API_RESPONSES.USERNAME_NOT_FOUND,
+            HttpStatus.NOT_FOUND
+          );
+        }
+        
+        // Generate reset token for forgot password flow
+        const tokenPayload = {
+          sub: userData.userId,
+          email: userData.email,
+        };
+        
+        resetToken = await this.jwtUtil.generateTokenForForgotPassword(
+          tokenPayload,
+          this.jwt_password_reset_expires_In,
+          this.jwt_secret
+        );
+      } 
+      else {
+        return APIResponse.error(
           response,
           apiId,
-          { success: true },
+          API_RESPONSES.BAD_REQUEST,
+          API_RESPONSES.INVALID_REASON,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+  
+      // Verify OTP hash
+      const data = `${identifier}.${otp}.${reason}.${expires}`;
+      console.log(data);
+      const calculatedHash = this.authUtils.calculateHash(data, this.smsKey);
+      console.log(calculatedHash, hashValue);
+      if (calculatedHash === hashValue) {
+        // For forgot password flow, include the reset token in response
+        const responseData = { success: true };
+        if (reason === 'forgot' && resetToken) {
+          responseData['token'] = resetToken;
+        }
+        
+        return APIResponse.success(
+          response,
+          apiId,
+          responseData,
           HttpStatus.OK,
           API_RESPONSES.OTP_VALID
         );
@@ -2273,21 +2316,23 @@ export class PostgresUserService implements IServicelocator {
           HttpStatus.BAD_REQUEST
         );
       }
-    } catch (e) {
+    } catch (error) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
-        `Error during OTP verification: ${e.message}`,
+        `Error during OTP verification: ${error.message}`,
         apiId
       );
+      
       return APIResponse.error(
         response,
         apiId,
         API_RESPONSES.SERVER_ERROR,
-        `Error : ${e?.message}`,
+        `Error : ${error?.message}`,
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }
+
 
   // send Mobile Notification
   async smsNotification(context: string, key: string, replacements: object, receipients: string[]) {
