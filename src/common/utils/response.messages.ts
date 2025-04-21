@@ -213,4 +213,6 @@ export const API_RESPONSES = {
   EMAIL_ERROR: "Email notification failed",
   SIGNED_URL_SUCCESS: "Signed URL generated successfully",
   SIGNED_URL_FAILED: "Error while generating signed URL",
+  INVALID_FILE_TYPE: "Invalid file type. Allowed file types are: '.jpg', '.jpeg', '.png', '.gif', '.ico', '.webp'",
+  FILE_SIZE_ERROR: "File too large. Maximum allowed file size is 10MB."
 };
