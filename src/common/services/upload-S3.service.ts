@@ -33,40 +33,17 @@ export class UploadS3Service {
     });
   }
 
+  // Upload content using PUT request
   // async getPresignedUrl(key: string, fileType, response): Promise<string> {
   //   try {
-  //     const allowedFileTypes = ['.jpg', '.jpeg', '.png', '.gif', '.ico', '.webp'];
-  //     // const maxFileSizeInBytes = 10 * 1024 * 1024; // 10MB
-
-  //     // Validate file type for generate presigned url
-  //     if (!allowedFileTypes.includes(fileType)) {
-  //       return APIResponse.error(
-  //         response,
-  //         APIID.SIGNED_URL,
-  //         API_RESPONSES.BAD_REQUEST,
-  //         API_RESPONSES.INVALID_FILE_TYPE,
-  //         HttpStatus.BAD_REQUEST,
-  //       );
-  //     }
-
-  //     //Create file name
-  //     const newkey = `${key}${uuidv4()}${fileType}`;
-
-  //     const result = await createPresignedPost(this.s3Client, {
+  //     const params = {
   //       Bucket: this.bucketName,
   //       Key: key,
-  //       Conditions: [
-  //         ["starts-with", "$Content-Type", "image/"],
-  //         ["ends-with", "$key", ".jpeg"],
-  //         ["content-length-range", 0, 5 * 1024 * 1024] // max 5MB
-  //       ],
-  //       Fields: {
-  //         "Content-Type": "image/jpeg"
-  //       },
-  //       Expires: 300 // valid for 5 minutes
-  //     });
+  //       Expires: 60 * 5, // URL expires in 5 min
+  //       ContentType: fileType,
+  //     };
 
-  //     // const result = await this.s3.getSignedUrlPromise("putObject", params);
+  //     const result = await this.s3.getSignedUrlPromise("putObject", params);
   //     return await APIResponse.success(
   //       response,
   //       APIID.SIGNED_URL,
@@ -75,7 +52,6 @@ export class UploadS3Service {
   //       API_RESPONSES.SIGNED_URL_SUCCESS
   //     );
   //   } catch (error) {
-  //     console.log
   //     return APIResponse.error(
   //       response,
   //       APIID.SIGNED_URL,
@@ -85,7 +61,6 @@ export class UploadS3Service {
   //     );
   //   }
   // }
-
 
 
   async getPresignedUrl(filename: string, fileType: string, response, foldername?: string): Promise<string> {
