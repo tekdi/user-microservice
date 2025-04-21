@@ -90,14 +90,25 @@ export class UploadS3Service {
 
   async getPresignedUrl(filename: string, fileType: string, response, foldername?: string): Promise<string> {
     try {
-      const allowedFileTypes = ['.jpg', '.jpeg', '.png', '.gif', '.ico', '.webp'];
+      const allowedFileTypes = [
+        '.jpg', '.jpeg', '.png', '.webp', // Images
+        '.pdf', '.doc', '.docx',          // Documents
+        '.mp4', '.mov',                   // Videos
+        '.txt', '.csv'                    // Text files
+      ];
+  
       const mimeTypeMap = {
-        '.jpg': 'image/jpg',
+        '.jpg': 'image/jpeg',
         '.jpeg': 'image/jpeg',
         '.png': 'image/png',
-        '.gif': 'image/gif',
-        '.ico': 'image/x-icon',
-        '.webp': 'image/webp'
+        '.webp': 'image/webp',
+        '.pdf': 'application/pdf',
+        '.doc': 'application/msword',
+        '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        '.mp4': 'video/mp4',
+        '.mov': 'video/quicktime',
+        '.txt': 'text/plain',
+        '.csv': 'text/csv',
       };
 
       // Validate file extension
