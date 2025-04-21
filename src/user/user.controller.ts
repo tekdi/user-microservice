@@ -348,14 +348,16 @@ export class UserController {
   }
   @Get("presigned-url")
   async getPresignedUrl(
-    @Query("key") key: string,
+    @Query("filename") filename: string,
+    @Query("foldername") foldername: string,
     @Query("fileType") fileType: string,
     @Res() response
   ) {
     const url = await this.uploadS3Service.getPresignedUrl(
-      key,
+      filename,
       fileType,
-      response
+      response,
+      foldername
     );
     return { url };
   }
