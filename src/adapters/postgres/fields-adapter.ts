@@ -142,7 +142,9 @@ export class PostgresFieldsService implements IServicelocatorfields {
         encounteredKeys.push(fieldId);
       }
       const fieldAttributes = getFieldDetails?.fieldAttributes || {};
-      getFieldDetails["fieldAttributes"] = fieldAttributes[tenantId] || fieldAttributes["default"];
+      // getFieldDetails["fieldAttributes"] = fieldAttributes[tenantId] || fieldAttributes["default"];
+      getFieldDetails["fieldAttributes"] = fieldAttributes;
+
       if (
         (getFieldDetails.type == "checkbox" ||
           getFieldDetails.type == "drop_down" ||
@@ -1718,8 +1720,8 @@ export class PostgresFieldsService implements IServicelocatorfields {
           value: opt.value,
         })) || [];
 
-      let fieldValidation =
-        field.fieldAttributes[tenantId] || field.fieldAttributes["default"];
+      // let fieldValidation = field.fieldAttributes[tenantId] || field.fieldAttributes["default"];
+      let fieldValidation = field.fieldAttributes;
 
       return {
         label: field.label,
