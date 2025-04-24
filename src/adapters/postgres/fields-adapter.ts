@@ -1656,7 +1656,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
     const getFieldsAttributesQuery = `
           SELECT * 
           FROM "public"."Fields" 
-          WHERE "fieldAttributes"->'${tenantData}'->>'isEditable' = $1; 
+          WHERE "fieldAttributes"->>'isEditable' = $1; 
         `;        
     const getFieldsAttributesParams = ["true"];
     return await this.fieldsRepository.query(
