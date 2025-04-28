@@ -27,11 +27,15 @@ import { AutomaticMemberModule } from "./automatic-member/automatic-member.modul
 import { PermissionMiddleware } from "./middleware/permission.middleware";
 import { RolePermissionModule } from "./permissionRbac/rolePermissionMapping/role-permission.module";
 import { LocationModule } from "./location/location.module";
-
+import { KafkaModule } from "./kafka/kafka.module";
+import kafkaConfig from "./kafka/kafka.config";
 @Module({
   imports: [
     RbacModule,
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({
+      load: [kafkaConfig], // Load the Kafka config
+      isGlobal: true, // Makes config accessible globally
+    }),
     // MulterModule.register({
     //   dest: "./uploads",
     // }),
@@ -50,6 +54,7 @@ import { LocationModule } from "./location/location.module";
     AutomaticMemberModule,
     RolePermissionModule,
     LocationModule,
+    KafkaModule,
   ],
   controllers: [AppController],
   providers: [AppService, HttpService],
