@@ -47,6 +47,7 @@ import { ActionType, UserUpdateDTO } from "src/user/dto/user-update.dto";
 import { randomInt } from 'crypto';
 import { UUID } from "aws-sdk/clients/cloudtrail";
 import { AutomaticMemberService } from "src/automatic-member/automatic-member.service";
+import { KafkaService } from "src/kafka/kafka.service";
 
 interface UpdateField {
   userId: string; // Required
@@ -92,6 +93,7 @@ export class PostgresUserService implements IServicelocator {
     private readonly cohortAcademicYearService: CohortAcademicYearService,
     private readonly authUtils: AuthUtils,
     private readonly automaticMemberService: AutomaticMemberService,
+    private readonly kafkaService: KafkaService,
     dataSource: DataSource
   ) {
     this.jwt_secret = this.configService.get<string>("RBAC_JWT_SECRET");
@@ -1010,13 +1012,24 @@ export class PostgresUserService implements IServicelocator {
         userDto?.userId
       );
 
-      return await APIResponse.success(
+      // Send response to the client
+      const apiResponse = await APIResponse.success(
         response,
         apiId,
         { ...updatedData, editIssues },
         HttpStatus.OK,
         API_RESPONSES.USER_UPDATED_SUCCESSFULLY
       );
+
+      // Produce user updated event to Kafka asynchronously - after response is sent to client
+      this.publishUserEvent('updated', userDto.userId, apiId)
+        .catch(error => LoggerUtil.error(
+          `Failed to publish user updated event to Kafka`,
+          `Error: ${error.message}`,
+          apiId
+        ));
+      
+      return apiResponse;
     } catch (e) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
@@ -1333,6 +1346,8 @@ export class PostgresUserService implements IServicelocator {
         }
       }
       LoggerUtil.log(API_RESPONSES.USER_CREATE_SUCCESSFULLY, apiId);
+      
+      // Send response to the client
       APIResponse.success(
         response,
         apiId,
@@ -1340,6 +1355,14 @@ export class PostgresUserService implements IServicelocator {
         HttpStatus.CREATED,
         API_RESPONSES.USER_CREATE_SUCCESSFULLY
       );
+      
+      // Produce user created event to Kafka asynchronously - after response is sent to client
+      this.publishUserEvent('created', result.userId, apiId)
+        .catch(error => LoggerUtil.error(
+          `Failed to publish user created event to Kafka`,
+          `Error: ${error.message}`,
+          apiId
+        ));
     } catch (e) {
 
       LoggerUtil.error(
@@ -2085,13 +2108,29 @@ export class PostgresUserService implements IServicelocator {
         },
       });
 
-      return await APIResponse.success(
+      // Prepare and format user data for Kafka event
+      const kafkaUserData = {
+        userId: userId,
+        deletedAt: new Date().toISOString()
+      };
+
+      // Send response to the client
+      const apiResponse = await APIResponse.success(
         response,
         apiId,
         userResult,
         HttpStatus.OK,
         API_RESPONSES.USER_RELATEDENTITY_DELETE
       );
+
+      // Produce user deleted event to Kafka asynchronously - after response is sent to client
+      this.publishUserEvent('deleted', userId, apiId)
+        .catch(error => LoggerUtil.error(
+          `Failed to publish user deleted event to Kafka`,
+          `Error: ${error.message}`,
+          apiId
+        ));
+      return apiResponse;
     } catch (e) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
@@ -2632,4 +2671,85 @@ export class PostgresUserService implements IServicelocator {
     }
   }
 
+  /**
+   * Publish user events to Kafka
+   * @param eventType Type of event (created, updated, deleted)
+   * @param userId User ID for whom the event is published
+   * @param apiId API ID for logging
+   */
+  private async publishUserEvent(
+    eventType: 'created' | 'updated' | 'deleted',
+    userId: string,
+    apiId: string
+  ): Promise<void> {
+    try {
+      // For delete events, we may want to include just basic information since the user might already be removed
+      let userData: any;
+      
+      if (eventType === 'deleted') {
+        userData = {
+          userId: userId,
+          deletedAt: new Date().toISOString()
+        };
+      } else {
+        // For create and update, fetch complete data from DB
+        try {
+          // Get basic user information
+          const user = await this.usersRepository.findOne({
+            where: { userId: userId },
+            select: [
+              "userId",
+              "username",
+              "firstName",
+              "middleName",
+              "lastName",
+              "gender",
+              "dob",
+              "mobile",
+              "email",
+              "createdAt",
+              "updatedAt",
+              "status"
+            ]
+          });
+
+          if (!user) {
+            LoggerUtil.error(`Failed to fetch user data for Kafka event`, `User with ID ${userId} not found`);
+            userData = { userId };
+          } else {
+            // Get tenant and role information
+            const tenantRoleData = await this.userTenantRoleData(userId);
+            
+            // Get custom fields if any
+            const customFields = await this.fieldsService.getCustomFieldDetails(userId, 'Users');
+
+            // Build the complete data object
+            userData = {
+              ...user,
+              tenantData: tenantRoleData,
+              customFields: customFields || [],
+              eventTimestamp: new Date().toISOString()
+            };
+          }
+        } catch (error) {
+          LoggerUtil.error(
+            `Failed to fetch user data for Kafka event`,
+            `Error: ${error.message}`
+          );
+          // Return at least the userId if we can't fetch complete data
+          userData = { userId };
+        }
+      }
+
+      await this.kafkaService.publishUserEvent(eventType, userData, userId);
+      LoggerUtil.log(`User ${eventType} event published to Kafka for user ${userId}`, apiId);
+    } catch (error) {
+      LoggerUtil.error(
+        `Failed to publish user ${eventType} event to Kafka`,
+        `Error: ${error.message}`,
+        apiId
+      );
+      // Don't throw the error to avoid affecting the main operation
+    }
+  }
 }
