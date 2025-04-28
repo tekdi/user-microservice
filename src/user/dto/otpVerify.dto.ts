@@ -1,5 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsIn, IsString, Length, Matches, ValidateIf } from 'class-validator';
+import { otpConfig } from './configotp-digit';
+
+// Always parse env variable properly
+// const otpDigits = (process.env.OTP_DIGITS); // fallback to 6 if not set
+// const otpRegex = new RegExp(`^\\d{${otpDigits}}$`);
+// console.log('OTP_DIGITS ===>', process.env.OTP_DIGITS);
+// console.log(otpConfig.otpDigits); // prints 4 (or whatever you set in .env)
 
 export class OtpVerifyDTO {
 
@@ -11,7 +18,7 @@ export class OtpVerifyDTO {
 
     @ApiProperty()
     @IsString({ message: 'OTP must be a string.' })
-    @Matches(/^\d{6}$/, { message: 'OTP must be exactly 6 digits.' })
+    @Matches(otpConfig.getOtpRegex(), { message: `OTP must be exactly ${otpConfig.getOtpDigits()} digits.` })
     otp: string;
 
     @ApiProperty()

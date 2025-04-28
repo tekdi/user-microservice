@@ -27,11 +27,15 @@ import { AutomaticMemberModule } from "./automatic-member/automatic-member.modul
 import { PermissionMiddleware } from "./middleware/permission.middleware";
 import { RolePermissionModule } from "./permissionRbac/rolePermissionMapping/role-permission.module";
 import { LocationModule } from "./location/location.module";
+import { envConfig } from "./config/env.config";
 
 @Module({
   imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+      load: [() => envConfig],
+    }),
     RbacModule,
-    ConfigModule.forRoot({ isGlobal: true }),
     // MulterModule.register({
     //   dest: "./uploads",
     // }),
