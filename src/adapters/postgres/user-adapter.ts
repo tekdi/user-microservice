@@ -1205,6 +1205,10 @@ export class PostgresUserService implements IServicelocator {
         );
       }
 
+      if(userCreateDto.email){
+        let sendOtp = await this.sendOtpOnMail(userCreateDto.email, userCreateDto.firstName, 'signup');
+      }
+
       //Validaion if try to assign on cohort and automaticMember
       if (userCreateDto.automaticMember?.value === true && userCreateDto.tenantCohortRoleMapping?.[0]?.cohortIds?.length > 0) {
         return APIResponse.error(
@@ -2394,6 +2398,7 @@ export class PostgresUserService implements IServicelocator {
           HttpStatus.BAD_REQUEST
         );
       }
+
       const programName = userData?.tenantData[0]?.tenantName ?? '';
       const reason = "forgot";
       const otp = this.authUtils.generateOtp(this.otpDigits).toString();
@@ -2410,6 +2415,7 @@ export class PostgresUserService implements IServicelocator {
           error.push({ type: 'SMS', message: `${API_RESPONSES.MOBILE_OTP_SEND_FAILED} ${e.message}` })
         }
       }
+
       if (userData.email) {
         const replacements = {
           "{OTP}": otp,
@@ -2480,6 +2486,8 @@ export class PostgresUserService implements IServicelocator {
           receipients: emailReceipt,
         },
       };
+      console.log("notificationPayload",notificationPayload);
+      
       const mailSend = await this.notificationRequest.sendNotification(
         notificationPayload
       );
@@ -2496,6 +2504,36 @@ export class PostgresUserService implements IServicelocator {
     }
   }
 
+  async sendOtpOnMail(email: string, username: string, reason: string) {
+    try {
+      // Step 1: Generate OTP and hash
+      const otp = this.authUtils.generateOtp(this.otpDigits).toString();
+      const { hash, expires, expiresInMinutes } = this.generateOtpHash(email, otp, reason);
+
+      // Step 2: Get program name from user's tenant data
+      const userData: any = await this.findUserDetails(null, username);
+      const programName = userData?.tenantData?.[0]?.tenantName ?? 'Shiksha Graha';
+
+      // Step 3: Prepare email replacements
+      const replacements = {
+        "{OTP}": otp,
+        "{otpExpiry}": expiresInMinutes,
+        "{programName}": programName,
+        "{username}": username,
+        "{eventName}": "Shiksha Graha OTP",
+        "{action}": "register"
+      };
+      console.log("hii",replacements,email)
+
+      // Step 4: Send email notification
+      const notificationPayload = await this.sendEmailNotification("OTP", "SendOtpOnMail", replacements, [email]);
+
+      return { notificationPayload, hash, expires, expiresInMinutes };
+    }
+    catch (error) {
+      throw new Error(`Failed to send OTP via email: ${error.message}`);
+    }
+  }
 
   async checkUser(
     request: any,

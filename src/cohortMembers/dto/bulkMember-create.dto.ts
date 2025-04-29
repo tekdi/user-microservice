@@ -17,7 +17,7 @@ export class BulkCohortMember {
   @ArrayNotEmpty()
   @IsNotEmpty()
   @IsUUID("4", { each: true })
-  @ArrayMaxSize(10)
+  @ArrayMaxSize(1000)
   userId: string[];
 
   @ApiProperty({
@@ -28,7 +28,7 @@ export class BulkCohortMember {
   @IsOptional()
   @ArrayNotEmpty()
   @IsUUID("4", { each: true })
-  @ArrayMaxSize(10)
+  @ArrayMaxSize(1000)
   cohortId: string[];
 
   @ApiProperty({
@@ -39,7 +39,7 @@ export class BulkCohortMember {
   @ArrayNotEmpty()
   @IsOptional()
   @IsUUID("4", { each: true })
-  @ArrayMaxSize(10)
+  @ArrayMaxSize(1000)
   removeCohortId: string[];
 
   constructor(obj: any) {
