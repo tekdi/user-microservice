@@ -1414,14 +1414,6 @@ export class PostgresUserService implements IServicelocator {
         );
       }
 
-      if (userCreateDto.email) {
-        let sendOtp = await this.sendOtpOnMail(
-          userCreateDto.email,
-          userCreateDto.firstName,
-          "signup"
-        );
-      }
-
       //Validaion if try to assign on cohort and automaticMember
       if (
         userCreateDto.automaticMember?.value === true &&
@@ -2401,30 +2393,57 @@ export class PostgresUserService implements IServicelocator {
   async sendOtp(body: OtpSendDTO, response: Response) {
     const apiId = APIID.SEND_OTP;
     try {
-      const { mobile, reason } = body;
-      if (!mobile || !/^\d{10}$/.test(mobile)) {
+      const { mobile, reason, email, firstName, replacements, key } = body;
+      let notificationPayload, hash, expires, sentTo, otp ;
+      if(mobile || email){
+        otp = this.authUtils.generateOtp(this.otpDigits).toString();
+      }
+      if (mobile) {
+        // Validation is now handled by DTO, but keeping as double-check
+        if (!/^\d{10}$/.test(mobile)) {
+          return APIResponse.error(
+            response,
+            apiId,
+            API_RESPONSES.BAD_REQUEST,
+            API_RESPONSES.MOBILE_VALID,
+            HttpStatus.BAD_REQUEST
+          );
+        }
+        
+        // Step 1: Prepare data for OTP generation and send on Mobile
+        const result = await this.sendOTPOnMobile(mobile, otp, reason);
+        notificationPayload = result.notificationPayload;
+        hash = result.hash;
+        expires = result.expires;
+        sentTo = mobile;
+      } 
+      if (email) {
+        // Send OTP on email
+        const result = await this.sendOtpOnMail(email, firstName, replacements, reason, key, otp);
+        notificationPayload = result.notificationPayload;
+        hash = result.hash;
+        expires = result.expires;
+        sentTo = email;
+      } else {
+        // Neither mobile nor email provided
         return APIResponse.error(
           response,
           apiId,
           API_RESPONSES.BAD_REQUEST,
-          API_RESPONSES.MOBILE_VALID,
+          "Either mobile or email must be provided",
           HttpStatus.BAD_REQUEST
         );
       }
-      // Step 1: Prepare data for OTP generation and send on Mobile
-      const { notificationPayload, hash, expires } = await this.sendOTPOnMobile(
-        mobile,
-        reason
-      );
+
       // Step 2: Send success response
       const result = {
         data: {
-          message: `OTP sent to ${mobile}`,
+          message: `OTP sent to ${sentTo}`,
           hash: `${hash}.${expires}`,
-          sendStatus: notificationPayload.result?.sms?.data[0],
-          // sid: message.sid, // Twilio Message SID
-        },
+          sendStatus: notificationPayload?.result?.sms?.data?.[0] || notificationPayload
+        }
       };
+      
       return await APIResponse.success(
         response,
         apiId,
@@ -2432,7 +2451,8 @@ export class PostgresUserService implements IServicelocator {
         HttpStatus.OK,
         API_RESPONSES.OTP_SEND_SUCCESSFULLY
       );
-    } catch (e) {
+    }
+    catch (e) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error: ${e.message}`,
@@ -2448,11 +2468,11 @@ export class PostgresUserService implements IServicelocator {
     }
   }
 
-  async sendOTPOnMobile(mobile: string, reason: string) {
+  async sendOTPOnMobile(mobile: string, otp: string, reason: string) {
     try {
       // Step 1: Format mobile number and generate OTP
       const mobileWithCode = this.formatMobileNumber(mobile);
-      const otp = this.authUtils.generateOtp(this.otpDigits).toString();
+      // const otp = this.authUtils.generateOtp(this.otpDigits).toString();
       const { hash, expires, expiresInMinutes } = this.generateOtpHash(
         mobileWithCode,
         otp,
@@ -2474,6 +2494,35 @@ export class PostgresUserService implements IServicelocator {
       throw new Error(`Failed to send OTP: ${error.message}`);
     }
   }
+
+  async sendOtpOnMail(email: string, username: string,   replacements: Record<string, string | number>,  reason: string, key:string, otp:string) {
+    try {
+      // Step 1: Generate OTP and hash
+      // const otp = this.authUtils.generateOtp(this.otpDigits).toString();
+      const { hash, expires, expiresInMinutes } = this.generateOtpHash(email, otp, reason);
+
+      // Step 2: Get program name from user's tenant data
+      const userData: any = await this.findUserDetails(null, username);
+
+      // Step 3: Prepare email replacements
+      const userReplacements = {
+        "{OTP}": otp,
+        "{username}":username,
+        "{otpExpiry}": expiresInMinutes,
+        "{action}": reason,
+        ...(replacements || {}),
+      };
+
+      // Step 4: Send email notification
+      const notificationPayload = await this.sendEmailNotification("OTP", key, userReplacements, [email]);
+
+      return { notificationPayload, hash, expires, expiresInMinutes };
+    }
+    catch (error) {
+      throw new Error(`Failed to send OTP via email: ${error.message}`);
+    }
+  }
+
   //verify OTP based on reason [signup , forgot]
   async verifyOtp(body: OtpVerifyDTO, response: Response) {
     const apiId = APIID.VERIFY_OTP;
@@ -2576,9 +2625,7 @@ export class PostgresUserService implements IServicelocator {
 
       // Verify OTP hash
       const data = `${identifier}.${otp}.${reason}.${expires}`;
-      console.log(data);
       const calculatedHash = this.authUtils.calculateHash(data, this.smsKey);
-      console.log(calculatedHash, hashValue);
       if (calculatedHash === hashValue) {
         // For forgot password flow, include the reset token in response
         const responseData = { success: true };
@@ -2806,7 +2853,6 @@ export class PostgresUserService implements IServicelocator {
           receipients: emailReceipt,
         },
       };
-      console.log("notificationPayload", notificationPayload);
 
       const mailSend = await this.notificationRequest.sendNotification(
         notificationPayload
@@ -2830,45 +2876,6 @@ export class PostgresUserService implements IServicelocator {
     }
   }
 
-  async sendOtpOnMail(email: string, username: string, reason: string) {
-    try {
-      // Step 1: Generate OTP and hash
-      const otp = this.authUtils.generateOtp(this.otpDigits).toString();
-      const { hash, expires, expiresInMinutes } = this.generateOtpHash(
-        email,
-        otp,
-        reason
-      );
-
-      // Step 2: Get program name from user's tenant data
-      const userData: any = await this.findUserDetails(null, username);
-      const programName =
-        userData?.tenantData?.[0]?.tenantName ?? "Shiksha Graha";
-
-      // Step 3: Prepare email replacements
-      const replacements = {
-        "{OTP}": otp,
-        "{otpExpiry}": expiresInMinutes,
-        "{programName}": programName,
-        "{username}": username,
-        "{eventName}": "Shiksha Graha OTP",
-        "{action}": "register",
-      };
-      console.log("hii", replacements, email);
-
-      // Step 4: Send email notification
-      const notificationPayload = await this.sendEmailNotification(
-        "OTP",
-        "SendOtpOnMail",
-        replacements,
-        [email]
-      );
-
-      return { notificationPayload, hash, expires, expiresInMinutes };
-    } catch (error) {
-      throw new Error(`Failed to send OTP via email: ${error.message}`);
-    }
-  }
 
   async checkUser(request: any, response: any, filters: ExistUserDto) {
     const apiId = APIID.USER_LIST;
