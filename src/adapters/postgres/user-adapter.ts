@@ -2218,8 +2218,10 @@ export class PostgresUserService implements IServicelocator {
     const apiId = APIID.SEND_OTP;
     try {
       const { mobile, reason, email, firstName, replacements, key } = body;
-      let notificationPayload, hash, expires, sentTo;
-
+      let notificationPayload, hash, expires, sentTo, otp ;
+      if(mobile || email){
+        otp = this.authUtils.generateOtp(this.otpDigits).toString();
+      }
       if (mobile) {
         // Validation is now handled by DTO, but keeping as double-check
         if (!/^\d{10}$/.test(mobile)) {
@@ -2233,14 +2235,15 @@ export class PostgresUserService implements IServicelocator {
         }
         
         // Step 1: Prepare data for OTP generation and send on Mobile
-        const result = await this.sendOTPOnMobile(mobile, reason);
+        const result = await this.sendOTPOnMobile(mobile, otp, reason);
         notificationPayload = result.notificationPayload;
         hash = result.hash;
         expires = result.expires;
         sentTo = mobile;
-      } else if (email) {
+      } 
+      if (email) {
         // Send OTP on email
-        const result = await this.sendOtpOnMail(email, firstName, replacements, reason, key);
+        const result = await this.sendOtpOnMail(email, firstName, replacements, reason, key, otp);
         notificationPayload = result.notificationPayload;
         hash = result.hash;
         expires = result.expires;
@@ -2290,11 +2293,11 @@ export class PostgresUserService implements IServicelocator {
   }
 
 
-  async sendOTPOnMobile(mobile: string, reason: string) {
+  async sendOTPOnMobile(mobile: string, otp: string, reason: string) {
     try {
       // Step 1: Format mobile number and generate OTP
       const mobileWithCode = this.formatMobileNumber(mobile);
-      const otp = this.authUtils.generateOtp(this.otpDigits).toString();
+      // const otp = this.authUtils.generateOtp(this.otpDigits).toString();
       const { hash, expires, expiresInMinutes } = this.generateOtpHash(mobileWithCode, otp, reason);
       const replacements = {
         "{OTP}": otp,
@@ -2617,10 +2620,10 @@ export class PostgresUserService implements IServicelocator {
     }
   }
 
-  async sendOtpOnMail(email: string, username: string,   replacements: Record<string, string | number>,  reason: string, key:string) {
+  async sendOtpOnMail(email: string, username: string,   replacements: Record<string, string | number>,  reason: string, key:string, otp:string) {
     try {
       // Step 1: Generate OTP and hash
-      const otp = this.authUtils.generateOtp(this.otpDigits).toString();
+      // const otp = this.authUtils.generateOtp(this.otpDigits).toString();
       const { hash, expires, expiresInMinutes } = this.generateOtpHash(email, otp, reason);
 
       // Step 2: Get program name from user's tenant data
