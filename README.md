@@ -18,4 +18,4 @@ There are two types of fields: core/primary and custom. Core fields are directly
 
 For instance, in a Learning Management System (LMS), tenants can be defined as different programs. Cohorts would represent student classes or groups within a particular state. Roles could include Admin, Teacher, and Student. Privileges might encompass actions like creating or deleting users, as well as viewing or updating profiles. Core fields would consist of fundamental information such as username, email, and contact details. Custom fields could include attributes like gender, with a radio button type offering options like male or female.
 
-Refer to the Documentation link for more details - https://tekdi.github.io/docs/user-service/about
+Refer to the Documentation link for more details - https://tekdi.github.io/docs/user-service/about.
