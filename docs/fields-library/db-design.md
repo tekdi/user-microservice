@@ -26,7 +26,6 @@ Stores field information with the field type and other extra information
 | `assetId`          | character varying             | Associated asset ID                       |
 | `note`             | character varying             | Additional notes                          |
 | `metadata`         | character varying             | Metadata for field                        |
-| `access`           | character varying             | Access control details                    |
 | `render`           | character varying             | Render control settings                   |
 | `fieldAttributes`  | json                          | Additional field attributes               |
 | `sourceDetails`    | jsonb                         | Field source details (e.g., API, static)  |
