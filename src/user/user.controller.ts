@@ -33,7 +33,11 @@ import {
   ApiConflictResponse,
 } from "@nestjs/swagger";
 
-import { ExistUserDto, SuggestUserDto, UserSearchDto } from "./dto/user-search.dto";
+import {
+  ExistUserDto,
+  SuggestUserDto,
+  UserSearchDto,
+} from "./dto/user-search.dto";
 import { UserAdapter } from "./useradapter";
 import { UserCreateDto } from "./dto/user-create.dto";
 import { UserUpdateDTO } from "./dto/user-update.dto";
@@ -54,6 +58,7 @@ import { OtpSendDTO } from "./dto/otpSend.dto";
 import { OtpVerifyDTO } from "./dto/otpVerify.dto";
 import { UploadS3Service } from "src/common/services/upload-S3.service";
 import { GetUserId } from "src/common/decorators/getUserId.decorator";
+
 export interface UserData {
   context: string;
   tenantId: string;
@@ -68,6 +73,48 @@ export class UserController {
     private userAdapter: UserAdapter,
     private readonly uploadS3Service: UploadS3Service
   ) {}
+  //read user from token
+  //@UseFilters(new AllExceptionsFilter(APIID.USER_GET))
+  @Get("profile")
+  @UseGuards(JwtAuthGuard)
+  @ApiBasicAuth("access-token")
+  @ApiOkResponse({ description: API_RESPONSES.USER_GET_SUCCESSFULLY })
+  @ApiNotFoundResponse({ description: API_RESPONSES.USER_NOT_FOUND })
+  @ApiInternalServerErrorResponse({
+    description: API_RESPONSES.INTERNAL_SERVER_ERROR,
+  })
+  @ApiBadRequestResponse({ description: API_RESPONSES.BAD_REQUEST })
+  @SerializeOptions({ strategy: "excludeAll" })
+  @ApiQuery({
+    name: "fieldvalue",
+    description: "Send True to Fetch Custom Field of User",
+    required: false,
+  })
+  public async getUserByToken(
+    @Headers() headers,
+    @Req() request: Request,
+    @Res() response: Response
+  ) {
+    //decode jwt token and get userId
+    const token = request.headers.authorization.split(" ")[1];
+    const decodedToken = Buffer.from(token.split(".")[1], "base64").toString(
+      "utf-8"
+    );
+    const payload = JSON.parse(decodedToken);
+
+    // Context and ContextType can be taken from .env later
+    const userData: UserData = {
+      context: "USERS",
+      tenantId: "",
+      userId: payload.sub,
+      fieldValue: true,
+    };
+    const result = await this.userAdapter
+      .buildUserAdapter()
+      .getUserDetailsByToken(userData, response);
+
+    return response.status(result.statusCode).json(result);
+  }
 
   @UseFilters(new AllExceptionsFilter(APIID.USER_GET))
   @Get("read/:userId")
@@ -274,7 +321,6 @@ export class UserController {
     return response.status(result.statusCode).json(result);
   }
 
-
   // required for FTL
   @UseFilters(new AllExceptionsFilter(APIID.SUGGEST_USERNAME))
   @Post("/suggestUsername")
@@ -292,7 +338,6 @@ export class UserController {
       .suggestUsername(request, response, suggestUserDto);
     return response.status(result.statusCode).json(result);
   }
-
 
   //delete
   @UseFilters(new AllExceptionsFilter(APIID.USER_DELETE))
