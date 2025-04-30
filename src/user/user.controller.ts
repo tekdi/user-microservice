@@ -85,7 +85,6 @@ export class UserController {
   })
   @ApiBadRequestResponse({ description: API_RESPONSES.BAD_REQUEST })
   @SerializeOptions({ strategy: "excludeAll" })
-  @ApiHeader({ name: "tenantid" })
   @ApiQuery({
     name: "fieldvalue",
     description: "Send True to Fetch Custom Field of User",
@@ -94,11 +93,8 @@ export class UserController {
   public async getUserByToken(
     @Headers() headers,
     @Req() request: Request,
-    @Res() response: Response,
-    @Param("userId", ParseUUIDPipe) userId: string,
-    @Query("fieldvalue") fieldvalue: string | null = null
+    @Res() response: Response
   ) {
-    const fieldValueBoolean = fieldvalue === "true";
     //decode jwt token and get userId
     const token = request.headers.authorization.split(" ")[1];
     const decodedToken = Buffer.from(token.split(".")[1], "base64").toString(
@@ -110,8 +106,8 @@ export class UserController {
     const userData: UserData = {
       context: "USERS",
       tenantId: "",
-      userId: payload.userId,
-      fieldValue: fieldValueBoolean,
+      userId: payload.sub,
+      fieldValue: true,
     };
     const result = await this.userAdapter
       .buildUserAdapter()

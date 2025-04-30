@@ -4,7 +4,6 @@ import {
   PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
-  UpdateDateColumn,
 } from "typeorm";
 
 @Entity("Tenants")
@@ -21,7 +20,7 @@ export class Tenant {
   @CreateDateColumn({ type: "timestamptz", default: () => "CURRENT_TIMESTAMP" })
   createdAt: Date; // Timestamp for creation date with timezone
 
-  @UpdateDateColumn({ type: "timestamptz", default: () => "CURRENT_TIMESTAMP" })
+  @Column({ type: "timestamptz", default: () => "CURRENT_TIMESTAMP" })
   updatedAt: Date; // Timestamp for last updated date with timezone
 
   @Column({ type: "jsonb", nullable: true })
@@ -48,9 +47,9 @@ export class Tenant {
   @Column({ type: "text", nullable: true })
   programHead: string | null; // UUID of the user who created the tenant
 
-  @Column({ type: 'varchar', length: 255, nullable: true })
+  @Column({ type: "varchar", length: 255, nullable: true })
   templateId: string;
-    
+
   @Column({ type: "text" })
   contentFramework: string;
 
@@ -66,6 +65,12 @@ export class Tenant {
   @Column({ type: "uuid", nullable: true })
   updatedBy: string | null; // UUID of the user who last updated the tenant
 
-  @Column({ type: 'json', nullable: true })
+  @Column({ type: "json", nullable: true })
   contentFilter: any;
+
+  @Column({ type: "text" })
+  parentId: string;
+
+  @Column({ type: "text" })
+  type: string;
 }
