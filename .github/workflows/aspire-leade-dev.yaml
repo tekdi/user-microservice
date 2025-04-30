@@ -1,0 +1,20 @@
+name: Deploy to dev
+on:
+  push:
+    branches:
+      - aspire-leaders
+jobs:
+  deploy_to_server1:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Deploy Stack to Server 1
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.HOST_AL }}
+          username: ${{ secrets.USERNAME_AL }}
+          key: ${{ secrets.SSH_PRIVATE_KEY_AL }}
+          port: ${{ secrets.PORT_AL }}
+          script: |
+            cd /home/ubuntu/Aspire-leader/BACKEND
+            ./deploy.sh
