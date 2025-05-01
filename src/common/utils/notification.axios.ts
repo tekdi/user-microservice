@@ -20,9 +20,7 @@ export class NotificationRequest {
     const config: AxiosRequestConfig<any> = {
       method: "POST",
       maxBodyLength: Infinity,
-      // url: `${this.url}/notification/send`,
-      url: `https://dev-interface.prathamdigital.org/interface/v1/notification/send`,
-
+      url: `${this.url}/notification/send`,
       headers: {
         "Content-Type": "application/json",
       },
