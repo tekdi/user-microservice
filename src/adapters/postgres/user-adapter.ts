@@ -1463,6 +1463,8 @@ export class PostgresUserService implements IServicelocator {
       }
 
       // Multi tenant for roles is not currently supported in keycloak
+      console.log("orgId: ", orgId);
+      console.log("tenantId: ", tenantId);
       resKeycloak = await createUserInKeyCloak(
         userSchema,
         token,

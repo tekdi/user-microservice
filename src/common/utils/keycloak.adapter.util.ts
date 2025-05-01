@@ -83,7 +83,7 @@ async function createUserInKeyCloak(
     attributes: {
       // Multi tenant for roles is not currently supported in keycloak
       user_roles: [role], // Added in attribute and mappers
-      ord_id: [orgId],
+      org_id: [orgId],
       tenant_id: [tenantId],
     },
   });
