@@ -47,6 +47,7 @@ import { KafkaModule } from "src/kafka/kafka.module";
       CohortAcademicYear,
       AcademicYear,
       AutomaticMember,
+      
     ]),
   ],
   providers: [

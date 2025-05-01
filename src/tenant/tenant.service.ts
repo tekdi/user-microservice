@@ -110,6 +110,7 @@ export class TenantService {
           where: { parentId: responseData.tenantId },
         });
         responseData.children = children;
+        responseData.childIds = children.filter((obj) => obj.tenantId);
       }
 
       if (result.length === 0) {
