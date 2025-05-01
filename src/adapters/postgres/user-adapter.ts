@@ -888,6 +888,7 @@ export class PostgresUserService implements IServicelocator {
         "temporaryPassword",
         "createdBy",
         "deviceId",
+        "status"
       ],
     });
     if (!userDetails) {
