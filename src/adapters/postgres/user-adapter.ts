@@ -2591,7 +2591,13 @@ export class PostgresUserService implements IServicelocator {
           );
         }
 
-        identifier = this.formatMobileNumber(mobile);
+        if(mobile){
+          identifier = this.formatMobileNumber(mobile);
+        }else if(email){
+          identifier = email;
+        }
+        
+        // identifier = this.formatMobileNumber(mobile);
         const userData = await this.findUserDetails(null, username);
 
         if (!userData) {
