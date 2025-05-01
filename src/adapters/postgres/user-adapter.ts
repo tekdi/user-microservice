@@ -55,6 +55,7 @@ import { randomInt } from "crypto";
 import { UUID } from "aws-sdk/clients/cloudtrail";
 import { AutomaticMemberService } from "src/automatic-member/automatic-member.service";
 import { KafkaService } from "src/kafka/kafka.service";
+import { Tenant } from "src/tenant/entities/tenent.entity";
 
 interface UpdateField {
   userId: string; // Required
@@ -91,6 +92,8 @@ export class PostgresUserService implements IServicelocator {
     private userRoleMappingRepository: Repository<UserRoleMapping>,
     @InjectRepository(Role)
     private roleRepository: Repository<Role>,
+    @InjectRepository(Tenants)
+    private tenantRepository: Repository<Tenant>,
     private fieldsService: PostgresFieldsService,
     private readonly postgresRoleService: PostgresRoleService,
     private readonly notificationRequest: NotificationRequest,
@@ -1369,6 +1372,16 @@ export class PostgresUserService implements IServicelocator {
     // It is considered that if user is not present in keycloak it is not present in database as well
 
     try {
+      let tenantId = userCreateDto.tenantCohortRoleMapping[0].tenantId;
+      let orgId = "";
+      //check tenantId present
+      if (tenantId) {
+        let result = await this.tenantRepository.find({
+          where: { tenantId: request.params.tenantId },
+        });
+        orgId = result[0].tenantId;
+      }
+
       if (request.headers.authorization) {
         const decoded: any = jwt_decode(request.headers.authorization);
         userCreateDto.createdBy = decoded?.sub;
@@ -1453,7 +1466,9 @@ export class PostgresUserService implements IServicelocator {
       resKeycloak = await createUserInKeyCloak(
         userSchema,
         token,
-        validatedRoles[0]?.title
+        validatedRoles[0]?.title,
+        orgId,
+        tenantId
       );
 
       if (resKeycloak.statusCode !== 201) {
@@ -2394,8 +2409,8 @@ export class PostgresUserService implements IServicelocator {
     const apiId = APIID.SEND_OTP;
     try {
       const { mobile, reason, email, firstName, replacements, key } = body;
-      let notificationPayload, hash, expires, sentTo, otp ;
-      if(mobile || email){
+      let notificationPayload, hash, expires, sentTo, otp;
+      if (mobile || email) {
         otp = this.authUtils.generateOtp(this.otpDigits).toString();
       }
       if (mobile) {
@@ -2409,17 +2424,23 @@ export class PostgresUserService implements IServicelocator {
             HttpStatus.BAD_REQUEST
           );
         }
-        
+
         // Step 1: Prepare data for OTP generation and send on Mobile
         const result = await this.sendOTPOnMobile(mobile, otp, reason);
         notificationPayload = result.notificationPayload;
         hash = result.hash;
         expires = result.expires;
         sentTo = mobile;
-      } 
-      else if (email) {
+      } else if (email) {
         // Send OTP on email
-        const result = await this.sendOtpOnMail(email, firstName, replacements, reason, key, otp);
+        const result = await this.sendOtpOnMail(
+          email,
+          firstName,
+          replacements,
+          reason,
+          key,
+          otp
+        );
         notificationPayload = result.notificationPayload;
         hash = result.hash;
         expires = result.expires;
@@ -2440,10 +2461,11 @@ export class PostgresUserService implements IServicelocator {
         data: {
           message: `OTP sent to ${sentTo}`,
           hash: `${hash}.${expires}`,
-          sendStatus: notificationPayload?.result?.sms?.data?.[0] || notificationPayload
-        }
+          sendStatus:
+            notificationPayload?.result?.sms?.data?.[0] || notificationPayload,
+        },
       };
-      
+
       return await APIResponse.success(
         response,
         apiId,
@@ -2451,8 +2473,7 @@ export class PostgresUserService implements IServicelocator {
         HttpStatus.OK,
         API_RESPONSES.OTP_SEND_SUCCESSFULLY
       );
-    }
-    catch (e) {
+    } catch (e) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error: ${e.message}`,
@@ -2495,27 +2516,42 @@ export class PostgresUserService implements IServicelocator {
     }
   }
 
-  async sendOtpOnMail(email: string, username: string,   replacements: Record<string, string | number>,  reason: string, key:string, otp:string) {
+  async sendOtpOnMail(
+    email: string,
+    username: string,
+    replacements: Record<string, string | number>,
+    reason: string,
+    key: string,
+    otp: string
+  ) {
     try {
       // Step 1: Generate OTP and hash
       // const otp = this.authUtils.generateOtp(this.otpDigits).toString();
-      const { hash, expires, expiresInMinutes } = this.generateOtpHash(email, otp, reason);
+      const { hash, expires, expiresInMinutes } = this.generateOtpHash(
+        email,
+        otp,
+        reason
+      );
 
       // Step 3: Prepare email replacements
       const userReplacements = {
         "{OTP}": otp,
-        "{username}":username || 'User',
+        "{username}": username || "User",
         "{otpExpiry}": expiresInMinutes,
         "{action}": reason,
         ...(replacements || {}),
       };
 
       // Step 4: Send email notification
-      const notificationPayload = await this.sendEmailNotification("OTP", key, userReplacements, [email]);
+      const notificationPayload = await this.sendEmailNotification(
+        "OTP",
+        key,
+        userReplacements,
+        [email]
+      );
 
       return { notificationPayload, hash, expires, expiresInMinutes };
-    }
-    catch (error) {
+    } catch (error) {
       throw new Error(`Failed to send OTP via email: ${error.message}`);
     }
   }
@@ -2574,12 +2610,11 @@ export class PostgresUserService implements IServicelocator {
             HttpStatus.BAD_REQUEST
           );
         }
-        if(mobile){
+        if (mobile) {
           identifier = this.formatMobileNumber(mobile);
-        }else if(email){
+        } else if (email) {
           identifier = email;
         }
-
       } else if (reason === "forgot") {
         if (!username) {
           return APIResponse.error(
@@ -2883,7 +2918,6 @@ export class PostgresUserService implements IServicelocator {
       );
     }
   }
-
 
   async checkUser(request: any, response: any, filters: ExistUserDto) {
     const apiId = APIID.USER_LIST;
