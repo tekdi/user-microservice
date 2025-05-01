@@ -198,7 +198,7 @@ export const API_RESPONSES = {
   SMS_NOTIFICATION_ERROR: "Failed to send SMS notification:",
   USERNAME_REQUIRED: "Username Required",
   INVALID_REASON: "Invalid Reason",
-  MOBILE_REQUIRED: "MObile Required",
+  MOBILE_REQUIRED: "Mobile Or Email is Required",
   INVALID_HASH_FORMAT: "Invalid hash format",
   NOTIFICATION_ERROR:
     "Notification not send due to getting from notification API",

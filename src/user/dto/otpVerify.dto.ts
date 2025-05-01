@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsIn, IsString, Length, Matches, ValidateIf, registerDecorator, ValidationOptions, ValidationArguments } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsIn, IsString, Length, Matches, ValidateIf, registerDecorator, ValidationOptions, ValidationArguments, IsOptional, IsEmail } from 'class-validator';
 
 // Custom validator function
 function IsValidOtp(validationOptions?: ValidationOptions) {
@@ -25,12 +25,18 @@ function IsValidOtp(validationOptions?: ValidationOptions) {
 }
 
 export class OtpVerifyDTO {
-    @ApiProperty()
+    @ApiPropertyOptional()
+    @IsOptional()
     @ValidateIf(o => o.reason === 'signup')
     @IsString({ message: 'Mobile number must be a string.' })
     @Matches(/^\d{10}$/, { message: 'Mobile number must be exactly 10 digits.' })
-    mobile: string;
+    mobile?: string;
     
+    @ApiPropertyOptional()
+    @IsOptional()
+    @IsEmail()
+    email?: string;
+
     @ApiProperty()
     @IsString({ message: 'OTP must be a string.' })
     @IsValidOtp() // Use the custom validator

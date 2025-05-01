@@ -2417,7 +2417,7 @@ export class PostgresUserService implements IServicelocator {
         expires = result.expires;
         sentTo = mobile;
       } 
-      if (email) {
+      else if (email) {
         // Send OTP on email
         const result = await this.sendOtpOnMail(email, firstName, replacements, reason, key, otp);
         notificationPayload = result.notificationPayload;
@@ -2501,13 +2501,10 @@ export class PostgresUserService implements IServicelocator {
       // const otp = this.authUtils.generateOtp(this.otpDigits).toString();
       const { hash, expires, expiresInMinutes } = this.generateOtpHash(email, otp, reason);
 
-      // Step 2: Get program name from user's tenant data
-      const userData: any = await this.findUserDetails(null, username);
-
       // Step 3: Prepare email replacements
       const userReplacements = {
         "{OTP}": otp,
-        "{username}":username,
+        "{username}":username || 'User',
         "{otpExpiry}": expiresInMinutes,
         "{action}": reason,
         ...(replacements || {}),
@@ -2527,7 +2524,7 @@ export class PostgresUserService implements IServicelocator {
   async verifyOtp(body: OtpVerifyDTO, response: Response) {
     const apiId = APIID.VERIFY_OTP;
     try {
-      const { mobile, otp, hash, reason, username } = body;
+      const { mobile, email, otp, hash, reason, username } = body;
 
       // Validate required fields for all requests
       if (!otp || !hash || !reason) {
@@ -2568,7 +2565,7 @@ export class PostgresUserService implements IServicelocator {
 
       // Process based on reason
       if (reason === "signup") {
-        if (!mobile) {
+        if (!mobile && !email) {
           return APIResponse.error(
             response,
             apiId,
@@ -2577,7 +2574,12 @@ export class PostgresUserService implements IServicelocator {
             HttpStatus.BAD_REQUEST
           );
         }
-        identifier = this.formatMobileNumber(mobile);
+        if(mobile){
+          identifier = this.formatMobileNumber(mobile);
+        }else if(email){
+          identifier = email;
+        }
+
       } else if (reason === "forgot") {
         if (!username) {
           return APIResponse.error(
