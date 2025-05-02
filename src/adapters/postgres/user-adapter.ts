@@ -1377,7 +1377,7 @@ export class PostgresUserService implements IServicelocator {
       //check tenantId present
       if (tenantId) {
         let result = await this.tenantRepository.find({
-          where: { tenantId: request.params.tenantId },
+          where: { tenantId: tenantId },
         });
         parentId = result[0].parentId;
       }
@@ -1461,14 +1461,17 @@ export class PostgresUserService implements IServicelocator {
           HttpStatus.BAD_REQUEST
         );
       }
-
+      console.log("validatedRoles[0]: ", validatedRoles[0]);
+      let roleTitle = validatedRoles[0]?.title
+        ? validatedRoles[0]?.title
+        : "Learner";
       // Multi tenant for roles is not currently supported in keycloak
       console.log("parentId: ", parentId);
       console.log("tenantId: ", tenantId);
       resKeycloak = await createUserInKeyCloak(
         userSchema,
         token,
-        validatedRoles[0]?.title,
+        roleTitle,
         parentId,
         tenantId
       );
