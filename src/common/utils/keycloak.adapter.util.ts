@@ -60,7 +60,7 @@ async function createUserInKeyCloak(
   query,
   token,
   role: string,
-  orgId,
+  parentId,
   tenantId
 ) {
   if (!query.password) {
@@ -82,9 +82,13 @@ async function createUserInKeyCloak(
     ],
     attributes: {
       // Multi tenant for roles is not currently supported in keycloak
-      user_roles: [role], // Added in attribute and mappers
-      org_id: [orgId],
-      tenant_id: [tenantId],
+      user_roles: [
+        {
+          title: role,
+        },
+      ], // Added in attribute and mappers
+      org_id: [tenantId],
+      tenant_id: [parentId],
     },
   });
 
