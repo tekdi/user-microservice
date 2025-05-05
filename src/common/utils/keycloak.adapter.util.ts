@@ -82,16 +82,17 @@ async function createUserInKeyCloak(
     ],
     attributes: {
       // Multi tenant for roles is not currently supported in keycloak
-      user_roles: [
-        {
-          title: "Learner",
-        },
+      user_roles_test: [
+        // {
+        //   title: "Learner",
+        // },
+        JSON.stringify({ title: "Learner" })
       ], // Added in attribute and mappers
       org_id: [tenantId],
       tenant_id: ["0d73bcf9-ab62-44ef-945e-88b1a77ab3c3"],
     },
   });
-
+  
   const config = {
     method: "post",
     url: `${process.env.KEYCLOAK}${process.env.KEYCLOAK_ADMIN}`,
@@ -101,6 +102,7 @@ async function createUserInKeyCloak(
     },
     data,
   };
+  console.log(config)
 
   try {
     // Make the request and wait for the response
