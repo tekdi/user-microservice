@@ -92,8 +92,6 @@ async function createUserInKeyCloak(
       tenant_id: ["0d73bcf9-ab62-44ef-945e-88b1a77ab3c3"],
     },
   });
-
-  console.log(data);
   
   const config = {
     method: "post",
