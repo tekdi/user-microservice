@@ -658,15 +658,17 @@ export class PostgresCohortService {
       let cohortsByAcademicYear: CohortAcademicYear[];
 
       offset = offset || 0;
-      limit = limit || 200;
+     // limit = limit || 200;
+     limit = limit || null;
 
       const emptyValueKeys = {};
       let emptyKeysString = "";
 
       const MAX_LIMIT = 200;
-
+     
       // Validate the limit parameter
-      if (limit > MAX_LIMIT) {
+      if (limit !== undefined && limit > MAX_LIMIT) {
+        
         return APIResponse.error(
           response,
           apiId,
@@ -675,7 +677,6 @@ export class PostgresCohortService {
           HttpStatus.BAD_REQUEST
         );
       }
-
       //Get all cohorts fields
       const cohortAllKeys = this.cohortRepository.metadata.columns.map(
         (column) => column.propertyName
@@ -804,8 +805,12 @@ export class PostgresCohortService {
         const [data, totalCount] =
           await this.cohortMembersRepository.findAndCount({
             where: whereClause,
+
           });
-        const userExistCohortGroup = data.slice(offset, offset + limit);
+          
+         // const userExistCohortGroup = data.slice(offset, offset + limit);
+         const userExistCohortGroup = limit ? data.slice(offset, offset + limit) : data;
+          
         count = totalCount;
 
         const cohortIds = userExistCohortGroup.map(
@@ -875,9 +880,8 @@ export class PostgresCohortService {
           where: whereClause,
           order,
         });
-
-        
-        const cohortData = data.slice(offset, offset + limit);
+        const cohortData = limit ? data.slice(offset, offset + limit) : data;
+        //const cohortData = data.slice(offset, offset + limit);
         count = totalCount;
 
         for (const data of cohortData) {

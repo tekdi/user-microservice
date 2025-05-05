@@ -830,6 +830,57 @@ export class PostgresUserService implements IServicelocator {
     return combinedResult;
   }
 
+  async updateUserByName(userDto, response: Response){
+    const apiId = APIID.USER_UPDATE;
+    try {
+      let updatedData = {};
+      let editIssues = {};
+
+      let getUser = await this.usersRepository.find({where:{name: userDto.name}})
+      for(let user of getUser){
+
+        if (userDto?.customFields?.length > 0) {
+          const getFieldsAttributes = await this.fieldsService.getEditableFieldsAttributes();
+  
+          let isEditableFieldId = [];
+          const fieldIdAndAttributes = {};
+          for (let fieldDetails of getFieldsAttributes) {
+            isEditableFieldId.push(fieldDetails.fieldId);
+            fieldIdAndAttributes[`${fieldDetails.fieldId}`] = fieldDetails;
+          }
+  
+          let unEditableIdes = [];
+          let editFailures = [];
+          for (let data of userDto.customFields) {
+            if (isEditableFieldId.includes(data.fieldId)) {
+              const result = await this.fieldsService.updateCustomFields(user.userId, data, fieldIdAndAttributes[data.fieldId]);
+              if (result.correctValue) {
+                if (!updatedData['customFields'])
+                  updatedData['customFields'] = [];
+                updatedData['customFields'].push(result);
+              } else {
+                editFailures.push(`${data.fieldId}: ${result?.valueIssue} - ${result.fieldName}`)
+              }
+            } else {
+              unEditableIdes.push(data.fieldId)
+            }
+          }
+          if (unEditableIdes.length > 0) {
+            editIssues["uneditableFields"] = unEditableIdes
+          }
+          if (editFailures.length > 0) {
+            editIssues["editFieldsFailure"] = editFailures
+          }
+        }
+      }
+
+      return await APIResponse.success(response, apiId, { ...updatedData, editIssues },
+        HttpStatus.OK, "User has been updated successfully.")
+    } catch (e) {
+      return APIResponse.error(response, apiId, "Internal Server Error", `${e}`, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
   async updateUser(userDto, response: Response) {
     const apiId = APIID.USER_UPDATE;
     try {
@@ -1216,7 +1267,12 @@ export class PostgresUserService implements IServicelocator {
         );
       }
 
-      userCreateDto.username = userCreateDto.username.toLocaleLowerCase();
+      const getUsernameAndPassword = await this.generateUserNamePassword(userCreateDto);
+
+      userCreateDto.username = userCreateDto.username ? await this.formatUsername(userCreateDto.username) : getUsernameAndPassword['username'];
+
+      userCreateDto.password = userCreateDto.password ? userCreateDto.password : getUsernameAndPassword['password'];
+
       const userSchema = new UserCreateDto(userCreateDto);
 
       let resKeycloak;
@@ -1227,6 +1283,7 @@ export class PostgresUserService implements IServicelocator {
         userCreateDto
       );
       // let checkUserinDb = await this.checkUserinKeyCloakandDb(userCreateDto.username);
+
       if (checkUserinKeyCloakandDb) {
         return APIResponse.error(
           response,
@@ -1538,13 +1595,97 @@ export class PostgresUserService implements IServicelocator {
     }
   }
 
-  async createUserInDatabase(
-    request: any,
-    userCreateDto: UserCreateDto,
-    academicYearId: string,
-    response: Response
-  ): Promise<User> {
-    const user = new User();
+  async generateUserNamePassword(userCreateDto: UserCreateDto) {
+    try {
+      let tenantCohortRoleMap = userCreateDto ? userCreateDto.tenantCohortRoleMapping : [];
+      let userRole;
+      let userTenant;
+      for (const tenantCohortRole of tenantCohortRoleMap) {
+        if (tenantCohortRole.roleId) {
+          let getRoleName = await this.roleRepository.find({
+            where: { "roleId": tenantCohortRole?.roleId },
+            select: ["title"]
+          })
+
+          let getTenantName = await this.tenantsRepository.find({
+            where: { "tenantId": tenantCohortRole?.tenantId },
+            select: ["name"]
+          })
+          userRole = getRoleName.map(role => role?.title.toUpperCase()).join(', ')
+          userTenant = getTenantName.map(role => role?.name).join(', ')
+        }
+      }
+
+      let generatedUsername;
+      let generatePassword;
+
+      // Generate the username based on the role and the program
+      if (userRole && userRole === 'STUDENT') {
+        let fieldValues = userCreateDto ? userCreateDto?.customFields : [];
+        let suffix;
+        if (fieldValues) {
+          for (const fieldsData of fieldValues) {
+            let getFieldName = await this.fieldsService.getFieldByIdes(fieldsData?.fieldId);
+            if (getFieldName['name'] === 'program') {
+              suffix = fieldsData?.value
+            }
+          }
+        }
+
+        // Retrieve the maximum sequence number from existing usernames
+        const maxUsername = await this.usersRepository
+          .createQueryBuilder('user')
+          .select("MAX(CAST(REGEXP_REPLACE(user.username, '[^0-9]', '', 'g') AS INTEGER))", 'max')
+          .where("user.username ILIKE :usernamePattern", { usernamePattern: `${userTenant}%` })
+          .andWhere("REGEXP_REPLACE(user.username, '[^0-9]', '', 'g') <> ''")
+          .getRawOne();
+
+        const maxNumber = maxUsername?.max;
+        const newSequenceNumber = maxNumber + 1;
+
+        generatedUsername = `${userTenant}${newSequenceNumber}${suffix?.[0]?.toUpperCase() || ''}`;
+        generatePassword = `${generatedUsername}@${userTenant.toLowerCase() || ''}`
+      }
+
+
+      if (userRole && userRole === 'TEACHER') {
+        generatedUsername = await this.formatUsername(userCreateDto?.name);
+        generatePassword = `${generatedUsername}@${userTenant.toLowerCase() || ''}`
+      }
+
+      let loginCredintial = {
+        "username": generatedUsername,
+        "password": generatePassword
+      };
+      return loginCredintial;
+
+    } catch (error) {
+      return false;
+    }
+  }
+
+  async formatUsername(name: string) {
+    // Remove prefixes (Dr., Mr., Mrs., etc.)
+    const nameWithoutPrefix = name.replace(/^(Dr\.|Mr\.|Mrs\.)\s+/i, '');
+
+    // Split the name by space
+    const nameParts = nameWithoutPrefix.split(' ');
+
+    // Convert the name to lowercase and join with an underscore
+    const formattedName = nameParts.map(part => part.toLocaleLowerCase()).join('_');
+
+    return formattedName;
+  }
+
+  async createUserInDatabase(request: any, userCreateDto: UserCreateDto, response: Response) {
+
+    const user = new User()
+    user.username = userCreateDto?.username
+    user.name = userCreateDto?.name
+    user.email = userCreateDto?.email
+    user.mobile = Number(userCreateDto?.mobile) || null,
+      user.createdBy = userCreateDto?.createdBy
+    user.updatedBy = userCreateDto?.updatedBy
     user.userId = userCreateDto?.userId,
       user.username = userCreateDto?.username,
       user.firstName = userCreateDto?.firstName,
