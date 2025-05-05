@@ -66,6 +66,9 @@ export class FormsService {
           HttpStatus.NOT_FOUND
         );
       }
+
+      // console.log(formData);
+      
       const mappedResponse = await Promise.all(
         formData.fields.result.map(async (data) => {
           if (!data.coreField) {
@@ -74,8 +77,8 @@ export class FormsService {
               whereClause,
               tenantId
             );
-            
-            customFieldData.order = data.order;
+            customFieldData.validation = data.validation;
+            customFieldData.order = data.order;            
             return { ...data, ...customFieldData };
           }
           return data;

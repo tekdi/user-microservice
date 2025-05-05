@@ -1,5 +1,5 @@
 import { ConsoleLogger, HttpStatus, Injectable } from "@nestjs/common";
-import { ReturnResponseBody } from "src/cohort/dto/cohort.dto";
+import { ReturnResponseBody } from "src/cohort/dto/cohort-create.dto";
 import { CohortSearchDto } from "src/cohort/dto/cohort-search.dto";
 import { CohortCreateDto } from "src/cohort/dto/cohort-create.dto";
 import { CohortUpdateDto } from "src/cohort/dto/cohort-update.dto";
@@ -135,7 +135,7 @@ export class PostgresCohortService {
       const resultData = {
         cohortName: cohort.name,
         cohortId: cohort.cohortId,
-        parentID: cohort.parentId,
+        parentId: cohort.parentId,
         type: cohort.type,
         status: cohort?.status,
         customField: requiredData.customField
@@ -374,6 +374,7 @@ export class PostgresCohortService {
         );
       }
       const response = await this.cohortRepository.save(cohortCreateDto);
+      
       const createFailures = [];
 
       //SAVE  in fieldValues table
@@ -423,6 +424,7 @@ export class PostgresCohortService {
       LoggerUtil.log(
         API_RESPONSES.CREATE_COHORT,
       )
+
       return APIResponse.success(
         res,
         apiId,
@@ -825,7 +827,7 @@ export class PostgresCohortService {
         }
       } else {
         let getCohortIdUsingCustomFields;
-
+        
         //If source config in source details from fields table is not exist then return false
 
         if (Object.keys(searchCustomFields).length > 0) {
@@ -849,7 +851,7 @@ export class PostgresCohortService {
 
         if (
           getCohortIdUsingCustomFields &&
-          getCohortIdUsingCustomFields.length > 0
+          getCohortIdUsingCustomFields.length > 0 && !whereClause['cohortId']
         ) {
           let cohortIdsByFieldAndAcademicYear;
           if (cohortsByAcademicYear?.length >= 1) {
@@ -874,6 +876,7 @@ export class PostgresCohortService {
           order,
         });
 
+        
         const cohortData = data.slice(offset, offset + limit);
         count = totalCount;
 
@@ -1089,7 +1092,7 @@ export class PostgresCohortService {
         const resultData = {
           cohortName: cohort?.name,
           cohortId: cohort?.cohortId,
-          parentID: cohort?.parentId,
+          parentId: cohort?.parentId,
           cohortMemberStatus: cohort?.cohortmemberstatus,
           cohortMembershipId: cohort?.cohortMembershipId,
           cohortStatus: cohort?.cohortstatus || cohort?.status,

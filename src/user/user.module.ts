@@ -17,6 +17,7 @@ import { CohortMembersModule } from "src/cohortMembers/cohortMembers.module";
 import { UploadS3Service } from "src/common/services/upload-S3.service";
 import { AutomaticMemberService } from "src/automatic-member/automatic-member.service";
 import { AutomaticMember } from "src/automatic-member/entity/automatic-member.entity";
+import { KafkaModule } from "src/kafka/kafka.module";
 
 @Module({
   imports: [
@@ -35,7 +36,7 @@ import { AutomaticMember } from "src/automatic-member/entity/automatic-member.en
     HttpModule,
     PostgresModule,
     CohortMembersModule,
-    
+    KafkaModule,
   ],
   controllers: [UserController],
   providers: [UserAdapter, UploadS3Service, AutomaticMemberService],
