@@ -25,11 +25,13 @@ import { CohortAcademicYearService } from "./cohortAcademicYear-adapter";
 import { AuthUtils } from "@utils/auth-util";
 import { AutomaticMemberService } from "src/automatic-member/automatic-member.service";
 import { AutomaticMember } from "src/automatic-member/entity/automatic-member.entity";
+import { KafkaModule } from "src/kafka/kafka.module";
 
 
 @Module({
   imports: [
     HttpModule,
+    KafkaModule,
     TypeOrmModule.forFeature([
       User,
       Fields,

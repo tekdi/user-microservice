@@ -34,14 +34,22 @@ export class TenantService {
             }
 
             for (let tenantData of result) {
-                let query = `SELECT * FROM public."Roles" WHERE "tenantId" = '${tenantData.tenantId}'`;
 
-                const getRole = await this.tenantRepository.query(query);
+                let query = `SELECT * FROM public."Roles" WHERE "tenantId" = '${tenantData.tenantId}'`;
+                let getRole = await this.tenantRepository.query(query);
+
+                if(getRole.length == 0){
+                    let query = `SELECT * FROM public."Roles"`;
+                    getRole = await this.tenantRepository.query(query);
+                }
 
                 // Add role details to the tenantData object
                 let roleDetails = [];
-                for (let roleData of getRole) {
+                if(getRole.length == 0){
+                    tenantData['role'] = null;
+                }
 
+                for (let roleData of getRole) {
                     roleDetails.push({
                         roleId: roleData.roleId,
                         name: roleData.name,

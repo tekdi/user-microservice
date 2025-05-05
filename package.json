@@ -62,7 +62,9 @@
     "swagger-ui-express": "^4.3.0",
     "templates.js": "^0.3.11",
     "typeorm": "^0.3.20",
-    "winston": "^3.11.0"
+    "winston": "^3.11.0",
+    "kafkajs": "^2.2.4"
+
   },
   "devDependencies": {
     "@nestjs/cli": "^8.0.0",
