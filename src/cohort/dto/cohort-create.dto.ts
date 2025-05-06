@@ -4,6 +4,8 @@ import {
   IsOptional,
   ValidateNested,
   IsEnum,
+  IsArray,
+  IsString,
 } from "class-validator";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { FieldValuesOptionDto } from "src/user/dto/user-create.dto";
@@ -83,10 +85,12 @@ export class CohortCreateDto {
   @Expose()
   attendanceCaptureImage: boolean;
 
-  //image need for future
-  // @Expose()
-  // @ApiPropertyOptional({ type: "string", format: "binary" })
-  // image: string;
+  //file path
+  @ApiPropertyOptional({ type: () => [String] })
+  @IsArray()
+  @IsString({ each: true })    
+  @IsOptional()
+  image: string[];
 
   //metadata
   @Expose()
@@ -122,5 +126,35 @@ export class CohortCreateDto {
     if (obj) {
       Object.assign(this, obj);
     }
+  }
+}
+
+export class ReturnResponseBody {
+  @Expose()
+  cohortId: string;
+  @Expose()
+  parentId: string;
+  @Expose()
+  name: string;
+  @Expose()
+  type: string;
+  @Expose()
+  status: string;
+  @Expose()
+  tenantId: string;
+  @Expose()
+  academicYearId: string;
+  @Expose()
+  image: string[];
+
+  constructor(cohortDto: CohortCreateDto) {
+    this.cohortId = cohortDto.cohortId;
+    this.parentId = cohortDto.parentId;
+    this.name = cohortDto.name;
+    this.type = cohortDto.type;
+    this.status = cohortDto.status;
+    this.tenantId = cohortDto.tenantId;
+    this.academicYearId = cohortDto.academicYearId;
+    this.image = cohortDto.image;
   }
 }

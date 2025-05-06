@@ -25,8 +25,8 @@ export class Cohort {
   @Column()
   status: string;
 
-  @Column({ nullable: true })
-  image: string;
+  @Column({ type: "json", nullable: true })
+  image: string[]; // JSON field to store array of program images
 
   @Column({ nullable: true })
   referenceId: string;
