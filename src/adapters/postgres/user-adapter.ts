@@ -1218,9 +1218,9 @@ export class PostgresUserService implements IServicelocator {
         );
       }
 
-      if(userCreateDto.email){
-        let sendOtp = await this.sendOtpOnMail(userCreateDto.email, userCreateDto.firstName, 'signup');
-      }
+      // if(userCreateDto.email){
+        // let sendOtp = await this.sendOtpOnMail(userCreateDto.email, userCreateDto.firstName, 'signup');
+      // }
 
       //Validaion if try to assign on cohort and automaticMember
       if (userCreateDto.automaticMember?.value === true && userCreateDto.tenantCohortRoleMapping?.[0]?.cohortIds?.length > 0) {
