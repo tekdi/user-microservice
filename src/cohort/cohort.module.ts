@@ -10,7 +10,7 @@ import { FieldValues } from "../fields/entities/fields-values.entity";
 import { CohortMembers } from "src/cohortMembers/entities/cohort-member.entity";
 import { PostgresModule } from "src/adapters/postgres/postgres-module";
 import { PostgresCohortService } from "src/adapters/postgres/cohort-adapter";
-import { UserTenantMapping } from "src/userTenantMapping/entities/user-tenant-mapping.entity";
+import { UserOrgTenantMapping } from "src/userTenantMapping/entities/user-tenant-mapping.entity";
 import { PostgresFieldsService } from "src/adapters/postgres/fields-adapter";
 import { CohortAcademicYearService } from "src/adapters/postgres/cohortAcademicYear-adapter";
 import { Role } from "src/rbac/role/entities/role.entity";
@@ -31,7 +31,7 @@ import { AutomaticMemberService } from "src/automatic-member/automatic-member.se
       FieldValues,
       Fields,
       CohortMembers,
-      UserTenantMapping,
+      UserOrgTenantMapping,
       Role,
       CohortAcademicYear,
       AcademicYear,

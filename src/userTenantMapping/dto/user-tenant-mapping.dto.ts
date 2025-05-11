@@ -2,7 +2,7 @@ import { Expose } from "class-transformer";
 import { ApiProperty } from "@nestjs/swagger";
 import { IsNotEmpty, IsString, IsUUID, IsArray } from "class-validator";
 
-export class UserTenantMappingDto {
+export class UserOrgTenantMappingDto {
   @ApiProperty({
     type: String,
     description: "User Id of User",
