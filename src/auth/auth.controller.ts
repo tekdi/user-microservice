@@ -58,7 +58,9 @@ export class AuthController {
   })
   public async getUserByAuth(@Req() request, @Res() response: Response) {
     const tenantId = request?.headers["tenantid"];
-    return this.authService.getUserByAuth(request, tenantId, response);
+    const org_id = request?.headers["org_id"];
+
+    return this.authService.getUserByAuth(request, org_id, response);
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.REFRESH))

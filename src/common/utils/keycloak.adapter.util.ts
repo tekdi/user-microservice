@@ -56,11 +56,7 @@ async function getKeycloakAdminToken() {
   return res;
 }
 
-async function createUserInKeyCloak(
-  query,
-  token,
-  userDetails
-) {
+async function createUserInKeyCloak(query, token, userDetails) {
   if (!query.password) {
     return "User cannot be created, Password missing";
   }
@@ -80,18 +76,23 @@ async function createUserInKeyCloak(
     ],
     attributes: {
       // Multi tenant for roles is not currently supported in keycloak
-    //   user_roles_test: [
-    //     // {
-    //     //   title: "Learner",
-    //     // },
-    //     JSON.stringify({ title: "Learner" })
-    //   ], // Added in attribute and mappers
-    //   org_id: [tenantId],
-    //   tenant_id: ["0d73bcf9-ab62-44ef-945e-88b1a77ab3c3"],
-    // },
-    tenant: userDetails.tenantDetails,
-      orgnizations: userDetails.organizationDetails,
-    }
+      // user_roles: [
+      //   {
+      //     title: "Learner",
+      //     org_id: "",
+      //   },
+      //   {
+      //     title: "Learner",
+      //     org_id: "",
+      //   },
+      // ], // Added in attribute and mappers
+      // org_id: [tenantId],
+      // tenant_id: ["0d73bcf9-ab62-44ef-945e-88b1a77ab3c3"],
+
+      //added for org / tenant
+      tenant: [JSON.stringify(userDetails.tenant)],
+      orgnizations: JSON.stringify(userDetails.orgnizations),
+    },
   });
   
   const config = {

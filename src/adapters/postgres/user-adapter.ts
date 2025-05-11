@@ -1419,25 +1419,25 @@ export class PostgresUserService implements IServicelocator {
         }
       }
 
-      // check and validate all fields
+      // // check and validate all fields
       const validatedRoles: any = await this.validateRequestBody(
         userCreateDto,
         academicYearId
       );
 
-      // check if roles are invalid and academic year is provided
-      if (
-        Array.isArray(validatedRoles) &&
-        validatedRoles.some((item) => item?.code === undefined)
-      ) {
-        return APIResponse.error(
-          response,
-          apiId,
-          "BAD_REQUEST",
-          validatedRoles.join("; "),
-          HttpStatus.BAD_REQUEST
-        );
-      }
+      // // check if roles are invalid and academic year is provided
+      // if (
+      //   Array.isArray(validatedRoles) &&
+      //   validatedRoles.some((item) => item?.code === undefined)
+      // ) {
+      //   return APIResponse.error(
+      //     response,
+      //     apiId,
+      //     "BAD_REQUEST",
+      //     validatedRoles.join("; "),
+      //     HttpStatus.BAD_REQUEST
+      //   );
+      // }
 
       //Validaion if try to assign on cohort and automaticMember
       if (
@@ -1680,16 +1680,16 @@ export class PostgresUserService implements IServicelocator {
           );
         }
 
-        // check academic year exists for tenant
-        const checkAcadmicYear =
-          await this.postgresAcademicYearService.getActiveAcademicYear(
-            academicYearId,
-            orgnizationId
-          );
+        // // check academic year exists for tenant
+        // const checkAcadmicYear =
+        //   await this.postgresAcademicYearService.getActiveAcademicYear(
+        //     academicYearId,
+        //     tenantId
+        //   );
 
-        if (!checkAcadmicYear && cohortIds) {
-          errorCollector.addError(API_RESPONSES.ACADEMIC_YEAR_NOT_FOUND);
-        }
+        // if (!checkAcadmicYear && cohortIds) {
+        //   errorCollector.addError(API_RESPONSES.ACADEMIC_YEAR_NOT_FOUND);
+        // }
 
         if (duplicateTenet.includes(orgnizationId)) {
           errorCollector.addError(API_RESPONSES.DUPLICAT_TENANTID);
@@ -1706,35 +1706,35 @@ export class PostgresUserService implements IServicelocator {
             orgnizationId && cohortIds
             ? this.checkCohortExistsInAcademicYear(academicYearId, cohortIds)
             : Promise.resolve([]),
-          roleId
-            ? this.roleRepository.find({ where: { roleId } })
-            : Promise.resolve([]),
+          roleId,
+          // ? this.roleRepository.find({ where: { roleId } })
+          // : Promise.resolve([]),
         ]);
 
-        if (tenantExists.length === 0) {
-          errorCollector.addError(`orgnizationId Id '${orgnizationId}' does not exist.`);
-        }
+        // if (tenantExists.length === 0) {
+        //   errorCollector.addError(`Tenant Id '${tenantId}' does not exist.`);
+        // }
 
-        if (notExistCohort.length > 0) {
-          errorCollector.addError(
-            `Cohort Id '${notExistCohort}' does not exist for this tenant '${orgnizationId}'.`
-          );
-        }
+        // if (notExistCohort.length > 0) {
+        //   errorCollector.addError(
+        //     `Cohort Id '${notExistCohort}' does not exist for this tenant '${tenantId}'.`
+        //   );
+        // }
 
-        if (roleExists && roleExists?.length === 0) {
-          errorCollector.addError(`Role Id '${roleId}' does not exist.`);
-        } else if (roleExists) {
-          if (
-            (roleExists[0].tenantId || roleExists[0].tenantId !== null) &&
-            roleExists[0].tenantId !== orgnizationId
-          ) {
-            errorCollector.addError(
-              `Role Id '${roleId}' does not exist for this tenant '${orgnizationId}'.`
-            );
-          } else {
-            roleData = [...roleData, ...roleExists];
-          }
-        }
+        // if (roleExists && roleExists?.length === 0) {
+        //   errorCollector.addError(`Role Id '${roleId}' does not exist.`);
+        // } else if (roleExists) {
+        //   if (
+        //     (roleExists[0].tenantId || roleExists[0].tenantId !== null) &&
+        //     roleExists[0].tenantId !== tenantId
+        //   ) {
+        //     errorCollector.addError(
+        //       `Role Id '${roleId}' does not exist for this tenant '${tenantId}'.`
+        //     );
+        //   } else {
+        //     roleData = [...roleData, ...roleExists];
+        //   }
+        // }
       }
     } else {
       return false;
@@ -1934,7 +1934,7 @@ export class PostgresUserService implements IServicelocator {
 
   async assignUserToTenantAndRoll(tenantsData, createdBy) {
     try {
-      const tenantId = tenantsData?.tenantRoleMapping?.tenantId;
+      const tenantId = tenantsData?.tenantRoleMapping?.orgnizationId;
       const userId = tenantsData?.userId;
       const roleId = tenantsData?.tenantRoleMapping?.roleId;
 
