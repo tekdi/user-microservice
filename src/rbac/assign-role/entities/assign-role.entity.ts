@@ -18,7 +18,7 @@ export class UserRoleMapping {
   userId: string;
 
   @Column("uuid")
-  tenantId: string;
+  orgId: string;
 
   @Column("uuid")
   roleId: string;

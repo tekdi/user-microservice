@@ -209,6 +209,9 @@ export class UserCreateDto {
   @Type(() => FieldValuesOptionDto)
   customFields: FieldValuesOptionDto[];
 
+  tenantDetails: any;
+  orgnizationsDetails: any;
+
   constructor(partial: Partial<UserCreateDto>) {
     Object.assign(this, partial);
   }
