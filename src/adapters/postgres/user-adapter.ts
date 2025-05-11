@@ -411,7 +411,7 @@ export class PostgresUserService implements IServicelocator {
     let { limit, offset, filters, exclude, sort } = userSearchDto;
     let excludeCohortIdes;
     let excludeUserIdes;
-    
+
     offset = offset ? `OFFSET ${offset}` : "";
     limit = limit ? `LIMIT ${limit}` : "";
     const result = {
@@ -443,7 +443,6 @@ export class PostgresUserService implements IServicelocator {
       ];
 
       for (const [key, value] of Object.entries(filters)) {
-        
         //Check request filter are proesent on core file or cutom fields
         if (allCoreField.includes(key)) {
           if (index > 0 && index < Object.keys(filters).length) {
@@ -511,7 +510,7 @@ export class PostgresUserService implements IServicelocator {
         } else {
           //For custom field store the data in key value pear
           searchCustomFields[key] = value;
-        }        
+        }
       }
     }
 
@@ -547,13 +546,13 @@ export class PostgresUserService implements IServicelocator {
       }
     }
 
-
     if (getUserIdUsingCustomFields && getUserIdUsingCustomFields.length > 0) {
       const userIdsDependsOnCustomFields = getUserIdUsingCustomFields
         .map((userId) => `'${userId}'`)
         .join(",");
-      whereCondition += `${index > 0 ? " AND " : ""
-        } U."userId" IN (${userIdsDependsOnCustomFields})`;
+      whereCondition += `${
+        index > 0 ? " AND " : ""
+      } U."userId" IN (${userIdsDependsOnCustomFields})`;
       index++;
     }
 
@@ -579,7 +578,7 @@ export class PostgresUserService implements IServicelocator {
     } else if (index === 0) {
       whereCondition = "";
     }
-    
+
     //Get user core fields data
     const query = `SELECT U."userId", U."username",U."email", U."firstName",UTM."tenantId", U."middleName", U."lastName", U."gender", U."dob", R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", U."status", COUNT(*) OVER() AS total_count 
       FROM  public."Users" U
@@ -592,7 +591,6 @@ export class PostgresUserService implements IServicelocator {
       LEFT JOIN public."Roles" R
       ON R."roleId" = UR."roleId" ${whereCondition} GROUP BY U."userId",UTM."tenantId", R."name" ${orderingCondition} ${offset} ${limit}`;
     const userDetails = await this.usersRepository.query(query);
-    
 
     if (userDetails.length > 0) {
       result.totalCount = parseInt(userDetails[0].total_count, 10);
@@ -606,11 +604,11 @@ export class PostgresUserService implements IServicelocator {
 
         userData["customFields"] = Array.isArray(customFields)
           ? customFields.map((data) => ({
-            fieldId: data?.fieldId,
-            label: data?.label,
-            selectedValues: data?.selectedValues,
-            type: data?.type,
-          }))
+              fieldId: data?.fieldId,
+              label: data?.label,
+              selectedValues: data?.selectedValues,
+              type: data?.type,
+            }))
           : [];
 
         result.getUserDetails.push(userData);
@@ -896,7 +894,7 @@ export class PostgresUserService implements IServicelocator {
         "temporaryPassword",
         "createdBy",
         "deviceId",
-        "status"
+        "status",
       ],
     });
     if (!userDetails) {
@@ -1381,18 +1379,17 @@ export class PostgresUserService implements IServicelocator {
     // It is considered that if user is not present in keycloak it is not present in database as well
 
     try {
-
       let parentId;
-      const tenantId = userCreateDto.tenantDetails.id;
-      const orgId = userCreateDto.orgnizationsDetails[0].id;
-      const roleId = userCreateDto.orgnizationsDetails[0].roles[0].id;
+      const tenantId = userCreateDto.tenant.id;
+      const orgId = userCreateDto.orgnizations[0].id;
+      const roleId = userCreateDto.orgnizations[0].roles[0].id;
       //check tenantIdupresent
-      if (orgId) {
-        let result = await this.tenantRepository.find({
-          where: { tenantId: orgId },
-        });
-        parentId = result[0].parentId;
-      }
+      // if (orgId) {
+      //   let result = await this.tenantRepository.find({
+      //     where: { tenantId: orgId },
+      //   });
+      //   //parentId = result[0].parentId;
+      // }
 
       if (request.headers.authorization) {
         const decoded: any = jwt_decode(request.headers.authorization);
@@ -1419,25 +1416,25 @@ export class PostgresUserService implements IServicelocator {
         }
       }
 
-      // check and validate all fields
+      // // check and validate all fields
       const validatedRoles: any = await this.validateRequestBody(
         userCreateDto,
         academicYearId
       );
 
-      // check if roles are invalid and academic year is provided
-      if (
-        Array.isArray(validatedRoles) &&
-        validatedRoles.some((item) => item?.code === undefined)
-      ) {
-        return APIResponse.error(
-          response,
-          apiId,
-          "BAD_REQUEST",
-          validatedRoles.join("; "),
-          HttpStatus.BAD_REQUEST
-        );
-      }
+      // // check if roles are invalid and academic year is provided
+      // if (
+      //   Array.isArray(validatedRoles) &&
+      //   validatedRoles.some((item) => item?.code === undefined)
+      // ) {
+      //   return APIResponse.error(
+      //     response,
+      //     apiId,
+      //     "BAD_REQUEST",
+      //     validatedRoles.join("; "),
+      //     HttpStatus.BAD_REQUEST
+      //   );
+      // }
 
       //Validaion if try to assign on cohort and automaticMember
       if (
@@ -1546,9 +1543,9 @@ export class PostgresUserService implements IServicelocator {
               fieldDetail[`${fieldId}`]
                 ? fieldDetail
                 : {
-                  ...fieldDetail,
-                  [`${fieldId}`]: { fieldAttributes, fieldParams, name },
-                },
+                    ...fieldDetail,
+                    [`${fieldId}`]: { fieldAttributes, fieldParams, name },
+                  },
             {}
           );
 
@@ -1680,16 +1677,16 @@ export class PostgresUserService implements IServicelocator {
           );
         }
 
-        // check academic year exists for tenant
-        const checkAcadmicYear =
-          await this.postgresAcademicYearService.getActiveAcademicYear(
-            academicYearId,
-            orgnizationId
-          );
+        // // check academic year exists for tenant
+        // const checkAcadmicYear =
+        //   await this.postgresAcademicYearService.getActiveAcademicYear(
+        //     academicYearId,
+        //     tenantId
+        //   );
 
-        if (!checkAcadmicYear && cohortIds) {
-          errorCollector.addError(API_RESPONSES.ACADEMIC_YEAR_NOT_FOUND);
-        }
+        // if (!checkAcadmicYear && cohortIds) {
+        //   errorCollector.addError(API_RESPONSES.ACADEMIC_YEAR_NOT_FOUND);
+        // }
 
         if (duplicateTenet.includes(orgnizationId)) {
           errorCollector.addError(API_RESPONSES.DUPLICAT_TENANTID);
@@ -1701,40 +1698,42 @@ export class PostgresUserService implements IServicelocator {
 
         const [tenantExists, notExistCohort, roleExists] = await Promise.all([
           orgnizationId
-            ? this.tenantsRepository.find({ where: { tenantId : orgnizationId } })
+            ? this.tenantsRepository.find({
+                where: { tenantId: orgnizationId },
+              })
             : Promise.resolve([]),
-            orgnizationId && cohortIds
+          orgnizationId && cohortIds
             ? this.checkCohortExistsInAcademicYear(academicYearId, cohortIds)
             : Promise.resolve([]),
-          roleId
-            ? this.roleRepository.find({ where: { roleId } })
-            : Promise.resolve([]),
+          roleId,
+          // ? this.roleRepository.find({ where: { roleId } })
+          // : Promise.resolve([]),
         ]);
 
-        if (tenantExists.length === 0) {
-          errorCollector.addError(`orgnizationId Id '${orgnizationId}' does not exist.`);
-        }
+        // if (tenantExists.length === 0) {
+        //   errorCollector.addError(`Tenant Id '${tenantId}' does not exist.`);
+        // }
 
-        if (notExistCohort.length > 0) {
-          errorCollector.addError(
-            `Cohort Id '${notExistCohort}' does not exist for this tenant '${orgnizationId}'.`
-          );
-        }
+        // if (notExistCohort.length > 0) {
+        //   errorCollector.addError(
+        //     `Cohort Id '${notExistCohort}' does not exist for this tenant '${tenantId}'.`
+        //   );
+        // }
 
-        if (roleExists && roleExists?.length === 0) {
-          errorCollector.addError(`Role Id '${roleId}' does not exist.`);
-        } else if (roleExists) {
-          if (
-            (roleExists[0].tenantId || roleExists[0].tenantId !== null) &&
-            roleExists[0].tenantId !== orgnizationId
-          ) {
-            errorCollector.addError(
-              `Role Id '${roleId}' does not exist for this tenant '${orgnizationId}'.`
-            );
-          } else {
-            roleData = [...roleData, ...roleExists];
-          }
-        }
+        // if (roleExists && roleExists?.length === 0) {
+        //   errorCollector.addError(`Role Id '${roleId}' does not exist.`);
+        // } else if (roleExists) {
+        //   if (
+        //     (roleExists[0].tenantId || roleExists[0].tenantId !== null) &&
+        //     roleExists[0].tenantId !== tenantId
+        //   ) {
+        //     errorCollector.addError(
+        //       `Role Id '${roleId}' does not exist for this tenant '${tenantId}'.`
+        //     );
+        //   } else {
+        //     roleData = [...roleData, ...roleExists];
+        //   }
+        // }
       }
     } else {
       return false;
@@ -1934,16 +1933,17 @@ export class PostgresUserService implements IServicelocator {
 
   async assignUserToTenantAndRoll(tenantsData, createdBy) {
     try {
-      const tenantId = tenantsData?.tenantRoleMapping?.tenantId;
+      const tenantId = tenantsData?.tenantRoleMapping?.orgnizationId;
       const userId = tenantsData?.userId;
       const roleId = tenantsData?.tenantRoleMapping?.roleId;
 
       if (roleId) {
         const data = await this.userRoleMappingRepository.save({
           userId: userId,
-          tenantId: tenantId,
+          orgId: tenantId,
           roleId: roleId,
           createdBy: createdBy,
+          updatedBy: createdBy,
         });
       }
 
@@ -1952,6 +1952,7 @@ export class PostgresUserService implements IServicelocator {
           userId: userId,
           tenantId: tenantId,
           createdBy: createdBy,
+          updatedBy: createdBy,
         });
       }
 
@@ -2138,7 +2139,7 @@ export class PostgresUserService implements IServicelocator {
             "{username}": userData?.name,
             "{programName}": userData?.tenantData?.[0]?.tenantName
               ? userData.tenantData[0].tenantName.charAt(0).toUpperCase() +
-              userData.tenantData[0].tenantName.slice(1)
+                userData.tenantData[0].tenantName.slice(1)
               : "",
           },
           email: {
@@ -2266,8 +2267,8 @@ export class PostgresUserService implements IServicelocator {
     const roleIds =
       userCreateDto && userCreateDto.tenantCohortRoleMapping
         ? userCreateDto.tenantCohortRoleMapping.map(
-          (userRole) => userRole.roleId
-        )
+            (userRole) => userRole.roleId
+          )
         : [];
 
     let contextType;
