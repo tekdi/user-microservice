@@ -160,12 +160,17 @@ class CustomFieldDTO {
 export class UserUpdateDTO {
   userId: string;
 
+<<<<<<< HEAD
   @ApiProperty({ type: () => [UserDataDTO] })
   @Expose()
   @ValidateNested()
   @IsNotEmpty()
   @Type(() => UserDataDTO)
   userData: UserDataDTO;
+=======
+    userId: string;
+    name:string;
+>>>>>>> upstream/lateMarkingForSelfAttendance
 
   @ApiPropertyOptional({ type: () => AutomaticMemberDto, description: 'Details of automatic membership' })
   @Expose()
