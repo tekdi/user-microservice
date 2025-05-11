@@ -14,7 +14,7 @@ import {
   MemberStatus,
 } from "src/cohortMembers/entities/cohort-member.entity";
 import { isUUID } from "class-validator";
-import { UserTenantMapping } from "src/userTenantMapping/entities/user-tenant-mapping.entity";
+import { UserOrgTenantMapping } from "src/userTenantMapping/entities/user-tenant-mapping.entity";
 import APIResponse from "src/common/responses/response";
 import { APIID } from "src/common/utils/api-id.config";
 import { CohortAcademicYearService } from "./cohortAcademicYear-adapter";
@@ -36,8 +36,8 @@ export class PostgresCohortService {
     private fieldValuesRepository: Repository<FieldValues>,
     @InjectRepository(Fields)
     private fieldsRepository: Repository<Fields>,
-    @InjectRepository(UserTenantMapping)
-    private UserTenantMappingRepository: Repository<UserTenantMapping>,
+    @InjectRepository(UserOrgTenantMapping)
+    private UserOrgTenantMappingRepository: Repository<UserOrgTenantMapping>,
     private fieldsService: PostgresFieldsService,
     private readonly cohortAcademicYearService: CohortAcademicYearService,
     private readonly postgresAcademicYearService: PostgresAcademicYearService,
@@ -785,7 +785,7 @@ export class PostgresCohortService {
           );
         }
 
-        const userTenantMapExist = await this.UserTenantMappingRepository.find({
+        const userTenantMapExist = await this.UserOrgTenantMappingRepository.find({
           where: {
             tenantId: tenantId,
             userId: whereClause["userId"],

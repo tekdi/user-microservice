@@ -24,7 +24,7 @@ import {
   SuggestUserDto,
   UserSearchDto,
 } from "src/user/dto/user-search.dto";
-import { UserTenantMapping } from "src/userTenantMapping/entities/user-tenant-mapping.entity";
+import { UserOrgTenantMapping } from "src/userTenantMapping/entities/user-tenant-mapping.entity";
 import { UserRoleMapping } from "src/rbac/assign-role/entities/assign-role.entity";
 import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
 import { Cohort } from "src/cohort/entities/cohort.entity";
@@ -84,8 +84,8 @@ export class PostgresUserService implements IServicelocator {
     private fieldsValueRepository: Repository<FieldValues>,
     @InjectRepository(CohortMembers)
     private cohortMemberRepository: Repository<CohortMembers>,
-    @InjectRepository(UserTenantMapping)
-    private userTenantMappingRepository: Repository<UserTenantMapping>,
+    @InjectRepository(UserOrgTenantMapping)
+    private userOrgMappingRepository: Repository<UserOrgTenantMapping>,
     @InjectRepository(Tenants)
     private tenantsRepository: Repository<Tenants>,
     @InjectRepository(UserRoleMapping)
@@ -367,7 +367,6 @@ export class PostgresUserService implements IServicelocator {
     const apiId = APIID.USER_LIST;
     try {
       const findData = await this.findAllUserDetails(userSearchDto);
-
       if (findData === false) {
         LoggerUtil.error(
           `${API_RESPONSES.NOT_FOUND}: ${request.url}`,
@@ -412,7 +411,7 @@ export class PostgresUserService implements IServicelocator {
     let { limit, offset, filters, exclude, sort } = userSearchDto;
     let excludeCohortIdes;
     let excludeUserIdes;
-
+    
     offset = offset ? `OFFSET ${offset}` : "";
     limit = limit ? `LIMIT ${limit}` : "";
     const result = {
@@ -440,14 +439,17 @@ export class PostgresUserService implements IServicelocator {
         "toDate",
         "role",
         "tenantId",
+        "orgId",
       ];
 
       for (const [key, value] of Object.entries(filters)) {
+        
         //Check request filter are proesent on core file or cutom fields
         if (allCoreField.includes(key)) {
           if (index > 0 && index < Object.keys(filters).length) {
             whereCondition += ` AND `;
           }
+
           switch (key) {
             case "firstName":
               whereCondition += ` U."${key}" ILIKE '%${value}%'`;
@@ -492,7 +494,12 @@ export class PostgresUserService implements IServicelocator {
               break;
 
             case "tenantId":
-              whereCondition += `UTM."tenantId" = '${value}'`;
+              whereCondition += ` UTM."tenantId" = '${value}'`;
+              index++;
+              break;
+
+            case "orgId":
+              whereCondition += ` UTM."orgId" = '${value}'`;
               index++;
               break;
 
@@ -504,7 +511,7 @@ export class PostgresUserService implements IServicelocator {
         } else {
           //For custom field store the data in key value pear
           searchCustomFields[key] = value;
-        }
+        }        
       }
     }
 
@@ -540,6 +547,7 @@ export class PostgresUserService implements IServicelocator {
       }
     }
 
+
     if (getUserIdUsingCustomFields && getUserIdUsingCustomFields.length > 0) {
       const userIdsDependsOnCustomFields = getUserIdUsingCustomFields
         .map((userId) => `'${userId}'`)
@@ -571,7 +579,7 @@ export class PostgresUserService implements IServicelocator {
     } else if (index === 0) {
       whereCondition = "";
     }
-
+    
     //Get user core fields data
     const query = `SELECT U."userId", U."username",U."email", U."firstName",UTM."tenantId", U."middleName", U."lastName", U."gender", U."dob", R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", U."status", COUNT(*) OVER() AS total_count 
       FROM  public."Users" U
@@ -579,11 +587,12 @@ export class PostgresUserService implements IServicelocator {
       ON CM."userId" = U."userId"
       LEFT JOIN public."UserRolesMapping" UR
       ON UR."userId" = U."userId"
-      LEFT JOIN public."UserTenantMapping" UTM
+      LEFT JOIN public."UserOrgTenantMapping" UTM
       ON UTM."userId" = U."userId"
       LEFT JOIN public."Roles" R
       ON R."roleId" = UR."roleId" ${whereCondition} GROUP BY U."userId",UTM."tenantId", R."name" ${orderingCondition} ${offset} ${limit}`;
     const userDetails = await this.usersRepository.query(query);
+    
 
     if (userDetails.length > 0) {
       result.totalCount = parseInt(userDetails[0].total_count, 10);
@@ -917,7 +926,7 @@ export class PostgresUserService implements IServicelocator {
     T.name AS tenantName, 
     UTM."Id" AS userTenantMappingId
   FROM 
-    public."UserTenantMapping" UTM
+    public."UserOrgTenantMapping" UTM
   LEFT JOIN 
     public."Tenants" T 
   ON 
@@ -1464,7 +1473,7 @@ export class PostgresUserService implements IServicelocator {
           HttpStatus.BAD_REQUEST
         );
       }
-      console.log("validatedRoles[0]: ", validatedRoles[0]);
+
       let roleTitle = validatedRoles[0]?.title
         ? validatedRoles[0]?.title
         : "Learner";
@@ -1939,7 +1948,7 @@ export class PostgresUserService implements IServicelocator {
       }
 
       if (tenantId) {
-        const data = await this.userTenantMappingRepository.save({
+        const data = await this.userOrgMappingRepository.save({
           userId: userId,
           tenantId: tenantId,
           createdBy: createdBy,
@@ -2330,7 +2339,7 @@ export class PostgresUserService implements IServicelocator {
 
       // Delete from UserTenantMapping table
       const userTenantMappingResult =
-        await this.userTenantMappingRepository.delete({ userId: userId });
+        await this.userOrgMappingRepository.delete({ userId: userId });
 
       // Delete from UserRoleMapping table
       const userRoleMappingResult = await this.userRoleMappingRepository.delete(

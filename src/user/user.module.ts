@@ -8,7 +8,7 @@ import { User } from "./entities/user-entity";
 import { FieldValues } from "../fields/entities/fields-values.entity";
 import { Fields } from "src/fields/entities/fields.entity";
 import { CohortMembers } from "src/cohortMembers/entities/cohort-member.entity";
-import { UserTenantMapping } from "src/userTenantMapping/entities/user-tenant-mapping.entity";
+import { UserOrgTenantMapping } from "src/userTenantMapping/entities/user-tenant-mapping.entity";
 import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
 import { UserRoleMapping } from "src/rbac/assign-role/entities/assign-role.entity";
 import { Cohort } from "src/cohort/entities/cohort.entity";
@@ -26,7 +26,7 @@ import { KafkaModule } from "src/kafka/kafka.module";
       FieldValues,
       Fields,
       CohortMembers,
-      UserTenantMapping,
+      UserOrgTenantMapping,
       Tenants,
       UserRoleMapping,
       Cohort,

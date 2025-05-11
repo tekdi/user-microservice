@@ -1,9 +1,9 @@
 import { HttpStatus, Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { In, Repository } from "typeorm";
-import { UserTenantMapping } from "src/userTenantMapping/entities/user-tenant-mapping.entity";
+import { UserOrgTenantMapping } from "src/userTenantMapping/entities/user-tenant-mapping.entity";
 import {
-  UserTenantMappingDto,
+  UserOrgTenantMappingDto,
   ResponseAssignTenantDto,
 } from "src/userTenantMapping/dto/user-tenant-mapping.dto";
 import { ErrorResponseTypeOrm } from "src/error-response-typeorm";
@@ -20,8 +20,8 @@ export class PostgresAssignTenantService
   implements IServicelocatorAssignTenant
 {
   constructor(
-    @InjectRepository(UserTenantMapping)
-    private userTenantMappingRepository: Repository<UserTenantMapping>,
+    @InjectRepository(UserOrgTenantMapping)
+    private userTenantMappingRepository: Repository<UserOrgTenantMapping>,
     @InjectRepository(User)
     private userRepository: Repository<User>,
     @InjectRepository(Tenants)
@@ -65,13 +65,13 @@ export class PostgresAssignTenantService
 
   public async userTenantMapping(
     request: any,
-    assignTenantMappingDto: UserTenantMappingDto,
+    assignOrgMappingDto: UserOrgTenantMappingDto,
     response: Response
   ) {
     const apiId = APIID.ASSIGN_TENANT_CREATE;
     try {
-      const userId = assignTenantMappingDto.userId;
-      const tenantIds = assignTenantMappingDto.tenantId;
+      const userId = assignOrgMappingDto.userId;
+      const tenantIds = assignOrgMappingDto.tenantId;
 
       // Check if tenant array is not empty
       if (!tenantIds || tenantIds.length === 0) {

@@ -9,7 +9,7 @@ import { Fields } from "src/fields/entities/fields.entity";
 import { FieldValues } from "src/fields/entities/fields-values.entity";
 import { PostgresFieldsService } from "./fields-adapter";
 import { Cohort } from "src/cohort/entities/cohort.entity";
-import { UserTenantMapping } from "src/userTenantMapping/entities/user-tenant-mapping.entity";
+import { UserOrgTenantMapping } from "src/userTenantMapping/entities/user-tenant-mapping.entity";
 import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
 import { UserRoleMapping } from "src/rbac/assign-role/entities/assign-role.entity";
 import { Role } from "src/rbac/role/entities/role.entity";
@@ -39,7 +39,7 @@ import { KafkaModule } from "src/kafka/kafka.module";
       CohortMembers,
       Fields,
       Cohort,
-      UserTenantMapping,
+      UserOrgTenantMapping,
       Tenants,
       UserRoleMapping,
       Role,

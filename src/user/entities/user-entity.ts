@@ -6,7 +6,7 @@ import {
   UpdateDateColumn,
   OneToMany,
 } from "typeorm";
-import { UserTenantMapping } from "src/userTenantMapping/entities/user-tenant-mapping.entity";
+import { UserOrgTenantMapping } from "src/userTenantMapping/entities/user-tenant-mapping.entity";
 
 export enum UserStatus {
   ACTIVE = "active",
@@ -95,8 +95,8 @@ export class User {
   // cohortMembers: CohortMembers[];
 
   @OneToMany(
-    () => UserTenantMapping,
+    () => UserOrgTenantMapping,
     (userTenantMapping) => userTenantMapping.user
   )
-  userTenantMapping: UserTenantMapping[];
+  userTenantMapping: UserOrgTenantMapping[];
 }

@@ -30,7 +30,7 @@ import {
 import { Request } from "@nestjs/common";
 import { Response, response } from "express";
 import { AssignTenantAdapter } from "./user-tenant-mapping.adapter";
-import { UserTenantMappingDto } from "./dto/user-tenant-mapping.dto";
+import { UserOrgTenantMappingDto } from "./dto/user-tenant-mapping.dto";
 import { JwtAuthGuard } from "src/common/guards/keycloak.guard";
 import { AllExceptionsFilter } from "src/common/filters/exception.filter";
 import { APIID } from "src/common/utils/api-id.config";
@@ -53,11 +53,11 @@ export class AssignTenantController {
     description: "Tenant is already assigned to this user.",
   })
   @UsePipes(new ValidationPipe())
-  @ApiBody({ type: UserTenantMappingDto })
+  @ApiBody({ type: UserOrgTenantMappingDto })
   public async createUserTenantMapping(
     @Headers() headers,
     @Req() request: Request,
-    @Body() userTenantMappingDto: UserTenantMappingDto,
+    @Body() userTenantMappingDto: UserOrgTenantMappingDto,
     @Res() response: Response
   ) {
     return await this.assignTenantAdapter

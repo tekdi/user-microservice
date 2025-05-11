@@ -9,8 +9,8 @@ import {
 } from "typeorm";
 import { User } from "src/user/entities/user-entity";
 
-@Entity({ name: "UserTenantMapping" })
-export class UserTenantMapping {
+@Entity({ name: "UserOrgTenantMapping" })
+export class UserOrgTenantMapping {
   @PrimaryGeneratedColumn("uuid")
   Id: string;
 
