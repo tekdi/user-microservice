@@ -544,9 +544,8 @@ export class PostgresUserService implements IServicelocator {
       const userIdsDependsOnCustomFields = getUserIdUsingCustomFields
         .map((userId) => `'${userId}'`)
         .join(",");
-      whereCondition += `${
-        index > 0 ? " AND " : ""
-      } U."userId" IN (${userIdsDependsOnCustomFields})`;
+      whereCondition += `${index > 0 ? " AND " : ""
+        } U."userId" IN (${userIdsDependsOnCustomFields})`;
       index++;
     }
 
@@ -598,11 +597,11 @@ export class PostgresUserService implements IServicelocator {
 
         userData["customFields"] = Array.isArray(customFields)
           ? customFields.map((data) => ({
-              fieldId: data?.fieldId,
-              label: data?.label,
-              selectedValues: data?.selectedValues,
-              type: data?.type,
-            }))
+            fieldId: data?.fieldId,
+            label: data?.label,
+            selectedValues: data?.selectedValues,
+            type: data?.type,
+          }))
           : [];
 
         result.getUserDetails.push(userData);
@@ -851,7 +850,7 @@ export class PostgresUserService implements IServicelocator {
     const getRole = await this.userRoleMappingRepository.findOne({
       where: {
         userId: userId,
-        tenantId: tenantId,
+        orgId: tenantId,
       },
     });
     if (!getRole) {
@@ -1373,12 +1372,15 @@ export class PostgresUserService implements IServicelocator {
     // It is considered that if user is not present in keycloak it is not present in database as well
 
     try {
-      let tenantId = userCreateDto.tenantCohortRoleMapping[0].tenantId;
-      let parentId = "";
-      //check tenantId present
-      if (tenantId) {
+
+      let parentId;
+      const tenantId = userCreateDto.tenantDetails.id;
+      const orgId = userCreateDto.orgnizationsDetails[0].id;
+      const roleId = userCreateDto.orgnizationsDetails[0].roles[0].id;
+      //check tenantIdupresent
+      if (orgId) {
         let result = await this.tenantRepository.find({
-          where: { tenantId: tenantId },
+          where: { tenantId: orgId },
         });
         parentId = result[0].parentId;
       }
@@ -1467,14 +1469,10 @@ export class PostgresUserService implements IServicelocator {
         ? validatedRoles[0]?.title
         : "Learner";
       // Multi tenant for roles is not currently supported in keycloak
-      console.log("parentId: ", parentId);
-      console.log("tenantId: ", tenantId);
       resKeycloak = await createUserInKeyCloak(
         userSchema,
         token,
-        roleTitle,
-        parentId,
-        tenantId
+        userCreateDto
       );
 
       if (resKeycloak.statusCode !== 201) {
@@ -1539,9 +1537,9 @@ export class PostgresUserService implements IServicelocator {
               fieldDetail[`${fieldId}`]
                 ? fieldDetail
                 : {
-                    ...fieldDetail,
-                    [`${fieldId}`]: { fieldAttributes, fieldParams, name },
-                  },
+                  ...fieldDetail,
+                  [`${fieldId}`]: { fieldAttributes, fieldParams, name },
+                },
             {}
           );
 
@@ -1665,7 +1663,7 @@ export class PostgresUserService implements IServicelocator {
 
     if (userCreateDto.tenantCohortRoleMapping) {
       for (const tenantCohortRoleMapping of userCreateDto?.tenantCohortRoleMapping) {
-        const { tenantId, cohortIds, roleId } = tenantCohortRoleMapping;
+        const { orgnizationId, cohortIds, roleId } = tenantCohortRoleMapping;
 
         if (!academicYearId && cohortIds) {
           errorCollector.addError(
@@ -1677,14 +1675,14 @@ export class PostgresUserService implements IServicelocator {
         const checkAcadmicYear =
           await this.postgresAcademicYearService.getActiveAcademicYear(
             academicYearId,
-            tenantId
+            orgnizationId
           );
 
         if (!checkAcadmicYear && cohortIds) {
           errorCollector.addError(API_RESPONSES.ACADEMIC_YEAR_NOT_FOUND);
         }
 
-        if (duplicateTenet.includes(tenantId)) {
+        if (duplicateTenet.includes(orgnizationId)) {
           errorCollector.addError(API_RESPONSES.DUPLICAT_TENANTID);
         }
 
@@ -1693,10 +1691,10 @@ export class PostgresUserService implements IServicelocator {
         // }
 
         const [tenantExists, notExistCohort, roleExists] = await Promise.all([
-          tenantId
-            ? this.tenantsRepository.find({ where: { tenantId } })
+          orgnizationId
+            ? this.tenantsRepository.find({ where: { tenantId : orgnizationId } })
             : Promise.resolve([]),
-          tenantId && cohortIds
+            orgnizationId && cohortIds
             ? this.checkCohortExistsInAcademicYear(academicYearId, cohortIds)
             : Promise.resolve([]),
           roleId
@@ -1705,12 +1703,12 @@ export class PostgresUserService implements IServicelocator {
         ]);
 
         if (tenantExists.length === 0) {
-          errorCollector.addError(`Tenant Id '${tenantId}' does not exist.`);
+          errorCollector.addError(`orgnizationId Id '${orgnizationId}' does not exist.`);
         }
 
         if (notExistCohort.length > 0) {
           errorCollector.addError(
-            `Cohort Id '${notExistCohort}' does not exist for this tenant '${tenantId}'.`
+            `Cohort Id '${notExistCohort}' does not exist for this tenant '${orgnizationId}'.`
           );
         }
 
@@ -1719,10 +1717,10 @@ export class PostgresUserService implements IServicelocator {
         } else if (roleExists) {
           if (
             (roleExists[0].tenantId || roleExists[0].tenantId !== null) &&
-            roleExists[0].tenantId !== tenantId
+            roleExists[0].tenantId !== orgnizationId
           ) {
             errorCollector.addError(
-              `Role Id '${roleId}' does not exist for this tenant '${tenantId}'.`
+              `Role Id '${roleId}' does not exist for this tenant '${orgnizationId}'.`
             );
           } else {
             roleData = [...roleData, ...roleExists];
@@ -2131,7 +2129,7 @@ export class PostgresUserService implements IServicelocator {
             "{username}": userData?.name,
             "{programName}": userData?.tenantData?.[0]?.tenantName
               ? userData.tenantData[0].tenantName.charAt(0).toUpperCase() +
-                userData.tenantData[0].tenantName.slice(1)
+              userData.tenantData[0].tenantName.slice(1)
               : "",
           },
           email: {
@@ -2259,8 +2257,8 @@ export class PostgresUserService implements IServicelocator {
     const roleIds =
       userCreateDto && userCreateDto.tenantCohortRoleMapping
         ? userCreateDto.tenantCohortRoleMapping.map(
-            (userRole) => userRole.roleId
-          )
+          (userRole) => userRole.roleId
+        )
         : [];
 
     let contextType;
@@ -2632,12 +2630,12 @@ export class PostgresUserService implements IServicelocator {
           );
         }
 
-        if(mobile){
+        if (mobile) {
           identifier = this.formatMobileNumber(mobile);
-        }else if(email){
+        } else if (email) {
           identifier = email;
         }
-        
+
         // identifier = this.formatMobileNumber(mobile);
         const userData = await this.findUserDetails(null, username);
 
