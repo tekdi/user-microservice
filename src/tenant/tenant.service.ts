@@ -10,12 +10,14 @@ import { TenantUpdateDto } from "./dto/tenant-update.dto";
 import { Request, Response } from "express";
 import { TenantSearchDTO } from "./dto/tenant-search.dto";
 import { TenantCreateDto } from "./dto/tenant-create.dto";
+import { KafkaService } from "src/kafka/kafka.service";
 
 @Injectable()
 export class TenantService {
   constructor(
     @InjectRepository(Tenant)
-    private tenantRepository: Repository<Tenant>
+    private tenantRepository: Repository<Tenant>,
+    private readonly kafkaService: KafkaService
   ) {}
 
   public async getTenants(
@@ -245,9 +247,46 @@ export class TenantService {
           HttpStatus.CONFLICT
         );
       }
-
-      let result = await this.tenantRepository.save(tenantCreateDto);
+      let result;
+      if(tenantCreateDto.context_type === "TENANT"){
+        if(tenantCreateDto.parentId){ 
+          return APIResponse.error(
+            response,
+            apiId,
+            API_RESPONSES.BAD_REQUEST,
+            "Tenant Type Should not have Parent Id",
+            HttpStatus.CONFLICT
+          );
+        }
+        result = await this.tenantRepository.save(tenantCreateDto);
+      }else{
+        if(!tenantCreateDto.parentId){ 
+          return APIResponse.error(
+            response,
+            apiId,
+            API_RESPONSES.BAD_REQUEST,
+            "Organization Type Should have Parent Id",
+            HttpStatus.CONFLICT
+          );
+        }
+        let checkExistParent = await this.tenantRepository.find({
+          where: {
+            tenantId: tenantCreateDto?.parentId,
+          },
+        })
+        if(!checkExistParent.length){
+          return APIResponse.error(
+            response,
+            apiId,
+            API_RESPONSES.CONFLICT,
+            "Parent Tenant not found",
+            HttpStatus.CONFLICT
+          );
+        }
+        result = await this.tenantRepository.save(tenantCreateDto);
+      }
       if (result) {
+        await this.publishTenantEvent('created', result, result?.tenantId);
         return APIResponse.success(
           response,
           apiId,
@@ -390,4 +429,45 @@ export class TenantService {
       );
     }
   }
+
+  private async publishTenantEvent(
+    eventType: "created" | "updated" | "deleted",
+    tenantPayload: any, // full payload from API
+    apiId: string
+  ): Promise<void> {
+    try {
+      let eventData: any;
+  
+      if (eventType === "deleted") {
+        // Only minimal data needed
+        eventData = {
+          tenantId: tenantPayload?.tenantId || tenantPayload?.id,
+          deletedAt: new Date().toISOString(),
+        };
+      } else {
+        // Use the full data received from the API
+        eventData = {
+          ...tenantPayload,
+          eventTimestamp: new Date().toISOString(),
+        };
+      }
+  
+      await this.kafkaService.publishTenantEvent(eventType, eventData, tenantPayload?.tenantId);
+      LoggerUtil.log(
+        `Tenant ${eventType} event published to Kafka for tenant ${
+          tenantPayload?.tenantId || tenantPayload?.id
+        }`,
+        apiId
+      );
+    } catch (error) {
+      LoggerUtil.error(
+        `Failed to publish tenant ${eventType} event to Kafka`,
+        `Error: ${error.message}`,
+        apiId
+      );
+      // Don't throw to avoid breaking main operation
+    }
+  }
+  
+
 }

@@ -126,4 +126,28 @@ export class KafkaService implements OnModuleInit, OnModuleDestroy {
     await this.publishMessage(topic, payload, userId);
     this.logger.log(`User ${eventType} event published for user ${userId}`);
   }
+
+  async publishTenantEvent(
+    eventType: 'created' | 'updated' | 'deleted',
+    tenantData: any,
+    tenantId: string
+  ): Promise<void> {
+    if (!this.isKafkaEnabled) {
+      this.logger.warn('Kafka is disabled. Skipping tenant event publish.');
+      return;
+    }
+  
+    const topic = this.configService.get<string>('KAFKA_TOPIC', 'user-events');
+  
+    const payload = {
+      eventType,
+      timestamp: new Date().toISOString(),
+      tenantId,
+      data: tenantData
+    };
+  
+    await this.publishMessage(topic, payload, tenantId);
+    this.logger.log(`Tenant ${eventType} event published for tenant ${tenantId}`);
+  }
+  
 }

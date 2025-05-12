@@ -17,7 +17,7 @@ import { User } from "src/user/entities/user-entity";
         //   User
         // ],
         autoLoadEntities: true,
-        synchronize: true,
+        // synchronize: true,
       }),
       inject: [ConfigService],
     }),
