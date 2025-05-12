@@ -1,0 +1,2437 @@
+{
+	"info": {
+		"_postman_id": "ba7ba325-aaca-4433-99a3-d7241e4fbb83",
+		"name": "Interface User Service",
+		"schema": "https://schema.getpostman.com/json/collection/v2.0.0/collection.json",
+		"_exporter_id": "29040585"
+	},
+	"item": [
+		{
+			"name": "User Service",
+			"item": [
+				{
+					"name": "Auth",
+					"item": [
+						{
+							"name": "login",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"var jsonData = pm.response.json();",
+											"pm.collectionVariables.set('AccessToken', jsonData.result.access_token)",
+											"pm.collectionVariables.set('refreshToken', jsonData.result.refresh_token)"
+										],
+										"type": "text/javascript",
+										"packages": {}
+									}
+								}
+							],
+							"protocolProfileBehavior": {
+								"disabledSystemHeaders": {}
+							},
+							"request": {
+								"auth": {
+									"type": "noauth"
+								},
+								"method": "POST",
+								"header": [
+									{
+										"key": "accept",
+										"value": "*/*",
+										"type": "text"
+									},
+									{
+										"key": "tenantId",
+										"value": "ef99949b-7f3a-4a5f-806a-e67e683e38f3",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"username\": \"pooja98765\",\n  \"password\": \"98765\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": "{{interfaceBaseUrl}}/interface/v1/account/login"
+							},
+							"response": []
+						},
+						{
+							"name": "auth",
+							"protocolProfileBehavior": {
+								"disableBodyPruning": true
+							},
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": {
+										"token": "{{AccessToken}}"
+									}
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "accept",
+										"value": "*/*"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": "{{interfaceBaseUrl}}/interface/v1/user/auth/refresh"
+							},
+							"response": []
+						},
+						{
+							"name": "Refresh Token",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": {
+										"token": "{{AccessToken}}"
+									}
+								},
+								"method": "POST",
+								"header": [
+									{
+										"key": "accept",
+										"value": "*/*"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"refresh_token\": \"eyJhbGciOiJIUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICIwOWM2Zjc5OC04ZDFkLTQ4OWEtODM2YS1kYmIwYWNkNjhjM2MifQ.eyJleHAiOjE3Mjk2MDQ4NzQsImlhdCI6MTcyOTUxODQ3NCwianRpIjoiNmI2ODY5YTYtNGFkMy00ODc3LWE0NWYtYTc4ZTc4Njc1NTNkIiwiaXNzIjoiaHR0cHM6Ly9rZXljbG9hay5wcmF0aGFtZGlnaXRhbC5vcmcvYXV0aC9yZWFsbXMvcHJhdGhhbSIsImF1ZCI6Imh0dHBzOi8va2V5Y2xvYWsucHJhdGhhbWRpZ2l0YWwub3JnL2F1dGgvcmVhbG1zL3ByYXRoYW0iLCJzdWIiOiI5ZWY3ZTg2Yy0yNjNlLTQ2MjEtYTdkOC02NDNjYTNmOTA2MDkiLCJ0eXAiOiJSZWZyZXNoIiwiYXpwIjoicHJhdGhhbSIsInNlc3Npb25fc3RhdGUiOiJjYzJmN2VmOC0yYmJhLTQxOGQtODNkOS05MjQ4NWVkMDJlMzYiLCJzY29wZSI6ImVtYWlsIHByb2ZpbGUiLCJzaWQiOiJjYzJmN2VmOC0yYmJhLTQxOGQtODNkOS05MjQ4NWVkMDJlMzYifQ.jrszvzjM4fosKMP4YVaZhs5zS9pAK9WAgP1A0fcaV-U\"\n}"
+								},
+								"url": "{{interfaceBaseUrl}}/interface/v1/user/auth/refresh"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Tenant",
+					"item": [
+						{
+							"name": "Create Tenant",
+							"protocolProfileBehavior": {
+								"disabledSystemHeaders": {}
+							},
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": {
+										"token": "eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJha0d1WG1zVTVxMXhOczZxUkVTWWZkTkRyUWRiZ2ZGekRFMEswRkFDNUVzIn0.eyJleHAiOjE3MzQ1NTMxNzEsImlhdCI6MTczNDQ2Njc3MSwianRpIjoiNTE0OTdmMzctNzgyZi00ZjlmLWEyZGItODU3ZGJkMTkwNmY1IiwiaXNzIjoiaHR0cHM6Ly9rZXljbG9hay5wcmF0aGFtZGlnaXRhbC5vcmcvYXV0aC9yZWFsbXMvcHJhdGhhbSIsImF1ZCI6ImFjY291bnQiLCJzdWIiOiIyODJiMjI4My0zZDQ0LTQ0NjctODliNi01NjM4NDk1NjZmYTUiLCJ0eXAiOiJCZWFyZXIiLCJhenAiOiJwcmF0aGFtIiwic2Vzc2lvbl9zdGF0ZSI6ImM4MDZjYThhLWM5ZjQtNGYzMC05YmU3LTZmOGMwODhhM2I4YSIsImFjciI6IjEiLCJhbGxvd2VkLW9yaWdpbnMiOlsiLyoiXSwicmVhbG1fYWNjZXNzIjp7InJvbGVzIjpbIm9mZmxpbmVfYWNjZXNzIiwidW1hX2F1dGhvcml6YXRpb24iLCJkZWZhdWx0LXJvbGVzLXByYXRoYW0iXX0sInJlc291cmNlX2FjY2VzcyI6eyJhY2NvdW50Ijp7InJvbGVzIjpbIm1hbmFnZS1hY2NvdW50IiwibWFuYWdlLWFjY291bnQtbGlua3MiLCJ2aWV3LXByb2ZpbGUiXX19LCJzY29wZSI6ImVtYWlsIHByb2ZpbGUiLCJzaWQiOiJjODA2Y2E4YS1jOWY0LTRmMzAtOWJlNy02ZjhjMDg4YTNiOGEiLCJlbWFpbF92ZXJpZmllZCI6ZmFsc2UsIm5hbWUiOiJTYW5rZXQgayIsInByZWZlcnJlZF91c2VybmFtZSI6InNhbmtldCIsImdpdmVuX25hbWUiOiJTYW5rZXQiLCJmYW1pbHlfbmFtZSI6ImsifQ.VzSuvBVXAx83FBpBWHzXnXbUSJqci3rOkv2I09NENGUoNv0swCdWRlxljIggP0uKrVxzdL0NWWTXoWtsCfqnxuMvedJsDdZnqFOPilb87SWHm_oeDaqn0WCV6_Hbwf63aQl27pm212oHjhYU2HIu6Nev6LLJGf2qRjhF3zVvG2W1SKnG5Vpgw5J4azswKyXuBTTtL5UUUEq1HMaUzL8T-tfx1NNSDD8ByitktP4RUDBmUqhuuT81rPeZ-g3_eFfxzFZdXYSJJbXBfcVj3her0gqksHc-kdLGvCK5eH287uKCevnqxGGs1WMoABsYuPI7wwWX4rMk5ZzJj6MuXvW2sA"
+									}
+								},
+								"method": "POST",
+								"header": [
+									{
+										"key": "accept",
+										"value": "*/*"
+									},
+									{
+										"key": "Authorization",
+										"value": "Bearer"
+									}
+								],
+								"body": {
+									"mode": "formdata",
+									"formdata": [
+										{
+											"key": "name",
+											"value": "SouravABC41",
+											"type": "text"
+										},
+										{
+											"key": "domain",
+											"value": "puspa.com",
+											"type": "text"
+										},
+										{
+											"key": "programImages",
+											"type": "file",
+											"src": [
+												"/home/ttpl-rt-239/Pictures/Screenshot from 2024-12-14 13-11-24.png",
+												"/home/ttpl-rt-239/Pictures/Screenshot from 2024-12-24 21-21-24.png"
+											]
+										},
+										{
+											"key": "description",
+											"value": "sourav",
+											"type": "text"
+										},
+										{
+											"key": "programHead",
+											"value": "Sourav",
+											"type": "text"
+										}
+									]
+								},
+								"url": {
+									"raw": "{{interfaceBaseUrl}}/interface/v1/tenant/create",
+									"host": [
+										"{{interfaceBaseUrl}}"
+									],
+									"path": [
+										"interface",
+										"v1",
+										"tenant",
+										"create"
+									],
+									"query": [
+										{
+											"key": "userId",
+											"value": "d72a1347-30cb-4d64-b5de-11825777f3a1",
+											"disabled": true
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Tenant Search",
+							"protocolProfileBehavior": {
+								"disabledSystemHeaders": {}
+							},
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": {
+										"token": "eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJha0d1WG1zVTVxMXhOczZxUkVTWWZkTkRyUWRiZ2ZGekRFMEswRkFDNUVzIn0.eyJleHAiOjE3MzQ1NTMxNzEsImlhdCI6MTczNDQ2Njc3MSwianRpIjoiNTE0OTdmMzctNzgyZi00ZjlmLWEyZGItODU3ZGJkMTkwNmY1IiwiaXNzIjoiaHR0cHM6Ly9rZXljbG9hay5wcmF0aGFtZGlnaXRhbC5vcmcvYXV0aC9yZWFsbXMvcHJhdGhhbSIsImF1ZCI6ImFjY291bnQiLCJzdWIiOiIyODJiMjI4My0zZDQ0LTQ0NjctODliNi01NjM4NDk1NjZmYTUiLCJ0eXAiOiJCZWFyZXIiLCJhenAiOiJwcmF0aGFtIiwic2Vzc2lvbl9zdGF0ZSI6ImM4MDZjYThhLWM5ZjQtNGYzMC05YmU3LTZmOGMwODhhM2I4YSIsImFjciI6IjEiLCJhbGxvd2VkLW9yaWdpbnMiOlsiLyoiXSwicmVhbG1fYWNjZXNzIjp7InJvbGVzIjpbIm9mZmxpbmVfYWNjZXNzIiwidW1hX2F1dGhvcml6YXRpb24iLCJkZWZhdWx0LXJvbGVzLXByYXRoYW0iXX0sInJlc291cmNlX2FjY2VzcyI6eyJhY2NvdW50Ijp7InJvbGVzIjpbIm1hbmFnZS1hY2NvdW50IiwibWFuYWdlLWFjY291bnQtbGlua3MiLCJ2aWV3LXByb2ZpbGUiXX19LCJzY29wZSI6ImVtYWlsIHByb2ZpbGUiLCJzaWQiOiJjODA2Y2E4YS1jOWY0LTRmMzAtOWJlNy02ZjhjMDg4YTNiOGEiLCJlbWFpbF92ZXJpZmllZCI6ZmFsc2UsIm5hbWUiOiJTYW5rZXQgayIsInByZWZlcnJlZF91c2VybmFtZSI6InNhbmtldCIsImdpdmVuX25hbWUiOiJTYW5rZXQiLCJmYW1pbHlfbmFtZSI6ImsifQ.VzSuvBVXAx83FBpBWHzXnXbUSJqci3rOkv2I09NENGUoNv0swCdWRlxljIggP0uKrVxzdL0NWWTXoWtsCfqnxuMvedJsDdZnqFOPilb87SWHm_oeDaqn0WCV6_Hbwf63aQl27pm212oHjhYU2HIu6Nev6LLJGf2qRjhF3zVvG2W1SKnG5Vpgw5J4azswKyXuBTTtL5UUUEq1HMaUzL8T-tfx1NNSDD8ByitktP4RUDBmUqhuuT81rPeZ-g3_eFfxzFZdXYSJJbXBfcVj3her0gqksHc-kdLGvCK5eH287uKCevnqxGGs1WMoABsYuPI7wwWX4rMk5ZzJj6MuXvW2sA"
+									}
+								},
+								"method": "POST",
+								"header": [
+									{
+										"key": "accept",
+										"value": "*/*"
+									},
+									{
+										"key": "Authorization",
+										"value": "Bearer"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"limit\": 100,  //max limit 200\n  \"offset\": 0,  //max offset 200\n  \"filters\": {\n    // \"tenantId\": \"9e57dea4-34af-4d86-a9e1-35fdffbc4c92\"\n    \"name\": \"Public\",//Search by keywoard\n    \"domain\": \"public.com\",\n    \"status12\": [\n      \"published\" // options: draft,published,archived\n    ]\n    // \"createdBy\": \"e39e6b17-0953-4cba-a05b-e5d551b1304d\",\n    // \"updatedBy\": \"e39e6b17-0953-4cba-a05b-e5d551b1304d\",\n    // \"programHead\": \"sourav\"\n  }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": "{{interfaceBaseUrl}}/interface/v1/tenant/search"
+							},
+							"response": []
+						},
+						{
+							"name": "Get All Tenant",
+							"protocolProfileBehavior": {
+								"disableBodyPruning": true,
+								"disabledSystemHeaders": {}
+							},
+							"request": {
+								"auth": {
+									"type": "noauth"
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "accept",
+										"value": "*/*",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": "{{interfaceBaseUrl}}/interface/v1/tenant/read"
+							},
+							"response": []
+						},
+						{
+							"name": "Update Tenant",
+							"protocolProfileBehavior": {
+								"disabledSystemHeaders": {}
+							},
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": {
+										"token": "eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJha0d1WG1zVTVxMXhOczZxUkVTWWZkTkRyUWRiZ2ZGekRFMEswRkFDNUVzIn0.eyJleHAiOjE3MzQ1NTMxNzEsImlhdCI6MTczNDQ2Njc3MSwianRpIjoiNTE0OTdmMzctNzgyZi00ZjlmLWEyZGItODU3ZGJkMTkwNmY1IiwiaXNzIjoiaHR0cHM6Ly9rZXljbG9hay5wcmF0aGFtZGlnaXRhbC5vcmcvYXV0aC9yZWFsbXMvcHJhdGhhbSIsImF1ZCI6ImFjY291bnQiLCJzdWIiOiIyODJiMjI4My0zZDQ0LTQ0NjctODliNi01NjM4NDk1NjZmYTUiLCJ0eXAiOiJCZWFyZXIiLCJhenAiOiJwcmF0aGFtIiwic2Vzc2lvbl9zdGF0ZSI6ImM4MDZjYThhLWM5ZjQtNGYzMC05YmU3LTZmOGMwODhhM2I4YSIsImFjciI6IjEiLCJhbGxvd2VkLW9yaWdpbnMiOlsiLyoiXSwicmVhbG1fYWNjZXNzIjp7InJvbGVzIjpbIm9mZmxpbmVfYWNjZXNzIiwidW1hX2F1dGhvcml6YXRpb24iLCJkZWZhdWx0LXJvbGVzLXByYXRoYW0iXX0sInJlc291cmNlX2FjY2VzcyI6eyJhY2NvdW50Ijp7InJvbGVzIjpbIm1hbmFnZS1hY2NvdW50IiwibWFuYWdlLWFjY291bnQtbGlua3MiLCJ2aWV3LXByb2ZpbGUiXX19LCJzY29wZSI6ImVtYWlsIHByb2ZpbGUiLCJzaWQiOiJjODA2Y2E4YS1jOWY0LTRmMzAtOWJlNy02ZjhjMDg4YTNiOGEiLCJlbWFpbF92ZXJpZmllZCI6ZmFsc2UsIm5hbWUiOiJTYW5rZXQgayIsInByZWZlcnJlZF91c2VybmFtZSI6InNhbmtldCIsImdpdmVuX25hbWUiOiJTYW5rZXQiLCJmYW1pbHlfbmFtZSI6ImsifQ.VzSuvBVXAx83FBpBWHzXnXbUSJqci3rOkv2I09NENGUoNv0swCdWRlxljIggP0uKrVxzdL0NWWTXoWtsCfqnxuMvedJsDdZnqFOPilb87SWHm_oeDaqn0WCV6_Hbwf63aQl27pm212oHjhYU2HIu6Nev6LLJGf2qRjhF3zVvG2W1SKnG5Vpgw5J4azswKyXuBTTtL5UUUEq1HMaUzL8T-tfx1NNSDD8ByitktP4RUDBmUqhuuT81rPeZ-g3_eFfxzFZdXYSJJbXBfcVj3her0gqksHc-kdLGvCK5eH287uKCevnqxGGs1WMoABsYuPI7wwWX4rMk5ZzJj6MuXvW2sA"
+									}
+								},
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "accept",
+										"value": "*/*",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "formdata",
+									"formdata": [
+										{
+											"key": "name",
+											"value": "sourav1",
+											"type": "text"
+										},
+										{
+											"key": "domain",
+											"value": "puspa2.com",
+											"type": "text"
+										},
+										{
+											"key": "programImages",
+											"type": "file",
+											"src": "/home/ttpl-rt-239/Downloads/download (1).jpeg"
+										},
+										{
+											"key": "description",
+											"value": "Puspa jhukaga nahi bara",
+											"type": "text"
+										},
+										{
+											"key": "woner",
+											"value": "Puspa 2",
+											"type": "text",
+											"disabled": true
+										},
+										{
+											"key": "programImages",
+											"type": "file",
+											"src": "/home/ttpl-rt-239/Downloads/Screenshot from 2024-12-17 15-28-25.png"
+										},
+										{
+											"key": "status",
+											"value": "active",
+											"type": "text",
+											"disabled": true
+										}
+									]
+								},
+								"url": {
+									"raw": "{{interfaceBaseUrl}}}}/interface/v1/tenant/update/a6ab59b1-d475-44d2-8322-0174f2586d2a?userId=d72a1347-30cb-4d64-b5de-11825777f3a1",
+									"host": [
+										"{{interfaceBaseUrl}}}}"
+									],
+									"path": [
+										"interface",
+										"v1",
+										"tenant",
+										"update",
+										"a6ab59b1-d475-44d2-8322-0174f2586d2a"
+									],
+									"query": [
+										{
+											"key": "userId",
+											"value": "d72a1347-30cb-4d64-b5de-11825777f3a1"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Delete Tenant",
+							"protocolProfileBehavior": {
+								"disabledSystemHeaders": {}
+							},
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": {
+										"token": "eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJha0d1WG1zVTVxMXhOczZxUkVTWWZkTkRyUWRiZ2ZGekRFMEswRkFDNUVzIn0.eyJleHAiOjE3MzQ1NTMxNzEsImlhdCI6MTczNDQ2Njc3MSwianRpIjoiNTE0OTdmMzctNzgyZi00ZjlmLWEyZGItODU3ZGJkMTkwNmY1IiwiaXNzIjoiaHR0cHM6Ly9rZXljbG9hay5wcmF0aGFtZGlnaXRhbC5vcmcvYXV0aC9yZWFsbXMvcHJhdGhhbSIsImF1ZCI6ImFjY291bnQiLCJzdWIiOiIyODJiMjI4My0zZDQ0LTQ0NjctODliNi01NjM4NDk1NjZmYTUiLCJ0eXAiOiJCZWFyZXIiLCJhenAiOiJwcmF0aGFtIiwic2Vzc2lvbl9zdGF0ZSI6ImM4MDZjYThhLWM5ZjQtNGYzMC05YmU3LTZmOGMwODhhM2I4YSIsImFjciI6IjEiLCJhbGxvd2VkLW9yaWdpbnMiOlsiLyoiXSwicmVhbG1fYWNjZXNzIjp7InJvbGVzIjpbIm9mZmxpbmVfYWNjZXNzIiwidW1hX2F1dGhvcml6YXRpb24iLCJkZWZhdWx0LXJvbGVzLXByYXRoYW0iXX0sInJlc291cmNlX2FjY2VzcyI6eyJhY2NvdW50Ijp7InJvbGVzIjpbIm1hbmFnZS1hY2NvdW50IiwibWFuYWdlLWFjY291bnQtbGlua3MiLCJ2aWV3LXByb2ZpbGUiXX19LCJzY29wZSI6ImVtYWlsIHByb2ZpbGUiLCJzaWQiOiJjODA2Y2E4YS1jOWY0LTRmMzAtOWJlNy02ZjhjMDg4YTNiOGEiLCJlbWFpbF92ZXJpZmllZCI6ZmFsc2UsIm5hbWUiOiJTYW5rZXQgayIsInByZWZlcnJlZF91c2VybmFtZSI6InNhbmtldCIsImdpdmVuX25hbWUiOiJTYW5rZXQiLCJmYW1pbHlfbmFtZSI6ImsifQ.VzSuvBVXAx83FBpBWHzXnXbUSJqci3rOkv2I09NENGUoNv0swCdWRlxljIggP0uKrVxzdL0NWWTXoWtsCfqnxuMvedJsDdZnqFOPilb87SWHm_oeDaqn0WCV6_Hbwf63aQl27pm212oHjhYU2HIu6Nev6LLJGf2qRjhF3zVvG2W1SKnG5Vpgw5J4azswKyXuBTTtL5UUUEq1HMaUzL8T-tfx1NNSDD8ByitktP4RUDBmUqhuuT81rPeZ-g3_eFfxzFZdXYSJJbXBfcVj3her0gqksHc-kdLGvCK5eH287uKCevnqxGGs1WMoABsYuPI7wwWX4rMk5ZzJj6MuXvW2sA"
+									}
+								},
+								"method": "DELETE",
+								"header": [
+									{
+										"key": "accept",
+										"value": "*/*",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "formdata",
+									"formdata": [
+										{
+											"key": "status",
+											"value": "archived",
+											"type": "text"
+										}
+									]
+								},
+								"url": "{{interfaceBaseUrl}}/interface/v1/tenant/delete"
+							},
+							"response": []
+						},
+						{
+							"name": "Get tenant details-child",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": "{{interfaceBaseUrl}}/interface/v1/user/tenant/read/914ca990-9b45-4385-a06b-05054f35d0b9"
+							},
+							"response": []
+						},
+						{
+							"name": "Get tenant details-parent",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": "{{interfaceBaseUrl}}/interface/v1/user/tenant/read/29f8c9a6-032f-48c7-a14a-9e3db3d7b76e"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Fields",
+					"item": [
+						{
+							"name": "Create State",
+							"protocolProfileBehavior": {
+								"disabledSystemHeaders": {}
+							},
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": {
+										"token": "eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJPc3NtSUhXaW1NMDN2MUxsVnFvNHBqaS0ydEMwTGhLY0o5dmtwQTlJZV9zIn0.eyJleHAiOjE3MjExOTg4NzcsImlhdCI6MTcyMTExMjQ3NywianRpIjoiMDFiNjgyMzUtNjNlNS00MGY3LWE3MTgtOTQyMTc2NWVjMmNmIiwiaXNzIjoiaHR0cHM6Ly9xYS5wcmF0aGFtdGVhY2hlcmFwcC50ZWtkaW5leHQuY29tL2F1dGgvcmVhbG1zL3ByYXRoYW0iLCJhdWQiOiJhY2NvdW50Iiwic3ViIjoiNjEwNzJlNmQtYmNlMi00ZWE1LTk4MmYtMDdkNTUwZTlhNTM0IiwidHlwIjoiQmVhcmVyIiwiYXpwIjoicHJhdGhhbSIsInNlc3Npb25fc3RhdGUiOiI3YWE3MjdhMi0zMWUyLTRhMTgtYjYwNy03NjU0ZDE0OGUxYWEiLCJhY3IiOiIxIiwiYWxsb3dlZC1vcmlnaW5zIjpbIi8qIl0sInJlYWxtX2FjY2VzcyI6eyJyb2xlcyI6WyJvZmZsaW5lX2FjY2VzcyIsInVtYV9hdXRob3JpemF0aW9uIiwiZGVmYXVsdC1yb2xlcy1wcmF0aGFtIl19LCJyZXNvdXJjZV9hY2Nlc3MiOnsiYWNjb3VudCI6eyJyb2xlcyI6WyJtYW5hZ2UtYWNjb3VudCIsIm1hbmFnZS1hY2NvdW50LWxpbmtzIiwidmlldy1wcm9maWxlIl19fSwic2NvcGUiOiJlbWFpbCBwcm9maWxlIiwic2lkIjoiN2FhNzI3YTItMzFlMi00YTE4LWI2MDctNzY1NGQxNDhlMWFhIiwiZW1haWxfdmVyaWZpZWQiOmZhbHNlLCJuYW1lIjoiVGVzdCIsInByZWZlcnJlZF91c2VybmFtZSI6InRlc3QxIiwiZ2l2ZW5fbmFtZSI6IlRlc3QiLCJmYW1pbHlfbmFtZSI6IiIsImVtYWlsIjoidGVzdDFAeW9wbWFpbC5jb20ifQ.DSsPCqzRMHsOrWf1zRv9LwR2OwulpcsYnT4UUwNf10XtS1n-4KCcZKc6ehePCPZVHiZzPoPAhS1ip7SmfuwNaYHJWkisK5LVgH9HItFyrn1H4mBKnNrwVXdLoUpNrpLpo16mh1PMMAeb_QaZ6m0n01XRnKhs2gvt2FPjFWzi5jDv27yVJ7twJnZvfCYvTM9Ls0g8RIzoC_dGVsY-K20qxThwLj8tsY1wRDIBBX40fmwmAP4M00gY87b5cgwdM_Npynu_y7LmJGIzKafRynQGOMpiQf9rkGPSJyyP01DVoifRFhqEljdd44ax296wr5d2oTuvyMzlwntgz2Zkt9Xehw"
+									}
+								},
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "accept",
+										"value": "*/*",
+										"type": "text"
+									},
+									{
+										"key": "tenantId",
+										"value": "{{tenantId}}",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"fieldParams\": {\n        \"contextType\" : \"LEARNER\"\n    }\n}\n",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": "{{interfaceBaseUrl}}/interface/v1/fields/update/0be5a8c6-92e9-4b7c-ac01-345131b06118"
+							},
+							"response": []
+						},
+						{
+							"name": "Create District",
+							"protocolProfileBehavior": {
+								"disabledSystemHeaders": {}
+							},
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": {
+										"token": "eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJPc3NtSUhXaW1NMDN2MUxsVnFvNHBqaS0ydEMwTGhLY0o5dmtwQTlJZV9zIn0.eyJleHAiOjE3MjExOTg4NzcsImlhdCI6MTcyMTExMjQ3NywianRpIjoiMDFiNjgyMzUtNjNlNS00MGY3LWE3MTgtOTQyMTc2NWVjMmNmIiwiaXNzIjoiaHR0cHM6Ly9xYS5wcmF0aGFtdGVhY2hlcmFwcC50ZWtkaW5leHQuY29tL2F1dGgvcmVhbG1zL3ByYXRoYW0iLCJhdWQiOiJhY2NvdW50Iiwic3ViIjoiNjEwNzJlNmQtYmNlMi00ZWE1LTk4MmYtMDdkNTUwZTlhNTM0IiwidHlwIjoiQmVhcmVyIiwiYXpwIjoicHJhdGhhbSIsInNlc3Npb25fc3RhdGUiOiI3YWE3MjdhMi0zMWUyLTRhMTgtYjYwNy03NjU0ZDE0OGUxYWEiLCJhY3IiOiIxIiwiYWxsb3dlZC1vcmlnaW5zIjpbIi8qIl0sInJlYWxtX2FjY2VzcyI6eyJyb2xlcyI6WyJvZmZsaW5lX2FjY2VzcyIsInVtYV9hdXRob3JpemF0aW9uIiwiZGVmYXVsdC1yb2xlcy1wcmF0aGFtIl19LCJyZXNvdXJjZV9hY2Nlc3MiOnsiYWNjb3VudCI6eyJyb2xlcyI6WyJtYW5hZ2UtYWNjb3VudCIsIm1hbmFnZS1hY2NvdW50LWxpbmtzIiwidmlldy1wcm9maWxlIl19fSwic2NvcGUiOiJlbWFpbCBwcm9maWxlIiwic2lkIjoiN2FhNzI3YTItMzFlMi00YTE4LWI2MDctNzY1NGQxNDhlMWFhIiwiZW1haWxfdmVyaWZpZWQiOmZhbHNlLCJuYW1lIjoiVGVzdCIsInByZWZlcnJlZF91c2VybmFtZSI6InRlc3QxIiwiZ2l2ZW5fbmFtZSI6IlRlc3QiLCJmYW1pbHlfbmFtZSI6IiIsImVtYWlsIjoidGVzdDFAeW9wbWFpbC5jb20ifQ.DSsPCqzRMHsOrWf1zRv9LwR2OwulpcsYnT4UUwNf10XtS1n-4KCcZKc6ehePCPZVHiZzPoPAhS1ip7SmfuwNaYHJWkisK5LVgH9HItFyrn1H4mBKnNrwVXdLoUpNrpLpo16mh1PMMAeb_QaZ6m0n01XRnKhs2gvt2FPjFWzi5jDv27yVJ7twJnZvfCYvTM9Ls0g8RIzoC_dGVsY-K20qxThwLj8tsY1wRDIBBX40fmwmAP4M00gY87b5cgwdM_Npynu_y7LmJGIzKafRynQGOMpiQf9rkGPSJyyP01DVoifRFhqEljdd44ax296wr5d2oTuvyMzlwntgz2Zkt9Xehw"
+									}
+								},
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "accept",
+										"value": "*/*",
+										"type": "text"
+									},
+									{
+										"key": "tenantId",
+										"value": "{{tenantId}}",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"fieldParams\": {\n        \"options\": [\n            {\n                \"name\": \"Patna\",\n                \"value\": \"PAT\",\n                \"controllingfieldfk\": \"BR\"\n            }\n        ]\n    }\n}\n",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": "{{interfaceBaseUrl}}/interface/v1/fields/update/b61edfc6-3787-4079-86d3-37262bf23a9e"
+							},
+							"response": []
+						},
+						{
+							"name": "Create Block",
+							"protocolProfileBehavior": {
+								"disabledSystemHeaders": {}
+							},
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": {
+										"token": "eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJPc3NtSUhXaW1NMDN2MUxsVnFvNHBqaS0ydEMwTGhLY0o5dmtwQTlJZV9zIn0.eyJleHAiOjE3MjExOTg4NzcsImlhdCI6MTcyMTExMjQ3NywianRpIjoiMDFiNjgyMzUtNjNlNS00MGY3LWE3MTgtOTQyMTc2NWVjMmNmIiwiaXNzIjoiaHR0cHM6Ly9xYS5wcmF0aGFtdGVhY2hlcmFwcC50ZWtkaW5leHQuY29tL2F1dGgvcmVhbG1zL3ByYXRoYW0iLCJhdWQiOiJhY2NvdW50Iiwic3ViIjoiNjEwNzJlNmQtYmNlMi00ZWE1LTk4MmYtMDdkNTUwZTlhNTM0IiwidHlwIjoiQmVhcmVyIiwiYXpwIjoicHJhdGhhbSIsInNlc3Npb25fc3RhdGUiOiI3YWE3MjdhMi0zMWUyLTRhMTgtYjYwNy03NjU0ZDE0OGUxYWEiLCJhY3IiOiIxIiwiYWxsb3dlZC1vcmlnaW5zIjpbIi8qIl0sInJlYWxtX2FjY2VzcyI6eyJyb2xlcyI6WyJvZmZsaW5lX2FjY2VzcyIsInVtYV9hdXRob3JpemF0aW9uIiwiZGVmYXVsdC1yb2xlcy1wcmF0aGFtIl19LCJyZXNvdXJjZV9hY2Nlc3MiOnsiYWNjb3VudCI6eyJyb2xlcyI6WyJtYW5hZ2UtYWNjb3VudCIsIm1hbmFnZS1hY2NvdW50LWxpbmtzIiwidmlldy1wcm9maWxlIl19fSwic2NvcGUiOiJlbWFpbCBwcm9maWxlIiwic2lkIjoiN2FhNzI3YTItMzFlMi00YTE4LWI2MDctNzY1NGQxNDhlMWFhIiwiZW1haWxfdmVyaWZpZWQiOmZhbHNlLCJuYW1lIjoiVGVzdCIsInByZWZlcnJlZF91c2VybmFtZSI6InRlc3QxIiwiZ2l2ZW5fbmFtZSI6IlRlc3QiLCJmYW1pbHlfbmFtZSI6IiIsImVtYWlsIjoidGVzdDFAeW9wbWFpbC5jb20ifQ.DSsPCqzRMHsOrWf1zRv9LwR2OwulpcsYnT4UUwNf10XtS1n-4KCcZKc6ehePCPZVHiZzPoPAhS1ip7SmfuwNaYHJWkisK5LVgH9HItFyrn1H4mBKnNrwVXdLoUpNrpLpo16mh1PMMAeb_QaZ6m0n01XRnKhs2gvt2FPjFWzi5jDv27yVJ7twJnZvfCYvTM9Ls0g8RIzoC_dGVsY-K20qxThwLj8tsY1wRDIBBX40fmwmAP4M00gY87b5cgwdM_Npynu_y7LmJGIzKafRynQGOMpiQf9rkGPSJyyP01DVoifRFhqEljdd44ax296wr5d2oTuvyMzlwntgz2Zkt9Xehw"
+									}
+								},
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "accept",
+										"value": "*/*",
+										"type": "text"
+									},
+									{
+										"key": "tenantId",
+										"value": "{{tenantId}}",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"fieldParams\": {\n        \"options\": [\n            {\n                \"name\": \"Patna\",\n                \"value\": \"PAT\",\n                \"controllingfieldfk\": \"BR\"\n            }\n        ]\n    }\n}\n",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": "{{interfaceBaseUrl}}/interface/v1/fields/update/b61edfc6-3787-4079-86d3-37262bf23a9e"
+							},
+							"response": []
+						},
+						{
+							"name": "delete field options",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": {
+										"token": "{{AccessToken}}"
+									}
+								},
+								"method": "DELETE",
+								"header": [
+									{
+										"key": "accept",
+										"value": "*/*"
+									},
+									{
+										"key": "Authorization",
+										"value": "Bearer eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJPc3NtSUhXaW1NMDN2MUxsVnFvNHBqaS0ydEMwTGhLY0o5dmtwQTlJZV9zIn0.eyJleHAiOjE3MjExOTg4NzcsImlhdCI6MTcyMTExMjQ3NywianRpIjoiMDFiNjgyMzUtNjNlNS00MGY3LWE3MTgtOTQyMTc2NWVjMmNmIiwiaXNzIjoiaHR0cHM6Ly9xYS5wcmF0aGFtdGVhY2hlcmFwcC50ZWtkaW5leHQuY29tL2F1dGgvcmVhbG1zL3ByYXRoYW0iLCJhdWQiOiJhY2NvdW50Iiwic3ViIjoiNjEwNzJlNmQtYmNlMi00ZWE1LTk4MmYtMDdkNTUwZTlhNTM0IiwidHlwIjoiQmVhcmVyIiwiYXpwIjoicHJhdGhhbSIsInNlc3Npb25fc3RhdGUiOiI3YWE3MjdhMi0zMWUyLTRhMTgtYjYwNy03NjU0ZDE0OGUxYWEiLCJhY3IiOiIxIiwiYWxsb3dlZC1vcmlnaW5zIjpbIi8qIl0sInJlYWxtX2FjY2VzcyI6eyJyb2xlcyI6WyJvZmZsaW5lX2FjY2VzcyIsInVtYV9hdXRob3JpemF0aW9uIiwiZGVmYXVsdC1yb2xlcy1wcmF0aGFtIl19LCJyZXNvdXJjZV9hY2Nlc3MiOnsiYWNjb3VudCI6eyJyb2xlcyI6WyJtYW5hZ2UtYWNjb3VudCIsIm1hbmFnZS1hY2NvdW50LWxpbmtzIiwidmlldy1wcm9maWxlIl19fSwic2NvcGUiOiJlbWFpbCBwcm9maWxlIiwic2lkIjoiN2FhNzI3YTItMzFlMi00YTE4LWI2MDctNzY1NGQxNDhlMWFhIiwiZW1haWxfdmVyaWZpZWQiOmZhbHNlLCJuYW1lIjoiVGVzdCIsInByZWZlcnJlZF91c2VybmFtZSI6InRlc3QxIiwiZ2l2ZW5fbmFtZSI6IlRlc3QiLCJmYW1pbHlfbmFtZSI6IiIsImVtYWlsIjoidGVzdDFAeW9wbWFpbC5jb20ifQ.DSsPCqzRMHsOrWf1zRv9LwR2OwulpcsYnT4UUwNf10XtS1n-4KCcZKc6ehePCPZVHiZzPoPAhS1ip7SmfuwNaYHJWkisK5LVgH9HItFyrn1H4mBKnNrwVXdLoUpNrpLpo16mh1PMMAeb_QaZ6m0n01XRnKhs2gvt2FPjFWzi5jDv27yVJ7twJnZvfCYvTM9Ls0g8RIzoC_dGVsY-K20qxThwLj8tsY1wRDIBBX40fmwmAP4M00gY87b5cgwdM_Npynu_y7LmJGIzKafRynQGOMpiQf9rkGPSJyyP01DVoifRFhqEljdd44ax296wr5d2oTuvyMzlwntgz2Zkt9Xehw"
+									},
+									{
+										"key": "tenantId",
+										"value": "6c8b810a-66c2-4f0d-8c0c-c025415a4414",
+										"type": "text",
+										"disabled": true
+									}
+								],
+								"url": {
+									"raw": "{{interfaceBaseUrl}}/interface/v1/fields/options/delete/states?option=WB",
+									"host": [
+										"{{interfaceBaseUrl}}"
+									],
+									"path": [
+										"interface",
+										"v1",
+										"fields",
+										"options",
+										"delete",
+										"states"
+									],
+									"query": [
+										{
+											"key": "option",
+											"value": "WB"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "get field options (districts states blocks)",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": {
+										"token": "{{AccessToken}}"
+									}
+								},
+								"method": "POST",
+								"header": [
+									{
+										"key": "accept",
+										"value": "*/*"
+									},
+									{
+										"key": "Authorization",
+										"value": "Bearer eeyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJPc3NtSUhXaW1NMDN2MUxsVnFvNHBqaS0ydEMwTGhLY0o5dmtwQTlJZV9zIn0.eyJleHAiOjE3MjIwNzc0MDgsImlhdCI6MTcyMTk5MTAwOCwianRpIjoiYjk3OGY1YjUtZDc0Zi00NTg0LWE1N2UtMjZiNjcyNjFmNGFjIiwiaXNzIjoiaHR0cHM6Ly9xYS5wcmF0aGFtdGVhY2hlcmFwcC50ZWtkaW5leHQuY29tL2F1dGgvcmVhbG1zL3ByYXRoYW0iLCJhdWQiOiJhY2NvdW50Iiwic3ViIjoiNjEwNzJlNmQtYmNlMi00ZWE1LTk4MmYtMDdkNTUwZTlhNTM0IiwidHlwIjoiQmVhcmVyIiwiYXpwIjoicHJhdGhhbSIsInNlc3Npb25fc3RhdGUiOiJlMzdkMTBjYy05MDRlLTQ1YTctYTUwMS1lZTY1N2VjOTBiYzUiLCJhY3IiOiIxIiwiYWxsb3dlZC1vcmlnaW5zIjpbIi8qIl0sInJlYWxtX2FjY2VzcyI6eyJyb2xlcyI6WyJvZmZsaW5lX2FjY2VzcyIsInVtYV9hdXRob3JpemF0aW9uIiwiZGVmYXVsdC1yb2xlcy1wcmF0aGFtIl19LCJyZXNvdXJjZV9hY2Nlc3MiOnsiYWNjb3VudCI6eyJyb2xlcyI6WyJtYW5hZ2UtYWNjb3VudCIsIm1hbmFnZS1hY2NvdW50LWxpbmtzIiwidmlldy1wcm9maWxlIl19fSwic2NvcGUiOiJlbWFpbCBwcm9maWxlIiwic2lkIjoiZTM3ZDEwY2MtOTA0ZS00NWE3LWE1MDEtZWU2NTdlYzkwYmM1IiwiZW1haWxfdmVyaWZpZWQiOmZhbHNlLCJuYW1lIjoiVGVzdCIsInByZWZlcnJlZF91c2VybmFtZSI6InRlc3QxIiwiZ2l2ZW5fbmFtZSI6IlRlc3QiLCJmYW1pbHlfbmFtZSI6IiIsImVtYWlsIjoidGVzdDFAeW9wbWFpbC5jb20ifQ.eGPlfhlbnvSGrIj1DOEhfia9sE9FJGTuL3PPxMNJMtgUGbrlvwx74XxlUX24rT19cj4pUghojOZK9X2OZeuAD8Xscw2y8TTZZvJtX3a6oEpKhjqa29EBTyYXo31eH3NaE5PxzfygshVxUDJXj7ePhqm6t_aoNLoVY9qBuNvyCYfsxlSFU6IErlkROf3uViovCsN5QGX2iPbgIvjIoHLoKEYtLtiCHYHQlofMt9xZRiZyKrdLLF0pNu2Fc77au6v2Zdc0WbjoMYs9PI6iVmDw0_8ZHsSLmciiA3JibUE-PyF5Y-KcjtMMIfxOGjGtulNNtl7XxwdfXgOxQtawc8kETQ"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"limit\": 10,\n  \"offset\": 0,\n//   \"fieldName\": \"states\",\n//   \"fieldName\": \"districts\",\n//   \"controllingfieldfk\": \"MH\",\n\n  \"fieldName\": \"block\"\n//   \"controllingfieldfk\": \"PUN\",\n\n//   \"optionName\": \"h\",\n    // \"sort\": [\n    //     \"createdAt\",\n    //     \"asc\"\n    // ]\n}"
+								},
+								"url": "{{interfaceBaseUrl}}/interface/v1/fields/options/read"
+							},
+							"response": []
+						},
+						{
+							"name": "search state",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": {
+										"token": "{{AccessToken}}"
+									}
+								},
+								"method": "POST",
+								"header": [
+									{
+										"key": "accept",
+										"value": "*/*"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"limit\": 0,\n  \"offset\": 0,\n  \"fieldName\": \"states\",\n  \"optionName\": \"Bih\" // Search by name keyword\n}"
+								},
+								"url": "{{interfaceBaseUrl}}/interface/v1/fields/options/read"
+							},
+							"response": []
+						},
+						{
+							"name": "fetch district & block under state and district",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": {
+										"token": "{{AccessToken}}"
+									}
+								},
+								"method": "POST",
+								"header": [
+									{
+										"key": "accept",
+										"value": "*/*"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"limit\": 0,\n  \"offset\": 0,\n//   Fetch district\n//   \"fieldName\": \"districts\",\n//   \"controllingfieldfk\": \"BR\"\n//   \"optionName\": \"Bih\" // Search by name keyword\n\n//  Fetch block\n    \"fieldName\": \"blocks\",\n    \"controllingfieldfk\": \"PAT\"\n}"
+								},
+								"url": "{{interfaceBaseUrl}}/interface/v1/fields/options/read"
+							},
+							"response": []
+						},
+						{
+							"name": "field value delete",
+							"request": {
+								"method": "DELETE",
+								"header": [
+									{
+										"key": "Accept",
+										"value": "application/json, text/plain, */*"
+									},
+									{
+										"key": "Accept-Language",
+										"value": "en-GB,en-US;q=0.9,en;q=0.8"
+									},
+									{
+										"key": "Authorization",
+										"value": "Bearer eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJPc3NtSUhXaW1NMDN2MUxsVnFvNHBqaS0ydEMwTGhLY0o5dmtwQTlJZV9zIn0.eyJleHAiOjE3NDQ3OTc5NDMsImlhdCI6MTc0NDcxMTU0MywianRpIjoiNTViNWMyZTYtZWZmNC00OTllLWJhMTEtZTE0OTgzZGVkZDk4IiwiaXNzIjoiaHR0cHM6Ly9kZXYtbG1wLnByYXRoYW1kaWdpdGFsLm9yZy9hdXRoL3JlYWxtcy9wcmF0aGFtIiwiYXVkIjoiYWNjb3VudCIsInN1YiI6Ijc4NzM5N2Q0LTJjYTAtNGU0ZS1iMzU2LTNhYWZmOGIwZDMxYyIsInR5cCI6IkJlYXJlciIsImF6cCI6InByYXRoYW0iLCJzZXNzaW9uX3N0YXRlIjoiNTFjNzkwMzUtMmRmYi00MGJmLTg5ZTgtYThlZWE2NGQzMWZhIiwiYWNyIjoiMSIsImFsbG93ZWQtb3JpZ2lucyI6WyIvKiJdLCJyZWFsbV9hY2Nlc3MiOnsicm9sZXMiOlsib2ZmbGluZV9hY2Nlc3MiLCJ1bWFfYXV0aG9yaXphdGlvbiIsImRlZmF1bHQtcm9sZXMtcHJhdGhhbSJdfSwicmVzb3VyY2VfYWNjZXNzIjp7ImFjY291bnQiOnsicm9sZXMiOlsibWFuYWdlLWFjY291bnQiLCJtYW5hZ2UtYWNjb3VudC1saW5rcyIsInZpZXctcHJvZmlsZSJdfX0sInNjb3BlIjoiZW1haWwgcHJvZmlsZSBwcmF0aGFtLXJvbGUiLCJzaWQiOiI1MWM3OTAzNS0yZGZiLTQwYmYtODllOC1hOGVlYTY0ZDMxZmEiLCJlbWFpbF92ZXJpZmllZCI6ZmFsc2UsIm5hbWUiOiJ0ZXN0IGZhY2lsaXRhdG9yIiwicHJlZmVycmVkX3VzZXJuYW1lIjoidGVzdHRlc3R0ZXN0QHRlc3QuY29tIiwidXNlcl9yb2xlcyI6Ikluc3RydWN0b3IiLCJnaXZlbl9uYW1lIjoidGVzdCIsImZhbWlseV9uYW1lIjoiZmFjaWxpdGF0b3IiLCJlbWFpbCI6InRlc3R0ZXN0dGVzdEB0ZXN0LmNvbSJ9.Ty_xtTqXqOadQu7OByZI0iE9VEj7PostPc9pE-VosADvMh0DOEapnktwjoBtiXl-2rIY7sqp4nv0L0xUVx20l9e0DB9lAKetsG0I1rCIXacDUWTFDTmWoH9URJwTe78r5NTvBmq0eYAsAhJyBvkPkvxmibLgyuXpxEIlz8QRt1iKvh_AUcWOxrwcr4TXRXa3m9IatCoQq0Fv6x2VABc1cyQTWsbKYEnVW0hPSzajgVABLEVIjne5Vofz5dFO9-vB42iAuSP_WTIFSk_C4NiyPbVAKzZUoy9DDv1v87GARONUXszG-zm_I1ojsDelid8AstziK0Fy7VRtQDWHYjHhKw"
+									},
+									{
+										"key": "Connection",
+										"value": "keep-alive"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Origin",
+										"value": "http://localhost:3001"
+									},
+									{
+										"key": "Referer",
+										"value": "http://localhost:3001/"
+									},
+									{
+										"key": "Sec-Fetch-Dest",
+										"value": "empty"
+									},
+									{
+										"key": "Sec-Fetch-Mode",
+										"value": "cors"
+									},
+									{
+										"key": "Sec-Fetch-Site",
+										"value": "cross-site"
+									},
+									{
+										"key": "User-Agent",
+										"value": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36"
+									},
+									{
+										"key": "academicyearid",
+										"value": "9a9e0daa-50dd-4d0e-8d10-36e7bc808f88"
+									},
+									{
+										"key": "sec-ch-ua",
+										"value": "\"Chromium\";v=\"134\", \"Not:A-Brand\";v=\"24\", \"Google Chrome\";v=\"134\""
+									},
+									{
+										"key": "sec-ch-ua-mobile",
+										"value": "?0"
+									},
+									{
+										"key": "sec-ch-ua-platform",
+										"value": "\"Linux\""
+									},
+									{
+										"key": "tenantid",
+										"value": "ef99949b-7f3a-4a5f-806a-e67e683e38f3"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"fieldValues\": [\n        {\n            \"fieldId\": \"69a9dba2-e05e-40cd-a39c-047b9b676b5c\",\n            \"itemId\": \"64894fda-aed1-4256-9fbb-ea1801224234\"\n        },\n        {\n            \"fieldId\": \"809e03a0-da84-458a-854b-4cae45c403da\",\n            \"itemId\": \"64894fda-aed1-4256-9fbb-ea1801224234\"\n        },\n        {\n            \"fieldId\": \"e0767693-f79d-4630-82c8-965137743844\",\n            \"itemId\": \"64894fda-aed1-4256-9fbb-ea1801224234\"\n        }\n    ]\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": "{{interfaceBaseUrl}}/interface/v1/fields/values/delete"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Cohort",
+					"item": [
+						{
+							"name": "Create Center as a State",
+							"protocolProfileBehavior": {
+								"disabledSystemHeaders": {}
+							},
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": {
+										"token": "{{AccessToken}}"
+									}
+								},
+								"method": "POST",
+								"header": [
+									{
+										"key": "accept",
+										"value": "*/*",
+										"type": "text"
+									},
+									{
+										"key": "tenantId",
+										"value": "{{tenantId}}",
+										"type": "text"
+									},
+									{
+										"key": "academicyearid",
+										"value": "{{academicYearId}}",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"name\":\"Bihar\",\n    \"type\":\"STATE\",\n    \"status\": \"active\"\n}\n",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": "{{interfaceBaseUrl}}/interface/v1/cohort/create"
+							},
+							"response": []
+						},
+						{
+							"name": "Create Center  as a District",
+							"protocolProfileBehavior": {
+								"disabledSystemHeaders": {}
+							},
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": {
+										"token": "{{AccessToken}}"
+									}
+								},
+								"method": "POST",
+								"header": [
+									{
+										"key": "accept",
+										"value": "*/*",
+										"type": "text"
+									},
+									{
+										"key": "tenantId",
+										"value": "{{tenantId}}",
+										"type": "text"
+									},
+									{
+										"key": "academicyearid",
+										"value": "{{academicYearId}}",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"name\":\"Patna\",\n    \"type\":\"DISTRICT\",\n    \"status\": \"active\",\n    \"customFields\": [\n        {\n            //state\n            \"fieldId\": \"6469c3ac-8c46-49d7-852a-00f9589737c5\",\n            \"value\": [\"BR\"]\n        }\n    ]\n}\n",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": "{{interfaceBaseUrl}}/interface/v1/cohort/create"
+							},
+							"response": []
+						},
+						{
+							"name": "Create Center  as a Block",
+							"protocolProfileBehavior": {
+								"disabledSystemHeaders": {}
+							},
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": {
+										"token": "{{AccessToken}}"
+									}
+								},
+								"method": "POST",
+								"header": [
+									{
+										"key": "accept",
+										"value": "*/*",
+										"type": "text"
+									},
+									{
+										"key": "tenantId",
+										"value": "{{tenantId}}",
+										"type": "text"
+									},
+									{
+										"key": "academicyearid",
+										"value": "{{academicYearId}}",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"name\":\"Patna Sadar\",\n    \"type\":\"BLOCK\",\n    \"status\": \"active\",\n    \"customFields\": [\n        {\n            //state\n            \"fieldId\": \"6469c3ac-8c46-49d7-852a-00f9589737c5\",\n            \"value\": [\"BR\"]\n        },\n        {\n            //district\n            \"fieldId\": \"b61edfc6-3787-4079-86d3-37262bf23a9e\",\n            \"value\": [\"PAT\"]\n        }\n    ]\n}\n",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": "{{interfaceBaseUrl}}/interface/v1/cohort/create"
+							},
+							"response": []
+						},
+						{
+							"name": "Create Center",
+							"protocolProfileBehavior": {
+								"disabledSystemHeaders": {}
+							},
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": {
+										"token": "{{AccessToken}}"
+									}
+								},
+								"method": "POST",
+								"header": [
+									{
+										"key": "accept",
+										"value": "*/*",
+										"type": "text"
+									},
+									{
+										"key": "tenantId",
+										"value": "{{tenantId}}",
+										"type": "text"
+									},
+									{
+										"key": "academicyearid",
+										"value": "{{academicYearId}}",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"name\":\"Rajiv Nagar\",\n    \"type\":\"COHORT\",\n    \"status\": \"active\",\n    \"customFields\": [\n        {\n            //state\n            \"fieldId\": \"6469c3ac-8c46-49d7-852a-00f9589737c5\",\n            \"value\": [\"BR\"]\n        },\n        {\n            //district\n            \"fieldId\": \"b61edfc6-3787-4079-86d3-37262bf23a9e\",\n            \"value\": [\"PAT\"]\n        },\n        {\n            //block\n            \"fieldId\": \"4aab68ae-8382-43aa-a45a-e9b239319857\",\n            \"value\": [\"PS\"]\n        },\n        {\n            //Center Tyoe\n            \"fieldId\": \"000a7469-2721-4c7b-8180-52812a0f6fe7\",\n            \"value\": \"remote\"\n        },\n        {\n            //Board\n            \"fieldId\": \"f996e8b1-0c46-49c3-b07a-47a029c0e7f8\",\n            \"value\": \"Bihar\"\n        },\n        {\n            //Medium\n            \"fieldId\": \"7b214a17-5a07-4ee0-bedc-271429862d30\",\n            \"value\": \"Hindi\"\n        },\n        {\n            //Grade\n            \"fieldId\": \"5a2dbb89-bbe6-4aa8-b541-93e01ab07b70\",\n            \"value\": \"Grade 10\"\n        }\n    ]\n}\n",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": "{{interfaceBaseUrl}}/interface/v1/cohort/create"
+							},
+							"response": []
+						},
+						{
+							"name": "Update Cohort data",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": {
+										"token": "{{AccessToken}}"
+									}
+								},
+								"method": "PUT",
+								"header": [
+									{
+										"key": "accept",
+										"value": "*/*"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"name\": \"Kankarbagh\",\n    \"customFields\": [\n        {\n            //Grade\n            \"fieldId\": \"5a2dbb89-bbe6-4aa8-b541-93e01ab07b70\",\n            \"value\": \"Grade 12\"\n        }\n    ]\n}\n",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": "{{interfaceBaseUrl}}/interface/v1/cohort/update/2447aa0c-4111-4cb9-94d1-9898ef6975a1"
+							},
+							"response": []
+						},
+						{
+							"name": "Search Center by State District Block name",
+							"protocolProfileBehavior": {
+								"disabledSystemHeaders": {}
+							},
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": {
+										"token": "{{AccessToken}}"
+									}
+								},
+								"method": "POST",
+								"header": [
+									{
+										"key": "accept",
+										"value": "*/*",
+										"type": "text"
+									},
+									{
+										"key": "tenantId",
+										"value": "{{tenantId}}",
+										"type": "text"
+									},
+									{
+										"key": "academicyearid",
+										"value": "{{academicYearId}}",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"limit\": 10,\n    \"offset\": 0,\n    \"filters\": {\n        \"states\":\"BR\",\n        \"districts\":\"PAT\",\n        \"blocks\":\"PS\"\n    }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": "{{interfaceBaseUrl}}/interface/v1/cohort/search"
+							},
+							"response": []
+						},
+						{
+							"name": "Search Active Centers",
+							"protocolProfileBehavior": {
+								"disabledSystemHeaders": {}
+							},
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": {
+										"token": "{{AccessToken}}"
+									}
+								},
+								"method": "POST",
+								"header": [
+									{
+										"key": "accept",
+										"value": "*/*",
+										"type": "text"
+									},
+									{
+										"key": "tenantId",
+										"value": "{{tenantId}}",
+										"type": "text"
+									},
+									{
+										"key": "academicyearid",
+										"value": "{{academicYearId}}",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"limit\": 10,\n    \"offset\": 0,\n    \"filters\": {\n        \"status\": [\"active\"]\n    }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": "{{interfaceBaseUrl}}/interface/v1/cohort/search"
+							},
+							"response": []
+						},
+						{
+							"name": "Search Center for State, District, and Block Labels",
+							"protocolProfileBehavior": {
+								"disabledSystemHeaders": {}
+							},
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": {
+										"token": "{{AccessToken}}"
+									}
+								},
+								"method": "POST",
+								"header": [
+									{
+										"key": "accept",
+										"value": "*/*",
+										"type": "text"
+									},
+									{
+										"key": "tenantId",
+										"value": "{{tenantId}}",
+										"type": "text"
+									},
+									{
+										"key": "academicyearid",
+										"value": "{{academicYearId}}",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"limit\": 10,\n    \"offset\": 0,\n    \"filters\": {\n        \"type\":\"STATE\"\n        // \"type\":\"DISTRICT\"\n        // \"type\":\"BLOCK\"\n    }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": "{{interfaceBaseUrl}}/interface/v1/cohort/search"
+							},
+							"response": []
+						},
+						{
+							"name": "Search District Cohort By States Code",
+							"protocolProfileBehavior": {
+								"disabledSystemHeaders": {}
+							},
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": {
+										"token": "{{AccessToken}}"
+									}
+								},
+								"method": "POST",
+								"header": [
+									{
+										"key": "accept",
+										"value": "*/*",
+										"type": "text"
+									},
+									{
+										"key": "tenantId",
+										"value": "{{tenantId}}",
+										"type": "text"
+									},
+									{
+										"key": "academicyearid",
+										"value": "{{academicYearId}}",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"limit\": 0,\n    \"offset\": 0,\n    \"filters\": {\n        \"states\": \"BR\",\n        \"type\": \"DISTRICT\",\n        \"status\": [\n            \"active\"\n        ]\n    },\n    \"sort\": [\n        \"name\",\n        \"asc\"\n    ]\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": "{{interfaceBaseUrl}}/interface/v1/cohort/search"
+							},
+							"response": []
+						},
+						{
+							"name": "Search by cohort name keyword",
+							"protocolProfileBehavior": {
+								"disabledSystemHeaders": {}
+							},
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": {
+										"token": "{{AccessToken}}"
+									}
+								},
+								"method": "POST",
+								"header": [
+									{
+										"key": "accept",
+										"value": "*/*",
+										"type": "text"
+									},
+									{
+										"key": "tenantId",
+										"value": "{{tenantId}}",
+										"type": "text"
+									},
+									{
+										"key": "academicyearid",
+										"value": "{{academicYearId}}",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"limit\": 10,\n    \"offset\": 0,\n    \"filters\": {\n        \"name\":\"Kan\"\n    }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": "{{localhost}}user/v1/cohort/search"
+							},
+							"response": []
+						},
+						{
+							"name": "Search by cohortId",
+							"protocolProfileBehavior": {
+								"disabledSystemHeaders": {}
+							},
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": {
+										"token": "{{AccessToken}}"
+									}
+								},
+								"method": "POST",
+								"header": [
+									{
+										"key": "accept",
+										"value": "*/*",
+										"type": "text"
+									},
+									{
+										"key": "tenantId",
+										"value": "{{tenantId}}",
+										"type": "text"
+									},
+									{
+										"key": "academicyearid",
+										"value": "{{academicYearId}}",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"limit\": 10,\n    \"offset\": 0,\n    \"filters\": {\n        \"cohortId\": \"2447aa0c-4111-4cb9-94d1-9898ef6975a1\"\n    }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": "{{interfaceBaseUrl}}/interface/v1/cohort/search"
+							},
+							"response": []
+						},
+						{
+							"name": "Search by parentId",
+							"protocolProfileBehavior": {
+								"disabledSystemHeaders": {}
+							},
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": {
+										"token": "{{AccessToken}}"
+									}
+								},
+								"method": "POST",
+								"header": [
+									{
+										"key": "accept",
+										"value": "*/*",
+										"type": "text"
+									},
+									{
+										"key": "tenantId",
+										"value": "{{tenantId}}",
+										"type": "text"
+									},
+									{
+										"key": "academicyearid",
+										"value": "{{academicYearId}}",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"limit\": 10,\n    \"offset\": 0,\n    \"filters\": {\n        \"parentId\": [\"f513a47f-87d1-4cbb-b1c4-6b9e104ca434\"]\n    }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": "{{interfaceBaseUrl}}user/v1/cohort/search"
+							},
+							"response": []
+						},
+						{
+							"name": "MyCohort",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": {
+										"token": "{{AccessToken}}"
+									}
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "accept",
+										"value": "application/json, text/plain, */*"
+									},
+									{
+										"key": "accept-language",
+										"value": "en-GB,en;q=0.9"
+									},
+									{
+										"key": "authorization",
+										"value": "Bearer eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJha0d1WG1zVTVxMXhOczZxUkVTWWZkTkRyUWRiZ2ZGekRFMEswRkFDNUVzIn0.eyJleHAiOjE3MjMwMjM0MDEsImlhdCI6MTcyMjkzNzAwMSwianRpIjoiM2FjNzI5OGYtZTQzYy00ZmVmLWFjYzUtNGQwYTc4ZjM0M2I5IiwiaXNzIjoiaHR0cHM6Ly9rZXljbG9hay5wcmF0aGFtZGlnaXRhbC5vcmcvYXV0aC9yZWFsbXMvcHJhdGhhbSIsImF1ZCI6ImFjY291bnQiLCJzdWIiOiJlN2UwNDhhNi1lYjQ4LTQzODUtYjI0MS05MzRhYTdhY2VhYWIiLCJ0eXAiOiJCZWFyZXIiLCJhenAiOiJwcmF0aGFtIiwic2Vzc2lvbl9zdGF0ZSI6ImVmN2E3ZTI1LTQ1YWUtNDk5Yy04M2ExLTgxOGQ2OGE3M2NlOSIsImFjciI6IjEiLCJhbGxvd2VkLW9yaWdpbnMiOlsiLyoiXSwicmVhbG1fYWNjZXNzIjp7InJvbGVzIjpbIm9mZmxpbmVfYWNjZXNzIiwidW1hX2F1dGhvcml6YXRpb24iLCJkZWZhdWx0LXJvbGVzLXByYXRoYW0iXX0sInJlc291cmNlX2FjY2VzcyI6eyJhY2NvdW50Ijp7InJvbGVzIjpbIm1hbmFnZS1hY2NvdW50IiwibWFuYWdlLWFjY291bnQtbGlua3MiLCJ2aWV3LXByb2ZpbGUiXX19LCJzY29wZSI6ImVtYWlsIHByb2ZpbGUiLCJzaWQiOiJlZjdhN2UyNS00NWFlLTQ5OWMtODNhMS04MThkNjhhNzNjZTkiLCJlbWFpbF92ZXJpZmllZCI6ZmFsc2UsIm5hbWUiOiJWaXZlayBUTCIsInByZWZlcnJlZF91c2VybmFtZSI6InZpdmVrX3Rla2RpIiwiZ2l2ZW5fbmFtZSI6IlZpdmVrIiwiZmFtaWx5X25hbWUiOiJUTCJ9.VEl0WoTJ31-6-84A1ZxinzCuDSZrNKhlAg2mUNE7j-v2NuJZshTBe_tDpwIjFHVxdD2neq0lSC2yhjZqaGw5wfBjmpEctsooiP0vq_l1hZ6jupPNNR-2DR-AvlJGE1iW7jlqzlQym9J5mKgPJwb9Cl-98xZqZPVw24RuWVqfEd6nWsvoOGwu6UUqojapnLy27hWhkke2O32nnesAGhJQNcpNWQ_grBESdxmKKvsQmKQ6JXEi2giBepc0WP4P0f5Bkyj_SKgcPUN7CMT9lUtxp_pDke_y0n6aeiFA-dw0jxmhWCJdqb9hItcqhI2vIjRSgvxEJDPETocQXFfCxefdOg"
+									},
+									{
+										"key": "if-none-match",
+										"value": "W/\"3a9-j7LZNDVYKM4Ev1e1W2Y+ipUgMGM\""
+									},
+									{
+										"key": "origin",
+										"value": "https://dev-infra.prathamdigital.org"
+									},
+									{
+										"key": "priority",
+										"value": "u=1, i"
+									},
+									{
+										"key": "referer",
+										"value": "https://dev-infra.prathamdigital.org/"
+									},
+									{
+										"key": "sec-ch-ua",
+										"value": "\"Not/A)Brand\";v=\"8\", \"Chromium\";v=\"126\", \"Google Chrome\";v=\"126\""
+									},
+									{
+										"key": "sec-ch-ua-mobile",
+										"value": "?0"
+									},
+									{
+										"key": "sec-ch-ua-platform",
+										"value": "\"Linux\""
+									},
+									{
+										"key": "sec-fetch-dest",
+										"value": "empty"
+									},
+									{
+										"key": "sec-fetch-mode",
+										"value": "cors"
+									},
+									{
+										"key": "sec-fetch-site",
+										"value": "same-site"
+									},
+									{
+										"key": "tenantid",
+										"value": "b73ddc86-7044-4ae1-9e0c-0eaabbc6f62a"
+									},
+									{
+										"key": "user-agent",
+										"value": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+									},
+									{
+										"key": "academicyearid",
+										"value": "{{academicYearId}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{interfaceBaseUrl}}/interface/v1/cohort/mycohorts/787f36ba-1c97-4b41-88be-f3bf4dfdc778?children=true&customField=true",
+									"host": [
+										"{{interfaceBaseUrl}}"
+									],
+									"path": [
+										"interface",
+										"v1",
+										"cohort",
+										"mycohorts",
+										"787f36ba-1c97-4b41-88be-f3bf4dfdc778"
+									],
+									"query": [
+										{
+											"key": "children",
+											"value": "true"
+										},
+										{
+											"key": "customField",
+											"value": "true"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Cohort Hierarchy",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": {
+										"token": "{{AccessToken}}"
+									}
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "accept",
+										"value": "*/*"
+									},
+									{
+										"key": "tenantid",
+										"value": "{{tenantId}}"
+									},
+									{
+										"key": "academicyearid",
+										"value": "{{academicYearId}}",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{interfaceBaseUrl}}/interface/v1/cohort/cohortHierarchy/6ab3fba4-3fbb-4569-a7c8-e88d7316353e?children=true&customField=true",
+									"host": [
+										"{{interfaceBaseUrl}}"
+									],
+									"path": [
+										"interface",
+										"v1",
+										"cohort",
+										"cohortHierarchy",
+										"6ab3fba4-3fbb-4569-a7c8-e88d7316353e"
+									],
+									"query": [
+										{
+											"key": "children",
+											"value": "true"
+										},
+										{
+											"key": "customField",
+											"value": "true"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Delete Cohort",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": {
+										"token": "{{AccessToken}}"
+									}
+								},
+								"method": "PUT",
+								"header": [
+									{
+										"key": "accept",
+										"value": "*/*"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"status\": \"archived\"\n}\n",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": "{{interfaceBaseUrl}}/interface/v1/cohort/update/2447aa0c-4111-4cb9-94d1-9898ef6975a1"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Cohort Member",
+					"item": [
+						{
+							"name": "Search Cohot Member",
+							"protocolProfileBehavior": {
+								"disabledSystemHeaders": {}
+							},
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": {
+										"token": "{{AccessToken}}"
+									}
+								},
+								"method": "POST",
+								"header": [
+									{
+										"key": "accept",
+										"value": "*/*",
+										"type": "text"
+									},
+									{
+										"key": "tenantId",
+										"value": "{{tenantId}}",
+										"type": "text"
+									},
+									{
+										"key": "academicyearid",
+										"value": "{{academicYearId}}",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"limit\": 10,\n    \"offset\": 0,\n    \"filters\": {\n      \"cohortId\": \"2447aa0c-4111-4cb9-94d1-9898ef6975a1\",\n      \"role\": \"Teacher\"\n    //   \"role\": \"Student\"\n},\n  \"sort\": [\n    \"name\",\n    \"asc\"\n  ]\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": "{{localhost}}user/v1/cohortmember/list"
+							},
+							"response": []
+						},
+						{
+							"name": "Create Cohot Member",
+							"protocolProfileBehavior": {
+								"disabledSystemHeaders": {}
+							},
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": {
+										"token": "{{AccessToken}}"
+									}
+								},
+								"method": "POST",
+								"header": [
+									{
+										"key": "accept",
+										"value": "*/*"
+									},
+									{
+										"key": "academicyearid",
+										"value": "9a9e0daa-50dd-4d0e-8d10-36e7bc808f88"
+									},
+									{
+										"key": "tenantid",
+										"value": "{{tenantId}}"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"cohortId\": \"3a42793a-d94e-469a-9b9f-d23d8c9b0420\",\n  \"userId\": \"a3a099ef-356a-4caf-a44f-09c85f8aa3e2\",\n  \"cohortAcademicYearId\": \"ad320264-2359-456f-ae11-375f93f1f31c\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": "{{localhost}}user/v1/cohortmember/create"
+							},
+							"response": []
+						},
+						{
+							"name": "Get cohort member by membership Id",
+							"protocolProfileBehavior": {
+								"disabledSystemHeaders": {}
+							},
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": {
+										"token": "{{AccessToken}}"
+									}
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "accept",
+										"value": "*/*"
+									},
+									{
+										"key": "academicyearid",
+										"value": "{{academicYearId}}"
+									},
+									{
+										"key": "tenantid",
+										"value": "{{tenantId}}"
+									}
+								],
+								"url": {
+									"raw": "{{localhost}}user/v1/cohortmember/read/a9bd2f8f-b522-4e8a-a7b6-ee0b91badf84?fieldvalue=True",
+									"host": [
+										"{{localhost}}user"
+									],
+									"path": [
+										"v1",
+										"cohortmember",
+										"read",
+										"a9bd2f8f-b522-4e8a-a7b6-ee0b91badf84"
+									],
+									"query": [
+										{
+											"key": "fieldvalue",
+											"value": "True"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Delete Cohot Membership",
+							"protocolProfileBehavior": {
+								"disabledSystemHeaders": {}
+							},
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": {
+										"token": "{{AccessToken}}"
+									}
+								},
+								"method": "PUT",
+								"header": [
+									{
+										"key": "accept",
+										"value": "*/*"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"status\": \"active\"\n}"
+								},
+								"url": "{{interfaceBaseUrl}}user/v1/cohortmember/update/52a13678-7d70-41de-bd47-83023824ea05"
+							},
+							"response": []
+						},
+						{
+							"name": "Update Cohot Membership",
+							"protocolProfileBehavior": {
+								"disabledSystemHeaders": {}
+							},
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": {
+										"token": "{{AccessToken}}"
+									}
+								},
+								"method": "PUT",
+								"header": [
+									{
+										"key": "accept",
+										"value": "*/*"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"cohortId\": \"00110a88-3adc-47cb-8f06-99e431074fe2\"\n}"
+								},
+								"url": "{{interfaceBaseUrl}}/interface/v1/cohortmember/update/52a13678-7d70-41de-bd47-83023824ea05"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "User",
+					"item": [
+						{
+							"name": "Create Team Leader",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "tenantid",
+										"value": "ef99949b-7f3a-4a5f-806a-e67e683e38f3"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "academicyearid",
+										"value": "9a9e0daa-50dd-4d0e-8d10-36e7bc808f88"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"username\": \"snehal_patil@1242\",\n    \"password\": \"10074\",\n    \"tenantCohortRoleMapping\": [\n        {\n            \"tenantId\": \"ef99949b-7f3a-4a5f-806a-e67e683e38f3\",\n            \"roleId\": \"eea7ddab-bdf9-4db1-a1bb-43ef503d65ef\"\n        }\n    ],\n    // \"customFields\": [\n    //      {\n    //         \"fieldId\": \"6469c3ac-8c46-49d7-852a-00f9589737c5\",\n    //         \"value\": [\n    //             \"27\"\n    //         ]\n    //     },\n    //     {\n    //         \"fieldId\": \"b61edfc6-3787-4079-86d3-37262bf23a9e\",\n    //         \"value\": [\n    //             \"498\"\n    //         ]\n    //     },\n    //     {\n    //         \"fieldId\": \"4aab68ae-8382-43aa-a45a-e9b239319857\",\n    //         \"value\": [\n    //             \"3786\"\n    //         ]\n    //     },\n    //      {\n    //         \"fieldId\": \"8e9bb321-ff99-4e2e-9269-61e863dd0c54\",\n    //         \"value\": [\n    //             \"521866\"\n    //         ]\n    //     }\n    // ],\n    \"gender\": \"female\",\n    \"firstName\": \"Snehal\",\n    \"lastName\": \"Patil\",\n    \"email\": \"snehal_patil+1@techjoomla.com\"\n    // \"mobile\": \"9877297629\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": "{{interfaceBaseUrl}}/interface/v1/account/create"
+							},
+							"response": []
+						},
+						{
+							"name": "Create Student",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": {
+										"token": "{{AccessToken}}"
+									}
+								},
+								"method": "POST",
+								"header": [
+									{
+										"key": "tenantid",
+										"value": "{{tenantId}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "academicyearid",
+										"value": "{{academicYearId}}"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"username\": \"sourav_b98766\",\n    \"firstName\": \"Sourav\",\n    \"middleName\": \"Sukanta\",\n    \"lastName\": \"Bhowmik\",\n    \"gender\": \"male\",\n    \"dob\": \"1999-02-08\",\n    \"mobile\": \"8240814806\",\n    \"email\": \"sourav@gmail.com\",\n    \"password\": \"98765\",\n    \"tenantCohortRoleMapping\": [\n        {\n            \"tenantId\": \"ef99949b-7f3a-4a5f-806a-e67e683e38f3\",\n            \"cohortIds\": [\n                \"2b73b482-d8bf-41a2-bd49-91a7a4abd7d4\"\n            ],\n            \"roleId\": \"493c04e2-a9db-47f2-b304-503da358d5f4\" //Student\n        }\n    ],\n    \"customFields\": [\n        {\n            //State\n            \"fieldId\": \"6469c3ac-8c46-49d7-852a-00f9589737c5\",\n            \"value\": [\n                \"MH\"\n            ]\n        },\n        {\n            //District\n            \"fieldId\": \"b61edfc6-3787-4079-86d3-37262bf23a9e\",\n            \"value\": [\n                \"MUM\"\n            ]\n        },\n        {\n            //Block\n            \"fieldId\": \"4aab68ae-8382-43aa-a45a-e9b239319857\",\n            \"value\": [\n                \"BOR\"\n            ]\n        },\n        {\n            //Preferred Language\n            \"fieldId\": \"4b9d798d-e8f2-4ae5-b177-a57655aa5d1c\",\n            \"value\": [\n                \"english\"\n            ]\n        },\n        {\n            //Mother name\n            \"fieldId\": \"60f48fbf-d5e9-4a85-aa84-0739e727153c\",\n            \"value\": \"Rinku\"\n        },\n\n        {\n            //Guardian name\n            \"fieldId\": \"d7a56014-0b9a-4f16-b07e-88baea79576d\",\n            \"value\": \"Sukanta\"\n        },\n\n        {\n            //Guardian Relation\n            \"fieldId\": \"3a7bf305-6bac-4377-bf09-f38af866105c\",\n            \"value\": \"Rinku\"\n        },\n        {\n            //phone_type_available\n            \"fieldId\": \"da594b2e-c645-4a96-af15-6e2d24587c9a\",\n            \"value\": \"smartphone\"\n        },\n        {\n            //own_phone_check\n            \"fieldId\": \"d119d92f-fab7-4c7d-8370-8b40b5ed23dc\",\n            \"value\": \"no\"\n        },\n        {\n            //marital_status\n            \"fieldId\": \"ff472647-6c40-42e6-b200-dc74b241e915\",\n            \"value\": [\n                \"unmarried\"\n            ]\n        },\n        {\n            //class\n            \"fieldId\": \"9a4ad601-023b-467f-bbbe-bda1885f87c7\",\n            \"value\": [\n                \"8\"\n            ]\n        },\n        {\n            //preferred mode of learning\n            \"fieldId\": \"7b43db0a-f4c3-4c77-919f-622509ca7add\",\n            \"value\": [\n                \"remote\"\n            ]\n        },\n        {\n            //drop_out_reason\n            \"fieldId\": \"4f48571b-88fd-43b9-acb3-91afda7901ac\",\n            \"value\": [\n                \"school_closure_due_to_covid\"\n            ]\n        },\n        {\n            //Work Domain\n            \"fieldId\": \"2914814c-2a0f-4422-aff8-6bd3b09d3069\",\n            \"value\": [\n                \"unemployed_or_domestic_work\"\n            ]\n        }, \n        {\n            //Training Check\n            \"fieldId\": \"0be5a8c6-92e9-4b7c-ac01-345131b06118\",\n            \"value\": [\n                \"yes\"\n            ]\n        },    \n        {\n            //Training Check\n            \"fieldId\": \"a8d3d878-9b92-4231-b25c-b22726985238\",\n            \"value\": \"I want to become a PM\"\n        }   \n    ]\n}"
+								},
+								"url": "{{interfaceBaseUrl}}/interface/v1/account/create"
+							},
+							"response": []
+						},
+						{
+							"name": "Create Facilitator",
+							"request": {
+								"auth": {
+									"type": "noauth"
+								},
+								"method": "POST",
+								"header": [
+									{
+										"key": "tenantid",
+										"value": "b73ddc86-7044-4ae1-9e0c-0eaabbc6f62a"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "academicyearid",
+										"value": "{{academicYearId}}"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"name\": \"Sourav1\",\n    \"username\": \"fscbr2498760\",\n    \"password\": \"98765\",\n    \"email\": \"sourav_pratham@gmail.com\",\n    \"tenantCohortRoleMapping\": [\n        {\n            \"tenantId\": \"ef99949b-7f3a-4a5f-806a-e67e683e38f3\",\n            \"cohortIds\": [\"2447aa0c-4111-4cb9-94d1-9898ef6975a1\"],\n            \"roleId\": \"3bde0028-6900-4900-9d05-eeb608843718\" //Teacher\n        }\n    ],\n    \"customFields\": [\n        {\n            //State\n            \"fieldId\": \"6469c3ac-8c46-49d7-852a-00f9589737c5\",\n            \"value\": [\"BR\"]\n        },\n        {\n            //District\n            \"fieldId\": \"b61edfc6-3787-4079-86d3-37262bf23a9e\",\n            \"value\": [\"PAT\"]\n        },\n        {\n            //Block\n            \"fieldId\": \"4aab68ae-8382-43aa-a45a-e9b239319857\",\n            \"value\": [\"PS\"]\n        },\n        {\n            //Age\n            \"fieldId\": \"57b50148-2b58-45e5-9b27-6a07c5317c18\",\n            \"value\": \"30\"\n        },\n        {\n            //Gender\n            \"fieldId\": \"a71fd390-fd67-45c3-ab1e-6994b8d967a2\",\n            \"value\": \"male\"\n        },\n        {\n            //Designation\n            \"fieldId\": \"cb407d11-f1c5-424c-a422-4755a1c4ab29\",\n            \"value\": \"facilitator\"\n        }\n    ] \n}"
+								},
+								"url": "{{interfaceBaseUrl}}/interface/v1/account/create"
+							},
+							"response": []
+						},
+						{
+							"name": "Create Learner",
+							"request": {
+								"auth": {
+									"type": "noauth"
+								},
+								"method": "POST",
+								"header": [
+									{
+										"key": "tenantid",
+										"value": "b73ddc86-7044-4ae1-9e0c-0eaabbc6f62a"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "academicyearid",
+										"value": "{{academicYearId}}"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"name\": \"Debanjan\",\n    \"username\": \"lrbr2498765\",\n    \"password\": \"98765\",\n    \"email\": \"debanjan@gmail.com\",\n    \"tenantCohortRoleMapping\": [\n        {\n            \"tenantId\": \"6c8b810a-66c2-4f0d-8c0c-c025415a4414\",\n            // \"cohortIds\": [\"2447aa0c-4111-4cb9-94d1-9898ef6975a1\"],\n            \"roleId\": \"fd721198-0439-473d-8f50-37a4f6757af2\" //Learner\n        }\n    ],\n    \"customFields\": [\n        {\n            //State\n            \"fieldId\": \"6469c3ac-8c46-49d7-852a-00f9589737c5\",\n            \"value\": [\"BR\"]\n        },\n        {\n            //District\n            \"fieldId\": \"b61edfc6-3787-4079-86d3-37262bf23a9e\",\n            \"value\": [\"PAT\"]\n        },\n        {\n            //Block\n            \"fieldId\": \"4aab68ae-8382-43aa-a45a-e9b239319857\",\n            \"value\": [\"PS\"]\n        },\n        {\n            //Preferred Language\n            \"fieldId\": \"3d23ef47-30b3-4fe4-833c-42f71be27e6b\",\n            \"value\": \"english\"\n        },\n        {\n            //Age\n            \"fieldId\": \"90893edb-40ca-4ffb-a078-3e026016fb59\",\n            \"value\": \"21\"\n        },\n        {\n            //Gender\n            \"fieldId\": \"888aa61f-1f36-4b08-b361-8840c4213408\",\n            \"value\": \"male\"\n        }\n    ] \n}"
+								},
+								"url": "{{interfaceBaseUrl}}/interface/v1/account/create"
+							},
+							"response": []
+						},
+						{
+							"name": "Get user",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": {
+										"token": "{{AccessToken}}"
+									}
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "tenantid",
+										"value": "ef99949b-7f3a-4a5f-806a-e67e683e38f3"
+									},
+									{
+										"key": "accept",
+										"value": "*/*"
+									},
+									{
+										"key": "Authorization",
+										"value": "Bearer eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJ5cF9YQlpJY3J2SEdEd18tbjFlTS1pVktRdVdSV2dJUW9sY3plMXhNdlNvIn0.eyJleHAiOjE3MDkxMDAzMTAsImlhdCI6MTcwOTA5NjcxMCwianRpIjoiODU2OWVkODctMmQyMC00MmViLWE2ZDgtZmUyZDM1NzFhYTIzIiwiaXNzIjoiaHR0cHM6Ly9zaGlrc2hhLnVuaXRlZnJhbWV3b3JrLmlvL2F1dGgvcmVhbG1zL0hhc3VyYSIsImF1ZCI6ImFjY291bnQiLCJzdWIiOiI1ZmRiZmMxMi02ODI5LTRjMjgtYmIxZS02ZDQ0YmI0ZjQwYzMiLCJ0eXAiOiJCZWFyZXIiLCJhenAiOiJoYXN1cmEiLCJzZXNzaW9uX3N0YXRlIjoiMjBlNDlkMjctNDYzZC00NGEyLTliYjQtMjU3NTUwMjIxZjkyIiwiYWNyIjoiMSIsInJlYWxtX2FjY2VzcyI6eyJyb2xlcyI6WyJkZWZhdWx0LXJvbGVzLWhhc3VyYSIsIm9mZmxpbmVfYWNjZXNzIiwidW1hX2F1dGhvcml6YXRpb24iXX0sInJlc291cmNlX2FjY2VzcyI6eyJoYXN1cmEiOnsicm9sZXMiOlsic3lzdGVtQWRtaW4iLCJ1c2VyIl19LCJhY2NvdW50Ijp7InJvbGVzIjpbIm1hbmFnZS1hY2NvdW50IiwibWFuYWdlLWFjY291bnQtbGlua3MiLCJ2aWV3LXByb2ZpbGUiXX19LCJzY29wZSI6InByb2ZpbGUgZW1haWwiLCJlbWFpbF92ZXJpZmllZCI6ZmFsc2UsImh0dHBzOi8vaGFzdXJhLmlvL2p3dC9jbGFpbXMiOnsieC1oYXN1cmEtZGVmYXVsdC1yb2xlIjoidXNlciIsIngtaGFzdXJhLXVzZXItaWQiOiI1ZmRiZmMxMi02ODI5LTRjMjgtYmIxZS02ZDQ0YmI0ZjQwYzMiLCJ4LWhhc3VyYS1hbGxvd2VkLXJvbGVzIjpbInN5c3RlbUFkbWluIiwidXNlciJdfSwibmFtZSI6IlNvdXJhdiIsInByZWZlcnJlZF91c2VybmFtZSI6ImFkbWluX3NvdXJhdiIsImdpdmVuX25hbWUiOiJTb3VyYXYiLCJmYW1pbHlfbmFtZSI6IiJ9.kflni8ASMhvWvoDBNzP4yOwF-46_i5656UuI78pLIna88cfwjWQ9ZOXdU6vTbErpKUtGZWHE1CVMLy6lPmwZIb8kI7fbxvCr61VOiAcZqrYfeoVcDtC0S_DH9crbePVDfsdFvFhQ5lvpVPcg2LMe3h--yO1pv0jp4oat5gR_Jd4oZYA95Km9G6X7AfffdXmkiQpAOIJOpfv09LVGAtDHX_FAFw4XmbaJ2dW3Yn9reD9IHMqAqGyIvij6zp8B99rv1Dt5hlQHnT2_USHYg61bTucwVxCsjBIKAg9fybHE_GlWCq5-gsAwdgpDRfH9KKZ4MSaI59LtbS8FXoAAvmJX7w"
+									}
+								],
+								"url": {
+									"raw": "{{interfaceBaseUrl}}/interface/v1/user/read/447777c3-5c99-4bb1-82a7-d787556fb9fb?fieldvalue=true",
+									"host": [
+										"{{interfaceBaseUrl}}"
+									],
+									"path": [
+										"interface",
+										"v1",
+										"user",
+										"read",
+										"447777c3-5c99-4bb1-82a7-d787556fb9fb"
+									],
+									"query": [
+										{
+											"key": "fieldvalue",
+											"value": "true"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Update User",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": {
+										"token": "{{AccessToken}}"
+									}
+								},
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "tenantid",
+										"value": "{{tenantId}}",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n      \"userData\": \n        {\n            \"firstName\": \"Sourav\",\n            \"status\": \"active\" \n        }\n    \n}"
+								},
+								"url": "{{interfaceBaseUrl}}/interface/v1/user/update/c2d0be57-9e4a-4b7b-bd14-6257e30783bd"
+							},
+							"response": []
+						},
+						{
+							"name": "Get user list By username",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": {
+										"token": "{{AccessToken}}"
+									}
+								},
+								"method": "POST",
+								"header": [
+									{
+										"key": "accept",
+										"value": "*/*"
+									},
+									{
+										"key": "tenantid",
+										"value": "6c8b810a-66c2-4f0d-8c0c-c025415a4414"
+									},
+									{
+										"key": "Authorization",
+										"value": "Bearer eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJPc3NtSUhXaW1NMDN2MUxsVnFvNHBqaS0ydEMwTGhLY0o5dmtwQTlJZV9zIn0.eyJleHAiOjE3MTg4NjA4MDAsImlhdCI6MTcxODc3NDQwMCwianRpIjoiMTkxMWEwZmMtOWJlMS00MmE0LWE1NGUtMzNlZWMxOWQxNjU1IiwiaXNzIjoiaHR0cHM6Ly9xYS5wcmF0aGFtdGVhY2hlcmFwcC50ZWtkaW5leHQuY29tL2F1dGgvcmVhbG1zL3ByYXRoYW0iLCJhdWQiOiJhY2NvdW50Iiwic3ViIjoiNjEwNzJlNmQtYmNlMi00ZWE1LTk4MmYtMDdkNTUwZTlhNTM0IiwidHlwIjoiQmVhcmVyIiwiYXpwIjoicHJhdGhhbSIsInNlc3Npb25fc3RhdGUiOiIzYjZhYjcxYS0yOTVhLTQ4N2MtYTk2MC1kNjIyZTRiMjZmNzEiLCJhY3IiOiIxIiwiYWxsb3dlZC1vcmlnaW5zIjpbIi8qIl0sInJlYWxtX2FjY2VzcyI6eyJyb2xlcyI6WyJvZmZsaW5lX2FjY2VzcyIsInVtYV9hdXRob3JpemF0aW9uIiwiZGVmYXVsdC1yb2xlcy1wcmF0aGFtIl19LCJyZXNvdXJjZV9hY2Nlc3MiOnsiYWNjb3VudCI6eyJyb2xlcyI6WyJtYW5hZ2UtYWNjb3VudCIsIm1hbmFnZS1hY2NvdW50LWxpbmtzIiwidmlldy1wcm9maWxlIl19fSwic2NvcGUiOiJlbWFpbCBwcm9maWxlIiwic2lkIjoiM2I2YWI3MWEtMjk1YS00ODdjLWE5NjAtZDYyMmU0YjI2ZjcxIiwiZW1haWxfdmVyaWZpZWQiOmZhbHNlLCJuYW1lIjoiVGVzdCIsInByZWZlcnJlZF91c2VybmFtZSI6InRlc3QxIiwiZ2l2ZW5fbmFtZSI6IlRlc3QiLCJmYW1pbHlfbmFtZSI6IiIsImVtYWlsIjoidGVzdDFAeW9wbWFpbC5jb20ifQ.ErIx-Ke9kqPkinqwtJPfzwW8mYTQf-A92EGupTm_P-9ItahGX9oRlbJabduOQiwEVQtvSDyVHh9pNclzuPHhIJygw-KmgjOQvR0N9q-3PWxNFf1i3Kg1qsPyAVQyspeh5Pe-x5FQJMli2_ddCmrOjN9Hpoobn7FKlzSiXJZoPn_pT9HljFqK7MOjucESxmPzX5jdwsrL5L3_aZzTkYasD4gmdGFAjg-wKebbbl347xO_KFHb-QmepGz1NMHl-xMITk-dJVe_Z3PkfOibfyNfYVVh_hqIdABNTrl20ewRpDO6QSDpQbOQJDWmAlVw9prlMjloPWB24KBNrh62Sn7XWw"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"limit\": 1,\n    \"filters\": {\n        \"username\": \"fscbr2498765\"\n    },\n    \"sort\": [\n        \"createdAt\",\n        \"asc\"\n    ],\n    \"offset\": 0\n\n}"
+								},
+								"url": "{{interfaceBaseUrl}}/interface/v1/user/list"
+							},
+							"response": []
+						},
+						{
+							"name": "Get user list By Role",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": {
+										"token": "{{AccessToken}}"
+									}
+								},
+								"method": "POST",
+								"header": [
+									{
+										"key": "accept",
+										"value": "*/*"
+									},
+									{
+										"key": "tenantid",
+										"value": "ef99949b-7f3a-4a5f-806a-e67e683e38f3"
+									},
+									{
+										"key": "Authorization",
+										"value": "Bearer eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJPc3NtSUhXaW1NMDN2MUxsVnFvNHBqaS0ydEMwTGhLY0o5dmtwQTlJZV9zIn0.eyJleHAiOjE3MTg4NjA4MDAsImlhdCI6MTcxODc3NDQwMCwianRpIjoiMTkxMWEwZmMtOWJlMS00MmE0LWE1NGUtMzNlZWMxOWQxNjU1IiwiaXNzIjoiaHR0cHM6Ly9xYS5wcmF0aGFtdGVhY2hlcmFwcC50ZWtkaW5leHQuY29tL2F1dGgvcmVhbG1zL3ByYXRoYW0iLCJhdWQiOiJhY2NvdW50Iiwic3ViIjoiNjEwNzJlNmQtYmNlMi00ZWE1LTk4MmYtMDdkNTUwZTlhNTM0IiwidHlwIjoiQmVhcmVyIiwiYXpwIjoicHJhdGhhbSIsInNlc3Npb25fc3RhdGUiOiIzYjZhYjcxYS0yOTVhLTQ4N2MtYTk2MC1kNjIyZTRiMjZmNzEiLCJhY3IiOiIxIiwiYWxsb3dlZC1vcmlnaW5zIjpbIi8qIl0sInJlYWxtX2FjY2VzcyI6eyJyb2xlcyI6WyJvZmZsaW5lX2FjY2VzcyIsInVtYV9hdXRob3JpemF0aW9uIiwiZGVmYXVsdC1yb2xlcy1wcmF0aGFtIl19LCJyZXNvdXJjZV9hY2Nlc3MiOnsiYWNjb3VudCI6eyJyb2xlcyI6WyJtYW5hZ2UtYWNjb3VudCIsIm1hbmFnZS1hY2NvdW50LWxpbmtzIiwidmlldy1wcm9maWxlIl19fSwic2NvcGUiOiJlbWFpbCBwcm9maWxlIiwic2lkIjoiM2I2YWI3MWEtMjk1YS00ODdjLWE5NjAtZDYyMmU0YjI2ZjcxIiwiZW1haWxfdmVyaWZpZWQiOmZhbHNlLCJuYW1lIjoiVGVzdCIsInByZWZlcnJlZF91c2VybmFtZSI6InRlc3QxIiwiZ2l2ZW5fbmFtZSI6IlRlc3QiLCJmYW1pbHlfbmFtZSI6IiIsImVtYWlsIjoidGVzdDFAeW9wbWFpbC5jb20ifQ.ErIx-Ke9kqPkinqwtJPfzwW8mYTQf-A92EGupTm_P-9ItahGX9oRlbJabduOQiwEVQtvSDyVHh9pNclzuPHhIJygw-KmgjOQvR0N9q-3PWxNFf1i3Kg1qsPyAVQyspeh5Pe-x5FQJMli2_ddCmrOjN9Hpoobn7FKlzSiXJZoPn_pT9HljFqK7MOjucESxmPzX5jdwsrL5L3_aZzTkYasD4gmdGFAjg-wKebbbl347xO_KFHb-QmepGz1NMHl-xMITk-dJVe_Z3PkfOibfyNfYVVh_hqIdABNTrl20ewRpDO6QSDpQbOQJDWmAlVw9prlMjloPWB24KBNrh62Sn7XWw"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"limit\": 1,\n    \"filters\": {\n        // \"role\": \"Student\"\n        \"role\": \"Teacher\"\n        // \"role\": \"Team Leader\"\n    },\n    \"sort\": [\n        \"createdAt\",\n        \"asc\"\n    ],\n    \"offset\": 0\n\n}"
+								},
+								"url": "{{interfaceBaseUrl}}/interface/v1/user/list"
+							},
+							"response": []
+						},
+						{
+							"name": "Get user list By userId",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": {
+										"token": "{{AccessToken}}"
+									}
+								},
+								"method": "POST",
+								"header": [
+									{
+										"key": "accept",
+										"value": "*/*"
+									},
+									{
+										"key": "tenantid",
+										"value": "ef99949b-7f3a-4a5f-806a-e67e683e38f3"
+									},
+									{
+										"key": "Authorization",
+										"value": "Bearer eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJPc3NtSUhXaW1NMDN2MUxsVnFvNHBqaS0ydEMwTGhLY0o5dmtwQTlJZV9zIn0.eyJleHAiOjE3MTg4NjA4MDAsImlhdCI6MTcxODc3NDQwMCwianRpIjoiMTkxMWEwZmMtOWJlMS00MmE0LWE1NGUtMzNlZWMxOWQxNjU1IiwiaXNzIjoiaHR0cHM6Ly9xYS5wcmF0aGFtdGVhY2hlcmFwcC50ZWtkaW5leHQuY29tL2F1dGgvcmVhbG1zL3ByYXRoYW0iLCJhdWQiOiJhY2NvdW50Iiwic3ViIjoiNjEwNzJlNmQtYmNlMi00ZWE1LTk4MmYtMDdkNTUwZTlhNTM0IiwidHlwIjoiQmVhcmVyIiwiYXpwIjoicHJhdGhhbSIsInNlc3Npb25fc3RhdGUiOiIzYjZhYjcxYS0yOTVhLTQ4N2MtYTk2MC1kNjIyZTRiMjZmNzEiLCJhY3IiOiIxIiwiYWxsb3dlZC1vcmlnaW5zIjpbIi8qIl0sInJlYWxtX2FjY2VzcyI6eyJyb2xlcyI6WyJvZmZsaW5lX2FjY2VzcyIsInVtYV9hdXRob3JpemF0aW9uIiwiZGVmYXVsdC1yb2xlcy1wcmF0aGFtIl19LCJyZXNvdXJjZV9hY2Nlc3MiOnsiYWNjb3VudCI6eyJyb2xlcyI6WyJtYW5hZ2UtYWNjb3VudCIsIm1hbmFnZS1hY2NvdW50LWxpbmtzIiwidmlldy1wcm9maWxlIl19fSwic2NvcGUiOiJlbWFpbCBwcm9maWxlIiwic2lkIjoiM2I2YWI3MWEtMjk1YS00ODdjLWE5NjAtZDYyMmU0YjI2ZjcxIiwiZW1haWxfdmVyaWZpZWQiOmZhbHNlLCJuYW1lIjoiVGVzdCIsInByZWZlcnJlZF91c2VybmFtZSI6InRlc3QxIiwiZ2l2ZW5fbmFtZSI6IlRlc3QiLCJmYW1pbHlfbmFtZSI6IiIsImVtYWlsIjoidGVzdDFAeW9wbWFpbC5jb20ifQ.ErIx-Ke9kqPkinqwtJPfzwW8mYTQf-A92EGupTm_P-9ItahGX9oRlbJabduOQiwEVQtvSDyVHh9pNclzuPHhIJygw-KmgjOQvR0N9q-3PWxNFf1i3Kg1qsPyAVQyspeh5Pe-x5FQJMli2_ddCmrOjN9Hpoobn7FKlzSiXJZoPn_pT9HljFqK7MOjucESxmPzX5jdwsrL5L3_aZzTkYasD4gmdGFAjg-wKebbbl347xO_KFHb-QmepGz1NMHl-xMITk-dJVe_Z3PkfOibfyNfYVVh_hqIdABNTrl20ewRpDO6QSDpQbOQJDWmAlVw9prlMjloPWB24KBNrh62Sn7XWw"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"limit\": 1,\n    \"filters\": {\n        \"userId\": \"787f36ba-1c97-4b41-88be-f3bf4dfdc778\"\n    },\n    \"sort\": [\n        \"createdAt\",\n        \"asc\"\n    ],\n    \"offset\": 0\n\n}"
+								},
+								"url": "{{interfaceBaseUrl}}/interface/v1/user/list"
+							},
+							"response": []
+						},
+						{
+							"name": "Get user list By State District & Block",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": {
+										"token": "{{AccessToken}}"
+									}
+								},
+								"method": "POST",
+								"header": [
+									{
+										"key": "accept",
+										"value": "*/*"
+									},
+									{
+										"key": "tenantid",
+										"value": "ef99949b-7f3a-4a5f-806a-e67e683e38f3"
+									},
+									{
+										"key": "Authorization",
+										"value": "Bearer eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJPc3NtSUhXaW1NMDN2MUxsVnFvNHBqaS0ydEMwTGhLY0o5dmtwQTlJZV9zIn0.eyJleHAiOjE3MTg4NjA4MDAsImlhdCI6MTcxODc3NDQwMCwianRpIjoiMTkxMWEwZmMtOWJlMS00MmE0LWE1NGUtMzNlZWMxOWQxNjU1IiwiaXNzIjoiaHR0cHM6Ly9xYS5wcmF0aGFtdGVhY2hlcmFwcC50ZWtkaW5leHQuY29tL2F1dGgvcmVhbG1zL3ByYXRoYW0iLCJhdWQiOiJhY2NvdW50Iiwic3ViIjoiNjEwNzJlNmQtYmNlMi00ZWE1LTk4MmYtMDdkNTUwZTlhNTM0IiwidHlwIjoiQmVhcmVyIiwiYXpwIjoicHJhdGhhbSIsInNlc3Npb25fc3RhdGUiOiIzYjZhYjcxYS0yOTVhLTQ4N2MtYTk2MC1kNjIyZTRiMjZmNzEiLCJhY3IiOiIxIiwiYWxsb3dlZC1vcmlnaW5zIjpbIi8qIl0sInJlYWxtX2FjY2VzcyI6eyJyb2xlcyI6WyJvZmZsaW5lX2FjY2VzcyIsInVtYV9hdXRob3JpemF0aW9uIiwiZGVmYXVsdC1yb2xlcy1wcmF0aGFtIl19LCJyZXNvdXJjZV9hY2Nlc3MiOnsiYWNjb3VudCI6eyJyb2xlcyI6WyJtYW5hZ2UtYWNjb3VudCIsIm1hbmFnZS1hY2NvdW50LWxpbmtzIiwidmlldy1wcm9maWxlIl19fSwic2NvcGUiOiJlbWFpbCBwcm9maWxlIiwic2lkIjoiM2I2YWI3MWEtMjk1YS00ODdjLWE5NjAtZDYyMmU0YjI2ZjcxIiwiZW1haWxfdmVyaWZpZWQiOmZhbHNlLCJuYW1lIjoiVGVzdCIsInByZWZlcnJlZF91c2VybmFtZSI6InRlc3QxIiwiZ2l2ZW5fbmFtZSI6IlRlc3QiLCJmYW1pbHlfbmFtZSI6IiIsImVtYWlsIjoidGVzdDFAeW9wbWFpbC5jb20ifQ.ErIx-Ke9kqPkinqwtJPfzwW8mYTQf-A92EGupTm_P-9ItahGX9oRlbJabduOQiwEVQtvSDyVHh9pNclzuPHhIJygw-KmgjOQvR0N9q-3PWxNFf1i3Kg1qsPyAVQyspeh5Pe-x5FQJMli2_ddCmrOjN9Hpoobn7FKlzSiXJZoPn_pT9HljFqK7MOjucESxmPzX5jdwsrL5L3_aZzTkYasD4gmdGFAjg-wKebbbl347xO_KFHb-QmepGz1NMHl-xMITk-dJVe_Z3PkfOibfyNfYVVh_hqIdABNTrl20ewRpDO6QSDpQbOQJDWmAlVw9prlMjloPWB24KBNrh62Sn7XWw"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"limit\": 1,\n    \"filters\": {\n        \"states\":\"BR\",\n        \"districts\":\"PAT\",\n        \"blocks\":\"PS\"\n    },\n    \"sort\": [\n        \"createdAt\",\n        \"asc\"\n    ],\n    \"offset\": 0\n\n}"
+								},
+								"url": "{{interfaceBaseUrl}}/interface/v1/user/list"
+							},
+							"response": []
+						},
+						{
+							"name": "Get user list extract userIds & cohortIds",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": {
+										"token": "{{AccessToken}}"
+									}
+								},
+								"method": "POST",
+								"header": [
+									{
+										"key": "accept",
+										"value": "*/*"
+									},
+									{
+										"key": "tenantid",
+										"value": "ef99949b-7f3a-4a5f-806a-e67e683e38f3"
+									},
+									{
+										"key": "Authorization",
+										"value": "Bearer eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJPc3NtSUhXaW1NMDN2MUxsVnFvNHBqaS0ydEMwTGhLY0o5dmtwQTlJZV9zIn0.eyJleHAiOjE3MTg4NjA4MDAsImlhdCI6MTcxODc3NDQwMCwianRpIjoiMTkxMWEwZmMtOWJlMS00MmE0LWE1NGUtMzNlZWMxOWQxNjU1IiwiaXNzIjoiaHR0cHM6Ly9xYS5wcmF0aGFtdGVhY2hlcmFwcC50ZWtkaW5leHQuY29tL2F1dGgvcmVhbG1zL3ByYXRoYW0iLCJhdWQiOiJhY2NvdW50Iiwic3ViIjoiNjEwNzJlNmQtYmNlMi00ZWE1LTk4MmYtMDdkNTUwZTlhNTM0IiwidHlwIjoiQmVhcmVyIiwiYXpwIjoicHJhdGhhbSIsInNlc3Npb25fc3RhdGUiOiIzYjZhYjcxYS0yOTVhLTQ4N2MtYTk2MC1kNjIyZTRiMjZmNzEiLCJhY3IiOiIxIiwiYWxsb3dlZC1vcmlnaW5zIjpbIi8qIl0sInJlYWxtX2FjY2VzcyI6eyJyb2xlcyI6WyJvZmZsaW5lX2FjY2VzcyIsInVtYV9hdXRob3JpemF0aW9uIiwiZGVmYXVsdC1yb2xlcy1wcmF0aGFtIl19LCJyZXNvdXJjZV9hY2Nlc3MiOnsiYWNjb3VudCI6eyJyb2xlcyI6WyJtYW5hZ2UtYWNjb3VudCIsIm1hbmFnZS1hY2NvdW50LWxpbmtzIiwidmlldy1wcm9maWxlIl19fSwic2NvcGUiOiJlbWFpbCBwcm9maWxlIiwic2lkIjoiM2I2YWI3MWEtMjk1YS00ODdjLWE5NjAtZDYyMmU0YjI2ZjcxIiwiZW1haWxfdmVyaWZpZWQiOmZhbHNlLCJuYW1lIjoiVGVzdCIsInByZWZlcnJlZF91c2VybmFtZSI6InRlc3QxIiwiZ2l2ZW5fbmFtZSI6IlRlc3QiLCJmYW1pbHlfbmFtZSI6IiIsImVtYWlsIjoidGVzdDFAeW9wbWFpbC5jb20ifQ.ErIx-Ke9kqPkinqwtJPfzwW8mYTQf-A92EGupTm_P-9ItahGX9oRlbJabduOQiwEVQtvSDyVHh9pNclzuPHhIJygw-KmgjOQvR0N9q-3PWxNFf1i3Kg1qsPyAVQyspeh5Pe-x5FQJMli2_ddCmrOjN9Hpoobn7FKlzSiXJZoPn_pT9HljFqK7MOjucESxmPzX5jdwsrL5L3_aZzTkYasD4gmdGFAjg-wKebbbl347xO_KFHb-QmepGz1NMHl-xMITk-dJVe_Z3PkfOibfyNfYVVh_hqIdABNTrl20ewRpDO6QSDpQbOQJDWmAlVw9prlMjloPWB24KBNrh62Sn7XWw"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"limit\": 10,\n    \"exclude\": {\n        \"userIds\": [\"73160824-d47d-4218-b7f4-bdc2c26ec075\"],\n        \"cohortIds\": [\"2447aa0c-4111-4cb9-94d1-9898ef6975a1\"]\n    },\n\n    \"sort\": [\n        \"createdAt\",\n        \"asc\"\n    ],\n    \"offset\": 0\n\n}"
+								},
+								"url": "{{interfaceBaseUrl}}/interface/v1/user/list"
+							},
+							"response": []
+						},
+						{
+							"name": "Delete User",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": {
+										"token": "{{AccessToken}}"
+									}
+								},
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "tenantid",
+										"value": "{{tenantId}}",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"userData\": {\n        \"status\": \"active\",\n        \"reason\": \"Health Issue\"\n    }\n}"
+								},
+								"url": "{{interfaceBaseUrl}}/interface/v1/user/update/787f36ba-1c97-4b41-88be-f3bf4dfdc778"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Academic Year",
+					"item": [
+						{
+							"name": "get acadimic year by id",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "accept",
+										"value": "*/*"
+									},
+									{
+										"key": "Authorization",
+										"value": "Bearer eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJPc3NtSUhXaW1NMDN2MUxsVnFvNHBqaS0ydEMwTGhLY0o5dmtwQTlJZV9zIn0.eyJleHAiOjE3MjkwNTcyMTksImlhdCI6MTcyODk3MDgxOSwianRpIjoiODEzODMxNzAtZWVlYi00YzRiLWEwNjAtOTdlMGI0YjRkMGYxIiwiaXNzIjoiaHR0cHM6Ly9xYS5wcmF0aGFtdGVhY2hlcmFwcC50ZWtkaW5leHQuY29tL2F1dGgvcmVhbG1zL3ByYXRoYW0iLCJhdWQiOiJhY2NvdW50Iiwic3ViIjoiY2FiMmEwY2UtMGI3MC00NGJmLTkzYTctNTY0YjQ1YzRhN2I2IiwidHlwIjoiQmVhcmVyIiwiYXpwIjoicHJhdGhhbSIsInNlc3Npb25fc3RhdGUiOiI5YjEwMTMwZC00NmEwLTQ3MDgtYjY5Yi0wZjQ3N2EzZmZhNDAiLCJhY3IiOiIxIiwiYWxsb3dlZC1vcmlnaW5zIjpbIi8qIl0sInJlYWxtX2FjY2VzcyI6eyJyb2xlcyI6WyJvZmZsaW5lX2FjY2VzcyIsInVtYV9hdXRob3JpemF0aW9uIiwiZGVmYXVsdC1yb2xlcy1wcmF0aGFtIl19LCJyZXNvdXJjZV9hY2Nlc3MiOnsiYWNjb3VudCI6eyJyb2xlcyI6WyJtYW5hZ2UtYWNjb3VudCIsIm1hbmFnZS1hY2NvdW50LWxpbmtzIiwidmlldy1wcm9maWxlIl19fSwic2NvcGUiOiJlbWFpbCBwcm9maWxlIiwic2lkIjoiOWIxMDEzMGQtNDZhMC00NzA4LWI2OWItMGY0NzdhM2ZmYTQwIiwiZW1haWxfdmVyaWZpZWQiOmZhbHNlLCJuYW1lIjoic2hpcnNodGkiLCJwcmVmZXJyZWRfdXNlcm5hbWUiOiJ0bHNjbWgyMzUwNTEwIiwiZ2l2ZW5fbmFtZSI6InNoaXJzaHRpIiwiZmFtaWx5X25hbWUiOiIifQ.W2G4kh-xGsT617VIyX1v_tNq-KE_hsRDKba0hnUuIvEvZLPv7LSkyIZR13ccCMiCRcFX7qC7ufbwbNMY76dmwFPPCFHi-MSNjkmRygaERGUIZvk6uOq6cBJNuWSGnprVzZxnXk6OR7epMvssTaA8yCrakhlzgwqkAgM4kYLPcaFWwB6by1CMnvNPMfxvz0Rykd9CJRh3yq_acHaw8bf5JUsKA4AKOCREBkCGQcB_mryhsS-gBlTmfzcGGCfnGn55ZtP2koEx2i9OXUyV78G-fhnVjept6fuMb63HOkOzXDHri9NtzU7Fih7A1RSuWWH77dez9OmJANuVzm0HDm9KUg",
+										"type": "text"
+									},
+									{
+										"key": "tenantid",
+										"value": "ef99949b-7f3a-4a5f-806a-e67e683e38f3",
+										"type": "text"
+									}
+								],
+								"url": "{{url}}/user/v1/academicyears/9a9e0daa-50dd-4d0e-8d10-36e7bc808f88"
+							},
+							"response": []
+						},
+						{
+							"name": "academicyears list",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "accept",
+										"value": "*/*"
+									},
+									{
+										"key": "tenantid",
+										"value": "ef99949b-7f3a-4a5f-806a-e67e683e38f3"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Authorization",
+										"value": "Bearer eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJPc3NtSUhXaW1NMDN2MUxsVnFvNHBqaS0ydEMwTGhLY0o5dmtwQTlJZV9zIn0.eyJleHAiOjE3MjkwNTcyMTksImlhdCI6MTcyODk3MDgxOSwianRpIjoiODEzODMxNzAtZWVlYi00YzRiLWEwNjAtOTdlMGI0YjRkMGYxIiwiaXNzIjoiaHR0cHM6Ly9xYS5wcmF0aGFtdGVhY2hlcmFwcC50ZWtkaW5leHQuY29tL2F1dGgvcmVhbG1zL3ByYXRoYW0iLCJhdWQiOiJhY2NvdW50Iiwic3ViIjoiY2FiMmEwY2UtMGI3MC00NGJmLTkzYTctNTY0YjQ1YzRhN2I2IiwidHlwIjoiQmVhcmVyIiwiYXpwIjoicHJhdGhhbSIsInNlc3Npb25fc3RhdGUiOiI5YjEwMTMwZC00NmEwLTQ3MDgtYjY5Yi0wZjQ3N2EzZmZhNDAiLCJhY3IiOiIxIiwiYWxsb3dlZC1vcmlnaW5zIjpbIi8qIl0sInJlYWxtX2FjY2VzcyI6eyJyb2xlcyI6WyJvZmZsaW5lX2FjY2VzcyIsInVtYV9hdXRob3JpemF0aW9uIiwiZGVmYXVsdC1yb2xlcy1wcmF0aGFtIl19LCJyZXNvdXJjZV9hY2Nlc3MiOnsiYWNjb3VudCI6eyJyb2xlcyI6WyJtYW5hZ2UtYWNjb3VudCIsIm1hbmFnZS1hY2NvdW50LWxpbmtzIiwidmlldy1wcm9maWxlIl19fSwic2NvcGUiOiJlbWFpbCBwcm9maWxlIiwic2lkIjoiOWIxMDEzMGQtNDZhMC00NzA4LWI2OWItMGY0NzdhM2ZmYTQwIiwiZW1haWxfdmVyaWZpZWQiOmZhbHNlLCJuYW1lIjoic2hpcnNodGkiLCJwcmVmZXJyZWRfdXNlcm5hbWUiOiJ0bHNjbWgyMzUwNTEwIiwiZ2l2ZW5fbmFtZSI6InNoaXJzaHRpIiwiZmFtaWx5X25hbWUiOiIifQ.W2G4kh-xGsT617VIyX1v_tNq-KE_hsRDKba0hnUuIvEvZLPv7LSkyIZR13ccCMiCRcFX7qC7ufbwbNMY76dmwFPPCFHi-MSNjkmRygaERGUIZvk6uOq6cBJNuWSGnprVzZxnXk6OR7epMvssTaA8yCrakhlzgwqkAgM4kYLPcaFWwB6by1CMnvNPMfxvz0Rykd9CJRh3yq_acHaw8bf5JUsKA4AKOCREBkCGQcB_mryhsS-gBlTmfzcGGCfnGn55ZtP2koEx2i9OXUyV78G-fhnVjept6fuMb63HOkOzXDHri9NtzU7Fih7A1RSuWWH77dez9OmJANuVzm0HDm9KUg",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"isActive\": true\n}"
+								},
+								"url": "{{interfaceBaseUrl}}/interface/v1/academicyears/list"
+							},
+							"response": []
+						},
+						{
+							"name": "add academic year",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "accept",
+										"value": "*/*"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "tenantid",
+										"value": "ef99949b-7f3a-4a5f-806a-e67e683e38f3",
+										"type": "text"
+									},
+									{
+										"key": "Authorization",
+										"value": "Bearer eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJPc3NtSUhXaW1NMDN2MUxsVnFvNHBqaS0ydEMwTGhLY0o5dmtwQTlJZV9zIn0.eyJleHAiOjE3MjkwNTcyMTksImlhdCI6MTcyODk3MDgxOSwianRpIjoiODEzODMxNzAtZWVlYi00YzRiLWEwNjAtOTdlMGI0YjRkMGYxIiwiaXNzIjoiaHR0cHM6Ly9xYS5wcmF0aGFtdGVhY2hlcmFwcC50ZWtkaW5leHQuY29tL2F1dGgvcmVhbG1zL3ByYXRoYW0iLCJhdWQiOiJhY2NvdW50Iiwic3ViIjoiY2FiMmEwY2UtMGI3MC00NGJmLTkzYTctNTY0YjQ1YzRhN2I2IiwidHlwIjoiQmVhcmVyIiwiYXpwIjoicHJhdGhhbSIsInNlc3Npb25fc3RhdGUiOiI5YjEwMTMwZC00NmEwLTQ3MDgtYjY5Yi0wZjQ3N2EzZmZhNDAiLCJhY3IiOiIxIiwiYWxsb3dlZC1vcmlnaW5zIjpbIi8qIl0sInJlYWxtX2FjY2VzcyI6eyJyb2xlcyI6WyJvZmZsaW5lX2FjY2VzcyIsInVtYV9hdXRob3JpemF0aW9uIiwiZGVmYXVsdC1yb2xlcy1wcmF0aGFtIl19LCJyZXNvdXJjZV9hY2Nlc3MiOnsiYWNjb3VudCI6eyJyb2xlcyI6WyJtYW5hZ2UtYWNjb3VudCIsIm1hbmFnZS1hY2NvdW50LWxpbmtzIiwidmlldy1wcm9maWxlIl19fSwic2NvcGUiOiJlbWFpbCBwcm9maWxlIiwic2lkIjoiOWIxMDEzMGQtNDZhMC00NzA4LWI2OWItMGY0NzdhM2ZmYTQwIiwiZW1haWxfdmVyaWZpZWQiOmZhbHNlLCJuYW1lIjoic2hpcnNodGkiLCJwcmVmZXJyZWRfdXNlcm5hbWUiOiJ0bHNjbWgyMzUwNTEwIiwiZ2l2ZW5fbmFtZSI6InNoaXJzaHRpIiwiZmFtaWx5X25hbWUiOiIifQ.W2G4kh-xGsT617VIyX1v_tNq-KE_hsRDKba0hnUuIvEvZLPv7LSkyIZR13ccCMiCRcFX7qC7ufbwbNMY76dmwFPPCFHi-MSNjkmRygaERGUIZvk6uOq6cBJNuWSGnprVzZxnXk6OR7epMvssTaA8yCrakhlzgwqkAgM4kYLPcaFWwB6by1CMnvNPMfxvz0Rykd9CJRh3yq_acHaw8bf5JUsKA4AKOCREBkCGQcB_mryhsS-gBlTmfzcGGCfnGn55ZtP2koEx2i9OXUyV78G-fhnVjept6fuMb63HOkOzXDHri9NtzU7Fih7A1RSuWWH77dez9OmJANuVzm0HDm9KUg",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"startDate\": \"2024-12-05\",\n  \"endDate\": \"2024-12-08\",\n  \"createdBy\": \"0093a007-819b-494a-85f4-07a7f448400c\",\n  \"updatedBy\": \"0093a007-819b-494a-85f4-07a7f448400c\"\n}  "
+								},
+								"url": "{{localhost}}/user/v1/academicyears/create"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Form",
+					"item": [
+						{
+							"name": "Form Read",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Accept",
+										"value": "application/json, text/plain, */*"
+									},
+									{
+										"key": "Accept-Language",
+										"value": "en-GB,en-US;q=0.9,en;q=0.8,ur;q=0.7"
+									},
+									{
+										"key": "Authorization",
+										"value": "Bearer eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJPc3NtSUhXaW1NMDN2MUxsVnFvNHBqaS0ydEMwTGhLY0o5dmtwQTlJZV9zIn0.eyJleHAiOjE3MzgwMDEwNTIsImlhdCI6MTczNzkxNDY1MiwianRpIjoiNWY0YzAwZDYtZTg2YS00NmMwLWJmY2YtNGQ1ZDg2YWRmNjIwIiwiaXNzIjoiaHR0cHM6Ly9xYS5wcmF0aGFtdGVhY2hlcmFwcC50ZWtkaW5leHQuY29tL2F1dGgvcmVhbG1zL3ByYXRoYW0iLCJhdWQiOiJhY2NvdW50Iiwic3ViIjoiY2FiMmEwY2UtMGI3MC00NGJmLTkzYTctNTY0YjQ1YzRhN2I2IiwidHlwIjoiQmVhcmVyIiwiYXpwIjoicHJhdGhhbSIsInNlc3Npb25fc3RhdGUiOiI0ZmUwZGM2OC0zZTE2LTQxZWUtYjcwZC0xZWQ4OTk2YWI0MzAiLCJhY3IiOiIxIiwiYWxsb3dlZC1vcmlnaW5zIjpbIi8qIl0sInJlYWxtX2FjY2VzcyI6eyJyb2xlcyI6WyJvZmZsaW5lX2FjY2VzcyIsInVtYV9hdXRob3JpemF0aW9uIiwiZGVmYXVsdC1yb2xlcy1wcmF0aGFtIl19LCJyZXNvdXJjZV9hY2Nlc3MiOnsiYWNjb3VudCI6eyJyb2xlcyI6WyJtYW5hZ2UtYWNjb3VudCIsIm1hbmFnZS1hY2NvdW50LWxpbmtzIiwidmlldy1wcm9maWxlIl19fSwic2NvcGUiOiJlbWFpbCBwcm9maWxlIiwic2lkIjoiNGZlMGRjNjgtM2UxNi00MWVlLWI3MGQtMWVkODk5NmFiNDMwIiwiZW1haWxfdmVyaWZpZWQiOmZhbHNlLCJuYW1lIjoic2hpcnNodGkiLCJwcmVmZXJyZWRfdXNlcm5hbWUiOiJ0bHNjbWgyMzUwNTEwIiwiZ2l2ZW5fbmFtZSI6InNoaXJzaHRpIiwiZmFtaWx5X25hbWUiOiIifQ.IAFp-2egpThLFdDUWkXXckhPfFOTEJl6E3bFb5P0z0bhzfVLhgcdeeL4_3CIvHaWvvbq4pzs4UVpj-FZ3NoTXvjMpYSuXwpFrmlmOjHxFdbuJs0fh-W8IYQPg9Cfb_sH4sf3O7scUrjB4ASUccz1ODAKDI9YjNSn6gr5r65qnza2scCaoGmybAfXnBb1xblnjBVZibKa8bk0xSV9C5SMTEIYTjiCz14kwFpmAha8aR5S6uc7NLz22zoPfoy-nFnzNaxMMdGfmVFpI5J_kTQcgxCyP5Ef1GR0hELp3aIuQm_klIzKfIRbDWhWUIIjOo-kMs7b0iYXL9WXTR6-b7URSw"
+									},
+									{
+										"key": "Connection",
+										"value": "keep-alive"
+									},
+									{
+										"key": "If-None-Match",
+										"value": "W/\"29e4-SMnd8AzJX5fp1Gjoi8d8NfFinAM\""
+									},
+									{
+										"key": "Origin",
+										"value": "http://localhost:3000"
+									},
+									{
+										"key": "Referer",
+										"value": "http://localhost:3000/"
+									},
+									{
+										"key": "Sec-Fetch-Dest",
+										"value": "empty"
+									},
+									{
+										"key": "Sec-Fetch-Mode",
+										"value": "cors"
+									},
+									{
+										"key": "Sec-Fetch-Site",
+										"value": "cross-site"
+									},
+									{
+										"key": "User-Agent",
+										"value": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+									},
+									{
+										"key": "sec-ch-ua",
+										"value": "\"Google Chrome\";v=\"131\", \"Chromium\";v=\"131\", \"Not_A Brand\";v=\"24\""
+									},
+									{
+										"key": "sec-ch-ua-mobile",
+										"value": "?0"
+									},
+									{
+										"key": "sec-ch-ua-platform",
+										"value": "\"Linux\""
+									},
+									{
+										"key": "tenantId",
+										"value": "ef99949b-7f3a-4a5f-806a-e67e683e38f3"
+									}
+								],
+								"url": {
+									"raw": "https://dev-middleware.prathamdigital.org/user/v1/form/read?context=USERS&contextType=STUDENT",
+									"protocol": "https",
+									"host": [
+										"dev-middleware",
+										"prathamdigital",
+										"org"
+									],
+									"path": [
+										"user",
+										"v1",
+										"form",
+										"read"
+									],
+									"query": [
+										{
+											"key": "context",
+											"value": "USERS"
+										},
+										{
+											"key": "contextType",
+											"value": "STUDENT"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Form Create",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "accept",
+										"value": "*/*"
+									},
+									{
+										"key": "tenantid",
+										"value": ""
+									},
+									{
+										"key": "Authorization",
+										"value": "Bearer token"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"title\": \"Sample Form\",\n    \"context\": \"USERS\",\n    \"contextType\": \"STUDENT\",\n    \"fields\": {\n        \"result\": [\n            {\n                \"hint\": null,\n                \"name\": \"name\",\n                \"type\": \"text\",\n                \"label\": \"FULL_NAME\",\n                \"order\": \"0\",\n                \"fieldId\": null,\n                \"options\": [],\n                \"pattern\": \"^[a-zA-Z][a-zA-Z ]*[a-zA-Z]$\",\n                \"coreField\": 1,\n                \"dependsOn\": null,\n                \"maxLength\": null,\n                \"minLength\": null,\n                \"isEditable\": true,\n                \"isPIIField\": null,\n                \"isRequired\": true,\n                \"validation\": [\n                    \"string\"\n                ],\n                \"placeholder\": \"ENTER_FULL_NAME\",\n                \"isMultiSelect\": false,\n                \"maxSelections\": 0,\n                \"sourceDetails\": {}\n            },\n            {\n                \"hint\": null,\n                \"name\": \"email\",\n                \"type\": \"email\",\n                \"label\": \"EMAIL\",\n                \"order\": \"1\",\n                \"fieldId\": null,\n                \"options\": [],\n                \"pattern\": null,\n                \"coreField\": 1,\n                \"dependsOn\": null,\n                \"maxLength\": null,\n                \"minLength\": null,\n                \"isEditable\": true,\n                \"isPIIField\": null,\n                \"isRequired\": true,\n                \"validation\": [\n                    \"string\"\n                ],\n                \"placeholder\": \"ENTER_EMAIL\",\n                \"isMultiSelect\": false,\n                \"maxSelections\": 0,\n                \"sourceDetails\": {}\n            },\n            {\n                \"hint\": null,\n                \"name\": \"mobile\",\n                \"type\": \"text\",\n                \"label\": \"CONTACT_NUMBER\",\n                \"order\": \"2\",\n                \"fieldId\": null,\n                \"options\": [],\n                \"pattern\": \"^[0-9]{10}$\",\n                \"coreField\": 1,\n                \"dependsOn\": null,\n                \"isEditable\": true,\n                \"isPIIField\": true,\n                \"isRequired\": true,\n                \"validation\": [\n                    \"mobile\"\n                ],\n                \"placeholder\": \"ENTER_CONTACT_NUMBER\",\n                \"isMultiSelect\": false,\n                \"maxSelections\": 0,\n                \"sourceDetails\": {}\n            },\n            {\n                \"order\": \"3\",\n                \"fieldId\": \"cb407d11-f1c5-424c-a422-4755a1c4ab29\",\n                \"coreField\": 0\n            },\n            {\n                \"order\": \"4\",\n                \"fieldId\": \"57b50148-2b58-45e5-9b27-6a07c5317c18\",\n                \"coreField\": 0\n            },\n            {\n                \"order\": \"5\",\n                \"fieldId\": \"a71fd390-fd67-45c3-ab1e-6994b8d967a2\",\n                \"coreField\": 0\n            },\n            {\n                \"order\": \"6\",\n                \"fieldId\": \"f9fb37a4-d5d0-4f71-9ff6-cfd7d54a1611\",\n                \"coreField\": 0\n            },\n            {\n                \"order\": \"7\",\n                \"fieldId\": \"abb7f3fe-f7fa-47be-9d28-5747dd3159f2\",\n                \"coreField\": 0\n            },\n            {\n                \"order\": \"8\",\n                \"fieldId\": \"935bfb34-9be7-4676-b9cc-cec1ec4c0a2c\",\n                \"coreField\": 0\n            },\n            {\n                \"order\": \"9\",\n                \"fieldId\": \"f5249ac0-931a-4136-8c82-8767263a5460\",\n                \"coreField\": 0\n            }\n        ],\n        \"context\": \"USERS\",\n        \"contextType\": \"teacher\"\n    }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": "{{localhost}}/user/v1/form/create",
+								"description": "Generated from cURL: curl --location 'http://localhost:3000/user/v1/form/create' \\\n--header 'accept: */*' \\\n--header 'tenantid;' \\\n--header 'Authorization: Bearer token' \\\n--header 'Content-Type: application/json' \\\n--data '{\n    \"title\": \"Sample Form\",\n    \"context\": \"USERS\",\n    \"contextType\": \"STUDENT\",\n    \"fields\": {\n        \"result\": [\n            {\n                \"hint\": null,\n                \"name\": \"name\",\n                \"type\": \"text\",\n                \"label\": \"FULL_NAME\",\n                \"order\": \"0\",\n                \"fieldId\": null,\n                \"options\": [],\n                \"pattern\": \"^[a-zA-Z][a-zA-Z ]*[a-zA-Z]$\",\n                \"coreField\": 1,\n                \"dependsOn\": null,\n                \"maxLength\": null,\n                \"minLength\": null,\n                \"isEditable\": true,\n                \"isPIIField\": null,\n                \"isRequired\": true,\n                \"validation\": [\n                    \"string\"\n                ],\n                \"placeholder\": \"ENTER_FULL_NAME\",\n                \"isMultiSelect\": false,\n                \"maxSelections\": 0,\n                \"sourceDetails\": {}\n            },\n            {\n                \"hint\": null,\n                \"name\": \"email\",\n                \"type\": \"email\",\n                \"label\": \"EMAIL\",\n                \"order\": \"1\",\n                \"fieldId\": null,\n                \"options\": [],\n                \"pattern\": null,\n                \"coreField\": 1,\n                \"dependsOn\": null,\n                \"maxLength\": null,\n                \"minLength\": null,\n                \"isEditable\": true,\n                \"isPIIField\": null,\n                \"isRequired\": true,\n                \"validation\": [\n                    \"string\"\n                ],\n                \"placeholder\": \"ENTER_EMAIL\",\n                \"isMultiSelect\": false,\n                \"maxSelections\": 0,\n                \"sourceDetails\": {}\n            },\n            {\n                \"hint\": null,\n                \"name\": \"mobile\",\n                \"type\": \"text\",\n                \"label\": \"CONTACT_NUMBER\",\n                \"order\": \"2\",\n                \"fieldId\": null,\n                \"options\": [],\n                \"pattern\": \"^[0-9]{10}$\",\n                \"coreField\": 1,\n                \"dependsOn\": null,\n                \"isEditable\": true,\n                \"isPIIField\": true,\n                \"isRequired\": true,\n                \"validation\": [\n                    \"mobile\"\n                ],\n                \"placeholder\": \"ENTER_CONTACT_NUMBER\",\n                \"isMultiSelect\": false,\n                \"maxSelections\": 0,\n                \"sourceDetails\": {}\n            },\n            {\n                \"order\": \"3\",\n                \"fieldId\": \"cb407d11-f1c5-424c-a422-4755a1c4ab29\",\n                \"coreField\": 0\n            },\n            {\n                \"order\": \"4\",\n                \"fieldId\": \"57b50148-2b58-45e5-9b27-6a07c5317c18\",\n                \"coreField\": 0\n            },\n            {\n                \"order\": \"5\",\n                \"fieldId\": \"a71fd390-fd67-45c3-ab1e-6994b8d967a2\",\n                \"coreField\": 0\n            },\n            {\n                \"order\": \"6\",\n                \"fieldId\": \"f9fb37a4-d5d0-4f71-9ff6-cfd7d54a1611\",\n                \"coreField\": 0\n            },\n            {\n                \"order\": \"7\",\n                \"fieldId\": \"abb7f3fe-f7fa-47be-9d28-5747dd3159f2\",\n                \"coreField\": 0\n            },\n            {\n                \"order\": \"8\",\n                \"fieldId\": \"935bfb34-9be7-4676-b9cc-cec1ec4c0a2c\",\n                \"coreField\": 0\n            },\n            {\n                \"order\": \"9\",\n                \"fieldId\": \"f5249ac0-931a-4136-8c82-8767263a5460\",\n                \"coreField\": 0\n            }\n        ],\n        \"context\": \"USERS\",\n        \"contextType\": \"teacher\"\n    }\n}'"
+							},
+							"response": []
+						},
+						{
+							"name": "Form Update",
+							"request": {
+								"auth": {
+									"type": "noauth"
+								},
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "accept",
+										"value": "*/*"
+									},
+									{
+										"key": "tenantid",
+										"value": "ef99949b-7f3a-4a5f-806a-e67e683e38f3"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"fields\": {\n    \"result\": [\n      {\n        \"hint\": null,\n        \"name\": \"firstNameaaaaaaaaa\",\n        \"type\": \"text\",\n        \"label\": \"FIRST_NAME\",\n        \"order\": \"1\",\n        \"fieldId\": null,\n        \"options\": [],\n        \"pattern\": \"^(?=.[a-zA-Z])[a-zA-Z ]+$\",\n        \"coreField\": 1,\n        \"dependsOn\": null,\n        \"maxLength\": null,\n        \"minLength\": null,\n        \"isEditable\": true,\n        \"isPIIField\": null,\n        \"isRequired\": true,\n        \"validation\": [\n          \"string\"\n        ],\n        \"placeholder\": \"ENTER_FIRST_NAME\",\n        \"isMultiSelect\": false,\n        \"maxSelections\": 0,\n        \"sourceDetails\": {}\n      }\n    ]\n  }\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": "{{localhost}}user/v1/form/update/a1af6b98-73d4-439f-8537-6f3a901ad462",
+								"description": "Generated from cURL: curl -X 'PUT' \\\n  'http://localhost:3000/user/v1/form/update/a1af6b98-73d4-439f-8537-6f3a901ad462' \\\n  -H 'accept: */*' \\\n  -H 'tenantid: ef99949b-7f3a-4a5f-806a-e67e683e38f3' \\\n  -H 'Content-Type: application/json' \\\n  -d '{\n  \"fields\": {\n    \"result\": [\n      {\n        \"hint\": null,\n        \"name\": \"firstName\",\n        \"type\": \"text\",\n        \"label\": \"FIRST_NAME\",\n        \"order\": \"1\",\n        \"fieldId\": null,\n        \"options\": [],\n        \"pattern\": \"^(?=.[a-zA-Z])[a-zA-Z ]+$\",\n        \"coreField\": 1,\n        \"dependsOn\": null,\n        \"maxLength\": null,\n        \"minLength\": null,\n        \"isEditable\": true,\n        \"isPIIField\": null,\n        \"isRequired\": true,\n        \"validation\": [\n          \"string\"\n        ],\n        \"placeholder\": \"ENTER_FIRST_NAME\",\n        \"isMultiSelect\": false,\n        \"maxSelections\": 0,\n        \"sourceDetails\": {}\n      }\n    ]\n  }\n}'"
+							},
+							"response": []
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "User Exist",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "accept",
+						"value": "*/*"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"firstName\": \"Sourav\",\n      \"username\": \"scbr249876422oo5\"\n\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": "{{interfaceBaseUrl}}/interface/v1/user/check",
+				"description": "Generated from cURL: curl -X 'POST' \\\n  'http://localhost:3000/user/v1/check' \\\n  -H 'accept: */*' \\\n  -H 'Content-Type: application/json' \\\n  -d '{\n  \"firstName\": \"Sourav\",\n      \"username\": \"scbr249876422oo5\"\n\n}'"
+			},
+			"response": []
+		},
+		{
+			"name": "Suggest Username",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "accept",
+						"value": "*/*"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"firstName\": \"Roger\",\n  \"lastName\": \"Schumm\",\n  \"username\": \"shubham_973\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": "{{interfaceBaseUrl}}/interface/v1/user/suggestUsername",
+				"description": "Generated from cURL: curl -X 'POST' \\\n  'http://localhost:3000/user/v1/suggestUsername' \\\n  -H 'accept: */*' \\\n  -H 'Content-Type: application/json' \\\n  -d '{\n  \"firstName\": \"Roger\",\n  \"lastName\": \"Schumm\",\n  \"username\": \"shubham_973\"\n}'"
+			},
+			"response": []
+		},
+		{
+			"name": "https://middleware-prod.prathamdigital.org/user/v1/password-reset-link",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\"username\":\"lekharao146\",\"redirectUrl\":\"pratham://learnerapp\"}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": "{{interfaceBaseUrl}}/interface/v1/user/password-reset-link",
+				"description": "Generated from cURL: curl -X POST https://middleware-prod.prathamdigital.org/user/v1/password-reset-link -H 'Content-Type: application/json' -H -d '{\"username\":\"lekharao146\",\"redirectUrl\":\"pratham://learnerapp\"}'"
+			},
+			"response": []
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"packages": {},
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"packages": {},
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "AccessToken",
+			"value": "eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJ5TGlWakRTOGFrd1JkOTI4aTJnbXluNG9Na1ZkdERpcXk0V3NaNHZLeHF3In0.eyJleHAiOjE3NDY3MjY4NDksImlhdCI6MTc0NjY0MDQ0OSwianRpIjoiYjYwNjIyZDYtYWUxNy00N2FiLTg1YzktNzdmMDFiZDU0ZGJkIiwiaXNzIjoiaHR0cHM6Ly9rZXljbG9hay1wcm9kLnByYXRoYW1kaWdpdGFsLm9yZy9hdXRoL3JlYWxtcy9wcmF0aGFtIiwiYXVkIjoiYWNjb3VudCIsInN1YiI6ImM2NWY4MTM2LWJiZjctNGE0NS04OGRjLTM0NGEyNDkwOGJjNSIsInR5cCI6IkJlYXJlciIsImF6cCI6InByYXRoYW0iLCJzZXNzaW9uX3N0YXRlIjoiMWYyMmYwYzYtZjcxNC00NmUzLWFlMDctOTkxZTdiMDE1OGIxIiwiYWNyIjoiMSIsImFsbG93ZWQtb3JpZ2lucyI6WyIvKiJdLCJyZWFsbV9hY2Nlc3MiOnsicm9sZXMiOlsib2ZmbGluZV9hY2Nlc3MiLCJ1bWFfYXV0aG9yaXphdGlvbiIsImRlZmF1bHQtcm9sZXMtcHJhdGhhbSJdfSwicmVzb3VyY2VfYWNjZXNzIjp7ImFjY291bnQiOnsicm9sZXMiOlsibWFuYWdlLWFjY291bnQiLCJtYW5hZ2UtYWNjb3VudC1saW5rcyIsInZpZXctcHJvZmlsZSJdfX0sInNjb3BlIjoicHJvZmlsZSBlbWFpbCIsInNpZCI6IjFmMjJmMGM2LWY3MTQtNDZlMy1hZTA3LTk5MWU3YjAxNThiMSIsImVtYWlsX3ZlcmlmaWVkIjpmYWxzZSwibmFtZSI6Ik1hbmFzIEt1cmFuZSIsInByZWZlcnJlZF91c2VybmFtZSI6Im1hbmFzLmt1cmFuZUBwcmF0aGFtLm9yZyIsImdpdmVuX25hbWUiOiJNYW5hcyIsImZhbWlseV9uYW1lIjoiS3VyYW5lIiwiZW1haWwiOiJtYW5hcy5rdXJhbmVAcHJhdGhhbS5vcmcifQ.eQEPwkS5DxLRTsiHgIUyrYhIHEWUlsaUe2d6nX-9jAw-kDSkQzk5kQpjmP54NySIKRc0p6ZZFMiftLwonFhSphpEVOWzzQsUDGn7oxLnKxfioWa_RkA2VKHwFgYUZaJLbMoC5Yo7JCRT9L1tvUEvGuFlG69Q88VHlsesRJ9fXGa9BxwhOP6Xp8VRoSW5T2sQmMlh1QMeIYzvsCRz7rALqXvK7Vph8qn8hZJ95YOL0W7BOjaWbvDpJYAuenheypQ93RaiiK7JbSNX5pYlyUqSdhhqlcNhxogPC2L10sjnzOnte4wzU5KFVTkqLU6PKIbTIAjd2_qXpPQIFgZcLr4GRg"
+		},
+		{
+			"key": "refreshToken",
+			"value": "",
+			"disabled": true
+		},
+		{
+			"key": "interfaceBaseUrl",
+			"value": "https://saas-qa-interface.tekdinext.com/interface/v1/",
+			"type": "string"
+		},
+		{
+			"key": "tenantId",
+			"value": "0d73bcf9-ab62-44ef-945e-88b1a77ab3c3",
+			"type": "string"
+		}
+	]
+}
