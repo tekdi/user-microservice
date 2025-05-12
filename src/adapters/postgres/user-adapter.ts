@@ -878,7 +878,7 @@ export class PostgresUserService implements IServicelocator {
     if (username && userId === null) {
       delete whereClause.userId;
       whereClause.username = username;
-    }
+    }    
     const userDetails = await this.usersRepository.findOne({
       where: whereClause,
       select: [
@@ -910,9 +910,9 @@ export class PostgresUserService implements IServicelocator {
     userDetails["tenantData"] = tenantData;
 
     return userDetails;
-  }
+  }  
 
-  async userTenantRoleData(userId: string) {
+  async userTenantRoleData(userId: string) {    
     const query = `
   SELECT 
     DISTINCT ON (T."tenantId") 
@@ -932,7 +932,7 @@ export class PostgresUserService implements IServicelocator {
   WHERE 
     UTM."userId" = $1
   ORDER BY 
-    T."tenantId", UTM."Id";`;
+    T."tenantId", UTM."Id";`;    
 
     const result = await this.usersRepository.query(query, [userId]);
     const combinedResult = [];
@@ -1932,28 +1932,28 @@ export class PostgresUserService implements IServicelocator {
   }
 
   async assignUserToTenantAndRoll(tenantsData, createdBy) {
-    try {
-      const tenantId = tenantsData?.tenantRoleMapping?.orgnizationId;
+    try {      
+      const orgId = tenantsData?.tenantRoleMapping?.orgnizationId;
       const userId = tenantsData?.userId;
       const roleId = tenantsData?.tenantRoleMapping?.roleId;
 
       if (roleId) {
         const data = await this.userRoleMappingRepository.save({
           userId: userId,
-          orgId: tenantId,
+          orgId: orgId,
           roleId: roleId,
           createdBy: createdBy,
           updatedBy: createdBy,
         });
       }
 
-      if (tenantId) {
-        const data = await this.userOrgMappingRepository.save({
-          userId: userId,
-          tenantId: tenantId,
-          createdBy: createdBy,
-          updatedBy: createdBy,
-        });
+      if (orgId) {        
+          const data = await this.userOrgMappingRepository.save({
+            userId: userId,
+            orgId: orgId,
+            createdBy: createdBy,
+            updatedBy: createdBy,
+          });
       }
 
       LoggerUtil.log(API_RESPONSES.USER_TENANT);
