@@ -1,76 +1,73 @@
-import { Max, Min } from "class-validator";
 import {
   Entity,
   PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
-} from "typeorm";
+  UpdateDateColumn,
+} from 'typeorm';
 
-@Entity("Tenants")
+@Entity('Tenants')
 export class Tenant {
-  @PrimaryGeneratedColumn("uuid")
-  tenantId: string; // UUID field
+  @PrimaryGeneratedColumn('uuid')
+  tenantId: string;
 
-  @Column({ type: "text" })
-  name: string; // Text field for tenant's name
+  @Column({ type: 'text' })
+  name: string;
 
-  @Column({ type: "text", nullable: true })
-  domain: string | null; // Text field for tenant's domain
+  @Column({ type: 'text' })
+  domain: string;
 
-  @CreateDateColumn({ type: "timestamptz", default: () => "CURRENT_TIMESTAMP" })
-  createdAt: Date; // Timestamp for creation date with timezone
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
 
-  @Column({ type: "timestamptz", default: () => "CURRENT_TIMESTAMP" })
-  updatedAt: Date; // Timestamp for last updated date with timezone
+  @UpdateDateColumn({ type: 'timestamptz' })
+  updatedAt: Date;
 
-  @Column({ type: "jsonb", nullable: true })
-  params: Record<string, any>; // JSONB field for additional parameters
+  @Column({ type: 'jsonb', nullable: true })
+  params: any;
 
-  @Column({ type: "json", nullable: true })
-  programImages: string[]; // JSON field to store array of program images
-
-  @Column({ type: "text" })
+  @Column({ type: 'text', nullable: true })
   description: string;
 
-  @Column({
-    type: "text",
-    default: "draft",
-    enum: ["published", "draft", "archived"],
-  })
-  status: "published" | "draft" | "archived"; // Status column with enum values
+  @Column({ type: 'uuid', nullable: true })
+  createdBy: string;
 
-  @Column("int4", { nullable: false })
-  @Min(0)
-  @Max(999999)
-  ordering: number = 0;
+  @Column({ type: 'uuid', nullable: true })
+  updatedBy: string;
 
-  @Column({ type: "text", nullable: true })
-  programHead: string | null; // UUID of the user who created the tenant
+  @Column({ type: 'json', nullable: true })
+  programImages: any;
 
-  @Column({ type: "varchar", length: 255, nullable: true })
+  @Column({ type: 'int', default: () => `nextval('"Tenants_ordering_seq"'::regclass)` })
+  ordering: number;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  programHead: string;
+
+  @Column({ type: 'text', default: 'draft' })
+  status: string;
+
+  @Column({ type: 'varchar', nullable: true })
   templateId: string;
 
-  @Column({ type: "text" })
+  @Column({ type: 'text', nullable: true })
   contentFramework: string;
 
-  @Column({ type: "text" })
-  channelId: string;
-
-  @Column({ type: "text" })
+  @Column({ type: 'text', nullable: true })
   collectionFramework: string;
 
-  @Column({ type: "uuid", nullable: true })
-  createdBy: string | null; // UUID of the user who created the tenant
+  @Column({ type: 'text', nullable: true })
+  channelId: string;
 
-  @Column({ type: "uuid", nullable: true })
-  updatedBy: string | null; // UUID of the user who last updated the tenant
-
-  @Column({ type: "json", nullable: true })
+  @Column({ type: 'json', nullable: true })
   contentFilter: any;
 
-  @Column({ type: "text" })
+  @Column({ type: 'varchar', length: 255, nullable: true })
   parentId: string;
 
-  @Column({ type: "text" })
+  @Column({ type: 'varchar', length: 255, nullable: true })
   type: string;
+
+  @Column({ type: 'varchar', nullable: true })
+  context_type: string;
 }

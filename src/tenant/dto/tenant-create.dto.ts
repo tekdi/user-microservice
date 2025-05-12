@@ -50,6 +50,17 @@ export class TenantCreateDto {
     @ApiProperty({ type: () => String })
     @IsString()
     @IsNotEmpty()
+    context_type: string;
+
+    @ApiProperty({ type: () => String })
+    @IsString()
+    @IsNotEmpty()
+    @IsOptional()
+    parentId: string;
+
+    @ApiProperty({ type: () => String })
+    @IsString()
+    @IsNotEmpty()
     programHead: string;
 
     constructor(obj?: Partial<TenantCreateDto>) {
