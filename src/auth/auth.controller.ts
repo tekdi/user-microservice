@@ -58,8 +58,7 @@ export class AuthController {
   })
   public async getUserByAuth(@Req() request, @Res() response: Response) {
     const tenantId = request?.headers["tenantid"];
-    const org_id = request?.headers["org_id"];
-
+    const org_id = request?.headers["org_id"];    
     return this.authService.getUserByAuth(request, org_id, response);
   }
 
