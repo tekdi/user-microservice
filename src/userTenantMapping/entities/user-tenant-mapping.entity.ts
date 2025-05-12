@@ -20,6 +20,9 @@ export class UserOrgTenantMapping {
   @Column("uuid")
   tenantId: string;
 
+  @Column()
+  orgId: string;
+
   @CreateDateColumn({
     type: "timestamp with time zone",
     default: () => "CURRENT_TIMESTAMP",

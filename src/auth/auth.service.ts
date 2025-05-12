@@ -70,7 +70,7 @@ export class AuthService {
 
   public async getUserByAuth(request: any, tenantId, response: Response) {
     const apiId = APIID.USER_AUTH;
-    try {
+    try {      
       const decoded: any = jwt_decode(request.headers.authorization);
       const username = decoded.preferred_username;
       const data = await this.useradapter
