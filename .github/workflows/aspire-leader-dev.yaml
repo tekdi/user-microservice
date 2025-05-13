@@ -16,5 +16,5 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY_AL }}
           port: ${{ secrets.PORT_AL }}
           script: |
-            cd /home/ubuntu/Aspire-leader/BACKEND
+            cd /home/ubuntu/Aspire-leader/MICROSERVICES/BACKEND
             ./deploy.sh
