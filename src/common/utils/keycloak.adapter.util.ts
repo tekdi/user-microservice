@@ -91,10 +91,10 @@ async function createUserInKeyCloak(query, token, userDetails) {
 
       //added for org / tenant
       tenant: [JSON.stringify(userDetails.tenant)],
-      orgnizations: JSON.stringify(userDetails.orgnizations),
+      organizations: JSON.stringify(userDetails.orgnizations),
     },
   });
-  
+
   const config = {
     method: "post",
     url: `${process.env.KEYCLOAK}${process.env.KEYCLOAK_ADMIN}`,
@@ -104,7 +104,7 @@ async function createUserInKeyCloak(query, token, userDetails) {
     },
     data,
   };
-  console.log(config)
+  console.log(config);
 
   try {
     // Make the request and wait for the response
