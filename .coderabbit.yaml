@@ -29,6 +29,7 @@ reviews:
     base_branches:
       - 'master'
       - 'main'
+      - 'aspire-leaders'
       - 'dev'
       - 'feat/*'
       - 'feat-*'
