@@ -29,6 +29,7 @@ reviews:
     base_branches:
       - 'master'
       - 'main'
+      - 'aspire-leaders'
       - 'dev'
       - 'feat/*'
       - 'feat-*'
@@ -36,7 +37,6 @@ reviews:
       - 'Shiksha-2.0'
       - 'youth-management'
       - 'east-africa-ym'
-      - 'aspire-leaders'
 
 chat:
   auto_reply: true
