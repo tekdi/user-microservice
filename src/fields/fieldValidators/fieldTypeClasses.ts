@@ -135,26 +135,80 @@ export class CalendarField extends Field {
 
   constructor(fieldAttributes: FieldAttributes, fieldParams?: FieldParams) {
     super(fieldAttributes, fieldParams);
-    // this.showTime = fieldParams?.showTime ?? false;
-    // this.minDate = fieldParams?.minDate;
-    // this.maxDate = fieldParams?.maxDate;
+    this.showTime = fieldParams?.showTime ?? false;
+    this.minDate = fieldParams?.minDate;
+    this.maxDate = fieldParams?.maxDate;
   }
 
   validate(value: any): boolean {
-    const date = new Date(value);
+    if (!value) return false;
+
+    // If value is an array, get first item
+    if (Array.isArray(value)) value = value[0];
+
+    // Replace space with T if needed
+    if (
+      typeof value === 'string' &&
+      value.includes(' ') &&
+      !value.includes('T')
+    ) {
+      value = value.replace(' ', 'T');
+    }
+
+    let date = new Date(value);
     if (isNaN(date.getTime())) return false;
+
+    if (!this.showTime) {
+      date.setHours(0, 0, 0, 0);
+    }
 
     if (this.minDate) {
       const min = this.parseDate(this.minDate);
+      if (!this.showTime) min.setHours(0, 0, 0, 0);
       if (date < min) return false;
     }
 
     if (this.maxDate) {
       const max = new Date(this.maxDate);
+      if (!this.showTime) max.setHours(0, 0, 0, 0);
       if (date > max) return false;
     }
 
     return true;
+  }
+
+  formatValue(value: any): string | null {
+    if (!value) return null;
+
+    if (Array.isArray(value)) value = value[0];
+
+    // Normalize string (convert to ISO-like format)
+    if (
+      typeof value === 'string' &&
+      value.includes(' ') &&
+      !value.includes('T')
+    ) {
+      value = value.replace(' ', 'T');
+    }
+
+    // Truncate microseconds if present
+    if (typeof value === 'string') {
+      value = value.replace(/(\.\d{3})\d+/, '$1');
+    }
+
+    const date = new Date(value);
+    if (isNaN(date.getTime())) return null;
+
+    if (!this.showTime) {
+      // Return only the date portion (YYYY-MM-DD)
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+
+    // Full ISO datetime string
+    return date.toISOString();
   }
 
   private parseDate(input: string): Date {

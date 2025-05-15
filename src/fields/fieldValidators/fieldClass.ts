@@ -22,9 +22,9 @@ export interface FieldParams {
   // minLength?: number;
 
   // For calendar
-  // minDate?: string; // e.g., "16Y"
-  // maxDate?: string; // e.g., "2025-12-31"
-  // showTime?: boolean;
+  minDate?: string; // e.g., "16Y"
+  maxDate?: string; // e.g., "2025-12-31"
+  showTime?: boolean;
 }
 
 export interface SchemaField {

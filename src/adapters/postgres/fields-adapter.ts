@@ -144,6 +144,8 @@ export class PostgresFieldsService implements IServicelocatorfields {
       if (
         (getFieldDetails.type == 'checkbox' ||
           getFieldDetails.type == 'drop_down' ||
+          getFieldDetails.type == 'textarea' ||
+          getFieldDetails.type == 'date' ||
           getFieldDetails.type == 'radio') &&
         getFieldDetails.sourceDetails.source == 'table'
       ) {
@@ -242,6 +244,8 @@ export class PostgresFieldsService implements IServicelocatorfields {
       if (
         (getFieldDetails.type == 'checkbox' ||
           getFieldDetails.type == 'drop_down' ||
+          getFieldDetails.type == 'textarea' ||
+          getFieldDetails.type == 'date' ||
           getFieldDetails.type == 'radio') &&
         getFieldDetails.sourceDetails.source == 'table'
       ) {
