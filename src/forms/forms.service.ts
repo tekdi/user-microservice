@@ -207,7 +207,6 @@ export class FormsService {
       formCreateDto.contextType = formCreateDto.contextType.toUpperCase();
       formCreateDto.context = formCreateDto.context.toUpperCase();
       formCreateDto.title = formCreateDto.title.toUpperCase();
-      formCreateDto.contextId = formCreateDto.contextId;
 
       formCreateDto.tenantId = formCreateDto.tenantId.trim().length
         ? formCreateDto.tenantId
