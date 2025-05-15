@@ -45,6 +45,8 @@ import { OtpVerifyDTO } from 'src/user/dto/otpVerify.dto';
 import { SendPasswordResetOTPDto } from 'src/user/dto/passwordReset.dto';
 import { ActionType, UserUpdateDTO } from 'src/user/dto/user-update.dto';
 import config from '../../common/config';
+import { CalendarField } from 'src/fields/fieldValidators/fieldTypeClasses';
+
 interface UpdateField {
   userId: string; // Required
   firstName?: string; // Optional
@@ -1794,6 +1796,8 @@ export class PostgresUserService implements IServicelocator {
       if (
         (getFieldDetails.type == 'checkbox' ||
           getFieldDetails.type == 'drop_down' ||
+          getFieldDetails.type == 'textarea' ||
+          getFieldDetails.type == 'calendar' ||
           getFieldDetails.type == 'radio') &&
         getFieldDetails.sourceDetails.source == 'table'
       ) {
@@ -1818,6 +1822,22 @@ export class PostgresUserService implements IServicelocator {
         getFieldDetails,
         fieldsData['value']
       );
+      //checking validation for field value  of calendar
+      if (typeof checkValidation !== 'object') {
+        if (getFieldDetails.type === 'calendar') {
+          const calendarField = new CalendarField(
+            getFieldDetails,
+            getFieldDetails.fieldParams
+          );
+
+          // Format the value based on showTime
+          const originalValue = fieldsData['value'][0];
+          const formattedValue = calendarField.formatValue(originalValue);
+
+          // Replace the value to store in formatted form
+          fieldsData['value'] = [formattedValue];
+        }
+      }
 
       if (typeof checkValidation === 'object' && 'error' in checkValidation) {
         invalidateFields.push(

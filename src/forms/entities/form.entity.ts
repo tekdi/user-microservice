@@ -4,37 +4,40 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
-} from "typeorm";
+} from 'typeorm';
 
-@Entity({ name: "forms" })
+@Entity({ name: 'forms' })
 export class Form {
-  @PrimaryGeneratedColumn("uuid")
+  @PrimaryGeneratedColumn('uuid')
   formid: string;
 
-  @CreateDateColumn({ type: "timestamptz" })
+  @CreateDateColumn({ type: 'timestamptz' })
   createdat: Date;
 
-  @UpdateDateColumn({ type: "timestamptz" })
+  @UpdateDateColumn({ type: 'timestamptz' })
   updatedat: Date;
 
-  @Column({ type: "varchar", length: 255 })
+  @Column({ type: 'varchar', length: 255 })
   title: string;
 
-  @Column({ type: "uuid" })
+  @Column({ type: 'uuid' })
   tenantId: string;
 
-  @Column({ type: "varchar", length: 255, nullable: true })
+  @Column({ type: 'varchar', length: 255, nullable: true })
   context: string;
 
-  @Column({ type: "varchar", length: 50, nullable: true })
+  @Column({ type: 'varchar', length: 50, nullable: true })
   contextType: string;
 
-  @Column({ type: "jsonb", nullable: true })
+  @Column({ type: 'jsonb', nullable: true })
   fields: object;
 
-  @Column({ type: 'uuid'})
+  @Column({ type: 'uuid' })
   createdBy: string;
 
-  @Column({ type: 'uuid'})
+  @Column({ type: 'uuid' })
   updatedBy: string;
+
+  @Column({ type: 'uuid' })
+  contextId: string;
 }

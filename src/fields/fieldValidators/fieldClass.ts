@@ -16,6 +16,11 @@ export interface FieldAttributes {
 
 export interface FieldParams {
   options: Option[];
+
+  // For calendar
+  minDate?: string; // e.g., "16Y"
+  maxDate?: string; // e.g., "2025-12-31"
+  showTime?: boolean;
 }
 
 export interface SchemaField {
@@ -37,6 +42,9 @@ export interface SchemaField {
   minLength?: number;
   fieldId?: string;
   dependsOn?: boolean;
+  minDate?: string; // e.g., "16Y"
+  maxDate?: string; // e.g., "2025-12-31"
+  showTime?: boolean;
 }
 
 export interface Option {
