@@ -82,27 +82,13 @@ export class CheckboxField extends Field {
   }
 }
 
-// export class TextAreaField extends Field {
-//   constructor(fieldAttributes: FieldAttributes) {
-//     super(fieldAttributes);
-//   }
-
-//   validate(value: any): boolean {
-//     if (typeof value !== 'string') {
-//       throw new Error('Value must be a string.');
-//     }
-//     return true;
-//   }
-// }
-
+// text area field class
 export class TextAreaField extends Field {
   minLength?: number;
   maxLength?: number;
 
   constructor(fieldAttributes: FieldAttributes, fieldParams?: FieldParams) {
     super(fieldAttributes, fieldParams);
-    // this.minLength = fieldParams?.minLength;
-    // this.maxLength = fieldParams?.maxLength;
   }
 
   validate(value: any): boolean {
@@ -113,21 +99,7 @@ export class TextAreaField extends Field {
   }
 }
 
-// export class CalendarField extends Field {
-//   constructor(fieldAttributes: FieldAttributes) {
-//     super(fieldAttributes);
-//   }
-
-//   validate(value: any): boolean {
-//     // Basic date format check (you can improve this as needed)
-//     const datePattern = /^\d{4}-\d{2}-\d{2}$/; // YYYY-MM-DD
-//     if (!datePattern.test(value)) {
-//       throw new Error('Invalid date format. Expected YYYY-MM-DD.');
-//     }
-//     return true;
-//   }
-// }
-
+// calendar field class
 export class CalendarField extends Field {
   showTime: boolean;
   minDate?: string;
@@ -177,6 +149,7 @@ export class CalendarField extends Field {
     return true;
   }
 
+  //formatValue method to format the date value to get date and datetime depending on the showTime property
   formatValue(value: any): string | null {
     if (!value) return null;
 

@@ -1797,7 +1797,7 @@ export class PostgresUserService implements IServicelocator {
         (getFieldDetails.type == 'checkbox' ||
           getFieldDetails.type == 'drop_down' ||
           getFieldDetails.type == 'textarea' ||
-          getFieldDetails.type == 'date' ||
+          getFieldDetails.type == 'calendar' ||
           getFieldDetails.type == 'radio') &&
         getFieldDetails.sourceDetails.source == 'table'
       ) {
@@ -1822,11 +1822,9 @@ export class PostgresUserService implements IServicelocator {
         getFieldDetails,
         fieldsData['value']
       );
-      // Add this block after validation is successful
+      //checking validation for field value  of calendar
       if (typeof checkValidation !== 'object') {
-        if (getFieldDetails.type === 'date') {
-          // Import CalendarField at top if not already
-          // import { CalendarField } from './CalendarField';
+        if (getFieldDetails.type === 'calendar') {
           const calendarField = new CalendarField(
             getFieldDetails,
             getFieldDetails.fieldParams

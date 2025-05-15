@@ -17,10 +17,6 @@ export interface FieldAttributes {
 export interface FieldParams {
   options: Option[];
 
-  // For textarea
-  // maxLength?: number;
-  // minLength?: number;
-
   // For calendar
   minDate?: string; // e.g., "16Y"
   maxDate?: string; // e.g., "2025-12-31"
