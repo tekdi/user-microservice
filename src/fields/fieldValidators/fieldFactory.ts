@@ -26,9 +26,9 @@ export class FieldFactory {
       case 'numeric':
         return new NumericField(fieldAttributes);
       case 'textarea':
-        return new TextAreaField(fieldAttributes);
-      case 'calendar':
-        return new CalendarField(fieldAttributes);
+        return new TextAreaField(fieldAttributes, fieldParams);
+      case 'date':
+        return new CalendarField(fieldAttributes, fieldParams);
       default:
         throw new Error(`Unsupported field type: ${type}`);
     }

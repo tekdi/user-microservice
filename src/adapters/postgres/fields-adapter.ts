@@ -364,6 +364,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
           context: fieldsData.context,
           contextType: fieldsData.contextType,
           name: fieldsData.name,
+          type: fieldsData.type,
         },
       });
       if (checkFieldExist.length > 0) {

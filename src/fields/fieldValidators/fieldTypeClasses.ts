@@ -82,30 +82,88 @@ export class CheckboxField extends Field {
   }
 }
 
+// export class TextAreaField extends Field {
+//   constructor(fieldAttributes: FieldAttributes) {
+//     super(fieldAttributes);
+//   }
+
+//   validate(value: any): boolean {
+//     if (typeof value !== 'string') {
+//       throw new Error('Value must be a string.');
+//     }
+//     return true;
+//   }
+// }
+
 export class TextAreaField extends Field {
-  constructor(fieldAttributes: FieldAttributes) {
-    super(fieldAttributes);
+  minLength?: number;
+  maxLength?: number;
+
+  constructor(fieldAttributes: FieldAttributes, fieldParams?: FieldParams) {
+    super(fieldAttributes, fieldParams);
+    // this.minLength = fieldParams?.minLength;
+    // this.maxLength = fieldParams?.maxLength;
   }
 
   validate(value: any): boolean {
-    if (typeof value !== 'string') {
-      throw new Error('Value must be a string.');
-    }
+    if (typeof value !== 'string') return false;
+    if (this.minLength && value.length < this.minLength) return false;
+    if (this.maxLength && value.length > this.maxLength) return false;
     return true;
   }
 }
 
+// export class CalendarField extends Field {
+//   constructor(fieldAttributes: FieldAttributes) {
+//     super(fieldAttributes);
+//   }
+
+//   validate(value: any): boolean {
+//     // Basic date format check (you can improve this as needed)
+//     const datePattern = /^\d{4}-\d{2}-\d{2}$/; // YYYY-MM-DD
+//     if (!datePattern.test(value)) {
+//       throw new Error('Invalid date format. Expected YYYY-MM-DD.');
+//     }
+//     return true;
+//   }
+// }
+
 export class CalendarField extends Field {
-  constructor(fieldAttributes: FieldAttributes) {
-    super(fieldAttributes);
+  showTime: boolean;
+  minDate?: string;
+  maxDate?: string;
+
+  constructor(fieldAttributes: FieldAttributes, fieldParams?: FieldParams) {
+    super(fieldAttributes, fieldParams);
+    // this.showTime = fieldParams?.showTime ?? false;
+    // this.minDate = fieldParams?.minDate;
+    // this.maxDate = fieldParams?.maxDate;
   }
 
   validate(value: any): boolean {
-    // Basic date format check (you can improve this as needed)
-    const datePattern = /^\d{4}-\d{2}-\d{2}$/; // YYYY-MM-DD
-    if (!datePattern.test(value)) {
-      throw new Error('Invalid date format. Expected YYYY-MM-DD.');
+    const date = new Date(value);
+    if (isNaN(date.getTime())) return false;
+
+    if (this.minDate) {
+      const min = this.parseDate(this.minDate);
+      if (date < min) return false;
     }
+
+    if (this.maxDate) {
+      const max = new Date(this.maxDate);
+      if (date > max) return false;
+    }
+
     return true;
+  }
+
+  private parseDate(input: string): Date {
+    if (input.endsWith('Y')) {
+      const years = parseInt(input.replace('Y', ''), 10);
+      const date = new Date();
+      date.setFullYear(date.getFullYear() - years);
+      return date;
+    }
+    return new Date(input);
   }
 }
