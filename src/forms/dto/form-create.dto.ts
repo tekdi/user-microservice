@@ -4,6 +4,7 @@ import {
   IsString,
   IsObject,
   IsNotEmptyObject,
+  IsUUID,
 } from "class-validator";
 import { ApiProperty } from "@nestjs/swagger";
 
@@ -49,4 +50,13 @@ export class FormCreateDto {
 
   updatedBy: string;
 
+  @ApiProperty({
+    type: String,
+    description: "The UUID of the cohort (stored as contextId)",
+    example: "550e8400-e29b-41d4-a716-446655440000",
+    format: "uuid",
+  })
+  @IsOptional()
+  @IsUUID(undefined, { message: "Cohort ID (contextId) must be a valid UUID" })
+  contextId: string;
 }

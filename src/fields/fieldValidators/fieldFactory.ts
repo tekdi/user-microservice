@@ -4,8 +4,10 @@ import {
   NumericField,
   RadioField,
   TextField,
-} from "./fieldTypeClasses";
-import { FieldAttributes, FieldParams, Field } from "./fieldClass";
+  CalendarField,
+  TextAreaField,
+} from './fieldTypeClasses';
+import { FieldAttributes, FieldParams, Field } from './fieldClass';
 export class FieldFactory {
   static createField(
     type: string,
@@ -13,16 +15,20 @@ export class FieldFactory {
     fieldParams: FieldParams
   ): Field {
     switch (type) {
-      case "drop_down":
+      case 'drop_down':
         return new DropdownField(fieldAttributes, fieldParams);
-      case "checkbox":
+      case 'checkbox':
         return new CheckboxField(fieldAttributes, fieldParams);
-      case "radio":
+      case 'radio':
         return new RadioField(fieldAttributes, fieldParams);
-      case "text":
+      case 'text':
         return new TextField(fieldAttributes);
-      case "numeric":
+      case 'numeric':
         return new NumericField(fieldAttributes);
+      case 'textarea':
+        return new TextAreaField(fieldAttributes);
+      case 'calendar':
+        return new CalendarField(fieldAttributes);
       default:
         throw new Error(`Unsupported field type: ${type}`);
     }
