@@ -1389,11 +1389,12 @@ export class PostgresFieldsService implements IServicelocatorfields {
             )
           : jsonData.options;
       } else {
+        const fpOptions = (fetchFieldParams?.fieldParams as any)?.options ?? [];
         dynamicOptions = controllingfieldfk
-          ? (fetchFieldParams?.fieldParams as any)?.options?.filter(
+          ? fpOptions.filter(
               (opt) => opt?.controllingfieldfk === controllingfieldfk
             )
-          : (fetchFieldParams?.fieldParams as any)?.options;
+          : fpOptions;
       }
 
       if (!dynamicOptions?.length) {
