@@ -1190,6 +1190,135 @@ export class PostgresFieldsService implements IServicelocatorfields {
   }
 
   //Get all fields options
+  // public async getFieldOptions(
+  //   fieldsOptionsSearchDto: FieldsOptionsSearchDto,
+  //   response: Response
+  // ) {
+  //   const apiId = APIID.FIELDVALUES_SEARCH;
+  //   try {
+  //     let dynamicOptions;
+  //     let { limit, offset } = fieldsOptionsSearchDto;
+  //     const {
+  //       fieldName,
+  //       controllingfieldfk,
+  //       context,
+  //       contextType,
+  //       sort,
+  //       optionName,
+  //     } = fieldsOptionsSearchDto;
+
+  //     offset = offset || 0;
+  //     limit = limit || 200;
+
+  //     const condition: any = {
+  //       name: fieldName,
+  //     };
+
+  //     if (context) {
+  //       condition.context = context;
+  //     }
+
+  //     if (contextType) {
+  //       condition.contextType = contextType;
+  //     }
+
+  //     const fetchFieldParams = await this.fieldsRepository.findOne({
+  //       where: condition,
+  //     });
+
+  //     let order;
+  //     if (sort?.length) {
+  //       const orderKey = sort[1].toUpperCase();
+  //       order = `ORDER BY "${sort[0]}" ${orderKey}`;
+  //     } else {
+  //       order = `ORDER BY name ASC`;
+  //     }
+
+  //     if (fetchFieldParams?.sourceDetails?.source === 'table') {
+  //       let whereClause;
+  //       if (controllingfieldfk) {
+  //         whereClause = `"controllingfieldfk" = '${controllingfieldfk}'`;
+  //       }
+
+  //       dynamicOptions = await this.findDynamicOptions(
+  //         fieldName,
+  //         whereClause,
+  //         offset,
+  //         limit,
+  //         order,
+  //         optionName
+  //       );
+  //     } else if (fetchFieldParams?.sourceDetails?.source === 'jsonFile') {
+  //       const filePath = path.join(
+  //         process.cwd(),
+  //         `${fetchFieldParams.sourceDetails.filePath}`
+  //       );
+  //       const getFieldValuesFromJson = JSON.parse(
+  //         readFileSync(filePath, 'utf-8')
+  //       );
+
+  //       if (controllingfieldfk) {
+  //         dynamicOptions = getFieldValuesFromJson.options.filter(
+  //           (option) => option?.controllingfieldfk === controllingfieldfk
+  //         );
+  //       } else {
+  //         dynamicOptions = getFieldValuesFromJson;
+  //       }
+  //     } else {
+  //       if (fetchFieldParams.fieldParams['options'] && controllingfieldfk) {
+  //         dynamicOptions = fetchFieldParams?.fieldParams['options'].filter(
+  //           (option: any) => option?.controllingfieldfk === controllingfieldfk
+  //         );
+  //       } else {
+  //         dynamicOptions = fetchFieldParams?.fieldParams['options'];
+  //       }
+  //     }
+
+  //     if (dynamicOptions.length === 0) {
+  //       return await APIResponse.error(
+  //         response,
+  //         apiId,
+  //         `No data found in ${fieldName} table`,
+  //         `NOT_FOUND`,
+  //         HttpStatus.NOT_FOUND
+  //       );
+  //     }
+
+  //     const queryData = dynamicOptions.map((result) => ({
+  //       value: result?.value,
+  //       label: result?.name,
+  //       createdAt: result?.createdAt,
+  //       updatedAt: result?.updatedAt,
+  //       createdBy: result?.createdBy,
+  //       updatedBy: result?.updatedBy,
+  //     }));
+
+  //     const result = {
+  //       totalCount: parseInt(dynamicOptions[0]?.total_count, 10),
+  //       fieldId: fetchFieldParams?.fieldId,
+  //       values: queryData,
+  //     };
+
+  //     return await APIResponse.success(
+  //       response,
+  //       apiId,
+  //       result,
+  //       HttpStatus.OK,
+  //       'Field options fetched successfully.'
+  //     );
+  //   } catch (e) {
+  //     LoggerUtil.error(`${API_RESPONSES.SERVER_ERROR}`, `Error: ${e.message}`);
+  //     const errorMessage = e?.message || API_RESPONSES.SERVER_ERROR;
+  //     return APIResponse.error(
+  //       response,
+  //       apiId,
+  //       API_RESPONSES.SERVER_ERROR,
+  //       `Error : ${errorMessage}`,
+  //       HttpStatus.INTERNAL_SERVER_ERROR
+  //     );
+  //   }
+  // }
+
   public async getFieldOptions(
     fieldsOptionsSearchDto: FieldsOptionsSearchDto,
     response: Response
@@ -1210,35 +1339,34 @@ export class PostgresFieldsService implements IServicelocatorfields {
       offset = offset || 0;
       limit = limit || 200;
 
-      const condition: any = {
-        name: fieldName,
-      };
-
-      if (context) {
-        condition.context = context;
-      }
-
-      if (contextType) {
-        condition.contextType = contextType;
-      }
+      const condition: any = { name: fieldName };
+      if (context) condition.context = context;
+      if (contextType) condition.contextType = contextType;
 
       const fetchFieldParams = await this.fieldsRepository.findOne({
         where: condition,
       });
 
-      let order;
-      if (sort?.length) {
-        const orderKey = sort[1].toUpperCase();
-        order = `ORDER BY "${sort[0]}" ${orderKey}`;
-      } else {
-        order = `ORDER BY name ASC`;
+      if (!fetchFieldParams) {
+        return await APIResponse.error(
+          response,
+          apiId,
+          `Field ${fieldName} not found`,
+          `NOT_FOUND`,
+          HttpStatus.NOT_FOUND
+        );
       }
 
+      // Set sort order
+      let order = sort?.length
+        ? `ORDER BY "${sort[0]}" ${sort[1].toUpperCase()}`
+        : `ORDER BY name ASC`;
+
+      // Fetch dynamic options based on source
       if (fetchFieldParams?.sourceDetails?.source === 'table') {
-        let whereClause;
-        if (controllingfieldfk) {
-          whereClause = `"controllingfieldfk" = '${controllingfieldfk}'`;
-        }
+        const whereClause = controllingfieldfk
+          ? `"controllingfieldfk" = '${controllingfieldfk}'`
+          : undefined;
 
         dynamicOptions = await this.findDynamicOptions(
           fieldName,
@@ -1251,39 +1379,34 @@ export class PostgresFieldsService implements IServicelocatorfields {
       } else if (fetchFieldParams?.sourceDetails?.source === 'jsonFile') {
         const filePath = path.join(
           process.cwd(),
-          `${fetchFieldParams.sourceDetails.filePath}`
+          fetchFieldParams.sourceDetails.filePath
         );
-        const getFieldValuesFromJson = JSON.parse(
-          readFileSync(filePath, 'utf-8')
-        );
+        const jsonData = JSON.parse(readFileSync(filePath, 'utf-8'));
 
-        if (controllingfieldfk) {
-          dynamicOptions = getFieldValuesFromJson.options.filter(
-            (option) => option?.controllingfieldfk === controllingfieldfk
-          );
-        } else {
-          dynamicOptions = getFieldValuesFromJson;
-        }
+        dynamicOptions = controllingfieldfk
+          ? jsonData.options?.filter(
+              (opt) => opt?.controllingfieldfk === controllingfieldfk
+            )
+          : jsonData.options;
       } else {
-        if (fetchFieldParams.fieldParams['options'] && controllingfieldfk) {
-          dynamicOptions = fetchFieldParams?.fieldParams['options'].filter(
-            (option: any) => option?.controllingfieldfk === controllingfieldfk
-          );
-        } else {
-          dynamicOptions = fetchFieldParams?.fieldParams['options'];
-        }
+        dynamicOptions = controllingfieldfk
+          ? (fetchFieldParams?.fieldParams as any)?.options?.filter(
+              (opt) => opt?.controllingfieldfk === controllingfieldfk
+            )
+          : (fetchFieldParams?.fieldParams as any)?.options;
       }
 
-      if (dynamicOptions.length === 0) {
+      if (!dynamicOptions?.length) {
         return await APIResponse.error(
           response,
           apiId,
-          `No data found in ${fieldName} table`,
+          `No data found in ${fieldName}`,
           `NOT_FOUND`,
           HttpStatus.NOT_FOUND
         );
       }
 
+      // Format main field options
       const queryData = dynamicOptions.map((result) => ({
         value: result?.value,
         label: result?.name,
@@ -1293,10 +1416,70 @@ export class PostgresFieldsService implements IServicelocatorfields {
         updatedBy: result?.updatedBy,
       }));
 
+      // ---------------- Conditional Field Logic ----------------
+      const conditionalFields = [];
+      const conditionalMappings =
+        fetchFieldParams?.sourceDetails?.conditionalMappings;
+
+      if (
+        Array.isArray(conditionalMappings) &&
+        conditionalMappings.length > 0
+      ) {
+        for (const mapping of conditionalMappings) {
+          const { value: triggerValue, fieldId: conditionalFieldId } = mapping;
+
+          const isTriggered = dynamicOptions.some(
+            (opt) => opt.value === triggerValue
+          );
+          if (!isTriggered || !conditionalFieldId) continue;
+
+          const conditionalField = await this.fieldsRepository.findOne({
+            where: { fieldId: conditionalFieldId, context, contextType },
+          });
+          if (!conditionalField) continue;
+
+          let conditionalOptions = [];
+
+          if ((conditionalField?.fieldParams as any)?.options) {
+            conditionalOptions = (conditionalField.fieldParams as any).options;
+          } else if (conditionalField?.sourceDetails?.source === 'table') {
+            conditionalOptions = await this.findDynamicOptions(
+              conditionalField.name,
+              undefined,
+              0,
+              200,
+              'ORDER BY name ASC'
+            );
+          } else if (conditionalField?.sourceDetails?.source === 'jsonFile') {
+            const filePath = path.join(
+              process.cwd(),
+              conditionalField.sourceDetails.filePath
+            );
+            const fileData = JSON.parse(readFileSync(filePath, 'utf-8'));
+            conditionalOptions = fileData.options || [];
+          }
+
+          const formattedConditionalOptions = conditionalOptions.map((opt) => ({
+            value: opt?.value,
+            label: opt?.name || opt?.label,
+          }));
+
+          conditionalFields.push({
+            fieldId: conditionalField.fieldId,
+            fieldName: conditionalField.name,
+            values: formattedConditionalOptions,
+          });
+        }
+      }
+
+      // ---------------- Final Response ----------------
       const result = {
-        totalCount: parseInt(dynamicOptions[0]?.total_count, 10),
+        totalCount: parseInt(dynamicOptions[0]?.total_count || '0', 10),
         fieldId: fetchFieldParams?.fieldId,
         values: queryData,
+        conditionalFields: conditionalFields.length
+          ? conditionalFields
+          : undefined,
       };
 
       return await APIResponse.success(
