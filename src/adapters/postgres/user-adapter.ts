@@ -160,11 +160,17 @@ export class PostgresUserService implements IServicelocator {
         ? programName.charAt(0).toUpperCase() + programName.slice(1)
         : 'Learner Account';
 
-      //Send Notification
+      // Use key accordingly to send notification (For account verification or password reset)
+      const notificationKey =
+        userData?.status === 'inactive'
+          ? 'onAccountVerification'
+          : 'OnForgotPasswordReset';
+
+      // Send Notification
       const notificationPayload = {
         isQueue: false,
         context: 'USER',
-        key: 'OnForgotPasswordReset',
+        key: notificationKey,
         replacements: {
           '{username}': userData?.username,
           '{resetToken}': resetToken,
@@ -178,31 +184,44 @@ export class PostgresUserService implements IServicelocator {
         },
       };
 
+      // Determine success and failure messages based on the notification key
+      const failureMessage =
+        notificationKey === 'OnForgotPasswordReset'
+          ? API_RESPONSES.RESET_PASSWORD_LINK_FAILED
+          : API_RESPONSES.ACCOUNT_VERIFICATION_LINK_FAILED;
+
+      const successMessage =
+        notificationKey === 'OnForgotPasswordReset'
+          ? API_RESPONSES.RESET_PASSWORD_LINK_SUCCESS
+          : API_RESPONSES.ACCOUNT_VERIFICATION_LINK_SUCCESS;
+
       const mailSend = await this.notificationRequest.sendNotification(
         notificationPayload
       );
 
+      // Check for errors in the email sending process
       if (mailSend?.result?.email?.errors.length > 0) {
         LoggerUtil.error(
           `${API_RESPONSES.BAD_REQUEST}`,
-          `Error: ${API_RESPONSES.RESET_PASSWORD_LINK_FAILED}`,
+          `Error: ${failureMessage}`,
           apiId
         );
         return APIResponse.error(
           response,
           apiId,
           mailSend?.result?.email?.errors,
-          API_RESPONSES.RESET_PASSWORD_LINK_FAILED,
+          failureMessage,
           HttpStatus.BAD_REQUEST
         );
       }
 
+      // Log success
       return await APIResponse.success(
         response,
         apiId,
         { email: emailOfUser },
         HttpStatus.OK,
-        API_RESPONSES.RESET_PASSWORD_LINK_SUCCESS
+        successMessage
       );
     } catch (e) {
       LoggerUtil.error(
@@ -264,12 +283,25 @@ export class PostgresUserService implements IServicelocator {
           body.newPassword,
           userDetail.userId
         );
-        //update tempPassword status
+
+        // Update tempPassword and user status
         if (apiResponse?.statusCode === 204) {
+          // Initialize an empty object to collect fields that need to be updated
+          const updatePayload: any = {};
+
+          // If the user's temporary password is still enabled, set it to false
           if (userData.temporaryPassword) {
-            await this.usersRepository.update(userData.userId, {
-              temporaryPassword: false,
-            });
+            updatePayload.temporaryPassword = false;
+          }
+
+          // If the user account is currently inactive, activate it by updating the status
+          if (userData.status === 'inactive') {
+            updatePayload.status = 'active';
+          }
+
+          // Only call the update function if there is at least one field to update
+          if (Object.keys(updatePayload).length > 0) {
+            await this.usersRepository.update(userData.userId, updatePayload);
           }
         }
       } catch (e) {
@@ -760,6 +792,7 @@ export class PostgresUserService implements IServicelocator {
         'mobile',
         'email',
         'temporaryPassword',
+        'status',
         'createdBy',
         'deviceId',
         'mobile_country_code',
