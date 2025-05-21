@@ -160,12 +160,13 @@ export class PostgresUserService implements IServicelocator {
         ? programName.charAt(0).toUpperCase() + programName.slice(1)
         : 'Learner Account';
 
+      // Use key accordingly to send notification (For account verification or password reset)
       const notificationKey =
         userData?.status === 'inactive'
           ? 'onAccountVerification'
           : 'OnForgotPasswordReset';
 
-      //Send Notification
+      // Send Notification
       const notificationPayload = {
         isQueue: false,
         context: 'USER',
@@ -183,6 +184,7 @@ export class PostgresUserService implements IServicelocator {
         },
       };
 
+      // Determine success and failure messages based on the notification key
       const failureMessage =
         notificationKey === 'OnForgotPasswordReset'
           ? API_RESPONSES.RESET_PASSWORD_LINK_FAILED
@@ -197,6 +199,7 @@ export class PostgresUserService implements IServicelocator {
         notificationPayload
       );
 
+      // Check for errors in the email sending process
       if (mailSend?.result?.email?.errors.length > 0) {
         LoggerUtil.error(
           `${API_RESPONSES.BAD_REQUEST}`,
@@ -212,6 +215,7 @@ export class PostgresUserService implements IServicelocator {
         );
       }
 
+      // Log success
       return await APIResponse.success(
         response,
         apiId,
@@ -279,12 +283,25 @@ export class PostgresUserService implements IServicelocator {
           body.newPassword,
           userDetail.userId
         );
-        //update tempPassword status
+
+        // Update tempPassword and user status
         if (apiResponse?.statusCode === 204) {
+          // Initialize an empty object to collect fields that need to be updated
+          const updatePayload: any = {};
+
+          // If the user's temporary password is still enabled, set it to false
           if (userData.temporaryPassword) {
-            await this.usersRepository.update(userData.userId, {
-              temporaryPassword: false,
-            });
+            updatePayload.temporaryPassword = false;
+          }
+
+          // If the user account is currently inactive, activate it by updating the status
+          if (userData.status === 'inactive') {
+            updatePayload.status = 'active';
+          }
+
+          // Only call the update function if there is at least one field to update
+          if (Object.keys(updatePayload).length > 0) {
+            await this.usersRepository.update(userData.userId, updatePayload);
           }
         }
       } catch (e) {
