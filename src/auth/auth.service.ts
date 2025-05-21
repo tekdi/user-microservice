@@ -3,14 +3,14 @@ import {
   Injectable,
   NotFoundException,
   UnauthorizedException,
-} from "@nestjs/common";
-import { UserAdapter } from "src/user/useradapter";
-import axios from "axios";
-import jwt_decode from "jwt-decode";
-import APIResponse from "src/common/responses/response";
-import { KeycloakService } from "src/common/utils/keycloak.service";
-import { APIID } from "src/common/utils/api-id.config";
-import { Response } from "express";
+} from '@nestjs/common';
+import { UserAdapter } from 'src/user/useradapter';
+import axios from 'axios';
+import jwt_decode from 'jwt-decode';
+import APIResponse from 'src/common/responses/response';
+import { KeycloakService } from 'src/common/utils/keycloak.service';
+import { APIID } from 'src/common/utils/api-id.config';
+import { Response } from 'express';
 
 type LoginResponse = {
   access_token: string;
@@ -23,12 +23,33 @@ export class AuthService {
   constructor(
     private readonly useradapter: UserAdapter,
     private readonly keycloakService: KeycloakService
-  ) { }
+  ) {}
 
   async login(authDto, response: Response) {
     const apiId = APIID.LOGIN;
     const { username, password } = authDto;
     try {
+      // Fetch user details by username
+      const userData = await this.useradapter
+        .buildUserAdapter()
+        .findUserDetails(null, username);
+
+      // Handle case: user not found or user is inactive
+      if (!userData || userData.status === 'inactive') {
+        const errorMessage = !userData
+          ? 'User details not found for user'
+          : 'User is inactive, please verify your email';
+
+        return APIResponse.error(
+          response,
+          apiId,
+          'Bad Request',
+          errorMessage,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      // If user is found, proceed to login
       const {
         access_token,
         expires_in,
@@ -50,17 +71,17 @@ export class AuthService {
         apiId,
         res,
         HttpStatus.OK,
-        "Auth Token fetched Successfully."
+        'Auth Token fetched Successfully.'
       );
     } catch (error) {
       if (error.response && error.response.status === 401) {
-        throw new NotFoundException("Invalid username or password");
+        throw new NotFoundException('Invalid username or password');
       } else {
-        const errorMessage = error?.message || "Something went wrong";
+        const errorMessage = error?.message || 'Something went wrong';
         return APIResponse.error(
           response,
           apiId,
-          "Internal Server Error",
+          'Internal Server Error',
           `Error : ${errorMessage}`,
           HttpStatus.INTERNAL_SERVER_ERROR
         );
@@ -82,14 +103,14 @@ export class AuthService {
         apiId,
         data,
         HttpStatus.OK,
-        "User fetched by auth token Successfully."
+        'User fetched by auth token Successfully.'
       );
     } catch (e) {
-      const errorMessage = e?.message || "Something went wrong";
+      const errorMessage = e?.message || 'Something went wrong';
       return APIResponse.error(
         response,
         apiId,
-        "Internal Server Error",
+        'Internal Server Error',
         `Error : ${errorMessage}`,
         HttpStatus.INTERNAL_SERVER_ERROR
       );
@@ -117,7 +138,7 @@ export class AuthService {
       apiId,
       res,
       HttpStatus.OK,
-      "Refresh Token fetched Successfully."
+      'Refresh Token fetched Successfully.'
     );
   }
 
@@ -130,17 +151,17 @@ export class AuthService {
         apiId,
         logout,
         HttpStatus.OK,
-        "Logged Out Successfully."
+        'Logged Out Successfully.'
       );
     } catch (error) {
       if (error.response && error.response.status === 400) {
         throw new UnauthorizedException();
       } else {
-        const errorMessage = error?.message || "Something went wrong";
+        const errorMessage = error?.message || 'Something went wrong';
         return APIResponse.error(
           response,
           apiId,
-          "Internal Server Error",
+          'Internal Server Error',
           `Error : ${errorMessage}`,
           HttpStatus.INTERNAL_SERVER_ERROR
         );

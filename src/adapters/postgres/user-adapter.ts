@@ -160,11 +160,16 @@ export class PostgresUserService implements IServicelocator {
         ? programName.charAt(0).toUpperCase() + programName.slice(1)
         : 'Learner Account';
 
+      const notificationKey =
+        userData?.status === 'inactive'
+          ? 'onAccountVerification'
+          : 'OnForgotPasswordReset';
+
       //Send Notification
       const notificationPayload = {
         isQueue: false,
         context: 'USER',
-        key: 'OnForgotPasswordReset',
+        key: notificationKey,
         replacements: {
           '{username}': userData?.username,
           '{resetToken}': resetToken,
@@ -178,6 +183,16 @@ export class PostgresUserService implements IServicelocator {
         },
       };
 
+      const failureMessage =
+        notificationKey === 'OnForgotPasswordReset'
+          ? API_RESPONSES.RESET_PASSWORD_LINK_FAILED
+          : API_RESPONSES.ACCOUNT_VERIFICATION_LINK_FAILED;
+
+      const successMessage =
+        notificationKey === 'OnForgotPasswordReset'
+          ? API_RESPONSES.RESET_PASSWORD_LINK_SUCCESS
+          : API_RESPONSES.ACCOUNT_VERIFICATION_LINK_SUCCESS;
+
       const mailSend = await this.notificationRequest.sendNotification(
         notificationPayload
       );
@@ -185,14 +200,14 @@ export class PostgresUserService implements IServicelocator {
       if (mailSend?.result?.email?.errors.length > 0) {
         LoggerUtil.error(
           `${API_RESPONSES.BAD_REQUEST}`,
-          `Error: ${API_RESPONSES.RESET_PASSWORD_LINK_FAILED}`,
+          `Error: ${failureMessage}`,
           apiId
         );
         return APIResponse.error(
           response,
           apiId,
           mailSend?.result?.email?.errors,
-          API_RESPONSES.RESET_PASSWORD_LINK_FAILED,
+          failureMessage,
           HttpStatus.BAD_REQUEST
         );
       }
@@ -202,7 +217,7 @@ export class PostgresUserService implements IServicelocator {
         apiId,
         { email: emailOfUser },
         HttpStatus.OK,
-        API_RESPONSES.RESET_PASSWORD_LINK_SUCCESS
+        successMessage
       );
     } catch (e) {
       LoggerUtil.error(
@@ -760,6 +775,7 @@ export class PostgresUserService implements IServicelocator {
         'mobile',
         'email',
         'temporaryPassword',
+        'status',
         'createdBy',
         'deviceId',
         'mobile_country_code',

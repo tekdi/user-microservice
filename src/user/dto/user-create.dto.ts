@@ -110,6 +110,7 @@ export class UserCreateDto {
     enum: ['male', 'female', 'transgender'],
   })
   @Expose()
+  @IsOptional()
   @IsEnum(['male', 'female', 'transgender'])
   gender: string;
 
