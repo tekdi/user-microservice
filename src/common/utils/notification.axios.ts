@@ -1,9 +1,9 @@
-import { HttpService } from "@nestjs/axios";
-import { HttpException, HttpStatus, Injectable } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
+import { HttpService } from '@nestjs/axios';
+import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 
-import axios, { AxiosRequestConfig } from "axios";
-import { API_RESPONSES } from "./response.messages";
+import axios, { AxiosRequestConfig } from 'axios';
+import { API_RESPONSES } from './response.messages';
 
 @Injectable()
 export class NotificationRequest {
@@ -12,17 +12,17 @@ export class NotificationRequest {
     private readonly configService: ConfigService,
     private readonly httpService: HttpService
   ) {
-    this.url = this.configService.get("NOTIFICATION_URL");
+    this.url = this.configService.get('NOTIFICATION_URL');
   }
 
   async sendNotification(body) {
     const data = JSON.stringify(body);
     const config: AxiosRequestConfig<any> = {
-      method: "POST",
+      method: 'POST',
       maxBodyLength: Infinity,
       url: `${this.url}/notification/send`,
       headers: {
-        "Content-Type": "application/json",
+        'Content-Type': 'application/json',
       },
       data: data,
     };
@@ -30,7 +30,7 @@ export class NotificationRequest {
       const response = await axios.request(config);
       return response.data;
     } catch (error) {
-      if (error.code === "ECONNREFUSED") {
+      if (error.code === 'ECONNREFUSED') {
         throw new HttpException(
           API_RESPONSES.SERVICE_UNAVAILABLE,
           HttpStatus.SERVICE_UNAVAILABLE
