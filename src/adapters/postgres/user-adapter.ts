@@ -608,7 +608,7 @@ export class PostgresUserService implements IServicelocator {
           userId: userData.userId,
         },
       });
-
+      
       if (checkExistUser.length == 0) {
         return APIResponse.error(
           response,
@@ -756,7 +756,10 @@ export class PostgresUserService implements IServicelocator {
         "mobile",
         "email",
         "temporaryPassword",
+        "createdAt",
+        "updatedAt",
         "createdBy",
+        "updatedBy",
         "deviceId",
       ],
     });
