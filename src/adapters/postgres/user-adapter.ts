@@ -172,7 +172,9 @@ export class PostgresUserService implements IServicelocator {
         context: 'USER',
         key: notificationKey,
         replacements: {
-          '{username}': userData?.username,
+          '{username}': userData?.firstName
+            ? userData.firstName
+            : userData?.username,
           '{resetToken}': resetToken,
           '{programName}': capilatizeFirstLettterOfProgram,
           '{expireTime}': time,
