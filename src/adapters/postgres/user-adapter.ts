@@ -163,7 +163,7 @@ export class PostgresUserService implements IServicelocator {
       // Use key accordingly to send notification (For account verification or password reset)
       const notificationKey =
         userData?.status === 'inactive'
-          ? 'onAccountVerification'
+          ? 'onStudentCreated'
           : 'OnForgotPasswordReset';
 
       // Send Notification
@@ -1521,6 +1521,7 @@ export class PostgresUserService implements IServicelocator {
       (user.middleName = userCreateDto?.middleName),
       (user.lastName = userCreateDto?.lastName),
       (user.gender = userCreateDto?.gender),
+      (user.status = userCreateDto?.status as User['status']),
       (user.email = userCreateDto?.email),
       (user.mobile = Number(userCreateDto?.mobile) || null),
       (user.mobile_country_code = userCreateDto?.mobile_country_code),

@@ -8,10 +8,10 @@ import {
   ValidateIf,
   Length,
   IsDate,
-} from "class-validator";
-import { Expose, Type } from "class-transformer";
-import { UserStatus } from "../entities/user-entity";
-import { ApiProperty } from "@nestjs/swagger";
+} from 'class-validator';
+import { Expose, Type } from 'class-transformer';
+import { UserStatus } from '../entities/user-entity';
+import { ApiProperty } from '@nestjs/swagger';
 
 export enum ActionType {
   ADD = 'add',
@@ -24,31 +24,44 @@ class UserDataDTO {
   @IsOptional()
   username: string;
 
-  @ApiProperty({ type: String, description: 'First name of the user', maxLength: 50 })
+  @ApiProperty({
+    type: String,
+    description: 'First name of the user',
+    maxLength: 50,
+  })
   @Expose()
   @IsOptional()
   @IsString()
   @Length(1, 50)
   firstName?: string;
 
-  @ApiProperty({ type: String, description: 'Middle name of the user (optional)', maxLength: 50, required: false })
+  @ApiProperty({
+    type: String,
+    description: 'Middle name of the user (optional)',
+    maxLength: 50,
+    required: false,
+  })
   @Expose()
   @IsOptional()
   @IsString()
   @Length(0, 50)
   middleName?: string;
 
-  @ApiProperty({ type: String, description: 'Last name of the user', maxLength: 50 })
+  @ApiProperty({
+    type: String,
+    description: 'Last name of the user',
+    maxLength: 50,
+  })
   @Expose()
   @IsOptional()
   @IsString()
   @Length(1, 50)
   lastName?: string;
 
-  @ApiProperty({ 
-    type: String, 
-    description: 'Gender of the user', 
-    enum: ['male', 'female', 'transgender'] 
+  @ApiProperty({
+    type: String,
+    description: 'Gender of the user',
+    enum: ['male', 'female', 'transgender'],
   })
   @Expose()
   @IsEnum(['male', 'female', 'transgender'])
@@ -60,7 +73,11 @@ class UserDataDTO {
   @IsOptional()
   role: string;
 
-  @ApiProperty({ type: () => String, format: 'date-time', example: '1990-01-01' })
+  @ApiProperty({
+    type: () => String,
+    format: 'date-time',
+    example: '1990-01-01',
+  })
   @IsOptional()
   @Type(() => Date) // Ensures validation correctly parses strings into Date objects
   @IsDate()
@@ -138,7 +155,9 @@ class UserDataDTO {
 
   @ApiProperty({ enum: ActionType, required: false })
   @ValidateIf((o) => o.deviceId)
-  @IsEnum(ActionType, { message: `Action must be either ${Object.values(ActionType).join(' or ')}` }) // Restrict to "add" or "remove"
+  @IsEnum(ActionType, {
+    message: `Action must be either ${Object.values(ActionType).join(' or ')}`,
+  }) // Restrict to "add" or "remove"
   action: ActionType;
 }
 class CustomFieldDTO {
@@ -149,7 +168,7 @@ class CustomFieldDTO {
   fieldId: string;
 
   @ApiProperty({ type: () => String })
-  @ValidateIf((o) => o.value !== "")
+  @ValidateIf((o) => o.value !== '')
   @IsNotEmpty()
   @Expose()
   value: string | string[];

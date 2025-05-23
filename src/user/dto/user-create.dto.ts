@@ -171,6 +171,13 @@ export class UserCreateDto {
   @Expose()
   address: string;
 
+  @Expose()
+  @IsOptional()
+  @IsEnum(['active', 'inactive', 'archived'], {
+    message: 'Status must be one of: active, inactive, archived',
+  })
+  status: string = 'active';
+
   // @ApiPropertyOptional({
   //   type: String,
   //   description: "The pincode of the user",
