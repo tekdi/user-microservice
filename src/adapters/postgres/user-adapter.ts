@@ -1199,8 +1199,8 @@ export class PostgresUserService implements IServicelocator {
         return APIResponse.error(
           response,
           apiId,
-          API_RESPONSES.BAD_REQUEST,
           API_RESPONSES.USER_EXISTS,
+          API_RESPONSES.BAD_REQUEST,
           HttpStatus.BAD_REQUEST
         );
       }
