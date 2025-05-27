@@ -40,4 +40,7 @@ export class Form {
 
   @Column({ type: 'uuid' })
   contextId: string;
+
+  @Column({ type: 'varchar', nullable: true })
+  status: string;
 }
