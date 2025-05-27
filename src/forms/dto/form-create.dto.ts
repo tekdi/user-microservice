@@ -5,9 +5,15 @@ import {
   IsObject,
   IsNotEmptyObject,
   IsUUID,
+  IsEnum,
 } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
+export enum FormStatus {
+  ACTIVE = 'active',
+  INACTIVE = 'inactive',
+  DRAFT = 'draft',
+}
 export class FormCreateDto {
   tenantId: string;
 
@@ -60,7 +66,8 @@ export class FormCreateDto {
   @IsUUID(undefined, { message: 'Cohort ID (contextId) must be a valid UUID' })
   contextId: string;
 
+  @ApiPropertyOptional({ enum: FormStatus })
   @IsOptional()
-  @IsString()
-  status: string;
+  @IsEnum(FormStatus)
+  status?: FormStatus;
 }

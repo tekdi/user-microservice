@@ -9,6 +9,7 @@ import { CohortContextType } from './utils/form-class';
 import { FormCreateDto } from './dto/form-create.dto';
 import { APIID } from '@utils/api-id.config';
 import { API_RESPONSES } from '@utils/response.messages';
+import { FormStatus } from './dto/form-create.dto';
 
 @Injectable()
 export class FormsService {
@@ -211,10 +212,17 @@ export class FormsService {
       formCreateDto.tenantId = formCreateDto.tenantId.trim().length
         ? formCreateDto.tenantId
         : null;
-      formCreateDto.status =
-        formCreateDto.status?.toLowerCase() === 'inactive'
-          ? 'inactive'
-          : 'active'; // default to 'active'
+      // Updated status assignment using enum safely
+      if (
+        formCreateDto.status &&
+        Object.values(FormStatus).includes(
+          formCreateDto.status.toLowerCase() as FormStatus
+        )
+      ) {
+        formCreateDto.status = formCreateDto.status.toLowerCase() as FormStatus;
+      } else {
+        formCreateDto.status = FormStatus.ACTIVE; // default to active
+      }
       let checkFormExists;
 
       if (formCreateDto.contextId) {
@@ -385,8 +393,23 @@ export class FormsService {
         formUpdateDto.context = formUpdateDto.context.toUpperCase();
       if (formUpdateDto.title)
         formUpdateDto.title = formUpdateDto.title.toUpperCase();
-      if (formUpdateDto.status)
-        formUpdateDto.status = formUpdateDto.status.toLowerCase();
+      // Normalize and validate status enum
+      if (formUpdateDto.status) {
+        const normalizedStatus = formUpdateDto.status.toString().toLowerCase();
+        if (
+          Object.values(FormStatus).includes(normalizedStatus as FormStatus)
+        ) {
+          formUpdateDto.status = normalizedStatus as FormStatus;
+        } else {
+          return APIResponse.error(
+            response,
+            apiId,
+            'Invalid status value',
+            'BAD_REQUEST',
+            HttpStatus.BAD_REQUEST
+          );
+        }
+      }
 
       const validForm = await this.validateFormFields(
         formUpdateDto.fields?.result
