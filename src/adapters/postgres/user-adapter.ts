@@ -2229,6 +2229,7 @@ export class PostgresUserService implements IServicelocator {
         "{var1}": otp,
       };
       // Step 2:send SMS notification
+      console.log(this.msg91TemplateKey,"Key");
       const notificationPayload = await this.smsNotification("OTP", this.msg91TemplateKey, replacements, [mobile]);
       return { notificationPayload, hash, expires, expiresInMinutes };
     }
