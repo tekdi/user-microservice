@@ -67,6 +67,7 @@ export class PostgresUserService implements IServicelocator {
   private readonly otpDigits: number;
   private readonly smsKey: string;
   private readonly dataSource: DataSource;
+  private readonly msg91TemplateKey: string;
 
   constructor(
     // private axiosInstance: AxiosInstance,
@@ -105,6 +106,7 @@ export class PostgresUserService implements IServicelocator {
     this.otpExpiry = this.configService.get<number>('OTP_EXPIRY') || 10; // default: 10 minutes
     this.otpDigits = this.configService.get<number>('OTP_DIGITS') || 6;
     this.smsKey = this.configService.get<string>('SMS_KEY');
+    this.msg91TemplateKey = this.configService.get<string>('MSG91_TEMPLATE_KEY');
     this.dataSource = dataSource; // Store dataSource in class property
   }
 
@@ -2224,11 +2226,10 @@ export class PostgresUserService implements IServicelocator {
       const otp = this.authUtils.generateOtp(this.otpDigits).toString();
       const { hash, expires, expiresInMinutes } = this.generateOtpHash(mobileWithCode, otp, reason);
       const replacements = {
-        "{OTP}": otp,
-        "{otpExpiry}": expiresInMinutes
+        "{var1}": otp,
       };
       // Step 2:send SMS notification
-      const notificationPayload = await this.smsNotification("OTP", "SEND_OTP", replacements, [mobile]);
+      const notificationPayload = await this.smsNotification("OTP", this.msg91TemplateKey, replacements, [mobile]);
       return { notificationPayload, hash, expires, expiresInMinutes };
     }
     catch (error) {
