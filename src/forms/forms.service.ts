@@ -9,6 +9,7 @@ import { CohortContextType } from './utils/form-class';
 import { FormCreateDto } from './dto/form-create.dto';
 import { APIID } from '@utils/api-id.config';
 import { API_RESPONSES } from '@utils/response.messages';
+import { FormStatus } from './dto/form-create.dto';
 
 @Injectable()
 export class FormsService {
@@ -211,7 +212,17 @@ export class FormsService {
       formCreateDto.tenantId = formCreateDto.tenantId.trim().length
         ? formCreateDto.tenantId
         : null;
-
+      // Updated status assignment using enum safely
+      if (
+        formCreateDto.status &&
+        Object.values(FormStatus).includes(
+          formCreateDto.status.toLowerCase() as FormStatus
+        )
+      ) {
+        formCreateDto.status = formCreateDto.status.toLowerCase() as FormStatus;
+      } else {
+        formCreateDto.status = FormStatus.ACTIVE; // default to active
+      }
       let checkFormExists;
 
       if (formCreateDto.contextId) {
@@ -222,6 +233,7 @@ export class FormsService {
             contextType: formCreateDto.contextType,
             tenantId: formCreateDto.tenantId || IsNull(),
             contextId: formCreateDto.contextId,
+            status: formCreateDto.status,
           },
         });
       } else {
@@ -232,6 +244,7 @@ export class FormsService {
             contextType: formCreateDto.contextType,
             tenantId: formCreateDto.tenantId || IsNull(),
             contextId: IsNull(),
+            status: formCreateDto.status,
           },
         });
       }
@@ -346,5 +359,90 @@ export class FormsService {
         contextId,
       },
     });
+  }
+
+  public async updateForm(
+    request,
+    formId: string,
+    formUpdateDto: FormCreateDto, // or FormUpdateDto
+    response
+  ) {
+    const apiId = APIID.FORM_UPDATE;
+
+    try {
+      const decoded: any = jwt_decode(request.headers.authorization);
+
+      const existingForm = await this.formRepository.findOne({
+        where: { formid: formId },
+      });
+
+      if (!existingForm) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.FORM_NOT_FOUND,
+          'NOT_FOUND',
+          HttpStatus.NOT_FOUND
+        );
+      }
+
+      formUpdateDto.updatedBy = decoded?.sub;
+      if (formUpdateDto.contextType)
+        formUpdateDto.contextType = formUpdateDto.contextType.toUpperCase();
+      if (formUpdateDto.context)
+        formUpdateDto.context = formUpdateDto.context.toUpperCase();
+      if (formUpdateDto.title)
+        formUpdateDto.title = formUpdateDto.title.toUpperCase();
+      // Normalize and validate status enum
+      if (formUpdateDto.status) {
+        const normalizedStatus = formUpdateDto.status.toString().toLowerCase();
+        if (
+          Object.values(FormStatus).includes(normalizedStatus as FormStatus)
+        ) {
+          formUpdateDto.status = normalizedStatus as FormStatus;
+        } else {
+          return APIResponse.error(
+            response,
+            apiId,
+            'Invalid status value',
+            'BAD_REQUEST',
+            HttpStatus.BAD_REQUEST
+          );
+        }
+      }
+
+      const validForm = await this.validateFormFields(
+        formUpdateDto.fields?.result
+      );
+      if (formUpdateDto.fields && !validForm) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.INVALID_FORM,
+          'BAD_REQUEST',
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      const updatedForm = Object.assign(existingForm, formUpdateDto);
+
+      const saved = await this.formRepository.save(updatedForm);
+
+      return APIResponse.success(
+        response,
+        apiId,
+        saved,
+        HttpStatus.OK,
+        API_RESPONSES.FORM_UPDATED_SUCCESSFULLY
+      );
+    } catch (error) {
+      return APIResponse.error(
+        response,
+        apiId,
+        error.message || 'Internal server error',
+        'INTERNAL_SERVER_ERROR',
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
   }
 }
