@@ -62,12 +62,12 @@ export class FieldValuesUpdateDto {
   calendarValue?: Date;
 
   @ApiPropertyOptional({
-    type: Object,
+    type: 'string | number | boolean',
     description: "The JSON value for dropdown type fields",
   })
   @Expose()
   @IsOptional()
-  dropdownValue?: any;
+  dropdownValue?: string | number | boolean | { [key: string]: any };
 
   @ApiPropertyOptional({
     type: String,

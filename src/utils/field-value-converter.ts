@@ -20,13 +20,15 @@ export class FieldValueConverter {
     try {
       switch (type) {
         case 'text':
+        {
           return {
             value: value?.toString(),
             convertedValue: value?.toString(),
             columnName: 'textValue'
           };
-
+        }
         case 'number':
+        {
           const numValue = parseFloat(value);
           if (isNaN(numValue)) {
             throw new Error(`Invalid number value: ${value}`);
@@ -36,8 +38,9 @@ export class FieldValueConverter {
             convertedValue: numValue,
             columnName: 'numberValue'
           };
-
+        }
         case 'calendar':
+        {
           const dateValue = new Date(value);
           if (isNaN(dateValue.getTime())) {
             throw new Error(`Invalid date value: ${value}`);
@@ -47,9 +50,10 @@ export class FieldValueConverter {
             convertedValue: dateValue,
             columnName: 'calendarValue'
           };
-
+        }
         case 'dropdown':
-          let dropdownValue;
+        {
+         let dropdownValue;
           if (typeof value === 'string') {
             try {
               dropdownValue = JSON.parse(value);
@@ -64,42 +68,48 @@ export class FieldValueConverter {
             convertedValue: dropdownValue,
             columnName: 'dropdownValue'
           };
-
+        }
         case 'radio':
+        {
           return {
             value: value?.toString(),
             convertedValue: value?.toString(),
             columnName: 'radioValue'
           };
-
+        }
         case 'checkbox':
+        {
           const boolValue = value === true || value === 'true' || value === '1' || value === 1;
           return {
             value: value?.toString(),
             convertedValue: boolValue,
             columnName: 'checkboxValue'
           };
-
+        }
         case 'textarea':
-          return {
+        {
+            return {
             value: value?.toString(),
             convertedValue: value?.toString(),
             columnName: 'textareaValue'
           };
-
+        }
         case 'file':
-          return {
+        {
+            return {
             value: value?.toString(),
             convertedValue: value?.toString(),
             columnName: 'fileValue'
           };
-
+        }
         default:
+        {
           return {
             value: value?.toString(),
             convertedValue: value?.toString(),
             columnName: 'value'
           };
+        }
       }
     } catch (error) {
       throw new BadRequestException(`Field type '${type}' validation failed: ${error.message}`);
@@ -115,7 +125,7 @@ export class FieldValueConverter {
    * @returns Object containing all necessary field data for storage
    */
   static prepareFieldData(fieldId: string, value: any, itemId: string, fieldType: string): any {
-    const conversion = this.convertValue(value, fieldType);
+    const conversion = FieldValueConverter.convertValue(value, fieldType);
     
     return {
       fieldId,
@@ -132,7 +142,7 @@ export class FieldValueConverter {
    * @returns The appropriate value for the field type
    */
   static extractValue(fieldRecord: any, fieldType: string): any {
-    const conversion = this.convertValue(fieldRecord.value, fieldType);
+    const conversion = FieldValueConverter.convertValue(fieldRecord.value, fieldType);
     const typeSpecificValue = fieldRecord[conversion.columnName];
     
     return typeSpecificValue ?? fieldRecord.value;
