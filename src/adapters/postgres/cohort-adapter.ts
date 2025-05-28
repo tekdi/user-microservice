@@ -25,6 +25,7 @@ import { CohortAcademicYear } from 'src/cohortAcademicYear/entities/cohortAcadem
 import { PostgresCohortMembersService } from './cohortMembers-adapter';
 import { LoggerUtil } from 'src/common/logger/LoggerUtil';
 import { User } from 'src/user/entities/user-entity';
+import { FieldValueConverter } from 'src/utils/field-value-converter';
 
 @Injectable()
 export class PostgresCohortService {
@@ -234,7 +235,19 @@ export class PostgresCohortService {
     SELECT DISTINCT 
       f."fieldId",
       f."label", 
-      fv."value", 
+      COALESCE(
+        CASE f."type"
+          WHEN 'text' THEN fv."textValue"::text
+          WHEN 'number' THEN fv."numberValue"::text
+          WHEN 'calendar' THEN fv."calendarValue"::text
+          WHEN 'dropdown' THEN fv."dropdownValue"::text
+          WHEN 'radio' THEN fv."radioValue"
+          WHEN 'checkbox' THEN fv."checkboxValue"::text
+          WHEN 'textarea' THEN fv."textareaValue"
+          WHEN 'file' THEN fv."fileValue"
+        END,
+        fv."value"
+      ) as "value",
       f."type", 
       f."fieldParams",
       f."sourceDetails"
@@ -379,23 +392,47 @@ export class PostgresCohortService {
         console.log('cohortId: ', response.cohortId);
         if (cohortCreateDto.customFields.length > 0) {
           for (const fieldValues of cohortCreateDto.customFields) {
-            const fieldData = {
-              fieldId: fieldValues['fieldId'],
-              value: fieldValues['value'],
-            };
+            const fieldId = fieldValues['fieldId'];
+            const value = fieldValues['value'];
 
-            const resfields = await this.fieldsService.updateCustomFields(
-              cohortId,
-              fieldData,
-              cohortCreateDto.customFields[0].fieldId
-            );
-            if (resfields.correctValue) {
+            // Get field type from Fields table
+            const fieldDetails = await this.fieldsRepository.findOne({
+              where: { fieldId: fieldId }
+            });
+
+            if (!fieldDetails) {
+              createFailures.push(`${fieldId}: Field not found`);
+              continue;
+            }
+
+            try {
+              // Use the utility to prepare field data
+              const fieldData = FieldValueConverter.prepareFieldData(
+                fieldId,
+                value,
+                cohortId,
+                fieldDetails.type
+              );
+
+              // Save to FieldValues table
+              await this.fieldValuesRepository
+                .createQueryBuilder()
+                .insert()
+                .into('FieldValues')
+                .values(fieldData)
+                .execute();
+
               if (!response['customFieldsValue'])
                 response['customFieldsValue'] = [];
-              response['customFieldsValue'].push(resfields);
-            } else {
+              response['customFieldsValue'].push({
+                fieldId: fieldId,
+                value: value,
+                correctValue: true,
+                fieldName: fieldDetails.name
+              });
+            } catch (error) {
               createFailures.push(
-                `${fieldData.fieldId}: ${resfields?.valueIssue} - ${resfields.fieldName}`
+                `${fieldId}: ${error.message} - ${fieldDetails.name}`
               );
             }
           }
@@ -546,32 +583,67 @@ export class PostgresCohortService {
             : existingCohorDetails?.type
             ? [existingCohorDetails.type]
             : [];
+
           const allCustomFields = await this.fieldsService.findCustomFields(
             'COHORT',
             contextType
           );
 
           if (allCustomFields.length > 0) {
-            const customFieldAttributes = allCustomFields.reduce(
-              (fieldDetail, { fieldId, fieldAttributes, fieldParams, name }) =>
-                fieldDetail[`${fieldId}`]
-                  ? fieldDetail
-                  : {
-                      ...fieldDetail,
-                      [`${fieldId}`]: { fieldAttributes, fieldParams, name },
-                    },
-              {}
-            );
             for (const fieldValues of cohortUpdateDto.customFields) {
-              const fieldData = {
-                fieldId: fieldValues['fieldId'],
-                value: fieldValues['value'],
-              };
-              await this.fieldsService.updateCustomFields(
-                cohortId,
-                fieldData,
-                customFieldAttributes[fieldData.fieldId]
-              );
+              const fieldId = fieldValues['fieldId'];
+              const value = fieldValues['value'];
+
+              // Get field type from Fields table
+              const fieldDetails = await this.fieldsRepository.findOne({
+                where: { fieldId: fieldId }
+              });
+
+              if (!fieldDetails) {
+                continue;
+              }
+
+              try {
+                // Use the utility to prepare field data
+                const fieldData = FieldValueConverter.prepareFieldData(
+                  fieldId,
+                  value,
+                  cohortId,
+                  fieldDetails.type
+                );
+
+                // Check if field value already exists
+                const existingFieldValue = await this.fieldValuesRepository.findOne({
+                  where: {
+                    itemId: cohortId,
+                    fieldId: fieldId
+                  }
+                });
+
+                if (existingFieldValue) {
+                  // Update existing field value
+                  await this.fieldValuesRepository
+                    .createQueryBuilder()
+                    .update('FieldValues')
+                    .set(fieldData)
+                    .where("fieldValuesId = :id", { id: existingFieldValue.fieldValuesId })
+                    .execute();
+                } else {
+                  // Insert new field value
+                  await this.fieldValuesRepository
+                    .createQueryBuilder()
+                    .insert()
+                    .into('FieldValues')
+                    .values(fieldData)
+                    .execute();
+                }
+              } catch (error) {
+                LoggerUtil.error(
+                  `Failed to update/insert field value`,
+                  `Error: ${error.message}`,
+                  apiId
+                );
+              }
             }
           }
         }
@@ -675,7 +747,7 @@ export class PostgresCohortService {
           { context: In(['COHORT', null, 'null', 'NULL']), contextType: null },
           { context: IsNull(), contextType: IsNull() },
         ],
-        select: ['fieldId', 'name', 'label', 'contextType'],
+        select: ['fieldId', 'name', 'label', 'contextType', 'type'],
       });
 
       // Extract custom field names
@@ -712,7 +784,19 @@ export class PostgresCohortService {
         if (filters?.customFieldsName) {
           Object.entries(filters.customFieldsName).forEach(([key, value]) => {
             if (customFieldsKeys.includes(key)) {
-              searchCustomFields[key] = value;
+              // Find the field type for this custom field
+              const fieldInfo = getCustomFields.find(field => field.name === key);
+              if (fieldInfo) {
+                searchCustomFields[key] = {
+                  value: value,
+                  type: fieldInfo.type
+                };
+              } else {
+                searchCustomFields[key] = {
+                  value: value,
+                  type: null
+                };
+              }
             }
           });
         }
@@ -734,8 +818,6 @@ export class PostgresCohortService {
             whereClause[key] = ILike(`%${value}%`);
           } else if (cohortAllKeys.includes(key)) {
             whereClause[key] = value;
-          } else if (customFieldsKeys.includes(key)) {
-            searchCustomFields[key] = value;
           }
         });
       }
@@ -767,7 +849,6 @@ export class PostgresCohortService {
           (key) => key !== 'userId' && key !== 'academicYearId'
         );
         if (additionalFields.length > 0) {
-          // Handle the case where userId is provided along with other fields
           return APIResponse.error(
             response,
             apiId,
@@ -821,23 +902,110 @@ export class PostgresCohortService {
       } else {
         let getCohortIdUsingCustomFields;
 
-        //If source config in source details from fields table is not exist then return false
-
         if (Object.keys(searchCustomFields).length > 0) {
           const context = 'COHORT';
-          getCohortIdUsingCustomFields =
-            await this.fieldsService.filterUserUsingCustomFields(
-              context,
-              searchCustomFields
-            );
+          
+          // Build parameterized query conditions
+          const conditions = [];
+          const params = [];
+          let paramIndex = 1;
 
-          if (getCohortIdUsingCustomFields == null) {
+          Object.entries(searchCustomFields).forEach(([key, fieldInfo]: [string, any]) => {
+            const fieldDetails = getCustomFields.find(f => f.name === key);
+            if (!fieldDetails) return;
+            
+            const value = fieldInfo.value;
+            const type = fieldDetails.type?.toLowerCase();
+            
+            // Add field name parameter
+            params.push(key);
+            
+            switch(type) {
+              case 'text':
+              case 'textarea':
+              case 'file':
+              case 'radio':
+                params.push(`%${value}%`);
+                conditions.push(`(f."name" = $${paramIndex} AND (fv."${type}Value" ILIKE $${paramIndex + 1} OR fv."value" ILIKE $${paramIndex + 1}))`);
+                paramIndex += 2;
+                break;
+              case 'number':
+                if (!isNaN(parseFloat(value))) {
+                  params.push(value);
+                  params.push(value.toString());
+                  conditions.push(`(f."name" = $${paramIndex} AND (fv."numberValue" = $${paramIndex + 1}::numeric OR fv."value" = $${paramIndex + 2}))`);
+                  paramIndex += 3;
+                }
+                break;
+              case 'calendar':
+                params.push(`%${value}%`);
+                conditions.push(`(f."name" = $${paramIndex} AND (fv."calendarValue"::text LIKE $${paramIndex + 1} OR fv."value" LIKE $${paramIndex + 1}))`);
+                paramIndex += 2;
+                break;
+              case 'checkbox':
+                const boolValue = value === 'true' || value === '1' || value === true;
+                params.push(boolValue);
+                params.push(value.toString());
+                conditions.push(`(f."name" = $${paramIndex} AND (fv."checkboxValue" = $${paramIndex + 1} OR fv."value" = $${paramIndex + 2}))`);
+                paramIndex += 3;
+                break;
+              case 'dropdown':
+                params.push(`%${value}%`);
+                conditions.push(`(f."name" = $${paramIndex} AND (fv."dropdownValue"::text LIKE $${paramIndex + 1} OR fv."value" LIKE $${paramIndex + 1}))`);
+                paramIndex += 2;
+                break;
+              default:
+                params.push(`%${value}%`);
+                conditions.push(`(f."name" = $${paramIndex} AND fv."value" LIKE $${paramIndex + 1})`);
+                paramIndex += 2;
+                break;
+            }
+          });
+
+          if (conditions.length === 0) {
             return APIResponse.error(
               response,
               apiId,
-              'No data found',
+              'No valid search conditions',
               'NOT FOUND',
               HttpStatus.NOT_FOUND
+            );
+          }
+
+          const customFieldQuery = `
+            SELECT DISTINCT fv."itemId"
+            FROM public."FieldValues" fv
+            INNER JOIN public."Fields" f ON f."fieldId" = fv."fieldId"
+            WHERE ${conditions.join(' OR ')}`;
+
+          try {
+            getCohortIdUsingCustomFields = await this.fieldValuesRepository.query(
+              customFieldQuery,
+              params
+            );
+            getCohortIdUsingCustomFields = getCohortIdUsingCustomFields.map(result => result.itemId);
+
+            if (!getCohortIdUsingCustomFields?.length) {
+              return APIResponse.error(
+                response,
+                apiId,
+                'No data found',
+                'NOT FOUND',
+                HttpStatus.NOT_FOUND
+              );
+            }
+          } catch (error) {
+            LoggerUtil.error(
+              'Error executing custom field query',
+              `Error: ${error.message}`,
+              apiId
+            );
+            return APIResponse.error(
+              response,
+              apiId,
+              'Error executing search',
+              'INTERNAL_SERVER_ERROR',
+              HttpStatus.INTERNAL_SERVER_ERROR
             );
           }
         }
@@ -857,12 +1025,6 @@ export class PostgresCohortService {
           );
           whereClause['cohortId'] = In(cohortIds);
         }
-        // } else if (cohortsByAcademicYear?.length >= 1) {
-        //   const cohortIds = cohortsByAcademicYear?.map(
-        //     ({ cohortId }) => cohortId
-        //   );
-        //   whereClause["cohortId"] = In(cohortIds);
-        // }
 
         const [data, totalCount] = await this.cohortRepository.findAndCount({
           where: whereClause,
@@ -878,7 +1040,6 @@ export class PostgresCohortService {
             data.type
           );
 
-          // Fetch number of users if the type is 'cohort'
           if (data.type === 'COHORT') {
             const userCount = await this.cohortMembersRepository.count({
               where: { cohortId: data.cohortId, status: MemberStatus.ACTIVE },
@@ -887,12 +1048,10 @@ export class PostgresCohortService {
           }
 
           data['customFields'] = customFieldsData || [];
-
           results.cohortDetails.push(data);
         }
       }
 
-      // Check if CSV export is enabled
       if (includeDisplayValues === true) {
         const userIds: string[] = Array.from(
           new Set(

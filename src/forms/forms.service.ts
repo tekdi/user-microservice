@@ -32,7 +32,18 @@ export class FormsService {
         );
       }
 
-      const { context, contextType, tenantId } = requiredData;
+      const { context, contextType, tenantId, contextId } = requiredData;
+
+      if (contextId && typeof contextId !== 'string') {
+        return APIResponse.error(
+          response,
+          apiId,
+          'BAD_REQUEST',
+          'contextId must be a string',
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
       const validationResult = await this.validateFormInput(requiredData);
 
       if (validationResult.error) {
@@ -56,13 +67,19 @@ export class FormsService {
         query.tenantId = tenantId;
       }
 
+      if (contextId) {
+        query.contextId = contextId;
+      } else {
+        query.contextId = null;
+      }
+
       const formData = await this.getFormData(query);
       if (!formData) {
         return APIResponse.error(
           response,
           apiId,
           'NOT_FOUND',
-          'No Data found for this context OR Context Type',
+          'No Data found for this context OR Context Type OR Context Id',
           HttpStatus.NOT_FOUND
         );
       }
@@ -127,6 +144,14 @@ export class FormsService {
     } else {
       query = query.andWhere('form.tenantId IS NULL');
     }
+
+    if (whereClause.contextId) {
+      query = query.andWhere('form.contextId = :contextId', {
+        contextId: whereClause.contextId,
+      });
+    } else {
+      query = query.andWhere('form.contextId IS NULL');
+    }
     const result = await query.getOne();
     return result || false;
   }
@@ -146,7 +171,13 @@ export class FormsService {
     requiredData: any
   ): Promise<{ error: string | null }> {
     delete requiredData.tenantId;
-    const allowedKeys = ['context', 'contextType', 'userId', 'center'];
+    const allowedKeys = [
+      'context',
+      'contextType',
+      'contextId',
+      'userId',
+      'center',
+    ];
     const extraKeys = Object.keys(requiredData).filter(
       (key) => !allowedKeys.includes(key)
     );
@@ -155,7 +186,7 @@ export class FormsService {
       return {
         error: `Invalid keys provided: ${extraKeys.join(
           ', '
-        )}. Only 'context', 'contextType' is allowed.`,
+        )}. Only 'context', 'contextType', 'contextId' are allowed.`,
       };
     }
 
