@@ -25,6 +25,7 @@ import jwt_decode from 'jwt-decode';
 import { LoggerUtil } from 'src/common/logger/LoggerUtil';
 import { API_RESPONSES } from '@utils/response.messages';
 import { v4 as uuidv4 } from 'uuid';
+import { FieldValueConverter } from 'src/utils/field-value-converter';
 
 @Injectable()
 export class PostgresFieldsService implements IServicelocatorfields {
@@ -1065,21 +1066,32 @@ export class PostgresFieldsService implements IServicelocatorfields {
     fieldValuesUpdateDto: FieldValuesUpdateDto
   ) {
     try {
-      const fieldsData: any = {};
-      Object.keys(fieldValuesUpdateDto).forEach((e) => {
-        if (fieldValuesUpdateDto[e] && fieldValuesUpdateDto[e] != '') {
-          if (Array.isArray(fieldValuesUpdateDto[e])) {
-            fieldsData[e] = JSON.stringify(fieldValuesUpdateDto[e]);
-          } else {
-            fieldsData[e] = fieldValuesUpdateDto[e];
-          }
-        }
+      // Get existing field value and type
+      const existingValue = await this.fieldsValuesRepository.findOne({
+        where: { fieldValuesId: id }
       });
-      const response = await this.fieldsValuesRepository.update(
-        id,
-        fieldValuesUpdateDto
+
+      if (!existingValue) {
+        throw new Error('Field value not found');
+      }
+
+      const fieldDetails = await this.fieldsRepository.findOne({
+        where: { fieldId: existingValue.fieldId }
+      });
+
+      if (!fieldDetails) {
+        throw new Error('Field not found');
+      }
+
+      // Use FieldValueConverter to prepare data
+      const fieldData = FieldValueConverter.prepareFieldData(
+        existingValue.fieldId,
+        fieldValuesUpdateDto.value,
+        existingValue.itemId,
+        fieldDetails.type
       );
 
+      const response = await this.fieldsValuesRepository.update(id, fieldData);
       return response;
     } catch (e) {
       LoggerUtil.error(`${API_RESPONSES.SERVER_ERROR}`, `Error: ${e.message}`);
