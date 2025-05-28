@@ -1,19 +1,20 @@
-import { HttpStatus, Injectable } from "@nestjs/common";
-import { FieldsDto } from "src/fields/dto/fields.dto";
-import { FieldsSearchDto } from "src/fields/dto/fields-search.dto";
-import { FieldValuesDto } from "src/fields/dto/field-values.dto";
-import { FieldValuesSearchDto } from "src/fields/dto/field-values-search.dto";
-import jwt_decode from "jwt-decode";
-import { ErrorResponse } from "src/error-response";
-import { Fields } from "./entities/fields.entity";
-import { FieldValues } from "./entities/fields-values.entity";
-import { InjectRepository } from "@nestjs/typeorm";
-import { IsNull, Not, Repository, getConnection, getRepository } from "typeorm";
-import { SuccessResponse } from "src/success-response";
-import { off } from "process";
-import APIResponse from "src/utils/response";
-import { log } from "util";
-import { ErrorResponseTypeOrm } from "src/error-response-typeorm";
+import { HttpStatus, Injectable, BadRequestException } from '@nestjs/common';
+import { FieldsDto } from 'src/fields/dto/fields.dto';
+import { FieldsSearchDto } from 'src/fields/dto/fields-search.dto';
+import { FieldValuesDto } from 'src/fields/dto/field-values.dto';
+import { FieldValuesSearchDto } from 'src/fields/dto/field-values-search.dto';
+import jwt_decode from 'jwt-decode';
+import { ErrorResponse } from 'src/error-response';
+import { Fields } from './entities/fields.entity';
+import { FieldValues } from './entities/fields-values.entity';
+import { InjectRepository } from '@nestjs/typeorm';
+import { IsNull, Not, Repository, getConnection, getRepository } from 'typeorm';
+import { SuccessResponse } from 'src/success-response';
+import { off } from 'process';
+import APIResponse from 'src/utils/response';
+import { log } from 'util';
+import { ErrorResponseTypeOrm } from 'src/error-response-typeorm';
+import { FieldValueConverter } from 'src/utils/field-value-converter';
 
 @Injectable()
 export class FieldsService {
@@ -30,8 +31,8 @@ export class FieldsService {
       const fieldsData: any = {}; // Define an empty object to store field data
 
       Object.keys(fieldsDto).forEach((e) => {
-        if (fieldsDto[e] && fieldsDto[e] !== "") {
-          if (e === "render") {
+        if (fieldsDto[e] && fieldsDto[e] !== '') {
+          if (e === 'render') {
             fieldsData[e] = fieldsDto[e];
           } else if (Array.isArray(fieldsDto[e])) {
             fieldsData[e] = JSON.stringify(fieldsDto[e]);
@@ -44,7 +45,7 @@ export class FieldsService {
       const result = await this.fieldsRepository.save(fieldsData);
       return new SuccessResponse({
         statusCode: HttpStatus.CREATED,
-        message: "Ok.",
+        message: 'Ok.',
         data: result,
       });
     } catch (e) {
@@ -74,7 +75,7 @@ export class FieldsService {
 
       return new SuccessResponse({
         statusCode: HttpStatus.OK,
-        message: "Ok.",
+        message: 'Ok.',
         totalCount: getFieldValue.totalCount,
         data: getFieldValue.mappedResponse,
       });
@@ -115,71 +116,51 @@ export class FieldsService {
    */
   async createFieldValues(request: any, fieldValuesDto: FieldValuesDto) {
     try {
-      const fieldsData: any = {};
-
       // Get field type from Fields table
       const fieldDetails = await this.fieldsRepository.findOne({
-        where: { fieldId: fieldValuesDto.fieldId }
+        where: { fieldId: fieldValuesDto.fieldId },
       });
 
       if (!fieldDetails) {
         throw new Error('Field not found');
       }
 
-      // Store the original value
-      fieldsData.value = fieldValuesDto.value;
-      fieldsData.fieldId = fieldValuesDto.fieldId;
-      fieldsData.itemId = fieldValuesDto.itemId;
+      try {
+        // Use the utility to prepare field data
+        const fieldData = FieldValueConverter.prepareFieldData(
+          fieldValuesDto.fieldId,
+          fieldValuesDto.value,
+          fieldValuesDto.itemId,
+          fieldDetails.type
+        );
 
-      // Set value in appropriate column based on field type
-      switch(fieldDetails.type?.toLowerCase()) {
-        case 'text':
-          fieldsData.textValue = fieldValuesDto.value;
-          break;
-        case 'number':
-          fieldsData.numberValue = parseFloat(fieldValuesDto.value);
-          break;
-        case 'calendar':
-          fieldsData.calendarValue = new Date(fieldValuesDto.value);
-          break;
-        case 'dropdown':
-          fieldsData.dropdownValue = typeof fieldValuesDto.value === 'string' ? 
-            JSON.parse(fieldValuesDto.value) : fieldValuesDto.value;
-          break;
-        case 'radio':
-          fieldsData.radioValue = fieldValuesDto.value;
-          break;
-        case 'checkbox':
-          fieldsData.checkboxValue = Boolean(fieldValuesDto.value);
-          break;
-        case 'textarea':
-          fieldsData.textareaValue = fieldValuesDto.value;
-          break;
-        case 'file':
-          fieldsData.fileValue = fieldValuesDto.value;
-          break;
+        // Set other common fields if provided
+        if (fieldValuesDto.createdBy) {
+          fieldData.createdBy = fieldValuesDto.createdBy;
+        }
+        if (fieldValuesDto.updatedBy) {
+          fieldData.updatedBy = fieldValuesDto.updatedBy;
+        }
+
+        const result = await this.fieldsValuesRepository
+          .createQueryBuilder()
+          .insert()
+          .into('FieldValues')
+          .values(fieldData)
+          .execute();
+
+        return new SuccessResponse({
+          statusCode: HttpStatus.CREATED,
+          message: 'Ok.',
+          data: result.raw[0],
+        });
+      } catch (error) {
+        throw new BadRequestException(error.message);
       }
-
-      // Set other common fields if provided
-      if (fieldValuesDto.createdBy) fieldsData.createdBy = fieldValuesDto.createdBy;
-      if (fieldValuesDto.updatedBy) fieldsData.updatedBy = fieldValuesDto.updatedBy;
-
-      const result = await this.fieldsValuesRepository
-        .createQueryBuilder()
-        .insert()
-        .into('FieldValues')
-        .values(fieldsData)
-        .execute();
-
-      return new SuccessResponse({
-        statusCode: HttpStatus.CREATED,
-        message: "Ok.",
-        data: result.raw[0]
-      });
     } catch (e) {
       return new ErrorResponseTypeOrm({
         statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-        errorMessage: e
+        errorMessage: e,
       });
     }
   }
@@ -202,7 +183,7 @@ export class FieldsService {
 
       return new SuccessResponse({
         statusCode: HttpStatus.OK,
-        message: "Ok.",
+        message: 'Ok.',
         totalCount: getFieldValue.totalCount,
         data: getFieldValue.mappedResponse,
       });
@@ -253,11 +234,9 @@ export class FieldsService {
    */
   async updateFieldValues(id: string, fieldValuesDto: FieldValuesDto) {
     try {
-      const fieldsData: any = {};
-
       // Get field type from Fields table
       const existingFieldValue = await this.fieldsValuesRepository.findOne({
-        where: { fieldValuesId: id }
+        where: { fieldValuesId: id },
       });
 
       if (!existingFieldValue) {
@@ -265,7 +244,7 @@ export class FieldsService {
       }
 
       const fieldDetails = await this.fieldsRepository.findOne({
-        where: { fieldId: existingFieldValue.fieldId }
+        where: { fieldId: existingFieldValue.fieldId },
       });
 
       if (!fieldDetails) {
@@ -274,61 +253,46 @@ export class FieldsService {
 
       // Store the original value if provided
       if (fieldValuesDto.value !== undefined) {
-        fieldsData.value = fieldValuesDto.value;
+        try {
+          // Use the utility to prepare field data
+          const fieldData = FieldValueConverter.prepareFieldData(
+            existingFieldValue.fieldId,
+            fieldValuesDto.value,
+            existingFieldValue.itemId,
+            fieldDetails.type
+          );
 
-        // Set value in appropriate column based on field type
-        switch(fieldDetails.type?.toLowerCase()) {
-          case 'text':
-            fieldsData.textValue = fieldValuesDto.value;
-            break;
-          case 'number':
-            fieldsData.numberValue = parseFloat(fieldValuesDto.value);
-            break;
-          case 'calendar':
-            fieldsData.calendarValue = new Date(fieldValuesDto.value);
-            break;
-          case 'dropdown':
-            fieldsData.dropdownValue = typeof fieldValuesDto.value === 'string' ? 
-              JSON.parse(fieldValuesDto.value) : fieldValuesDto.value;
-            break;
-          case 'radio':
-            fieldsData.radioValue = fieldValuesDto.value;
-            break;
-          case 'checkbox':
-            fieldsData.checkboxValue = Boolean(fieldValuesDto.value);
-            break;
-          case 'textarea':
-            fieldsData.textareaValue = fieldValuesDto.value;
-            break;
-          case 'file':
-            fieldsData.fileValue = fieldValuesDto.value;
-            break;
+          // Set other common fields if provided
+          if (fieldValuesDto.updatedBy) {
+            fieldData.updatedBy = fieldValuesDto.updatedBy;
+          }
+
+          const result = await this.fieldsValuesRepository
+            .createQueryBuilder()
+            .update('FieldValues')
+            .set(fieldData)
+            .where('fieldValuesId = :id', { id })
+            .execute();
+
+          if (result.affected === 0) {
+            throw new Error('No record was updated');
+          }
+
+          return new SuccessResponse({
+            statusCode: HttpStatus.OK,
+            message: 'Updated successfully.',
+            data: await this.fieldsValuesRepository.findOne({
+              where: { fieldValuesId: id },
+            }),
+          });
+        } catch (error) {
+          throw new BadRequestException(error.message);
         }
       }
-
-      // Set other common fields if provided
-      if (fieldValuesDto.updatedBy) fieldsData.updatedBy = fieldValuesDto.updatedBy;
-
-      const result = await this.fieldsValuesRepository
-        .createQueryBuilder()
-        .update('FieldValues')
-        .set(fieldsData)
-        .where("fieldValuesId = :id", { id })
-        .execute();
-
-      if (result.affected === 0) {
-        throw new Error('No record was updated');
-      }
-
-      return new SuccessResponse({
-        statusCode: HttpStatus.OK,
-        message: "Updated successfully.",
-        data: await this.fieldsValuesRepository.findOne({ where: { fieldValuesId: id } })
-      });
     } catch (e) {
       return new ErrorResponseTypeOrm({
         statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-        errorMessage: e
+        errorMessage: e,
       });
     }
   }
@@ -343,46 +307,20 @@ export class FieldsService {
 
   public async mappedResponse(result: any) {
     const fieldValueResponse = result.map((item: any) => {
-      // Get the value from the appropriate type-specific column or fall back to default value
-      let value = item.value; // fallback value
-      if (item.type) {
-        switch(item.type.toLowerCase()) {
-          case 'text':
-            value = item.textValue ?? item.value;
-            break;
-          case 'number':
-            value = item.numberValue?.toString() ?? item.value;
-            break;
-          case 'calendar':
-            value = item.calendarValue ? item.calendarValue.toISOString() : item.value;
-            break;
-          case 'dropdown':
-            value = item.dropdownValue ? JSON.stringify(item.dropdownValue) : item.value;
-            break;
-          case 'radio':
-            value = item.radioValue ?? item.value;
-            break;
-          case 'checkbox':
-            value = item.checkboxValue?.toString() ?? item.value;
-            break;
-          case 'textarea':
-            value = item.textareaValue ?? item.value;
-            break;
-          case 'file':
-            value = item.fileValue ?? item.value;
-            break;
-        }
-      }
+      // Use the utility to extract the appropriate value
+      const value = item.type ? 
+        FieldValueConverter.extractValue(item, item.type) : 
+        item.value;
 
       const fieldValueMapping = {
-        value: value ? `${value}` : "",
-        fieldValuesId: item?.fieldValuesId ? `${item.fieldValuesId}` : "",
-        itemId: item?.itemId ? `${item.itemId}` : "",
-        fieldId: item?.fieldId ? `${item.fieldId}` : "",
-        createdAt: item?.createdAt ? `${item.createdAt}` : "",
-        updatedAt: item?.updatedAt ? `${item.updatedAt}` : "",
-        createdBy: item?.createdBy ? `${item.createdBy}` : "",
-        updatedBy: item?.updatedBy ? `${item.updatedBy}` : "",
+        value: value ? `${value}` : '',
+        fieldValuesId: item?.fieldValuesId ? `${item.fieldValuesId}` : '',
+        itemId: item?.itemId ? `${item.itemId}` : '',
+        fieldId: item?.fieldId ? `${item.fieldId}` : '',
+        createdAt: item?.createdAt ? `${item.createdAt}` : '',
+        updatedAt: item?.updatedAt ? `${item.updatedAt}` : '',
+        createdBy: item?.createdBy ? `${item.createdBy}` : '',
+        updatedBy: item?.updatedBy ? `${item.updatedBy}` : '',
       };
 
       return new FieldValuesDto(fieldValueMapping);
@@ -393,66 +331,40 @@ export class FieldsService {
 
   public async mappedResponseField(result: any) {
     const fieldResponse = result.map((item: any) => {
-      // Get the value from the appropriate type-specific column or fall back to default value
-      let value = item.value; // fallback value
-      if (item.type) {
-        switch(item.type.toLowerCase()) {
-          case 'text':
-            value = item.textValue ?? item.value;
-            break;
-          case 'number':
-            value = item.numberValue?.toString() ?? item.value;
-            break;
-          case 'calendar':
-            value = item.calendarValue ? item.calendarValue.toISOString() : item.value;
-            break;
-          case 'dropdown':
-            value = item.dropdownValue ? JSON.stringify(item.dropdownValue) : item.value;
-            break;
-          case 'radio':
-            value = item.radioValue ?? item.value;
-            break;
-          case 'checkbox':
-            value = item.checkboxValue?.toString() ?? item.value;
-            break;
-          case 'textarea':
-            value = item.textareaValue ?? item.value;
-            break;
-          case 'file':
-            value = item.fileValue ?? item.value;
-            break;
-        }
-      }
+      // Use the utility to extract the appropriate value
+      const value = item.type ? 
+        FieldValueConverter.extractValue(item, item.type) : 
+        item.value;
 
       const fieldMapping = {
-        fieldId: item?.fieldId ? `${item.fieldId}` : "",
-        assetId: item?.assetId ? `${item.assetId}` : "",
-        context: item?.context ? `${item.context}` : "",
-        groupId: item?.groupId ? `${item.groupId}` : "",
-        name: item?.name ? `${item.name}` : "",
-        label: item?.label ? `${item.label}` : "",
-        defaultValue: item?.defaultValue ? `${item.defaultValue}` : "",
-        type: item?.type ? `${item.type}` : "",
-        note: item?.note ? `${item.note}` : "",
-        description: item?.description ? `${item.description}` : "",
-        state: item?.state ? `${item.state}` : "",
-        required: item?.required ? `${item.required}` : "",
-        ordering: item?.ordering ? `${item.ordering}` : "",
-        metadata: item?.metadata ? `${item.metadata}` : "",
-        access: item?.access ? `${item.access}` : "",
+        fieldId: item?.fieldId ? `${item.fieldId}` : '',
+        assetId: item?.assetId ? `${item.assetId}` : '',
+        context: item?.context ? `${item.context}` : '',
+        groupId: item?.groupId ? `${item.groupId}` : '',
+        name: item?.name ? `${item.name}` : '',
+        label: item?.label ? `${item.label}` : '',
+        defaultValue: item?.defaultValue ? `${item.defaultValue}` : '',
+        type: item?.type ? `${item.type}` : '',
+        note: item?.note ? `${item.note}` : '',
+        description: item?.description ? `${item.description}` : '',
+        state: item?.state ? `${item.state}` : '',
+        required: item?.required ? `${item.required}` : '',
+        ordering: item?.ordering ? `${item.ordering}` : '',
+        metadata: item?.metadata ? `${item.metadata}` : '',
+        access: item?.access ? `${item.access}` : '',
         onlyUseInSubform: item?.onlyUseInSubform
           ? `${item.onlyUseInSubform}`
-          : "",
-        tenantId: item?.tenantId ? `${item.tenantId}` : "",
-        createdAt: item?.createdAt ? `${item.createdAt}` : "",
-        updatedAt: item?.updatedAt ? `${item.updatedAt}` : "",
-        createdBy: item?.createdBy ? `${item.createdBy}` : "",
-        updatedBy: item?.updatedBy ? `${item.updatedBy}` : "",
-        contextId: item?.contextId ? `${item.contextId}` : "",
-        render: item?.render ? `${item.render}` : "",
-        contextType: item?.contextType ? `${item.contextType}` : "",
-        fieldParams: item?.fieldParams ? JSON.stringify(item.fieldParams) : "",
-        value: value ? `${value}` : "", // Add the processed value to the response
+          : '',
+        tenantId: item?.tenantId ? `${item.tenantId}` : '',
+        createdAt: item?.createdAt ? `${item.createdAt}` : '',
+        updatedAt: item?.updatedAt ? `${item.updatedAt}` : '',
+        createdBy: item?.createdBy ? `${item.createdBy}` : '',
+        updatedBy: item?.updatedBy ? `${item.updatedBy}` : '',
+        contextId: item?.contextId ? `${item.contextId}` : '',
+        render: item?.render ? `${item.render}` : '',
+        contextType: item?.contextType ? `${item.contextType}` : '',
+        fieldParams: item?.fieldParams ? JSON.stringify(item.fieldParams) : '',
+        value: value ? `${value}` : '', // Add the processed value to the response
       };
 
       return new FieldsDto(fieldMapping);

@@ -31,7 +31,7 @@ export class FieldValuesCreateDto {
 
   @Expose()
   @IsOptional()
-  dropdownValue?: any;
+  dropdownValue?: string | number | boolean | { [key: string]: any };
 
   @Expose()
   @IsOptional()

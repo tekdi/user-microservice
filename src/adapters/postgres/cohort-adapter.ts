@@ -25,6 +25,7 @@ import { CohortAcademicYear } from 'src/cohortAcademicYear/entities/cohortAcadem
 import { PostgresCohortMembersService } from './cohortMembers-adapter';
 import { LoggerUtil } from 'src/common/logger/LoggerUtil';
 import { User } from 'src/user/entities/user-entity';
+import { FieldValueConverter } from 'src/utils/field-value-converter';
 
 @Injectable()
 export class PostgresCohortService {
@@ -404,44 +405,16 @@ export class PostgresCohortService {
               continue;
             }
 
-            // Prepare field data with type-specific values
-            const fieldData: any = {
-              fieldId: fieldId,
-              value: value,
-              itemId: cohortId
-            };
-
-            // Set value in appropriate column based on field type
-            switch(fieldDetails.type?.toLowerCase()) {
-              case 'text':
-                fieldData.textValue = value;
-                break;
-              case 'number':
-                fieldData.numberValue = parseFloat(value);
-                break;
-              case 'calendar':
-                fieldData.calendarValue = new Date(value);
-                break;
-              case 'dropdown':
-                fieldData.dropdownValue = typeof value === 'string' ? 
-                  JSON.parse(value) : value;
-                break;
-              case 'radio':
-                fieldData.radioValue = value;
-                break;
-              case 'checkbox':
-                fieldData.checkboxValue = Boolean(value);
-                break;
-              case 'textarea':
-                fieldData.textareaValue = value;
-                break;
-              case 'file':
-                fieldData.fileValue = value;
-                break;
-            }
-
-            // Save to FieldValues table
             try {
+              // Use the utility to prepare field data
+              const fieldData = FieldValueConverter.prepareFieldData(
+                fieldId,
+                value,
+                cohortId,
+                fieldDetails.type
+              );
+
+              // Save to FieldValues table
               await this.fieldValuesRepository
                 .createQueryBuilder()
                 .insert()
@@ -459,7 +432,7 @@ export class PostgresCohortService {
               });
             } catch (error) {
               createFailures.push(
-                `${fieldId}: Failed to save field value - ${fieldDetails.name}`
+                `${fieldId}: ${error.message} - ${fieldDetails.name}`
               );
             }
           }
@@ -630,51 +603,23 @@ export class PostgresCohortService {
                 continue;
               }
 
-              // Prepare field data with type-specific values
-              const fieldData: any = {
-                fieldId: fieldId,
-                value: value,
-                itemId: cohortId
-              };
-
-              // Set value in appropriate column based on field type
-              switch(fieldDetails.type?.toLowerCase()) {
-                case 'text':
-                  fieldData.textValue = value;
-                  break;
-                case 'number':
-                  fieldData.numberValue = parseFloat(value);
-                  break;
-                case 'calendar':
-                  fieldData.calendarValue = new Date(value);
-                  break;
-                case 'dropdown':
-                  fieldData.dropdownValue = typeof value === 'string' ? 
-                    JSON.parse(value) : value;
-                  break;
-                case 'radio':
-                  fieldData.radioValue = value;
-                  break;
-                case 'checkbox':
-                  fieldData.checkboxValue = Boolean(value);
-                  break;
-                case 'textarea':
-                  fieldData.textareaValue = value;
-                  break;
-                case 'file':
-                  fieldData.fileValue = value;
-                  break;
-              }
-
-              // Check if field value already exists
-              const existingFieldValue = await this.fieldValuesRepository.findOne({
-                where: {
-                  itemId: cohortId,
-                  fieldId: fieldId
-                }
-              });
-
               try {
+                // Use the utility to prepare field data
+                const fieldData = FieldValueConverter.prepareFieldData(
+                  fieldId,
+                  value,
+                  cohortId,
+                  fieldDetails.type
+                );
+
+                // Check if field value already exists
+                const existingFieldValue = await this.fieldValuesRepository.findOne({
+                  where: {
+                    itemId: cohortId,
+                    fieldId: fieldId
+                  }
+                });
+
                 if (existingFieldValue) {
                   // Update existing field value
                   await this.fieldValuesRepository
@@ -959,48 +904,108 @@ export class PostgresCohortService {
 
         if (Object.keys(searchCustomFields).length > 0) {
           const context = 'COHORT';
-          // Build the query to search in type-specific columns
+          
+          // Build parameterized query conditions
+          const conditions = [];
+          const params = [];
+          let paramIndex = 1;
+
+          Object.entries(searchCustomFields).forEach(([key, fieldInfo]: [string, any]) => {
+            const fieldDetails = getCustomFields.find(f => f.name === key);
+            if (!fieldDetails) return;
+            
+            const value = fieldInfo.value;
+            const type = fieldDetails.type?.toLowerCase();
+            
+            // Add field name parameter
+            params.push(key);
+            
+            switch(type) {
+              case 'text':
+              case 'textarea':
+              case 'file':
+              case 'radio':
+                params.push(`%${value}%`);
+                conditions.push(`(f."name" = $${paramIndex} AND (fv."${type}Value" ILIKE $${paramIndex + 1} OR fv."value" ILIKE $${paramIndex + 1}))`);
+                paramIndex += 2;
+                break;
+              case 'number':
+                if (!isNaN(parseFloat(value))) {
+                  params.push(value);
+                  params.push(value.toString());
+                  conditions.push(`(f."name" = $${paramIndex} AND (fv."numberValue" = $${paramIndex + 1}::numeric OR fv."value" = $${paramIndex + 2}))`);
+                  paramIndex += 3;
+                }
+                break;
+              case 'calendar':
+                params.push(`%${value}%`);
+                conditions.push(`(f."name" = $${paramIndex} AND (fv."calendarValue"::text LIKE $${paramIndex + 1} OR fv."value" LIKE $${paramIndex + 1}))`);
+                paramIndex += 2;
+                break;
+              case 'checkbox':
+                const boolValue = value === 'true' || value === '1' || value === true;
+                params.push(boolValue);
+                params.push(value.toString());
+                conditions.push(`(f."name" = $${paramIndex} AND (fv."checkboxValue" = $${paramIndex + 1} OR fv."value" = $${paramIndex + 2}))`);
+                paramIndex += 3;
+                break;
+              case 'dropdown':
+                params.push(`%${value}%`);
+                conditions.push(`(f."name" = $${paramIndex} AND (fv."dropdownValue"::text LIKE $${paramIndex + 1} OR fv."value" LIKE $${paramIndex + 1}))`);
+                paramIndex += 2;
+                break;
+              default:
+                params.push(`%${value}%`);
+                conditions.push(`(f."name" = $${paramIndex} AND fv."value" LIKE $${paramIndex + 1})`);
+                paramIndex += 2;
+                break;
+            }
+          });
+
+          if (conditions.length === 0) {
+            return APIResponse.error(
+              response,
+              apiId,
+              'No valid search conditions',
+              'NOT FOUND',
+              HttpStatus.NOT_FOUND
+            );
+          }
+
           const customFieldQuery = `
             SELECT DISTINCT fv."itemId"
             FROM public."FieldValues" fv
             INNER JOIN public."Fields" f ON f."fieldId" = fv."fieldId"
-            WHERE ${Object.entries(searchCustomFields).map(([key, fieldInfo]: [string, any]) => {
-              const fieldDetails = getCustomFields.find(f => f.name === key);
-              if (!fieldDetails) return '';
-              
-              const value = fieldInfo.value;
-              const type = fieldDetails.type?.toLowerCase();
-              
-              switch(type) {
-                case 'text':
-                case 'textarea':
-                case 'file':
-                case 'radio':
-                  return `(f."name" = '${key}' AND (fv."${type}Value" ILIKE '%${value}%' OR fv."value" ILIKE '%${value}%'))`;
-                case 'number':
-                  return `(f."name" = '${key}' AND (fv."numberValue" = ${value} OR fv."value" = '${value}'))`;
-                case 'calendar':
-                  return `(f."name" = '${key}' AND (fv."calendarValue"::text LIKE '%${value}%' OR fv."value" LIKE '%${value}%'))`;
-                case 'checkbox':
-                  const boolValue = value === 'true' || value === '1' || value === true;
-                  return `(f."name" = '${key}' AND (fv."checkboxValue" = ${boolValue} OR fv."value" = '${value}'))`;
-                case 'dropdown':
-                  return `(f."name" = '${key}' AND (fv."dropdownValue"::text LIKE '%${value}%' OR fv."value" LIKE '%${value}%'))`;
-                default:
-                  return `(f."name" = '${key}' AND fv."value" LIKE '%${value}%')`;
-              }
-            }).filter(Boolean).join(' OR ')}`;
+            WHERE ${conditions.join(' OR ')}`;
 
-          getCohortIdUsingCustomFields = await this.fieldValuesRepository.query(customFieldQuery);
-          getCohortIdUsingCustomFields = getCohortIdUsingCustomFields.map(result => result.itemId);
+          try {
+            getCohortIdUsingCustomFields = await this.fieldValuesRepository.query(
+              customFieldQuery,
+              params
+            );
+            getCohortIdUsingCustomFields = getCohortIdUsingCustomFields.map(result => result.itemId);
 
-          if (!getCohortIdUsingCustomFields?.length) {
+            if (!getCohortIdUsingCustomFields?.length) {
+              return APIResponse.error(
+                response,
+                apiId,
+                'No data found',
+                'NOT FOUND',
+                HttpStatus.NOT_FOUND
+              );
+            }
+          } catch (error) {
+            LoggerUtil.error(
+              'Error executing custom field query',
+              `Error: ${error.message}`,
+              apiId
+            );
             return APIResponse.error(
               response,
               apiId,
-              'No data found',
-              'NOT FOUND',
-              HttpStatus.NOT_FOUND
+              'Error executing search',
+              'INTERNAL_SERVER_ERROR',
+              HttpStatus.INTERNAL_SERVER_ERROR
             );
           }
         }

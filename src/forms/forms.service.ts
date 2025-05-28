@@ -33,6 +33,17 @@ export class FormsService {
       }
 
       const { context, contextType, tenantId, contextId } = requiredData;
+
+      if (contextId && typeof contextId !== 'string') {
+        return APIResponse.error(
+          response,
+          apiId,
+          'BAD_REQUEST',
+          'contextId must be a string',
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
       const validationResult = await this.validateFormInput(requiredData);
 
       if (validationResult.error) {
