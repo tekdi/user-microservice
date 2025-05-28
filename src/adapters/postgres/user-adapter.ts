@@ -67,6 +67,7 @@ export class PostgresUserService implements IServicelocator {
   private readonly otpDigits: number;
   private readonly smsKey: string;
   private readonly dataSource: DataSource;
+  private readonly msg91TemplateKey: string;
 
   constructor(
     // private axiosInstance: AxiosInstance,
@@ -105,6 +106,7 @@ export class PostgresUserService implements IServicelocator {
     this.otpExpiry = this.configService.get<number>('OTP_EXPIRY') || 10; // default: 10 minutes
     this.otpDigits = this.configService.get<number>('OTP_DIGITS') || 6;
     this.smsKey = this.configService.get<string>('SMS_KEY');
+    this.msg91TemplateKey = this.configService.get<string>('MSG91_TEMPLATE_KEY');
     this.dataSource = dataSource; // Store dataSource in class property
   }
 
@@ -553,7 +555,7 @@ export class PostgresUserService implements IServicelocator {
     }
 
     //Get user core fields data
-    const query = `SELECT U."userId", U."username",U."email", U."firstName",UTM."tenantId", U."middleName", U."lastName", U."gender", U."dob", R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", U."status", COUNT(*) OVER() AS total_count 
+    const query = `SELECT U."userId",U."enrollmentId", U."username",U."email", U."firstName",UTM."tenantId", U."middleName", U."lastName", U."gender", U."dob", R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", U."status", COUNT(*) OVER() AS total_count 
       FROM  public."Users" U
       LEFT JOIN public."CohortMembers" CM 
       ON CM."userId" = U."userId"
@@ -608,7 +610,7 @@ export class PostgresUserService implements IServicelocator {
           userId: userData.userId,
         },
       });
-
+      
       if (checkExistUser.length == 0) {
         return APIResponse.error(
           response,
@@ -746,6 +748,7 @@ export class PostgresUserService implements IServicelocator {
       where: whereClause,
       select: [
         "userId",
+        "enrollmentId",
         "username",
         "firstName",
         "middleName",
@@ -755,7 +758,10 @@ export class PostgresUserService implements IServicelocator {
         "mobile",
         "email",
         "temporaryPassword",
+        "createdAt",
+        "updatedAt",
         "createdBy",
+        "updatedBy",
         "deviceId",
       ],
     });
@@ -2221,12 +2227,12 @@ export class PostgresUserService implements IServicelocator {
       console.log(this.otpDigits, this.otpExpiry,"testing OTP changes");
       const { hash, expires, expiresInMinutes } = this.generateOtpHash(mobileWithCode, otp, reason);
       const replacements = {
-        "{OTP}": otp,
-        "{otpExpiry}": expiresInMinutes
+        "{var1}": otp,
       };
       console.log(replacements, "replacements");
       // Step 2:send SMS notification
-      const notificationPayload = await this.smsNotification("OTP", "SEND_OTP", replacements, [mobile]);
+      console.log(this.msg91TemplateKey,"Key");
+      const notificationPayload = await this.smsNotification("OTP", this.msg91TemplateKey, replacements, [mobile]);
       return { notificationPayload, hash, expires, expiresInMinutes };
     }
     catch (error) {
