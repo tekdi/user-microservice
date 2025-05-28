@@ -34,6 +34,9 @@ export class User {
   @Column({ type: 'enum', enum: ['male', 'female', 'transgender'], nullable: false })
   gender: string;
 
+  @Column({ type: 'varchar', length: 50, nullable: false })
+  enrollmentId: string;
+
   @Column({ type: "date", nullable: true })
   dob: Date;
 
