@@ -60,6 +60,8 @@ export const API_RESPONSES = {
   COHORTMEMBER_NOTFOUND: 'Invalid input: Cohort Member not exist.',
   ACADEMICYEAR_GET_SUCCESSFULLY: 'Get Successfully Academic year list',
   FORM_CREATED_SUCCESSFULLY: 'Form created successfully',
+  FORM_UPDATED_SUCCESSFULLY: 'Form updated successfully.',
+  FORM_NOT_FOUND: 'Form not found with the given ID.',
   ADD_COHORT_TO_ACADEMIC_YEAR: 'Cohort added with academic year successfully',
   COHORT_NOT_FOUND: 'Cohort not found',
   FORM_EXISTS: 'Form already exists',
