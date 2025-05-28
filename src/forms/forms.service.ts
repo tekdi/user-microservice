@@ -253,8 +253,8 @@ export class FormsService {
         return APIResponse.error(
           response,
           apiId,
-          'BAD_REQUEST',
           API_RESPONSES.FORM_EXISTS,
+          'BAD_REQUEST',
           HttpStatus.BAD_REQUEST
         );
       }
@@ -267,8 +267,8 @@ export class FormsService {
         return APIResponse.error(
           response,
           apiId,
-          'BAD_REQUEST',
           API_RESPONSES.INVALID_FORM,
+          'BAD_REQUEST',
           HttpStatus.BAD_REQUEST
         );
       }
@@ -280,8 +280,8 @@ export class FormsService {
         return APIResponse.error(
           response,
           apiId,
-          'BAD_REQUEST',
           API_RESPONSES.INVALID_CONTEXT(formCreateDto.context),
+          'BAD_REQUEST',
           HttpStatus.BAD_REQUEST
         );
       }
@@ -292,11 +292,11 @@ export class FormsService {
         return APIResponse.error(
           response,
           apiId,
-          'BAD_REQUEST',
           API_RESPONSES.INVALID_CONTEXTTYPE(
             formCreateDto.context,
             validContextTypes.join(', ')
           ),
+          'BAD_REQUEST',
           HttpStatus.BAD_REQUEST
         );
       }
