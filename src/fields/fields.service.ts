@@ -107,29 +107,79 @@ export class FieldsService {
     return { mappedResponse, totalCount };
   }
 
+  /**
+   * Creates field values with type-specific storage based on field type
+   * @param request - The incoming request object
+   * @param fieldValuesDto - The field values data transfer object
+   * @returns Success response with created field values or error response
+   */
   async createFieldValues(request: any, fieldValuesDto: FieldValuesDto) {
     try {
       const fieldsData: any = {};
-      Object.keys(fieldValuesDto).forEach((e) => {
-        if (fieldValuesDto[e] && fieldValuesDto[e] != "") {
-          if (Array.isArray(fieldValuesDto[e])) {
-            fieldsData[e] = JSON.stringify(fieldValuesDto[e]);
-          } else {
-            fieldsData[e] = fieldValuesDto[e];
-          }
-        }
+
+      // Get field type from Fields table
+      const fieldDetails = await this.fieldsRepository.findOne({
+        where: { fieldId: fieldValuesDto.fieldId }
       });
 
-      const result = await this.fieldsValuesRepository.save(fieldsData);
+      if (!fieldDetails) {
+        throw new Error('Field not found');
+      }
+
+      // Store the original value
+      fieldsData.value = fieldValuesDto.value;
+      fieldsData.fieldId = fieldValuesDto.fieldId;
+      fieldsData.itemId = fieldValuesDto.itemId;
+
+      // Set value in appropriate column based on field type
+      switch(fieldDetails.type?.toLowerCase()) {
+        case 'text':
+          fieldsData.textValue = fieldValuesDto.value;
+          break;
+        case 'number':
+          fieldsData.numberValue = parseFloat(fieldValuesDto.value);
+          break;
+        case 'calendar':
+          fieldsData.calendarValue = new Date(fieldValuesDto.value);
+          break;
+        case 'dropdown':
+          fieldsData.dropdownValue = typeof fieldValuesDto.value === 'string' ? 
+            JSON.parse(fieldValuesDto.value) : fieldValuesDto.value;
+          break;
+        case 'radio':
+          fieldsData.radioValue = fieldValuesDto.value;
+          break;
+        case 'checkbox':
+          fieldsData.checkboxValue = Boolean(fieldValuesDto.value);
+          break;
+        case 'textarea':
+          fieldsData.textareaValue = fieldValuesDto.value;
+          break;
+        case 'file':
+          fieldsData.fileValue = fieldValuesDto.value;
+          break;
+      }
+
+      // Set other common fields if provided
+      if (fieldValuesDto.createdBy) fieldsData.createdBy = fieldValuesDto.createdBy;
+      if (fieldValuesDto.updatedBy) fieldsData.updatedBy = fieldValuesDto.updatedBy;
+
+      const result = await this.fieldsValuesRepository
+        .createQueryBuilder()
+        .insert()
+        .into('FieldValues')
+        .values(fieldsData)
+        .execute();
+
       return new SuccessResponse({
         statusCode: HttpStatus.CREATED,
         message: "Ok.",
-        data: result,
+        data: result.raw[0]
       });
     } catch (e) {
       return new ErrorResponseTypeOrm({
         statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-        errorMessage: e,
+        errorMessage: e
       });
     }
   }
@@ -195,28 +245,90 @@ export class FieldsService {
     return response;
   }
 
+  /**
+   * Updates field values with type-specific storage based on field type
+   * @param id - The ID of the field value to update
+   * @param fieldValuesDto - The field values data transfer object
+   * @returns Success response with updated field values or error response
+   */
   async updateFieldValues(id: string, fieldValuesDto: FieldValuesDto) {
     try {
       const fieldsData: any = {};
-      Object.keys(fieldValuesDto).forEach((e) => {
-        if (fieldValuesDto[e] && fieldValuesDto[e] != "") {
-          if (Array.isArray(fieldValuesDto[e])) {
-            fieldsData[e] = JSON.stringify(fieldValuesDto[e]);
-          } else {
-            fieldsData[e] = fieldValuesDto[e];
-          }
-        }
-      });
-      const response = await this.fieldsValuesRepository.update(
-        id,
-        fieldValuesDto
-      );
 
-      return response;
+      // Get field type from Fields table
+      const existingFieldValue = await this.fieldsValuesRepository.findOne({
+        where: { fieldValuesId: id }
+      });
+
+      if (!existingFieldValue) {
+        throw new Error('Field value not found');
+      }
+
+      const fieldDetails = await this.fieldsRepository.findOne({
+        where: { fieldId: existingFieldValue.fieldId }
+      });
+
+      if (!fieldDetails) {
+        throw new Error('Field not found');
+      }
+
+      // Store the original value if provided
+      if (fieldValuesDto.value !== undefined) {
+        fieldsData.value = fieldValuesDto.value;
+
+        // Set value in appropriate column based on field type
+        switch(fieldDetails.type?.toLowerCase()) {
+          case 'text':
+            fieldsData.textValue = fieldValuesDto.value;
+            break;
+          case 'number':
+            fieldsData.numberValue = parseFloat(fieldValuesDto.value);
+            break;
+          case 'calendar':
+            fieldsData.calendarValue = new Date(fieldValuesDto.value);
+            break;
+          case 'dropdown':
+            fieldsData.dropdownValue = typeof fieldValuesDto.value === 'string' ? 
+              JSON.parse(fieldValuesDto.value) : fieldValuesDto.value;
+            break;
+          case 'radio':
+            fieldsData.radioValue = fieldValuesDto.value;
+            break;
+          case 'checkbox':
+            fieldsData.checkboxValue = Boolean(fieldValuesDto.value);
+            break;
+          case 'textarea':
+            fieldsData.textareaValue = fieldValuesDto.value;
+            break;
+          case 'file':
+            fieldsData.fileValue = fieldValuesDto.value;
+            break;
+        }
+      }
+
+      // Set other common fields if provided
+      if (fieldValuesDto.updatedBy) fieldsData.updatedBy = fieldValuesDto.updatedBy;
+
+      const result = await this.fieldsValuesRepository
+        .createQueryBuilder()
+        .update('FieldValues')
+        .set(fieldsData)
+        .where("fieldValuesId = :id", { id })
+        .execute();
+
+      if (result.affected === 0) {
+        throw new Error('No record was updated');
+      }
+
+      return new SuccessResponse({
+        statusCode: HttpStatus.OK,
+        message: "Updated successfully.",
+        data: await this.fieldsValuesRepository.findOne({ where: { fieldValuesId: id } })
+      });
     } catch (e) {
-      return new ErrorResponse({
-        errorCode: "400",
-        errorMessage: e,
+      return new ErrorResponseTypeOrm({
+        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+        errorMessage: e
       });
     }
   }
@@ -231,8 +343,39 @@ export class FieldsService {
 
   public async mappedResponse(result: any) {
     const fieldValueResponse = result.map((item: any) => {
+      // Get the value from the appropriate type-specific column or fall back to default value
+      let value = item.value; // fallback value
+      if (item.type) {
+        switch(item.type.toLowerCase()) {
+          case 'text':
+            value = item.textValue ?? item.value;
+            break;
+          case 'number':
+            value = item.numberValue?.toString() ?? item.value;
+            break;
+          case 'calendar':
+            value = item.calendarValue ? item.calendarValue.toISOString() : item.value;
+            break;
+          case 'dropdown':
+            value = item.dropdownValue ? JSON.stringify(item.dropdownValue) : item.value;
+            break;
+          case 'radio':
+            value = item.radioValue ?? item.value;
+            break;
+          case 'checkbox':
+            value = item.checkboxValue?.toString() ?? item.value;
+            break;
+          case 'textarea':
+            value = item.textareaValue ?? item.value;
+            break;
+          case 'file':
+            value = item.fileValue ?? item.value;
+            break;
+        }
+      }
+
       const fieldValueMapping = {
-        value: item?.value ? `${item.value}` : "",
+        value: value ? `${value}` : "",
         fieldValuesId: item?.fieldValuesId ? `${item.fieldValuesId}` : "",
         itemId: item?.itemId ? `${item.itemId}` : "",
         fieldId: item?.fieldId ? `${item.fieldId}` : "",
@@ -250,6 +393,37 @@ export class FieldsService {
 
   public async mappedResponseField(result: any) {
     const fieldResponse = result.map((item: any) => {
+      // Get the value from the appropriate type-specific column or fall back to default value
+      let value = item.value; // fallback value
+      if (item.type) {
+        switch(item.type.toLowerCase()) {
+          case 'text':
+            value = item.textValue ?? item.value;
+            break;
+          case 'number':
+            value = item.numberValue?.toString() ?? item.value;
+            break;
+          case 'calendar':
+            value = item.calendarValue ? item.calendarValue.toISOString() : item.value;
+            break;
+          case 'dropdown':
+            value = item.dropdownValue ? JSON.stringify(item.dropdownValue) : item.value;
+            break;
+          case 'radio':
+            value = item.radioValue ?? item.value;
+            break;
+          case 'checkbox':
+            value = item.checkboxValue?.toString() ?? item.value;
+            break;
+          case 'textarea':
+            value = item.textareaValue ?? item.value;
+            break;
+          case 'file':
+            value = item.fileValue ?? item.value;
+            break;
+        }
+      }
+
       const fieldMapping = {
         fieldId: item?.fieldId ? `${item.fieldId}` : "",
         assetId: item?.assetId ? `${item.assetId}` : "",
@@ -278,6 +452,7 @@ export class FieldsService {
         render: item?.render ? `${item.render}` : "",
         contextType: item?.contextType ? `${item.contextType}` : "",
         fieldParams: item?.fieldParams ? JSON.stringify(item.fieldParams) : "",
+        value: value ? `${value}` : "", // Add the processed value to the response
       };
 
       return new FieldsDto(fieldMapping);
