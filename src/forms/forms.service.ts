@@ -119,6 +119,7 @@ export class FormsService {
       const result = {
         formid: formData.formid,
         title: formData.title,
+        status: formData.status,
         fields: mappedResponse,
       };
 
@@ -144,7 +145,7 @@ export class FormsService {
   async getFormData(whereClause): Promise<any> {
     let query = this.formRepository
       .createQueryBuilder('form')
-      .select(['form.formid', 'form.title', 'form.fields'])
+      .select(['form.formid', 'form.title', 'form.status', 'form.fields'])
       .where('form.context = :context', { context: whereClause.context });
 
     if (whereClause.contextType !== undefined) {
