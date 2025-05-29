@@ -32,7 +32,8 @@ export class FormsService {
         );
       }
 
-      const { context, contextType, tenantId, contextId } = requiredData;
+      const { context, contextType, tenantId, contextId, formType } =
+        requiredData;
 
       if (contextId && typeof contextId !== 'string') {
         return APIResponse.error(
@@ -83,6 +84,24 @@ export class FormsService {
           HttpStatus.NOT_FOUND
         );
       }
+
+      // Return raw fields if formType is 'rjsf'
+      if (formType === 'rjsf') {
+        const result = {
+          formid: formData.formid,
+          title: formData.title,
+          fields: formData.fields, // send raw fields JSON as-is
+        };
+        return APIResponse.success(
+          response,
+          apiId,
+          result,
+          HttpStatus.OK,
+          'Fields fetched successfully.'
+        );
+      }
+
+      // Default or "core" formType (existing logic)
       const mappedResponse = await Promise.all(
         formData.fields.result.map(async (data) => {
           if (!data.coreField) {
@@ -176,7 +195,7 @@ export class FormsService {
       'contextType',
       'contextId',
       'userId',
-      'center',
+      'formType',
     ];
     const extraKeys = Object.keys(requiredData).filter(
       (key) => !allowedKeys.includes(key)
@@ -186,11 +205,21 @@ export class FormsService {
       return {
         error: `Invalid keys provided: ${extraKeys.join(
           ', '
-        )}. Only 'context', 'contextType', 'contextId' are allowed.`,
+        )}. Only ${allowedKeys.join(', ')} are allowed.`,
       };
     }
 
-    const { context, contextType } = requiredData;
+    const { context, contextType, formType } = requiredData;
+
+    // Validate formType
+    const validFormTypes = ['core', 'rjsf'];
+    if (formType && !validFormTypes.includes(formType)) {
+      return {
+        error: `Invalid formType: '${formType}'. Allowed values are: ${validFormTypes.join(
+          ', '
+        )}`,
+      };
+    }
 
     if (context) {
       const validContextTypes = await this.getValidContextTypes(context);
