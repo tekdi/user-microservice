@@ -195,7 +195,6 @@ export class FormsService {
       'contextType',
       'contextId',
       'userId',
-      'center',
       'formType',
     ];
     const extraKeys = Object.keys(requiredData).filter(
@@ -206,7 +205,7 @@ export class FormsService {
       return {
         error: `Invalid keys provided: ${extraKeys.join(
           ', '
-        )}. Only 'context', 'contextType', 'contextId' are allowed.`,
+        )}. Only ${allowedKeys.join(', ')} are allowed.`,
       };
     }
 
