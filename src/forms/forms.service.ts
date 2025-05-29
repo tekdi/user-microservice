@@ -90,6 +90,7 @@ export class FormsService {
         const result = {
           formid: formData.formid,
           title: formData.title,
+          status: formData.status,
           fields: formData.fields, // send raw fields JSON as-is
         };
         return APIResponse.success(
