@@ -513,7 +513,7 @@ export class FormsService {
             formUpdateDto.rules = JSON.parse(formUpdateDto.rules);
           }
         } catch (err: any) {
-          console.error('Error parsing rules:', err.message || err);
+          console.error('Error parsing rules:', err.message ?? err);
           return APIResponse.error(
             response,
             apiId,
