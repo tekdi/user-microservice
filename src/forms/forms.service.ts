@@ -32,8 +32,14 @@ export class FormsService {
         );
       }
 
-      const { context, contextType, tenantId, contextId, formType } =
-        requiredData;
+      const {
+        context,
+        contextType,
+        tenantId,
+        contextId,
+        formType,
+        fetchRequired,
+      } = requiredData;
 
       if (contextId && typeof contextId !== 'string') {
         return APIResponse.error(
@@ -79,20 +85,39 @@ export class FormsService {
         return APIResponse.error(
           response,
           apiId,
-          'NOT_FOUND',
           'No Data found for this context OR Context Type OR Context Id',
+          'NOT_FOUND',
           HttpStatus.NOT_FOUND
         );
       }
 
       // Return raw fields if formType is 'rjsf'
       if (formType === 'rjsf') {
-        const result = {
+        const result: {
+          formid: any;
+          title: any;
+          status: any;
+          fields: any;
+          requiredFields?: string[] | null;
+        } = {
           formid: formData.formid,
           title: formData.title,
           status: formData.status,
-          fields: formData.fields, // send raw fields JSON as-is
+          fields: formData.fields,
         };
+
+        // Conditionally include requiredFields only if fetchRequired === 'yes'
+        if (requiredData.fetchRequired === 'yes') {
+          const requiredFields = formData.fields?.result
+            ?.flatMap((item) =>
+              Array.isArray(item.schema?.required) ? item.schema.required : []
+            )
+            ?.filter((v, i, self) => self.indexOf(v) === i); // remove duplicates
+
+          result.requiredFields =
+            requiredFields.length > 0 ? requiredFields : null;
+        }
+
         return APIResponse.success(
           response,
           apiId,
@@ -198,6 +223,7 @@ export class FormsService {
       'contextId',
       'userId',
       'formType',
+      'fetchRequired',
     ];
     const extraKeys = Object.keys(requiredData).filter(
       (key) => !allowedKeys.includes(key)
@@ -211,7 +237,7 @@ export class FormsService {
       };
     }
 
-    const { context, contextType, formType } = requiredData;
+    const { context, contextType, formType, fetchRequired } = requiredData;
 
     // Validate formType
     const validFormTypes = ['core', 'rjsf'];
@@ -484,6 +510,23 @@ export class FormsService {
           'BAD_REQUEST',
           HttpStatus.BAD_REQUEST
         );
+      }
+      // Inside your updateForm method, after status handling:
+      if (formUpdateDto.rules) {
+        try {
+          // Optional: Validate that rules is a valid JSON object
+          if (typeof formUpdateDto.rules !== 'object') {
+            formUpdateDto.rules = JSON.parse(formUpdateDto.rules);
+          }
+        } catch (err) {
+          return APIResponse.error(
+            response,
+            apiId,
+            'Invalid rules JSON format',
+            'BAD_REQUEST',
+            HttpStatus.BAD_REQUEST
+          );
+        }
       }
 
       const updatedForm = Object.assign(existingForm, formUpdateDto);

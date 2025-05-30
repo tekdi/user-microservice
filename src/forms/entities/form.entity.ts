@@ -43,4 +43,7 @@ export class Form {
 
   @Column({ type: 'varchar', nullable: true })
   status: string;
+
+  @Column({ type: 'jsonb', nullable: true })
+  rules: object;
 }
