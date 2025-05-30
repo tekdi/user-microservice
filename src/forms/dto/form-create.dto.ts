@@ -12,7 +12,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 export enum FormStatus {
   ACTIVE = 'active',
   INACTIVE = 'inactive',
-  DRAFT = 'draft',
+  ARCHIVED = 'archived',
 }
 export class FormCreateDto {
   tenantId: string;
@@ -70,4 +70,11 @@ export class FormCreateDto {
   @IsOptional()
   @IsEnum(FormStatus)
   status?: FormStatus;
+
+  @ApiProperty({
+    description: 'fields',
+  })
+  @IsOptional()
+  @IsObject()
+  rules?: any;
 }

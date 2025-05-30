@@ -1,4 +1,5 @@
 export enum CohortContextType {
-  COHORT = "COHORT",
-  CENTER = "CENTER",
+  COHORT = 'COHORT',
+  CENTER = 'CENTER',
+  COHORTFORMRULE = 'COHORTFORMRULE',
 }
