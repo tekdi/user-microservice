@@ -32,14 +32,8 @@ export class FormsService {
         );
       }
 
-      const {
-        context,
-        contextType,
-        tenantId,
-        contextId,
-        formType,
-        fetchRequired,
-      } = requiredData;
+      const { context, contextType, tenantId, contextId, formType } =
+        requiredData;
 
       if (contextId && typeof contextId !== 'string') {
         return APIResponse.error(
@@ -237,7 +231,7 @@ export class FormsService {
       };
     }
 
-    const { context, contextType, formType, fetchRequired } = requiredData;
+    const { context, contextType, formType } = requiredData;
 
     // Validate formType
     const validFormTypes = ['core', 'rjsf'];
