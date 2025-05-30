@@ -512,12 +512,12 @@ export class FormsService {
           if (typeof formUpdateDto.rules !== 'object') {
             formUpdateDto.rules = JSON.parse(formUpdateDto.rules);
           }
-        } catch (err) {
+        } catch (err: any) {
           return APIResponse.error(
             response,
             apiId,
-            'Invalid rules JSON format',
             'BAD_REQUEST',
+            'Invalid rules JSON format',
             HttpStatus.BAD_REQUEST
           );
         }
