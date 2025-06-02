@@ -10,12 +10,8 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { FieldType } from '../entities/fields.entity';
+import { FieldStatus } from './field-values-update.dto';
 
-export enum FieldStatus {
-  ACTIVE = 'active',
-  ARCHIVED = 'archived',
-  INACTIVE = 'inactive',
-}
 export class FieldsDto {
   //generated fields
   @Expose()

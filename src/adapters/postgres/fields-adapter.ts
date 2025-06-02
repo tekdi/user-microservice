@@ -1458,13 +1458,13 @@ export class PostgresFieldsService implements IServicelocatorfields {
   public async deleteField(requiredData, response) {
     const apiId = APIID.FIELD_OPTIONS_DELETE;
     try {
-      const { fieldId, fieldName, softDelete = true } = requiredData;
+      const { fieldId, fieldName, softDelete = true } = requiredData || {};
 
       if (!fieldId && !fieldName) {
         return await APIResponse.error(
           response,
           apiId,
-          'Please provide either fieldId or fieldName.',
+          'Either fieldId or fieldName must be provided to delete a field.',
           'BAD_REQUEST',
           HttpStatus.BAD_REQUEST
         );
