@@ -10,7 +10,6 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { FieldType } from '../entities/fields.entity';
-import { FieldStatus } from './field-values-update.dto';
 
 export class FieldsDto {
   //generated fields
@@ -116,17 +115,6 @@ export class FieldsDto {
   })
   @Expose()
   dependsOn: string;
-
-  // status
-  @ApiPropertyOptional({
-    enum: FieldStatus,
-    description: 'The status of the field',
-    default: FieldStatus.ACTIVE,
-  })
-  @IsOptional()
-  @Expose()
-  @IsEnum(FieldStatus, { message: 'status must be a valid enum value' })
-  status: FieldStatus;
 
   constructor(obj: any) {
     Object.assign(this, obj);
