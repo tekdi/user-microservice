@@ -318,7 +318,7 @@ export class PostgresCohortService {
 
       const academicYearId = cohortCreateDto.academicYearId;
       const tenantId = cohortCreateDto.tenantId;
-      cohortCreateDto.name = cohortCreateDto?.name.toLowerCase();
+
       // verify if the academic year id is valid
       const academicYear =
         await this.postgresAcademicYearService.getActiveAcademicYear(
@@ -397,7 +397,7 @@ export class PostgresCohortService {
 
             // Get field type from Fields table
             const fieldDetails = await this.fieldsRepository.findOne({
-              where: { fieldId: fieldId }
+              where: { fieldId: fieldId },
             });
 
             if (!fieldDetails) {
@@ -428,7 +428,7 @@ export class PostgresCohortService {
                 fieldId: fieldId,
                 value: value,
                 correctValue: true,
-                fieldName: fieldDetails.name
+                fieldName: fieldDetails.name,
               });
             } catch (error) {
               createFailures.push(
@@ -596,7 +596,7 @@ export class PostgresCohortService {
 
               // Get field type from Fields table
               const fieldDetails = await this.fieldsRepository.findOne({
-                where: { fieldId: fieldId }
+                where: { fieldId: fieldId },
               });
 
               if (!fieldDetails) {
@@ -613,12 +613,13 @@ export class PostgresCohortService {
                 );
 
                 // Check if field value already exists
-                const existingFieldValue = await this.fieldValuesRepository.findOne({
-                  where: {
-                    itemId: cohortId,
-                    fieldId: fieldId
-                  }
-                });
+                const existingFieldValue =
+                  await this.fieldValuesRepository.findOne({
+                    where: {
+                      itemId: cohortId,
+                      fieldId: fieldId,
+                    },
+                  });
 
                 if (existingFieldValue) {
                   // Update existing field value
@@ -626,7 +627,9 @@ export class PostgresCohortService {
                     .createQueryBuilder()
                     .update('FieldValues')
                     .set(fieldData)
-                    .where("fieldValuesId = :id", { id: existingFieldValue.fieldValuesId })
+                    .where('fieldValuesId = :id', {
+                      id: existingFieldValue.fieldValuesId,
+                    })
                     .execute();
                 } else {
                   // Insert new field value
@@ -785,16 +788,18 @@ export class PostgresCohortService {
           Object.entries(filters.customFieldsName).forEach(([key, value]) => {
             if (customFieldsKeys.includes(key)) {
               // Find the field type for this custom field
-              const fieldInfo = getCustomFields.find(field => field.name === key);
+              const fieldInfo = getCustomFields.find(
+                (field) => field.name === key
+              );
               if (fieldInfo) {
                 searchCustomFields[key] = {
                   value: value,
-                  type: fieldInfo.type
+                  type: fieldInfo.type,
                 };
               } else {
                 searchCustomFields[key] = {
                   value: value,
-                  type: null
+                  type: null,
                 };
               }
             }
@@ -904,63 +909,90 @@ export class PostgresCohortService {
 
         if (Object.keys(searchCustomFields).length > 0) {
           const context = 'COHORT';
-          
+
           // Build parameterized query conditions
           const conditions = [];
           const params = [];
           let paramIndex = 1;
 
-          Object.entries(searchCustomFields).forEach(([key, fieldInfo]: [string, any]) => {
-            const fieldDetails = getCustomFields.find(f => f.name === key);
-            if (!fieldDetails) return;
-            
-            const value = fieldInfo.value;
-            const type = fieldDetails.type?.toLowerCase();
-            
-            // Add field name parameter
-            params.push(key);
-            
-            switch(type) {
-              case 'text':
-              case 'textarea':
-              case 'file':
-              case 'radio':
-                params.push(`%${value}%`);
-                conditions.push(`(f."name" = $${paramIndex} AND (fv."${type}Value" ILIKE $${paramIndex + 1} OR fv."value" ILIKE $${paramIndex + 1}))`);
-                paramIndex += 2;
-                break;
-              case 'number':
-                if (!isNaN(parseFloat(value))) {
-                  params.push(value);
+          Object.entries(searchCustomFields).forEach(
+            ([key, fieldInfo]: [string, any]) => {
+              const fieldDetails = getCustomFields.find((f) => f.name === key);
+              if (!fieldDetails) return;
+
+              const value = fieldInfo.value;
+              const type = fieldDetails.type?.toLowerCase();
+
+              // Add field name parameter
+              params.push(key);
+
+              switch (type) {
+                case 'text':
+                case 'textarea':
+                case 'file':
+                case 'radio':
+                  params.push(`%${value}%`);
+                  conditions.push(
+                    `(f."name" = $${paramIndex} AND (fv."${type}Value" ILIKE $${
+                      paramIndex + 1
+                    } OR fv."value" ILIKE $${paramIndex + 1}))`
+                  );
+                  paramIndex += 2;
+                  break;
+                case 'number':
+                  if (!isNaN(parseFloat(value))) {
+                    params.push(value);
+                    params.push(value.toString());
+                    conditions.push(
+                      `(f."name" = $${paramIndex} AND (fv."numberValue" = $${
+                        paramIndex + 1
+                      }::numeric OR fv."value" = $${paramIndex + 2}))`
+                    );
+                    paramIndex += 3;
+                  }
+                  break;
+                case 'calendar':
+                  params.push(`%${value}%`);
+                  conditions.push(
+                    `(f."name" = $${paramIndex} AND (fv."calendarValue"::text LIKE $${
+                      paramIndex + 1
+                    } OR fv."value" LIKE $${paramIndex + 1}))`
+                  );
+                  paramIndex += 2;
+                  break;
+                case 'checkbox':
+                  const boolValue =
+                    value === 'true' || value === '1' || value === true;
+                  params.push(boolValue);
                   params.push(value.toString());
-                  conditions.push(`(f."name" = $${paramIndex} AND (fv."numberValue" = $${paramIndex + 1}::numeric OR fv."value" = $${paramIndex + 2}))`);
+                  conditions.push(
+                    `(f."name" = $${paramIndex} AND (fv."checkboxValue" = $${
+                      paramIndex + 1
+                    } OR fv."value" = $${paramIndex + 2}))`
+                  );
                   paramIndex += 3;
-                }
-                break;
-              case 'calendar':
-                params.push(`%${value}%`);
-                conditions.push(`(f."name" = $${paramIndex} AND (fv."calendarValue"::text LIKE $${paramIndex + 1} OR fv."value" LIKE $${paramIndex + 1}))`);
-                paramIndex += 2;
-                break;
-              case 'checkbox':
-                const boolValue = value === 'true' || value === '1' || value === true;
-                params.push(boolValue);
-                params.push(value.toString());
-                conditions.push(`(f."name" = $${paramIndex} AND (fv."checkboxValue" = $${paramIndex + 1} OR fv."value" = $${paramIndex + 2}))`);
-                paramIndex += 3;
-                break;
-              case 'dropdown':
-                params.push(`%${value}%`);
-                conditions.push(`(f."name" = $${paramIndex} AND (fv."dropdownValue"::text LIKE $${paramIndex + 1} OR fv."value" LIKE $${paramIndex + 1}))`);
-                paramIndex += 2;
-                break;
-              default:
-                params.push(`%${value}%`);
-                conditions.push(`(f."name" = $${paramIndex} AND fv."value" LIKE $${paramIndex + 1})`);
-                paramIndex += 2;
-                break;
+                  break;
+                case 'dropdown':
+                  params.push(`%${value}%`);
+                  conditions.push(
+                    `(f."name" = $${paramIndex} AND (fv."dropdownValue"::text LIKE $${
+                      paramIndex + 1
+                    } OR fv."value" LIKE $${paramIndex + 1}))`
+                  );
+                  paramIndex += 2;
+                  break;
+                default:
+                  params.push(`%${value}%`);
+                  conditions.push(
+                    `(f."name" = $${paramIndex} AND fv."value" LIKE $${
+                      paramIndex + 1
+                    })`
+                  );
+                  paramIndex += 2;
+                  break;
+              }
             }
-          });
+          );
 
           if (conditions.length === 0) {
             return APIResponse.error(
@@ -979,11 +1011,11 @@ export class PostgresCohortService {
             WHERE ${conditions.join(' OR ')}`;
 
           try {
-            getCohortIdUsingCustomFields = await this.fieldValuesRepository.query(
-              customFieldQuery,
-              params
+            getCohortIdUsingCustomFields =
+              await this.fieldValuesRepository.query(customFieldQuery, params);
+            getCohortIdUsingCustomFields = getCohortIdUsingCustomFields.map(
+              (result) => result.itemId
             );
-            getCohortIdUsingCustomFields = getCohortIdUsingCustomFields.map(result => result.itemId);
 
             if (!getCohortIdUsingCustomFields?.length) {
               return APIResponse.error(
