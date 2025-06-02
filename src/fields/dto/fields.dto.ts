@@ -13,8 +13,8 @@ import { FieldType } from '../entities/fields.entity';
 
 export enum FieldStatus {
   ACTIVE = 'active',
-  INACTIVE = 'inactive',
   ARCHIVED = 'archived',
+  INACTIVE = 'inactive',
 }
 export class FieldsDto {
   //generated fields
@@ -127,9 +127,9 @@ export class FieldsDto {
     description: 'The status of the field',
     default: FieldStatus.ACTIVE,
   })
-  @IsEnum(FieldStatus, { message: 'status must be a valid enum value' })
   @IsOptional()
   @Expose()
+  @IsEnum(FieldStatus, { message: 'status must be a valid enum value' })
   status: FieldStatus;
 
   constructor(obj: any) {
