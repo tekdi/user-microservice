@@ -19,7 +19,11 @@ export enum FieldType {
   CALENDAR = 'calendar', // string
   TEXTAREA = 'textarea', // string
 }
-
+export enum FieldStatus {
+  ACTIVE = 'active',
+  INACTIVE = 'inactive',
+  ARCHIVED = 'archived',
+}
 @Entity({ name: 'Fields' })
 export class Fields {
   @PrimaryGeneratedColumn('uuid', { name: 'fieldId' })
@@ -122,4 +126,12 @@ export class Fields {
 
   @Column({ type: 'varchar' })
   dependsOn: string;
+
+  @Column({
+    type: 'enum',
+    enum: FieldStatus,
+    default: FieldStatus.ACTIVE,
+    nullable: false,
+  })
+  status: FieldStatus;
 }

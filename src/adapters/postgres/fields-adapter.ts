@@ -26,7 +26,7 @@ import { LoggerUtil } from 'src/common/logger/LoggerUtil';
 import { API_RESPONSES } from '@utils/response.messages';
 import { v4 as uuidv4 } from 'uuid';
 import { FieldValueConverter } from 'src/utils/field-value-converter';
-
+import { FieldStatus } from 'src/fields/dto/field-values-create.dto';
 @Injectable()
 export class PostgresFieldsService implements IServicelocatorfields {
   constructor(
@@ -363,6 +363,8 @@ export class PostgresFieldsService implements IServicelocatorfields {
         }
       });
       fieldsData['required'] = true;
+      // Ensure default status is 'active'
+      fieldsData['status'] = fieldsData['status'] || FieldStatus.ACTIVE;
 
       const checkFieldExist = await this.fieldsRepository.find({
         where: {
@@ -1068,7 +1070,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
     try {
       // Get existing field value and type
       const existingValue = await this.fieldsValuesRepository.findOne({
-        where: { fieldValuesId: id }
+        where: { fieldValuesId: id },
       });
 
       if (!existingValue) {
@@ -1076,7 +1078,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
       }
 
       const fieldDetails = await this.fieldsRepository.findOne({
-        where: { fieldId: existingValue.fieldId }
+        where: { fieldId: existingValue.fieldId },
       });
 
       if (!fieldDetails) {
@@ -1369,7 +1371,6 @@ export class PostgresFieldsService implements IServicelocatorfields {
       const getField = await this.fieldsRepository.findOne({
         where: condition,
       });
-
       if (!getField) {
         return await APIResponse.error(
           response,
@@ -1404,7 +1405,6 @@ export class PostgresFieldsService implements IServicelocatorfields {
         // check options exits in fieldParams column or not
         const query = `SELECT * FROM public."Fields" WHERE "fieldId"='${getField.fieldId}' AND "fieldParams" -> 'options' @> '[{"value": "${removeOption}"}]' `;
         const checkSourceData = await this.fieldsRepository.query(query);
-
         if (checkSourceData.length > 0) {
           let fieldParamsOptions = checkSourceData[0].fieldParams.options;
 
@@ -1440,6 +1440,93 @@ export class PostgresFieldsService implements IServicelocatorfields {
           result,
           HttpStatus.OK,
           'Field Options deleted successfully.'
+        );
+      }
+    } catch (e) {
+      LoggerUtil.error(`${API_RESPONSES.SERVER_ERROR}`, `Error: ${e.message}`);
+      const errorMessage = e?.message || API_RESPONSES.SERVER_ERROR;
+      return APIResponse.error(
+        response,
+        apiId,
+        API_RESPONSES.SERVER_ERROR,
+        `Error : ${errorMessage}`,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  public async deleteField(requiredData, response) {
+    const apiId = APIID.FIELD_OPTIONS_DELETE;
+    try {
+      const { fieldId, fieldName, softDelete = true } = requiredData;
+
+      if (!fieldId && !fieldName) {
+        return await APIResponse.error(
+          response,
+          apiId,
+          'Please provide either fieldId or fieldName.',
+          'BAD_REQUEST',
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      // Build search condition
+      const condition: any = {};
+      if (fieldId) condition.fieldId = fieldId;
+      else condition.name = fieldName;
+
+      // Find the field
+      const getField = await this.fieldsRepository.findOne({
+        where: condition,
+      });
+
+      if (!getField) {
+        return await APIResponse.error(
+          response,
+          apiId,
+          'Field not found.',
+          'NOT_FOUND',
+          HttpStatus.NOT_FOUND
+        );
+      }
+
+      if (softDelete) {
+        // Soft delete: mark field as inactive or archived
+        // Assuming you have a column like "status" or "isActive" on your Fields table
+        const updateResult = await this.fieldsRepository.update(
+          { fieldId: getField.fieldId },
+          { status: FieldStatus.ARCHIVED } //  enum value here
+        );
+        return await APIResponse.success(
+          response,
+          apiId,
+          { affected: updateResult.affected },
+          HttpStatus.OK,
+          'Field soft deleted (archived) successfully.'
+        );
+      } else {
+        // Permanent delete - physically remove the field
+        const deleteResult = await this.fieldsRepository.delete({
+          fieldId: getField.fieldId,
+        });
+
+        if (deleteResult.affected === 0) {
+          return await APIResponse.error(
+            response,
+            apiId,
+            'Field not found for deletion.',
+            'NOT_FOUND',
+            HttpStatus.NOT_FOUND
+          );
+        }
+
+        // If needed, also delete related data here (e.g., options from other tables)
+        return await APIResponse.success(
+          response,
+          apiId,
+          { affected: deleteResult.affected },
+          HttpStatus.OK,
+          'Field permanently deleted successfully.'
         );
       }
     } catch (e) {

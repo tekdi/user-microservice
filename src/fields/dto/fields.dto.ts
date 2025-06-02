@@ -1,4 +1,4 @@
-import { Exclude, Expose } from "class-transformer";
+import { Exclude, Expose } from 'class-transformer';
 import {
   MaxLength,
   IsNotEmpty,
@@ -6,9 +6,16 @@ import {
   IsString,
   IsNumber,
   IsEnum,
-} from "class-validator";
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { FieldType } from "../entities/fields.entity";
+  IsOptional,
+} from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { FieldType } from '../entities/fields.entity';
+
+export enum FieldStatus {
+  ACTIVE = 'active',
+  INACTIVE = 'inactive',
+  ARCHIVED = 'archived',
+}
 export class FieldsDto {
   //generated fields
   @Expose()
@@ -17,8 +24,8 @@ export class FieldsDto {
   //name
   @ApiProperty({
     type: String,
-    description: "The name of the fields",
-    default: "",
+    description: 'The name of the fields',
+    default: '',
   })
   @Expose()
   name: string;
@@ -26,8 +33,8 @@ export class FieldsDto {
   //label
   @ApiProperty({
     type: String,
-    description: "The label of the fields",
-    default: "",
+    description: 'The label of the fields',
+    default: '',
   })
   @Expose()
   label: string;
@@ -35,8 +42,8 @@ export class FieldsDto {
   //context
   @ApiPropertyOptional({
     type: String,
-    description: "The context of the fields",
-    default: "",
+    description: 'The context of the fields',
+    default: '',
   })
   @Expose()
   context: string;
@@ -44,8 +51,8 @@ export class FieldsDto {
   //contextType
   @ApiPropertyOptional({
     type: String,
-    description: "The contextType of the fields",
-    default: "",
+    description: 'The contextType of the fields',
+    default: '',
   })
   @Expose()
   contextType: string;
@@ -63,7 +70,7 @@ export class FieldsDto {
   //ordering
   @ApiProperty({
     type: Number,
-    description: "The ordering of the fields",
+    description: 'The ordering of the fields',
     default: 0,
   })
   @Expose()
@@ -72,8 +79,8 @@ export class FieldsDto {
   //tenantId
   @ApiPropertyOptional({
     type: String,
-    description: "The tenantId of the fields",
-    default: "",
+    description: 'The tenantId of the fields',
+    default: '',
   })
   @Expose()
   tenantId: string;
@@ -81,7 +88,7 @@ export class FieldsDto {
   // fieldParams
   @ApiPropertyOptional({
     type: Object,
-    description: "The fieldParams of the fields",
+    description: 'The fieldParams of the fields',
     default: {},
   })
   @Expose()
@@ -90,7 +97,7 @@ export class FieldsDto {
   //fieldAttributes
   @ApiPropertyOptional({
     type: Object,
-    description: "The fieldAttributes of the fields",
+    description: 'The fieldAttributes of the fields',
     default: {},
   })
   @Expose()
@@ -99,7 +106,7 @@ export class FieldsDto {
   //sourceDetails
   @ApiPropertyOptional({
     type: Object,
-    description: "The sourceDetails of the fields",
+    description: 'The sourceDetails of the fields',
     default: {},
   })
   @Expose()
@@ -108,11 +115,22 @@ export class FieldsDto {
   //dependsOn
   @ApiPropertyOptional({
     type: String,
-    description: "The dependsOn of the fields",
+    description: 'The dependsOn of the fields',
     default: {},
   })
   @Expose()
   dependsOn: string;
+
+  // status
+  @ApiPropertyOptional({
+    enum: FieldStatus,
+    description: 'The status of the field',
+    default: FieldStatus.ACTIVE,
+  })
+  @IsEnum(FieldStatus, { message: 'status must be a valid enum value' })
+  @IsOptional()
+  @Expose()
+  status: FieldStatus;
 
   constructor(obj: any) {
     Object.assign(this, obj);
