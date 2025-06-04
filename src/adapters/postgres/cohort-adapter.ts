@@ -4,7 +4,7 @@ import { ReturnResponseBody } from 'src/cohort/dto/cohort.dto';
 import { CohortSearchDto } from 'src/cohort/dto/cohort-search.dto';
 import { CohortCreateDto } from 'src/cohort/dto/cohort-create.dto';
 import { CohortUpdateDto } from 'src/cohort/dto/cohort-update.dto';
-import { IsNull, Repository, In, ILike } from 'typeorm';
+import { IsNull, Repository, In, ILike, DataSource } from 'typeorm';
 import { Cohort } from 'src/cohort/entities/cohort.entity';
 import { Fields } from 'src/fields/entities/fields.entity';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -44,6 +44,7 @@ export class PostgresCohortService {
     private readonly cohortAcademicYearService: CohortAcademicYearService,
     private readonly postgresAcademicYearService: PostgresAcademicYearService,
     private readonly postgresCohortMembersService: PostgresCohortMembersService,
+    private readonly dataSource: DataSource,
     @InjectRepository(User)
     private usersRepository: Repository<User>
   ) {}
@@ -1066,6 +1067,14 @@ export class PostgresCohortService {
         const cohortData = data.slice(offset, offset + limit);
         count = totalCount;
 
+        // Step 1: Get cohortIds for checking form existence
+        const cohortIds = cohortData.map((c) => c.cohortId);
+        //the cohort Id is present in the Forms Table as contextId will check here
+        const formMappedCohortIds = await this.getCohortMappedFormId(
+          cohortIds,
+          apiId
+        );
+
         for (const data of cohortData) {
           const customFieldsData = await this.getCohortDataWithCustomfield(
             data.cohortId,
@@ -1080,6 +1089,10 @@ export class PostgresCohortService {
           }
 
           data['customFields'] = customFieldsData || [];
+
+          // Step 4: Add isFormCreated flag
+          data['isFormCreated'] = formMappedCohortIds.has(data.cohortId);
+
           results.cohortDetails.push(data);
         }
       }
@@ -1147,6 +1160,28 @@ export class PostgresCohortService {
         errorMessage,
         HttpStatus.INTERNAL_SERVER_ERROR
       );
+    }
+  }
+
+  // This function checks if the cohortIds are present in the Forms table
+  private async getCohortMappedFormId(
+    cohortIds: string[],
+    apiId?: string
+  ): Promise<Set<string>> {
+    try {
+      const rawForms: Array<{ contextId: string }> =
+        await this.dataSource.query(
+          `SELECT DISTINCT "contextId" FROM forms WHERE "contextId" = ANY($1)`,
+          [cohortIds]
+        );
+      return new Set(rawForms.map((f) => f.contextId));
+    } catch (error) {
+      LoggerUtil.error(
+        'Error querying forms table',
+        `Error: ${error.message}`,
+        apiId || 'FORM_QUERY'
+      );
+      return new Set();
     }
   }
 
