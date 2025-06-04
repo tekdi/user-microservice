@@ -26,6 +26,7 @@ import { PostgresCohortMembersService } from './cohortMembers-adapter';
 import { LoggerUtil } from 'src/common/logger/LoggerUtil';
 import { User } from 'src/user/entities/user-entity';
 import { FieldValueConverter } from 'src/utils/field-value-converter';
+import { DataSource } from 'typeorm';
 
 @Injectable()
 export class PostgresCohortService {
@@ -44,6 +45,7 @@ export class PostgresCohortService {
     private readonly cohortAcademicYearService: CohortAcademicYearService,
     private readonly postgresAcademicYearService: PostgresAcademicYearService,
     private readonly postgresCohortMembersService: PostgresCohortMembersService,
+    private readonly dataSource: DataSource,
     @InjectRepository(User)
     private usersRepository: Repository<User>
   ) {}
@@ -1066,6 +1068,18 @@ export class PostgresCohortService {
         const cohortData = data.slice(offset, offset + limit);
         count = totalCount;
 
+        // Step 1: Get cohortIds for checking form existence
+        const cohortIds = cohortData.map((c) => c.cohortId);
+
+        // Step 2: Query the form table using dataSource
+        const rawForms = await this.dataSource.query(
+          `SELECT DISTINCT "contextId" FROM forms WHERE "contextId" = ANY($1)`,
+          [cohortIds]
+        );
+
+        // Step 3: Create a Set of cohortIds present in form table
+        const formMappedCohortIds = new Set(rawForms.map((f) => f.contextId));
+
         for (const data of cohortData) {
           const customFieldsData = await this.getCohortDataWithCustomfield(
             data.cohortId,
@@ -1080,6 +1094,10 @@ export class PostgresCohortService {
           }
 
           data['customFields'] = customFieldsData || [];
+
+          // Step 4: Add isFormCreated flag
+          data['isFormCreated'] = formMappedCohortIds.has(data.cohortId);
+
           results.cohortDetails.push(data);
         }
       }
