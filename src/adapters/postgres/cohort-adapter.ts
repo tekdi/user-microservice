@@ -1071,14 +1071,10 @@ export class PostgresCohortService {
         // Step 1: Get cohortIds for checking form existence
         const cohortIds = cohortData.map((c) => c.cohortId);
 
-        // Step 2: Query the form table using dataSource
-        const rawForms = await this.dataSource.query(
-          `SELECT DISTINCT "contextId" FROM forms WHERE "contextId" = ANY($1)`,
-          [cohortIds]
+        const formMappedCohortIds = await this.getFormMappedCohortIds(
+          cohortIds,
+          apiId
         );
-
-        // Step 3: Create a Set of cohortIds present in form table
-        const formMappedCohortIds = new Set(rawForms.map((f) => f.contextId));
 
         for (const data of cohortData) {
           const customFieldsData = await this.getCohortDataWithCustomfield(
@@ -1165,6 +1161,27 @@ export class PostgresCohortService {
         errorMessage,
         HttpStatus.INTERNAL_SERVER_ERROR
       );
+    }
+  }
+
+  private async getFormMappedCohortIds(
+    cohortIds: string[],
+    apiId?: string
+  ): Promise<Set<string>> {
+    try {
+      const rawForms: Array<{ contextId: string }> =
+        await this.dataSource.query(
+          `SELECT DISTINCT "contextId" FROM forms WHERE "contextId" = ANY($1)`,
+          [cohortIds]
+        );
+      return new Set(rawForms.map((f) => f.contextId));
+    } catch (error) {
+      LoggerUtil.error(
+        'Error querying forms table',
+        `Error: ${error.message}`,
+        apiId || 'FORM_QUERY'
+      );
+      return new Set();
     }
   }
 
