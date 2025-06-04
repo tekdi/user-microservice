@@ -4,7 +4,7 @@ import { ReturnResponseBody } from 'src/cohort/dto/cohort.dto';
 import { CohortSearchDto } from 'src/cohort/dto/cohort-search.dto';
 import { CohortCreateDto } from 'src/cohort/dto/cohort-create.dto';
 import { CohortUpdateDto } from 'src/cohort/dto/cohort-update.dto';
-import { IsNull, Repository, In, ILike } from 'typeorm';
+import { IsNull, Repository, In, ILike, DataSource } from 'typeorm';
 import { Cohort } from 'src/cohort/entities/cohort.entity';
 import { Fields } from 'src/fields/entities/fields.entity';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -26,7 +26,6 @@ import { PostgresCohortMembersService } from './cohortMembers-adapter';
 import { LoggerUtil } from 'src/common/logger/LoggerUtil';
 import { User } from 'src/user/entities/user-entity';
 import { FieldValueConverter } from 'src/utils/field-value-converter';
-import { DataSource } from 'typeorm';
 
 @Injectable()
 export class PostgresCohortService {
