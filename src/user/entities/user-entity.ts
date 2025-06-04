@@ -106,4 +106,7 @@ export class User {
 
   @Column({ nullable: true })
   mobile_country_code: string;
+
+  @Column({ nullable: true })
+  provider: string;
 }

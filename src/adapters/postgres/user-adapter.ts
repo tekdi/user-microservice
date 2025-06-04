@@ -1,4 +1,8 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import {
+  HttpStatus,
+  Injectable,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import { User } from '../../user/entities/user-entity';
 import { FieldValues } from 'src/fields/entities/fields-values.entity';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -46,6 +50,7 @@ import { SendPasswordResetOTPDto } from 'src/user/dto/passwordReset.dto';
 import { ActionType, UserUpdateDTO } from 'src/user/dto/user-update.dto';
 import config from '../../common/config';
 import { CalendarField } from 'src/fields/fieldValidators/fieldTypeClasses';
+import { UserCreateSsoDto } from 'src/user/dto/user-create-sso.dto';
 
 interface UpdateField {
   userId: string; // Required
@@ -1114,6 +1119,120 @@ export class PostgresUserService implements IServicelocator {
     } catch (error) {
       // Re-throw or handle the error as needed
       throw new Error('An error occurred while updating user details');
+    }
+  }
+
+  // This method is a placeholder for creating an SSO user.
+  async createSsoUser(
+    request: any,
+    userCreateSsoDto: UserCreateSsoDto,
+    academicYearId: string,
+    response: Response
+  ) {
+    // Optional: set createdBy/updatedBy
+    if (request.headers.authorization) {
+      const decoded: any = jwt_decode(request.headers.authorization);
+      userCreateSsoDto.createdBy = decoded?.sub;
+      userCreateSsoDto.updatedBy = decoded?.sub;
+    }
+
+    // Call DB creation only
+    const result = await this.createUserInDatabaseBySso(
+      request,
+      userCreateSsoDto,
+      academicYearId,
+      response
+    );
+
+    return APIResponse.success(
+      response,
+      API_RESPONSES.USER_CREATE_SUCCESSFULLY, // string message
+      { userData: result },
+      HttpStatus.CREATED,
+      'api.user.create' // This becomes the "id" field in the response
+    );
+  }
+
+  async createUserInDatabaseBySso(
+    request: any,
+    userCreateSsoDto: UserCreateSsoDto,
+    academicYearId: string,
+    response: Response
+  ) {
+    try {
+      //  Check if username already exists
+      const existingUser = await this.usersRepository.findOne({
+        where: { username: userCreateSsoDto.username },
+      });
+
+      if (existingUser) {
+        return APIResponse.error(
+          response,
+          'USER_CREATE_SSO',
+          API_RESPONSES.USER_ALREADY_EXISTS,
+          `User with username "${userCreateSsoDto.username}" already exists`,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      const user = new User();
+
+      user.userId = userCreateSsoDto?.userId;
+      user.username = userCreateSsoDto?.username;
+      user.firstName = userCreateSsoDto?.firstName;
+      user.middleName = userCreateSsoDto?.middleName;
+      user.lastName = userCreateSsoDto?.lastName;
+      user.gender = userCreateSsoDto?.gender;
+      user.status = userCreateSsoDto?.status as User['status'];
+      user.email = userCreateSsoDto?.email;
+      user.mobile = Number(userCreateSsoDto?.mobile) || null;
+      user.mobile_country_code = userCreateSsoDto?.mobile_country_code;
+      user.createdBy = userCreateSsoDto?.createdBy || null;
+      user.updatedBy = userCreateSsoDto?.updatedBy || null;
+      user.provider = userCreateSsoDto?.provider;
+
+      if (userCreateSsoDto?.dob) {
+        user.dob = new Date(userCreateSsoDto.dob);
+      }
+
+      const result = await this.usersRepository.save(user);
+
+      if (result && userCreateSsoDto.tenantCohortRoleMapping) {
+        for (const mapData of userCreateSsoDto.tenantCohortRoleMapping) {
+          if (mapData.cohortIds) {
+            for (const cohortId of mapData.cohortIds) {
+              const query = `
+              SELECT * FROM public."CohortAcademicYear"
+              WHERE "cohortId" = '${cohortId}' AND "academicYearId" = '${academicYearId}'`;
+
+              const getCohortAcademicYearId = await this.usersRepository.query(
+                query
+              );
+
+              const cohortData = {
+                userId: result?.userId,
+                cohortId,
+                cohortAcademicYearId:
+                  getCohortAcademicYearId[0]?.cohortAcademicYearId || null,
+              };
+
+              await this.addCohortMember(cohortData);
+            }
+          }
+
+          const tenantRoleMappingData = {
+            userId: result?.userId,
+            tenantRoleMapping: mapData,
+          };
+
+          await this.assignUserToTenant(tenantRoleMappingData, request);
+        }
+      }
+
+      return result;
+    } catch (error) {
+      console.error('SSO user DB sync failed:', error);
+      throw new InternalServerErrorException('SSO user DB sync failed');
     }
   }
 
