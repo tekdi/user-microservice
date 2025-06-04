@@ -84,6 +84,4 @@ jobs:
         kubectl apply -f manifest/backend-updated.yaml
         kubectl apply -f manifest/configmap.yaml
         sleep 10
-        kubectl get pods
-        kubectl get services
-        kubectl get deployment
+        kubectl get pods | grep eventmanagement
