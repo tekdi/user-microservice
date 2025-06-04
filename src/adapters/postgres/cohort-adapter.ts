@@ -1071,7 +1071,7 @@ export class PostgresCohortService {
         // Step 1: Get cohortIds for checking form existence
         const cohortIds = cohortData.map((c) => c.cohortId);
         //the cohort Id is present in the Forms Table as contextId will check here
-        const formMappedCohortIds = await this.getFormMappedCohortIds(
+        const formMappedCohortIds = await this.getCohortMappedFormId(
           cohortIds,
           apiId
         );
@@ -1165,7 +1165,7 @@ export class PostgresCohortService {
   }
 
   // This function checks if the cohortIds are present in the Forms table
-  private async getFormMappedCohortIds(
+  private async getCohortMappedFormId(
     cohortIds: string[],
     apiId?: string
   ): Promise<Set<string>> {
