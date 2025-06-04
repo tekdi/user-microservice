@@ -1165,7 +1165,6 @@ export class PostgresCohortService {
   }
 
   // This function checks if the cohortIds are present in the Forms table
-  // and returns a Set of cohortIds that are mapped to forms.
   private async getFormMappedCohortIds(
     cohortIds: string[],
     apiId?: string
