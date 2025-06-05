@@ -48,7 +48,6 @@ import {
   SendPasswordResetLinkDto,
   SendPasswordResetOTPDto,
 } from './dto/passwordReset.dto';
-import { isUUID } from 'class-validator';
 import { API_RESPONSES } from '@utils/response.messages';
 import { LoggerUtil } from 'src/common/logger/LoggerUtil';
 import { OtpSendDTO } from './dto/otpSend.dto';
@@ -311,9 +310,7 @@ export class UserController {
 
   @UseFilters(new AllExceptionsFilter(APIID.USER_CREATE))
   @Post('/sso-synch')
-  // @UseGuards(JwtAuthGuard)
   @UsePipes(new ValidationPipe())
-  // @ApiBasicAuth("access-token")
   @ApiCreatedResponse({ description: API_RESPONSES.USER_CREATE_SUCCESSFULLY })
   @ApiBody({ type: UserCreateSsoDto })
   @ApiForbiddenResponse({ description: API_RESPONSES.USER_EXISTS })
@@ -331,11 +328,6 @@ export class UserController {
     @Res() response: Response
   ) {
     const academicYearId = headers['academicyearid'];
-    // if (!academicYearId || !isUUID(academicYearId)) {
-    //   throw new BadRequestException(
-    //     "academicYearId is required and academicYearId must be a valid UUID."
-    //   );
-    // }
     return await this.userAdapter
       .buildUserAdapter()
       .createSsoUser(request, userCreateSsoDto, academicYearId, response);
