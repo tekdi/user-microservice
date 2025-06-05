@@ -1132,7 +1132,56 @@ export class PostgresUserService implements IServicelocator {
       userCreateSsoDto.createdBy = decoded?.sub;
       userCreateSsoDto.updatedBy = decoded?.sub;
     }
+    try {
+      // Validate email and userId in Keycloak
+      const keycloakResponse = await getKeycloakAdminToken();
+      const token = keycloakResponse.data.access_token;
 
+      // Check if email exists in Keycloak
+      const emailExistsInKeycloak = await checkIfEmailExistsInKeycloak(
+        userCreateSsoDto.email,
+        token
+      );
+
+      if (!emailExistsInKeycloak?.data?.length) {
+        return APIResponse.error(
+          response,
+          apiId,
+          `Email ${userCreateSsoDto.email} does not exist in Keycloak.`,
+          API_RESPONSES.EMAIL_NOT_FOUND,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      // Check if userId exists in Keycloak
+      const userIdExistsInKeycloak = await checkIfUsernameExistsInKeycloak(
+        userCreateSsoDto.userId,
+        token
+      );
+
+      if (!userIdExistsInKeycloak?.data?.length) {
+        return APIResponse.error(
+          response,
+          apiId,
+          `User ID ${userCreateSsoDto.userId} does not exist in Keycloak.`,
+          API_RESPONSES.INVALID_USERID,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+    } catch (error) {
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Failed to get Keycloak admin token: ${error.message}`,
+        apiId
+      );
+      return APIResponse.error(
+        response,
+        apiId,
+        API_RESPONSES.SERVICE_UNAVAILABLE,
+        'Keycloak service is currently unavailable',
+        HttpStatus.SERVICE_UNAVAILABLE
+      );
+    }
     // Call DB creation only
     const result = await this.createUserInDatabaseBySso(
       request,

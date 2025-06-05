@@ -5,6 +5,7 @@ export const API_RESPONSES = {
   FORGOT_PASSWORD_SUCCESS: 'Forgot password Reset successfully',
   EMAIL_NOT_FOUND_FOR_RESET:
     'EmailId does not exist for sending Reset password link',
+  EMAIL_NOT_FOUND: ' Email does not exist',
   RESET_PASSWORD_LINK_FAILED:
     'Failed to send the reset password link. Please try again later.',
   RESET_PASSWORD_LINK_SUCCESS:
