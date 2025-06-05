@@ -1189,8 +1189,8 @@ export class PostgresUserService implements IServicelocator {
       user.email = userCreateSsoDto?.email;
       user.mobile = Number(userCreateSsoDto?.mobile) || null;
       user.mobile_country_code = userCreateSsoDto?.mobile_country_code;
-      user.createdBy = userCreateSsoDto?.createdBy || null;
-      user.updatedBy = userCreateSsoDto?.updatedBy || null;
+      user.createdBy = userCreateSsoDto?.createdBy ?? null;
+      user.updatedBy = userCreateSsoDto?.updatedBy ?? null;
       user.provider = userCreateSsoDto?.provider;
 
       if (userCreateSsoDto?.dob) {
@@ -1215,7 +1215,7 @@ export class PostgresUserService implements IServicelocator {
                 userId: result?.userId,
                 cohortId,
                 cohortAcademicYearId:
-                  getCohortAcademicYearId[0]?.cohortAcademicYearId || null,
+                  getCohortAcademicYearId[0]?.cohortAcademicYearId ?? null,
               };
 
               await this.addCohortMember(cohortData);
