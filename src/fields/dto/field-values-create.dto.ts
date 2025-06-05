@@ -1,9 +1,22 @@
-import { Exclude, Expose } from "class-transformer";
-import { IsOptional, IsString, IsNumber, IsDate, IsBoolean } from 'class-validator';
+import { Exclude, Expose } from 'class-transformer';
+import {
+  IsOptional,
+  IsString,
+  IsNumber,
+  IsDate,
+  IsBoolean,
+} from 'class-validator';
+import { IsEnum } from 'class-validator';
 
 /**
  * DTO for creating field values with type-specific storage
  */
+export enum FieldStatus {
+  ACTIVE = 'active',
+  INACTIVE = 'inactive',
+  ARCHIVED = 'archived',
+}
+
 export class FieldValuesCreateDto {
   //fieldId
   @Expose()
@@ -52,6 +65,11 @@ export class FieldValuesCreateDto {
   @IsOptional()
   @IsString()
   fileValue?: string;
+
+  @Expose()
+  @IsOptional()
+  @IsEnum(FieldStatus)
+  status?: FieldStatus = FieldStatus.ACTIVE;
 
   constructor(obj: any) {
     Object.assign(this, obj);

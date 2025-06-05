@@ -84,7 +84,16 @@ export class FormsService {
           HttpStatus.NOT_FOUND
         );
       }
-
+      // Check for status === 'archived'
+      if (!formData || formData.status === 'archived') {
+        return APIResponse.error(
+          response,
+          apiId,
+          'NOT_FOUND',
+          'No Data found for this context OR Context Type OR Context Id',
+          HttpStatus.NOT_FOUND
+        );
+      }
       // Return raw fields if formType is 'rjsf'
       if (formType === 'rjsf') {
         const result: {
