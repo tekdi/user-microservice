@@ -1133,6 +1133,42 @@ export class PostgresUserService implements IServicelocator {
       userCreateSsoDto.updatedBy = decoded?.sub;
     }
 
+    // Validate email and userId in Keycloak
+    const keycloakResponse = await getKeycloakAdminToken();
+    const token = keycloakResponse.data.access_token;
+
+    // Check if email exists in Keycloak
+    const emailExistsInKeycloak = await checkIfEmailExistsInKeycloak(
+      userCreateSsoDto.email,
+      token
+    );
+
+    if (!emailExistsInKeycloak?.data?.length) {
+      return APIResponse.error(
+        response,
+        apiId,
+        `Email ${userCreateSsoDto.email} does not exist in Keycloak.`,
+        API_RESPONSES.EMAIL_NOT_FOUND,
+        HttpStatus.BAD_REQUEST
+      );
+    }
+
+    // Check if userId exists in Keycloak
+    const userIdExistsInKeycloak = await checkIfUsernameExistsInKeycloak(
+      userCreateSsoDto.userId,
+      token
+    );
+
+    if (!userIdExistsInKeycloak?.data?.length) {
+      return APIResponse.error(
+        response,
+        apiId,
+        `User ID ${userCreateSsoDto.userId} does not exist in Keycloak.`,
+        API_RESPONSES.INVALID_USERID,
+        HttpStatus.BAD_REQUEST
+      );
+    }
+
     // Call DB creation only
     const result = await this.createUserInDatabaseBySso(
       request,
