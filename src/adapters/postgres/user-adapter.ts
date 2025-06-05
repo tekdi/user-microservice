@@ -1129,6 +1129,7 @@ export class PostgresUserService implements IServicelocator {
     academicYearId: string,
     response: Response
   ) {
+    const apiId = APIID.USER_CREATE;
     // Optional: set createdBy/updatedBy
     if (request.headers.authorization) {
       const decoded: any = jwt_decode(request.headers.authorization);
@@ -1146,10 +1147,11 @@ export class PostgresUserService implements IServicelocator {
 
     return APIResponse.success(
       response,
-      API_RESPONSES.USER_CREATE_SUCCESSFULLY, // string message
+      apiId, // string message
       { userData: result },
       HttpStatus.CREATED,
-      'api.user.create' // This becomes the "id" field in the response
+      'USER_CREATE_SUCCESSFULLY'
+      // This becomes the "id" field in the response
     );
   }
 
@@ -1169,8 +1171,8 @@ export class PostgresUserService implements IServicelocator {
         return APIResponse.error(
           response,
           'USER_CREATE_SSO',
-          API_RESPONSES.USER_ALREADY_EXISTS,
-          `User with username "${userCreateSsoDto.username}" already exists`,
+          API_RESPONSES.USER_EXISTS,
+          API_RESPONSES.BAD_REQUEST,
           HttpStatus.BAD_REQUEST
         );
       }
