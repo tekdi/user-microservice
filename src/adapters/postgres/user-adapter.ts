@@ -1177,64 +1177,16 @@ export class PostgresUserService implements IServicelocator {
         );
       }
 
-      const user = new User();
-
-      user.userId = userCreateSsoDto?.userId;
-      user.username = userCreateSsoDto?.username;
-      user.firstName = userCreateSsoDto?.firstName;
-      user.middleName = userCreateSsoDto?.middleName;
-      user.lastName = userCreateSsoDto?.lastName;
-      user.gender = userCreateSsoDto?.gender;
-      user.status = userCreateSsoDto?.status as User['status'];
-      user.email = userCreateSsoDto?.email;
-      user.mobile = Number(userCreateSsoDto?.mobile) || null;
-      user.mobile_country_code = userCreateSsoDto?.mobile_country_code;
-      user.createdBy = userCreateSsoDto?.createdBy ?? null;
-      user.updatedBy = userCreateSsoDto?.updatedBy ?? null;
-      user.provider = userCreateSsoDto?.provider;
-
-      if (userCreateSsoDto?.dob) {
-        user.dob = new Date(userCreateSsoDto.dob);
-      }
-
-      const result = await this.usersRepository.save(user);
-
-      if (result && userCreateSsoDto.tenantCohortRoleMapping) {
-        for (const mapData of userCreateSsoDto.tenantCohortRoleMapping) {
-          if (mapData.cohortIds) {
-            for (const cohortId of mapData.cohortIds) {
-              const query = `
-              SELECT * FROM public."CohortAcademicYear"
-              WHERE "cohortId" = '${cohortId}' AND "academicYearId" = '${academicYearId}'`;
-
-              const getCohortAcademicYearId = await this.usersRepository.query(
-                query
-              );
-
-              const cohortData = {
-                userId: result?.userId,
-                cohortId,
-                cohortAcademicYearId:
-                  getCohortAcademicYearId[0]?.cohortAcademicYearId ?? null,
-              };
-
-              await this.addCohortMember(cohortData);
-            }
-          }
-
-          const tenantRoleMappingData = {
-            userId: result?.userId,
-            tenantRoleMapping: mapData,
-          };
-
-          await this.assignUserToTenant(tenantRoleMappingData, request);
-        }
-      }
-
-      return result;
+      return await this.saveUserToDatabase(
+        userCreateSsoDto,
+        academicYearId,
+        request
+      );
     } catch (error) {
-      console.error('SSO user DB sync failed:', error);
-      throw new InternalServerErrorException('SSO user DB sync failed');
+      LoggerUtil.error(
+        'SSO user DB sync failed',
+        `Error Message: ${error.message}, Stack: ${error.stack}`
+      );
     }
   }
 
@@ -1444,6 +1396,73 @@ export class PostgresUserService implements IServicelocator {
     }
   }
 
+  //Common method to save the user in database
+  private async saveUserToDatabase(
+    userDto: UserCreateDto | UserCreateSsoDto,
+    academicYearId: string,
+    request: any
+  ): Promise<User> {
+    const user = new User();
+
+    user.userId = userDto?.userId;
+    user.username = userDto?.username;
+    user.firstName = userDto?.firstName;
+    user.middleName = userDto?.middleName;
+    user.lastName = userDto?.lastName;
+    user.gender = userDto?.gender;
+    user.status = userDto?.status as User['status'];
+    user.email = userDto?.email;
+    user.mobile = Number(userDto?.mobile) || null;
+    user.mobile_country_code = userDto?.mobile_country_code;
+    user.createdBy = userDto?.createdBy ?? null;
+    user.updatedBy = userDto?.updatedBy ?? null;
+
+    // Handle SSO-specific fields
+    if ('provider' in userDto) {
+      user.provider = userDto.provider;
+    }
+
+    if (userDto?.dob) {
+      user.dob = new Date(userDto.dob);
+    }
+
+    const result = await this.usersRepository.save(user);
+
+    if (result && userDto.tenantCohortRoleMapping) {
+      for (const mapData of userDto.tenantCohortRoleMapping) {
+        if (mapData.cohortIds) {
+          for (const cohortId of mapData.cohortIds) {
+            const query = `
+            SELECT * FROM public."CohortAcademicYear"
+            WHERE "cohortId" = '${cohortId}' AND "academicYearId" = '${academicYearId}'`;
+
+            const getCohortAcademicYearId = await this.usersRepository.query(
+              query
+            );
+
+            const cohortData = {
+              userId: result?.userId,
+              cohortId,
+              cohortAcademicYearId:
+                getCohortAcademicYearId[0]?.cohortAcademicYearId ?? null,
+            };
+
+            await this.addCohortMember(cohortData);
+          }
+        }
+
+        const tenantRoleMappingData = {
+          userId: result?.userId,
+          tenantRoleMapping: mapData,
+        };
+
+        await this.assignUserToTenant(tenantRoleMappingData, request);
+      }
+    }
+
+    return result;
+  }
+
   createErrorCollector() {
     const errors: string[] = [];
 
@@ -1637,55 +1656,11 @@ export class PostgresUserService implements IServicelocator {
     academicYearId: string,
     response: Response
   ) {
-    const user = new User();
-    (user.userId = userCreateDto?.userId),
-      (user.username = userCreateDto?.username),
-      (user.firstName = userCreateDto?.firstName),
-      (user.middleName = userCreateDto?.middleName),
-      (user.lastName = userCreateDto?.lastName),
-      (user.gender = userCreateDto?.gender),
-      (user.status = userCreateDto?.status as User['status']),
-      (user.email = userCreateDto?.email),
-      (user.mobile = Number(userCreateDto?.mobile) || null),
-      (user.mobile_country_code = userCreateDto?.mobile_country_code),
-      (user.createdBy = userCreateDto?.createdBy || null),
-      (user.updatedBy = userCreateDto?.updatedBy || null);
-    if (userCreateDto?.dob) {
-      user.dob = new Date(userCreateDto.dob);
-    }
-
-    const result = await this.usersRepository.save(user);
-
-    if (result && userCreateDto.tenantCohortRoleMapping) {
-      for (const mapData of userCreateDto.tenantCohortRoleMapping) {
-        if (mapData.cohortIds) {
-          for (const cohortIds of mapData.cohortIds) {
-            let query = `SELECT * FROM public."CohortAcademicYear" WHERE "cohortId"= '${cohortIds}' AND "academicYearId" = '${academicYearId}'`;
-
-            let getCohortAcademicYearId = await this.usersRepository.query(
-              query
-            );
-
-            // will add data only if cohort is found with acadmic year
-            let cohortData = {
-              userId: result?.userId,
-              cohortId: cohortIds,
-              cohortAcademicYearId:
-                getCohortAcademicYearId[0]['cohortAcademicYearId'] || null,
-            };
-            await this.addCohortMember(cohortData);
-          }
-        }
-
-        const tenantRoleMappingData = {
-          userId: result?.userId,
-          tenantRoleMapping: mapData,
-        };
-
-        await this.assignUserToTenant(tenantRoleMappingData, request);
-      }
-    }
-    return result;
+    return await this.saveUserToDatabase(
+      userCreateDto,
+      academicYearId,
+      request
+    );
   }
 
   async assignUserToTenant(tenantsData, request) {
