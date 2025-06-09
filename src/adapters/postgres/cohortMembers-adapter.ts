@@ -638,18 +638,62 @@ export class PostgresCohortMembersService {
         );
       }
 
-      cohortMembers.createdBy = loginUser;
-      cohortMembers.updatedBy = loginUser;
-      cohortMembers.cohortAcademicYearId = cohortacAdemicyearId;
-      // Create a new CohortMembers entity and populate it with cohortMembers data
-      const savedCohortMember = await this.cohortMembersRepository.save(
-        cohortMembers
+      // Set default status to APPLIED if not provided
+      if (!cohortMembers.status) {
+        cohortMembers.status = MemberStatus.APPLIED;
+      }
+
+      // Check if there's an existing mapping
+      const mappingExists = await this.cohortUserMapping(
+        cohortMembers.userId,
+        cohortMembers.cohortId,
+        cohortMembers.cohortAcademicYearId,
+        true // include inactive to check all existing mappings
       );
+
+      if (mappingExists) {
+        // If mapping exists but is archived/inactive, reactivate it
+        if (mappingExists.status === MemberStatus.ARCHIVED || mappingExists.status === MemberStatus.INACTIVE) {
+          const updatedMember = await this.cohortMembersRepository.save({
+            ...mappingExists,
+            status: cohortMembers.status,
+            statusReason: cohortMembers.statusReason || '',
+            updatedBy: loginUser,
+            updatedAt: new Date(),
+            customFields: cohortMembers.customFields
+          });
+          
+          return APIResponse.success(
+            res,
+            APIID.COHORT_MEMBER_CREATE,
+            updatedMember,
+            HttpStatus.OK,
+            API_RESPONSES.COHORTMEMBER_CREATED_SUCCESSFULLY
+          );
+        }
+
+        // If active mapping exists, return conflict
+        return APIResponse.error(
+          res,
+          APIID.COHORT_MEMBER_CREATE,
+          HttpStatus.CONFLICT.toString(),
+          API_RESPONSES.MAPPING_EXIST_BW_USER_AND_COHORT(cohortMembers.userId, cohortMembers.cohortId),
+          HttpStatus.CONFLICT
+        );
+      }
+
+      // Create new cohort member
+      const result = await this.cohortMembersRepository.save({
+        ...cohortMembers,
+        createdBy: loginUser,
+        updatedBy: loginUser,
+        tenantId: tenantId
+      });
 
       return APIResponse.success(
         res,
         apiId,
-        savedCohortMember,
+        result,
         HttpStatus.OK,
         API_RESPONSES.COHORTMEMBER_CREATED_SUCCESSFULLY
       );
@@ -951,12 +995,39 @@ export class PostgresCohortMembersService {
     return existCohort;
   }
 
-  public async cohortUserMapping(userId, cohortId, cohortAcademicYearId) {
+  public async cohortUserMapping(userId: string, cohortId: string, cohortAcademicYearId: string, includeInactive: boolean = false) {
+    const whereClause: any = {
+      userId,
+      cohortId,
+      cohortAcademicYearId
+    };
+
+    // By default, exclude archived and inactive statuses unless specifically requested
+    if (!includeInactive) {
+      whereClause.status = In([
+        MemberStatus.ACTIVE,
+        MemberStatus.APPLIED,
+        MemberStatus.SHORTLISTED,
+        MemberStatus.REJECTED,
+        MemberStatus.DROPOUT
+      ]);
+    }
+
+    const mappingExist = await this.cohortMembersRepository.findOne({
+      where: whereClause,
+    });
+
+    return mappingExist;
+  }
+
+  // Add a new method to specifically check for active mappings
+  public async getActiveCohortUserMapping(userId: string, cohortId: string, cohortAcademicYearId: string) {
     const mappingExist = await this.cohortMembersRepository.findOne({
       where: {
-        userId: userId,
-        cohortId: cohortId,
-        cohortAcademicYearId: cohortAcademicYearId
+        userId,
+        cohortId,
+        cohortAcademicYearId,
+        status: In([MemberStatus.ACTIVE, MemberStatus.APPLIED, MemberStatus.SHORTLISTED])
       },
     });
 

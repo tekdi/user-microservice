@@ -41,6 +41,7 @@ export const API_RESPONSES = {
   ACADEMICYEAR_COHORT_NOT_FOUND: 'This cohort not exist for this year',
   COHORTMEMBER_CREATED_SUCCESSFULLY:
     'Cohort member has been successfully assigned.',
+  COHORT_MEMBER_REACTIVATED: 'Cohort member has been successfully reactivated.',
   CONFLICT: 'CONFLICT',
   INVALID_USERID: 'Invalid input: User Id does not exist.',
   INVALID_COHORTID: 'Invalid input: Cohort Id does not exist.',
