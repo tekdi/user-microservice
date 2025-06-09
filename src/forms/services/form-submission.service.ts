@@ -1,4 +1,4 @@
-import { Injectable, HttpStatus, BadRequestException } from '@nestjs/common';
+import { Injectable, HttpStatus, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindOptionsWhere, Between, In } from 'typeorm';
 import {
@@ -28,8 +28,16 @@ import { MemberStatus } from '../../cohortMembers/entities/cohort-member.entity'
 import { isUUID } from 'class-validator';
 import { FormSubmissionSearchDto } from '../dto/form-submission-search.dto';
 
+interface FormSubmissionResult {
+  formSubmission: FormSubmission;
+  customFields: any[];
+  cohortMember?: any;
+}
+
 @Injectable()
 export class FormSubmissionService {
+  private readonly logger = new Logger(FormSubmissionService.name);
+
   constructor(
     @InjectRepository(FormSubmission)
     private formSubmissionRepository: Repository<FormSubmission>,
@@ -44,9 +52,8 @@ export class FormSubmissionService {
 
   async create(
     createFormSubmissionDto: CreateFormSubmissionDto,
-    response: Response,
     cohortAcademicYearId: string
-  ) {
+  ): Promise<FormSubmissionResult> {
     try {
       // Create form submission
       const formSubmission = new FormSubmission();
@@ -98,20 +105,10 @@ export class FormSubmissionService {
             cohortAcademicYearId: cohortAcademicYearId,
           });
 
-          // Create a new response object for cohort member creation
-          const tempResponse = {
-            status: function (code) {
-              return this;
-            },
-            json: function (data) {
-              return data;
-            },
-          } as Response;
-
           const result = await this.cohortMembersService.createCohortMembers(
             createFormSubmissionDto.userId,
             cohortMemberDto,
-            tempResponse,
+            null,
             createFormSubmissionDto.tenantId,
             'web',
             cohortAcademicYearId
@@ -122,42 +119,21 @@ export class FormSubmissionService {
             cohortMemberResult = result.result;
           }
         } catch (error) {
-          console.error('Error creating cohort member:', error);
-          console.log(
+          this.logger.error('Error creating cohort member:', { error });
+          this.logger.log(
             'Continuing with form submission response despite cohort member error'
           );
         }
       }
 
-      // Create response object with form submission as primary focus
-      const responseData = {
-        id: 'api.form.submission.create',
-        ver: '1.0',
-        ts: new Date().toISOString(),
-        params: {
-          resmsgid: savedSubmission.submissionId,
-          status: 'successful',
-          err: null,
-          errmsg: null,
-          successmessage: 'Form saved successfully',
-        },
-        responseCode: HttpStatus.CREATED,
-        result: {
-          formSubmission: savedSubmission,
-          customFields,
-          ...(cohortMemberResult && { cohortMember: cohortMemberResult }),
-        },
+      return {
+        formSubmission: savedSubmission,
+        customFields,
+        ...(cohortMemberResult && { cohortMember: cohortMemberResult }),
       };
-
-      return response.status(HttpStatus.CREATED).json(responseData);
     } catch (error) {
-      return APIResponse.error(
-        response,
-        'api.form.submission.create',
-        API_RESPONSES.INTERNAL_SERVER_ERROR,
-        error.message,
-        HttpStatus.INTERNAL_SERVER_ERROR
-      );
+      this.logger.error('Error creating form submission:', { error });
+      throw error;
     }
   }
 
@@ -402,7 +378,7 @@ export class FormSubmissionService {
         },
       };
     } catch (error) {
-      console.error('Error in findAll:', error);
+      this.logger.error('Error in findAll:', { error });
       return {
         id: 'api.form.submission.search',
         ver: '1.0',
@@ -721,17 +697,13 @@ export class FormSubmissionService {
             cohortMemberResult = result.result;
           } else {
             // Log the error but don't throw it to maintain form submission flow
-            console.error('Error updating cohort member:', result);
-            console.log(
-              'Continuing with form submission response despite cohort member error'
-            );
+            this.logger.error('Error updating cohort member:', { error: result });
+            this.logger.log('Continuing with form submission response despite cohort member error');
           }
         } catch (error) {
-          console.error('Error updating cohort member:', error);
+          this.logger.error('Error updating cohort member:', { error });
           // Don't throw error, just log it and continue
-          console.log(
-            'Continuing with form submission response despite cohort member error'
-          );
+          this.logger.log('Continuing with form submission response despite cohort member error');
         }
       }
 

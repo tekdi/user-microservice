@@ -13,6 +13,7 @@ import {
   Headers,
   BadRequestException,
   Req,
+  HttpStatus,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -34,6 +35,7 @@ import { Response, Request } from 'express';
 import { isUUID } from 'class-validator';
 import { API_RESPONSES } from '../../common/utils/response.messages';
 import { FormSubmissionSearchDto } from '../dto/form-submission-search.dto';
+import APIResponse from '../../common/responses/response';
 
 @ApiTags('Form Submissions')
 @Controller('forms/submissions')
@@ -57,38 +59,57 @@ export class FormSubmissionController {
     @Headers() headers,
     @Req() request: Request
   ) {
-    if (!tenantId || !isUUID(tenantId)) {
-      throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
-    }
-
-    // Only validate cohortAcademicYearId if cohortMember object is present
-    if (createFormSubmissionDto.cohortMember) {
-      if (
-        !createFormSubmissionDto.cohortAcademicYearId ||
-        !isUUID(createFormSubmissionDto.cohortAcademicYearId)
-      ) {
-        throw new BadRequestException(
-          'cohortAcademicYearId is required in the request body when creating a cohort member'
-        );
+    try {
+      if (!tenantId || !isUUID(tenantId)) {
+        throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
       }
+
+      // Only validate cohortAcademicYearId if cohortMember object is present
+      if (createFormSubmissionDto.cohortMember) {
+        if (
+          !createFormSubmissionDto.cohortAcademicYearId ||
+          !isUUID(createFormSubmissionDto.cohortAcademicYearId)
+        ) {
+          throw new BadRequestException(
+            'cohortAcademicYearId is required in the request body when creating a cohort member'
+          );
+        }
+      }
+
+      createFormSubmissionDto.tenantId = tenantId;
+      const result = await this.formSubmissionService.create(
+        createFormSubmissionDto,
+        createFormSubmissionDto.cohortAcademicYearId
+      );
+
+      // Set appropriate success message based on whether cohort member was created
+      const successMessage = createFormSubmissionDto.cohortMember
+        ? 'Form saved successfully and cohort member has been assigned'
+        : 'Form saved successfully';
+
+      return response.status(HttpStatus.CREATED).json({
+        id: 'api.form.submission.create',
+        ver: '1.0',
+        ts: new Date().toISOString(),
+        params: {
+          resmsgid: result.formSubmission.submissionId,
+          status: 'successful',
+          err: null,
+          errmsg: null,
+          successmessage: successMessage
+        },
+        responseCode: HttpStatus.CREATED,
+        result
+      });
+    } catch (error) {
+      return APIResponse.error(
+        response,
+        'api.form.submission.create',
+        API_RESPONSES.INTERNAL_SERVER_ERROR,
+        error.message,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
     }
-
-    createFormSubmissionDto.tenantId = tenantId;
-    const result = await this.formSubmissionService.create(
-      createFormSubmissionDto,
-      response,
-      createFormSubmissionDto.cohortAcademicYearId
-    );
-
-    // Set appropriate success message based on whether cohort member was created
-    const successMessage = createFormSubmissionDto.cohortMember
-      ? 'Form saved successfully and cohort member has been assigned'
-      : 'Form saved successfully';
-
-    return response.status(201).json({
-      ...result,
-      successmessage: successMessage,
-    });
   }
 
   @Post('search')
