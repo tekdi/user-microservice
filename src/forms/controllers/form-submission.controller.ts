@@ -14,6 +14,7 @@ import {
   BadRequestException,
   Req,
   HttpStatus,
+  Put,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -77,30 +78,11 @@ export class FormSubmissionController {
       }
 
       createFormSubmissionDto.tenantId = tenantId;
-      const result = await this.formSubmissionService.create(
+      return await this.formSubmissionService.create(
         createFormSubmissionDto,
+        response,
         createFormSubmissionDto.cohortAcademicYearId
       );
-
-      // Set appropriate success message based on whether cohort member was created
-      const successMessage = createFormSubmissionDto.cohortMember
-        ? 'Form saved successfully and cohort member has been assigned'
-        : 'Form saved successfully';
-
-      return response.status(HttpStatus.CREATED).json({
-        id: 'api.form.submission.create',
-        ver: '1.0',
-        ts: new Date().toISOString(),
-        params: {
-          resmsgid: result.formSubmission.submissionId,
-          status: 'successful',
-          err: null,
-          errmsg: null,
-          successmessage: successMessage
-        },
-        responseCode: HttpStatus.CREATED,
-        result
-      });
     } catch (error) {
       return APIResponse.error(
         response,
@@ -129,28 +111,25 @@ export class FormSubmissionController {
     return this.formSubmissionService.findOne(id);
   }
 
-  @Patch(':id')
+  @Put(':id')
   @UseFilters(new AllExceptionsFilter(APIID.FORM_SUBMISSION_UPDATE))
   @ApiOperation({ summary: 'Update a form submission' })
   @ApiParam({ name: 'id', type: String })
   @ApiBody({ type: UpdateFormSubmissionDto })
-  @ApiHeader({ name: 'tenantid', required: true })
+  @ApiHeader({ name: 'tenantId', required: true })
   async update(
     @Param('id') id: string,
     @Body() updateFormSubmissionDto: UpdateFormSubmissionDto,
-    @Headers('tenantid') tenantId: string,
+    @Headers('tenantId') tenantId: string,
     @Res() response: Response
   ) {
-    if (!tenantId || !isUUID(tenantId)) {
-      throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
-    }
-
     const result = await this.formSubmissionService.update(
       id,
       updateFormSubmissionDto,
-      tenantId
+      tenantId,
+      response
     );
-    return response.status(result.responseCode).json(result);
+    return result;
   }
 
   @Delete(':id')

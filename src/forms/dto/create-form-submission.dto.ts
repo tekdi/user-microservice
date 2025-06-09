@@ -6,9 +6,13 @@ import {
   IsOptional,
   ValidateNested,
   ArrayNotEmpty,
+  ValidateIf,
+  IsString,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { FormSubmissionStatus } from '../entities/form-submission.entity';
+import { MemberStatus } from '../../cohortMembers/entities/cohort-member.entity';
+import { FieldValuesOptionDto } from '../../user/dto/user-create.dto';
 
 export class FieldValueDto {
   @ApiProperty({
@@ -68,8 +72,8 @@ export class CohortMemberDto {
     description: 'The roleId for cohort member creation',
   })
   @IsUUID()
-  @IsNotEmpty()
-  roleId: string;
+  @IsOptional()
+  roleId?: string;
 
   @ApiProperty({
     type: String,
@@ -78,6 +82,32 @@ export class CohortMemberDto {
   @IsUUID()
   @IsOptional()
   cohortAcademicYearId?: string;
+
+  @ApiProperty({
+    enum: MemberStatus,
+    description: 'The status of the cohort member',
+    default: MemberStatus.APPLIED,
+  })
+  @IsEnum(MemberStatus)
+  @IsOptional()
+  status?: MemberStatus;
+
+  @ApiProperty({
+    type: String,
+    description: 'The status change reason (required when status is DROPOUT)',
+  })
+  @ValidateIf((o) => o.status === MemberStatus.DROPOUT)
+  @IsString()
+  statusReason?: string;
+
+  @ApiProperty({
+    type: [FieldValuesOptionDto],
+    description: 'Array of custom fields',
+  })
+  @ValidateNested({ each: true })
+  @Type(() => FieldValuesOptionDto)
+  @IsOptional()
+  customFields?: FieldValuesOptionDto[];
 }
 
 export class CreateFormSubmissionDto {

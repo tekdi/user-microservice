@@ -1,4 +1,4 @@
-import { Injectable, HttpStatus, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, HttpStatus, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindOptionsWhere, Between, In } from 'typeorm';
 import {
@@ -23,47 +23,55 @@ import { ErrorResponseTypeOrm } from '../../error-response-typeorm';
 import { SuccessResponse } from '../../success-response';
 import { PostgresCohortMembersService } from '../../adapters/postgres/cohortMembers-adapter';
 import { CohortMembersDto } from '../../cohortMembers/dto/cohortMembers.dto';
-import { PostgresAcademicYearService } from '../../adapters/postgres/academicyears-adapter';
 import { MemberStatus } from '../../cohortMembers/entities/cohort-member.entity';
 import { isUUID } from 'class-validator';
 import { FormSubmissionSearchDto } from '../dto/form-submission-search.dto';
-
-interface FormSubmissionResult {
-  formSubmission: FormSubmission;
-  customFields: any[];
-  cohortMember?: any;
-}
+import { FieldValuesSearchDto } from '../../fields/dto/field-values-search.dto';
+import { FieldsSearchDto } from '../../fields/dto/fields-search.dto';
+import { CohortMembersUpdateDto } from '../../cohortMembers/dto/cohortMember-update.dto';
+import jwt_decode from 'jwt-decode';
 
 @Injectable()
 export class FormSubmissionService {
-  private readonly logger = new Logger(FormSubmissionService.name);
-
   constructor(
     @InjectRepository(FormSubmission)
     private formSubmissionRepository: Repository<FormSubmission>,
     @InjectRepository(FieldValues)
     private fieldValuesRepository: Repository<FieldValues>,
-    @InjectRepository(Fields)
-    private fieldsRepository: Repository<Fields>,
     private fieldsService: FieldsService,
-    private cohortMembersService: PostgresCohortMembersService,
-    private academicYearService: PostgresAcademicYearService
+    private cohortMembersService: PostgresCohortMembersService
   ) {}
 
   async create(
     createFormSubmissionDto: CreateFormSubmissionDto,
+    response: Response,
     cohortAcademicYearId: string
-  ): Promise<FormSubmissionResult> {
+  ) {
     try {
+      // Get user ID from token
+      const decoded: any = jwt_decode(response.req.headers.authorization);
+      const userId = decoded?.sub;
+
+      if (!userId) {
+        throw new BadRequestException('User ID not found in token');
+      }
+
       // Create form submission
       const formSubmission = new FormSubmission();
       formSubmission.formId = createFormSubmissionDto.formSubmission.formId;
-      formSubmission.itemId = createFormSubmissionDto.formSubmission.itemId;
+      formSubmission.itemId = userId;
       formSubmission.status =
         createFormSubmissionDto.formSubmission.status ||
         FormSubmissionStatus.ACTIVE;
-      formSubmission.createdBy = createFormSubmissionDto.userId;
-      formSubmission.updatedBy = createFormSubmissionDto.userId;
+      formSubmission.createdBy = userId;
+      formSubmission.updatedBy = userId;
+
+      console.log('Creating form submission with data:', {
+        formId: formSubmission.formId,
+        itemId: formSubmission.itemId,
+        status: formSubmission.status,
+        createdBy: formSubmission.createdBy
+      });
 
       const savedSubmission = await this.formSubmissionRepository.save(
         formSubmission
@@ -75,8 +83,8 @@ export class FormSubmissionService {
           fieldId: fieldValue.fieldId,
           value: fieldValue.value,
           itemId: savedSubmission.itemId,
-          createdBy: createFormSubmissionDto.userId,
-          updatedBy: createFormSubmissionDto.userId,
+          createdBy: userId,
+          updatedBy: userId,
         });
 
         const result = await this.fieldsService.createFieldValues(
@@ -93,47 +101,176 @@ export class FormSubmissionService {
         savedSubmission.itemId
       );
 
-      // Handle cohort member creation if cohortMember data is present
+      // Handle cohort member creation/update if cohortMember data is present
       let cohortMemberResult = null;
       if (createFormSubmissionDto.cohortMember) {
         try {
-          const cohortMemberDto = new CohortMembersDto({
-            cohortId: createFormSubmissionDto.cohortMember.cohortId,
+          console.log('Starting cohort member creation with data:', {
             userId: savedSubmission.itemId,
-            createdBy: createFormSubmissionDto.userId,
-            updatedBy: createFormSubmissionDto.userId,
-            cohortAcademicYearId: cohortAcademicYearId,
+            cohortId: createFormSubmissionDto.cohortMember.cohortId,
+            cohortAcademicYearId,
+            status: createFormSubmissionDto.cohortMember.status,
+            tenantId: createFormSubmissionDto.tenantId
           });
 
-          const result = await this.cohortMembersService.createCohortMembers(
-            createFormSubmissionDto.userId,
-            cohortMemberDto,
-            null,
-            createFormSubmissionDto.tenantId,
-            'web',
+          if (!cohortAcademicYearId) {
+            throw new BadRequestException('cohortAcademicYearId is required for cohort member creation');
+          }
+
+          if (!createFormSubmissionDto.tenantId) {
+            throw new BadRequestException('tenantId is required for cohort member creation');
+          }
+
+          const tempResponse = {
+            status: function (code) { 
+              console.log('Response status code:', code);
+              return this; 
+            },
+            json: function (data) { 
+              console.log('Response data:', data);
+              return data; 
+            },
+          } as Response;
+
+          // Check if cohort member already exists
+          console.log('Checking if cohort member exists...');
+          const existingMember = await this.cohortMembersService.cohortUserMapping(
+            savedSubmission.itemId,
+            createFormSubmissionDto.cohortMember.cohortId,
             cohortAcademicYearId
           );
 
-          // Check if the result contains data
-          if (result && result.result) {
-            cohortMemberResult = result.result;
+          console.log('Existing member check result:', existingMember);
+
+          if (existingMember) {
+            console.log('Updating existing cohort member');
+            // Update existing cohort member
+            const updateDto = new CohortMembersUpdateDto({
+              cohortMembershipId: existingMember.cohortMembershipId,
+              cohortId: createFormSubmissionDto.cohortMember.cohortId,
+              userId: savedSubmission.itemId,
+              status: createFormSubmissionDto.cohortMember.status ? createFormSubmissionDto.cohortMember.status.toLowerCase() : MemberStatus.APPLIED,
+              statusReason: createFormSubmissionDto.cohortMember.statusReason || '',
+              customFields: createFormSubmissionDto.cohortMember.customFields,
+              updatedBy: userId,
+              createdBy: existingMember.createdBy,
+              createdAt: existingMember.createdAt,
+              updatedAt: new Date().toISOString(),
+              cohortAcademicYearId: cohortAcademicYearId,
+              tenantId: createFormSubmissionDto.tenantId
+            });
+
+            console.log('Update DTO:', updateDto);
+
+            const result = await this.cohortMembersService.updateCohortMembers(
+              existingMember.cohortMembershipId,
+              userId,
+              updateDto,
+              tempResponse
+            );
+
+            console.log('Update result:', result);
+
+            if (result?.responseCode === HttpStatus.OK && result.result) {
+              cohortMemberResult = result.result;
+            }
+          } else {
+            console.log('Creating new cohort member');
+            // Create new cohort member
+            const cohortMemberDto = new CohortMembersDto({
+              cohortId: createFormSubmissionDto.cohortMember.cohortId,
+              userId: savedSubmission.itemId,
+              createdBy: userId,
+              updatedBy: userId,
+              cohortAcademicYearId: cohortAcademicYearId,
+              status: createFormSubmissionDto.cohortMember.status ? createFormSubmissionDto.cohortMember.status.toLowerCase() : MemberStatus.APPLIED,
+              statusReason: createFormSubmissionDto.cohortMember.statusReason || '',
+              customFields: createFormSubmissionDto.cohortMember.customFields,
+              tenantId: createFormSubmissionDto.tenantId,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString()
+            });
+
+            console.log('Create DTO:', cohortMemberDto);
+
+            const result = await this.cohortMembersService.createCohortMembers(
+              userId,
+              cohortMemberDto,
+              tempResponse,
+              createFormSubmissionDto.tenantId,
+              'web',
+              cohortAcademicYearId
+            );
+
+            console.log('Create result:', result);
+
+            if (result?.responseCode === HttpStatus.OK && result.result) {
+              cohortMemberResult = result.result;
+              console.log('Successfully created cohort member:', cohortMemberResult);
+            } else if (result?.responseCode === HttpStatus.CONFLICT) {
+              console.log('Got conflict response, checking existing member');
+              // If we get a conflict, try to get the existing member details
+              const conflictMember = await this.cohortMembersService.cohortUserMapping(
+                savedSubmission.itemId,
+                createFormSubmissionDto.cohortMember.cohortId,
+                cohortAcademicYearId
+              );
+              
+              if (conflictMember) {
+                cohortMemberResult = {
+                  cohortMembershipId: conflictMember.cohortMembershipId,
+                  cohortId: conflictMember.cohortId,
+                  userId: conflictMember.userId,
+                  status: conflictMember.status,
+                  statusReason: conflictMember.statusReason,
+                  updatedBy: conflictMember.updatedBy,
+                  updatedAt: conflictMember.updatedAt,
+                  cohortAcademicYearId: conflictMember.cohortAcademicYearId,
+                  customFields: createFormSubmissionDto.cohortMember.customFields
+                };
+                console.log('Using existing cohort member:', cohortMemberResult);
+              }
+            } else {
+              console.log('Unexpected response from createCohortMembers:', result);
+              throw new Error(`Failed to create cohort member. Response code: ${result?.responseCode}`);
+            }
           }
         } catch (error) {
-          this.logger.error('Error creating cohort member:', { error });
-          this.logger.log(
-            'Continuing with form submission response despite cohort member error'
-          );
+          console.error('Detailed error in cohort member creation/update:', error);
+          // Instead of silently continuing, we'll throw the error
+          throw new BadRequestException(`Failed to create/update cohort member: ${error.message}`);
         }
       }
 
-      return {
-        formSubmission: savedSubmission,
-        customFields,
-        ...(cohortMemberResult && { cohortMember: cohortMemberResult }),
+      // Create response object with form submission as primary focus
+      const responseData = {
+        id: 'api.form.submission.create',
+        ver: '1.0',
+        ts: new Date().toISOString(),
+        params: {
+          resmsgid: savedSubmission.submissionId,
+          status: 'successful',
+          err: null,
+          errmsg: null,
+          successmessage: 'Form saved successfully'
+        },
+        responseCode: HttpStatus.CREATED,
+        result: {
+          formSubmission: savedSubmission,
+          customFields,
+          ...(cohortMemberResult && { cohortMember: cohortMemberResult })
+        },
       };
+
+      return response.status(HttpStatus.CREATED).json(responseData);
     } catch (error) {
-      this.logger.error('Error creating form submission:', { error });
-      throw error;
+      return APIResponse.error(
+        response,
+        'api.form.submission.create',
+        API_RESPONSES.INTERNAL_SERVER_ERROR,
+        error.message,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
     }
   }
 
@@ -223,101 +360,71 @@ export class FormSubmissionService {
       // Handle custom field filters if any
       let filteredSubmissions = [...submissions];
       let filteredCount = submissions.length;
-      if (
-        filters?.customFieldsFilter &&
-        Object.keys(filters.customFieldsFilter).length > 0
-      ) {
+      if (filters?.customFieldsFilter && Object.keys(filters.customFieldsFilter).length > 0) {
         const customFieldFilters = filters.customFieldsFilter;
-
+        
         // Get all field definitions first
         const fieldIds = Object.keys(customFieldFilters);
         const fieldDefinitions = await Promise.all(
-          fieldIds.map((fieldId) =>
-            this.fieldsRepository.findOne({ where: { fieldId } })
-          )
+          fieldIds.map(async (fieldId) => {
+            const searchDto = this.createFieldsSearchDto({ fieldId });
+            const result = await this.fieldsService.searchFields('default', { headers: {} }, searchDto);
+            if (result instanceof SuccessResponse && Array.isArray(result.data)) {
+              return result.data[0];
+            }
+            return null;
+          })
         );
 
         // Create a map of fieldId to field definition
         const fieldDefinitionMap = new Map(
-          fieldDefinitions.map((field) => [field.fieldId, field])
+          fieldDefinitions.filter(field => field).map(field => [field.fieldId, field])
         );
 
         // Filter submissions based on custom fields
         filteredSubmissions = [];
         for (const submission of submissions) {
           let matches = true;
-
-          // Get all field values for this submission
-          const fieldValues = await this.fieldValuesRepository.find({
-            where: { itemId: submission.itemId },
-          });
+          
+          // Get all field values for this submission using getFieldsAndFieldsValues
+          const fieldValuesResult = await this.fieldsService.getFieldsAndFieldsValues(submission.itemId);
+          const fieldValues = fieldValuesResult || [];
 
           // Check each custom field filter
-          for (const [fieldId, expectedValue] of Object.entries(
-            customFieldFilters
-          )) {
+          for (const [fieldId, expectedValue] of Object.entries(customFieldFilters)) {
             const fieldDef = fieldDefinitionMap.get(fieldId);
             if (!fieldDef) {
               throw new BadRequestException(`Invalid field ID: ${fieldId}`);
             }
 
-            const fieldValue = fieldValues.find((fv) => fv.fieldId === fieldId);
+            const fieldValue = fieldValues.find((fv: any) => fv.fieldId === fieldId);
             if (!fieldValue) continue;
 
-            let actualValue;
-            switch (fieldDef.type) {
-              case FieldType.TEXT:
-                actualValue = fieldValue.textValue;
-                break;
-              case FieldType.NUMERIC:
-                actualValue = fieldValue.numberValue;
-                break;
-              case FieldType.CALENDAR:
-                actualValue = fieldValue.calendarValue;
-                break;
-              case FieldType.DROPDOWN:
-                actualValue = fieldValue.dropdownValue;
-                break;
-              case FieldType.RADIO:
-                actualValue = fieldValue.radioValue;
-                break;
-              case FieldType.CHECKBOX:
-                actualValue = fieldValue.checkboxValue;
-                break;
-              case FieldType.TEXTAREA:
-                actualValue = fieldValue.textareaValue;
-                break;
-              default:
-                actualValue = fieldValue.value;
-            }
+            let actualValue = fieldValue.value;
 
             // Compare values based on field type
             let valueMatches = false;
-            switch (fieldDef.type) {
-              case FieldType.NUMERIC:
+            const fieldType = (fieldDef as any).type as string;
+            switch (fieldType) {
+              case 'NUMERIC':
                 valueMatches = Number(actualValue) === Number(expectedValue);
                 break;
-              case FieldType.CALENDAR:
-                valueMatches =
-                  new Date(actualValue).getTime() ===
-                  new Date(expectedValue).getTime();
+              case 'CALENDAR':
+                valueMatches = new Date(actualValue).getTime() === new Date(expectedValue).getTime();
                 break;
-              case FieldType.CHECKBOX:
+              case 'CHECKBOX':
                 valueMatches = Boolean(actualValue) === Boolean(expectedValue);
                 break;
-              case FieldType.DROPDOWN:
+              case 'DROPDOWN':
                 if (Array.isArray(expectedValue)) {
-                  valueMatches =
-                    Array.isArray(actualValue) &&
-                    expectedValue.every((v) => actualValue.includes(v));
+                  valueMatches = Array.isArray(actualValue) && 
+                    expectedValue.every(v => actualValue.includes(v));
                 } else {
                   valueMatches = actualValue === expectedValue;
                 }
                 break;
               default:
-                valueMatches =
-                  String(actualValue).toLowerCase() ===
-                  String(expectedValue).toLowerCase();
+                valueMatches = String(actualValue).toLowerCase() === String(expectedValue).toLowerCase();
             }
 
             if (!valueMatches) {
@@ -378,7 +485,7 @@ export class FormSubmissionService {
         },
       };
     } catch (error) {
-      this.logger.error('Error in findAll:', { error });
+      console.error('Error in findAll:', error);
       return {
         id: 'api.form.submission.search',
         ver: '1.0',
@@ -501,25 +608,21 @@ export class FormSubmissionService {
   async update(
     submissionId: string,
     updateFormSubmissionDto: UpdateFormSubmissionDto,
-    tenantId: string
+    tenantId: string,
+    response: Response
   ) {
     try {
+      // Get user ID from token
+      const decoded: any = jwt_decode(response.req.headers.authorization);
+      const userId = decoded?.sub;
+
+      if (!userId) {
+        throw new BadRequestException('User ID not found in token');
+      }
+
       // Validate submissionId is a UUID
       if (!isUUID(submissionId)) {
-        return {
-          id: 'api.form.submission.update',
-          ver: '1.0',
-          ts: new Date().toISOString(),
-          params: {
-            resmsgid: submissionId,
-            status: 'failed',
-            err: 'INVALID_SUBMISSION_ID',
-            errmsg: 'Invalid submission ID format. Expected a valid UUID.',
-            successmessage: null,
-          },
-          responseCode: HttpStatus.BAD_REQUEST,
-          result: null,
-        };
+        throw new BadRequestException('Invalid submission ID format. Expected a valid UUID.');
       }
 
       // Find the existing submission
@@ -528,90 +631,82 @@ export class FormSubmissionService {
       });
 
       if (!submission) {
-        return {
-          id: 'api.form.submission.update',
-          ver: '1.0',
-          ts: new Date().toISOString(),
-          params: {
-            resmsgid: submissionId,
-            status: 'failed',
-            err: 'SUBMISSION_NOT_FOUND',
-            errmsg: `Form submission ID ${submissionId} not found`,
-            successmessage: null,
-          },
-          responseCode: HttpStatus.NOT_FOUND,
-          result: null,
-        };
+        throw new BadRequestException(`Form submission ID ${submissionId} not found`);
       }
 
       // Update form submission if provided
       let updatedSubmission = submission;
       if (updateFormSubmissionDto.formSubmission) {
-        // Update only allowed fields
-        if (updateFormSubmissionDto.formSubmission.formId) {
-          submission.formId = updateFormSubmissionDto.formSubmission.formId;
+        try {
+          if (updateFormSubmissionDto.formSubmission.formId) {
+            submission.formId = updateFormSubmissionDto.formSubmission.formId;
+          }
+          // Use userId from token as itemId
+          submission.itemId = userId;
+          if (updateFormSubmissionDto.formSubmission.status) {
+            submission.status = updateFormSubmissionDto.formSubmission.status;
+          }
+          submission.updatedBy = userId;
+
+          console.log('Updating form submission with data:', {
+            formId: submission.formId,
+            itemId: submission.itemId,
+            status: submission.status,
+            updatedBy: submission.updatedBy
+          });
+
+          updatedSubmission = await this.formSubmissionRepository.save(submission);
+        } catch (error) {
+          throw new Error('Failed to update form submission details');
         }
-        if (updateFormSubmissionDto.formSubmission.itemId) {
-          submission.itemId = updateFormSubmissionDto.formSubmission.itemId;
-        }
-        if (updateFormSubmissionDto.formSubmission.status) {
-          submission.status = updateFormSubmissionDto.formSubmission.status;
-        }
-        // Always update the updatedBy field if provided
-        if (updateFormSubmissionDto.updatedBy) {
-          submission.updatedBy = updateFormSubmissionDto.updatedBy;
-        }
-        updatedSubmission = await this.formSubmissionRepository.save(
-          submission
-        );
       }
 
       // Update field values if provided
-      const updatedFieldValues = [];
-      if (
-        updateFormSubmissionDto.customFields &&
-        updateFormSubmissionDto.customFields.length > 0
-      ) {
-        for (const fieldValue of updateFormSubmissionDto.customFields) {
-          const fieldValueDto = new FieldValuesDto({
-            fieldId: fieldValue.fieldId,
-            value: fieldValue.value,
-            itemId: submission.itemId,
-            updatedBy: updateFormSubmissionDto.updatedBy,
+      let updatedFieldValues = [];
+      if (updateFormSubmissionDto.customFields?.length > 0) {
+        try {
+          const fieldValuePromises = updateFormSubmissionDto.customFields.map(async (fieldValue) => {
+            try {
+              const existingFieldValue = await this.fieldValuesRepository
+                .createQueryBuilder('fieldValue')
+                .where('fieldValue.fieldId = :fieldId', { fieldId: fieldValue.fieldId })
+                .andWhere('fieldValue.itemId = :itemId', { itemId: userId }) // Use userId here
+                .getOne();
+
+              if (existingFieldValue) {
+                const result = await this.fieldsService.updateFieldValues(
+                  existingFieldValue.fieldValuesId,
+                  new FieldValuesDto({
+                    fieldId: fieldValue.fieldId,
+                    value: fieldValue.value,
+                    itemId: userId, // Use userId here
+                    updatedBy: userId,
+                    createdBy: existingFieldValue.createdBy
+                  })
+                );
+                return result instanceof ErrorResponseTypeOrm ? null : result;
+              } else {
+                const result = await this.fieldsService.createFieldValues(
+                  null,
+                  new FieldValuesDto({
+                    fieldId: fieldValue.fieldId,
+                    value: fieldValue.value,
+                    itemId: userId, // Use userId here
+                    createdBy: userId,
+                    updatedBy: userId
+                  })
+                );
+                return (result instanceof SuccessResponse && result.data) ? result.data : null;
+              }
+            } catch (error) {
+              return null;
+            }
           });
 
-          // If fieldValueId is provided, update existing field value
-          const existingFieldValue = await this.fieldValuesRepository.findOne({
-            where: {
-              fieldId: fieldValue.fieldId,
-              itemId: submission.itemId,
-            },
-          });
-
-          if (existingFieldValue) {
-            const result = await this.fieldsService.updateFieldValues(
-              existingFieldValue.fieldValuesId,
-              fieldValueDto
-            );
-            if (result instanceof ErrorResponseTypeOrm) {
-              throw new BadRequestException(result.errorMessage);
-            }
-            if (result instanceof SuccessResponse && result.data) {
-              updatedFieldValues.push(result.data);
-            }
-          } else {
-            // If no existing field value found, create new one
-            const result = await this.fieldsService.createFieldValues(
-              null,
-              fieldValueDto
-            );
-            if (result instanceof ErrorResponseTypeOrm) {
-              throw new BadRequestException(result.errorMessage);
-            }
-            if (result instanceof SuccessResponse && result.data) {
-              updatedFieldValues.push(result.data);
-            }
-          }
+          const results = await Promise.all(fieldValuePromises);
+          updatedFieldValues = results.filter(result => result !== null);
+        } catch (error) {
+          throw new Error('Failed to update field values');
         }
       }
 
@@ -619,96 +714,138 @@ export class FormSubmissionService {
       let cohortMemberResult = null;
       if (updateFormSubmissionDto.cohortMember) {
         try {
-          // Create a new response object for cohort member update
           const tempResponse = {
-            status: function (code) {
-              return this;
-            },
-            json: function (data) {
-              return data;
-            },
+            status: function (code) { return this; },
+            json: function (data) { return data; },
           } as Response;
 
-          // Ensure cohortMembershipId is set in the update DTO
-          if (!updateFormSubmissionDto.cohortMember.cohortMembershipId) {
-            // Try to find existing cohort membership using the service's method
-            const cohortMembers =
-              await this.cohortMembersService.getCohortMemberUserDetails(
-                {
-                  userId: submission.itemId,
-                  cohortId: updateFormSubmissionDto.cohortMember.cohortId,
-                },
-                'false',
-                { limit: 1, offset: 0 },
-                {}
-              );
-
-            if (
-              !cohortMembers ||
-              !cohortMembers.userDetails ||
-              cohortMembers.userDetails.length === 0
-            ) {
-              throw new BadRequestException(
-                'Cohort membership not found for update'
-              );
-            }
-            updateFormSubmissionDto.cohortMember.cohortMembershipId =
-              cohortMembers.userDetails[0].cohortMembershipId;
-          }
-
-          // Validate status and statusReason
-          if (
-            updateFormSubmissionDto.cohortMember.status ===
-              MemberStatus.DROPOUT &&
-            !updateFormSubmissionDto.cohortMember.statusReason
-          ) {
-            throw new BadRequestException(
-              'Status reason is required when changing status to DROPOUT'
-            );
-          }
-
-          // Create a proper CohortMembersUpdateDto object
-          const cohortMembersUpdateDto = {
-            tenantId: tenantId,
-            cohortMembershipId:
-              updateFormSubmissionDto.cohortMember.cohortMembershipId,
-            cohortId: updateFormSubmissionDto.cohortMember.cohortId,
-            userId:
-              updateFormSubmissionDto.cohortMember.userId || submission.itemId,
-            status: updateFormSubmissionDto.cohortMember.status,
-            statusReason: updateFormSubmissionDto.cohortMember.statusReason,
-            customFields: updateFormSubmissionDto.cohortMember.customFields,
-            updatedBy: updateFormSubmissionDto.updatedBy,
-            createdBy: updateFormSubmissionDto.cohortMember.createdBy,
-            createdAt: updateFormSubmissionDto.cohortMember.createdAt,
-            updatedAt: updateFormSubmissionDto.cohortMember.updatedAt,
-          };
-
-          // Call the cohort member update service
-          const result = await this.cohortMembersService.updateCohortMembers(
-            cohortMembersUpdateDto.cohortMembershipId,
-            updateFormSubmissionDto.updatedBy,
-            cohortMembersUpdateDto,
-            tempResponse
+          const existingMember = await this.cohortMembersService.cohortUserMapping(
+            submission.itemId,
+            updateFormSubmissionDto.cohortMember.cohortId,
+            updateFormSubmissionDto.cohortMember.cohortAcademicYearId
           );
 
-          // Check if the update was successful
-          if (result && result.statusCode === HttpStatus.OK) {
-            cohortMemberResult = result.result;
+          if (!existingMember) {
+            const cohortMemberDto = new CohortMembersDto({
+              cohortId: updateFormSubmissionDto.cohortMember.cohortId,
+              userId: submission.itemId,
+              createdBy: userId,
+              updatedBy: userId,
+              cohortAcademicYearId: updateFormSubmissionDto.cohortMember.cohortAcademicYearId,
+              status: updateFormSubmissionDto.cohortMember.status ? updateFormSubmissionDto.cohortMember.status.toLowerCase() : MemberStatus.APPLIED,
+              statusReason: updateFormSubmissionDto.cohortMember.statusReason,
+              customFields: updateFormSubmissionDto.cohortMember.customFields,
+              tenantId: updateFormSubmissionDto.tenantId
+            });
+
+            const result = await this.cohortMembersService.createCohortMembers(
+              userId,
+              cohortMemberDto,
+              tempResponse,
+              updateFormSubmissionDto.tenantId,
+              'web',
+              updateFormSubmissionDto.cohortMember.cohortAcademicYearId
+            );
+
+            if (result?.result) {
+              cohortMemberResult = result.result;
+            } else if (result?.responseCode === HttpStatus.CONFLICT) {
+              // If member already exists, try to update instead
+              const existingMember = await this.cohortMembersService.cohortUserMapping(
+                submission.itemId,
+                updateFormSubmissionDto.cohortMember.cohortId,
+                updateFormSubmissionDto.cohortMember.cohortAcademicYearId
+              );
+
+              if (existingMember) {
+                const updateDto = new CohortMembersUpdateDto({
+                  cohortMembershipId: existingMember.cohortMembershipId,
+                  cohortId: updateFormSubmissionDto.cohortMember.cohortId,
+                  userId: submission.itemId,
+                  status: updateFormSubmissionDto.cohortMember.status ? updateFormSubmissionDto.cohortMember.status.toLowerCase() : MemberStatus.APPLIED,
+                  statusReason: updateFormSubmissionDto.cohortMember.statusReason,
+                  customFields: updateFormSubmissionDto.cohortMember.customFields,
+                  updatedBy: userId,
+                  createdBy: existingMember.createdBy,
+                  createdAt: existingMember.createdAt,
+                  updatedAt: new Date().toISOString(),
+                  cohortAcademicYearId: updateFormSubmissionDto.cohortMember.cohortAcademicYearId,
+                  tenantId: updateFormSubmissionDto.tenantId
+                });
+
+                const updateResult = await this.cohortMembersService.updateCohortMembers(
+                  existingMember.cohortMembershipId,
+                  userId,
+                  updateDto,
+                  tempResponse
+                );
+
+                if (updateResult?.responseCode === HttpStatus.OK && updateResult.result) {
+                  cohortMemberResult = updateResult.result;
+                }
+              }
+            }
           } else {
-            // Log the error but don't throw it to maintain form submission flow
-            this.logger.error('Error updating cohort member:', { error: result });
-            this.logger.log('Continuing with form submission response despite cohort member error');
+            if (
+              updateFormSubmissionDto.cohortMember.status === MemberStatus.DROPOUT &&
+              !updateFormSubmissionDto.cohortMember.statusReason
+            ) {
+              throw new BadRequestException('Status reason is required when changing status to DROPOUT');
+            }
+
+            const cohortMembersUpdateDto = new CohortMembersUpdateDto({
+              tenantId,
+              cohortMembershipId: existingMember.cohortMembershipId,
+              cohortId: updateFormSubmissionDto.cohortMember.cohortId,
+              userId: submission.itemId,
+              status: updateFormSubmissionDto.cohortMember.status ? updateFormSubmissionDto.cohortMember.status.toLowerCase() : existingMember.status,
+              statusReason: updateFormSubmissionDto.cohortMember.statusReason || existingMember.statusReason,
+              customFields: updateFormSubmissionDto.cohortMember.customFields,
+              updatedBy: userId,
+              createdBy: existingMember.createdBy,
+              createdAt: existingMember.createdAt,
+              updatedAt: new Date().toISOString(),
+              cohortAcademicYearId: updateFormSubmissionDto.cohortMember.cohortAcademicYearId
+            });
+
+            const result = await this.cohortMembersService.updateCohortMembers(
+              existingMember.cohortMembershipId,
+              userId,
+              cohortMembersUpdateDto,
+              tempResponse
+            );
+
+            if (result?.responseCode === HttpStatus.OK && result.result) {
+              cohortMemberResult = result.result;
+            } else {
+              // Get the updated cohort member details
+              const updatedMember = await this.cohortMembersService.cohortUserMapping(
+                submission.itemId,
+                updateFormSubmissionDto.cohortMember.cohortId,
+                updateFormSubmissionDto.cohortMember.cohortAcademicYearId
+              );
+              
+              if (updatedMember) {
+                cohortMemberResult = {
+                  cohortMembershipId: updatedMember.cohortMembershipId,
+                  cohortId: updatedMember.cohortId,
+                  userId: updatedMember.userId,
+                  status: updatedMember.status,
+                  statusReason: updatedMember.statusReason,
+                  updatedBy: updatedMember.updatedBy,
+                  updatedAt: updatedMember.updatedAt,
+                  cohortAcademicYearId: updatedMember.cohortAcademicYearId,
+                  customFields: cohortMembersUpdateDto.customFields
+                };
+              }
+            }
           }
         } catch (error) {
-          this.logger.error('Error updating cohort member:', { error });
-          // Don't throw error, just log it and continue
-          this.logger.log('Continuing with form submission response despite cohort member error');
+          // Continue with form submission response despite cohort member error
         }
       }
 
-      // Create response object with form submission as primary focus
-      return {
+      const successResponse = {
         id: 'api.form.submission.update',
         ver: '1.0',
         ts: new Date().toISOString(),
@@ -717,37 +854,35 @@ export class FormSubmissionService {
           status: 'successful',
           err: null,
           errmsg: null,
-          successmessage: 'Form updated successfully',
+          successmessage: 'Form updated successfully'
         },
         responseCode: HttpStatus.OK,
         result: {
           formSubmission: updatedSubmission,
-          ...(updatedFieldValues.length > 0 && {
-            customFields: updatedFieldValues,
-          }),
-          ...(cohortMemberResult && { cohortMember: cohortMemberResult }),
-        },
+          ...(updatedFieldValues.length > 0 && { customFields: updatedFieldValues }),
+          ...(cohortMemberResult && { cohortMember: cohortMemberResult })
+        }
       };
+
+      return response.status(HttpStatus.OK).json(successResponse);
+
     } catch (error) {
-      return {
+      const errorResponse = {
         id: 'api.form.submission.update',
         ver: '1.0',
         ts: new Date().toISOString(),
         params: {
           resmsgid: submissionId,
           status: 'failed',
-          err: 'UPDATE_FAILED',
-          errmsg:
-            error.message ||
-            'An unexpected error occurred while updating the form submission',
-          successmessage: null,
+          err: error instanceof BadRequestException ? 'BAD_REQUEST' : 'INTERNAL_SERVER_ERROR',
+          errmsg: error.message || 'An unexpected error occurred while updating the form submission',
+          successmessage: null
         },
-        responseCode:
-          error instanceof BadRequestException
-            ? HttpStatus.BAD_REQUEST
-            : HttpStatus.INTERNAL_SERVER_ERROR,
-        result: null,
+        responseCode: error instanceof BadRequestException ? HttpStatus.BAD_REQUEST : HttpStatus.INTERNAL_SERVER_ERROR,
+        result: null
       };
+
+      return response.status(errorResponse.responseCode).json(errorResponse);
     }
   }
 
@@ -843,5 +978,13 @@ export class FormSubmissionService {
         result: null,
       };
     }
+  }
+
+  private createFieldsSearchDto(filters: any): FieldsSearchDto {
+    return new FieldsSearchDto({ filters });
+  }
+
+  private createFieldValuesSearchDto(filters: any): FieldValuesSearchDto {
+    return new FieldValuesSearchDto({ filters });
   }
 }

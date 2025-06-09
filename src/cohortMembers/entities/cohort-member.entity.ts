@@ -11,6 +11,9 @@ export enum MemberStatus {
   INACTIVE = "inactive",
   DROPOUT = "dropout",
   ARCHIVED = "archived",
+  APPLIED = "applied",
+  REJECTED = "rejected",
+  SHORTLISTED = "shortlisted"
 }
 
 @Entity("CohortMembers")
@@ -45,7 +48,7 @@ export class CohortMembers {
   @Column({
     type: "enum",
     enum: MemberStatus,
-    default: MemberStatus.ACTIVE,
+    default: MemberStatus.APPLIED,
   })
   status: MemberStatus;
 }

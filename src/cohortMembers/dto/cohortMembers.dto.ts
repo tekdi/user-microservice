@@ -1,6 +1,7 @@
 import { Expose } from "class-transformer";
 import { ApiProperty } from "@nestjs/swagger";
-import { IsNotEmpty, IsUUID } from "class-validator";
+import { IsNotEmpty, IsUUID, IsOptional, IsString, IsArray } from "class-validator";
+import { MemberStatus } from "../entities/cohort-member.entity";
 
 export class CohortMembersDto {
   //generated fields
@@ -48,6 +49,35 @@ export class CohortMembersDto {
   @IsNotEmpty()
   @IsUUID(undefined, { message: "User Id must be a valid UUID" })
   userId: string;
+
+  @ApiProperty({
+    enum: MemberStatus,
+    description: "The status of the cohort member",
+    default: MemberStatus.APPLIED,
+  })
+  @Expose()
+  @IsOptional()
+  status: MemberStatus;
+
+  @ApiProperty({
+    type: String,
+    description: "The reason for the status",
+    required: false,
+  })
+  @Expose()
+  @IsOptional()
+  @IsString()
+  statusReason?: string;
+
+  @ApiProperty({
+    type: Array,
+    description: "Custom fields for the cohort member",
+    required: false,
+  })
+  @Expose()
+  @IsOptional()
+  @IsArray()
+  customFields?: any[];
 
   constructor(obj: any) {
     Object.assign(this, obj);

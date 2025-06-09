@@ -89,6 +89,14 @@ export class CohortMemberUpdateDto {
 
   @ApiProperty({
     type: String,
+    description: 'The academic year ID for cohort member',
+  })
+  @IsUUID()
+  @IsOptional()
+  cohortAcademicYearId?: string;
+
+  @ApiProperty({
+    type: String,
     description: 'The user ID',
   })
   @IsUUID()
@@ -181,4 +189,12 @@ export class UpdateFormSubmissionDto {
   @IsUUID()
   @IsOptional()
   updatedBy?: string;
+
+  @ApiProperty({
+    type: String,
+    description: 'The tenant ID for the update',
+  })
+  @IsUUID()
+  @IsOptional()
+  tenantId?: string;
 }

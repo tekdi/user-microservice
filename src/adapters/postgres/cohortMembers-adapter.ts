@@ -814,10 +814,20 @@ export class PostgresCohortMembersService {
           HttpStatus.NOT_FOUND
         );
       }
-      Object.assign(cohortMembershipToUpdate, cohortMembersUpdateDto);
-      let result = await this.cohortMembersRepository.save(
-        cohortMembershipToUpdate
-      );
+
+      // Ensure status is in lowercase if provided
+      if (cohortMembersUpdateDto.status) {
+        cohortMembersUpdateDto.status = cohortMembersUpdateDto.status.toLowerCase();
+      }
+
+      // Update the entity
+      Object.assign(cohortMembershipToUpdate, {
+        ...cohortMembersUpdateDto,
+        updatedAt: new Date()
+      });
+
+      let result = await this.cohortMembersRepository.save(cohortMembershipToUpdate);
+
       //update custom fields
       let responseForCustomField;
       if (
@@ -825,43 +835,32 @@ export class PostgresCohortMembersService {
         cohortMembersUpdateDto.customFields.length > 0
       ) {
         const customFields = cohortMembersUpdateDto.customFields;
-        delete cohortMembersUpdateDto.customFields;
-        Object.assign(cohortMembershipToUpdate, cohortMembersUpdateDto);
-
         responseForCustomField = await this.processCustomFields(
           customFields,
           cohortMembershipId,
           cohortMembersUpdateDto
         );
-        if (result && responseForCustomField.success) {
-          return APIResponse.success(
-            res,
-            apiId,
-            [],
-            HttpStatus.CREATED,
-            API_RESPONSES.COHORTMEMBER_UPDATE_SUCCESSFULLY
-          );
-        } else {
-          const errorMessage =
-            responseForCustomField.error || 'Internal server error';
-          return APIResponse.error(
-            res,
-            apiId,
-            'Internal Server Error',
-            errorMessage,
-            HttpStatus.INTERNAL_SERVER_ERROR
-          );
-        }
       }
-      if (result) {
-        return APIResponse.success(
-          res,
-          apiId,
-          [],
-          HttpStatus.OK,
-          API_RESPONSES.COHORTMEMBER_UPDATE_SUCCESSFULLY
-        );
-      }
+
+      // Return the updated entity in the response
+      return APIResponse.success(
+        res,
+        apiId,
+        {
+          cohortMembershipId: result.cohortMembershipId,
+          cohortId: result.cohortId,
+          userId: result.userId,
+          status: result.status,
+          statusReason: result.statusReason,
+          updatedBy: result.updatedBy,
+          updatedAt: result.updatedAt,
+          cohortAcademicYearId: result.cohortAcademicYearId,
+          ...(responseForCustomField?.success && { customFields: cohortMembersUpdateDto.customFields })
+        },
+        HttpStatus.OK,
+        API_RESPONSES.COHORTMEMBER_UPDATE_SUCCESSFULLY
+      );
+
     } catch (error) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
@@ -957,8 +956,7 @@ export class PostgresCohortMembersService {
       where: {
         userId: userId,
         cohortId: cohortId,
-        cohortAcademicYearId: cohortAcademicYearId,
-        status: MemberStatus.ACTIVE,
+        cohortAcademicYearId: cohortAcademicYearId
       },
     });
 

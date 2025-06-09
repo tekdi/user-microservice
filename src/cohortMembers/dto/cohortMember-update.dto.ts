@@ -6,9 +6,11 @@ import {
   IsString,
   ValidateIf,
   ValidateNested,
+  IsUUID,
 } from "class-validator";
 import { MemberStatus } from "../entities/cohort-member.entity";
 import { FieldValuesOptionDto } from "src/user/dto/user-create.dto";
+
 export class CohortMembersUpdateDto {
   @Expose()
   tenantId: string;
@@ -29,8 +31,17 @@ export class CohortMembersUpdateDto {
     description: "The cohortId of the cohort members",
   })
   @Expose()
-  @IsOptional() // Marking as optional
-  cohortId?: string; // Making it optional by adding '?' after the type
+  @IsOptional()
+  cohortId?: string;
+
+  @ApiProperty({
+    type: String,
+    description: "The cohortAcademicYearId of the cohort members",
+  })
+  @Expose()
+  @IsOptional()
+  @IsUUID()
+  cohortAcademicYearId?: string;
 
   @ApiProperty({
     type: String,
@@ -71,6 +82,7 @@ export class CohortMembersUpdateDto {
   @ValidateIf((o) => o.status === MemberStatus.DROPOUT)
   @IsString({ message: "Reason is mandatory while dropping out a member" })
   statusReason?: string;
+
   @ApiProperty({
     type: FieldValuesOptionDto,
     description: "Array of Custom fields",
