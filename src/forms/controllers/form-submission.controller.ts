@@ -95,6 +95,7 @@ export class FormSubmissionController {
   }
 
   @Post('search')
+  @UseFilters(new AllExceptionsFilter(APIID.FORM_SUBMISSION_LIST))
   @ApiOperation({
     summary: 'Search form submissions with filters and pagination',
   })

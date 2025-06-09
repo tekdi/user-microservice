@@ -20,7 +20,7 @@ import { API_RESPONSES } from '../../common/utils/response.messages';
 import { FieldsService } from '../../fields/fields.service';
 import { FieldValuesDto } from '../../fields/dto/field-values.dto';
 import { ErrorResponseTypeOrm } from '../../error-response-typeorm';
-import { SuccessResponse } from '../../success-response';
+import { SuccessResponse } from '../../common/responses/success.response';
 import { PostgresCohortMembersService } from '../../adapters/postgres/cohortMembers-adapter';
 import { CohortMembersDto } from '../../cohortMembers/dto/cohortMembers.dto';
 import { MemberStatus } from '../../cohortMembers/entities/cohort-member.entity';
@@ -363,81 +363,98 @@ export class FormSubmissionService {
       if (filters?.customFieldsFilter && Object.keys(filters.customFieldsFilter).length > 0) {
         const customFieldFilters = filters.customFieldsFilter;
         
-        // Get all field definitions first
+        // Get all field definitions first to validate field types
         const fieldIds = Object.keys(customFieldFilters);
-        const fieldDefinitions = await Promise.all(
-          fieldIds.map(async (fieldId) => {
-            const searchDto = this.createFieldsSearchDto({ fieldId });
-            const result = await this.fieldsService.searchFields('default', { headers: {} }, searchDto);
-            if (result instanceof SuccessResponse && Array.isArray(result.data)) {
-              return result.data[0];
-            }
-            return null;
-          })
-        );
+        const searchDto: FieldsSearchDto = {
+          filters: {
+            fieldIds
+          },
+          limit: fieldIds.length,
+          offset: 0
+        };
+        const fieldDefinitionsResult = await this.fieldsService.searchFields('default', { headers: {} }, searchDto);
+        let fieldDefinitions: Fields[] = [];
+        if (fieldDefinitionsResult instanceof SuccessResponse && 'data' in fieldDefinitionsResult) {
+          fieldDefinitions = fieldDefinitionsResult.data as Fields[];
+        }
 
         // Create a map of fieldId to field definition
         const fieldDefinitionMap = new Map(
-          fieldDefinitions.filter(field => field).map(field => [field.fieldId, field])
+          fieldDefinitions.map((field: Fields) => [field.fieldId, field])
         );
 
-        // Filter submissions based on custom fields
-        filteredSubmissions = [];
-        for (const submission of submissions) {
-          let matches = true;
-          
-          // Get all field values for this submission using getFieldsAndFieldsValues
-          const fieldValuesResult = await this.fieldsService.getFieldsAndFieldsValues(submission.itemId);
-          const fieldValues = fieldValuesResult || [];
+        // Build query with joins
+        const queryBuilder = this.formSubmissionRepository
+          .createQueryBuilder('fs')
+          .leftJoinAndSelect('field_values', 'fv', 'fv.itemId = fs.itemId')
+          .leftJoinAndSelect('fields', 'f', 'f.fieldId = fv.fieldId')
+          .where(whereClause);
 
-          // Check each custom field filter
-          for (const [fieldId, expectedValue] of Object.entries(customFieldFilters)) {
-            const fieldDef = fieldDefinitionMap.get(fieldId);
-            if (!fieldDef) {
-              throw new BadRequestException(`Invalid field ID: ${fieldId}`);
-            }
+        // Add conditions for each custom field filter
+        Object.entries(customFieldFilters).forEach(([fieldId, expectedValue]) => {
+          const fieldDef = fieldDefinitionMap.get(fieldId) as Fields;
+          if (!fieldDef) {
+            throw new BadRequestException(`Invalid field ID: ${fieldId}`);
+          }
 
-            const fieldValue = fieldValues.find((fv: any) => fv.fieldId === fieldId);
-            if (!fieldValue) continue;
-
-            let actualValue = fieldValue.value;
-
-            // Compare values based on field type
-            let valueMatches = false;
-            const fieldType = (fieldDef as any).type as string;
-            switch (fieldType) {
-              case 'NUMERIC':
-                valueMatches = Number(actualValue) === Number(expectedValue);
-                break;
-              case 'CALENDAR':
-                valueMatches = new Date(actualValue).getTime() === new Date(expectedValue).getTime();
-                break;
-              case 'CHECKBOX':
-                valueMatches = Boolean(actualValue) === Boolean(expectedValue);
-                break;
-              case 'DROPDOWN':
-                if (Array.isArray(expectedValue)) {
-                  valueMatches = Array.isArray(actualValue) && 
-                    expectedValue.every(v => actualValue.includes(v));
-                } else {
-                  valueMatches = actualValue === expectedValue;
-                }
-                break;
-              default:
-                valueMatches = String(actualValue).toLowerCase() === String(expectedValue).toLowerCase();
-            }
-
-            if (!valueMatches) {
-              matches = false;
+          const fieldType = fieldDef.type;
+          switch (fieldType) {
+            case FieldType.NUMERIC:
+              queryBuilder.andWhere('fv.fieldId = :fieldId AND CAST(fv.value AS DECIMAL) = :value', {
+                fieldId,
+                value: Number(expectedValue)
+              });
               break;
-            }
+            case FieldType.CALENDAR:
+              queryBuilder.andWhere('fv.fieldId = :fieldId AND fv.value = :value', {
+                fieldId,
+                value: new Date(expectedValue).toISOString()
+              });
+              break;
+            case FieldType.CHECKBOX:
+              queryBuilder.andWhere('fv.fieldId = :fieldId AND fv.value = :value', {
+                fieldId,
+                value: Boolean(expectedValue).toString()
+              });
+              break;
+            case FieldType.DROPDOWN:
+              if (Array.isArray(expectedValue)) {
+                queryBuilder.andWhere('fv.fieldId = :fieldId AND fv.value IN (:...values)', {
+                  fieldId,
+                  values: expectedValue
+                });
+              } else {
+                queryBuilder.andWhere('fv.fieldId = :fieldId AND fv.value = :value', {
+                  fieldId,
+                  value: expectedValue
+                });
+              }
+              break;
+            default:
+              queryBuilder.andWhere('fv.fieldId = :fieldId AND LOWER(fv.value) = LOWER(:value)', {
+                fieldId,
+                value: expectedValue
+              });
           }
+        });
 
-          if (matches) {
-            filteredSubmissions.push(submission);
-          }
+        // Add sorting and pagination
+        if (sort?.length === 2) {
+          queryBuilder.orderBy(`fs.${sort[0]}`, sort[1].toUpperCase() as 'ASC' | 'DESC');
+        } else {
+          queryBuilder.orderBy('fs.createdAt', 'DESC');
         }
-        filteredCount = filteredSubmissions.length;
+
+        queryBuilder
+          .skip(offset)
+          .take(limit);
+
+        // Execute query
+        const [results, total] = await queryBuilder.getManyAndCount();
+
+        // Update filtered results
+        filteredSubmissions = results;
+        filteredCount = total;
       }
 
       // Get field values for filtered submissions if includeDisplayValues is true
@@ -455,10 +472,9 @@ export class FormSubmissionService {
           };
 
           if (includeDisplayValues) {
-            result.customFields =
-              await this.fieldsService.getFieldsAndFieldsValues(
-                submission.itemId
-              );
+            result.customFields = await this.fieldsService.getFieldsAndFieldsValues(
+              submission.itemId
+            );
           }
 
           return result;
@@ -679,7 +695,7 @@ export class FormSubmissionService {
                   new FieldValuesDto({
                     fieldId: fieldValue.fieldId,
                     value: fieldValue.value,
-                    itemId: userId, // Use userId here
+                    itemId: userId,
                     updatedBy: userId,
                     createdBy: existingFieldValue.createdBy
                   })
@@ -691,12 +707,12 @@ export class FormSubmissionService {
                   new FieldValuesDto({
                     fieldId: fieldValue.fieldId,
                     value: fieldValue.value,
-                    itemId: userId, // Use userId here
+                    itemId: userId,
                     createdBy: userId,
                     updatedBy: userId
                   })
                 );
-                return (result instanceof SuccessResponse && result.data) ? result.data : null;
+                return (result instanceof SuccessResponse && 'data' in result) ? result.data : null;
               }
             } catch (error) {
               return null;
