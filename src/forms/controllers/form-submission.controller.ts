@@ -12,7 +12,7 @@ import {
   Res,
   Headers,
   BadRequestException,
-  Req
+  Req,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -46,7 +46,10 @@ export class FormSubmissionController {
   @ApiOperation({ summary: 'Create a new form submission' })
   @ApiBody({ type: CreateFormSubmissionDto })
   @ApiHeader({ name: 'tenantid', required: true })
-  @ApiResponse({ status: 201, description: 'Form submission created successfully' })
+  @ApiResponse({
+    status: 201,
+    description: 'Form submission created successfully',
+  })
   async create(
     @Body() createFormSubmissionDto: CreateFormSubmissionDto,
     @Res() response: Response,
@@ -58,35 +61,40 @@ export class FormSubmissionController {
       throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
     }
 
-    console.log('Received body:', createFormSubmissionDto); // Debug log
-
     // Only validate cohortAcademicYearId if cohortMember object is present
     if (createFormSubmissionDto.cohortMember) {
-      if (!createFormSubmissionDto.cohortAcademicYearId || !isUUID(createFormSubmissionDto.cohortAcademicYearId)) {
-        throw new BadRequestException('cohortAcademicYearId is required in the request body when creating a cohort member');
+      if (
+        !createFormSubmissionDto.cohortAcademicYearId ||
+        !isUUID(createFormSubmissionDto.cohortAcademicYearId)
+      ) {
+        throw new BadRequestException(
+          'cohortAcademicYearId is required in the request body when creating a cohort member'
+        );
       }
     }
 
     createFormSubmissionDto.tenantId = tenantId;
     const result = await this.formSubmissionService.create(
-      createFormSubmissionDto, 
-      response, 
+      createFormSubmissionDto,
+      response,
       createFormSubmissionDto.cohortAcademicYearId
     );
 
     // Set appropriate success message based on whether cohort member was created
-    const successMessage = createFormSubmissionDto.cohortMember 
+    const successMessage = createFormSubmissionDto.cohortMember
       ? 'Form saved successfully and cohort member has been assigned'
       : 'Form saved successfully';
 
     return response.status(201).json({
       ...result,
-      successmessage: successMessage
+      successmessage: successMessage,
     });
   }
 
   @Post('search')
-  @ApiOperation({ summary: 'Search form submissions with filters and pagination' })
+  @ApiOperation({
+    summary: 'Search form submissions with filters and pagination',
+  })
   @ApiBody({ type: FormSubmissionSearchDto })
   findAll(@Body() searchDto: FormSubmissionSearchDto) {
     return this.formSubmissionService.findAll(searchDto);
@@ -110,13 +118,17 @@ export class FormSubmissionController {
     @Param('id') id: string,
     @Body() updateFormSubmissionDto: UpdateFormSubmissionDto,
     @Headers('tenantid') tenantId: string,
-    @Res() response: Response,
+    @Res() response: Response
   ) {
     if (!tenantId || !isUUID(tenantId)) {
       throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
     }
 
-    const result = await this.formSubmissionService.update(id, updateFormSubmissionDto, tenantId);
+    const result = await this.formSubmissionService.update(
+      id,
+      updateFormSubmissionDto,
+      tenantId
+    );
     return response.status(result.responseCode).json(result);
   }
 
@@ -124,11 +136,12 @@ export class FormSubmissionController {
   @UseFilters(new AllExceptionsFilter(APIID.FORM_SUBMISSION_DELETE))
   @ApiOperation({ summary: 'Delete/Archive a form submission' })
   @ApiParam({ name: 'id', type: String })
-  @ApiQuery({ 
-    name: 'mode', 
-    enum: ['soft', 'hard'], 
-    description: 'Delete mode - soft (archive) or hard (permanent delete). Defaults to soft delete if not specified.',
-    required: false 
+  @ApiQuery({
+    name: 'mode',
+    enum: ['soft', 'hard'],
+    description:
+      'Delete mode - soft (archive) or hard (permanent delete). Defaults to soft delete if not specified.',
+    required: false,
   })
   async remove(
     @Param('id') id: string,
@@ -136,4 +149,4 @@ export class FormSubmissionController {
   ) {
     return this.formSubmissionService.remove(id, mode);
   }
-} 
+}

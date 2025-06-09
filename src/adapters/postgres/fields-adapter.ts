@@ -1132,7 +1132,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
     const results = await this.fieldsValuesRepository.query(query, [itemId]);
 
     // Transform results to use typed values with fallback to generic value
-    return results.map(result => {
+    return results.map((result) => {
       let typedValue;
       switch (result.type) {
         case 'text':
@@ -1170,7 +1170,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         context: result.context,
         state: result.state,
         contextType: result.contextType,
-        fieldParams: result.fieldParams
+        fieldParams: result.fieldParams,
       };
     });
   }

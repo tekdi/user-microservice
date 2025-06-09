@@ -1,11 +1,11 @@
-import { Module } from "@nestjs/common";
-import { FormsService } from "./forms.service";
-import { FormsController } from "./forms.controller";
-import { Form } from "./entities/form.entity";
-import { TypeOrmModule } from "@nestjs/typeorm";
-import { PostgresFieldsService } from "src/adapters/postgres/fields-adapter";
-import { Fields } from "src/fields/entities/fields.entity";
-import { FieldValues } from "src/fields/entities/fields-values.entity";
+import { Module } from '@nestjs/common';
+import { FormsService } from './forms.service';
+import { FormsController } from './forms.controller';
+import { Form } from './entities/form.entity';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { PostgresFieldsService } from 'src/adapters/postgres/fields-adapter';
+import { Fields } from 'src/fields/entities/fields.entity';
+import { FieldValues } from 'src/fields/entities/fields-values.entity';
 import { FormSubmission } from './entities/form-submission.entity';
 import { FormSubmissionService } from './services/form-submission.service';
 import { FormSubmissionController } from './controllers/form-submission.controller';
@@ -24,26 +24,26 @@ import { Tenants } from '../userTenantMapping/entities/tenant.entity';
   controllers: [FormsController, FormSubmissionController],
   imports: [
     TypeOrmModule.forFeature([
-      Form, 
-      Fields, 
-      FieldValues, 
+      Form,
+      Fields,
+      FieldValues,
       FormSubmission,
       CohortMembers,
       User,
       Cohort,
       CohortAcademicYear,
       AcademicYear,
-      Tenants
+      Tenants,
     ]),
     CohortMembersModule,
-    PostgresModule
+    PostgresModule,
   ],
   providers: [
-    FormsService, 
-    PostgresFieldsService, 
-    FormSubmissionService, 
+    FormsService,
+    PostgresFieldsService,
+    FormSubmissionService,
     FieldsService,
-    PostgresCohortMembersService
+    PostgresCohortMembersService,
   ],
   exports: [FormSubmissionService],
 })

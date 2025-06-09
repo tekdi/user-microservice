@@ -325,7 +325,7 @@ export class FieldsService {
     const results = await this.fieldsValuesRepository.query(query, [itemId]);
 
     // Transform results to use typed values with fallback to generic value
-    return results.map(result => {
+    return results.map((result) => {
       let typedValue;
       switch (result.type) {
         case 'text':
@@ -363,7 +363,7 @@ export class FieldsService {
         context: result.context,
         state: result.state,
         contextType: result.contextType,
-        fieldParams: result.fieldParams
+        fieldParams: result.fieldParams,
       };
     });
   }
@@ -371,9 +371,9 @@ export class FieldsService {
   public async mappedResponse(result: any) {
     const fieldValueResponse = result.map((item: any) => {
       // Use the utility to extract the appropriate value
-      const value = item.type ? 
-        FieldValueConverter.extractValue(item, item.type) : 
-        item.value;
+      const value = item.type
+        ? FieldValueConverter.extractValue(item, item.type)
+        : item.value;
 
       const fieldValueMapping = {
         value: value ? `${value}` : '',
@@ -395,9 +395,9 @@ export class FieldsService {
   public async mappedResponseField(result: any) {
     const fieldResponse = result.map((item: any) => {
       // Use the utility to extract the appropriate value
-      const value = item.type ? 
-        FieldValueConverter.extractValue(item, item.type) : 
-        item.value;
+      const value = item.type
+        ? FieldValueConverter.extractValue(item, item.type)
+        : item.value;
 
       const fieldMapping = {
         fieldId: item?.fieldId ? `${item.fieldId}` : '',

@@ -1,5 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsUUID, IsNotEmpty, IsEnum, IsOptional, ValidateNested, ArrayNotEmpty } from 'class-validator';
+import {
+  IsUUID,
+  IsNotEmpty,
+  IsEnum,
+  IsOptional,
+  ValidateNested,
+  ArrayNotEmpty,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { FormSubmissionStatus } from '../entities/form-submission.entity';
 
@@ -44,7 +51,7 @@ export class FormSubmissionDto {
   })
   @IsEnum(FormSubmissionStatus)
   @IsOptional()
-  status?: FormSubmissionStatus = FormSubmissionStatus.ACTIVE;
+  status?: FormSubmissionStatus;
 }
 
 export class CohortMemberDto {
@@ -92,7 +99,8 @@ export class CreateFormSubmissionDto {
 
   @ApiProperty({
     type: String,
-    description: 'The academic year ID for cohort member creation (required when cohortMember is present)',
+    description:
+      'The academic year ID for cohort member creation (required when cohortMember is present)',
   })
   @IsUUID()
   @IsOptional()
@@ -124,4 +132,4 @@ export class CreateFormSubmissionDto {
   @Type(() => CohortMemberDto)
   @IsOptional()
   cohortMember?: CohortMemberDto;
-} 
+}

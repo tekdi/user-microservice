@@ -4,7 +4,7 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
-  Check
+  Check,
 } from 'typeorm';
 
 export enum FormSubmissionStatus {
@@ -28,7 +28,7 @@ export class FormSubmission {
   @Column({
     type: 'text',
     default: 'inactive',
-    nullable: false
+    nullable: false,
   })
   status: FormSubmissionStatus;
 
@@ -51,4 +51,4 @@ export class FormSubmission {
 
   @Column('uuid', { nullable: true })
   updatedBy?: string;
-} 
+}

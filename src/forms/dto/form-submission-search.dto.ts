@@ -1,5 +1,18 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsNumber, IsObject, IsArray, IsString, IsEnum, ArrayMinSize, ArrayMaxSize, ValidateIf, IsBoolean, IsUUID, IsNotEmpty } from 'class-validator';
+import {
+  IsOptional,
+  IsNumber,
+  IsObject,
+  IsArray,
+  IsString,
+  IsEnum,
+  ArrayMinSize,
+  ArrayMaxSize,
+  ValidateIf,
+  IsBoolean,
+  IsUUID,
+  IsNotEmpty,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { FormSubmissionStatus } from '../entities/form-submission.entity';
 import { Expose } from 'class-transformer';
@@ -29,7 +42,7 @@ export class FiltersProperty {
     type: [String],
     description: 'Status of the form submission',
     enum: FormSubmissionStatus,
-    isArray: true
+    isArray: true,
   })
   @Expose()
   @IsOptional()
@@ -61,8 +74,8 @@ export class FiltersProperty {
     type: Object,
     description: 'Custom fields to filter by using fieldId as key',
     example: {
-      "fieldId-uuid": "value"
-    }
+      'fieldId-uuid': 'value',
+    },
   })
   @Expose()
   @IsOptional()
@@ -79,7 +92,7 @@ export class FormSubmissionSearchDto {
   @ApiProperty({
     type: Number,
     description: 'Number of records to return',
-    default: 10
+    default: 10,
   })
   @Expose()
   @IsNumber()
@@ -89,7 +102,7 @@ export class FormSubmissionSearchDto {
   @ApiProperty({
     type: Number,
     description: 'Number of records to skip',
-    default: 0
+    default: 0,
   })
   @Expose()
   @IsNumber()
@@ -98,7 +111,7 @@ export class FormSubmissionSearchDto {
 
   @ApiProperty({
     type: FiltersProperty,
-    description: 'Filter criteria'
+    description: 'Filter criteria',
   })
   @Expose()
   @IsObject()
@@ -106,7 +119,7 @@ export class FormSubmissionSearchDto {
 
   @ApiPropertyOptional({
     description: 'Sort criteria [field, order]',
-    example: ['createdAt', 'desc']
+    example: ['createdAt', 'desc'],
   })
   @IsArray()
   @IsOptional()
@@ -114,19 +127,20 @@ export class FormSubmissionSearchDto {
   @ArrayMaxSize(2, { message: 'Sort array must contain exactly two elements' })
   sort: [string, string];
 
-  @ValidateIf((o) => o.sort !== undefined)
+  @ValidateIf((o) => o.sort !== undefined && o.sort.length >= 2)
   @IsEnum(SortDirection, {
-    each: true,
-    message: 'Sort[1] must be either asc or desc'
+    message: 'Sort direction must be either asc or desc',
   })
   get sortDirection(): string | undefined {
-    return this.sort ? this.sort[1].toLowerCase() : undefined;
+    return this.sort && this.sort.length >= 2
+      ? this.sort[1].toLowerCase()
+      : undefined;
   }
 
   @ApiPropertyOptional({
     type: Boolean,
     description: 'Include display values in the response',
-    example: false
+    example: false,
   })
   @IsOptional()
   @IsBoolean()
@@ -135,4 +149,4 @@ export class FormSubmissionSearchDto {
   constructor(partial: Partial<FormSubmissionSearchDto>) {
     Object.assign(this, partial);
   }
-} 
+}
