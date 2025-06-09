@@ -25,6 +25,12 @@ export class FieldsService {
     private fieldsValuesRepository: Repository<FieldValues>
   ) {}
 
+  async getFieldById(fieldId: string): Promise<Fields | null> {
+    return await this.fieldsRepository.findOne({
+      where: { fieldId }
+    });
+  }
+
   //fields
   async createFields(request: any, fieldsDto: FieldsDto) {
     try {

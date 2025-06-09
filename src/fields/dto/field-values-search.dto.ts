@@ -1,28 +1,38 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { Expose } from "class-transformer";
-import { IsNotEmpty } from "class-validator";
+import { Expose, Transform } from "class-transformer";
+import { IsNotEmpty, IsNumber, IsOptional } from "class-validator";
 
 export class FieldValuesSearchDto {
-  @ApiProperty({
-    type: String,
-    description: "Limit",
-  })
-  limit: string;
-
-  @ApiProperty({
+  @ApiPropertyOptional({
     type: Number,
-    description: "number",
+    description: "Limit",
+    default: 10
   })
-  page: number;
+  @IsOptional()
+  @Transform(({ value }) => Number(value))
+  @IsNumber({}, { message: "Limit must be a number" })
+  limit: number = 10;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
+    type: Number,
+    description: "Page number",
+    default: 1
+  })
+  @IsOptional()
+  @Transform(({ value }) => Number(value))
+  @IsNumber({}, { message: "Page must be a number" })
+  page: number = 1;
+
+  @ApiPropertyOptional({
     type: Object,
     description: "Filters",
   })
-  @ApiPropertyOptional()
-  filters: object;
+  filters?: object;
 
   constructor(partial: Partial<FieldValuesSearchDto>) {
     Object.assign(this, partial);
+    // Ensure limit and page are numbers with defaults
+    this.limit = partial.limit ? Number(partial.limit) : 10;
+    this.page = partial.page ? Number(partial.page) : 1;
   }
 }

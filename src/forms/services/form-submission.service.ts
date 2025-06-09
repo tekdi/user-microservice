@@ -11,8 +11,8 @@ import {
 } from '../dto/create-form-submission.dto';
 import { UpdateFormSubmissionDto } from '../dto/update-form-submission.dto';
 import { FieldValues } from '../../fields/entities/fields-values.entity';
-import { FieldValueConverter } from '../../utils/field-value-converter';
 import { Fields, FieldType } from '../../fields/entities/fields.entity';
+import { FieldValueConverter } from '../../utils/field-value-converter';
 import APIResponse from '../../common/responses/response';
 import { Response } from 'express';
 import { APIID } from '../../common/utils/api-id.config';
@@ -20,7 +20,6 @@ import { API_RESPONSES } from '../../common/utils/response.messages';
 import { FieldsService } from '../../fields/fields.service';
 import { FieldValuesDto } from '../../fields/dto/field-values.dto';
 import { ErrorResponseTypeOrm } from '../../error-response-typeorm';
-import { SuccessResponse } from '../../common/responses/success.response';
 import { PostgresCohortMembersService } from '../../adapters/postgres/cohortMembers-adapter';
 import { CohortMembersDto } from '../../cohortMembers/dto/cohortMembers.dto';
 import { MemberStatus } from '../../cohortMembers/entities/cohort-member.entity';
@@ -30,6 +29,42 @@ import { FieldValuesSearchDto } from '../../fields/dto/field-values-search.dto';
 import { FieldsSearchDto } from '../../fields/dto/fields-search.dto';
 import { CohortMembersUpdateDto } from '../../cohortMembers/dto/cohortMember-update.dto';
 import jwt_decode from 'jwt-decode';
+
+interface DateRange {
+  start: string;
+  end: string;
+}
+
+interface FilterValue {
+  value: string | number | boolean | DateRange;
+  type: 'string' | 'number' | 'boolean' | 'date';
+}
+
+interface CustomFieldFilters {
+  [fieldId: string]: string | number | boolean | string[];
+}
+
+interface FormSubmissionFilters {
+  status?: string | string[];
+  submissionId?: string;
+  formId?: string;
+  itemId?: string;
+  createdBy?: string;
+  updatedBy?: string;
+  createdAt?: string | DateRange;
+  updatedAt?: string | DateRange;
+  customFieldsFilter?: CustomFieldFilters;
+}
+
+interface FieldSearchResult {
+  data: Fields[];
+  responseCode: number;
+}
+
+interface FieldSearchResponse {
+  data: Fields[];
+  [key: string]: any;
+}
 
 @Injectable()
 export class FormSubmissionService {
@@ -274,232 +309,370 @@ export class FormSubmissionService {
     }
   }
 
-  async findAll(formSubmissionSearchDto: FormSubmissionSearchDto) {
-    try {
-      let { limit, offset, filters, sort, includeDisplayValues } =
-        formSubmissionSearchDto;
+  private async buildWhereClause(filters: FormSubmissionFilters, formSubmissionKeys: string[]) {
+    const whereClause: any = {};
+    if (!filters || Object.keys(filters).length === 0) {
+      return whereClause;
+    }
 
-      // Set default values
-      offset = offset || 0;
-      limit = limit || 10;
-
-      // Get all valid form submission fields for filtering
-      const formSubmissionKeys =
-        this.formSubmissionRepository.metadata.columns.map(
-          (column) => column.propertyName
-        );
-
-      // Build where clause
-      const whereClause: any = {};
-      if (filters && Object.keys(filters).length > 0) {
-        Object.entries(filters).forEach(([key, value]) => {
-          if (key === 'customFieldsFilter') {
-            // Handle custom fields separately
-            return;
-          }
-
-          if (!formSubmissionKeys.includes(key)) {
-            throw new BadRequestException(`Invalid filter key: ${key}`);
-          }
-
-          // Handle different types of filters
-          if (key === 'status') {
-            if (Array.isArray(value)) {
-              whereClause[key] = In(
-                value.map((status) => status.toLowerCase())
-              );
-            } else {
-              whereClause[key] = value.toLowerCase();
-            }
-          }
-          // Handle UUID fields (exact match)
-          else if (
-            [
-              'submissionId',
-              'formId',
-              'itemId',
-              'createdBy',
-              'updatedBy',
-            ].includes(key)
-          ) {
-            if (value && !isUUID(value)) {
-              throw new BadRequestException(`Invalid UUID format for ${key}`);
-            }
-            whereClause[key] = value;
-          }
-          // Handle date fields
-          else if (['createdAt', 'updatedAt'].includes(key)) {
-            if (typeof value === 'object' && value.start && value.end) {
-              whereClause[key] = Between(
-                new Date(value.start),
-                new Date(value.end)
-              );
-            } else if (value) {
-              whereClause[key] = new Date(value);
-            }
-          }
-          // Default case
-          else {
-            whereClause[key] = value;
-          }
-        });
+    Object.entries(filters).forEach(([key, value]) => {
+      if (key === 'customFieldsFilter' || !value) {
+        return;
       }
 
-      // Get form submissions with pagination
-      const [submissions, totalCount] =
-        await this.formSubmissionRepository.findAndCount({
-          where: whereClause,
-          order:
-            sort?.length === 2
-              ? { [sort[0]]: sort[1].toUpperCase() }
-              : { createdAt: 'DESC' },
-          skip: offset,
-          take: limit,
-        });
+      if (!formSubmissionKeys.includes(key)) {
+        throw new BadRequestException(`Invalid filter key: ${key}`);
+      }
 
-      // Handle custom field filters if any
-      let filteredSubmissions = [...submissions];
-      let filteredCount = submissions.length;
-      if (filters?.customFieldsFilter && Object.keys(filters.customFieldsFilter).length > 0) {
-        const customFieldFilters = filters.customFieldsFilter;
+      // Handle different types of filters
+      if (key === 'status') {
+        if (Array.isArray(value)) {
+          whereClause[key] = In(value.map((status: string) => status.toLowerCase()));
+        } else if (typeof value === 'string') {
+          whereClause[key] = value.toLowerCase();
+        }
+      }
+      // Handle UUID fields (exact match)
+      else if (['submissionId', 'formId', 'itemId', 'createdBy', 'updatedBy'].includes(key)) {
+        if (value && !isUUID(value as string)) {
+          throw new BadRequestException(`Invalid UUID format for ${key}`);
+        }
+        whereClause[key] = value;
+      }
+      // Handle date fields
+      else if (['createdAt', 'updatedAt'].includes(key)) {
+        if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+          const dateRange = value as DateRange;
+          if (dateRange.start && dateRange.end && 
+              typeof dateRange.start === 'string' && 
+              typeof dateRange.end === 'string') {
+            const startDate = new Date(dateRange.start);
+            const endDate = new Date(dateRange.end);
+            
+            if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+              throw new BadRequestException(`Invalid date format for ${key}`);
+            }
+            
+            whereClause[key] = Between(startDate, endDate);
+          }
+        } else if (typeof value === 'string') {
+          const date = new Date(value);
+          if (isNaN(date.getTime())) {
+            throw new BadRequestException(`Invalid date format for ${key}`);
+          }
+          whereClause[key] = date;
+        }
+      }
+      // Default case
+      else {
+        whereClause[key] = value;
+      }
+    });
+
+    return whereClause;
+  }
+
+  private async fetchSubmissionsWithPagination(whereClause: any, sort: any[], offset: number, limit: number) {
+    return await this.formSubmissionRepository.findAndCount({
+      where: whereClause,
+      order: sort?.length === 2 ? { [sort[0]]: sort[1].toUpperCase() } : { createdAt: 'DESC' },
+      skip: offset,
+      take: limit,
+    });
+  }
+
+  private async applyCustomFieldFilters(submissions: FormSubmission[], filters: FormSubmissionFilters, offset: number, limit: number) {
+    if (!filters?.customFieldsFilter || Object.keys(filters.customFieldsFilter).length === 0) {
+      return {
+        filteredSubmissions: submissions,
+        filteredCount: submissions.length
+      };
+    }
+
+    const customFieldFilters = filters.customFieldsFilter;
+    
+    // Get all field definitions first to validate field types
+    const fieldIds = Object.keys(customFieldFilters);
+    
+    // Get field definitions for each field ID
+    const fieldDefinitions: Fields[] = [];
+    for (const fieldId of fieldIds) {
+      try {
+        // Get field definition directly using fieldId
+        const fieldDefinition = await this.fieldsService.getFieldById(fieldId);
         
-        // Get all field definitions first to validate field types
-        const fieldIds = Object.keys(customFieldFilters);
-        const searchDto: FieldsSearchDto = {
-          filters: {
-            fieldIds
-          },
-          limit: fieldIds.length,
-          offset: 0
-        };
-        const fieldDefinitionsResult = await this.fieldsService.searchFields('default', { headers: {} }, searchDto);
-        let fieldDefinitions: Fields[] = [];
-        if (fieldDefinitionsResult instanceof SuccessResponse && 'data' in fieldDefinitionsResult) {
-          fieldDefinitions = fieldDefinitionsResult.data as Fields[];
+        if (!fieldDefinition) {
+          throw new BadRequestException(`Field not found with ID: ${fieldId}`);
         }
+        
+        fieldDefinitions.push(fieldDefinition);
+      } catch (error) {
+        throw new BadRequestException(`Failed to fetch field definition for ${fieldId}: ${error.message}`);
+      }
+    }
 
-        // Create a map of fieldId to field definition
-        const fieldDefinitionMap = new Map(
-          fieldDefinitions.map((field: Fields) => [field.fieldId, field])
-        );
+    if (fieldDefinitions.length === 0) {
+      return {
+        filteredSubmissions: [],
+        filteredCount: 0
+      };
+    }
 
-        // Build query with joins
-        const queryBuilder = this.formSubmissionRepository
-          .createQueryBuilder('fs')
-          .leftJoinAndSelect('field_values', 'fv', 'fv.itemId = fs.itemId')
-          .leftJoinAndSelect('fields', 'f', 'f.fieldId = fv.fieldId')
-          .where(whereClause);
+    // Create a map of fieldId to field definition
+    const fieldDefinitionMap = new Map(
+      fieldDefinitions.map((field: Fields) => [field.fieldId, field])
+    );
 
-        // Add conditions for each custom field filter
-        Object.entries(customFieldFilters).forEach(([fieldId, expectedValue]) => {
-          const fieldDef = fieldDefinitionMap.get(fieldId) as Fields;
-          if (!fieldDef) {
-            throw new BadRequestException(`Invalid field ID: ${fieldId}`);
-          }
+    // Build query with joins
+    const queryBuilder = this.formSubmissionRepository
+      .createQueryBuilder('fs')
+      .leftJoin(FieldValues, 'fv', 'fv.itemId = fs.itemId')
+      .leftJoin(Fields, 'f', 'f.fieldId = fv.fieldId')
+      .select('fs');  // Select all columns from form submission
 
-          const fieldType = fieldDef.type;
-          switch (fieldType) {
-            case FieldType.NUMERIC:
-              queryBuilder.andWhere('fv.fieldId = :fieldId AND CAST(fv.value AS DECIMAL) = :value', {
-                fieldId,
-                value: Number(expectedValue)
-              });
-              break;
-            case FieldType.CALENDAR:
-              queryBuilder.andWhere('fv.fieldId = :fieldId AND fv.value = :value', {
-                fieldId,
-                value: new Date(expectedValue).toISOString()
-              });
-              break;
-            case FieldType.CHECKBOX:
-              queryBuilder.andWhere('fv.fieldId = :fieldId AND fv.value = :value', {
-                fieldId,
-                value: Boolean(expectedValue).toString()
-              });
-              break;
-            case FieldType.DROPDOWN:
-              if (Array.isArray(expectedValue)) {
-                queryBuilder.andWhere('fv.fieldId = :fieldId AND fv.value IN (:...values)', {
-                  fieldId,
-                  values: expectedValue
-                });
-              } else {
-                queryBuilder.andWhere('fv.fieldId = :fieldId AND fv.value = :value', {
-                  fieldId,
-                  value: expectedValue
-                });
-              }
-              break;
-            default:
-              queryBuilder.andWhere('fv.fieldId = :fieldId AND LOWER(fv.value) = LOWER(:value)', {
-                fieldId,
-                value: expectedValue
-              });
-          }
-        });
-
-        // Add sorting and pagination
-        if (sort?.length === 2) {
-          queryBuilder.orderBy(`fs.${sort[0]}`, sort[1].toUpperCase() as 'ASC' | 'DESC');
-        } else {
-          queryBuilder.orderBy('fs.createdAt', 'DESC');
-        }
-
-        queryBuilder
-          .skip(offset)
-          .take(limit);
-
-        // Execute query
-        const [results, total] = await queryBuilder.getManyAndCount();
-
-        // Update filtered results
-        filteredSubmissions = results;
-        filteredCount = total;
+    // Add conditions for each custom field filter
+    Object.entries(customFieldFilters).forEach(([fieldId, expectedValue]) => {
+      const fieldDef = fieldDefinitionMap.get(fieldId);
+      if (!fieldDef) {
+        throw new BadRequestException(`Invalid field ID: ${fieldId}`);
       }
 
-      // Get field values for filtered submissions if includeDisplayValues is true
-      const formSubmissions = await Promise.all(
-        filteredSubmissions.map(async (submission) => {
-          const result: any = {
-            submissionId: submission.submissionId,
-            formId: submission.formId,
-            itemId: submission.itemId,
-            status: submission.status,
-            createdAt: submission.createdAt,
-            updatedAt: submission.updatedAt,
-            createdBy: submission.createdBy,
-            updatedBy: submission.updatedBy,
-          };
+      const fieldType = fieldDef.type;
+      switch (fieldType) {
+        case FieldType.NUMERIC:
+          const numValue = Number(expectedValue);
+          if (isNaN(numValue)) {
+            throw new BadRequestException(`Invalid numeric value for field ${fieldDef.label}`);
+          }
+          // Check numberValue column first, then fall back to value column
+          queryBuilder.andWhere(
+            'fv.fieldId = :fieldId AND (fv.numberValue = :numValue OR CAST(fv.value AS DECIMAL) = :numValue)', 
+            {
+              fieldId,
+              numValue
+            }
+          );
+          break;
 
-          if (includeDisplayValues) {
-            result.customFields = await this.fieldsService.getFieldsAndFieldsValues(
-              submission.itemId
+        case FieldType.CALENDAR:
+          try {
+            if (!expectedValue) {
+              throw new Error('Date value is required');
+            }
+            
+            // Format the date value
+            let dateStr = expectedValue as string;
+            if (dateStr.includes(' ') && !dateStr.includes('T')) {
+              dateStr = dateStr.replace(' ', 'T');
+            }
+            
+            const dateValue = new Date(dateStr);
+            if (isNaN(dateValue.getTime())) {
+              throw new Error('Invalid date format');
+            }
+
+            // Check calendarValue column first, then fall back to value column
+            const formattedDate = dateValue.toISOString().split('T')[0];
+            queryBuilder.andWhere(
+              'fv.fieldId = :fieldId AND (DATE(fv.calendarValue) = DATE(:dateValue::timestamp) OR DATE(fv.value::timestamp) = DATE(:dateValue::timestamp))',
+              {
+                fieldId,
+                dateValue: formattedDate
+              }
+            );
+          } catch (error) {
+            throw new BadRequestException(`Invalid date value for field ${fieldDef.label}: ${error.message}`);
+          }
+          break;
+
+        case FieldType.CHECKBOX:
+          // Check checkboxValue column first, then fall back to value column
+          const boolValue = Boolean(expectedValue);
+          queryBuilder.andWhere(
+            'fv.fieldId = :fieldId AND (fv.checkboxValue = :boolValue OR CAST(fv.value AS BOOLEAN) = :boolValue)',
+            {
+              fieldId,
+              boolValue
+            }
+          );
+          break;
+
+        case FieldType.DROPDOWN:
+          // Check dropdownValue column first, then fall back to value column
+          if (Array.isArray(expectedValue)) {
+            if (expectedValue.length === 0) {
+              throw new BadRequestException(`Empty array value for dropdown field ${fieldDef.label}`);
+            }
+            const values = expectedValue.map(v => v.toString());
+            queryBuilder.andWhere(
+              'fv.fieldId = :fieldId AND (fv.dropdownValue ? :values OR fv.value IN (:...values))',
+              {
+                fieldId,
+                values
+              }
+            );
+          } else {
+            const value = expectedValue.toString();
+            queryBuilder.andWhere(
+              'fv.fieldId = :fieldId AND (fv.dropdownValue ? :value OR fv.value = :value)',
+              {
+                fieldId,
+                value
+              }
             );
           }
+          break;
 
-          return result;
-        })
+        case FieldType.TEXT:
+          // Check textValue column first, then fall back to value column with ILIKE
+          const textSearchValue = expectedValue.toString();
+          queryBuilder.andWhere(
+            'fv.fieldId = :fieldId AND (fv.textValue ILIKE :textSearchValue OR fv.value ILIKE :textSearchValue)',
+            {
+              fieldId,
+              textSearchValue: `%${textSearchValue}%`
+            }
+          );
+          break;
+
+        case FieldType.TEXTAREA:
+          // Check textareaValue column first, then fall back to value column with ILIKE
+          const textareaSearchValue = expectedValue.toString();
+          queryBuilder.andWhere(
+            'fv.fieldId = :fieldId AND (fv.textareaValue ILIKE :textareaSearchValue OR fv.value ILIKE :textareaSearchValue)',
+            {
+              fieldId,
+              textareaSearchValue: `%${textareaSearchValue}%`
+            }
+          );
+          break;
+
+        case FieldType.RADIO:
+          // Check radioValue column first, then fall back to value column
+          const radioValue = expectedValue.toString();
+          queryBuilder.andWhere(
+            'fv.fieldId = :fieldId AND (fv.radioValue = :radioValue OR fv.value = :radioValue)',
+            {
+              fieldId,
+              radioValue
+            }
+          );
+          break;
+
+        default:
+          // For any other type, check value column with case-insensitive comparison
+          queryBuilder.andWhere(
+            'fv.fieldId = :fieldId AND LOWER(fv.value) = LOWER(:defaultValue)',
+            {
+              fieldId,
+              defaultValue: expectedValue.toString()
+            }
+          );
+      }
+    });
+
+    // Add sorting and pagination
+    queryBuilder
+      .skip(offset)
+      .take(limit);
+
+    // Execute query
+    const [results, total] = await queryBuilder.getManyAndCount();
+
+    return {
+      filteredSubmissions: results,
+      filteredCount: total
+    };
+  }
+
+  private async formatSubmissionResponse(submissions: FormSubmission[], includeDisplayValues: boolean, totalCount: number, filteredCount: number) {
+    const formSubmissions = await Promise.all(
+      submissions.map(async (submission) => {
+        const result: any = {
+          submissionId: submission.submissionId,
+          formId: submission.formId,
+          itemId: submission.itemId,
+          status: submission.status,
+          createdAt: submission.createdAt,
+          updatedAt: submission.updatedAt,
+          createdBy: submission.createdBy,
+          updatedBy: submission.updatedBy,
+        };
+
+        if (includeDisplayValues) {
+          result.customFields = await this.fieldsService.getFieldsAndFieldsValues(
+            submission.itemId
+          );
+        }
+
+        return result;
+      })
+    );
+
+    return {
+      id: 'api.form.submission.search',
+      ver: '1.0',
+      ts: new Date().toISOString(),
+      params: {
+        resmsgid: '',
+        status: 'successful',
+        err: null,
+        errmsg: null,
+        successmessage: 'Form submissions retrieved successfully',
+      },
+      responseCode: HttpStatus.OK,
+      result: {
+        totalCount,
+        count: filteredCount,
+        formSubmissions,
+      },
+    };
+  }
+
+  async findAll(formSubmissionSearchDto: FormSubmissionSearchDto) {
+    try {
+      let { limit, offset, filters, sort, includeDisplayValues } = formSubmissionSearchDto;
+
+      // Convert limit and offset to numbers and set default values
+      offset = Number(offset) || 0;
+      limit = Number(limit) || 10;
+
+      // Validate limit and offset
+      if (isNaN(limit) || isNaN(offset) || limit < 0 || offset < 0) {
+        throw new BadRequestException('Invalid limit or offset value. Must be non-negative numbers.');
+      }
+
+      // Get all valid form submission fields for filtering
+      const formSubmissionKeys = this.formSubmissionRepository.metadata.columns.map(
+        (column) => column.propertyName
       );
 
-      // Return response in standard format
-      return {
-        id: 'api.form.submission.search',
-        ver: '1.0',
-        ts: new Date().toISOString(),
-        params: {
-          resmsgid: '',
-          status: 'successful',
-          err: null,
-          errmsg: null,
-          successmessage: 'Form submissions retrieved successfully',
-        },
-        responseCode: HttpStatus.OK,
-        result: {
-          totalCount: totalCount,
-          count: filteredCount,
-          formSubmissions,
-        },
-      };
+      // Build where clause
+      const whereClause = await this.buildWhereClause(filters, formSubmissionKeys);
+
+      // Get form submissions with pagination
+      const [submissions, totalCount] = await this.fetchSubmissionsWithPagination(
+        whereClause,
+        sort,
+        offset,
+        limit
+      );
+
+      // Apply custom field filters if any
+      const { filteredSubmissions, filteredCount } = await this.applyCustomFieldFilters(
+        submissions,
+        filters,
+        offset,
+        limit
+      );
+
+      // Format and return response
+      return await this.formatSubmissionResponse(
+        filteredSubmissions,
+        includeDisplayValues,
+        totalCount,
+        filteredCount
+      );
     } catch (error) {
       console.error('Error in findAll:', error);
       return {
@@ -510,15 +683,10 @@ export class FormSubmissionService {
           resmsgid: '',
           status: 'failed',
           err: 'SEARCH_FAILED',
-          errmsg:
-            error.message ||
-            'An unexpected error occurred while searching form submissions',
+          errmsg: error.message || 'An unexpected error occurred while searching form submissions',
           successmessage: null,
         },
-        responseCode:
-          error instanceof BadRequestException
-            ? HttpStatus.BAD_REQUEST
-            : HttpStatus.INTERNAL_SERVER_ERROR,
+        responseCode: error instanceof BadRequestException ? HttpStatus.BAD_REQUEST : HttpStatus.INTERNAL_SERVER_ERROR,
         result: null,
       };
     }
@@ -545,11 +713,11 @@ export class FormSubmissionService {
       }
 
       // Find the form submission
-      const submission = await this.formSubmissionRepository.findOne({
-        where: { submissionId },
-      });
+    const submission = await this.formSubmissionRepository.findOne({
+      where: { submissionId },
+    });
 
-      if (!submission) {
+    if (!submission) {
         return {
           id: 'api.form.submission.get',
           ver: '1.0',
@@ -642,11 +810,11 @@ export class FormSubmissionService {
       }
 
       // Find the existing submission
-      const submission = await this.formSubmissionRepository.findOne({
-        where: { submissionId },
-      });
+    const submission = await this.formSubmissionRepository.findOne({
+      where: { submissionId },
+    });
 
-      if (!submission) {
+    if (!submission) {
         throw new BadRequestException(`Form submission ID ${submissionId} not found`);
       }
 
@@ -683,37 +851,12 @@ export class FormSubmissionService {
         try {
           const fieldValuePromises = updateFormSubmissionDto.customFields.map(async (fieldValue) => {
             try {
-              const existingFieldValue = await this.fieldValuesRepository
+              const result = await this.updateFieldValues(fieldValue, userId, await this.fieldValuesRepository
                 .createQueryBuilder('fieldValue')
                 .where('fieldValue.fieldId = :fieldId', { fieldId: fieldValue.fieldId })
-                .andWhere('fieldValue.itemId = :itemId', { itemId: userId }) // Use userId here
-                .getOne();
-
-              if (existingFieldValue) {
-                const result = await this.fieldsService.updateFieldValues(
-                  existingFieldValue.fieldValuesId,
-                  new FieldValuesDto({
-                    fieldId: fieldValue.fieldId,
-                    value: fieldValue.value,
-                    itemId: userId,
-                    updatedBy: userId,
-                    createdBy: existingFieldValue.createdBy
-                  })
-                );
-                return result instanceof ErrorResponseTypeOrm ? null : result;
-              } else {
-                const result = await this.fieldsService.createFieldValues(
-                  null,
-                  new FieldValuesDto({
-                    fieldId: fieldValue.fieldId,
-                    value: fieldValue.value,
-                    itemId: userId,
-                    createdBy: userId,
-                    updatedBy: userId
-                  })
-                );
-                return (result instanceof SuccessResponse && 'data' in result) ? result.data : null;
-              }
+                .andWhere('fieldValue.itemId = :itemId', { itemId: userId })
+                .getOne());
+              return result;
             } catch (error) {
               return null;
             }
@@ -836,7 +979,7 @@ export class FormSubmissionService {
             } else {
               // Get the updated cohort member details
               const updatedMember = await this.cohortMembersService.cohortUserMapping(
-                submission.itemId,
+        submission.itemId,
                 updateFormSubmissionDto.cohortMember.cohortId,
                 updateFormSubmissionDto.cohortMember.cohortAcademicYearId
               );
@@ -922,11 +1065,11 @@ export class FormSubmissionService {
         };
       }
 
-      const submission = await this.formSubmissionRepository.findOne({
-        where: { submissionId },
-      });
+    const submission = await this.formSubmissionRepository.findOne({
+      where: { submissionId },
+    });
 
-      if (!submission) {
+    if (!submission) {
         return {
           id: 'api.form.submission.delete',
           ver: '1.0',
@@ -948,8 +1091,8 @@ export class FormSubmissionService {
         // Permanent delete
         result = await this.formSubmissionRepository.remove(submission);
       } else {
-        // Soft delete - update status to ARCHIVED
-        submission.status = FormSubmissionStatus.ARCHIVED;
+    // Soft delete - update status to ARCHIVED
+    submission.status = FormSubmissionStatus.ARCHIVED;
         result = await this.formSubmissionRepository.save(submission);
       }
 
@@ -1002,5 +1145,40 @@ export class FormSubmissionService {
 
   private createFieldValuesSearchDto(filters: any): FieldValuesSearchDto {
     return new FieldValuesSearchDto({ filters });
+  }
+
+  private async updateFieldValues(fieldValue: any, userId: string, existingFieldValue: any) {
+    try {
+      if (existingFieldValue) {
+        const result = await this.fieldsService.updateFieldValues(
+          existingFieldValue.fieldValuesId,
+          new FieldValuesDto({
+            fieldId: fieldValue.fieldId,
+            value: fieldValue.value,
+            itemId: userId,
+            updatedBy: userId,
+            createdBy: existingFieldValue.createdBy
+          })
+        );
+        return result instanceof ErrorResponseTypeOrm ? null : result;
+      } else {
+        const result = await this.fieldsService.createFieldValues(
+          null,
+          new FieldValuesDto({
+            fieldId: fieldValue.fieldId,
+            value: fieldValue.value,
+            itemId: userId,
+            createdBy: userId,
+            updatedBy: userId
+          })
+        );
+        if (result instanceof ErrorResponseTypeOrm) {
+          return null;
+        }
+        return result.data;
+      }
+    } catch (error) {
+      return null;
+    }
   }
 }
