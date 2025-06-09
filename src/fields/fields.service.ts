@@ -297,12 +297,75 @@ export class FieldsService {
     }
   }
 
-  public async getFieldsAndFieldsValues(cohortId: string) {
-    const query = `SELECT FV."value",FV."itemId", FV."fieldId", F."name" AS fieldname, F."label", F."context",F."type", F."state", F."contextType", F."fieldParams" FROM public."FieldValues" FV 
-        LEFT JOIN public."Fields" F
-        ON FV."fieldId" = F."fieldId" where FV."itemId" =$1`;
-    const results = await this.fieldsValuesRepository.query(query, [cohortId]);
-    return results;
+  public async getFieldsAndFieldsValues(itemId: string) {
+    const query = `
+      SELECT 
+        FV."fieldValuesId",
+        FV."value",
+        FV."textValue",
+        FV."numberValue",
+        FV."calendarValue",
+        FV."dropdownValue",
+        FV."radioValue",
+        FV."checkboxValue",
+        FV."textareaValue",
+        FV."itemId", 
+        FV."fieldId",
+        F."name" AS fieldname,
+        F."label",
+        F."context",
+        F."type",
+        F."state",
+        F."contextType",
+        F."fieldParams"
+      FROM public."FieldValues" FV 
+      LEFT JOIN public."Fields" F ON FV."fieldId" = F."fieldId" 
+      WHERE FV."itemId" = $1`;
+
+    const results = await this.fieldsValuesRepository.query(query, [itemId]);
+
+    // Transform results to use typed values with fallback to generic value
+    return results.map(result => {
+      let typedValue;
+      switch (result.type) {
+        case 'text':
+          typedValue = result.textValue || result.value;
+          break;
+        case 'numeric':
+          typedValue = result.numberValue || result.value;
+          break;
+        case 'calendar':
+          typedValue = result.calendarValue || result.value;
+          break;
+        case 'drop_down':
+          typedValue = result.dropdownValue || result.value;
+          break;
+        case 'radio':
+          typedValue = result.radioValue || result.value;
+          break;
+        case 'checkbox':
+          typedValue = result.checkboxValue || result.value;
+          break;
+        case 'textarea':
+          typedValue = result.textareaValue || result.value;
+          break;
+        default:
+          typedValue = result.value;
+      }
+
+      return {
+        fieldValuesId: result.fieldValuesId,
+        fieldId: result.fieldId,
+        fieldname: result.fieldname,
+        label: result.label,
+        type: result.type,
+        value: typedValue,
+        context: result.context,
+        state: result.state,
+        contextType: result.contextType,
+        fieldParams: result.fieldParams
+      };
+    });
   }
 
   public async mappedResponse(result: any) {

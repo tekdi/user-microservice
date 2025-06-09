@@ -13,12 +13,6 @@ import { Fields } from './fields.entity';
 /**
  * Entity for storing field values with type-specific columns
  */
-
-export enum FieldValueStatus {
-  ACTIVE = 'active',
-  INACTIVE = 'inactive',
-  ARCHIVED = 'archived',
-}
 @Entity('FieldValues', { schema: 'public' })
 export class FieldValues {
   @PrimaryGeneratedColumn('uuid', { name: 'fieldValuesId' })
@@ -61,14 +55,6 @@ export class FieldValues {
 
   @Column({ name: 'fileValue', type: 'varchar', nullable: true })
   fileValue: string;
-
-  @Column({
-    type: 'enum',
-    enum: FieldValueStatus,
-    default: FieldValueStatus.ACTIVE,
-    nullable: false,
-  })
-  status: FieldValueStatus;
 
   @CreateDateColumn({
     type: 'timestamptz',
