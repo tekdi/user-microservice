@@ -1155,7 +1155,7 @@ export class PostgresUserService implements IServicelocator {
 
       // Check if userId exists in Keycloak
       const userIdExistsInKeycloak = await checkIfUsernameExistsInKeycloak(
-        userCreateSsoDto.userId,
+        userCreateSsoDto.email,
         token
       );
 
