@@ -390,7 +390,6 @@ export class PostgresCohortService {
         cohortCreateDto.customFields.length > 0
       ) {
         const cohortId = response?.cohortId;
-        console.log('cohortId: ', response.cohortId);
         if (cohortCreateDto.customFields.length > 0) {
           for (const fieldValues of cohortCreateDto.customFields) {
             const fieldId = fieldValues['fieldId'];
