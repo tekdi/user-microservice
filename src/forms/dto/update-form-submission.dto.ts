@@ -5,15 +5,11 @@ import {
   IsEnum,
   ValidateNested,
   IsArray,
-  IsString,
-  ValidateIf,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { FormSubmissionStatus } from '../entities/form-submission.entity';
 import { FieldValueDto } from './create-form-submission.dto';
-import { MemberStatus } from '../../cohortMembers/entities/cohort-member.entity';
 import { FieldValuesOptionDto } from '../../user/dto/user-create.dto';
-import { Expose } from 'class-transformer';
 
 export class FormSubmissionUpdateDto {
   @ApiProperty({
@@ -57,102 +53,6 @@ export class FormSubmissionUpdateDto {
   updatedBy?: string;
 }
 
-export class FieldValueUpdateDto extends FieldValueDto {
-  @ApiProperty({
-    type: String,
-    description: 'The ID of the field value to update',
-  })
-  @IsUUID()
-  @IsOptional()
-  fieldValueId?: string;
-}
-
-export class CohortMemberUpdateDto {
-  @Expose()
-  tenantId?: string;
-
-  @ApiProperty({
-    type: String,
-    description: 'The cohort membership ID',
-  })
-  @IsUUID()
-  @IsOptional()
-  cohortMembershipId?: string;
-
-  @ApiProperty({
-    type: String,
-    description: 'The cohort ID',
-  })
-  @IsUUID()
-  @IsOptional()
-  cohortId?: string;
-
-  @ApiProperty({
-    type: String,
-    description: 'The academic year ID for cohort member',
-  })
-  @IsUUID()
-  @IsOptional()
-  cohortAcademicYearId?: string;
-
-  @ApiProperty({
-    type: String,
-    description: 'The user ID',
-  })
-  @IsUUID()
-  @IsOptional()
-  userId?: string;
-
-  @ApiProperty({
-    enum: MemberStatus,
-    description: 'The status of the cohort member',
-  })
-  @IsEnum(MemberStatus)
-  @IsOptional()
-  status?: MemberStatus;
-
-  @ApiProperty({
-    type: String,
-    description: 'The status change reason (required when status is DROPOUT)',
-  })
-  @ValidateIf((o) => o.status === MemberStatus.DROPOUT)
-  @IsString()
-  statusReason?: string;
-
-  @ApiProperty({
-    type: [FieldValuesOptionDto],
-    description: 'Array of custom fields',
-  })
-  @ValidateNested({ each: true })
-  @Type(() => FieldValuesOptionDto)
-  @IsOptional()
-  customFields?: FieldValuesOptionDto[];
-
-  @Expose()
-  @IsOptional()
-  createdAt?: string;
-
-  @Expose()
-  @IsOptional()
-  updatedAt?: string;
-
-  @ApiProperty({
-    type: String,
-    description: 'The user who created the cohort member',
-  })
-  @Expose()
-  @IsOptional()
-  createdBy?: string;
-
-  @ApiProperty({
-    type: String,
-    description: 'The user who updated the cohort member',
-  })
-  @Expose()
-  @IsOptional()
-  updatedBy?: string;
-}
-
 export class UpdateFormSubmissionDto {
   @ApiProperty({
     type: FormSubmissionUpdateDto,
@@ -172,15 +72,6 @@ export class UpdateFormSubmissionDto {
   @IsOptional()
   @IsArray()
   customFields?: FieldValuesOptionDto[];
-
-  @ApiProperty({
-    type: CohortMemberUpdateDto,
-    description: 'Cohort member details to update',
-  })
-  @ValidateNested()
-  @Type(() => CohortMemberUpdateDto)
-  @IsOptional()
-  cohortMember?: CohortMemberUpdateDto;
 
   @ApiProperty({
     type: String,

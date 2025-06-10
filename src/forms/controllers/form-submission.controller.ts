@@ -65,23 +65,10 @@ export class FormSubmissionController {
         throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
       }
 
-      // Only validate cohortAcademicYearId if cohortMember object is present
-      if (createFormSubmissionDto.cohortMember) {
-        if (
-          !createFormSubmissionDto.cohortAcademicYearId ||
-          !isUUID(createFormSubmissionDto.cohortAcademicYearId)
-        ) {
-          throw new BadRequestException(
-            'cohortAcademicYearId is required in the request body when creating a cohort member'
-          );
-        }
-      }
-
       createFormSubmissionDto.tenantId = tenantId;
       return await this.formSubmissionService.create(
         createFormSubmissionDto,
-        response,
-        createFormSubmissionDto.cohortAcademicYearId
+        response
       );
     } catch (error) {
       return APIResponse.error(
