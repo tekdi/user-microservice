@@ -26,14 +26,7 @@ import { PostgresCohortMembersService } from './cohortMembers-adapter';
 import { LoggerUtil } from 'src/common/logger/LoggerUtil';
 import { User } from 'src/user/entities/user-entity';
 import { FieldValueConverter } from 'src/utils/field-value-converter';
-import {
-  MoreThan,
-  LessThan,
-  LessThanOrEqual,
-  Equal,
-  MoreThanOrEqual,
-  Not,
-} from 'typeorm';
+
 @Injectable()
 export class PostgresCohortService {
   constructor(
