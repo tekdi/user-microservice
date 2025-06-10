@@ -718,11 +718,11 @@ export class FormSubmissionService {
       }
 
       // Find the existing submission
-      const submission = await this.formSubmissionRepository.findOne({
-        where: { submissionId },
-      });
+    const submission = await this.formSubmissionRepository.findOne({
+      where: { submissionId },
+    });
 
-      if (!submission) {
+    if (!submission) {
         throw new BadRequestException(`Form submission ID ${submissionId} not found`);
       }
 
