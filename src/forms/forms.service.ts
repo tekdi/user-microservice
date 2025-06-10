@@ -10,6 +10,9 @@ import { FormCreateDto } from './dto/form-create.dto';
 import { APIID } from '@utils/api-id.config';
 import { API_RESPONSES } from '@utils/response.messages';
 import { FormStatus } from './dto/form-create.dto';
+import { FieldStatus } from '../fields/entities/fields.entity';
+import { FieldsUpdateDto } from '../fields/dto/fields-update.dto';
+import { In } from 'typeorm';
 
 @Injectable()
 export class FormsService {
@@ -455,7 +458,7 @@ export class FormsService {
   public async updateForm(
     request,
     formId: string,
-    formUpdateDto: FormCreateDto, // or FormUpdateDto
+    formUpdateDto: FormCreateDto,
     response
   ) {
     const apiId = APIID.FORM_UPDATE;
@@ -484,6 +487,7 @@ export class FormsService {
         formUpdateDto.context = formUpdateDto.context.toUpperCase();
       if (formUpdateDto.title)
         formUpdateDto.title = formUpdateDto.title.toUpperCase();
+
       // Normalize and validate status enum
       if (formUpdateDto.status) {
         const normalizedStatus = formUpdateDto.status.toString().toLowerCase();
@@ -491,6 +495,76 @@ export class FormsService {
           Object.values(FormStatus).includes(normalizedStatus as FormStatus)
         ) {
           formUpdateDto.status = normalizedStatus as FormStatus;
+
+          // If status is being changed to archived, archive all associated fields
+          if (normalizedStatus === FormStatus.ARCHIVED) {
+            try {
+              // Check if form has fields data
+              if (!existingForm.fields) {
+                // Continue with form archival even if no fields found
+              } else {
+                // Function to recursively find all fieldIds in an object
+                const findFieldIds = (obj: any): string[] => {
+                  const fieldIds: string[] = [];
+                  
+                  if (!obj) return fieldIds;
+
+                  if (typeof obj === 'object') {
+                    // If object has fieldId property, add it
+                    if (obj.fieldId) {
+                      fieldIds.push(obj.fieldId);
+                    }
+                    
+                    // Recursively search all object values
+                    Object.values(obj).forEach(value => {
+                      if (typeof value === 'object') {
+                        fieldIds.push(...findFieldIds(value));
+                      }
+                    });
+                  }
+                  
+                  return fieldIds;
+                };
+
+                // Get all fieldIds from the fields JSON
+                const fieldIds = findFieldIds(existingForm.fields);
+                
+                // Remove duplicates and filter out any undefined/null values
+                const uniqueFieldIds = [...new Set(fieldIds)].filter(Boolean);
+
+                if (uniqueFieldIds.length > 0) {
+                  // Archive all fields in a single operation
+                  try {
+                    await this.fieldsService.archiveFieldsByIds(uniqueFieldIds, decoded?.sub);
+                  } catch (error) {
+                    console.error('Error archiving fields:', error);
+                    // Continue with form archival even if field archival fails
+                  }
+                }
+              }
+
+              // Proceed with form update regardless of field archival status
+              const updatedForm = Object.assign(existingForm, formUpdateDto);
+              const saved = await this.formRepository.save(updatedForm);
+
+              return APIResponse.success(
+                response,
+                apiId,
+                saved,
+                HttpStatus.OK,
+                API_RESPONSES.FORM_UPDATED_SUCCESSFULLY
+              );
+
+            } catch (error) {
+              return APIResponse.error(
+                response,
+                apiId,
+                'Error during form archival process',
+                error.message || 'Internal server error',
+                HttpStatus.INTERNAL_SERVER_ERROR
+              );
+            }
+          }
         } else {
           return APIResponse.error(
             response,
@@ -514,6 +588,7 @@ export class FormsService {
           HttpStatus.BAD_REQUEST
         );
       }
+
       // Inside your updateForm method, after status handling:
       if (formUpdateDto.rules) {
         try {
@@ -534,7 +609,6 @@ export class FormsService {
       }
 
       const updatedForm = Object.assign(existingForm, formUpdateDto);
-
       const saved = await this.formRepository.save(updatedForm);
 
       return APIResponse.success(

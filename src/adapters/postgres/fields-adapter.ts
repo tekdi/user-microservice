@@ -1976,4 +1976,21 @@ export class PostgresFieldsService implements IServicelocatorfields {
       },
     });
   }
+
+  async archiveFieldsByIds(fieldIds: string[], updatedBy: string) {
+    try {
+      const result = await this.fieldsRepository.update(
+        {
+          fieldId: In(fieldIds)
+        },
+        {
+          status: FieldStatus.ARCHIVED,
+          updatedBy
+        }
+      );
+      return result;
+    } catch (error) {
+      throw new Error(`Failed to archive fields: ${error.message}`);
+    }
+  }
 }
