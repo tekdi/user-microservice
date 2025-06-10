@@ -806,6 +806,17 @@ export class PostgresCohortService {
                 ) {
                   const operator = Object.keys(value)[0];
                   const val = value[operator];
+                  const validOperators = ['lt', 'lte', 'gt', 'gte', 'eq', 'ne'];
+                  if (!validOperators.includes(operator)) {
+                    // Skip invalid operators or throw an error
+                    return APIResponse.error(
+                      response,
+                      apiId,
+                      `Invalid operator: ${operator}`,
+                      `Invalid filter operator`,
+                      HttpStatus.BAD_REQUEST
+                    );
+                  }
                   searchCustomFields[key] = {
                     value: val, // e.g., "2024-01-01"
                     type: null,
