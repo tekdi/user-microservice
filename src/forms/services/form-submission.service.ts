@@ -69,7 +69,7 @@ export class FormSubmissionService {
     private formSubmissionRepository: Repository<FormSubmission>,
     @InjectRepository(FieldValues)
     private fieldValuesRepository: Repository<FieldValues>,
-    private fieldsService: FieldsService,
+    private fieldsService: FieldsService
   ) {}
 
   async create(
@@ -99,7 +99,7 @@ export class FormSubmissionService {
         formId: formSubmission.formId,
         itemId: formSubmission.itemId,
         status: formSubmission.status,
-        createdBy: formSubmission.createdBy
+        createdBy: formSubmission.createdBy,
       });
 
       const savedSubmission = await this.formSubmissionRepository.save(
@@ -140,12 +140,12 @@ export class FormSubmissionService {
           status: 'successful',
           err: null,
           errmsg: null,
-          successmessage: 'Form saved successfully'
+          successmessage: 'Form saved successfully',
         },
         responseCode: HttpStatus.CREATED,
         result: {
           formSubmission: savedSubmission,
-          customFields
+          customFields,
         },
       };
 
@@ -161,7 +161,10 @@ export class FormSubmissionService {
     }
   }
 
-  private async buildWhereClause(filters: FormSubmissionFilters, formSubmissionKeys: string[]) {
+  private async buildWhereClause(
+    filters: FormSubmissionFilters,
+    formSubmissionKeys: string[]
+  ) {
     const whereClause: any = {};
     if (!filters || Object.keys(filters).length === 0) {
       return whereClause;
@@ -179,13 +182,19 @@ export class FormSubmissionService {
       // Handle different types of filters
       if (key === 'status') {
         if (Array.isArray(value)) {
-          whereClause[key] = In(value.map((status: string) => status.toLowerCase()));
+          whereClause[key] = In(
+            value.map((status: string) => status.toLowerCase())
+          );
         } else if (typeof value === 'string') {
           whereClause[key] = value.toLowerCase();
         }
       }
       // Handle UUID fields (exact match)
-      else if (['submissionId', 'formId', 'itemId', 'createdBy', 'updatedBy'].includes(key)) {
+      else if (
+        ['submissionId', 'formId', 'itemId', 'createdBy', 'updatedBy'].includes(
+          key
+        )
+      ) {
         if (value && !isUUID(value as string)) {
           throw new BadRequestException(`Invalid UUID format for ${key}`);
         }
@@ -193,18 +202,25 @@ export class FormSubmissionService {
       }
       // Handle date fields
       else if (['createdAt', 'updatedAt'].includes(key)) {
-        if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+        if (
+          typeof value === 'object' &&
+          value !== null &&
+          !Array.isArray(value)
+        ) {
           const dateRange = value as DateRange;
-          if (dateRange.start && dateRange.end && 
-              typeof dateRange.start === 'string' && 
-              typeof dateRange.end === 'string') {
+          if (
+            dateRange.start &&
+            dateRange.end &&
+            typeof dateRange.start === 'string' &&
+            typeof dateRange.end === 'string'
+          ) {
             const startDate = new Date(dateRange.start);
             const endDate = new Date(dateRange.end);
-            
+
             if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
               throw new BadRequestException(`Invalid date format for ${key}`);
             }
-            
+
             whereClause[key] = Between(startDate, endDate);
           }
         } else if (typeof value === 'string') {
@@ -224,49 +240,67 @@ export class FormSubmissionService {
     return whereClause;
   }
 
-  private async fetchSubmissionsWithPagination(whereClause: any, sort: any[], offset: number, limit: number) {
+  private async fetchSubmissionsWithPagination(
+    whereClause: any,
+    sort: any[],
+    offset: number,
+    limit: number
+  ) {
     return await this.formSubmissionRepository.findAndCount({
       where: whereClause,
-      order: sort?.length === 2 ? { [sort[0]]: sort[1].toUpperCase() } : { createdAt: 'DESC' },
+      order:
+        sort?.length === 2
+          ? { [sort[0]]: sort[1].toUpperCase() }
+          : { createdAt: 'DESC' },
       skip: offset,
       take: limit,
     });
   }
 
-  private async applyCustomFieldFilters(submissions: FormSubmission[], filters: FormSubmissionFilters, offset: number, limit: number) {
-    if (!filters?.customFieldsFilter || Object.keys(filters.customFieldsFilter).length === 0) {
+  private async applyCustomFieldFilters(
+    submissions: FormSubmission[],
+    filters: FormSubmissionFilters,
+    offset: number,
+    limit: number
+  ) {
+    if (
+      !filters?.customFieldsFilter ||
+      Object.keys(filters.customFieldsFilter).length === 0
+    ) {
       return {
         filteredSubmissions: submissions,
-        filteredCount: submissions.length
+        filteredCount: submissions.length,
       };
     }
 
     const customFieldFilters = filters.customFieldsFilter;
-    
+
     // Get all field definitions first to validate field types
     const fieldIds = Object.keys(customFieldFilters);
-    
+
     // Get field definitions for each field ID
     const fieldDefinitions: Fields[] = [];
     for (const fieldId of fieldIds) {
       try {
         // Get field definition directly using fieldId
         const fieldDefinition = await this.fieldsService.getFieldById(fieldId);
-        
+
         if (!fieldDefinition) {
           throw new BadRequestException(`Field not found with ID: ${fieldId}`);
         }
-        
+
         fieldDefinitions.push(fieldDefinition);
       } catch (error) {
-        throw new BadRequestException(`Failed to fetch field definition for ${fieldId}: ${error.message}`);
+        throw new BadRequestException(
+          `Failed to fetch field definition for ${fieldId}: ${error.message}`
+        );
       }
     }
 
     if (fieldDefinitions.length === 0) {
       return {
         filteredSubmissions: [],
-        filteredCount: 0
+        filteredCount: 0,
       };
     }
 
@@ -280,7 +314,7 @@ export class FormSubmissionService {
       .createQueryBuilder('fs')
       .leftJoin(FieldValues, 'fv', 'fv.itemId = fs.itemId')
       .leftJoin(Fields, 'f', 'f.fieldId = fv.fieldId')
-      .select('fs');  // Select all columns from form submission
+      .select('fs'); // Select all columns from form submission
 
     // Add conditions for each custom field filter
     Object.entries(customFieldFilters).forEach(([fieldId, expectedValue]) => {
@@ -294,14 +328,16 @@ export class FormSubmissionService {
         case FieldType.NUMERIC:
           const numValue = Number(expectedValue);
           if (isNaN(numValue)) {
-            throw new BadRequestException(`Invalid numeric value for field ${fieldDef.label}`);
+            throw new BadRequestException(
+              `Invalid numeric value for field ${fieldDef.label}`
+            );
           }
           // Check numberValue column first, then fall back to value column
           queryBuilder.andWhere(
-            'fv.fieldId = :fieldId AND (fv.numberValue = :numValue OR CAST(fv.value AS DECIMAL) = :numValue)', 
+            'fv.fieldId = :fieldId AND (fv.numberValue = :numValue OR CAST(fv.value AS DECIMAL) = :numValue)',
             {
               fieldId,
-              numValue
+              numValue,
             }
           );
           break;
@@ -311,13 +347,13 @@ export class FormSubmissionService {
             if (!expectedValue) {
               throw new Error('Date value is required');
             }
-            
+
             // Format the date value
             let dateStr = expectedValue as string;
             if (dateStr.includes(' ') && !dateStr.includes('T')) {
               dateStr = dateStr.replace(' ', 'T');
             }
-            
+
             const dateValue = new Date(dateStr);
             if (isNaN(dateValue.getTime())) {
               throw new Error('Invalid date format');
@@ -329,11 +365,13 @@ export class FormSubmissionService {
               'fv.fieldId = :fieldId AND (DATE(fv.calendarValue) = DATE(:dateValue::timestamp) OR DATE(fv.value::timestamp) = DATE(:dateValue::timestamp))',
               {
                 fieldId,
-                dateValue: formattedDate
+                dateValue: formattedDate,
               }
             );
           } catch (error) {
-            throw new BadRequestException(`Invalid date value for field ${fieldDef.label}: ${error.message}`);
+            throw new BadRequestException(
+              `Invalid date value for field ${fieldDef.label}: ${error.message}`
+            );
           }
           break;
 
@@ -344,7 +382,7 @@ export class FormSubmissionService {
             'fv.fieldId = :fieldId AND (fv.checkboxValue = :boolValue OR CAST(fv.value AS BOOLEAN) = :boolValue)',
             {
               fieldId,
-              boolValue
+              boolValue,
             }
           );
           break;
@@ -353,14 +391,16 @@ export class FormSubmissionService {
           // Check dropdownValue column first, then fall back to value column
           if (Array.isArray(expectedValue)) {
             if (expectedValue.length === 0) {
-              throw new BadRequestException(`Empty array value for dropdown field ${fieldDef.label}`);
+              throw new BadRequestException(
+                `Empty array value for dropdown field ${fieldDef.label}`
+              );
             }
-            const values = expectedValue.map(v => v.toString());
+            const values = expectedValue.map((v) => v.toString());
             queryBuilder.andWhere(
               'fv.fieldId = :fieldId AND (fv.dropdownValue ? :values OR fv.value IN (:...values))',
               {
                 fieldId,
-                values
+                values,
               }
             );
           } else {
@@ -369,46 +409,50 @@ export class FormSubmissionService {
               'fv.fieldId = :fieldId AND (fv.dropdownValue ? :value OR fv.value = :value)',
               {
                 fieldId,
-                value
+                value,
               }
             );
           }
           break;
 
         case FieldType.TEXT:
-          // Check textValue column first, then fall back to value column with ILIKE
-          const textSearchValue = expectedValue.toString();
-          queryBuilder.andWhere(
-            'fv.fieldId = :fieldId AND (fv.textValue ILIKE :textSearchValue OR fv.value ILIKE :textSearchValue)',
-            {
-              fieldId,
-              textSearchValue: `%${textSearchValue}%`
-            }
-          );
+          {
+            // Check textValue column first, then fall back to value column with ILIKE
+            const textSearchValue = expectedValue.toString();
+            queryBuilder.andWhere(
+              'fv.fieldId = :fieldId AND (fv.textValue ILIKE :textSearchValue OR fv.value ILIKE :textSearchValue)',
+              {
+                fieldId,
+                textSearchValue: `%${textSearchValue}%`,
+              }
+            );
+          }
           break;
 
-        case FieldType.TEXTAREA:
+        case FieldType.TEXTAREA: {
           // Check textareaValue column first, then fall back to value column with ILIKE
           const textareaSearchValue = expectedValue.toString();
           queryBuilder.andWhere(
             'fv.fieldId = :fieldId AND (fv.textareaValue ILIKE :textareaSearchValue OR fv.value ILIKE :textareaSearchValue)',
             {
               fieldId,
-              textareaSearchValue: `%${textareaSearchValue}%`
+              textareaSearchValue: `%${textareaSearchValue}%`,
             }
           );
           break;
-
+        }
         case FieldType.RADIO:
-          // Check radioValue column first, then fall back to value column
-          const radioValue = expectedValue.toString();
-          queryBuilder.andWhere(
-            'fv.fieldId = :fieldId AND (fv.radioValue = :radioValue OR fv.value = :radioValue)',
-            {
-              fieldId,
-              radioValue
-            }
-          );
+          {
+            // Check radioValue column first, then fall back to value column
+            const radioValue = expectedValue.toString();
+            queryBuilder.andWhere(
+              'fv.fieldId = :fieldId AND (fv.radioValue = :radioValue OR fv.value = :radioValue)',
+              {
+                fieldId,
+                radioValue,
+              }
+            );
+          }
           break;
 
         default:
@@ -417,27 +461,30 @@ export class FormSubmissionService {
             'fv.fieldId = :fieldId AND LOWER(fv.value) = LOWER(:defaultValue)',
             {
               fieldId,
-              defaultValue: expectedValue.toString()
+              defaultValue: expectedValue.toString(),
             }
           );
       }
     });
 
     // Add sorting and pagination
-    queryBuilder
-      .skip(offset)
-      .take(limit);
+    queryBuilder.skip(offset).take(limit);
 
     // Execute query
     const [results, total] = await queryBuilder.getManyAndCount();
 
     return {
       filteredSubmissions: results,
-      filteredCount: total
+      filteredCount: total,
     };
   }
 
-  private async formatSubmissionResponse(submissions: FormSubmission[], includeDisplayValues: boolean, totalCount: number, filteredCount: number) {
+  private async formatSubmissionResponse(
+    submissions: FormSubmission[],
+    includeDisplayValues: boolean,
+    totalCount: number,
+    filteredCount: number
+  ) {
     const formSubmissions = await Promise.all(
       submissions.map(async (submission) => {
         const result: any = {
@@ -452,9 +499,10 @@ export class FormSubmissionService {
         };
 
         if (includeDisplayValues) {
-          result.customFields = await this.fieldsService.getFieldsAndFieldsValues(
-            submission.itemId
-          );
+          result.customFields =
+            await this.fieldsService.getFieldsAndFieldsValues(
+              submission.itemId
+            );
         }
 
         return result;
@@ -483,7 +531,8 @@ export class FormSubmissionService {
 
   async findAll(formSubmissionSearchDto: FormSubmissionSearchDto) {
     try {
-      let { limit, offset, filters, sort, includeDisplayValues } = formSubmissionSearchDto;
+      let { limit, offset, filters, sort, includeDisplayValues } =
+        formSubmissionSearchDto;
 
       // Convert limit and offset to numbers and set default values
       offset = Number(offset) || 0;
@@ -491,32 +540,35 @@ export class FormSubmissionService {
 
       // Validate limit and offset
       if (isNaN(limit) || isNaN(offset) || limit < 0 || offset < 0) {
-        throw new BadRequestException('Invalid limit or offset value. Must be non-negative numbers.');
+        throw new BadRequestException(
+          'Invalid limit or offset value. Must be non-negative numbers.'
+        );
       }
 
       // Get all valid form submission fields for filtering
-      const formSubmissionKeys = this.formSubmissionRepository.metadata.columns.map(
-        (column) => column.propertyName
-      );
+      const formSubmissionKeys =
+        this.formSubmissionRepository.metadata.columns.map(
+          (column) => column.propertyName
+        );
 
       // Build where clause
-      const whereClause = await this.buildWhereClause(filters, formSubmissionKeys);
+      const whereClause = await this.buildWhereClause(
+        filters,
+        formSubmissionKeys
+      );
 
       // Get form submissions with pagination
-      const [submissions, totalCount] = await this.fetchSubmissionsWithPagination(
-        whereClause,
-        sort,
-        offset,
-        limit
-      );
+      const [submissions, totalCount] =
+        await this.fetchSubmissionsWithPagination(
+          whereClause,
+          sort,
+          offset,
+          limit
+        );
 
       // Apply custom field filters if any
-      const { filteredSubmissions, filteredCount } = await this.applyCustomFieldFilters(
-        submissions,
-        filters,
-        offset,
-        limit
-      );
+      const { filteredSubmissions, filteredCount } =
+        await this.applyCustomFieldFilters(submissions, filters, offset, limit);
 
       // Format and return response
       return await this.formatSubmissionResponse(
@@ -535,10 +587,15 @@ export class FormSubmissionService {
           resmsgid: '',
           status: 'failed',
           err: 'SEARCH_FAILED',
-          errmsg: error.message || 'An unexpected error occurred while searching form submissions',
+          errmsg:
+            error.message ||
+            'An unexpected error occurred while searching form submissions',
           successmessage: null,
         },
-        responseCode: error instanceof BadRequestException ? HttpStatus.BAD_REQUEST : HttpStatus.INTERNAL_SERVER_ERROR,
+        responseCode:
+          error instanceof BadRequestException
+            ? HttpStatus.BAD_REQUEST
+            : HttpStatus.INTERNAL_SERVER_ERROR,
         result: null,
       };
     }
@@ -565,11 +622,11 @@ export class FormSubmissionService {
       }
 
       // Find the form submission
-    const submission = await this.formSubmissionRepository.findOne({
-      where: { submissionId },
-    });
+      const submission = await this.formSubmissionRepository.findOne({
+        where: { submissionId },
+      });
 
-    if (!submission) {
+      if (!submission) {
         return {
           id: 'api.form.submission.get',
           ver: '1.0',
@@ -641,7 +698,11 @@ export class FormSubmissionService {
     }
   }
 
-  private async updateFieldValues(fieldValue: any, userId: string, existingFieldValue: any) {
+  private async updateFieldValues(
+    fieldValue: any,
+    userId: string,
+    existingFieldValue: any
+  ) {
     try {
       let result;
       if (existingFieldValue) {
@@ -652,7 +713,7 @@ export class FormSubmissionService {
             value: fieldValue.value,
             itemId: userId,
             updatedBy: userId,
-            createdBy: existingFieldValue.createdBy
+            createdBy: existingFieldValue.createdBy,
           })
         );
       } else {
@@ -663,7 +724,7 @@ export class FormSubmissionService {
             value: fieldValue.value,
             itemId: userId,
             createdBy: userId,
-            updatedBy: userId
+            updatedBy: userId,
           })
         );
         if (result instanceof ErrorResponseTypeOrm) {
@@ -689,7 +750,7 @@ export class FormSubmissionService {
         context: field.context,
         state: field.state,
         contextType: field.contextType,
-        fieldParams: field.fieldParams || {}
+        fieldParams: field.fieldParams || {},
       };
     } catch (error) {
       console.error('Error in updateFieldValues:', error);
@@ -714,16 +775,20 @@ export class FormSubmissionService {
 
       // Validate submissionId is a UUID
       if (!isUUID(submissionId)) {
-        throw new BadRequestException('Invalid submission ID format. Expected a valid UUID.');
+        throw new BadRequestException(
+          'Invalid submission ID format. Expected a valid UUID.'
+        );
       }
 
       // Find the existing submission
-    const submission = await this.formSubmissionRepository.findOne({
-      where: { submissionId },
-    });
+      const submission = await this.formSubmissionRepository.findOne({
+        where: { submissionId },
+      });
 
-    if (!submission) {
-        throw new BadRequestException(`Form submission ID ${submissionId} not found`);
+      if (!submission) {
+        throw new BadRequestException(
+          `Form submission ID ${submissionId} not found`
+        );
       }
 
       // Update form submission if provided
@@ -738,7 +803,9 @@ export class FormSubmissionService {
             submission.status = updateFormSubmissionDto.formSubmission.status;
           }
           submission.updatedBy = userId;
-          updatedSubmission = await this.formSubmissionRepository.save(submission);
+          updatedSubmission = await this.formSubmissionRepository.save(
+            submission
+          );
         } catch (error) {
           throw new Error('Failed to update form submission details');
         }
@@ -748,24 +815,32 @@ export class FormSubmissionService {
       let updatedFieldValues = [];
       if (updateFormSubmissionDto.customFields?.length > 0) {
         try {
-          const fieldValuePromises = updateFormSubmissionDto.customFields.map(async (fieldValue) => {
-            try {
-              const existingValue = await this.fieldValuesRepository
-                .createQueryBuilder('fieldValue')
-                .where('fieldValue.fieldId = :fieldId', { fieldId: fieldValue.fieldId })
-                .andWhere('fieldValue.itemId = :itemId', { itemId: userId })
-                .getOne();
+          const fieldValuePromises = updateFormSubmissionDto.customFields.map(
+            async (fieldValue) => {
+              try {
+                const existingValue = await this.fieldValuesRepository
+                  .createQueryBuilder('fieldValue')
+                  .where('fieldValue.fieldId = :fieldId', {
+                    fieldId: fieldValue.fieldId,
+                  })
+                  .andWhere('fieldValue.itemId = :itemId', { itemId: userId })
+                  .getOne();
 
-              const result = await this.updateFieldValues(fieldValue, userId, existingValue);
-              return result;
-            } catch (error) {
-              console.error('Error updating field value:', error);
-              return null;
+                const result = await this.updateFieldValues(
+                  fieldValue,
+                  userId,
+                  existingValue
+                );
+                return result;
+              } catch (error) {
+                console.error('Error updating field value:', error);
+                return null;
+              }
             }
-          });
+          );
 
           const results = await Promise.all(fieldValuePromises);
-          updatedFieldValues = results.filter(result => result !== null);
+          updatedFieldValues = results.filter((result) => result !== null);
         } catch (error) {
           throw new Error('Failed to update field values');
         }
@@ -780,17 +855,16 @@ export class FormSubmissionService {
           status: 'successful',
           err: null,
           errmsg: null,
-          successmessage: 'Form updated successfully'
+          successmessage: 'Form updated successfully',
         },
         responseCode: HttpStatus.OK,
         result: {
           formSubmission: updatedSubmission,
-          customFields: updatedFieldValues
-        }
+          customFields: updatedFieldValues,
+        },
       };
 
       return response.status(HttpStatus.OK).json(successResponse);
-
     } catch (error) {
       const errorResponse = {
         id: 'api.form.submission.update',
@@ -799,12 +873,20 @@ export class FormSubmissionService {
         params: {
           resmsgid: submissionId,
           status: 'failed',
-          err: error instanceof BadRequestException ? 'BAD_REQUEST' : 'INTERNAL_SERVER_ERROR',
-          errmsg: error.message || 'An unexpected error occurred while updating the form submission',
-          successmessage: null
+          err:
+            error instanceof BadRequestException
+              ? 'BAD_REQUEST'
+              : 'INTERNAL_SERVER_ERROR',
+          errmsg:
+            error.message ||
+            'An unexpected error occurred while updating the form submission',
+          successmessage: null,
         },
-        responseCode: error instanceof BadRequestException ? HttpStatus.BAD_REQUEST : HttpStatus.INTERNAL_SERVER_ERROR,
-        result: null
+        responseCode:
+          error instanceof BadRequestException
+            ? HttpStatus.BAD_REQUEST
+            : HttpStatus.INTERNAL_SERVER_ERROR,
+        result: null,
       };
 
       return response.status(errorResponse.responseCode).json(errorResponse);
@@ -831,11 +913,11 @@ export class FormSubmissionService {
         };
       }
 
-    const submission = await this.formSubmissionRepository.findOne({
-      where: { submissionId },
-    });
+      const submission = await this.formSubmissionRepository.findOne({
+        where: { submissionId },
+      });
 
-    if (!submission) {
+      if (!submission) {
         return {
           id: 'api.form.submission.delete',
           ver: '1.0',
@@ -857,8 +939,8 @@ export class FormSubmissionService {
         // Permanent delete
         result = await this.formSubmissionRepository.remove(submission);
       } else {
-    // Soft delete - update status to ARCHIVED
-    submission.status = FormSubmissionStatus.ARCHIVED;
+        // Soft delete - update status to ARCHIVED
+        submission.status = FormSubmissionStatus.ARCHIVED;
         result = await this.formSubmissionRepository.save(submission);
       }
 
