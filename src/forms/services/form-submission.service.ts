@@ -95,13 +95,6 @@ export class FormSubmissionService {
       formSubmission.createdBy = userId;
       formSubmission.updatedBy = userId;
 
-      console.log('Creating form submission with data:', {
-        formId: formSubmission.formId,
-        itemId: formSubmission.itemId,
-        status: formSubmission.status,
-        createdBy: formSubmission.createdBy,
-      });
-
       const savedSubmission = await this.formSubmissionRepository.save(
         formSubmission
       );
