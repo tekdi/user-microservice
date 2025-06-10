@@ -41,6 +41,7 @@ export const API_RESPONSES = {
   ACADEMICYEAR_COHORT_NOT_FOUND: 'This cohort not exist for this year',
   COHORTMEMBER_CREATED_SUCCESSFULLY:
     'Cohort member has been successfully assigned.',
+  COHORT_MEMBER_REACTIVATED: 'Cohort member has been successfully reactivated.',
   CONFLICT: 'CONFLICT',
   INVALID_USERID: 'Invalid input: User Id does not exist.',
   INVALID_COHORTID: 'Invalid input: Cohort Id does not exist.',
@@ -216,4 +217,9 @@ export const API_RESPONSES = {
   SEND_OTP: 'OTP sent successfully',
   EMAIL_NOTIFICATION_ERROR: 'Failed to send Email notification:',
   EMAIL_ERROR: 'Email notification failed',
+
+  FORM_SUBMISSION_CREATED_SUCCESSFULLY: 'Application saved successfully',
+  FORM_SUBMISSION_UPDATED_SUCCESSFULLY: 'Application updated successfully',
+  FORM_SUBMISSION_DELETED_SUCCESSFULLY: 'Application deleted successfully',
+  FORM_SUBMISSION_NOT_FOUND: 'Application not found',
 };

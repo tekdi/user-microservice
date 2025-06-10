@@ -58,4 +58,9 @@ export const APIID = {
   SEND_OTP: 'api.send.OTP',
   VERIFY_OTP: 'api.verify.OTP',
   SEND_RESET_OTP: 'api.send.reset.otp',
+  FORM_SUBMISSION_CREATE: 'api.formSubmission.create',
+  FORM_SUBMISSION_UPDATE: 'api.formSubmission.update',
+  FORM_SUBMISSION_DELETE: 'api.formSubmission.delete',
+  FORM_SUBMISSION_GET: 'api.formSubmission.get',
+  FORM_SUBMISSION_LIST: 'api.formSubmission.list',
 };
