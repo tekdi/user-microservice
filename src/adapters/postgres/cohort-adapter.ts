@@ -792,10 +792,35 @@ export class PostgresCohortService {
                 (field) => field.name === key
               );
               if (fieldInfo) {
-                searchCustomFields[key] = {
-                  value: value,
-                  type: fieldInfo.type,
-                };
+                if (
+                  typeof value === 'object' &&
+                  value !== null &&
+                  !Array.isArray(value)
+                ) {
+                  const operator = Object.keys(value)[0];
+                  const val = value[operator];
+                  const validOperators = ['lt', 'lte', 'gt', 'gte', 'eq', 'ne'];
+                  if (!validOperators.includes(operator)) {
+                    // Skip invalid operators or throw an error
+                    return APIResponse.error(
+                      response,
+                      apiId,
+                      `Invalid operator: ${operator}`,
+                      `Invalid filter operator`,
+                      HttpStatus.BAD_REQUEST
+                    );
+                  }
+                  searchCustomFields[key] = {
+                    value: val, // e.g., "2024-01-01"
+                    type: null,
+                    operator: Object.keys(value)[0], // e.g., "gt"
+                  };
+                } else {
+                  searchCustomFields[key] = {
+                    value: value,
+                    type: fieldInfo.type,
+                  };
+                }
               } else {
                 searchCustomFields[key] = {
                   value: value,
@@ -922,74 +947,128 @@ export class PostgresCohortService {
 
               const value = fieldInfo.value;
               const type = fieldDetails.type?.toLowerCase();
-
               // Add field name parameter
               params.push(key);
-
-              switch (type) {
-                case 'text':
-                case 'textarea':
-                case 'file':
-                case 'radio':
-                  params.push(`%${value}%`);
-                  conditions.push(
-                    `(f."name" = $${paramIndex} AND (fv."${type}Value" ILIKE $${
-                      paramIndex + 1
-                    } OR fv."value" ILIKE $${paramIndex + 1}))`
-                  );
-                  paramIndex += 2;
-                  break;
-                case 'number':
-                  if (!isNaN(parseFloat(value))) {
-                    params.push(value);
+              if (fieldInfo.operator) {
+                params.push(value);
+                switch (fieldInfo.operator) {
+                  case 'lt':
+                    conditions.push(
+                      `(f."name" = $${paramIndex} AND fv."value" < $${
+                        paramIndex + 1
+                      })`
+                    );
+                    break;
+                  case 'lte':
+                    conditions.push(
+                      `(f."name" = $${paramIndex} AND fv."value" <= $${
+                        paramIndex + 1
+                      })`
+                    );
+                    break;
+                  case 'gt':
+                    conditions.push(
+                      `(f."name" = $${paramIndex} AND fv."value" > $${
+                        paramIndex + 1
+                      })`
+                    );
+                    break;
+                  case 'gte':
+                    conditions.push(
+                      `(f."name" = $${paramIndex} AND fv."value" >= $${
+                        paramIndex + 1
+                      })`
+                    );
+                    break;
+                  case 'eq':
+                    conditions.push(
+                      `(f."name" = $${paramIndex} AND fv."value" = $${
+                        paramIndex + 1
+                      })`
+                    );
+                    break;
+                  case 'ne':
+                    conditions.push(
+                      `(f."name" = $${paramIndex} AND fv."value" != $${
+                        paramIndex + 1
+                      })`
+                    );
+                    break;
+                  default:
+                    conditions.push(
+                      `(f."name" = $${paramIndex} AND fv."value" LIKE $${
+                        paramIndex + 1
+                      })`
+                    );
+                }
+                paramIndex += 2;
+              } else {
+                switch (type) {
+                  case 'text':
+                  case 'textarea':
+                  case 'file':
+                  case 'radio':
+                    params.push(`%${value}%`);
+                    conditions.push(
+                      `(f."name" = $${paramIndex} AND (fv."${type}Value" ILIKE $${
+                        paramIndex + 1
+                      } OR fv."value" ILIKE $${paramIndex + 1}))`
+                    );
+                    paramIndex += 2;
+                    break;
+                  case 'number':
+                    if (!isNaN(parseFloat(value))) {
+                      params.push(value);
+                      params.push(value.toString());
+                      conditions.push(
+                        `(f."name" = $${paramIndex} AND (fv."numberValue" = $${
+                          paramIndex + 1
+                        }::numeric OR fv."value" = $${paramIndex + 2}))`
+                      );
+                      paramIndex += 3;
+                    }
+                    break;
+                  case 'calendar':
+                    params.push(`%${value}%`);
+                    conditions.push(
+                      `(f."name" = $${paramIndex} AND (fv."calendarValue"::text LIKE $${
+                        paramIndex + 1
+                      } OR fv."value" LIKE $${paramIndex + 1}))`
+                    );
+                    paramIndex += 2;
+                    break;
+                  case 'checkbox': {
+                    const boolValue =
+                      value === 'true' || value === '1' || value === true;
+                    params.push(boolValue);
                     params.push(value.toString());
                     conditions.push(
-                      `(f."name" = $${paramIndex} AND (fv."numberValue" = $${
+                      `(f."name" = $${paramIndex} AND (fv."checkboxValue" = $${
                         paramIndex + 1
-                      }::numeric OR fv."value" = $${paramIndex + 2}))`
+                      } OR fv."value" = $${paramIndex + 2}))`
                     );
                     paramIndex += 3;
+                    break;
                   }
-                  break;
-                case 'calendar':
-                  params.push(`%${value}%`);
-                  conditions.push(
-                    `(f."name" = $${paramIndex} AND (fv."calendarValue"::text LIKE $${
-                      paramIndex + 1
-                    } OR fv."value" LIKE $${paramIndex + 1}))`
-                  );
-                  paramIndex += 2;
-                  break;
-                case 'checkbox':
-                  const boolValue =
-                    value === 'true' || value === '1' || value === true;
-                  params.push(boolValue);
-                  params.push(value.toString());
-                  conditions.push(
-                    `(f."name" = $${paramIndex} AND (fv."checkboxValue" = $${
-                      paramIndex + 1
-                    } OR fv."value" = $${paramIndex + 2}))`
-                  );
-                  paramIndex += 3;
-                  break;
-                case 'dropdown':
-                  params.push(`%${value}%`);
-                  conditions.push(
-                    `(f."name" = $${paramIndex} AND (fv."dropdownValue"::text LIKE $${
-                      paramIndex + 1
-                    } OR fv."value" LIKE $${paramIndex + 1}))`
-                  );
-                  paramIndex += 2;
-                  break;
-                default:
-                  params.push(`%${value}%`);
-                  conditions.push(
-                    `(f."name" = $${paramIndex} AND fv."value" LIKE $${
-                      paramIndex + 1
-                    })`
-                  );
-                  paramIndex += 2;
-                  break;
+                  case 'dropdown':
+                    params.push(`%${value}%`);
+                    conditions.push(
+                      `(f."name" = $${paramIndex} AND (fv."dropdownValue"::text LIKE $${
+                        paramIndex + 1
+                      } OR fv."value" LIKE $${paramIndex + 1}))`
+                    );
+                    paramIndex += 2;
+                    break;
+                  default:
+                    params.push(`%${value}%`);
+                    conditions.push(
+                      `(f."name" = $${paramIndex} AND fv."value" LIKE $${
+                        paramIndex + 1
+                      })`
+                    );
+                    paramIndex += 2;
+                    break;
+                }
               }
             }
           );
