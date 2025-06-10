@@ -218,8 +218,8 @@ export const API_RESPONSES = {
   EMAIL_NOTIFICATION_ERROR: 'Failed to send Email notification:',
   EMAIL_ERROR: 'Email notification failed',
 
-  FORM_SUBMISSION_CREATED_SUCCESSFULLY: 'Form submission created successfully',
-  FORM_SUBMISSION_UPDATED_SUCCESSFULLY: 'Form submission updated successfully',
-  FORM_SUBMISSION_DELETED_SUCCESSFULLY: 'Form submission deleted successfully',
-  FORM_SUBMISSION_NOT_FOUND: 'Form submission not found',
+  FORM_SUBMISSION_CREATED_SUCCESSFULLY: 'Application saved successfully',
+  FORM_SUBMISSION_UPDATED_SUCCESSFULLY: 'Application updated successfully',
+  FORM_SUBMISSION_DELETED_SUCCESSFULLY: 'Application deleted successfully',
+  FORM_SUBMISSION_NOT_FOUND: 'Application not found',
 };
