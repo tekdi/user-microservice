@@ -85,6 +85,25 @@ export class FormSubmissionService {
         throw new BadRequestException('User ID not found in token');
       }
 
+      // Check for existing active/inactive submissions with same formId and itemId
+      const existingSubmission = await this.formSubmissionRepository.findOne({
+        where: {
+          formId: createFormSubmissionDto.formSubmission.formId,
+          itemId: userId,
+          status: In([FormSubmissionStatus.ACTIVE, FormSubmissionStatus.INACTIVE])
+        }
+      });
+
+      if (existingSubmission) {
+        return APIResponse.error(
+          response,
+          'api.form.submission.create',
+          'BAD_REQUEST',
+          'Application with this formId and userId already exists with status ACTIVE or INACTIVE',
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
       // Create form submission
       const formSubmission = new FormSubmission();
       formSubmission.formId = createFormSubmissionDto.formSubmission.formId;
@@ -615,11 +634,11 @@ export class FormSubmissionService {
       }
 
       // Find the form submission
-      const submission = await this.formSubmissionRepository.findOne({
-        where: { submissionId },
-      });
+    const submission = await this.formSubmissionRepository.findOne({
+      where: { submissionId },
+    });
 
-      if (!submission) {
+    if (!submission) {
         return {
           id: 'api.form.submission.get',
           ver: '1.0',
@@ -774,11 +793,11 @@ export class FormSubmissionService {
       }
 
       // Find the existing submission
-      const submission = await this.formSubmissionRepository.findOne({
-        where: { submissionId },
-      });
+    const submission = await this.formSubmissionRepository.findOne({
+      where: { submissionId },
+    });
 
-      if (!submission) {
+    if (!submission) {
         throw new BadRequestException(
           `Form submission ID ${submissionId} not found`
         );
@@ -906,11 +925,11 @@ export class FormSubmissionService {
         };
       }
 
-      const submission = await this.formSubmissionRepository.findOne({
-        where: { submissionId },
-      });
+    const submission = await this.formSubmissionRepository.findOne({
+      where: { submissionId },
+    });
 
-      if (!submission) {
+    if (!submission) {
         return {
           id: 'api.form.submission.delete',
           ver: '1.0',
@@ -932,8 +951,8 @@ export class FormSubmissionService {
         // Permanent delete
         result = await this.formSubmissionRepository.remove(submission);
       } else {
-        // Soft delete - update status to ARCHIVED
-        submission.status = FormSubmissionStatus.ARCHIVED;
+    // Soft delete - update status to ARCHIVED
+    submission.status = FormSubmissionStatus.ARCHIVED;
         result = await this.formSubmissionRepository.save(submission);
       }
 
