@@ -13,7 +13,6 @@ import { Fields } from './fields.entity';
 /**
  * Entity for storing field values with type-specific columns
  */
-
 @Entity('FieldValues', { schema: 'public' })
 export class FieldValues {
   @PrimaryGeneratedColumn('uuid', { name: 'fieldValuesId' })

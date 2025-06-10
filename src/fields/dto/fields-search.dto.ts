@@ -48,17 +48,20 @@ export class FieldsSearchDto {
   @ApiPropertyOptional({
     type: Number,
     description: "Limit",
+    default: 10
   })
   @IsOptional()
-  @IsNotEmpty()
   @IsNumber({}, { message: "Limit must be a number" })
-  limit: number;
+  limit?: number = 10;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     type: Number,
-    description: "number",
+    description: "Offset",
+    default: 0
   })
-  offset: number;
+  @IsOptional()
+  @IsNumber({}, { message: "Offset must be a number" })
+  offset?: number = 0;
 
   @ApiPropertyOptional({
     type: FieldsFilterDto,
@@ -66,10 +69,13 @@ export class FieldsSearchDto {
   })
   @ValidateNested({ each: true })
   @Type(() => FieldsFilterDto)
-  filters: FieldsFilterDto;
+  filters?: FieldsFilterDto;
 
   constructor(partial: Partial<FieldsSearchDto>) {
     Object.assign(this, partial);
+    // Ensure limit and offset are numbers with defaults
+    this.limit = partial.limit ? Number(partial.limit) : 10;
+    this.offset = partial.offset ? Number(partial.offset) : 0;
   }
 }
 

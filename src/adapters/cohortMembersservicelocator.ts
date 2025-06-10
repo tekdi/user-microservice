@@ -2,6 +2,7 @@ import { CohortMembersSearchDto } from "src/cohortMembers/dto/cohortMembers-sear
 import { CohortMembersDto } from "src/cohortMembers/dto/cohortMembers.dto";
 import { CohortMembersUpdateDto } from "src/cohortMembers/dto/cohortMember-update.dto";
 import { Response } from "express";
+
 export interface IServicelocatorcohortMembers {
   createCohortMembers(
     loginUser: any,
@@ -28,7 +29,6 @@ export interface IServicelocatorcohortMembers {
     cohortMembershipId: string,
     loginUser: any,
     cohortMemberUpdateDto: CohortMembersUpdateDto,
-
     response: any
   );
   deleteCohortMemberById(tenantid, cohortMembershipId, response);

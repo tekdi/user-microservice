@@ -1,14 +1,14 @@
-import { Exclude, Expose, Type } from "class-transformer";
-import { ApiProperty } from "@nestjs/swagger";
+import { Exclude, Expose, Type } from 'class-transformer';
+import { ApiProperty } from '@nestjs/swagger';
 import {
   IsEnum,
   IsOptional,
   IsString,
   ValidateIf,
   ValidateNested,
-} from "class-validator";
-import { MemberStatus } from "../entities/cohort-member.entity";
-import { FieldValuesOptionDto } from "src/user/dto/user-create.dto";
+} from 'class-validator';
+import { MemberStatus } from '../entities/cohort-member.entity';
+import { FieldValuesOptionDto } from 'src/user/dto/user-create.dto';
 export class CohortMembersUpdateDto {
   @Expose()
   tenantId: string;
@@ -26,7 +26,7 @@ export class CohortMembersUpdateDto {
 
   @ApiProperty({
     type: String,
-    description: "The cohortId of the cohort members",
+    description: 'The cohortId of the cohort members',
   })
   @Expose()
   @IsOptional() // Marking as optional
@@ -34,7 +34,7 @@ export class CohortMembersUpdateDto {
 
   @ApiProperty({
     type: String,
-    description: "The userId of the cohort members",
+    description: 'The userId of the cohort members',
   })
   @Expose()
   @IsOptional()
@@ -42,7 +42,7 @@ export class CohortMembersUpdateDto {
 
   @ApiProperty({
     enum: MemberStatus,
-    description: "The status of the cohort members",
+    description: 'The status of the cohort members',
   })
   @IsOptional()
   @IsEnum(MemberStatus)
@@ -50,7 +50,7 @@ export class CohortMembersUpdateDto {
 
   @ApiProperty({
     type: String,
-    description: "The createdBy of the cohort members",
+    description: 'The createdBy of the cohort members',
   })
   @Expose()
   @IsOptional()
@@ -58,7 +58,7 @@ export class CohortMembersUpdateDto {
 
   @ApiProperty({
     type: String,
-    description: "The updatedBy of the cohort members",
+    description: 'The updatedBy of the cohort members',
   })
   @Expose()
   @IsOptional()
@@ -66,14 +66,14 @@ export class CohortMembersUpdateDto {
 
   @ApiProperty({
     type: String,
-    description: "The status change reason",
+    description: 'The status change reason',
   })
   @ValidateIf((o) => o.status === MemberStatus.DROPOUT)
-  @IsString({ message: "Reason is mandatory while dropping out a member" })
+  @IsString({ message: 'Reason is mandatory while dropping out a member' })
   statusReason?: string;
   @ApiProperty({
     type: FieldValuesOptionDto,
-    description: "Array of Custom fields",
+    description: 'Array of Custom fields',
   })
   @IsOptional()
   @ValidateNested({ each: true })

@@ -58,18 +58,19 @@ export default class APIResponse {
   }
 
   public static search(dtoFileName) {
-    let { limit } = dtoFileName;
-    const { page, filters } = dtoFileName;
+    let { limit, page, filters } = dtoFileName;
 
+    // Ensure limit and page are numbers with defaults
+    limit = typeof limit === 'number' ? limit : (Number(limit) || 10);
+    page = typeof page === 'number' ? page : (Number(page) || 1);
+    
+    // Calculate offset
     let offset = 0;
     if (page > 1) {
-      offset = parseInt(limit) * (page - 1);
+      offset = limit * (page - 1);
     }
 
-    if (limit.trim() === "") {
-      limit = "0";
-    }
-
+    // Build where clause
     const whereClause = {};
     if (filters && Object.keys(filters).length > 0) {
       Object.entries(filters).forEach(([key, value]) => {
