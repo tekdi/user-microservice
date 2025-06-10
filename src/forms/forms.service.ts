@@ -1,4 +1,4 @@
-import { BadRequestException, HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable } from '@nestjs/common';
 import jwt_decode from 'jwt-decode';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Form } from './entities/form.entity';
@@ -10,9 +10,6 @@ import { FormCreateDto } from './dto/form-create.dto';
 import { APIID } from '@utils/api-id.config';
 import { API_RESPONSES } from '@utils/response.messages';
 import { FormStatus } from './dto/form-create.dto';
-import { FieldStatus } from '../fields/entities/fields.entity';
-import { FieldsUpdateDto } from '../fields/dto/fields-update.dto';
-import { In } from 'typeorm';
 
 @Injectable()
 export class FormsService {
@@ -506,7 +503,7 @@ export class FormsService {
                 // Function to recursively find all fieldIds in an object
                 const findFieldIds = (obj: any): string[] => {
                   const fieldIds: string[] = [];
-                  
+
                   if (!obj) return fieldIds;
 
                   if (typeof obj === 'object') {
@@ -514,28 +511,31 @@ export class FormsService {
                     if (obj.fieldId) {
                       fieldIds.push(obj.fieldId);
                     }
-                    
+
                     // Recursively search all object values
-                    Object.values(obj).forEach(value => {
+                    Object.values(obj).forEach((value) => {
                       if (typeof value === 'object') {
                         fieldIds.push(...findFieldIds(value));
                       }
                     });
                   }
-                  
+
                   return fieldIds;
                 };
 
                 // Get all fieldIds from the fields JSON
                 const fieldIds = findFieldIds(existingForm.fields);
-                
+
                 // Remove duplicates and filter out any undefined/null values
                 const uniqueFieldIds = [...new Set(fieldIds)].filter(Boolean);
 
                 if (uniqueFieldIds.length > 0) {
                   // Archive all fields in a single operation
                   try {
-                    await this.fieldsService.archiveFieldsByIds(uniqueFieldIds, decoded?.sub);
+                    await this.fieldsService.archiveFieldsByIds(
+                      uniqueFieldIds,
+                      decoded?.sub
+                    );
                   } catch (error) {
                     console.error('Error archiving fields:', error);
                     // Continue with form archival even if field archival fails
@@ -554,7 +554,6 @@ export class FormsService {
                 HttpStatus.OK,
                 API_RESPONSES.FORM_UPDATED_SUCCESSFULLY
               );
-
             } catch (error) {
               return APIResponse.error(
                 response,
