@@ -1037,7 +1037,7 @@ export class PostgresCohortService {
                     );
                     paramIndex += 2;
                     break;
-                  case 'checkbox':
+                  case 'checkbox': {
                     const boolValue =
                       value === 'true' || value === '1' || value === true;
                     params.push(boolValue);
@@ -1049,6 +1049,7 @@ export class PostgresCohortService {
                     );
                     paramIndex += 3;
                     break;
+                  }
                   case 'dropdown':
                     params.push(`%${value}%`);
                     conditions.push(
