@@ -348,7 +348,7 @@ export class PostgresCohortMembersService {
           apiId,
           API_RESPONSES.COHORT_USER_NOTFOUND,
           API_RESPONSES.NOT_FOUND,
-          HttpStatus.NOT_FOUND
+          HttpStatus.OK
         );
       }
       // Add cohortAcademicYearId filter if applicable
