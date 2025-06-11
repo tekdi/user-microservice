@@ -719,6 +719,7 @@ export class PostgresCohortService {
       const { sort, filters, includeDisplayValues } = cohortSearchDto;
       let { limit, offset } = cohortSearchDto;
       let cohortsByAcademicYear: CohortAcademicYear[];
+      let academicYearMap: Map<string, CohortAcademicYear> = new Map();
 
       offset = offset || 0;
       limit = limit || 200;
@@ -781,6 +782,11 @@ export class PostgresCohortService {
             HttpStatus.NOT_FOUND
           );
         }
+
+        academicYearMap = new Map();
+        cohortsByAcademicYear?.forEach((item) => {
+          academicYearMap.set(`${item.cohortId}|${item.academicYearId}`, item);
+        });
       }
 
       if (filters && Object.keys(filters).length > 0) {
@@ -926,13 +932,11 @@ export class PostgresCohortService {
           const customFieldsData = await this.getCohortDataWithCustomfield(
             data.cohortId
           );
-          const academicYearInfo = cohortsByAcademicYear?.find(
-            (item) =>
-              item.cohortId === data.cohortId &&
-              item.academicYearId === academicYearId
+          data['customFields'] = customFieldsData;
+          const academicYearInfo = academicYearMap.get(
+            `${data.cohortId}|${academicYearId}`
           );
           data['academicYearInfo'] = academicYearInfo || null;
-          data['customFields'] = customFieldsData;
           results.cohortDetails.push(data);
         }
       } else {
@@ -1165,14 +1169,6 @@ export class PostgresCohortService {
             data.type
           );
 
-          const academicYearInfo = cohortsByAcademicYear?.find(
-            (item) =>
-              item.cohortId === data.cohortId &&
-              item.academicYearId === academicYearId
-          );
-
-          data['academicYearInfo'] = academicYearInfo || null;
-
           if (data.type === 'COHORT') {
             const userCount = await this.cohortMembersRepository.count({
               where: { cohortId: data.cohortId, status: MemberStatus.ACTIVE },
@@ -1181,6 +1177,11 @@ export class PostgresCohortService {
           }
 
           data['customFields'] = customFieldsData || [];
+
+          const academicYearInfo = academicYearMap.get(
+            `${data.cohortId}|${academicYearId}`
+          );
+          data['academicYearInfo'] = academicYearInfo || null;
 
           // Step 4: Add isFormCreated flag
           data['isFormCreated'] = formMappedCohortIds.has(data.cohortId);
