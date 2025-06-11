@@ -926,6 +926,12 @@ export class PostgresCohortService {
           const customFieldsData = await this.getCohortDataWithCustomfield(
             data.cohortId
           );
+          const academicYearInfo = cohortsByAcademicYear?.find(
+            (item) =>
+              item.cohortId === data.cohortId &&
+              item.academicYearId === academicYearId
+          );
+          data['academicYearInfo'] = academicYearInfo || null;
           data['customFields'] = customFieldsData;
           results.cohortDetails.push(data);
         }
@@ -1158,6 +1164,14 @@ export class PostgresCohortService {
             data.cohortId,
             data.type
           );
+
+          const academicYearInfo = cohortsByAcademicYear?.find(
+            (item) =>
+              item.cohortId === data.cohortId &&
+              item.academicYearId === academicYearId
+          );
+
+          data['academicYearInfo'] = academicYearInfo || null;
 
           if (data.type === 'COHORT') {
             const userCount = await this.cohortMembersRepository.count({
