@@ -2227,12 +2227,13 @@ export class PostgresUserService implements IServicelocator {
       console.log(this.otpDigits, this.otpExpiry,"testing OTP changes");
       const { hash, expires, expiresInMinutes } = this.generateOtpHash(mobileWithCode, otp, reason);
       const replacements = {
-        "{var1}": otp,
+        "{OTP}": otp,
+        "{otpExpiry}": expiresInMinutes
       };
       console.log(replacements, "replacements");
       // Step 2:send SMS notification
       console.log(this.msg91TemplateKey,"Key");
-      const notificationPayload = await this.smsNotification("OTP", this.msg91TemplateKey, replacements, [mobile]);
+      const notificationPayload = await this.smsNotification("OTP", "SEND_OTP", replacements, [mobile]);
       return { notificationPayload, hash, expires, expiresInMinutes };
     }
     catch (error) {
