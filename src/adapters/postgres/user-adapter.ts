@@ -1118,6 +1118,57 @@ export class PostgresUserService implements IServicelocator {
     }
   }
 
+  // This method handles the SSO callback from Keycloak
+  public async ssoCallback(
+    code: string,
+    academicYearId: string,
+    response: Response
+  ): Promise<any> {
+    try {
+      if (!code) {
+        return response
+          .status(400)
+          .json({ message: 'Missing authorization code' });
+      }
+
+      const tokenUrl = `${process.env.KEYCLOAK}${process.env.KEYCLOAK_USER_TOKEN}`;
+      const bodyParams = new URLSearchParams({
+        grant_type: 'authorization_code',
+        code,
+        client_id: `${process.env.KEYCLOAK_CLIENT_ID}`, // match the curl value
+        redirect_uri: `${process.env.SSO_CALLBACK_URL}`, // match the curl
+      });
+
+      // Optional: include cookies if required (you'll need to capture these from the client)
+      const headers: any = {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        // 'Cookie': 'AWSALB=...; AWSALBCORS=...', // Optional if backend requires it
+      };
+
+      const tokenRes = await fetch(tokenUrl, {
+        method: 'POST',
+        headers,
+        body: bodyParams,
+      });
+
+      if (!tokenRes.ok) {
+        throw new Error(`Failed to fetch token: ${tokenRes.statusText}`);
+      }
+
+      const tokenData = await tokenRes.json();
+
+      return {
+        tokenData,
+      };
+    } catch (error) {
+      LoggerUtil.error(
+        'SSO Callback Error',
+        `Error Message: ${error.message}, Stack: ${error.stack}`
+      );
+      throw error;
+    }
+  }
+
   // This method is a placeholder for creating an SSO user.
   async createSsoUser(
     request: any,

@@ -332,4 +332,36 @@ export class UserController {
       .buildUserAdapter()
       .createSsoUser(request, userCreateSsoDto, academicYearId, response);
   }
+
+  @Get('/sso-callback')
+  @UsePipes(new ValidationPipe())
+  @ApiQuery({ name: 'code', required: true })
+  @ApiCreatedResponse({ description: API_RESPONSES.USER_CREATE_SUCCESSFULLY })
+  @ApiForbiddenResponse({ description: API_RESPONSES.USER_EXISTS })
+  @ApiInternalServerErrorResponse({
+    description: API_RESPONSES.INTERNAL_SERVER_ERROR,
+  })
+  @ApiConflictResponse({ description: API_RESPONSES.DUPLICATE_DATA })
+  async ssoCallback(
+    @Headers() headers,
+    @Req() request: Request,
+    @Res() response: Response
+  ) {
+    const code = request.query.code ?? request.body?.code;
+    if (!code) {
+      return response
+        .status(400)
+        .json({ message: 'Missing authorization code' });
+    }
+
+    try {
+      const result = await this.userAdapter
+        .buildUserAdapter()
+        .ssoCallback(code, request, response);
+
+      return response.status(201).json(result);
+    } catch (error) {
+      return response.status(500).json({ message: error.message });
+    }
+  }
 }
