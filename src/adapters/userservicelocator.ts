@@ -31,6 +31,7 @@ export interface IServicelocator {
     academicYearId: string,
     response: Response
   );
+  ssoCallback(request: any, academicYearId: string, response: Response);
   findUserDetails(userID: any, username: string, tenantId?: string);
   searchUser(
     tenantId: string,
