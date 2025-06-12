@@ -333,7 +333,7 @@ export class UserController {
       .createSsoUser(request, userCreateSsoDto, academicYearId, response);
   }
 
-  @Get('/callback')
+  @Get('/sso-callback')
   @UsePipes(new ValidationPipe())
   @ApiQuery({ name: 'code', required: true })
   @ApiCreatedResponse({ description: API_RESPONSES.USER_CREATE_SUCCESSFULLY })
@@ -342,15 +342,12 @@ export class UserController {
     description: API_RESPONSES.INTERNAL_SERVER_ERROR,
   })
   @ApiConflictResponse({ description: API_RESPONSES.DUPLICATE_DATA })
-  @ApiHeader({ name: 'academicyearid' })
   async ssoCallback(
     @Headers() headers,
-    @Query('code') code: string,
     @Req() request: Request,
     @Res() response: Response
   ) {
-    const academicYearId = headers['academicyearid'];
-
+    const code = request.query.code ?? request.body?.code;
     if (!code) {
       return response
         .status(400)
@@ -360,7 +357,7 @@ export class UserController {
     try {
       const result = await this.userAdapter
         .buildUserAdapter()
-        .ssoCallback(request, academicYearId, response);
+        .ssoCallback(code, request, response);
 
       return response.status(201).json(result);
     } catch (error) {

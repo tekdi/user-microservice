@@ -1120,13 +1120,11 @@ export class PostgresUserService implements IServicelocator {
 
   // This method handles the SSO callback from Keycloak
   public async ssoCallback(
-    request: any,
+    code: string,
     academicYearId: string,
     response: Response
   ): Promise<any> {
     try {
-      const code = request.query.code ?? request.body?.code;
-
       if (!code) {
         return response
           .status(400)
@@ -1159,19 +1157,15 @@ export class PostgresUserService implements IServicelocator {
 
       const tokenData = await tokenRes.json();
 
-      return response.status(201).json({
-        message: 'SSO login successful',
+      return {
         tokenData,
-        academicYearId,
-      });
+      };
     } catch (error) {
       LoggerUtil.error(
         'SSO Callback Error',
         `Error Message: ${error.message}, Stack: ${error.stack}`
       );
-      return response
-        .status(500)
-        .json({ message: 'Failed to process SSO callback' });
+      throw error;
     }
   }
 
