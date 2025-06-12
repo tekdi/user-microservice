@@ -1807,25 +1807,56 @@ export class PostgresFieldsService implements IServicelocatorfields {
   }
 
   async updateCustomFields(itemId, data, fieldAttributesAndParams) {
-    if (Array.isArray(data.value)) {
-      data.value = data.value.join(',');
-    }
-
-    const result: any = await this.fieldsValuesRepository.update(
-      { itemId, fieldId: data.fieldId },
-      { value: data.value }
-    );
-    let newResult;
-    if (result.affected === 0) {
-      newResult = await this.fieldsValuesRepository.save({
-        itemId,
-        fieldId: data.fieldId,
-        value: data.value,
+    try {
+      // Get field type from Fields table
+      const fieldDetails = await this.fieldsRepository.findOne({
+        where: { fieldId: data.fieldId },
       });
+
+      if (!fieldDetails) {
+        throw new Error('Field not found');
+      }
+
+      // Handle array values
+      if (Array.isArray(data.value)) {
+        data.value = data.value.join(',');
+      }
+
+      // Use the utility to prepare field data with type-specific storage
+      const fieldData = FieldValueConverter.prepareFieldData(
+        data.fieldId,
+        data.value,
+        itemId,
+        fieldDetails.type
+      );
+
+      // Find existing field value
+      const existingFieldValue = await this.fieldsValuesRepository.findOne({
+        where: { itemId, fieldId: data.fieldId },
+      });
+
+      let result;
+      if (existingFieldValue) {
+        // Update existing record
+        result = await this.fieldsValuesRepository.save({
+          ...existingFieldValue,
+          ...fieldData
+        });
+      } else {
+        // Create new record
+        result = await this.fieldsValuesRepository.save(fieldData);
+      }
+
+      result['correctValue'] = true;
+      return result;
+    } catch (error) {
+      console.error('Error in updateCustomFields:', error);
+      return {
+        correctValue: false,
+        valueIssue: error.message,
+        fieldName: fieldAttributesAndParams?.name || 'Unknown Field'
+      };
     }
-    Object.assign(result, newResult);
-    result['correctValue'] = true;
-    return result;
   }
 
   validateFieldValue(field: any, value: any) {
