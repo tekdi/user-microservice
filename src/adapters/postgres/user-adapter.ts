@@ -1125,7 +1125,7 @@ export class PostgresUserService implements IServicelocator {
     response: Response
   ): Promise<any> {
     try {
-      const code = request.query.code || request.body?.code;
+      const code = request.query.code ?? request.body?.code;
 
       if (!code) {
         return response
