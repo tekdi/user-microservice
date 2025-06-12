@@ -68,12 +68,13 @@ export class FieldValuesUpdateDto {
   calendarValue?: Date;
 
   @ApiPropertyOptional({
-    type: 'string | number | boolean',
-    description: 'The JSON value for dropdown type fields',
+    type: String,
+    description: 'The string value for dropdown type fields',
   })
   @Expose()
   @IsOptional()
-  dropdownValue?: string | number | boolean | { [key: string]: any };
+  @IsString()
+  dropdownValue?: string;
 
   @ApiPropertyOptional({
     type: String,
@@ -85,13 +86,13 @@ export class FieldValuesUpdateDto {
   radioValue?: string;
 
   @ApiPropertyOptional({
-    type: Boolean,
-    description: 'The boolean value for checkbox type fields',
+    type: String,
+    description: 'The string value for checkbox type fields',
   })
   @Expose()
   @IsOptional()
-  @IsBoolean()
-  checkboxValue?: boolean;
+  @IsString()
+  checkboxValue?: string;
 
   @ApiPropertyOptional({
     type: String,

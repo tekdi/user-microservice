@@ -44,7 +44,8 @@ export class FieldValuesCreateDto {
 
   @Expose()
   @IsOptional()
-  dropdownValue?: string | number | boolean | { [key: string]: any };
+  @IsString()
+  dropdownValue?: string;
 
   @Expose()
   @IsOptional()
@@ -53,8 +54,8 @@ export class FieldValuesCreateDto {
 
   @Expose()
   @IsOptional()
-  @IsBoolean()
-  checkboxValue?: boolean;
+  @IsString()
+  checkboxValue?: string;
 
   @Expose()
   @IsOptional()
