@@ -1238,8 +1238,32 @@ export class PostgresFieldsService implements IServicelocatorfields {
     });
 
     if (checkFieldValueExist.length == 0) {
-      const result = await this.fieldsValuesRepository.save(fieldValuesDto);
+      // Get field type from Fields table
+      const fieldDetails = await this.fieldsRepository.findOne({
+        where: { fieldId: fieldValuesDto.fieldId },
+      });
 
+      if (!fieldDetails) {
+        throw new Error('Field not found');
+      }
+
+      // Use the utility to prepare field data
+      const fieldData = FieldValueConverter.prepareFieldData(
+        fieldValuesDto.fieldId,
+        fieldValuesDto.value,
+        fieldValuesDto.itemId,
+        fieldDetails.type
+      );
+
+      // Add createdBy and updatedBy if present
+      if (fieldValuesDto.createdBy) {
+        fieldData.createdBy = fieldValuesDto.createdBy;
+      }
+      if (fieldValuesDto.updatedBy) {
+        fieldData.updatedBy = fieldValuesDto.updatedBy;
+      }
+
+      const result = await this.fieldsValuesRepository.save(fieldData);
       return result;
     }
     return false;

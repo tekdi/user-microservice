@@ -7,10 +7,23 @@ export class DropdownField extends Field {
   }
 
   validate(value: any): boolean {
-    return validateMultiSelect(value, {
-      fieldAttributes: this.fieldAttributes,
-      fieldParams: this.fieldParams,
-    });
+    if (this.fieldAttributes.isMultiSelect) {
+      return validateMultiSelect(value, {
+        fieldAttributes: this.fieldAttributes,
+        fieldParams: this.fieldParams,
+      });
+    }
+    
+    // For single select, validate as string
+    if (typeof value !== 'string') {
+      throw new Error('Value must be a string.');
+    }
+    
+    const fieldParamsOptions = this.fieldParams.options.map(({ value }) => value);
+    if (!fieldParamsOptions.includes(value)) {
+      throw new Error('Invalid option selected.');
+    }
+    return true;
   }
 
   getOptions(): Option[] {
@@ -71,10 +84,23 @@ export class CheckboxField extends Field {
   }
 
   validate(value: any): boolean {
-    return validateMultiSelect(value, {
-      fieldAttributes: this.fieldAttributes,
-      fieldParams: this.fieldParams,
-    });
+    if (this.fieldAttributes.isMultiSelect) {
+      return validateMultiSelect(value, {
+        fieldAttributes: this.fieldAttributes,
+        fieldParams: this.fieldParams,
+      });
+    }
+    
+    // For single select, validate as string
+    if (typeof value !== 'string') {
+      throw new Error('Value must be a string.');
+    }
+    
+    const fieldParamsOptions = this.fieldParams.options.map(({ value }) => value);
+    if (!fieldParamsOptions.includes(value)) {
+      throw new Error('Invalid option selected.');
+    }
+    return true;
   }
 
   getOptions(): Option[] {

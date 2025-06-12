@@ -41,14 +41,14 @@ export class FieldValues {
   })
   calendarValue: Date;
 
-  @Column({ name: 'dropdownValue', type: 'jsonb', nullable: true })
-  dropdownValue: any;
+  @Column({ name: 'dropdownValue', type: 'varchar', nullable: true })
+  dropdownValue: string;
 
   @Column({ name: 'radioValue', type: 'varchar', nullable: true })
   radioValue: string;
 
-  @Column({ name: 'checkboxValue', type: 'boolean', nullable: true })
-  checkboxValue: boolean;
+  @Column({ name: 'checkboxValue', type: 'varchar', nullable: true })
+  checkboxValue: string;
 
   @Column({ name: 'textareaValue', type: 'text', nullable: true })
   textareaValue: string;

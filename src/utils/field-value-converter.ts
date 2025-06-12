@@ -51,21 +51,31 @@ export class FieldValueConverter {
             columnName: 'calendarValue'
           };
         }
-        case 'dropdown':
+        case 'drop_down':
         {
-         let dropdownValue;
-          if (typeof value === 'string') {
+          let convertedValue;
+          if (Array.isArray(value)) {
+            convertedValue = value.join(',');
+          } else if (typeof value === 'string') {
+            convertedValue = value;
+          } else if (value && typeof value === 'object') {
             try {
-              dropdownValue = JSON.parse(value);
-            } catch (error) {
-              throw new Error(`Invalid JSON value for dropdown: ${value}`);
+              const parsedValue = JSON.parse(JSON.stringify(value));
+              if (Array.isArray(parsedValue)) {
+                convertedValue = parsedValue.join(',');
+              } else {
+                convertedValue = String(value);
+              }
+            } catch (e) {
+              convertedValue = String(value);
             }
           } else {
-            dropdownValue = value;
+            convertedValue = String(value || '');
           }
+          
           return {
-            value: value?.toString(),
-            convertedValue: dropdownValue,
+            value: convertedValue,
+            convertedValue: convertedValue,
             columnName: 'dropdownValue'
           };
         }
@@ -79,10 +89,17 @@ export class FieldValueConverter {
         }
         case 'checkbox':
         {
-          const boolValue = value === true || value === 'true' || value === '1' || value === 1;
+          let convertedValue;
+          if (Array.isArray(value)) {
+            convertedValue = value.join(',');
+          } else if (typeof value === 'string') {
+            convertedValue = value;
+          } else {
+            convertedValue = value?.toString();
+          }
           return {
-            value: value?.toString(),
-            convertedValue: boolValue,
+            value: Array.isArray(value) ? value.join(',') : value?.toString(),
+            convertedValue: convertedValue,
             columnName: 'checkboxValue'
           };
         }
