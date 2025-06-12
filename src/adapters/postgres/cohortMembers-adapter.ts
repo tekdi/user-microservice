@@ -341,7 +341,9 @@ export class PostgresCohortMembersService {
       if (
         whereClause['userId'] &&
         whereClause['cohortId'] &&
-        cohortYearExistInYear[0] !== userYearExistInYear[0]
+        !cohortYearExistInYear.some((cayId) =>
+          userYearExistInYear.includes(cayId)
+        )
       ) {
         return APIResponse.error(
           res,
