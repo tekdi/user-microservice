@@ -1033,13 +1033,14 @@ export class PostgresCohortService {
     return hierarchy;
   }
 
-  public async getCohortDetailsByIds(ids: string[]) {
-    return await this.cohortRepository.find({
-      where: {
-        cohortId: In(ids),
-      },
-      select: ["cohortId", "name", "parentId", "type", "status"],
-    });
+  public async getCohortDetailsByIds(ids: string[], academicYearId) {
+    return await this.cohortRepository
+      .createQueryBuilder('cohort')
+      .innerJoin('CohortAcademicYear', 'cay', 'cohort.cohortId = cay.cohortId')
+      .where('cohort.cohortId IN (:...ids)', { ids })
+      .andWhere('cay.academicYearId = :academicYearId', { academicYearId })
+      .select(['cohort.cohortId', 'cohort.name', 'cohort.parentId', 'cohort.type', 'cohort.status'])
+      .getMany();
   }
 
   public async automaticMemberCohortHierarchy(requiredData, academicYearId) {
@@ -1060,7 +1061,7 @@ export class PostgresCohortService {
       throw new Error("No cohort IDs found for the given fieldId and value.");
     }
 
-    const existingCohortIds = await this.getCohortDetailsByIds(cohortIds);
+    const existingCohortIds = await this.getCohortDetailsByIds(cohortIds,academicYearId);
     return existingCohortIds;
   }
 
