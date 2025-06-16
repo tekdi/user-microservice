@@ -115,9 +115,23 @@ export class KafkaService implements OnModuleInit, OnModuleDestroy {
     }
 
     const topic = this.configService.get<string>('KAFKA_TOPIC', 'user-events');
-    
+    let fullEventType = '';
+    switch (eventType) {
+      case 'created':
+        fullEventType = 'USER_CREATED';
+        break;
+      case 'updated':
+        fullEventType = 'USER_UPDATED';
+        break;
+      case 'deleted':
+        fullEventType = 'USER_DELETED';
+        break;
+      default:
+        fullEventType = 'UNKNOWN_EVENT';
+        break;
+    }
     const payload = {
-      eventType,
+      eventType: fullEventType,
       timestamp: new Date().toISOString(),
       userId,
       data: userData
