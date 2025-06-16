@@ -24,28 +24,43 @@ import {
   ValidationPipe,
   Patch,
   Delete,
+  UseInterceptors,
+  UploadedFile,
+  HttpStatus,
 } from '@nestjs/common';
 import {
   FieldsOptionsSearchDto,
   FieldsSearchDto,
 } from './dto/fields-search.dto';
-import { Request } from '@nestjs/common';
+import { Request, Response } from 'express';
 import { FieldsDto } from './dto/fields.dto';
 import { FieldsUpdateDto } from './dto/fields-update.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
-import { Response } from 'express';
 import { FieldsAdapter } from './fieldsadapter';
 import { FieldValuesDto } from './dto/field-values.dto';
 import { FieldValuesSearchDto } from './dto/field-values-search.dto';
 import { JwtAuthGuard } from 'src/common/guards/keycloak.guard';
 import { AllExceptionsFilter } from 'src/common/filters/exception.filter';
 import { APIID } from 'src/common/utils/api-id.config';
+import { FileUploadService } from 'src/storage/file-upload.service';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { S3StorageProvider } from 'src/storage/providers/s3-storage.provider';
+import { StorageConfigService } from 'src/storage/storage.config';
+import { FileValidationException } from '../storage/exceptions/file-validation.exception';
+import APIResponse from 'src/common/responses/response';
+import { API_RESPONSES } from 'src/common/utils/response.messages';
+import { StorageProvider } from 'src/storage/interfaces/storage.provider';
 
 @ApiTags('Fields')
 @Controller('fields')
 export class FieldsController {
-  constructor(private fieldsAdapter: FieldsAdapter) {}
+  constructor(
+    private fieldsAdapter: FieldsAdapter,
+    private readonly fileUploadService: FileUploadService,
+    private readonly storageConfig: StorageConfigService
+  ) {}
 
   //fields
   //create fields
@@ -264,5 +279,78 @@ export class FieldsController {
     return await this.fieldsAdapter
       .buildFieldsAdapter()
       .getFormCustomField(requiredData, response);
+  }
+
+  @Post(':fieldId/upload')
+  @UseInterceptors(FileInterceptor('file'))
+  @UseFilters(new AllExceptionsFilter(APIID.FIELDVALUES_CREATE))
+  async uploadFile(
+    @Param('fieldId') fieldId: string,
+    @Param('itemId') itemId: string,
+    @UploadedFile() file: Express.Multer.File,
+    @Res() response: Response
+  ) {
+    try {
+      const fileUrl = await this.fileUploadService.uploadFile(
+        file,
+        fieldId,
+        itemId
+      );
+      return APIResponse.success(
+        response,
+        APIID.FIELDVALUES_CREATE,
+        { url: fileUrl },
+        HttpStatus.CREATED,
+        'File uploaded successfully'
+      );
+    } catch (error) {
+      if (error instanceof FileValidationException) {
+        const errorResponse = error.getResponse() as any;
+        return APIResponse.error(
+          response,
+          APIID.FIELDVALUES_CREATE,
+          errorResponse.error,
+          errorResponse.message,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+      return APIResponse.error(
+        response,
+        APIID.FIELDVALUES_CREATE,
+        API_RESPONSES.SERVER_ERROR,
+        'Failed to upload file: ' + error.message,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  @Post(':fieldId/presigned-url')
+  async getPresignedUrl(
+    @Param('fieldId') fieldId: string,
+    @Body() body: { fileName: string; contentType: string },
+    @Res() response: Response
+  ) {
+    try {
+      const storageProvider = this.storageConfig.getProvider();
+      const presignedUrl = await storageProvider.getPresignedUrl(
+        body.fileName,
+        body.contentType
+      );
+      return APIResponse.success(
+        response,
+        APIID.FIELDVALUES_CREATE,
+        { url: presignedUrl },
+        HttpStatus.OK,
+        'Presigned URL generated successfully'
+      );
+    } catch (error) {
+      return APIResponse.error(
+        response,
+        APIID.FIELDVALUES_CREATE,
+        error.message,
+        error.error || 'Storage Error',
+        error.statusCode || HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
   }
 }

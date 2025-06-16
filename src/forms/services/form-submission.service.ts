@@ -90,8 +90,11 @@ export class FormSubmissionService {
         where: {
           formId: createFormSubmissionDto.formSubmission.formId,
           itemId: userId,
-          status: In([FormSubmissionStatus.ACTIVE, FormSubmissionStatus.INACTIVE])
-        }
+          status: In([
+            FormSubmissionStatus.ACTIVE,
+            FormSubmissionStatus.INACTIVE,
+          ]),
+        },
       });
 
       if (existingSubmission) {
@@ -634,11 +637,11 @@ export class FormSubmissionService {
       }
 
       // Find the form submission
-    const submission = await this.formSubmissionRepository.findOne({
-      where: { submissionId },
-    });
+      const submission = await this.formSubmissionRepository.findOne({
+        where: { submissionId },
+      });
 
-    if (!submission) {
+      if (!submission) {
         return {
           id: 'api.form.submission.get',
           ver: '1.0',
@@ -793,11 +796,11 @@ export class FormSubmissionService {
       }
 
       // Find the existing submission
-    const submission = await this.formSubmissionRepository.findOne({
-      where: { submissionId },
-    });
+      const submission = await this.formSubmissionRepository.findOne({
+        where: { submissionId },
+      });
 
-    if (!submission) {
+      if (!submission) {
         throw new BadRequestException(
           `Form submission ID ${submissionId} not found`
         );
@@ -925,11 +928,11 @@ export class FormSubmissionService {
         };
       }
 
-    const submission = await this.formSubmissionRepository.findOne({
-      where: { submissionId },
-    });
+      const submission = await this.formSubmissionRepository.findOne({
+        where: { submissionId },
+      });
 
-    if (!submission) {
+      if (!submission) {
         return {
           id: 'api.form.submission.delete',
           ver: '1.0',
@@ -951,8 +954,8 @@ export class FormSubmissionService {
         // Permanent delete
         result = await this.formSubmissionRepository.remove(submission);
       } else {
-    // Soft delete - update status to ARCHIVED
-    submission.status = FormSubmissionStatus.ARCHIVED;
+        // Soft delete - update status to ARCHIVED
+        submission.status = FormSubmissionStatus.ARCHIVED;
         result = await this.formSubmissionRepository.save(submission);
       }
 

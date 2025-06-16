@@ -441,4 +441,20 @@ export class FieldsService {
 
     return fieldResponse;
   }
+
+  async getField(fieldId: string): Promise<Fields> {
+    return this.fieldsRepository.findOne({ where: { fieldId } });
+  }
+
+  async updateFieldValue(data: {
+    fieldId: string;
+    itemId: string;
+    value: string;
+    fileValue: string;
+  }): Promise<void> {
+    await this.fieldsValuesRepository.update(
+      { fieldId: data.fieldId, itemId: data.itemId },
+      { value: data.value, fileValue: data.fileValue }
+    );
+  }
 }
