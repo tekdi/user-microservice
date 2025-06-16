@@ -90,15 +90,15 @@ export class FormSubmissionService {
 
       // Check if form exists
       const form = await this.formRepository.findOne({
-        where: { formId: createFormSubmissionDto.formSubmission.formId },
+        where: { formid: createFormSubmissionDto.formSubmission.formId }
       });
 
       if (!form) {
         return APIResponse.error(
           response,
           'api.form.submission.create',
-          'Form with the provided formId does not exist',
           'BAD_REQUEST',
+          'Form with the provided formId does not exist',
           HttpStatus.BAD_REQUEST
         );
       }
