@@ -61,6 +61,7 @@ export class PostgresUserService implements IServicelocator {
   jwt_password_reset_expires_In: any;
   jwt_secret: any;
   reset_frontEnd_url: any;
+  reset_backEnd_url: any;
   //SMS notification
   private readonly otpExpiry: number;
   private readonly otpDigits: number;
@@ -97,6 +98,8 @@ export class PostgresUserService implements IServicelocator {
     );
     this.reset_frontEnd_url =
       this.configService.get<string>('RESET_FRONTEND_URL');
+    this.reset_backEnd_url =
+      this.configService.get<string>('RESET_BACKEND_URL');
     this.otpExpiry = this.configService.get<number>('OTP_EXPIRY') || 10; // default: 10 minutes
     this.otpDigits = this.configService.get<number>('OTP_DIGITS') || 6;
     this.smsKey = this.configService.get<string>('SMS_KEY');
@@ -148,6 +151,7 @@ export class PostgresUserService implements IServicelocator {
       const jwtExpireTime = this.jwt_password_reset_expires_In;
       const jwtSecretKey = this.jwt_secret;
       const frontEndUrl = `${this.reset_frontEnd_url}/reset-password`;
+      const backEndUrl = `${this.reset_backEnd_url}/reset-password`;
       const resetToken = await this.jwtUtil.generateTokenForForgotPassword(
         tokenPayload,
         jwtExpireTime,
@@ -167,6 +171,14 @@ export class PostgresUserService implements IServicelocator {
           ? 'onStudentCreated'
           : 'OnForgotPasswordReset';
 
+      // Determine redirect URL for reset password based on user role
+      const userRole = userData?.tenantData?.[0]?.roleName;
+      let resetPasswordUrlPath = frontEndUrl;
+
+      if (userRole === 'Admin' || userRole === 'Regional Admin') {
+        resetPasswordUrlPath = backEndUrl;
+      }
+
       // Send Notification
       const notificationPayload = {
         isQueue: false,
@@ -179,7 +191,7 @@ export class PostgresUserService implements IServicelocator {
           '{resetToken}': resetToken,
           '{programName}': capilatizeFirstLettterOfProgram,
           '{expireTime}': time,
-          '{frontEndUrl}': frontEndUrl,
+          '{resetPasswordUrl}': resetPasswordUrlPath,
           '{redirectUrl}': redirectUrl,
         },
         email: {
