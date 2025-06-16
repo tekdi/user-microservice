@@ -11,6 +11,10 @@ export enum MemberStatus {
   INACTIVE = 'inactive',
   DROPOUT = 'dropout',
   ARCHIVED = 'archived',
+  APPLIED = 'applied',
+  SUBMITTED = 'submitted',
+  SHORTLISTED = 'shortlisted',
+  REJECTED = 'rejected',
 }
 
 @Entity('CohortMembers')
