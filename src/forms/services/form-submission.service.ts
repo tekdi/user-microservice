@@ -88,9 +88,12 @@ export class FormSubmissionService {
         throw new BadRequestException('User ID not found in token');
       }
 
-      // Check if form exists
+      // Check if form exists and is active
       const form = await this.formRepository.findOne({
-        where: { formid: createFormSubmissionDto.formSubmission.formId }
+        where: { 
+          formid: createFormSubmissionDto.formSubmission.formId,
+          status: 'active'
+        }
       });
 
       if (!form) {
@@ -98,7 +101,7 @@ export class FormSubmissionService {
           response,
           'api.form.submission.create',
           'BAD_REQUEST',
-          'Form with the provided formId does not exist',
+          'Form with the provided formId does not exist or is not active',
           HttpStatus.BAD_REQUEST
         );
       }
