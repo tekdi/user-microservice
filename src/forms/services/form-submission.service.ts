@@ -25,6 +25,7 @@ import { FormSubmissionSearchDto } from '../dto/form-submission-search.dto';
 import { FieldValuesSearchDto } from '../../fields/dto/field-values-search.dto';
 import { FieldsSearchDto } from '../../fields/dto/fields-search.dto';
 import jwt_decode from 'jwt-decode';
+import { Form } from '../entities/form.entity';
 
 interface DateRange {
   start: string;
@@ -69,6 +70,8 @@ export class FormSubmissionService {
     private formSubmissionRepository: Repository<FormSubmission>,
     @InjectRepository(FieldValues)
     private fieldValuesRepository: Repository<FieldValues>,
+    @InjectRepository(Form)
+    private formRepository: Repository<Form>,
     private fieldsService: FieldsService
   ) {}
 
@@ -83,6 +86,24 @@ export class FormSubmissionService {
 
       if (!userId) {
         throw new BadRequestException('User ID not found in token');
+      }
+
+      // Check if form exists and is active
+      const form = await this.formRepository.findOne({
+        where: {
+          formid: createFormSubmissionDto.formSubmission.formId,
+          status: 'active',
+        },
+      });
+
+      if (!form) {
+        return APIResponse.error(
+          response,
+          'api.form.submission.create',
+          'BAD_REQUEST',
+          'Form with the provided formId does not exist or is not active',
+          HttpStatus.BAD_REQUEST
+        );
       }
 
       // Check for existing active/inactive submissions with same formId and itemId
