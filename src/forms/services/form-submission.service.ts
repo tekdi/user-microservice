@@ -90,10 +90,10 @@ export class FormSubmissionService {
 
       // Check if form exists and is active
       const form = await this.formRepository.findOne({
-        where: { 
+        where: {
           formid: createFormSubmissionDto.formSubmission.formId,
-          status: 'active'
-        }
+          status: 'active',
+        },
       });
 
       if (!form) {
