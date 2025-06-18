@@ -24,7 +24,7 @@ import { PostgresUserService } from './user-adapter';
 import { isValid } from 'date-fns';
 import { FieldValuesOptionDto } from 'src/user/dto/user-create.dto';
 import { In } from 'typeorm';
-
+import { ElasticsearchService } from 'src/elasticsearch/elasticsearch.service';
 @Injectable()
 export class PostgresCohortMembersService {
   constructor(
@@ -41,7 +41,8 @@ export class PostgresCohortMembersService {
     private readonly academicyearService: PostgresAcademicYearService,
     private readonly notificationRequest: NotificationRequest,
     private fieldsService: PostgresFieldsService,
-    private userService: PostgresUserService
+    private userService: PostgresUserService,
+    private elasticsearchService: ElasticsearchService
   ) {}
 
   //Get cohort member
@@ -648,6 +649,41 @@ export class PostgresCohortMembersService {
         cohortMembers
       );
 
+      // Update Elasticsearch with cohort member status
+      try {
+        const application = {
+          cohortId: cohortMembers.cohortId,
+          cohortmemberstatus: savedCohortMember.status || 'active',
+          lastSavedAt: new Date().toISOString(),
+          submittedAt: new Date().toISOString(),
+          cohortDetails: {
+            name: '',
+            description: '',
+            startDate: null,
+            endDate: null,
+            status: 'active',
+          },
+          progress: {
+            pages: {},
+            overall: {
+              completed: 0,
+              total: 0,
+            },
+          },
+        };
+
+        await this.elasticsearchService.updateApplication(
+          cohortMembers.userId,
+          application
+        );
+      } catch (elasticError) {
+        // Log Elasticsearch error but don't fail the request
+        LoggerUtil.error(
+          'Failed to update Elasticsearch with cohort member status',
+          `Error: ${elasticError.message}`,
+          apiId
+        );
+      }
       return APIResponse.success(
         res,
         apiId,
@@ -820,6 +856,29 @@ export class PostgresCohortMembersService {
       let result = await this.cohortMembersRepository.save(
         cohortMembershipToUpdate
       );
+
+      // Update Elasticsearch with updated cohort member status
+      try {
+        const application = {
+          cohortId: cohortMembershipToUpdate.cohortId,
+          cohortmemberstatus: result.status || 'active',
+          lastSavedAt: new Date().toISOString(),
+          submittedAt: new Date().toISOString(),
+        };
+
+        await this.elasticsearchService.updateApplication(
+          cohortMembershipToUpdate.userId,
+          application
+        );
+      } catch (elasticError) {
+        // Log Elasticsearch error but don't fail the request
+        LoggerUtil.error(
+          'Failed to update Elasticsearch with cohort member status',
+          `Error: ${elasticError.message}`,
+          apiId
+        );
+      }
+
       //update custom fields
       let responseForCustomField;
       if (

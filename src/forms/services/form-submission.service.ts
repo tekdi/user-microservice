@@ -26,6 +26,10 @@ import { FieldValuesSearchDto } from '../../fields/dto/field-values-search.dto';
 import { FieldsSearchDto } from '../../fields/dto/fields-search.dto';
 import jwt_decode from 'jwt-decode';
 import { Form } from '../entities/form.entity';
+import { UserElasticsearchService } from '../../elasticsearch/user-elasticsearch.service';
+import { IApplication } from '../../elasticsearch/interfaces/user.interface';
+import { FormsService } from '../../forms/forms.service';
+import { PostgresCohortService } from 'src/adapters/postgres/cohort-adapter';
 
 interface DateRange {
   start: string;
@@ -72,7 +76,10 @@ export class FormSubmissionService {
     private fieldValuesRepository: Repository<FieldValues>,
     @InjectRepository(Form)
     private formRepository: Repository<Form>,
-    private fieldsService: FieldsService
+    private fieldsService: FieldsService,
+    private userElasticsearchService: UserElasticsearchService,
+    private formsService: FormsService,
+    private postgresCohortService: PostgresCohortService
   ) {}
 
   async create(
@@ -164,6 +171,134 @@ export class FormSubmissionService {
       // Get the complete field values with field information
       const customFields = await this.fieldsService.getFieldsAndFieldsValues(
         savedSubmission.itemId
+      );
+
+      // Get form details first to get contextId
+      const formDetails = await this.formsService.getFormById(
+        createFormSubmissionDto.formSubmission.formId
+      );
+      if (!formDetails) {
+        throw new BadRequestException('Form not found');
+      }
+
+      // Get form data using contextId
+      const formData = await this.formsService.getFormData({
+        context: 'COHORTMEMBER',
+        contextType: 'COHORTMEMBER',
+        contextId: formDetails.contextId,
+        tenantId: createFormSubmissionDto.tenantId,
+      });
+
+      if (!formData) {
+        throw new BadRequestException('Form data not found');
+      }
+
+      const cohortId = formData.contextId;
+
+      // Extract schema from formData
+      interface SchemaProperty {
+        fieldId: string;
+        type?: string;
+        [key: string]: any;
+      }
+
+      interface PageSchema {
+        properties: {
+          [key: string]: SchemaProperty;
+        };
+        [key: string]: any;
+      }
+
+      const schema = (formData.fields?.result?.[0]?.schema?.properties ||
+        {}) as {
+        [key: string]: PageSchema;
+      };
+
+      const mockResponse = {
+        status: (code: number) => ({
+          json: (data: any) => data,
+        }),
+      };
+
+      const cohortDetails = await this.postgresCohortService.getCohortsDetails(
+        {
+          cohortId: formData.contextId,
+          getChildData: false,
+        },
+        mockResponse
+      );
+
+      if (!cohortDetails?.result?.cohortData?.[0]) {
+        throw new BadRequestException('Cohort details not found');
+      }
+
+      const cohortData = cohortDetails.result.cohortData[0];
+
+      // Use cohortData.customField instead of making another database call
+      const cohortFieldValues = cohortData.customField || [];
+
+      const application = {
+        cohortId: cohortData.cohortId,
+        formstatus:
+          createFormSubmissionDto.formSubmission.status ||
+          FormSubmissionStatus.ACTIVE,
+        progress: {
+          pages: {},
+          overall: {
+            completed: createFormSubmissionDto.customFields.length,
+            total: createFormSubmissionDto.customFields.length,
+          },
+        },
+        lastSavedAt: new Date().toISOString(),
+        submittedAt: new Date().toISOString(),
+        cohortDetails: {
+          name: cohortData.name || '',
+          status: cohortData.status || '',
+          // Dynamically map all custom fields using their labels as keys
+          ...cohortFieldValues.reduce((acc, field) => {
+            acc[field.label] = field.value || '';
+            return acc;
+          }, {} as Record<string, any>),
+        },
+        formData: {},
+      };
+
+      // Loop through each page from the schema
+      for (const [pageKey, pageSchema] of Object.entries(schema)) {
+        const pageName = pageKey === 'default' ? 'eligibility' : pageKey;
+
+        // Initialize sections
+        application.progress.pages[pageName] = {
+          completed: true,
+          fields: {},
+        };
+
+        application.formData[pageName] = {};
+
+        // Loop through each field defined in the schema
+        const fieldProps = pageSchema.properties || {};
+        for (const [fieldKey, fieldSchema] of Object.entries(fieldProps)) {
+          const fieldId = fieldSchema.fieldId;
+
+          // Find matching submitted field value
+          const matchingField = createFormSubmissionDto.customFields.find(
+            (f) => f.fieldId === fieldId
+          );
+
+          if (matchingField) {
+            const fieldName = matchingField.fieldId;
+            const value = matchingField.value;
+
+            // Assign to both progress and formData
+            application.progress.pages[pageName].fields[fieldName] = value;
+            application.formData[pageName][fieldName] = value;
+          }
+        }
+      }
+
+      await this.userElasticsearchService.updateApplication(
+        userId,
+        application
       );
 
       // Create response object
@@ -881,7 +1016,110 @@ export class FormSubmissionService {
           throw new Error('Failed to update field values');
         }
       }
+      // Update Elasticsearch after successful form submission update
+      try {
+        // Get form fields from FormsService
+        const formData = await this.formsService.getFormData({
+          formid: updatedSubmission.formId,
+          tenantId,
+        });
 
+        if (!formData) {
+          throw new Error('Form data not found');
+        }
+
+        // Group fields by page/section
+        const pages: {
+          [key: string]: { completed: boolean; fields: { [key: string]: any } };
+        } = {};
+        let totalFields = 0;
+        let completedFields = 0;
+
+        // Process form fields and group them by page
+        if (formData.fields?.result) {
+          for (const field of formData.fields.result) {
+            const pageKey = field.schema?.page || 'default';
+            if (!pages[pageKey]) {
+              pages[pageKey] = {
+                completed: false,
+                fields: {},
+              };
+            }
+
+            // Find the field value in updatedFieldValues
+            const fieldValue = updatedFieldValues.find(
+              (fv) => fv.fieldId === field.fieldId
+            );
+            if (fieldValue) {
+              pages[pageKey].fields[field.schema?.name || field.fieldId] =
+                fieldValue.value;
+              completedFields++;
+            }
+            totalFields++;
+          }
+
+          // Mark pages as completed if all their fields are filled
+          for (const pageKey in pages) {
+            const pageFields = Object.keys(pages[pageKey].fields);
+            pages[pageKey].completed = pageFields.length > 0;
+          }
+        }
+
+        const mockResponse = {
+          status: (code: number) => ({
+            json: (data: any) => data,
+          }),
+        };
+
+        const cohortDetails =
+          await this.postgresCohortService.getCohortsDetails(
+            {
+              cohortId: updatedSubmission.formId,
+              getChildData: false,
+            },
+            mockResponse
+          );
+
+        if (!cohortDetails?.result?.cohortData?.[0]) {
+          throw new BadRequestException('Cohort details not found');
+        }
+
+        const cohortData = cohortDetails.result.cohortData[0];
+
+        // Use cohortData.customField instead of making another database call
+        const cohortFieldValues = cohortData.customField || [];
+
+        const application: IApplication = {
+          cohortId: cohortData.cohortId,
+          formstatus: updatedSubmission.status,
+          progress: {
+            pages,
+            overall: {
+              completed: completedFields,
+              total: totalFields,
+            },
+          },
+          lastSavedAt: updatedSubmission.createdAt.toISOString(),
+          submittedAt: updatedSubmission.updatedAt.toISOString(),
+          cohortDetails: {
+            name: cohortData.name || '',
+            status: cohortData.status || '',
+            // Dynamically map all custom fields using their labels as keys
+            ...cohortFieldValues.reduce((acc, field) => {
+              acc[field.label] = field.value || '';
+              return acc;
+            }, {} as Record<string, any>),
+          },
+        };
+
+        await this.userElasticsearchService.updateApplication(
+          userId,
+          application
+        );
+      } catch (elasticError) {
+        // Log Elasticsearch error but don't fail the request
+        console.error('Failed to update Elasticsearch:', elasticError);
+      }
       const successResponse = {
         id: 'api.form.submission.update',
         ver: '1.0',

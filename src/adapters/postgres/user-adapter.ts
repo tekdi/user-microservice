@@ -47,6 +47,8 @@ import { ActionType, UserUpdateDTO } from 'src/user/dto/user-update.dto';
 import config from '../../common/config';
 import { CalendarField } from 'src/fields/fieldValidators/fieldTypeClasses';
 import { UserCreateSsoDto } from 'src/user/dto/user-create-sso.dto';
+import { UserElasticsearchService } from '../../elasticsearch/user-elasticsearch.service';
+import { IUser, IProfile } from '../../elasticsearch/interfaces/user.interface';
 
 interface UpdateField {
   userId: string; // Required
@@ -90,7 +92,8 @@ export class PostgresUserService implements IServicelocator {
     private configService: ConfigService,
     private postgresAcademicYearService: PostgresAcademicYearService,
     private readonly cohortAcademicYearService: CohortAcademicYearService,
-    private readonly authUtils: AuthUtils
+    private readonly authUtils: AuthUtils,
+    private userElasticsearchService: UserElasticsearchService
   ) {
     this.jwt_secret = this.configService.get<string>('RBAC_JWT_SECRET');
     this.jwt_password_reset_expires_In = this.configService.get<string>(
@@ -103,6 +106,17 @@ export class PostgresUserService implements IServicelocator {
     this.otpExpiry = this.configService.get<number>('OTP_EXPIRY') || 10; // default: 10 minutes
     this.otpDigits = this.configService.get<number>('OTP_DIGITS') || 6;
     this.smsKey = this.configService.get<string>('SMS_KEY');
+    // Initialize Elasticsearch index on service startup
+    this.initializeElasticsearch();
+  }
+
+  private async initializeElasticsearch() {
+    try {
+      await this.userElasticsearchService.initialize();
+      LoggerUtil.log('Elasticsearch index initialized successfully');
+    } catch (error) {
+      LoggerUtil.error('Failed to initialize Elasticsearch index', error);
+    }
   }
 
   public async sendPasswordResetLink(
@@ -389,6 +403,28 @@ export class PostgresUserService implements IServicelocator {
   ) {
     const apiId = APIID.USER_LIST;
     try {
+      // First try Elasticsearch
+      const elasticResults = await this.userElasticsearchService.searchUsers({
+        text: userSearchDto.filters?.username || '', // Use username from filters
+        exact: {
+          'profile.tenantId': tenantId,
+        },
+        ...userSearchDto,
+      });
+
+      if (elasticResults.hits.length > 0) {
+        return APIResponse.success(
+          response,
+          apiId,
+          {
+            users: elasticResults.hits.map((hit) => hit._source),
+            total: elasticResults.total.toString(), // Convert number to string
+          },
+          HttpStatus.OK, // statusCode parameter
+          API_RESPONSES.USER_GET_SUCCESSFULLY // successmessage parameter
+        );
+      }
+
       let findData = await this.findAllUserDetails(userSearchDto);
 
       if (findData === false) {
@@ -1022,6 +1058,15 @@ export class PostgresUserService implements IServicelocator {
         userDto?.userId
       );
 
+      const updatedUser = await this.updateBasicUserDetails(userId, userDto);
+
+      // Get applications and courses
+      const applications = await this.getUserApplications(userId);
+      const courses = await this.getUserCourses(userId);
+
+      // Sync to Elasticsearch
+      await this.syncUserToElasticsearch(updatedUser);
+
       return await APIResponse.success(
         response,
         apiId,
@@ -1483,6 +1528,57 @@ export class PostgresUserService implements IServicelocator {
         }
       }
       LoggerUtil.log(API_RESPONSES.USER_CREATE_SUCCESSFULLY, apiId);
+
+      // Add Elasticsearch sync with custom fields
+      try {
+        // Get custom fields from the processed result
+        const customFields = result['customFields'] || [];
+
+        // Map user data to match IUser interface
+        const userForElastic: IUser = {
+          userId: result.userId,
+          profile: {
+            userId: result.userId,
+            username: result.username,
+            firstName: result.firstName,
+            lastName: result.lastName,
+            middleName: result.middleName || '',
+            email: result.email || '',
+            mobile: result.mobile ? result.mobile.toString() : '',
+            mobile_country_code: result.mobile_country_code || '',
+            gender: result.gender,
+            dob: result.dob ? result.dob.toISOString() : '',
+            address: result.address || '',
+            state: result.state || '',
+            district: result.district || '',
+            pincode: result.pincode || '',
+            status: result.status,
+            customFields: customFields.map((field) => ({
+              fieldId: field.fieldId,
+              value: field.value,
+            })),
+          },
+          applications: [],
+          courses: [],
+          createdAt: result.createdAt
+            ? result.createdAt.toISOString()
+            : new Date().toISOString(),
+          updatedAt: result.updatedAt
+            ? result.updatedAt.toISOString()
+            : new Date().toISOString(),
+        };
+
+        // Use createUser to ensure new document creation
+        await this.userElasticsearchService.createUser(userForElastic);
+        LoggerUtil.log('User synced to Elasticsearch successfully', apiId);
+      } catch (elasticError) {
+        // Log Elasticsearch error but don't fail the request
+        LoggerUtil.error(
+          'Elasticsearch sync failed but user was created in Keycloak and database',
+          elasticError
+        );
+      }
+
       APIResponse.success(
         response,
         apiId,
@@ -2624,5 +2720,82 @@ export class PostgresUserService implements IServicelocator {
         `${API_RESPONSES.EMAIL_NOTIFICATION_ERROR}:  ${e.message}`
       );
     }
+  }
+
+  private async syncUserToElasticsearch(user: User) {
+    try {
+      // Get user's applications with cohort details
+      const applications = await this.cohortMemberRepository.find({
+        where: { userId: user.userId },
+        relations: ['cohort'],
+      });
+
+      // Map applications to IApplication format
+      const mappedApplications = applications.map((app) => ({
+        cohortId: app.cohortId,
+        status: app.status,
+        cohortmemberstatus: app.status,
+        formstatus: app.status,
+        progress: {
+          pages: {},
+          overall: {
+            completed: 0,
+            total: 0,
+          },
+        },
+        lastSavedAt: app.createdAt.toISOString(),
+        submittedAt: app.updatedAt.toISOString(),
+        cohortDetails: {
+          name: '',
+          description: '',
+          startDate: '',
+          endDate: '',
+          status: '',
+        },
+      }));
+
+      // Prepare the user data for Elasticsearch
+      const elasticUser: IUser = {
+        userId: user.userId,
+        profile: {
+          userId: user.userId,
+          username: user.username,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          middleName: user.middleName || '',
+          email: user.email || '',
+          mobile: user.mobile?.toString() || '',
+          mobile_country_code: user.mobile_country_code || '',
+          dob: user.dob ? new Date(user.dob).toISOString() : '',
+          gender: user.gender,
+          address: user.address || '',
+          district: user.district || '',
+          state: user.state || '',
+          pincode: user.pincode || '',
+          status: user.status,
+          customFields: {},
+        },
+        applications: mappedApplications,
+        courses: [],
+        createdAt: user.createdAt.toISOString(),
+        updatedAt: user.updatedAt.toISOString(),
+      };
+
+      // Try to sync with Elasticsearch
+      await this.userElasticsearchService.createUser(elasticUser);
+    } catch (error) {
+      console.error('Failed to sync user to Elasticsearch:', error);
+      // Don't throw the error - we want the main operation to continue even if Elasticsearch sync fails
+    }
+  }
+
+  private async getUserApplications(userId: string) {
+    // Implement logic to get user applications
+    return [];
+  }
+
+  private async getUserCourses(userId: string) {
+    // Implement logic to get user courses
+    return [];
   }
 }
