@@ -627,4 +627,16 @@ export class FormsService {
       );
     }
   }
+
+  async getFormById(formId: string) {
+    try {
+      const form = await this.formRepository.findOne({
+        where: { formid: formId },
+      });
+      return form;
+    } catch (error) {
+      console.error('Error getting form by ID:', error);
+      return null;
+    }
+  }
 }
