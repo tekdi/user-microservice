@@ -820,6 +820,60 @@ export class PostgresCohortMembersService {
       let result = await this.cohortMembersRepository.save(
         cohortMembershipToUpdate
       );
+
+      // Send notification if applicable for this status onlu
+      const notifyStatuses = ['dropout', 'shortlisted', 'rejected'];
+      const { status, statusReason } = cohortMembersUpdateDto;
+
+      if (notifyStatuses.includes(status)) {
+        const [userData, cohortData] = await Promise.all([
+          this.usersRepository.findOne({
+            where: { userId: cohortMembershipToUpdate.userId },
+          }),
+          this.cohortRepository.findOne({
+            where: { cohortId: cohortMembershipToUpdate.cohortId },
+          }),
+        ]);
+
+        if (userData?.email) {
+          const validStatusKeys = {
+            dropout: 'onStudentDropout',
+            shortlisted: 'onStudentShortlisted',
+            rejected: 'onStudentRejected',
+          };
+          //This is notification payload required to send
+          const notificationPayload = {
+            isQueue: false,
+            context: 'USER',
+            key: validStatusKeys[status],
+            replacements: {
+              '{username}': `${userData.firstName ?? ''} ${
+                userData.lastName ?? ''
+              }`.trim(),
+              '{firstName}': userData.firstName ?? '',
+              '{lastName}': userData.lastName ?? '',
+              '{programName}': cohortData?.name ?? 'the program',
+              '{status}': status,
+              '{statusReason}': statusReason ?? 'Not specified',
+            },
+            email: {
+              receipients: [userData.email],
+            },
+          };
+
+          const mailSend = await this.notificationRequest.sendNotification(
+            notificationPayload
+          );
+
+          if (mailSend?.result?.email?.errors?.length > 0) {
+            LoggerUtil.error(
+              API_RESPONSES.BAD_REQUEST,
+              `Error: Failed to send ${status} notification`,
+              apiId
+            );
+          }
+        }
+      }
       //update custom fields
       let responseForCustomField;
       if (

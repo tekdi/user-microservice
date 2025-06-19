@@ -68,8 +68,16 @@ export class CohortMembersUpdateDto {
     type: String,
     description: 'The status change reason',
   })
-  @ValidateIf((o) => o.status === MemberStatus.DROPOUT)
-  @IsString({ message: 'Reason is mandatory while dropping out a member' })
+  @ValidateIf(
+    (o) =>
+      o.status === MemberStatus.DROPOUT ||
+      o.status === MemberStatus.SHORTLISTED ||
+      o.status === MemberStatus.REJECTED
+  )
+  @IsString({
+    message:
+      'Reason is mandatory while dropout, shortlisted, and rejected statuses',
+  })
   statusReason?: string;
   @ApiProperty({
     type: FieldValuesOptionDto,
