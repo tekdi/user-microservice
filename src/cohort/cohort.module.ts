@@ -22,6 +22,7 @@ import { User } from "src/user/entities/user-entity";
 import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
 import { AutomaticMember } from "src/automatic-member/entity/automatic-member.entity";
 import { AutomaticMemberService } from "src/automatic-member/automatic-member.service";
+import { KafkaService } from "../kafka/kafka.service";
 
 
 @Module({
@@ -51,7 +52,8 @@ import { AutomaticMemberService } from "src/automatic-member/automatic-member.se
     CohortAcademicYearService,
     PostgresAcademicYearService,
     PostgresCohortMembersService,
-    AutomaticMemberService
+    AutomaticMemberService,
+    KafkaService
   ],
 })
 export class CohortModule { }
