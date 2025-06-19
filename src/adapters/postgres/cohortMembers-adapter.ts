@@ -1450,9 +1450,8 @@ export class PostgresCohortMembersService {
     offset = offset || 0;
     limit = limit || 0;
     let results = { userDetails: [] };
-    let where: any[] = [];
     const options = [];
-
+    let where: any[] = [];
     const whereClause = {};
     if (filters && Object.keys(filters).length > 0) {
       Object.entries(filters).forEach(([key, value]) => {
@@ -1540,7 +1539,7 @@ export class PostgresCohortMembersService {
       const userIds: string[] = Array.from(
         new Set(
           results['userDetails']
-            .map((user) => [user.createdBy, user.updatedBy])
+            .map((user) => [user.updatedBy, user.createdBy])
             .flat()
             .filter((id) => typeof id === 'string')
         )
