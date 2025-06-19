@@ -821,7 +821,7 @@ export class PostgresCohortMembersService {
         cohortMembershipToUpdate
       );
 
-      // Send notification if applicable
+      // Send notification if applicable for this status onlu
       const notifyStatuses = ['dropout', 'shortlisted', 'rejected'];
       const { status, statusReason } = cohortMembersUpdateDto;
 
@@ -841,7 +841,7 @@ export class PostgresCohortMembersService {
             shortlisted: 'onStudentShortlisted',
             rejected: 'onStudentRejected',
           };
-
+          //This is notification payload required to send
           const notificationPayload = {
             isQueue: false,
             context: 'USER',
