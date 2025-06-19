@@ -260,13 +260,27 @@ export class S3StorageProvider implements StorageProvider {
   }
 
   /**
+   * Get the minimum file size from configuration.
+   * @returns Minimum file size in bytes
+   */
+  private getMinFileSize(): number {
+    return this.configService.get<number>('AWS_MIN_FILE_SIZE_BYTES') ?? 1;
+  }
+
+  /**
    * Verifies an uploaded file and deletes it if invalid (wrong type/size/corrupted).
    * @param key - The S3 key
    * @param expectedContentType - The expected MIME type
    * @param expectedSize - Optional expected file size
+   * @param minimumFileSize - Optional minimum file size in bytes (defaults to config or 1 byte)
    * @returns Validation result and whether file was deleted
    */
-  async verifyAndCleanupFile(key: string, expectedContentType: string, expectedSize?: number): Promise<{ valid: boolean; deleted: boolean; reason?: string }> {
+  async verifyAndCleanupFile(
+    key: string, 
+    expectedContentType: string, 
+    expectedSize?: number,
+    minimumFileSize?: number
+  ): Promise<{ valid: boolean; deleted: boolean; reason?: string }> {
     try {
       const verification = await this.verifyFile(key, expectedContentType);
       if (!verification.exists) {
@@ -284,11 +298,15 @@ export class S3StorageProvider implements StorageProvider {
         await this.delete(key);
         return { valid: false, deleted: true, reason: `File size mismatch. Expected: ${expectedSize}, Got: ${verification.size}` };
       }
-      // Check if file is empty or too small (likely corrupted)
-      if (verification.size && verification.size < 100) { // Less than 100 bytes is suspicious
-        console.log(`File too small for ${key}. Size: ${verification.size}. Deleting file.`);
+      
+      // Get minimum file size from parameter, configuration, or use default
+      const minSize = minimumFileSize ?? this.getMinFileSize();
+      
+      // Check if file is too small (likely corrupted or empty)
+      if (verification.size !== undefined && verification.size < minSize) {
+        console.log(`File too small for ${key}. Size: ${verification.size}, Minimum: ${minSize}. Deleting file.`);
         await this.delete(key);
-        return { valid: false, deleted: true, reason: `File too small (${verification.size} bytes), likely corrupted` };
+        return { valid: false, deleted: true, reason: `File too small (${verification.size} bytes), minimum required: ${minSize} bytes` };
       }
       return { valid: true, deleted: false };
     } catch (error) {

@@ -25,13 +25,15 @@ export class FileUploadController {
    * @param req - Express request object
    * @param res - Express response object
    */
-  async getPresignedUrl(req: Request, res: Response) {
+  @Get(':fieldId/presigned-url')
+  async getPresignedUrl(
+    @Param('fieldId') fieldId: string,
+    @Query('userId') userId: string,
+    @Query('fileType') fileType: string,
+    @Res() res: Response
+  ) {
     const apiId = APIID.FIELDVALUES_CREATE;
     try {
-      const { fieldId } = req.params;
-      const { userId } = req.query;
-      const { fileType } = req.query;
-
       if (!userId) {
         return APIResponse.error(
           res,
@@ -43,11 +45,11 @@ export class FileUploadController {
       }
 
       // Only pass fileType if it's not undefined or empty string
-      const fileTypeParam = fileType && fileType !== 'undefined' ? fileType as string : undefined;
+      const fileTypeParam = fileType && fileType !== 'undefined' ? fileType : undefined;
 
       const result = await this.fileUploadService.getPresignedUrl(
         fieldId,
-        userId as string,
+        userId,
         fileTypeParam
       );
 
@@ -60,7 +62,7 @@ export class FileUploadController {
       );
     } catch (error) {
       console.error('Error getting presigned URL:', error);
-      
+
       // Handle FileValidationException specifically
       if (error.message && (error.message.includes('not allowed') || error.message.includes('Unsupported file type'))) {
         return APIResponse.error(
