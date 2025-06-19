@@ -820,6 +820,65 @@ export class PostgresCohortMembersService {
       let result = await this.cohortMembersRepository.save(
         cohortMembershipToUpdate
       );
+
+      // 2. After save, send notification if status is "dropout", "shortlist", or "reject"
+      const notifyStatuses = ['dropout', 'shortlisted', 'rejected'];
+
+      if (notifyStatuses.includes(cohortMembersUpdateDto.status)) {
+        const userData = await this.usersRepository.findOne({
+          where: { userId: cohortMembershipToUpdate.userId },
+        });
+        const cohortData = await this.cohortRepository.findOne({
+          where: { cohortId: cohortMembershipToUpdate.cohortId },
+        });
+        if (userData && userData.email) {
+          let notificationKey = '';
+
+          switch (cohortMembersUpdateDto.status) {
+            case 'dropout':
+              notificationKey = 'onStudentDropout';
+              break;
+            case 'shortlisted':
+              notificationKey = 'onStudentShortlisted';
+              break;
+            case 'rejected':
+              notificationKey = 'onStudentRejected';
+              break;
+          }
+
+          const notificationPayload = {
+            isQueue: false,
+            context: 'USER',
+            key: notificationKey, // Use correct template keys in your notification service
+            replacements: {
+              '{username}': `${userData.firstName || ''} ${
+                userData.lastName || ''
+              }`.trim(),
+              '{firstName}': userData.firstName || '',
+              '{lastName}': userData.lastName || '',
+              '{programName}': cohortData?.name || 'the program',
+              '{status}': cohortMembersUpdateDto.status,
+              '{statusReason}':
+                cohortMembersUpdateDto.statusReason || 'Not specified',
+            },
+            email: {
+              receipients: [userData.email],
+            },
+          };
+
+          const mailSend = await this.notificationRequest.sendNotification(
+            notificationPayload
+          );
+
+          if (mailSend?.result?.email?.errors?.length > 0) {
+            LoggerUtil.error(
+              `${API_RESPONSES.BAD_REQUEST}`,
+              `Error: Failed to send ${cohortMembersUpdateDto.status} notification`,
+              apiId
+            );
+          }
+        }
+      }
       //update custom fields
       let responseForCustomField;
       if (
