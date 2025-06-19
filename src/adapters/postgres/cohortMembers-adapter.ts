@@ -1548,6 +1548,7 @@ export class PostgresCohortMembersService {
         try {
           const userDetails = await this.getUserNamesByIds(userIds);
           if (userDetails && Object.keys(userDetails).length > 0) {
+            // Get userDetails
             results['userDetails'] = results['userDetails'].map((user) => ({
               ...user,
               createdByName: user.createdBy
