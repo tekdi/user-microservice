@@ -24,6 +24,7 @@ import { CohortAcademicYear } from "src/cohortAcademicYear/entities/cohortAcadem
 import { PostgresCohortMembersService } from "./cohortMembers-adapter";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
 import { AutomaticMemberService } from "src/automatic-member/automatic-member.service";
+import { KafkaService } from "../../kafka/kafka.service";
 
 @Injectable()
 export class PostgresCohortService {
@@ -42,7 +43,8 @@ export class PostgresCohortService {
     private readonly cohortAcademicYearService: CohortAcademicYearService,
     private readonly postgresAcademicYearService: PostgresAcademicYearService,
     private readonly postgresCohortMembersService: PostgresCohortMembersService,
-    private readonly automaticMemberService: AutomaticMemberService
+    private readonly automaticMemberService: AutomaticMemberService,
+    private readonly kafkaService: KafkaService
   ) { }
 
   public async getCohortsDetails(requiredData, res) {
@@ -417,6 +419,18 @@ export class PostgresCohortService {
         cohortCreateDto.updatedBy
       );
 
+      // Publish cohort created event to Kafka
+      try {
+        await this.kafkaService.publishCohortEvent('created', response, response.cohortId);
+      } catch (kafkaError) {
+        LoggerUtil.error(
+          'Failed to publish cohort created event to Kafka',
+          `Error: ${kafkaError.message}`,
+          apiId
+        );
+        // Don't fail the request if Kafka publishing fails
+      }
+
       const resBody = new ReturnResponseBody({
         ...response,
         academicYearId: academicYearId,
@@ -607,6 +621,22 @@ export class PostgresCohortService {
               { status: memberStatus, updatedBy: cohortUpdateDto.updatedBy }
             );
           }
+        }
+
+        // Publish cohort updated event to Kafka
+        try {
+          const updatedCohortData = {
+            ...existingCohorDetails,
+            ...cohortUpdateDto
+          };
+          await this.kafkaService.publishCohortEvent('updated', updatedCohortData, cohortId);
+        } catch (kafkaError) {
+          LoggerUtil.error(
+            'Failed to publish cohort updated event to Kafka',
+            `Error: ${kafkaError.message}`,
+            apiId
+          );
+          // Don't fail the request if Kafka publishing fails
         }
 
         LoggerUtil.log(
@@ -948,6 +978,24 @@ export class PostgresCohortService {
         ]);
         await this.cohortMembersRepository.delete({ cohortId: cohortId });
         await this.fieldValuesRepository.delete({ itemId: cohortId });
+
+        // Publish cohort deleted event to Kafka
+        try {
+          const deletedCohortData = {
+            cohortId,
+            status: 'archived',
+            updatedBy: userId,
+            deletedAt: new Date().toISOString()
+          };
+          await this.kafkaService.publishCohortEvent('deleted', deletedCohortData, cohortId);
+        } catch (kafkaError) {
+          LoggerUtil.error(
+            'Failed to publish cohort deleted event to Kafka',
+            `Error: ${kafkaError.message}`,
+            apiId
+          );
+          // Don't fail the request if Kafka publishing fails
+        }
 
         return APIResponse.success(
           response,
