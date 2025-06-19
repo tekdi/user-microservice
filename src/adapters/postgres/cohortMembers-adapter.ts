@@ -821,35 +821,31 @@ export class PostgresCohortMembersService {
         cohortMembershipToUpdate
       );
 
-      //send notification if status is "dropout", "shortlist", or "reject" only
+      // Send notification if applicable
       const notifyStatuses = ['dropout', 'shortlisted', 'rejected'];
+      const { status, statusReason } = cohortMembersUpdateDto;
 
-      if (notifyStatuses.includes(cohortMembersUpdateDto.status)) {
-        const userData = await this.usersRepository.findOne({
-          where: { userId: cohortMembershipToUpdate.userId },
-        });
-        const cohortData = await this.cohortRepository.findOne({
-          where: { cohortId: cohortMembershipToUpdate.cohortId },
-        });
+      if (notifyStatuses.includes(status)) {
+        const [userData, cohortData] = await Promise.all([
+          this.usersRepository.findOne({
+            where: { userId: cohortMembershipToUpdate.userId },
+          }),
+          this.cohortRepository.findOne({
+            where: { cohortId: cohortMembershipToUpdate.cohortId },
+          }),
+        ]);
+
         if (userData?.email) {
-          let notificationKey = '';
+          const validStatusKeys = {
+            dropout: 'onStudentDropout',
+            shortlisted: 'onStudentShortlisted',
+            rejected: 'onStudentRejected',
+          };
 
-          switch (cohortMembersUpdateDto.status) {
-            case 'dropout':
-              notificationKey = 'onStudentDropout';
-              break;
-            case 'shortlisted':
-              notificationKey = 'onStudentShortlisted';
-              break;
-            case 'rejected':
-              notificationKey = 'onStudentRejected';
-              break;
-          }
-          //This the notification payload to be sent
           const notificationPayload = {
             isQueue: false,
             context: 'USER',
-            key: notificationKey, // Use correct template keys in your notification service
+            key: validStatusKeys[status],
             replacements: {
               '{username}': `${userData.firstName ?? ''} ${
                 userData.lastName ?? ''
@@ -857,9 +853,8 @@ export class PostgresCohortMembersService {
               '{firstName}': userData.firstName ?? '',
               '{lastName}': userData.lastName ?? '',
               '{programName}': cohortData?.name ?? 'the program',
-              '{status}': cohortMembersUpdateDto.status,
-              '{statusReason}':
-                cohortMembersUpdateDto.statusReason ?? 'Not specified',
+              '{status}': status,
+              '{statusReason}': statusReason ?? 'Not specified',
             },
             email: {
               receipients: [userData.email],
@@ -872,8 +867,8 @@ export class PostgresCohortMembersService {
 
           if (mailSend?.result?.email?.errors?.length > 0) {
             LoggerUtil.error(
-              `${API_RESPONSES.BAD_REQUEST}`,
-              `Error: Failed to send ${cohortMembersUpdateDto.status} notification`,
+              API_RESPONSES.BAD_REQUEST,
+              `Error: Failed to send ${status} notification`,
               apiId
             );
           }
