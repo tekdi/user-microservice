@@ -18,6 +18,7 @@ export enum FieldType {
   CHECKBOX = 'checkbox', // comma seperated string array
   CALENDAR = 'calendar', // string
   TEXTAREA = 'textarea', // string
+  FILE = 'file', // string
 }
 export enum FieldStatus {
   ACTIVE = 'active',
