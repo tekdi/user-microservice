@@ -1151,7 +1151,7 @@ export class PostgresUserService implements IServicelocator {
         // redirect_uri: `${process.env.SSO_CALLBACK_URL}`, // match the curl
         redirect_uri:
           process.env.SSO_CALLBACK_URL ||
-          'https://aspire-learner-dev.tekdinext.com/auth/callback',
+          'https://aspire-learner-dev.tekdinext.com/',
       });
 
       // Optional: include cookies if required (you'll need to capture these from the client)
