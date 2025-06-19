@@ -22,19 +22,17 @@ import {
   Req,
   Headers,
   Res,
-  UseGuards,
   UsePipes,
   ValidationPipe,
   Query,
   UseFilters,
   BadRequestException,
+  Request,
 } from '@nestjs/common';
 import { CohortMembersSearchDto } from './dto/cohortMembers-search.dto';
-import { Request } from '@nestjs/common';
 import { CohortMembersDto } from './dto/cohortMembers.dto';
 import { CohortMembersAdapter } from './cohortMembersadapter';
 import { CohortMembersUpdateDto } from './dto/cohortMember-update.dto';
-import { JwtAuthGuard } from 'src/common/guards/keycloak.guard';
 import { Response } from 'express';
 import { AllExceptionsFilter } from 'src/common/filters/exception.filter';
 import { APIID } from 'src/common/utils/api-id.config';
@@ -328,7 +326,7 @@ export class CohortMembersController {
         'academicyearId is required and must be a valid UUID.'
       );
     }
-    const result = await this.cohortMemberAdapter
+    await this.cohortMemberAdapter
       .buildCohortMembersAdapter()
       .listWithApplication(
         cohortMembersSearchDto,

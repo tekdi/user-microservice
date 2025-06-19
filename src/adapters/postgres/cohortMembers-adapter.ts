@@ -45,7 +45,7 @@ export class PostgresCohortMembersService {
     private readonly academicyearService: PostgresAcademicYearService,
     private readonly notificationRequest: NotificationRequest,
     private fieldsService: PostgresFieldsService,
-    private userService: PostgresUserService,
+    private readonly userService: PostgresUserService,
     private readonly formsService: FormsService, // Add FormsService
     private readonly formSubmissionService: FormSubmissionService // Add FormSubmissionService
   ) {}
@@ -1429,7 +1429,7 @@ export class PostgresCohortMembersService {
         res,
         apiId,
         API_RESPONSES.INTERNAL_SERVER_ERROR,
-        e.message || 'Internal Server Error',
+        e.message ?? 'Internal Server Error',
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }

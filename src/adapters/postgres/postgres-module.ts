@@ -24,9 +24,6 @@ import { AcademicYear } from 'src/academicyears/entities/academicyears-entity';
 import { CohortAcademicYearService } from './cohortAcademicYear-adapter';
 import { AuthUtils } from '@utils/auth-util';
 import { FormsModule } from 'src/forms/forms.module';
-import { PostgresCohortMembersService } from './cohortMembers-adapter';
-import { FormsService } from 'src/forms/forms.service';
-import { FormSubmissionService } from 'src/forms/services/form-submission.service';
 
 @Module({
   imports: [
@@ -58,7 +55,6 @@ import { FormSubmissionService } from 'src/forms/services/form-submission.servic
     CohortAcademicYearService,
     PostgresAcademicYearService,
     AuthUtils,
- 
   ],
   exports: [
     PostgresUserService,
