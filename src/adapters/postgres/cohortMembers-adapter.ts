@@ -1547,16 +1547,16 @@ export class PostgresCohortMembersService {
       if (userIds.length > 0) {
         try {
           const userDetails = await this.getUserNamesByIds(userIds);
-          // If userDetails is not empty, map the userDetails to include createdByName and updatedByName
           if (userDetails && Object.keys(userDetails).length > 0) {
             // Get userDetails
             results['userDetails'] = results['userDetails'].map((user) => ({
               ...user,
-              createdByName: user.createdBy
-                ? userDetails[user.createdBy] || null
-                : null,
+
               updatedByName: user.updatedBy
                 ? userDetails[user.updatedBy] || null
+                : null,
+              createdByName: user.createdBy
+                ? userDetails[user.createdBy] || null
                 : null,
             }));
           }
