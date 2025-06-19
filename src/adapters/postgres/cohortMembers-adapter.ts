@@ -1363,7 +1363,7 @@ export class PostgresCohortMembersService {
       const enrichedResults = await Promise.all(
         userDetails.map(async (user) => {
           let formInfo = null;
-          if (form && form.formid && form.status === 'active') {
+          if (form?.formid && form.status === 'active') {
             // Fetch form submission for this user
             const dto = new FormSubmissionSearchDto({
               filters: {
@@ -1547,6 +1547,7 @@ export class PostgresCohortMembersService {
       if (userIds.length > 0) {
         try {
           const userDetails = await this.getUserNamesByIds(userIds);
+          // If userDetails is not empty, map the userDetails to include createdByName and updatedByName
           if (userDetails && Object.keys(userDetails).length > 0) {
             // Get userDetails
             results['userDetails'] = results['userDetails'].map((user) => ({
