@@ -1381,17 +1381,28 @@ export class PostgresCohortMembersService {
 
             let formSubmissionId = null;
             let formSubmissionStatus = null;
+            let formSubmissionCreatedAt = null;
+            let formSubmissionUpdatedAt = null;
+
             if (submissionResult?.result?.formSubmissions?.length > 0) {
               const submission = submissionResult.result.formSubmissions[0];
               formSubmissionId = submission.submissionId;
               formSubmissionStatus = submission.status;
+              formSubmissionCreatedAt = submission.createdAt
+                ? new Date(submission.createdAt).toISOString().slice(0, 10)
+                : null; //take only date
+              formSubmissionUpdatedAt = submission.updatedAt
+                ? new Date(submission.updatedAt).toISOString().slice(0, 10)
+                : null;
             }
             formInfo = {
-              title: form.title,
-              formId: form.formid,
-              formStatus: form.status,
-              formSubmissionId,
+              title: form.title, //form title
+              formId: form.formid, //form id
+              formStatus: form.status, //form status
+              formSubmissionId, //form submission id
               formSubmissionStatus,
+              formSubmissionCreatedAt,
+              formSubmissionUpdatedAt,
             };
           }
           return {
