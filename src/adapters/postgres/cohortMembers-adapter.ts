@@ -821,7 +821,7 @@ export class PostgresCohortMembersService {
         cohortMembershipToUpdate
       );
 
-      // 2. After save, send notification if status is "dropout", "shortlist", or "reject"
+      //send notification if status is "dropout", "shortlist", or "reject" only
       const notifyStatuses = ['dropout', 'shortlisted', 'rejected'];
 
       if (notifyStatuses.includes(cohortMembersUpdateDto.status)) {
@@ -845,7 +845,7 @@ export class PostgresCohortMembersService {
               notificationKey = 'onStudentRejected';
               break;
           }
-
+          //This the notification payload to be sent
           const notificationPayload = {
             isQueue: false,
             context: 'USER',
