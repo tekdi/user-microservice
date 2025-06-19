@@ -831,7 +831,7 @@ export class PostgresCohortMembersService {
         const cohortData = await this.cohortRepository.findOne({
           where: { cohortId: cohortMembershipToUpdate.cohortId },
         });
-        if (userData && userData.email) {
+        if (userData?.email) {
           let notificationKey = '';
 
           switch (cohortMembersUpdateDto.status) {
@@ -851,15 +851,15 @@ export class PostgresCohortMembersService {
             context: 'USER',
             key: notificationKey, // Use correct template keys in your notification service
             replacements: {
-              '{username}': `${userData.firstName || ''} ${
-                userData.lastName || ''
+              '{username}': `${userData.firstName ?? ''} ${
+                userData.lastName ?? ''
               }`.trim(),
-              '{firstName}': userData.firstName || '',
-              '{lastName}': userData.lastName || '',
-              '{programName}': cohortData?.name || 'the program',
+              '{firstName}': userData.firstName ?? '',
+              '{lastName}': userData.lastName ?? '',
+              '{programName}': cohortData?.name ?? 'the program',
               '{status}': cohortMembersUpdateDto.status,
               '{statusReason}':
-                cohortMembersUpdateDto.statusReason || 'Not specified',
+                cohortMembersUpdateDto.statusReason ?? 'Not specified',
             },
             email: {
               receipients: [userData.email],

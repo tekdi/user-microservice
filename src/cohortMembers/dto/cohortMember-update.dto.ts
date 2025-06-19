@@ -74,7 +74,10 @@ export class CohortMembersUpdateDto {
       o.status === MemberStatus.SHORTLISTED ||
       o.status === MemberStatus.REJECTED
   )
-  @IsString({ message: 'Reason is mandatory while dropping out a member' })
+  @IsString({
+    message:
+      'Reason is mandatory while dropout, shortlisted, and rejected statuses',
+  })
   statusReason?: string;
   @ApiProperty({
     type: FieldValuesOptionDto,
