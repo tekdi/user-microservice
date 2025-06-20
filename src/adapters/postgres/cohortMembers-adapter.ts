@@ -24,6 +24,10 @@ import { PostgresUserService } from './user-adapter';
 import { isValid } from 'date-fns';
 import { FieldValuesOptionDto } from 'src/user/dto/user-create.dto';
 import { In } from 'typeorm';
+import { FormsService } from 'src/forms/forms.service';
+import { FormSubmissionService } from 'src/forms/services/form-submission.service';
+import { FormSubmissionStatus } from 'src/forms/entities/form-submission.entity';
+import { FormSubmissionSearchDto } from 'src/forms/dto/form-submission-search.dto';
 
 @Injectable()
 export class PostgresCohortMembersService {
@@ -41,7 +45,9 @@ export class PostgresCohortMembersService {
     private readonly academicyearService: PostgresAcademicYearService,
     private readonly notificationRequest: NotificationRequest,
     private fieldsService: PostgresFieldsService,
-    private userService: PostgresUserService
+    private readonly userService: PostgresUserService,
+    private readonly formsService: FormsService, // Add FormsService
+    private readonly formSubmissionService: FormSubmissionService // Add FormSubmissionService
   ) {}
 
   //Get cohort member
@@ -1277,5 +1283,293 @@ export class PostgresCohortMembersService {
     } catch (error) {
       return { success: false, error: error.message };
     }
+  }
+
+  public async listWithApplication(
+    cohortMembersSearchDto: CohortMembersSearchDto,
+    tenantId: string,
+    academicyearId: string,
+    res: Response
+  ) {
+    const apiId = APIID.COHORT_MEMBER_SEARCH;
+    try {
+      if (!isUUID(tenantId)) {
+        return APIResponse.error(
+          res,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          API_RESPONSES.TENANT_ID_NOTFOUND,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      const { filters } = cohortMembersSearchDto;
+      const cohortId = filters?.cohortId;
+      const userId = filters?.userId;
+
+      if (!cohortId || !userId) {
+        return APIResponse.error(
+          res,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          `Both cohortId and userId are required.`,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+      //get the cohort userDetails same as searchcohortmembers
+      const results = await this.getCohortMembersData(
+        cohortMembersSearchDto,
+        tenantId,
+        academicyearId
+      );
+      let userDetails = results.userDetails || [];
+
+      if (!userDetails.length) {
+        return APIResponse.success(
+          res,
+          apiId,
+          [],
+          HttpStatus.OK,
+          'No cohort members found'
+        );
+      }
+
+      // Step 2: Get the active form
+      const contextId = Array.isArray(cohortId) ? cohortId[0] : cohortId;
+      // Validate contextId (cohortId)
+      if (!contextId || !isUUID(contextId)) {
+        LoggerUtil.error(
+          API_RESPONSES.BAD_REQUEST,
+          `Invalid or missing cohortId for form contextId: ${contextId}`,
+          apiId
+        );
+        return APIResponse.error(
+          res,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          'Invalid or missing cohortId for form contextId',
+          HttpStatus.BAD_REQUEST
+        );
+      }
+      //to get the active form for cohort
+      const form = await this.formsService.getFormData({
+        context: 'COHORTMEMBER',
+        contextId,
+        contextType: 'COHORTMEMBER',
+        tenantId,
+      });
+
+      // Step 3: For each userId, fetch their submissions and enrich
+      const enrichedResults = await Promise.all(
+        userDetails.map(async (user) => {
+          let formInfo = null;
+          if (form?.formid && form.status === 'active') {
+            // Fetch form submission for this user
+            const dto = new FormSubmissionSearchDto({
+              filters: {
+                formId: form.formid,
+                itemId: user.userId,
+                status: [FormSubmissionStatus.ACTIVE],
+              },
+              limit: 1,
+              offset: 0,
+              sort: ['createdAt', 'desc'],
+            });
+            const submissionResult = await this.formSubmissionService.findAll(
+              dto
+            );
+
+            let formSubmissionId = null;
+            let formSubmissionStatus = null;
+            let formSubmissionCreatedAt = null;
+            let formSubmissionUpdatedAt = null;
+
+            if (submissionResult?.result?.formSubmissions?.length > 0) {
+              const submission = submissionResult.result.formSubmissions[0];
+              formSubmissionId = submission.submissionId;
+              formSubmissionStatus = submission.status;
+              formSubmissionCreatedAt = submission.createdAt
+                ? new Date(submission.createdAt).toISOString().slice(0, 10)
+                : null; //take only date
+              formSubmissionUpdatedAt = submission.updatedAt
+                ? new Date(submission.updatedAt).toISOString().slice(0, 10)
+                : null;
+            }
+            formInfo = {
+              title: form.title, //form title
+              formId: form.formid, //form id
+              formStatus: form.status, //form status
+              formSubmissionId, //form submission id
+              formSubmissionStatus,
+              formSubmissionCreatedAt,
+              formSubmissionUpdatedAt,
+            };
+          }
+          return {
+            ...user,
+            form: formInfo,
+          };
+        })
+      );
+
+      return APIResponse.success(
+        res,
+        apiId,
+        enrichedResults,
+        HttpStatus.OK,
+        API_RESPONSES.COHORT_GET_SUCCESSFULLY
+      );
+    } catch (e) {
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${e.message}`,
+        apiId
+      );
+      return APIResponse.error(
+        res,
+        apiId,
+        API_RESPONSES.INTERNAL_SERVER_ERROR,
+        e.message ?? 'Internal Server Error',
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  // Add this private method before listWithApplication
+  private async getCohortMembersData(
+    cohortMembersSearchDto: CohortMembersSearchDto,
+    tenantId: string,
+    academicyearId: string
+  ) {
+    let { limit, offset } = cohortMembersSearchDto;
+    const {
+      sort,
+      filters,
+      includeDisplayValues = false,
+    } = cohortMembersSearchDto;
+    offset = offset || 0;
+    limit = limit || 0;
+    let results = { userDetails: [] };
+    const options = [];
+    let where: any[] = [];
+    const whereClause = {};
+    if (filters && Object.keys(filters).length > 0) {
+      Object.entries(filters).forEach(([key, value]) => {
+        if (key === 'cohortId') {
+          if (Array.isArray(value)) {
+            whereClause[key] = value;
+          } else if (typeof value === 'string') {
+            whereClause[key] = value.split(',').map((id) => id.trim());
+          }
+        } else {
+          whereClause[key] = value;
+        }
+      });
+    }
+
+    let cohortYearExistInYear = [],
+      userYearExistInYear = [],
+      finalExistRecord = [];
+    if (whereClause['cohortId']) {
+      const getYearExistRecord = await this.isCohortExistForYear(
+        academicyearId,
+        whereClause['cohortId']
+      );
+      cohortYearExistInYear = getYearExistRecord.map(
+        (item) => item.cohortAcademicYearId
+      );
+      finalExistRecord = [...cohortYearExistInYear];
+    }
+    if (whereClause['userId']) {
+      const getYearExitUser = await this.isUserExistForYear(
+        academicyearId,
+        whereClause['userId']
+      );
+      userYearExistInYear = getYearExitUser.map(
+        (item) => item.cohortAcademicYearId
+      );
+      finalExistRecord = [...userYearExistInYear];
+    }
+    if (
+      whereClause['userId'] &&
+      whereClause['cohortId'] &&
+      !cohortYearExistInYear.some((cayId) =>
+        userYearExistInYear.includes(cayId)
+      )
+    ) {
+      return { userDetails: [] };
+    }
+    if (finalExistRecord.length > 0) {
+      whereClause['cohortAcademicYearId'] = finalExistRecord;
+    }
+    const whereKeys = [
+      'cohortId',
+      'userId',
+      'role',
+      'name',
+      'status',
+      'cohortAcademicYearId',
+    ];
+    const uniqueWhere = new Map();
+    whereKeys.forEach((key) => {
+      if (whereClause[key]) {
+        const value = Array.isArray(whereClause[key])
+          ? whereClause[key]
+          : [whereClause[key]];
+        if (!uniqueWhere.has(key)) {
+          uniqueWhere.set(key, value);
+        }
+      }
+    });
+    where = Array.from(uniqueWhere.entries());
+    if (limit) options.push(['limit', limit]);
+    if (offset) options.push(['offset', offset]);
+    const order = {};
+    if (sort) {
+      const [sortField, sortOrder] = sort;
+      order[sortField] = sortOrder;
+    }
+    results = await this.getCohortMemberUserDetails(
+      where,
+      'true',
+      options,
+      order
+    );
+    if (includeDisplayValues == true && results['userDetails']?.length) {
+      const userIds: string[] = Array.from(
+        new Set(
+          results['userDetails']
+            .map((user) => [user.updatedBy, user.createdBy])
+            .flat()
+            .filter((id) => typeof id === 'string')
+        )
+      ) as string[];
+      if (userIds.length > 0) {
+        try {
+          const userDetails = await this.getUserNamesByIds(userIds);
+          if (userDetails && Object.keys(userDetails).length > 0) {
+            // Get userDetails
+            results['userDetails'] = results['userDetails'].map((user) => ({
+              ...user,
+
+              updatedByName: user.updatedBy
+                ? userDetails[user.updatedBy] || null
+                : null,
+              createdByName: user.createdBy
+                ? userDetails[user.createdBy] || null
+                : null,
+            }));
+          }
+        } catch (error) {
+          LoggerUtil.error(
+            `${API_RESPONSES.SERVER_ERROR}`,
+            `Error: ${error.message}`,
+            APIID.COHORT_MEMBER_SEARCH
+          );
+          // In case of error, just return the results as is
+        }
+      }
+    }
+    return results;
   }
 }
