@@ -3,7 +3,8 @@ import { FileUploadService } from '../storage/file-upload.service';
 import APIResponse from '../common/responses/response';
 import { APIID } from '../common/utils/api-id.config';
 import { API_RESPONSES } from '../common/utils/response.messages';
-import { HttpStatus, Get, Param, Query, Res, Controller } from '@nestjs/common';
+import { HttpStatus, Get, Param, Query, Res, Controller, Post, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 
 /**
  * FileUploadController
@@ -61,7 +62,7 @@ export class FileUploadController {
         'Presigned URL generated successfully'
       );
     } catch (error) {
-      console.error('Error getting presigned URL:', error);
+      console.log('Error getting presigned URL:', error);
 
       // Handle FileValidationException specifically
       if (error.message && (error.message.includes('not allowed') || error.message.includes('Unsupported file type'))) {
@@ -86,15 +87,21 @@ export class FileUploadController {
 
   /**
    * Upload a file directly to storage.
-   * @param req - Express request object
+   * @param fieldId - The field ID from URL parameters
+   * @param userId - The user ID from query parameters
+   * @param file - The uploaded file
    * @param res - Express response object
    */
-  async uploadFile(req: Request, res: Response) {
+  @Post(':fieldId/upload')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadFile(
+    @Param('fieldId') fieldId: string,
+    @Query('userId') userId: string,
+    @UploadedFile() file: Express.Multer.File,
+    @Res() res: Response
+  ) {
     const apiId = APIID.FIELDVALUES_CREATE;
     try {
-      const { fieldId } = req.params;
-      const { userId } = req.query;
-
       if (!userId) {
         return APIResponse.error(
           res,
@@ -105,7 +112,7 @@ export class FileUploadController {
         );
       }
 
-      if (!req.file) {
+      if (!file) {
         return APIResponse.error(
           res,
           apiId,
@@ -116,10 +123,10 @@ export class FileUploadController {
       }
 
       const result = await this.fileUploadService.uploadFile(
-        req.file,
+        file,
         fieldId,
-        userId as string,
-        userId as string
+        userId,
+        userId
       );
 
       return APIResponse.success(
@@ -130,7 +137,7 @@ export class FileUploadController {
         'File uploaded successfully'
       );
     } catch (error) {
-      console.error('Error uploading file:', error);
+      console.log('Error uploading file:', error);
       return APIResponse.error(
         res,
         apiId,
@@ -164,7 +171,7 @@ export class FileUploadController {
         'File upload verified successfully'
       );
     } catch (error) {
-      console.error('Error verifying upload:', error);
+      console.log('Error verifying upload:', error);
       return APIResponse.error(
         response,
         apiId,
