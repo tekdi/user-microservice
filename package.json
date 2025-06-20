@@ -105,12 +105,5 @@
     ],
     "coverageDirectory": "../coverage",
     "testEnvironment": "node"
-  },
-  "compilerOptions": {
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "strictNullChecks": false,
-    "noImplicitAny": false,
-    "moduleResolution": "node"
   }
 }
