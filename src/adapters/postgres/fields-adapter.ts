@@ -401,7 +401,6 @@ export class PostgresFieldsService implements IServicelocatorfields {
           ) {
             storeWithoutControllingField.push(sourceFieldName['name']);
           }
-          console.log('ssssssss');
 
           const query = `SELECT "name", "value" 
           FROM public.${fieldsData.sourceDetails.table} 
