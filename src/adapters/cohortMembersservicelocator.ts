@@ -1,7 +1,7 @@
-import { CohortMembersSearchDto } from "src/cohortMembers/dto/cohortMembers-search.dto";
-import { CohortMembersDto } from "src/cohortMembers/dto/cohortMembers.dto";
-import { CohortMembersUpdateDto } from "src/cohortMembers/dto/cohortMember-update.dto";
-import { Response } from "express";
+import { CohortMembersSearchDto } from 'src/cohortMembers/dto/cohortMembers-search.dto';
+import { CohortMembersDto } from 'src/cohortMembers/dto/cohortMembers.dto';
+import { CohortMembersUpdateDto } from 'src/cohortMembers/dto/cohortMember-update.dto';
+import { Response } from 'express';
 
 export interface IServicelocatorcohortMembers {
   createCohortMembers(
@@ -38,5 +38,11 @@ export interface IServicelocatorcohortMembers {
     response,
     tenantId,
     academicyearId: string
+  );
+  listWithApplication(
+    cohortMembersSearchDto: CohortMembersSearchDto,
+    tenantId: string,
+    academicyearId: string,
+    response: Response
   );
 }
