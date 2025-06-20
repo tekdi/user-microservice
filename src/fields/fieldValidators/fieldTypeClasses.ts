@@ -13,13 +13,15 @@ export class DropdownField extends Field {
         fieldParams: this.fieldParams,
       });
     }
-    
+
     // For single select, validate as string
     if (typeof value !== 'string') {
       throw new Error('Value must be a string.');
     }
-    
-    const fieldParamsOptions = this.fieldParams.options.map(({ value }) => value);
+
+    const fieldParamsOptions = this.fieldParams.options.map(
+      ({ value }) => value
+    );
     if (!fieldParamsOptions.includes(value)) {
       throw new Error('Invalid option selected.');
     }
@@ -90,13 +92,15 @@ export class CheckboxField extends Field {
         fieldParams: this.fieldParams,
       });
     }
-    
+
     // For single select, validate as string
     if (typeof value !== 'string') {
       throw new Error('Value must be a string.');
     }
-    
-    const fieldParamsOptions = this.fieldParams.options.map(({ value }) => value);
+
+    const fieldParamsOptions = this.fieldParams.options.map(
+      ({ value }) => value
+    );
     if (!fieldParamsOptions.includes(value)) {
       throw new Error('Invalid option selected.');
     }
@@ -218,5 +222,29 @@ export class CalendarField extends Field {
       return date;
     }
     return new Date(input);
+  }
+}
+
+export class FileField extends Field {
+  allowedTypes?: string[];
+  maxSize?: number; // in bytes
+
+  constructor(fieldAttributes: FieldAttributes, fieldParams?: FieldParams) {
+    super(fieldAttributes, fieldParams);
+    this.allowedTypes = fieldParams?.allowedTypes || [];
+    this.maxSize = fieldParams?.maxSize || 5 * 1024 * 1024; // Default 5MB
+  }
+
+  validate(value: any): boolean {
+    if (typeof value !== 'string') return false;
+
+    // Validate file path/URL format
+    try {
+      new URL(value);
+      return true;
+    } catch {
+      // If not a URL, check if it's a valid file path
+      return value.startsWith('/') || value.startsWith('./');
+    }
   }
 }

@@ -36,6 +36,7 @@ export const APIID = {
   FIELDS_SEARCH: 'api.fields.search',
   FIELDVALUES_CREATE: 'api.fieldValues.create',
   FIELDVALUES_SEARCH: 'api.fieldValues.search',
+  FIELDVALUES_DELETE: 'api.fieldValues.delete',
   FIELD_OPTIONS_DELETE: 'api.fields.options.delete',
   FIELD_DELETE: 'api.fields.delete',
   LOGIN: 'api.login',
@@ -63,4 +64,4 @@ export const APIID = {
   FORM_SUBMISSION_DELETE: 'api.formSubmission.delete',
   FORM_SUBMISSION_GET: 'api.formSubmission.get',
   FORM_SUBMISSION_LIST: 'api.formSubmission.list',
-};
+} as const;

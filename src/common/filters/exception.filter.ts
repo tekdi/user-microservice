@@ -20,7 +20,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       exception instanceof HttpException ? exception.getResponse() : null;
     const errorMessage =
       exception instanceof HttpException
-        ? (exceptionResponse as any).message || exception.message
+        ? (exceptionResponse as any).error || exception.message
         : "Internal server error";
     const detailedErrorMessage = `${errorMessage}`;
     APIResponse.error(
@@ -28,7 +28,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       this.apiId,
       detailedErrorMessage,
       exception instanceof HttpException
-        ? exception.name
+        ? (exceptionResponse as any).message
         : "Internal Server Error", // error
       status
     );
