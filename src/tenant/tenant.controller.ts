@@ -1,10 +1,11 @@
 import { BadRequestException, Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query, Req, Res, SerializeOptions, UploadedFiles, UseInterceptors, UsePipes, ValidationPipe } from '@nestjs/common';
 import { TenantService } from './tenant.service';
-import { ApiCreatedResponse, ApiForbiddenResponse, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { ApiCreatedResponse, ApiForbiddenResponse, ApiQuery, ApiTags, ApiParam } from '@nestjs/swagger';
 import { TenantCreateDto } from './dto/tenant-create.dto';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { FilesUploadService } from 'src/common/services/upload-file';
 import { TenantUpdateDto } from './dto/tenant-update.dto';
+import { CreateTenantConfigDto, UpdateTenantConfigDto } from './dto/tenant-config.dto';
 import { Request, Response } from "express";
 import { TenantSearchDTO } from './dto/tenant-search.dto';
 import { API_RESPONSES } from '@utils/response.messages';
@@ -119,6 +120,99 @@ export class TenantController {
     ) {
         const tenantId = id;        
         return await this.tenantService.deleteTenants(request, tenantId, response);
+    }
+
+    // ========== TENANT CONFIGURATION ENDPOINTS ==========
+
+    /**
+     * Get all configurations for a tenant
+     */
+    @Get(':tenantId/configs')
+    @ApiParam({ name: 'tenantId', description: 'Tenant ID' })
+    @ApiCreatedResponse({ description: 'Tenant configurations retrieved successfully' })
+    @ApiForbiddenResponse({ description: API_RESPONSES.FORBIDDEN })
+    @UsePipes(ValidationPipe)
+    public async getTenantConfigs(
+        @Param('tenantId', new ParseUUIDPipe()) tenantId: string,
+        @Res() response: Response,
+    ): Promise<Response> {
+        return await this.tenantService.getTenantConfigs(tenantId, response);
+    }
+
+    /**
+     * Get configuration for a specific context
+     */
+    @Get(':tenantId/configs/:context')
+    @ApiParam({ name: 'tenantId', description: 'Tenant ID' })
+    @ApiParam({ name: 'context', description: 'Configuration context (e.g., storage, lms, assessment)' })
+    @ApiCreatedResponse({ description: 'Tenant configuration retrieved successfully' })
+    @ApiForbiddenResponse({ description: API_RESPONSES.FORBIDDEN })
+    @UsePipes(ValidationPipe)
+    public async getTenantConfigByContext(
+        @Param('tenantId', new ParseUUIDPipe()) tenantId: string,
+        @Param('context') context: string,
+        @Res() response: Response,
+    ): Promise<Response> {
+        return await this.tenantService.getTenantConfigByContext(tenantId, context, response);
+    }
+
+    /**
+     * Create configuration for a context
+     */
+    @Post(':tenantId/configs/:context')
+    @ApiParam({ name: 'tenantId', description: 'Tenant ID' })
+    @ApiParam({ name: 'context', description: 'Configuration context (e.g., storage, lms, assessment)' })
+    @ApiQuery({ name: 'userId', description: 'User ID making the change' })
+    @ApiCreatedResponse({ description: 'Tenant configuration created successfully' })
+    @ApiForbiddenResponse({ description: API_RESPONSES.FORBIDDEN })
+    @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+    public async createTenantConfig(
+        @Param('tenantId', new ParseUUIDPipe()) tenantId: string,
+        @Param('context') context: string,
+        @Body() configDto: CreateTenantConfigDto,
+        @Query('userId', new ParseUUIDPipe()) userId: string,
+        @Res() response: Response,
+    ): Promise<Response> {
+        return await this.tenantService.createTenantConfig(tenantId, context, configDto, userId, response);
+    }
+
+    /**
+     * Update configuration for a context
+     */
+    @Patch(':tenantId/configs/:context')
+    @ApiParam({ name: 'tenantId', description: 'Tenant ID' })
+    @ApiParam({ name: 'context', description: 'Configuration context (e.g., storage, lms, assessment)' })
+    @ApiQuery({ name: 'userId', description: 'User ID making the change' })
+    @ApiCreatedResponse({ description: 'Tenant configuration updated successfully' })
+    @ApiForbiddenResponse({ description: API_RESPONSES.FORBIDDEN })
+    @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+    public async updateTenantConfig(
+        @Param('tenantId', new ParseUUIDPipe()) tenantId: string,
+        @Param('context') context: string,
+        @Body() configDto: UpdateTenantConfigDto,
+        @Query('userId', new ParseUUIDPipe()) userId: string,
+        @Res() response: Response,
+    ): Promise<Response> {
+        return await this.tenantService.updateTenantConfig(tenantId, context, configDto, userId, response);
+    }
+
+    /**
+     * Delete configuration for a context
+     */
+    @Delete(':tenantId/configs/:context')
+    @ApiParam({ name: 'tenantId', description: 'Tenant ID' })
+    @ApiParam({ name: 'context', description: 'Configuration context to delete' })
+    @ApiQuery({ name: 'userId', description: 'User ID making the change' })
+    @ApiCreatedResponse({ description: 'Tenant configuration deleted successfully' })
+    @ApiForbiddenResponse({ description: API_RESPONSES.FORBIDDEN })
+    @UsePipes(ValidationPipe)
+    public async deleteTenantConfig(
+        @Param('tenantId', new ParseUUIDPipe()) tenantId: string,
+        @Param('context') context: string,
+        @Query('userId', new ParseUUIDPipe()) userId: string,
+        @Res() response: Response,
+    ): Promise<Response> {
+        return await this.tenantService.deleteTenantConfig(tenantId, context, userId, response);
     }
 
 }

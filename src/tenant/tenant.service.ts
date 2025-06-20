@@ -1,5 +1,7 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { Tenant } from './entities/tenent.entity';
+import { TenantConfig } from './entities/tenant-config.entity';
+import { TenantConfigAudit } from './entities/tenant-config-audit.entity';
 import { ILike, In, Repository } from 'typeorm';
 import APIResponse from 'src/common/responses/response';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -7,6 +9,7 @@ import { API_RESPONSES } from '@utils/response.messages';
 import { APIID } from '@utils/api-id.config';
 import { LoggerUtil } from 'src/common/logger/LoggerUtil';
 import { TenantUpdateDto } from './dto/tenant-update.dto';
+import { CreateTenantConfigDto, UpdateTenantConfigDto } from './dto/tenant-config.dto';
 import { Request, Response } from 'express';
 import { TenantSearchDTO } from './dto/tenant-search.dto';
 import { TenantCreateDto } from './dto/tenant-create.dto';
@@ -16,6 +19,10 @@ export class TenantService {
   constructor(
     @InjectRepository(Tenant)
     private tenantRepository: Repository<Tenant>,
+    @InjectRepository(TenantConfig)
+    private tenantConfigRepository: Repository<TenantConfig>,
+    @InjectRepository(TenantConfigAudit)
+    private tenantConfigAuditRepository: Repository<TenantConfigAudit>,
   ) {}
 
   public async getTenants(
@@ -321,5 +328,343 @@ export class TenantService {
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
+  }
+
+  // ========== TENANT CONFIGURATION METHODS ==========
+
+
+  /**
+   * Create configuration for a context
+   */
+  public async createTenantConfig(
+    tenantId: string,
+    context: string,
+    configDto: CreateTenantConfigDto,
+    changedBy: string,
+    response: Response,
+  ): Promise<Response> {
+    let apiId = APIID.TENANT_CONFIG_CREATE;
+    try {
+      // Check if config already exists
+      const existingConfig = await this.tenantConfigRepository.findOne({
+        where: { tenantId, context },
+      });
+
+      if (existingConfig) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.CONFLICT,
+          API_RESPONSES.CONFIGURATION_ALREADY_EXISTS_FOR_CONTEXT + context,
+          HttpStatus.CONFLICT,
+        );
+      }
+
+      // Prepare config data
+      const configData = {
+        tenantId,
+        context,
+        config: configDto.config,
+        version: configDto.version || 1,
+        expiresAt: configDto.expiresAt ? new Date(configDto.expiresAt) : null,
+      };
+
+      // Save new config
+      const savedConfig = await this.tenantConfigRepository.save(configData);
+
+      // Create audit log
+      await this.createAuditLog(tenantId, context, changedBy, null, configDto.config);
+
+      return APIResponse.success(
+        response,
+        apiId,
+        savedConfig,
+        HttpStatus.CREATED,
+        API_RESPONSES.TENANT_CONFIG_CREATED_SUCCESSFULLY,
+      );
+    } catch (error) {
+      const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${errorMessage}`,
+        apiId,
+      );
+      return APIResponse.error(
+        response,
+        apiId,
+        API_RESPONSES.INTERNAL_SERVER_ERROR,
+        errorMessage,
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  /**
+   * Update configuration for a context
+   */
+  public async updateTenantConfig(
+    tenantId: string,
+    context: string,
+    configDto: UpdateTenantConfigDto,
+    changedBy: string,
+    response: Response,
+  ): Promise<Response> {
+    let apiId = APIID.TENANT_CONFIG_UPDATE;
+    try {
+      // Check if config exists
+      const existingConfig = await this.tenantConfigRepository.findOne({
+        where: { tenantId, context },
+      });
+
+      if (!existingConfig) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.NOT_FOUND,
+          API_RESPONSES.CONFIGURATION_NOT_FOUND_FOR_CONTEXT + context,
+          HttpStatus.NOT_FOUND,
+        );
+      }
+
+      const oldConfig = { ...existingConfig.config };
+
+      // Prepare config data
+      const configData = {
+        ...existingConfig,
+        config: configDto.config,
+        version: configDto.version || existingConfig.version + 1,
+        expiresAt: configDto.expiresAt ? new Date(configDto.expiresAt) : existingConfig.expiresAt,
+      };
+
+      // Update config
+      const savedConfig = await this.tenantConfigRepository.save(configData);
+
+      // Create audit log
+      await this.createAuditLog(tenantId, context, changedBy, oldConfig, configDto.config);
+
+      return APIResponse.success(
+        response,
+        apiId,
+        savedConfig,
+        HttpStatus.OK,
+        API_RESPONSES.TENANT_CONFIG_UPDATED_SUCCESSFULLY,
+      );
+    } catch (error) {
+      const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${errorMessage}`,
+        apiId,
+      );
+      return APIResponse.error(
+        response,
+        apiId,
+        API_RESPONSES.INTERNAL_SERVER_ERROR,
+        errorMessage,
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+
+  /**
+   * Get all configurations for a tenant
+   */
+  public async getTenantConfigs(
+    tenantId: string,
+    response: Response,
+  ): Promise<Response> {
+    let apiId = APIID.TENANT_CONFIG_LIST;
+    try {
+      const configs = await this.tenantConfigRepository.find({
+        where: { tenantId },
+        order: { context: 'ASC' },
+      });
+
+      if (configs.length === 0) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.NOT_FOUND,
+          API_RESPONSES.TENANT_CONFIG_NOT_FOUND,
+          HttpStatus.NOT_FOUND,
+        );
+      }
+
+      return APIResponse.success(
+        response,
+        apiId,
+        { configs: configs, totalCount: configs.length },
+        HttpStatus.OK,
+        API_RESPONSES.TENANT_CONFIG_RETRIEVED_SUCCESSFULLY,
+      );
+    } catch (error) {
+      const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${errorMessage}`,
+        apiId,
+      );
+      return APIResponse.error(
+        response,
+        apiId,
+        API_RESPONSES.INTERNAL_SERVER_ERROR,
+        errorMessage,
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  /**
+   * Get configuration for a specific context
+   */
+  public async getTenantConfigByContext(
+    tenantId: string,
+    context: string,
+    response: Response,
+  ): Promise<Response> {
+    let apiId = APIID.TENANT_CONFIG_GET;
+    try {
+      const config = await this.tenantConfigRepository.findOne({
+        where: { tenantId, context },
+      });
+
+      if (!config) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.NOT_FOUND,
+          API_RESPONSES.CONFIGURATION_NOT_FOUND_FOR_CONTEXT + context,
+          HttpStatus.NOT_FOUND,
+        );
+      }
+
+      // Process config to handle storage_provider references
+      const processedConfig = await this.processConfigWithStorageProvider(tenantId, config);
+
+      return APIResponse.success(
+        response,
+        apiId,
+        processedConfig,
+        HttpStatus.OK,
+        API_RESPONSES.TENANT_CONFIG_RETRIEVED_SUCCESSFULLY,
+      );
+    } catch (error) {
+      const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${errorMessage}`,
+        apiId,
+      );
+      return APIResponse.error(
+        response,
+        apiId,
+        API_RESPONSES.INTERNAL_SERVER_ERROR,
+        errorMessage,
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+  /**
+   * Delete configuration for a context
+   */
+  public async deleteTenantConfig(
+    tenantId: string,
+    context: string,
+    changedBy: string,
+    response: Response,
+  ): Promise<Response> {
+    let apiId = APIID.TENANT_CONFIG_DELETE;
+    try {
+      const existingConfig = await this.tenantConfigRepository.findOne({
+        where: { tenantId, context },
+      });
+
+      if (!existingConfig) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.NOT_FOUND,
+          API_RESPONSES.CONFIGURATION_NOT_FOUND_FOR_CONTEXT + context,
+          HttpStatus.NOT_FOUND,
+        );
+      }
+
+      // Create audit log before deletion
+      await this.createAuditLog(tenantId, context, changedBy, existingConfig.config, null);
+
+      // Delete the config
+      await this.tenantConfigRepository.remove(existingConfig);
+
+      return APIResponse.success(
+        response,
+        apiId,
+        { message: API_RESPONSES.TENANT_CONFIG_DELETED_SUCCESSFULLY },
+        HttpStatus.OK,
+        API_RESPONSES.TENANT_CONFIG_DELETED_SUCCESSFULLY,
+      );
+    } catch (error) {
+      const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${errorMessage}`,
+        apiId,
+      );
+      return APIResponse.error(
+        response,
+        apiId,
+        API_RESPONSES.INTERNAL_SERVER_ERROR,
+        errorMessage,
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  /**
+   * Process config to handle storage_provider references
+   */
+  private async processConfigWithStorageProvider(tenantId: string, config: TenantConfig): Promise<TenantConfig> {
+    const processedConfig = { ...config };
+    
+    // Check if config has storage_provider and context is not already a storage context
+    if (config.config?.storage_provider && !config.context.startsWith('storage.')) {
+      const storageProvider = config.config.storage_provider;
+      const storageContext = `storage.${storageProvider}`;
+      
+      // Find the storage configuration
+      const storageConfig = await this.tenantConfigRepository.findOne({
+        where: { tenantId, context: storageContext },
+      });
+
+      if (storageConfig) {
+        // Merge storage config with the original config
+        processedConfig.config = {
+          ...processedConfig.config,
+          ...storageConfig.config,
+        };
+      }
+    }
+
+    return processedConfig;
+  }
+  /**
+   * Create audit log entry
+   */
+  private async createAuditLog(
+    tenantId: string,
+    context: string,
+    changedBy: string,
+    oldConfig: Record<string, any> | null,
+    newConfig: Record<string, any> | null,
+  ): Promise<void> {
+    const auditLog = this.tenantConfigAuditRepository.create({
+      tenantId,
+      context,
+      changedBy,
+      oldConfig,
+      newConfig,
+    });
+
+    await this.tenantConfigAuditRepository.save(auditLog);
   }
 }
