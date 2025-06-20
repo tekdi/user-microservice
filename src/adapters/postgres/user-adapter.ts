@@ -808,6 +808,7 @@ export class PostgresUserService implements IServicelocator {
         'email',
         'temporaryPassword',
         'status',
+        'createdAt',
         'createdBy',
         'deviceId',
         'mobile_country_code',
