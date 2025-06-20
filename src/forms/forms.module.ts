@@ -14,12 +14,7 @@ import { FieldsService } from '../fields/fields.service';
 @Module({
   controllers: [FormsController, FormSubmissionController],
   imports: [
-    TypeOrmModule.forFeature([
-      Form,
-      Fields,
-      FieldValues,
-      FormSubmission,
-    ]),
+    TypeOrmModule.forFeature([Form, Fields, FieldValues, FormSubmission]),
   ],
   providers: [
     FormsService,
@@ -27,6 +22,6 @@ import { FieldsService } from '../fields/fields.service';
     FormSubmissionService,
     FieldsService,
   ],
-  exports: [FormSubmissionService],
+  exports: [FormsService, FormSubmissionService],
 })
 export class FormsModule {}
