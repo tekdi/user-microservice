@@ -640,7 +640,7 @@ export class TenantService {
         // Merge storage config with the original config
         processedConfig.config = {
           ...processedConfig.config,
-          storage: storageConfig.config,
+          ...storageConfig.config,
         };
       }
     }

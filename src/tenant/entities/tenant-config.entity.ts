@@ -7,11 +7,11 @@ import {
   Index,
 } from 'typeorm';
 
-@Entity('tenant_configs')
+@Entity('TenantConfigs')
 @Index(['tenantId', 'context'], { unique: true })
 export class TenantConfig {
   @PrimaryGeneratedColumn('uuid')
-  id: string;
+  tenantConfigId: string;
 
   @Column({ type: 'text', nullable: false })
   tenantId: string;

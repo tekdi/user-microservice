@@ -5,10 +5,10 @@ import {
   CreateDateColumn,
 } from 'typeorm';
 
-@Entity('tenant_config_audits')
+@Entity('TenantConfigAudits')
 export class TenantConfigAudit {
   @PrimaryGeneratedColumn('uuid')
-  id: string;
+  tenantConfigAuditId: string;
 
   @Column({ type: 'text', nullable: false })
   tenantId: string;
