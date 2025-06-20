@@ -373,10 +373,11 @@ export class PostgresFieldsService implements IServicelocatorfields {
           name: fieldsData.name,
           type: fieldsData.type,
           contextId: fieldsData.contextId,
+          status: FieldStatus.ACTIVE,
         },
       });
       if (checkFieldExist.length > 0) {
-        APIResponse.error(
+        return APIResponse.error(
           response,
           apiId,
           `Fields already exist`,
@@ -400,6 +401,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
           ) {
             storeWithoutControllingField.push(sourceFieldName['name']);
           }
+          console.log('ssssssss');
 
           const query = `SELECT "name", "value" 
           FROM public.${fieldsData.sourceDetails.table} 
@@ -1273,9 +1275,9 @@ export class PostgresFieldsService implements IServicelocatorfields {
     let { limit, page, filters } = dtoFileName;
 
     // Ensure limit and page are numbers with defaults
-    limit = typeof limit === 'number' ? limit : (Number(limit) || 10);
-    page = typeof page === 'number' ? page : (Number(page) || 1);
-    
+    limit = typeof limit === 'number' ? limit : Number(limit) || 10;
+    page = typeof page === 'number' ? page : Number(page) || 1;
+
     // Calculate offset
     let offset = 0;
     if (page > 1) {
@@ -2005,11 +2007,11 @@ export class PostgresFieldsService implements IServicelocatorfields {
     try {
       const result = await this.fieldsRepository.update(
         {
-          fieldId: In(fieldIds)
+          fieldId: In(fieldIds),
         },
         {
           status: FieldStatus.ARCHIVED,
-          updatedBy
+          updatedBy,
         }
       );
       return result;
