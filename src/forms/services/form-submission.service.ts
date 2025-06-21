@@ -1,4 +1,10 @@
-import { Injectable, HttpStatus, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  HttpStatus,
+  BadRequestException,
+  Inject,
+  forwardRef,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindOptionsWhere, Between, In } from 'typeorm';
 import {
@@ -79,6 +85,7 @@ export class FormSubmissionService {
     private fieldsService: FieldsService,
     private userElasticsearchService: UserElasticsearchService,
     private formsService: FormsService,
+    @Inject(forwardRef(() => PostgresCohortService))
     private postgresCohortService: PostgresCohortService
   ) {}
 

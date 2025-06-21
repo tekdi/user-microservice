@@ -26,6 +26,8 @@ import { HttpModule } from '@nestjs/axios';
 import { ConfigModule } from '@nestjs/config';
 import { NotificationRequest } from 'src/common/utils/notification.axios';
 import { PostgresModule } from 'src/adapters/postgres/postgres-module';
+import { forwardRef } from '@nestjs/common';
+import { CohortModule } from 'src/cohort/cohort.module';
 @Module({
   controllers: [FormsController, FormSubmissionController],
   imports: [
@@ -45,19 +47,17 @@ import { PostgresModule } from 'src/adapters/postgres/postgres-module';
     ElasticsearchModule,
     HttpModule,
     ConfigModule,
-    PostgresModule,
+    forwardRef(() => CohortModule),
   ],
   providers: [
     FormsService,
     PostgresFieldsService,
-    FormSubmissionService,
     FieldsService,
-    PostgresCohortService,
     PostgresAcademicYearService,
     CohortAcademicYearService,
-    PostgresCohortMembersService,
     NotificationRequest,
+    FormSubmissionService,
   ],
-  exports: [FormSubmissionService],
+  exports: [FormSubmissionService, FormsService],
 })
 export class FormsModule {}

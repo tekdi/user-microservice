@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { CohortMembersController } from './cohortMembers.controller';
 import { HttpModule } from '@nestjs/axios';
 import { CohortMembersAdapter } from './cohortMembersadapter';
@@ -14,6 +14,7 @@ import { PostgresAcademicYearService } from 'src/adapters/postgres/academicyears
 import { AcademicYear } from 'src/academicyears/entities/academicyears-entity';
 import { Tenants } from 'src/userTenantMapping/entities/tenant.entity';
 import { ElasticsearchModule } from 'src/elasticsearch/elasticsearch.module';
+import { FormsModule } from 'src/forms/forms.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { ElasticsearchModule } from 'src/elasticsearch/elasticsearch.module';
     HttpModule,
     PostgresModule,
     ElasticsearchModule,
+    forwardRef(() => FormsModule),
   ],
   controllers: [CohortMembersController],
   providers: [
