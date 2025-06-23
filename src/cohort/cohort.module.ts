@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { CohortController } from './cohort.controller';
 import { HttpModule } from '@nestjs/axios';
 import { CohortAdapter } from './cohortadapter';
@@ -22,7 +22,6 @@ import { User } from 'src/user/entities/user-entity';
 import { Tenants } from 'src/userTenantMapping/entities/tenant.entity';
 import { ElasticsearchModule } from 'src/elasticsearch/elasticsearch.module';
 import { FormsModule } from 'src/forms/forms.module';
-import { forwardRef } from '@nestjs/common';
 
 @Module({
   imports: [

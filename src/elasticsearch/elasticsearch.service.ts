@@ -27,7 +27,7 @@ export class ElasticsearchService {
 
   constructor(private readonly configService: ConfigService) {
     this.client = new Client({
-      node: process.env.ELASTICSEARCH_NODE || 'http://localhost:9200',
+      node: process.env.ELASTICSEARCH_NODE ?? 'http://localhost:9200',
     });
   }
 
@@ -42,9 +42,9 @@ export class ElasticsearchService {
             settings: {
               number_of_shards: 1,
               number_of_replicas: 1,
-              wait_for_active_shards: 1
-            }
-          }
+              wait_for_active_shards: 1,
+            },
+          },
         });
         this.logger.log(`Index ${indexName} created successfully`);
       }
@@ -60,7 +60,7 @@ export class ElasticsearchService {
         index: indexName,
         id,
         document,
-        refresh: true
+        refresh: true,
       });
       this.logger.log(`Document indexed successfully in ${indexName}`);
     } catch (error) {
@@ -69,14 +69,19 @@ export class ElasticsearchService {
     }
   }
 
-  async update(indexName: string, id: string, body: any, options: Record<string, any> = {}) {
+  async update(
+    indexName: string,
+    id: string,
+    body: any,
+    options: Record<string, any> = {}
+  ) {
     try {
       await this.client.update({
         index: indexName,
         id,
         body,
         refresh: true,
-        ...options
+        ...options,
       });
       this.logger.log(`Document updated successfully in ${indexName}`);
     } catch (error) {
@@ -89,7 +94,7 @@ export class ElasticsearchService {
     try {
       const response = await this.client.get({
         index: indexName,
-        id
+        id,
       });
       return response;
     } catch (error) {
@@ -107,14 +112,14 @@ export class ElasticsearchService {
     options: Record<string, any> = {}
   ) {
     try {
-      const response = await this.client.search({
+      const response = (await this.client.search({
         index,
         ...options,
         query,
         track_total_hits: true,
-      }) as SearchResponse;
+      })) as SearchResponse;
 
-      if (!response.hits || !response.hits.hits) {
+      if (!response.hits?.hits || response.hits.hits.length === 0) {
         throw new Error('No hits found in the search response');
       }
 
@@ -145,18 +150,19 @@ export class ElasticsearchService {
               status: source?.profile?.status || 'active',
               customFields: source?.profile?.customFields || [],
             },
-            applications: source?.applications?.map((app) => ({
-              cohortId: app.cohortId || '',
-              formId: app.formId || '',
-              submissionId: app.submissionId || '',
-              status: app.status || '',
-              cohortmemberstatus: app.cohortmemberstatus || '',
-              formstatus: app.formstatus || '',
-              progress: app.progress || {},
-              lastSavedAt: app.lastSavedAt || null,
-              submittedAt: app.submittedAt || null,
-              cohortDetails: app.cohortDetails || {},
-            })) || [],
+            applications:
+              source?.applications?.map((app) => ({
+                cohortId: app.cohortId || '',
+                formId: app.formId || '',
+                submissionId: app.submissionId || '',
+                status: app.status || '',
+                cohortmemberstatus: app.cohortmemberstatus || '',
+                formstatus: app.formstatus || '',
+                progress: app.progress || {},
+                lastSavedAt: app.lastSavedAt || null,
+                submittedAt: app.submittedAt || null,
+                cohortDetails: app.cohortDetails || {},
+              })) || [],
             courses: source?.courses || [],
             createdAt: source?.createdAt || null,
             updatedAt: source?.updatedAt || null,
@@ -200,8 +206,8 @@ export class ElasticsearchService {
         lang: 'painless',
         params: {
           application,
-          updatedAt: new Date().toISOString()
-        }
+          updatedAt: new Date().toISOString(),
+        },
       };
 
       const defaultProfile: IProfile = {
@@ -220,7 +226,7 @@ export class ElasticsearchService {
         state: '',
         pincode: '',
         status: 'active',
-        customFields: []
+        customFields: [],
       };
 
       const updateBody = {
@@ -231,14 +237,19 @@ export class ElasticsearchService {
           applications: [application],
           courses: [],
           createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        }
+          updatedAt: new Date().toISOString(),
+        },
       };
 
       await this.update('users', userId, updateBody);
-      this.logger.log(`Application for user ${userId} updated successfully in Elasticsearch`);
+      this.logger.log(
+        `Application for user ${userId} updated successfully in Elasticsearch`
+      );
     } catch (error) {
-      this.logger.error(`Failed to update application for user ${userId}: ${error.message}`, error.stack);
+      this.logger.error(
+        `Failed to update application for user ${userId}: ${error.message}`,
+        error.stack
+      );
       throw new Error(`Failed to update application: ${error.message}`);
     }
   }
@@ -246,9 +257,9 @@ export class ElasticsearchService {
   async searchUsers(query: any) {
     try {
       const response = await this.search('users', query);
-      return response.hits.map(hit => ({
+      return response.hits.map((hit) => ({
         _id: hit._id,
-        ...hit._source
+        ...hit._source,
       }));
     } catch (error) {
       this.logger.error('Failed to search users:', error);
@@ -262,7 +273,7 @@ export class ElasticsearchService {
       if (!response || !response._source) {
         return null;
       }
-      
+
       const user = response._source as IUser;
       if (!user.applications || !Array.isArray(user.applications)) {
         return null;
@@ -280,7 +291,7 @@ export class ElasticsearchService {
     try {
       await this.client.delete({
         index: indexName,
-        id
+        id,
       });
       this.logger.log(`Document deleted successfully from ${indexName}`);
     } catch (error) {
@@ -293,7 +304,7 @@ export class ElasticsearchService {
     try {
       const response = await this.client.bulk({
         refresh: true,
-        operations
+        operations,
       });
       return response;
     } catch (error) {

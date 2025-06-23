@@ -3,7 +3,7 @@ import { Injectable } from '@nestjs/common';
 
 @Injectable()
 export class ElasticsearchConfig {
-  readonly node = process.env.ELASTICSEARCH_NODE || 'http://localhost:9200';
+  readonly node = process.env.ELASTICSEARCH_NODE ?? 'http://localhost:9200';
 }
 
 console.log(`Elasticsearch node: ${process.env.ELASTICSEARCH_NODE}`);
