@@ -36,6 +36,7 @@ import { UserElasticsearchService } from '../../elasticsearch/user-elasticsearch
 import { IApplication } from '../../elasticsearch/interfaces/user.interface';
 import { FormsService } from '../../forms/forms.service';
 import { PostgresCohortService } from 'src/adapters/postgres/cohort-adapter';
+import { IUser } from '../../elasticsearch/interfaces/user.interface';
 
 interface DateRange {
   start: string;
@@ -246,6 +247,8 @@ export class FormSubmissionService {
 
       const application = {
         cohortId: cohortData.cohortId,
+        formId: savedSubmission.formId,
+        submissionId: savedSubmission.submissionId,
         formstatus:
           createFormSubmissionDto.formSubmission.status ||
           FormSubmissionStatus.ACTIVE,
@@ -1032,115 +1035,139 @@ export class FormSubmissionService {
       }
       // Update Elasticsearch after successful form submission update
       try {
-        // Fetch the form by ID to get context, contextType, contextId
-        const formDetails = await this.formsService.getFormById(updatedSubmission.formId);
-        if (!formDetails) {
-          throw new Error('Form not found');
+        // Get the existing user document from Elasticsearch
+        const userDoc = await this.userElasticsearchService.getUser(userId);
+        
+        if (!userDoc) {
+          throw new Error('User document not found in Elasticsearch');
         }
-        // Get form fields from FormsService
-        const formData = await this.formsService.getFormData({
-          context: formDetails.context,
-          contextType: formDetails.contextType,
-          contextId: formDetails.contextId,
-          tenantId,
+
+        // Get existing applications or initialize empty array
+        const userSource = userDoc._source as IUser;
+        const applications = userSource.applications || [];
+        
+        // Use the actual submissionId and formId from the updatedSubmission
+        const formIdToMatch = updatedSubmission.formId;
+        const submissionIdToMatch = updatedSubmission.submissionId;
+
+        // --- NEW LOGIC: Fetch form schema and build fieldId -> pageName map ---
+        let fieldIdToPageName: Record<string, string> = {};
+        try {
+          const form = await this.formsService.getFormById(formIdToMatch);
+          const fieldsObj = form && form.fields ? (form.fields as any) : null;
+          if (
+            fieldsObj &&
+            fieldsObj.result &&
+            Array.isArray(fieldsObj.result) &&
+            fieldsObj.result[0] &&
+            fieldsObj.result[0].schema &&
+            fieldsObj.result[0].schema.properties
+          ) {
+            const schema = fieldsObj.result[0].schema.properties;
+            for (const [pageKey, pageSchema] of Object.entries(schema)) {
+              const pageName = pageKey === 'default' ? 'eligibility' : pageKey;
+              const fieldProps = (pageSchema as any).properties || {};
+              for (const [fieldKey, fieldSchema] of Object.entries(fieldProps)) {
+                const fieldId = (fieldSchema as any).fieldId;
+                if (fieldId) {
+                  fieldIdToPageName[fieldId] = pageName;
+                }
+              }
+            }
+          }
+        } catch (err) {
+          // If schema fetch fails, fallback to empty map (all fields go to 'default')
+          fieldIdToPageName = {};
+        }
+        // --- END NEW LOGIC ---
+
+        // Find the existing application for this form and submission
+        const existingAppIndex = applications.findIndex(app =>
+          app.formId === formIdToMatch && app.submissionId === submissionIdToMatch
+        );
+
+        // Prepare the updated fields data
+        const updatedFields = {};
+        updatedFieldValues.forEach(field => {
+          // Use the schema mapping to get the correct page name
+          const pageKey = fieldIdToPageName[field.fieldId] || 'default';
+          if (!updatedFields[pageKey]) {
+            updatedFields[pageKey] = {
+              completed: true,
+              fields: {}
+            };
+          }
+          updatedFields[pageKey].fields[field.fieldname || field.fieldId] = field.value;
         });
 
-        if (!formData) {
-          throw new Error('Form data not found');
-        }
-
-        // Group fields by page/section
-        const pages: {
-          [key: string]: { completed: boolean; fields: { [key: string]: any } };
-        } = {};
-        let totalFields = 0;
-        let completedFields = 0;
-
-        // Process form fields and group them by page
-        if (formData.fields?.result) {
-          for (const field of formData.fields.result) {
-            const pageKey = field.schema?.page || 'default';
-            if (!pages[pageKey]) {
-              pages[pageKey] = {
-                completed: false,
-                fields: {},
+        if (existingAppIndex !== -1) {
+          // Deep merge for each page's fields
+          const mergedPages = { ...((applications[existingAppIndex].progress && applications[existingAppIndex].progress.pages) || {}) };
+          for (const [pageKey, pageValue] of Object.entries(updatedFields)) {
+            const newPage = pageValue as { completed: boolean; fields: { [key: string]: any } };
+            if (mergedPages[pageKey]) {
+              const existingPage = mergedPages[pageKey] as { completed: boolean; fields: { [key: string]: any } };
+              mergedPages[pageKey] = {
+                ...existingPage,
+                fields: {
+                  ...existingPage.fields,
+                  ...newPage.fields
+                },
+                completed: newPage.completed // update completed status if needed
               };
+            } else {
+              mergedPages[pageKey] = newPage;
             }
+          }
+          // Merge overall progress
+          const mergedOverall = applications[existingAppIndex].progress && applications[existingAppIndex].progress.overall
+            ? { ...applications[existingAppIndex].progress.overall }
+            : { completed: updatedFieldValues.length, total: updatedFieldValues.length };
 
-            // Find the field value in updatedFieldValues
-            const fieldValue = updatedFieldValues.find(
-              (fv) => fv.fieldId === field.fieldId
-            );
-            if (fieldValue) {
-              // Use field name if available
-              let fieldName = field.fieldId;
-              if (field.name) {
-                fieldName = field.name;
+          applications[existingAppIndex] = {
+            ...applications[existingAppIndex],
+            formId: formIdToMatch,
+            submissionId: submissionIdToMatch,
+            formstatus: updatedSubmission.status || applications[existingAppIndex].formstatus,
+            progress: {
+              pages: mergedPages,
+              overall: mergedOverall
+            },
+            lastSavedAt: new Date().toISOString(),
+            submittedAt: new Date().toISOString()
+          };
+        } else {
+          // If no existing application found, create new application with minimal required fields
+          applications.push({
+            formId: formIdToMatch,
+            submissionId: submissionIdToMatch,
+            cohortId: '',
+            status: '',
+            cohortmemberstatus: '',
+            formstatus: updatedSubmission.status,
+            progress: {
+              pages: updatedFields,
+              overall: {
+                completed: updatedFieldValues.length,
+                total: updatedFieldValues.length
               }
-              pages[pageKey].fields[fieldName] = fieldValue.value;
-              completedFields++;
+            },
+            lastSavedAt: new Date().toISOString(),
+            submittedAt: new Date().toISOString(),
+            cohortDetails: {
+              name: '',
+              status: ''
             }
-            totalFields++;
-          }
-
-          // Mark pages as completed if all their fields are filled
-          for (const pageKey in pages) {
-            const pageFields = Object.keys(pages[pageKey].fields);
-            pages[pageKey].completed = pageFields.length > 0;
-          }
+          });
         }
 
-        const mockResponse = {
-          status: (code: number) => ({
-            json: (data: any) => data,
-          }),
-        };
+        // Update the Elasticsearch document with the modified applications array
+        await this.userElasticsearchService.updateUser(userId, {
+          doc: {
+            applications: applications
+          }
+        });
 
-        const cohortDetails =
-          await this.postgresCohortService.getCohortsDetails(
-            {
-              cohortId: updatedSubmission.formId,
-              getChildData: false,
-            },
-            mockResponse
-          );
-
-        if (!cohortDetails?.result?.cohortData?.[0]) {
-          throw new BadRequestException('Cohort details not found');
-        }
-
-        const cohortData = cohortDetails.result.cohortData[0];
-
-        // Use cohortData.customField instead of making another database call
-        const cohortFieldValues = cohortData.customField || [];
-
-        const application: IApplication = {
-          cohortId: cohortData.cohortId,
-          formstatus: updatedSubmission.status,
-          progress: {
-            pages,
-            overall: {
-              completed: completedFields,
-              total: totalFields,
-            },
-          },
-          lastSavedAt: updatedSubmission.createdAt.toISOString(),
-          submittedAt: updatedSubmission.updatedAt.toISOString(),
-          cohortDetails: {
-            name: cohortData.name || '',
-            status: cohortData.status || '',
-            // Dynamically map all custom fields using their labels as keys
-            ...cohortFieldValues.reduce((acc, field) => {
-              acc[field.label] = field.value || '';
-              return acc;
-            }, {} as Record<string, any>),
-          },
-        };
-
-        await this.userElasticsearchService.updateApplication(
-          userId,
-          application
-        );
       } catch (elasticError) {
         // Log Elasticsearch error but don't fail the request
         console.error('Failed to update Elasticsearch:', elasticError);

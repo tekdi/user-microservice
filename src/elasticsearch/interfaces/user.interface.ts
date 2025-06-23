@@ -1,5 +1,7 @@
 export interface IApplication {
   cohortId: string;
+  formId?: string;
+  submissionId?: string;
   status?: string;
   cohortmemberstatus?: string;
   formstatus: string;

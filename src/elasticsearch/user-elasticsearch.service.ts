@@ -20,7 +20,9 @@ export class UserElasticsearchService {
 
   async deleteIndex() {
     try {
-      const exists = await this.elasticsearchService.indexExists(this.indexName);
+      const exists = await this.elasticsearchService.indexExists(
+        this.indexName
+      );
       if (exists) {
         await this.elasticsearchService.deleteIndex(this.indexName);
         console.log(`Index ${this.indexName} deleted successfully`);
@@ -34,7 +36,7 @@ export class UserElasticsearchService {
   async initialize() {
     try {
       // Delete existing index if it exists
-      await this.deleteIndex();
+      // await this.deleteIndex();
 
       const mapping = {
         mappings: {
@@ -62,10 +64,10 @@ export class UserElasticsearchService {
                   type: 'nested',
                   properties: {
                     fieldId: { type: 'keyword' },
-                    value: { type: 'text' }
-                  }
-                }
-              }
+                    value: { type: 'text' },
+                  },
+                },
+              },
             },
             applications: {
               type: 'nested',
@@ -80,16 +82,16 @@ export class UserElasticsearchService {
                       type: 'object',
                       properties: {
                         completed: { type: 'boolean' },
-                        fields: { type: 'object', dynamic: true }
-                      }
+                        fields: { type: 'object', dynamic: true },
+                      },
                     },
                     overall: {
                       properties: {
                         completed: { type: 'integer' },
-                        total: { type: 'integer' }
-                      }
-                    }
-                  }
+                        total: { type: 'integer' },
+                      },
+                    },
+                  },
                 },
                 lastSavedAt: { type: 'date', null_value: null },
                 submittedAt: { type: 'date', null_value: null },
@@ -99,10 +101,10 @@ export class UserElasticsearchService {
                     description: { type: 'text' },
                     startDate: { type: 'date', null_value: null },
                     endDate: { type: 'date', null_value: null },
-                    status: { type: 'keyword' }
-                  }
-                }
-              }
+                    status: { type: 'keyword' },
+                  },
+                },
+              },
             },
             courses: {
               type: 'nested',
@@ -116,22 +118,24 @@ export class UserElasticsearchService {
                     name: { type: 'text' },
                     description: { type: 'text' },
                     duration: { type: 'integer' },
-                    status: { type: 'keyword' }
-                  }
-                }
-              }
+                    status: { type: 'keyword' },
+                  },
+                },
+              },
             },
             createdAt: { type: 'date', null_value: null },
-            updatedAt: { type: 'date', null_value: null }
-          }
-        }
+            updatedAt: { type: 'date', null_value: null },
+          },
+        },
       };
 
       await this.elasticsearchService.createIndex(this.indexName, mapping);
       console.log(`Index ${this.indexName} created successfully with mappings`);
     } catch (error) {
       console.error('Failed to initialize Elasticsearch index:', error);
-      throw new Error(`Failed to initialize Elasticsearch index: ${error.message}`);
+      throw new Error(
+        `Failed to initialize Elasticsearch index: ${error.message}`
+      );
     }
   }
 
@@ -167,12 +171,12 @@ export class UserElasticsearchService {
           state: user.profile.state,
           pincode: user.profile.pincode,
           status: user.profile.status,
-          customFields: user.profile.customFields || {}
+          customFields: user.profile.customFields || {},
         },
         applications: user.applications || [],
         courses: user.courses || [],
         createdAt: user.createdAt,
-        updatedAt: user.updatedAt
+        updatedAt: user.updatedAt,
       };
 
       const result = await this.elasticsearchService.index(
@@ -183,7 +187,9 @@ export class UserElasticsearchService {
       return result;
     } catch (error) {
       console.error('Failed to create user in Elasticsearch:', error);
-      throw new Error(`Failed to create user in Elasticsearch: ${error.message}`);
+      throw new Error(
+        `Failed to create user in Elasticsearch: ${error.message}`
+      );
     }
   }
 
@@ -198,7 +204,9 @@ export class UserElasticsearchService {
       return result;
     } catch (error) {
       console.error('Error updating user in Elasticsearch:', error);
-      throw new Error(`Failed to update user in Elasticsearch: ${error.message}`);
+      throw new Error(
+        `Failed to update user in Elasticsearch: ${error.message}`
+      );
     }
   }
 
@@ -211,7 +219,27 @@ export class UserElasticsearchService {
       return result;
     } catch (error) {
       console.error('Failed to delete user from Elasticsearch:', error);
-      throw new Error(`Failed to delete user from Elasticsearch: ${error.message}`);
+      throw new Error(
+        `Failed to delete user from Elasticsearch: ${error.message}`
+      );
+    }
+  }
+
+  async getUser(userId: string) {
+    try {
+      const result = await this.elasticsearchService.get(
+        this.indexName,
+        userId
+      );
+      return result;
+    } catch (error) {
+      if (error.meta?.statusCode === 404) {
+        return null;
+      }
+      console.error('Failed to get user from Elasticsearch:', error);
+      throw new Error(
+        `Failed to get user from Elasticsearch: ${error.message}`
+      );
     }
   }
 
@@ -224,8 +252,8 @@ export class UserElasticsearchService {
       const searchQuery = {
         bool: {
           must: [],
-          filter: []
-        }
+          filter: [],
+        },
       };
 
       // Add text search if query.q is provided
@@ -240,10 +268,10 @@ export class UserElasticsearchService {
               'profile.firstName^2',
               'profile.lastName^2',
               'profile.email',
-              'profile.username'
+              'profile.username',
             ],
-            fuzziness: 'AUTO'
-          }
+            fuzziness: 'AUTO',
+          },
         });
       }
 
@@ -261,13 +289,13 @@ export class UserElasticsearchService {
                 nested: {
                   path: nestedPath,
                   query: {
-                    term: { [`${nestedPath}.${nestedField}`]: value }
-                  }
-                }
+                    term: { [`${nestedPath}.${nestedField}`]: value },
+                  },
+                },
               });
             } else {
               searchQuery.bool.filter.push({
-                term: { [`profile.${field}`]: value }
+                term: { [`profile.${field}`]: value },
               });
             }
           }
@@ -283,9 +311,9 @@ export class UserElasticsearchService {
           nested: {
             path: 'tenantCohortRoleMapping',
             query: {
-              term: { 'tenantCohortRoleMapping.tenantId': query.tenantId }
-            }
-          }
+              term: { 'tenantCohortRoleMapping.tenantId': query.tenantId },
+            },
+          },
         });
       }
 
@@ -297,13 +325,11 @@ export class UserElasticsearchService {
           nested: {
             path: 'applications',
             query: {
-              term: { 'applications.cohortId': query.cohortId }
-            }
-          }
+              term: { 'applications.cohortId': query.cohortId },
+            },
+          },
         });
       }
-
-      console.log('Search query:', JSON.stringify(searchQuery, null, 2));
 
       const result = await this.elasticsearchService.search(
         this.indexName,
@@ -319,22 +345,24 @@ export class UserElasticsearchService {
               'applications.*',
               'courses.*',
               'createdAt',
-              'updatedAt'
-            ]
-          }
+              'updatedAt',
+            ],
+          },
         }
       );
       return result;
     } catch (error) {
       console.error('Failed to search users in Elasticsearch:', error);
-      throw new Error(`Failed to search users in Elasticsearch: ${error.message}`);
+      throw new Error(
+        `Failed to search users in Elasticsearch: ${error.message}`
+      );
     }
   }
 
   private async exists(userId: string): Promise<boolean> {
     try {
       const result = await this.elasticsearchService.search(this.indexName, {
-        term: { userId }
+        term: { userId },
       });
       return result.hits.length > 0;
     } catch (error) {
@@ -342,86 +370,60 @@ export class UserElasticsearchService {
     }
   }
 
-  async updateApplication(userId: string, application: IApplication): Promise<void> {
+  async updateApplication(
+    userId: string,
+    application: IApplication
+  ): Promise<void> {
     try {
-      console.log('Original application data:', JSON.stringify(application, null, 2));
-
       const exists = await this.exists(userId);
-      if (!exists) {
-        // Create new document with application
-        const newDoc: IUser = {
-          userId,
-          profile: {
-            userId,
-            username: '',
-            firstName: '',
-            lastName: '',
-            middleName: '',
-            email: '',
-            mobile: '',
-            mobile_country_code: '',
-            gender: '',
-            dob: null,
-            address: '',
-            district: '',
-            state: '',
-            pincode: '',
-            status: 'active',
-            customFields: []
-          },
-          applications: [{
-            cohortId: application.cohortId,
-            status: application.status || 'inactive',
-            cohortmemberstatus: application.cohortmemberstatus || 'inactive',
-            formstatus: application.formstatus || 'inactive',
-            progress: application.progress || {
-              pages: {},
-              overall: {
-                completed: 0,
-                total: 0
-              }
-            },
-            lastSavedAt: application.lastSavedAt || new Date().toISOString(),
-            submittedAt: application.submittedAt || new Date().toISOString(),
-            cohortDetails: application.cohortDetails || {
-              name: '',
-              status: 'active'
-            }
-          }],
-          courses: [],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        };
-        console.log('Creating new document:', JSON.stringify(newDoc, null, 2));
-        await this.elasticsearchService.index(this.indexName, userId, newDoc);
-        return;
+      let existingCohortMemberStatus;
+      if (exists) {
+        // Fetch the existing application for this cohortId
+        const userDoc = await this.elasticsearchService.get(
+          this.indexName,
+          userId
+        );
+        const source =
+          userDoc && (userDoc._source as { applications?: IApplication[] });
+        if (source && Array.isArray(source.applications)) {
+          const existingApp = source.applications.find(
+            (app) => app.cohortId === application.cohortId
+          );
+          if (existingApp && existingApp.cohortmemberstatus !== undefined) {
+            existingCohortMemberStatus = existingApp.cohortmemberstatus;
+          }
+        }
       }
 
       // Map form fields to pages structure
       const mappedApplication: IApplication = {
         cohortId: application.cohortId,
-        status: application.status || 'inactive',
-        cohortmemberstatus: application.cohortmemberstatus || 'inactive',
+        formId: application.formId,
+        submissionId: application.submissionId,
+        // Only set cohortmemberstatus if provided, otherwise preserve existing
+        cohortmemberstatus:
+          application.cohortmemberstatus !== undefined
+            ? application.cohortmemberstatus
+            : existingCohortMemberStatus,
         formstatus: application.formstatus || 'inactive',
         progress: {
           pages: {},
           overall: {
             completed: 0,
-            total: 0
-          }
+            total: 0,
+          },
         },
         lastSavedAt: application.lastSavedAt || new Date().toISOString(),
         submittedAt: application.submittedAt || new Date().toISOString(),
         cohortDetails: application.cohortDetails || {
           name: '',
-          status: 'active'
+          status: 'active',
         },
-        formData: {}
+        formData: {},
       };
 
       // If application has formData, map it to pages structure
       if (application.formData) {
-        console.log('Form data before mapping:', JSON.stringify(application.formData, null, 2));
         const pages = {};
         let completedCount = 0;
         let totalCount = 0;
@@ -446,7 +448,7 @@ export class UserElasticsearchService {
           const pageName = pageId === 'default' ? 'eligibility' : pageId;
           pages[pageName] = {
             completed: pageCompleted,
-            fields
+            fields,
           };
         });
 
@@ -454,14 +456,12 @@ export class UserElasticsearchService {
           pages,
           overall: {
             completed: completedCount,
-            total: totalCount
-          }
+            total: totalCount,
+          },
         };
 
         // Also update formData with the same structure
         mappedApplication.formData = application.formData;
-        
-        console.log('Mapped pages structure:', JSON.stringify(mappedApplication.progress, null, 2));
       }
 
       // Update existing document with new application
@@ -492,12 +492,13 @@ export class UserElasticsearchService {
         lang: 'painless',
         params: {
           application: mappedApplication,
-          updatedAt: new Date().toISOString()
-        }
+          updatedAt: new Date().toISOString(),
+        },
       };
 
-      console.log('Final application data being sent to Elasticsearch:', JSON.stringify(script.params.application, null, 2));
-      await this.elasticsearchService.update(this.indexName, userId, { script });
+      await this.elasticsearchService.update(this.indexName, userId, {
+        script,
+      });
     } catch (error) {
       console.error('Failed to update application in Elasticsearch:', error);
       throw error;
@@ -511,12 +512,16 @@ export class UserElasticsearchService {
       '1': 'personalDetails',
       '2': 'background',
       '3': 'education',
-      '4': 'additional'
+      '4': 'additional',
     };
     return pageMap[pageId] || pageId;
   }
 
-  async updateCourse(userId: string, courseId: string, course: Partial<ICourse>): Promise<any> {
+  async updateCourse(
+    userId: string,
+    courseId: string,
+    course: Partial<ICourse>
+  ): Promise<any> {
     try {
       const script = {
         source: `
@@ -538,8 +543,8 @@ export class UserElasticsearchService {
         lang: 'painless',
         params: {
           courseId,
-          course
-        }
+          course,
+        },
       };
 
       const result = await this.elasticsearchService.update(
@@ -551,19 +556,34 @@ export class UserElasticsearchService {
       return result;
     } catch (error) {
       console.error('Error updating course in Elasticsearch:', error);
-      throw new Error(`Failed to update course in Elasticsearch: ${error.message}`);
+      throw new Error(
+        `Failed to update course in Elasticsearch: ${error.message}`
+      );
     }
   }
 
-  async updateApplicationPage(userId: string, cohortId: string, pageId: string, pageData: { completed: boolean; fields: Record<string, any> }): Promise<any> {
+  async updateApplicationPage(
+    userId: string,
+    cohortId: string,
+    pageId: string,
+    pageData: { completed: boolean; fields: Record<string, any> }
+  ): Promise<any> {
     try {
       // Validate input
       if (!userId || !cohortId || !pageId) {
-        throw new Error('Missing required parameters: userId, cohortId, and pageId are required');
+        throw new Error(
+          'Missing required parameters: userId, cohortId, and pageId are required'
+        );
       }
 
-      if (!pageData || typeof pageData.completed !== 'boolean' || !pageData.fields) {
-        throw new Error('Invalid page data: completed status and fields are required');
+      if (
+        !pageData ||
+        typeof pageData.completed !== 'boolean' ||
+        !pageData.fields
+      ) {
+        throw new Error(
+          'Invalid page data: completed status and fields are required'
+        );
       }
 
       // Validate fields object
@@ -615,8 +635,8 @@ export class UserElasticsearchService {
           cohortId,
           pageId,
           pageData,
-          lastSavedAt: new Date().toISOString()
-        }
+          lastSavedAt: new Date().toISOString(),
+        },
       };
 
       const result = await this.elasticsearchService.update(
@@ -628,11 +648,17 @@ export class UserElasticsearchService {
       return result;
     } catch (error) {
       console.error('Error updating application page in Elasticsearch:', error);
-      throw new Error(`Failed to update application page in Elasticsearch: ${error.message}`);
+      throw new Error(
+        `Failed to update application page in Elasticsearch: ${error.message}`
+      );
     }
   }
 
-  async syncUserToElasticsearch(user: IUser, applications?: IApplication[], courses?: ICourse[]) {
+  async syncUserToElasticsearch(
+    user: IUser,
+    applications?: IApplication[],
+    courses?: ICourse[]
+  ) {
     try {
       // Handle empty date values
       if (user.profile.dob === '') {
@@ -664,12 +690,12 @@ export class UserElasticsearchService {
           state: user.profile.state,
           pincode: user.profile.pincode,
           status: user.profile.status,
-          customFields: user.profile.customFields || {}
+          customFields: user.profile.customFields || {},
         },
         applications: applications || user.applications || [],
         courses: courses || user.courses || [],
         createdAt: user.createdAt,
-        updatedAt: user.updatedAt
+        updatedAt: user.updatedAt,
       };
 
       // Use update instead of index to ensure we only update after database changes
@@ -690,4 +716,4 @@ export class UserElasticsearchService {
     // Only update the profile field in the Elasticsearch document
     return this.updateUser(userId, { doc: { profile } });
   }
-} 
+}

@@ -1495,12 +1495,21 @@ export class PostgresUserService implements IServicelocator {
 
         if (customFields) {
           const customFieldAttributes = customFields.reduce(
-            (fieldDetail, { fieldId, fieldAttributes, fieldParams, name, label, type }) =>
+            (
+              fieldDetail,
+              { fieldId, fieldAttributes, fieldParams, name, label, type }
+            ) =>
               fieldDetail[`${fieldId}`]
                 ? fieldDetail
                 : {
                     ...fieldDetail,
-                    [`${fieldId}`]: { fieldAttributes, fieldParams, name, label, type },
+                    [`${fieldId}`]: {
+                      fieldAttributes,
+                      fieldParams,
+                      name,
+                      label,
+                      type,
+                    },
                   },
             {}
           );
@@ -1540,9 +1549,29 @@ export class PostgresUserService implements IServicelocator {
 
       // Add Elasticsearch sync with custom fields
       try {
-        // Get custom fields from the processed result
+        // Get custom fields from the processed result (these may only have fieldId and value)
         const customFields = result['customFields'] || [];
 
+        // Map custom fields for Elasticsearch: enrich with name and label
+        const elasticCustomFields = [];
+        for (const field of customFields) {
+          let name = '';
+          let label = '';
+          // Fetch field definition for name/label
+          const fieldDef = await this.fieldsService.getFieldByIdes(
+            field.fieldId
+          );
+          if (fieldDef && !('error' in fieldDef)) {
+            name = fieldDef.name || '';
+            label = fieldDef.label || '';
+          }
+          elasticCustomFields.push({
+            fieldId: field.fieldId,
+            name,
+            label,
+            value: field.value,
+          });
+        }
         // Map user data to match IUser interface
         const userForElastic: IUser = {
           userId: result.userId,
@@ -1562,10 +1591,7 @@ export class PostgresUserService implements IServicelocator {
             district: result.district || '',
             pincode: result.pincode || '',
             status: result.status,
-            customFields: customFields.map((field) => ({
-              fieldId: field.fieldId,
-              value: field.value,
-            })),
+            customFields: elasticCustomFields,
           },
           applications: [],
           courses: [],

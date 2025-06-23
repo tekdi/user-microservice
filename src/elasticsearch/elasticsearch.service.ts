@@ -147,6 +147,8 @@ export class ElasticsearchService {
             },
             applications: source?.applications?.map((app) => ({
               cohortId: app.cohortId || '',
+              formId: app.formId || '',
+              submissionId: app.submissionId || '',
               status: app.status || '',
               cohortmemberstatus: app.cohortmemberstatus || '',
               formstatus: app.formstatus || '',
@@ -250,6 +252,26 @@ export class ElasticsearchService {
       }));
     } catch (error) {
       this.logger.error('Failed to search users:', error);
+      throw error;
+    }
+  }
+
+  async getApplication(userId: string) {
+    try {
+      const response = await this.get('users', userId);
+      if (!response || !response._source) {
+        return null;
+      }
+      
+      const user = response._source as IUser;
+      if (!user.applications || !Array.isArray(user.applications)) {
+        return null;
+      }
+
+      // Return the first application found for the user
+      return user.applications[0] || null;
+    } catch (error) {
+      this.logger.error(`Failed to get application for user ${userId}:`, error);
       throw error;
     }
   }
