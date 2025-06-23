@@ -48,7 +48,7 @@ import config from '../../common/config';
 import { CalendarField } from 'src/fields/fieldValidators/fieldTypeClasses';
 import { UserCreateSsoDto } from 'src/user/dto/user-create-sso.dto';
 import { UserElasticsearchService } from '../../elasticsearch/user-elasticsearch.service';
-import { IUser, IProfile } from '../../elasticsearch/interfaces/user.interface';
+import { IUser } from '../../elasticsearch/interfaces/user.interface';
 
 interface UpdateField {
   userId: string; // Required
@@ -93,7 +93,7 @@ export class PostgresUserService implements IServicelocator {
     private postgresAcademicYearService: PostgresAcademicYearService,
     private readonly cohortAcademicYearService: CohortAcademicYearService,
     private readonly authUtils: AuthUtils,
-    private userElasticsearchService: UserElasticsearchService
+    private readonly userElasticsearchService: UserElasticsearchService
   ) {
     this.jwt_secret = this.configService.get<string>('RBAC_JWT_SECRET');
     this.jwt_password_reset_expires_In = this.configService.get<string>(
@@ -106,10 +106,10 @@ export class PostgresUserService implements IServicelocator {
     this.otpExpiry = this.configService.get<number>('OTP_EXPIRY') || 10; // default: 10 minutes
     this.otpDigits = this.configService.get<number>('OTP_DIGITS') || 6;
     this.smsKey = this.configService.get<string>('SMS_KEY');
-    // Initialize Elasticsearch index on service startup
-    this.initializeElasticsearch();
   }
-
+  async onModuleInit() {
+    await this.initializeElasticsearch();
+  }
   private async initializeElasticsearch() {
     try {
       await this.userElasticsearchService.initialize();
@@ -1563,7 +1563,10 @@ export class PostgresUserService implements IServicelocator {
             mobile: result.mobile ? result.mobile.toString() : '',
             mobile_country_code: result.mobile_country_code || '',
             gender: result.gender,
-            dob: result.dob ? result.dob.toISOString() : null,
+            dob:
+              result.dob instanceof Date
+                ? result.dob.toISOString()
+                : result.dob ?? '',
             address: result.address || '',
             state: result.state || '',
             district: result.district || '',

@@ -45,7 +45,7 @@ export class PostgresCohortMembersService {
     private readonly academicyearService: PostgresAcademicYearService,
     private readonly notificationRequest: NotificationRequest,
     private fieldsService: PostgresFieldsService,
-    private elasticsearchService: ElasticsearchService,
+    private readonly elasticsearchService: ElasticsearchService,
     private readonly userService: PostgresUserService,
     private readonly formsService: FormsService, // Add FormsService
     private readonly formSubmissionService: FormSubmissionService // Add FormSubmissionService

@@ -24,7 +24,6 @@ import { AcademicYear } from 'src/academicyears/entities/academicyears-entity';
 import { CohortAcademicYearService } from './cohortAcademicYear-adapter';
 import { AuthUtils } from '@utils/auth-util';
 import { ElasticsearchModule } from 'src/elasticsearch/elasticsearch.module';
-import { UserElasticsearchService } from 'src/elasticsearch/user-elasticsearch.service';
 
 @Module({
   imports: [
