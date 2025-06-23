@@ -56,7 +56,6 @@ import { UserElasticsearchService } from 'src/elasticsearch/user-elasticsearch.s
     CohortAcademicYearService,
     PostgresAcademicYearService,
     AuthUtils,
-    UserElasticsearchService,
   ],
   exports: [
     PostgresUserService,

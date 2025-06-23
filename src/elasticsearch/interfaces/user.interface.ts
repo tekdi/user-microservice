@@ -84,4 +84,4 @@ export interface IUser {
   courses: ICourse[];
   createdAt: string;
   updatedAt: string;
-} 
+}
