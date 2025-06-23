@@ -45,8 +45,8 @@ export class PostgresCohortMembersService {
     private readonly academicyearService: PostgresAcademicYearService,
     private readonly notificationRequest: NotificationRequest,
     private fieldsService: PostgresFieldsService,
-    private userService: PostgresUserService,
     private elasticsearchService: ElasticsearchService,
+    private readonly userService: PostgresUserService,
     private readonly formsService: FormsService, // Add FormsService
     private readonly formSubmissionService: FormSubmissionService // Add FormSubmissionService
   ) {}
@@ -764,7 +764,7 @@ export class PostgresCohortMembersService {
       whereCase += where.map(processCondition).join(' AND ');
     }
 
-    let query = `SELECT U."userId", U."username", "firstName", "middleName", "lastName", R."name" AS role, U."district", U."state",U."mobile",U."deviceId",U."gender",U."dob",
+    let query = `SELECT U."userId", U."username",U."email", U."firstName", U."middleName", U."lastName", R."name" AS role, U."district", U."state",U."mobile",U."deviceId",U."gender",U."dob",
       CM."status", CM."statusReason",CM."cohortMembershipId",CM."status",CM."createdAt", CM."updatedAt",U."createdBy",U."updatedBy", COUNT(*) OVER() AS total_count  FROM public."CohortMembers" CM
       INNER JOIN public."Users" U
       ON CM."userId" = U."userId"
@@ -885,6 +885,59 @@ export class PostgresCohortMembersService {
         );
       }
 
+      // Send notification if applicable for this status onlu
+      const notifyStatuses = ['dropout', 'shortlisted', 'rejected'];
+      const { status, statusReason } = cohortMembersUpdateDto;
+
+      if (notifyStatuses.includes(status)) {
+        const [userData, cohortData] = await Promise.all([
+          this.usersRepository.findOne({
+            where: { userId: cohortMembershipToUpdate.userId },
+          }),
+          this.cohortRepository.findOne({
+            where: { cohortId: cohortMembershipToUpdate.cohortId },
+          }),
+        ]);
+
+        if (userData?.email) {
+          const validStatusKeys = {
+            dropout: 'onStudentDropout',
+            shortlisted: 'onStudentShortlisted',
+            rejected: 'onStudentRejected',
+          };
+          //This is notification payload required to send
+          const notificationPayload = {
+            isQueue: false,
+            context: 'USER',
+            key: validStatusKeys[status],
+            replacements: {
+              '{username}': `${userData.firstName ?? ''} ${
+                userData.lastName ?? ''
+              }`.trim(),
+              '{firstName}': userData.firstName ?? '',
+              '{lastName}': userData.lastName ?? '',
+              '{programName}': cohortData?.name ?? 'the program',
+              '{status}': status,
+              '{statusReason}': statusReason ?? 'Not specified',
+            },
+            email: {
+              receipients: [userData.email],
+            },
+          };
+
+          const mailSend = await this.notificationRequest.sendNotification(
+            notificationPayload
+          );
+
+          if (mailSend?.result?.email?.errors?.length > 0) {
+            LoggerUtil.error(
+              API_RESPONSES.BAD_REQUEST,
+              `Error: Failed to send ${status} notification`,
+              apiId
+            );
+          }
+        }
+      }
       //update custom fields
       let responseForCustomField;
       if (

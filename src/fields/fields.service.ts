@@ -441,4 +441,33 @@ export class FieldsService {
 
     return fieldResponse;
   }
+
+  async getField(fieldId: string): Promise<Fields> {
+    return this.fieldsRepository.findOne({ where: { fieldId } });
+  }
+
+  async getFieldValue(fieldId: string, itemId: string): Promise<FieldValues> {
+    return this.fieldsValuesRepository.findOne({ 
+      where: { fieldId: fieldId, itemId: itemId } 
+    });
+  }
+
+  async updateFieldValue(data: {
+    fieldId: string;
+    itemId: string;
+    value: string;
+    fileValue: string;
+  }): Promise<void> {
+    await this.fieldsValuesRepository.update(
+      { fieldId: data.fieldId, itemId: data.itemId },
+      { value: data.value, fileValue: data.fileValue }
+    );
+  }
+
+  async deleteFieldValue(fieldId: string, itemId: string): Promise<void> {
+    await this.fieldsValuesRepository.delete({
+      fieldId: fieldId,
+      itemId: itemId
+    });
+  }
 }

@@ -187,7 +187,7 @@ export class UserElasticsearchService {
     }
   }
 
-  async updateUser(userId: string, updateData: Partial<IUser>): Promise<any> {
+  async updateUser(userId: string, updateData: any): Promise<any> {
     try {
       const result = await this.elasticsearchService.update(
         this.indexName,
@@ -684,5 +684,10 @@ export class UserElasticsearchService {
       console.error('Failed to sync user to Elasticsearch:', error);
       throw new Error(`Failed to sync user to Elasticsearch: ${error.message}`);
     }
+  }
+
+  async updateUserProfile(userId: string, profile: any): Promise<any> {
+    // Only update the profile field in the Elasticsearch document
+    return this.updateUser(userId, { doc: { profile } });
   }
 } 

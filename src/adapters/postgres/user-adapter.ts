@@ -844,6 +844,7 @@ export class PostgresUserService implements IServicelocator {
         'email',
         'temporaryPassword',
         'status',
+        'createdAt',
         'createdBy',
         'deviceId',
         'mobile_country_code',
@@ -1494,12 +1495,12 @@ export class PostgresUserService implements IServicelocator {
 
         if (customFields) {
           const customFieldAttributes = customFields.reduce(
-            (fieldDetail, { fieldId, fieldAttributes, fieldParams, name }) =>
+            (fieldDetail, { fieldId, fieldAttributes, fieldParams, name, label, type }) =>
               fieldDetail[`${fieldId}`]
                 ? fieldDetail
                 : {
                     ...fieldDetail,
-                    [`${fieldId}`]: { fieldAttributes, fieldParams, name },
+                    [`${fieldId}`]: { fieldAttributes, fieldParams, name, label, type },
                   },
             {}
           );
@@ -1518,7 +1519,15 @@ export class PostgresUserService implements IServicelocator {
 
             if (res.correctValue) {
               if (!result['customFields']) result['customFields'] = [];
-              result['customFields'].push(res);
+              // Add code, label, type, value, fieldId to each custom field object
+              const fieldMeta = customFieldAttributes[fieldData.fieldId] || {};
+              result['customFields'].push({
+                code: fieldData.value,
+                label: fieldMeta.label || '',
+                type: fieldMeta.type || '',
+                value: fieldData.value,
+                fieldId: fieldData.fieldId,
+              });
             } else {
               createFailures.push(
                 `${fieldData.fieldId}: ${res?.valueIssue} - ${res.fieldName}`
@@ -1547,7 +1556,7 @@ export class PostgresUserService implements IServicelocator {
             mobile: result.mobile ? result.mobile.toString() : '',
             mobile_country_code: result.mobile_country_code || '',
             gender: result.gender,
-            dob: result.dob ? result.dob.toISOString() : '',
+            dob: result.dob ? result.dob.toISOString() : null,
             address: result.address || '',
             state: result.state || '',
             district: result.district || '',
@@ -2724,70 +2733,104 @@ export class PostgresUserService implements IServicelocator {
 
   private async syncUserToElasticsearch(user: User) {
     try {
-      // Get user's applications with cohort details
-      const applications = await this.cohortMemberRepository.find({
-        where: { userId: user.userId },
-        relations: ['cohort'],
-      });
-
-      // Map applications to IApplication format
-      const mappedApplications = applications.map((app) => ({
-        cohortId: app.cohortId,
-        status: app.status,
-        cohortmemberstatus: app.status,
-        formstatus: app.status,
-        progress: {
-          pages: {},
-          overall: {
-            completed: 0,
-            total: 0,
-          },
-        },
-        lastSavedAt: app.createdAt.toISOString(),
-        submittedAt: app.updatedAt.toISOString(),
-        cohortDetails: {
-          name: '',
-          description: '',
-          startDate: '',
-          endDate: '',
-          status: '',
-        },
-      }));
-
-      // Prepare the user data for Elasticsearch
-      const elasticUser: IUser = {
+      const customFields = await this.fieldsService.getUserCustomFieldDetails(
+        user.userId
+      );
+      // Prepare the profile data
+      const profile = {
         userId: user.userId,
-        profile: {
-          userId: user.userId,
-          username: user.username,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          middleName: user.middleName || '',
-          email: user.email || '',
-          mobile: user.mobile?.toString() || '',
-          mobile_country_code: user.mobile_country_code || '',
-          dob: user.dob ? new Date(user.dob).toISOString() : '',
-          gender: user.gender,
-          address: user.address || '',
-          district: user.district || '',
-          state: user.state || '',
-          pincode: user.pincode || '',
-          status: user.status,
-          customFields: {},
-        },
-        applications: mappedApplications,
-        courses: [],
-        createdAt: user.createdAt.toISOString(),
-        updatedAt: user.updatedAt.toISOString(),
+        username: user.username,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        middleName: user.middleName || '',
+        email: user.email || '',
+        mobile: user.mobile?.toString() || '',
+        mobile_country_code: user.mobile_country_code || '',
+        dob: user.dob ? new Date(user.dob).toISOString() : null,
+        gender: user.gender,
+        address: user.address || '',
+        district: user.district || '',
+        state: user.state || '',
+        pincode: user.pincode || '',
+        status: user.status,
+        customFields, // Make sure this is an array of {fieldId, value}
       };
 
-      // Try to sync with Elasticsearch
-      await this.userElasticsearchService.createUser(elasticUser);
+      // Partial update: only update the profile field
+      await this.userElasticsearchService.updateUserProfile(
+        user.userId,
+        profile
+      );
     } catch (error) {
-      console.error('Failed to sync user to Elasticsearch:', error);
-      // Don't throw the error - we want the main operation to continue even if Elasticsearch sync fails
+      console.error('Failed to update user profile in Elasticsearch:', error);
     }
   }
+  // private async syncUserToElasticsearch(user: User) {
+  //   try {
+  //     // Get user's applications with cohort details
+  //     const applications = await this.cohortMemberRepository.find({
+  //       where: { userId: user.userId },
+  //       relations: ['cohort'],
+  //     });
+
+  //     // Map applications to IApplication format
+  //     const mappedApplications = applications.map((app) => ({
+  //       cohortId: app.cohortId,
+  //       status: app.status,
+  //       cohortmemberstatus: app.status,
+  //       formstatus: app.status,
+  //       progress: {
+  //         pages: {},
+  //         overall: {
+  //           completed: 0,
+  //           total: 0,
+  //         },
+  //       },
+  //       lastSavedAt: app.createdAt.toISOString(),
+  //       submittedAt: app.updatedAt.toISOString(),
+  //       cohortDetails: {
+  //         name: '',
+  //         description: '',
+  //         startDate: '',
+  //         endDate: '',
+  //         status: '',
+  //       },
+  //     }));
+
+  //     // Prepare the user data for Elasticsearch
+  //     const elasticUser: IUser = {
+  //       userId: user.userId,
+  //       profile: {
+  //         userId: user.userId,
+  //         username: user.username,
+  //         firstName: user.firstName,
+  //         lastName: user.lastName,
+  //         middleName: user.middleName || '',
+  //         email: user.email || '',
+  //         mobile: user.mobile?.toString() || '',
+  //         mobile_country_code: user.mobile_country_code || '',
+  //         dob: user.dob ? new Date(user.dob).toISOString() : '',
+  //         gender: user.gender,
+  //         address: user.address || '',
+  //         district: user.district || '',
+  //         state: user.state || '',
+  //         pincode: user.pincode || '',
+  //         status: user.status,
+  //         customFields: {},
+  //       },
+  //       applications: mappedApplications,
+  //       courses: [],
+  //       createdAt: user.createdAt.toISOString(),
+  //       updatedAt: user.updatedAt.toISOString(),
+  //     };
+
+  //     // Try to sync with Elasticsearch
+  //     await this.userElasticsearchService.createUser(elasticUser);
+  //   } catch (error) {
+  //     console.error('Failed to sync user to Elasticsearch:', error);
+  //     // Don't throw the error - we want the main operation to continue even if Elasticsearch sync fails
+  //   }
+  // }
 
   private async getUserApplications(userId: string) {
     // Implement logic to get user applications

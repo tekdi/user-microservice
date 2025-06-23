@@ -23,6 +23,7 @@ import { HttpService } from '@utils/http-service';
 import { TenantModule } from './tenant/tenant.module';
 import { AcademicyearsModule } from './academicyears/academicyears.module';
 import { CohortAcademicYearModule } from './cohortAcademicYear/cohortAcademicYear.module';
+import { storageConfig } from './config/storage.config';
 import { ElasticsearchModule } from './elasticsearch/elasticsearch.module';
 
 @Module({
@@ -47,6 +48,13 @@ import { ElasticsearchModule } from './elasticsearch/elasticsearch.module';
     ElasticsearchModule,
   ],
   controllers: [AppController],
-  providers: [AppService, HttpService],
+  providers: [
+    AppService,
+    HttpService,
+    {
+      provide: 'STORAGE_CONFIG',
+      useValue: storageConfig,
+    },
+  ],
 })
 export class AppModule {}

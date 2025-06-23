@@ -1094,11 +1094,16 @@ export class PostgresCohortService {
             );
           }
 
+          const havingConditions = conditions.map(
+            (c) => `COUNT(*) FILTER (WHERE ${c}) > 0`
+          );
+
           const customFieldQuery = `
             SELECT DISTINCT fv."itemId"
             FROM public."FieldValues" fv
             INNER JOIN public."Fields" f ON f."fieldId" = fv."fieldId"
-            WHERE ${conditions.join(' OR ')}`;
+            GROUP BY fv."itemId"
+            HAVING ${havingConditions.join(' AND ')}`;
 
           try {
             getCohortIdUsingCustomFields =

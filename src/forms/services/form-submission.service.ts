@@ -293,7 +293,14 @@ export class FormSubmissionService {
           );
 
           if (matchingField) {
-            const fieldName = matchingField.fieldId;
+            // Fetch the field name using fieldsService
+            let fieldName = fieldId;
+            try {
+              const fieldDef = await this.fieldsService.getFieldById(fieldId);
+              if (fieldDef && fieldDef.name) {
+                fieldName = fieldDef.name;
+              }
+            } catch (e) {}
             const value = matchingField.value;
 
             // Assign to both progress and formData
@@ -1025,9 +1032,16 @@ export class FormSubmissionService {
       }
       // Update Elasticsearch after successful form submission update
       try {
+        // Fetch the form by ID to get context, contextType, contextId
+        const formDetails = await this.formsService.getFormById(updatedSubmission.formId);
+        if (!formDetails) {
+          throw new Error('Form not found');
+        }
         // Get form fields from FormsService
         const formData = await this.formsService.getFormData({
-          formid: updatedSubmission.formId,
+          context: formDetails.context,
+          contextType: formDetails.contextType,
+          contextId: formDetails.contextId,
           tenantId,
         });
 
@@ -1058,8 +1072,12 @@ export class FormSubmissionService {
               (fv) => fv.fieldId === field.fieldId
             );
             if (fieldValue) {
-              pages[pageKey].fields[field.schema?.name || field.fieldId] =
-                fieldValue.value;
+              // Use field name if available
+              let fieldName = field.fieldId;
+              if (field.name) {
+                fieldName = field.name;
+              }
+              pages[pageKey].fields[fieldName] = fieldValue.value;
               completedFields++;
             }
             totalFields++;
