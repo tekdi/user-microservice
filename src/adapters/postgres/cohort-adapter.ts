@@ -1284,7 +1284,6 @@ export class PostgresCohortService {
       }
 
       return { createdFormIds, publishedFormIds };
-      // return new Set(rawForms.map((f) => f.contextId));
     } catch (error) {
       LoggerUtil.error(
         'Error querying forms table',
