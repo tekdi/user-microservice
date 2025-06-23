@@ -1040,8 +1040,8 @@ export class PostgresUserService implements IServicelocator {
       const updatedUser = await this.updateBasicUserDetails(userId, userDto);
 
       // Get applications and courses
-      const applications = await this.getUserApplications(userId);
-      const courses = await this.getUserCourses(userId);
+      await this.getUserApplications(userId);
+      await this.getUserCourses(userId);
 
       // Sync to Elasticsearch
       await this.syncUserToElasticsearch(updatedUser);
@@ -1507,11 +1507,11 @@ export class PostgresUserService implements IServicelocator {
             if (res.correctValue) {
               if (!result['customFields']) result['customFields'] = [];
               // Add code, label, type, value, fieldId to each custom field object
-              const fieldMeta = customFieldAttributes[fieldData.fieldId] || {};
+              const fieldMeta = customFieldAttributes[fieldData.fieldId] ?? {};
               result['customFields'].push({
                 code: fieldData.value,
-                label: fieldMeta.label || '',
-                type: fieldMeta.type || '',
+                label: fieldMeta.label ?? '',
+                type: fieldMeta.type ?? '',
                 value: fieldData.value,
                 fieldId: fieldData.fieldId,
               });
@@ -1528,7 +1528,7 @@ export class PostgresUserService implements IServicelocator {
       // Add Elasticsearch sync with custom fields
       try {
         // Get custom fields from the processed result (these may only have fieldId and value)
-        const customFields = result['customFields'] || [];
+        const customFields = result['customFields'] ?? [];
 
         // Map custom fields for Elasticsearch: enrich with name and label
         const elasticCustomFields = [];
@@ -1540,8 +1540,8 @@ export class PostgresUserService implements IServicelocator {
             field.fieldId
           );
           if (fieldDef && !('error' in fieldDef)) {
-            name = fieldDef.name || '';
-            label = fieldDef.label || '';
+            name = fieldDef.name ?? '';
+            label = fieldDef.label ?? '';
           }
           elasticCustomFields.push({
             fieldId: field.fieldId,
