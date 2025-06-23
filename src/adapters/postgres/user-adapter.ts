@@ -403,28 +403,6 @@ export class PostgresUserService implements IServicelocator {
   ) {
     const apiId = APIID.USER_LIST;
     try {
-      // First try Elasticsearch
-      const elasticResults = await this.userElasticsearchService.searchUsers({
-        text: userSearchDto.filters?.username || '', // Use username from filters
-        exact: {
-          'profile.tenantId': tenantId,
-        },
-        ...userSearchDto,
-      });
-
-      if (elasticResults.hits.length > 0) {
-        return APIResponse.success(
-          response,
-          apiId,
-          {
-            users: elasticResults.hits.map((hit) => hit._source),
-            total: elasticResults.total.toString(), // Convert number to string
-          },
-          HttpStatus.OK, // statusCode parameter
-          API_RESPONSES.USER_GET_SUCCESSFULLY // successmessage parameter
-        );
-      }
-
       let findData = await this.findAllUserDetails(userSearchDto);
 
       if (findData === false) {
