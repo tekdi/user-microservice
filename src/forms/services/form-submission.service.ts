@@ -34,7 +34,6 @@ import { FieldsSearchDto } from '../../fields/dto/fields-search.dto';
 import jwt_decode from 'jwt-decode';
 import { Form } from '../entities/form.entity';
 import { UserElasticsearchService } from '../../elasticsearch/user-elasticsearch.service';
-import { IApplication } from '../../elasticsearch/interfaces/user.interface';
 import { FormsService } from '../../forms/forms.service';
 import { PostgresCohortService } from 'src/adapters/postgres/cohort-adapter';
 import { IUser } from '../../elasticsearch/interfaces/user.interface';
@@ -84,11 +83,11 @@ export class FormSubmissionService {
     private fieldValuesRepository: Repository<FieldValues>,
     @InjectRepository(Form)
     private formRepository: Repository<Form>,
-    private fieldsService: FieldsService,
-    private userElasticsearchService: UserElasticsearchService,
-    private formsService: FormsService,
+    private readonly fieldsService: FieldsService,
+    private readonly userElasticsearchService: UserElasticsearchService,
+    private readonly formsService: FormsService,
     @Inject(forwardRef(() => PostgresCohortService))
-    private postgresCohortService: PostgresCohortService
+    private readonly postgresCohortService: PostgresCohortService
   ) {}
 
   async create(
@@ -202,7 +201,7 @@ export class FormSubmissionService {
         throw new BadRequestException('Form data not found');
       }
 
-      const cohortId = formData.contextId;
+      formData.contextId;
 
       // Extract schema from formData
       interface SchemaProperty {
@@ -218,7 +217,7 @@ export class FormSubmissionService {
         [key: string]: any;
       }
 
-      const schema = (formData.fields?.result?.[0]?.schema?.properties ||
+      const schema = (formData.fields?.result?.[0]?.schema?.properties ??
         {}) as {
         [key: string]: PageSchema;
       };
@@ -244,7 +243,7 @@ export class FormSubmissionService {
       const cohortData = cohortDetails.result.cohortData[0];
 
       // Use cohortData.customField instead of making another database call
-      const cohortFieldValues = cohortData.customField || [];
+      const cohortFieldValues = cohortData.customField ?? [];
 
       const application = {
         cohortId: cohortData.cohortId,
@@ -263,11 +262,11 @@ export class FormSubmissionService {
         lastSavedAt: new Date().toISOString(),
         submittedAt: new Date().toISOString(),
         cohortDetails: {
-          name: cohortData.name || '',
-          status: cohortData.status || '',
+          name: cohortData.name ?? '',
+          status: cohortData.status ?? '',
           // Dynamically map all custom fields using their labels as keys
           ...cohortFieldValues.reduce((acc, field) => {
-            acc[field.label] = field.value || '';
+            acc[field.label] = field.value ?? '';
             return acc;
           }, {} as Record<string, any>),
         },
