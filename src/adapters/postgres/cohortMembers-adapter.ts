@@ -29,6 +29,7 @@ import { FormSubmissionService } from 'src/forms/services/form-submission.servic
 import { FormSubmissionStatus } from 'src/forms/entities/form-submission.entity';
 import { FormSubmissionSearchDto } from 'src/forms/dto/form-submission-search.dto';
 import { FormsService } from 'src/forms/forms.service';
+import { isElasticsearchEnabled } from 'src/common/utils/elasticsearch.util';
 @Injectable()
 export class PostgresCohortMembersService {
   constructor(
@@ -656,50 +657,52 @@ export class PostgresCohortMembersService {
       );
 
       // Update Elasticsearch with cohort member status
-      try {
-        // First get the existing application data
-        const existingApplication =
-          await this.elasticsearchService.getApplication(cohortMembers.userId);
+      if (isElasticsearchEnabled()) {
+        try {
+          // First get the existing application data
+          const existingApplication =
+            await this.elasticsearchService.getApplication(cohortMembers.userId);
 
-        // Prepare the updated application data
-        const updatedApplication = {
-          ...(existingApplication || {}), // Preserve all existing fields if they exist
-          cohortId: cohortMembers.cohortId,
-          cohortmemberstatus: savedCohortMember.status ?? 'active',
-          // Only add these if there's no existing application
-          ...(existingApplication
-            ? {}
-            : {
-                lastSavedAt: new Date().toISOString(),
-                submittedAt: new Date().toISOString(),
-                cohortDetails: {
-                  name: '',
-                  description: '',
-                  startDate: null,
-                  endDate: null,
-                  status: 'active',
-                },
-                progress: {
-                  pages: {},
-                  overall: {
-                    completed: 0,
-                    total: 0,
+          // Prepare the updated application data
+          const updatedApplication = {
+            ...(existingApplication || {}), // Preserve all existing fields if they exist
+            cohortId: cohortMembers.cohortId,
+            cohortmemberstatus: savedCohortMember.status ?? 'active',
+            // Only add these if there's no existing application
+            ...(existingApplication
+              ? {}
+              : {
+                  lastSavedAt: new Date().toISOString(),
+                  submittedAt: new Date().toISOString(),
+                  cohortDetails: {
+                    name: '',
+                    description: '',
+                    startDate: null,
+                    endDate: null,
+                    status: 'active',
                   },
-                },
-              }),
-        };
+                  progress: {
+                    pages: {},
+                    overall: {
+                      completed: 0,
+                      total: 0,
+                    },
+                  },
+                }),
+          };
 
-        await this.elasticsearchService.updateApplication(
-          cohortMembers.userId,
-          updatedApplication
-        );
-      } catch (elasticError) {
-        // Log Elasticsearch error but don't fail the request
-        LoggerUtil.error(
-          'Failed to update Elasticsearch with cohort member status',
-          `Error: ${elasticError.message}`,
-          apiId
-        );
+          await this.elasticsearchService.updateApplication(
+            cohortMembers.userId,
+            updatedApplication
+          );
+        } catch (elasticError) {
+          // Log Elasticsearch error but don't fail the request
+          LoggerUtil.error(
+            'Failed to update Elasticsearch with cohort member status',
+            `Error: ${elasticError.message}`,
+            apiId
+          );
+        }
       }
       return APIResponse.success(
         res,
@@ -875,52 +878,54 @@ export class PostgresCohortMembersService {
       );
 
       // Update Elasticsearch with updated cohort member status
-      try {
-        // First get the existing application data
-        const existingApplication =
-          await this.elasticsearchService.getApplication(
-            cohortMembershipToUpdate.userId
-          );
+      if (isElasticsearchEnabled()) {
+        try {
+          // First get the existing application data
+          const existingApplication =
+            await this.elasticsearchService.getApplication(
+              cohortMembershipToUpdate.userId
+            );
 
-        // Prepare the updated application data
-        const updatedApplication = {
-          ...(existingApplication || {}), // Preserve all existing fields if they exist
-          cohortId: cohortMembershipToUpdate.cohortId,
-          cohortmemberstatus: result.status ?? 'active',
-          // Only add these if there's no existing application
-          ...(existingApplication
-            ? {}
-            : {
-                lastSavedAt: new Date().toISOString(),
-                submittedAt: new Date().toISOString(),
-                cohortDetails: {
-                  name: '',
-                  description: '',
-                  startDate: null,
-                  endDate: null,
-                  status: 'active',
-                },
-                progress: {
-                  pages: {},
-                  overall: {
-                    completed: 0,
-                    total: 0,
+          // Prepare the updated application data
+          const updatedApplication = {
+            ...(existingApplication || {}), // Preserve all existing fields if they exist
+            cohortId: cohortMembershipToUpdate.cohortId,
+            cohortmemberstatus: result.status ?? 'active',
+            // Only add these if there's no existing application
+            ...(existingApplication
+              ? {}
+              : {
+                  lastSavedAt: new Date().toISOString(),
+                  submittedAt: new Date().toISOString(),
+                  cohortDetails: {
+                    name: '',
+                    description: '',
+                    startDate: null,
+                    endDate: null,
+                    status: 'active',
                   },
-                },
-              }),
-        };
+                  progress: {
+                    pages: {},
+                    overall: {
+                      completed: 0,
+                      total: 0,
+                    },
+                  },
+                }),
+          };
 
-        await this.elasticsearchService.updateApplication(
-          cohortMembershipToUpdate.userId,
-          updatedApplication
-        );
-      } catch (elasticError) {
-        // Log Elasticsearch error but don't fail the request
-        LoggerUtil.error(
-          'Failed to update Elasticsearch with cohort member status',
-          `Error: ${elasticError.message}`,
-          apiId
-        );
+          await this.elasticsearchService.updateApplication(
+            cohortMembershipToUpdate.userId,
+            updatedApplication
+          );
+        } catch (elasticError) {
+          // Log Elasticsearch error but don't fail the request
+          LoggerUtil.error(
+            'Failed to update Elasticsearch with cohort member status',
+            `Error: ${elasticError.message}`,
+            apiId
+          );
+        }
       }
 
       // Send notification if applicable for this status onlu

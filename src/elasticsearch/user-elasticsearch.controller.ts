@@ -1,6 +1,7 @@
 import { Controller, Post, Body, Get, Put, Param, Query } from '@nestjs/common';
 import { UserElasticsearchService } from './user-elasticsearch.service';
 import { IUser, IApplication, ICourse } from './interfaces/user.interface';
+import { isElasticsearchEnabled } from 'src/common/utils/elasticsearch.util';
 
 @Controller('elasticsearch/users')
 export class UserElasticsearchController {
@@ -10,7 +11,10 @@ export class UserElasticsearchController {
 
   @Post()
   async createUser(@Body() userData: IUser) {
-    return this.userElasticsearchService.createUser(userData);
+    if (isElasticsearchEnabled()) {
+      return this.userElasticsearchService.createUser(userData);
+    }
+    return null;
   }
 
   @Put(':userId')
@@ -18,7 +22,10 @@ export class UserElasticsearchController {
     @Param('userId') userId: string,
     @Body() updateData: Partial<IUser>
   ) {
-    return this.userElasticsearchService.updateUser(userId, updateData);
+    if (isElasticsearchEnabled()) {
+      return this.userElasticsearchService.updateUser(userId, updateData);
+    }
+    return null;
   }
 
   @Put(':userId/applications/:cohortId')
@@ -49,10 +56,13 @@ export class UserElasticsearchController {
         },
       },
     };
-    return this.userElasticsearchService.updateApplication(
-      userId,
-      fullApplication
-    );
+    if (isElasticsearchEnabled()) {
+      return this.userElasticsearchService.updateApplication(
+        userId,
+        fullApplication
+      );
+    }
+    return null;
   }
 
   @Put(':userId/courses/:courseId')
@@ -61,7 +71,10 @@ export class UserElasticsearchController {
     @Param('courseId') courseId: string,
     @Body() course: Partial<ICourse>
   ) {
-    return this.userElasticsearchService.updateCourse(userId, courseId, course);
+    if (isElasticsearchEnabled()) {
+      return this.userElasticsearchService.updateCourse(userId, courseId, course);
+    }
+    return null;
   }
 
   @Put(':userId/applications/:cohortId/pages/:pageId')
@@ -71,16 +84,22 @@ export class UserElasticsearchController {
     @Param('pageId') pageId: string,
     @Body() pageData: { completed: boolean; fields: Record<string, any> }
   ) {
-    return this.userElasticsearchService.updateApplicationPage(
-      userId,
-      cohortId,
-      pageId,
-      pageData
-    );
+    if (isElasticsearchEnabled()) {
+      return this.userElasticsearchService.updateApplicationPage(
+        userId,
+        cohortId,
+        pageId,
+        pageData
+      );
+    }
+    return null;
   }
 
   @Get('search')
   async searchUsers(@Query() query: any) {
-    return this.userElasticsearchService.searchUsers(query);
+    if (isElasticsearchEnabled()) {
+      return this.userElasticsearchService.searchUsers(query);
+    }
+    return null;
   }
 }

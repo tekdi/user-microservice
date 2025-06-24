@@ -49,6 +49,7 @@ import { CalendarField } from 'src/fields/fieldValidators/fieldTypeClasses';
 import { UserCreateSsoDto } from 'src/user/dto/user-create-sso.dto';
 import { UserElasticsearchService } from '../../elasticsearch/user-elasticsearch.service';
 import { IUser } from '../../elasticsearch/interfaces/user.interface';
+import { isElasticsearchEnabled } from 'src/common/utils/elasticsearch.util';
 
 interface UpdateField {
   userId: string; // Required
@@ -1578,8 +1579,10 @@ export class PostgresUserService implements IServicelocator {
         };
 
         // Use createUser to ensure new document creation
-        await this.userElasticsearchService.createUser(userForElastic);
-        LoggerUtil.log('User synced to Elasticsearch successfully', apiId);
+        if (isElasticsearchEnabled()) {
+          await this.userElasticsearchService.createUser(userForElastic);
+          LoggerUtil.log('User synced to Elasticsearch successfully', apiId);
+        }
       } catch (elasticError) {
         // Log Elasticsearch error but don't fail the request
         LoggerUtil.error(
@@ -2764,10 +2767,12 @@ export class PostgresUserService implements IServicelocator {
       };
 
       // Partial update: only update the profile field
-      await this.userElasticsearchService.updateUserProfile(
-        user.userId,
-        profile
-      );
+      if (isElasticsearchEnabled()) {
+        await this.userElasticsearchService.updateUserProfile(
+          user.userId,
+          profile
+        );
+      }
     } catch (error) {
       LoggerUtil.error('Failed to update user profile in Elasticsearch', error);
     }
