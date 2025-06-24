@@ -201,8 +201,6 @@ export class FormSubmissionService {
         throw new BadRequestException('Form data not found');
       }
 
-      formData.contextId;
-
       // Extract schema from formData
       interface SchemaProperty {
         fieldId: string;
