@@ -26,28 +26,22 @@ export class ElasticsearchService {
   private readonly client: Client;
 
   constructor(private readonly configService: ConfigService) {
-    this.client = new Client({
-      node: process.env.ELASTICSEARCH_NODE ?? 'http://localhost:9200',
-    });
+    const node =
+      this.configService.get<string>('ELASTICSEARCH_HOST') ||
+      'http://localhost:9200';
+    this.client = new Client({ node });
   }
 
   async initialize(indexName: string, mappings: any) {
     try {
-      const exists = await this.client.indices.exists({ index: indexName });
-      if (!exists) {
-        await this.client.indices.create({
-          index: indexName,
-          body: {
-            mappings,
-            settings: {
-              number_of_shards: 1,
-              number_of_replicas: 1,
-              wait_for_active_shards: 1,
-            },
-          },
-        });
-        this.logger.log(`Index ${indexName} created successfully`);
-      }
+      await this.createIndex(indexName, {
+        mappings,
+        settings: {
+          number_of_shards: 1,
+          number_of_replicas: 1,
+          wait_for_active_shards: 1,
+        },
+      });
     } catch (error) {
       this.logger.error(`Failed to initialize index ${indexName}:`, error);
       throw error;

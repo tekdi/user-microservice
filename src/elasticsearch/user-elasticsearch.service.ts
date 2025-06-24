@@ -143,7 +143,7 @@ export class UserElasticsearchService {
     try {
       // Handle empty date values
       if (user.profile.dob === '') {
-        delete user.profile.dob;
+        user.profile.dob = undefined;
       }
       if (user.createdAt === '') {
         user.createdAt = new Date().toISOString();
