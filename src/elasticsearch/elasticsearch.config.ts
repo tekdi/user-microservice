@@ -1,9 +1,13 @@
 // src/elasticsearch/elasticsearch.config.ts
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 
 @Injectable()
 export class ElasticsearchConfig {
-  readonly node = process.env.ELASTICSEARCH_HOST ?? 'http://localhost:9200';
-}
+  private readonly logger = new Logger(ElasticsearchConfig.name);
 
-console.log(`Elasticsearch node: ${process.env.ELASTICSEARCH_HOST}`);
+  readonly node = process.env.ELASTICSEARCH_HOST ?? 'http://localhost:9200';
+
+  constructor() {
+    this.logger.log(`Elasticsearch node: ${this.node}`);
+  }
+}

@@ -1,11 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ElasticsearchService } from './elasticsearch.service';
 import { IUser, IApplication, ICourse } from './interfaces/user.interface';
-import { Logger } from '@nestjs/common';
 @Injectable()
 export class UserElasticsearchService {
   private readonly indexName = 'users';
-
+  private readonly logger = new Logger(UserElasticsearchService.name);
   constructor(private readonly elasticsearchService: ElasticsearchService) {}
 
   async isAvailable(): Promise<boolean> {
@@ -13,7 +12,7 @@ export class UserElasticsearchService {
       await this.elasticsearchService.ping();
       return true;
     } catch (error) {
-      console.error('Elasticsearch is not available:', error);
+      this.logger.error('Elasticsearch is not available:', error);
       return false;
     }
   }
@@ -25,7 +24,7 @@ export class UserElasticsearchService {
       );
       if (exists) {
         await this.elasticsearchService.deleteIndex(this.indexName);
-        console.log(`Index ${this.indexName} deleted successfully`);
+        this.logger.log(`Index ${this.indexName} deleted successfully`);
       }
     } catch (error) {
       console.error(`Failed to delete index ${this.indexName}:`, error);
@@ -358,6 +357,7 @@ export class UserElasticsearchService {
       });
       return result.hits.length > 0;
     } catch (error) {
+      this.logger.warn(`Error checking user existence for ${userId}:`, error);
       return false;
     }
   }

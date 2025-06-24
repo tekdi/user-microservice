@@ -1039,10 +1039,6 @@ export class PostgresUserService implements IServicelocator {
 
       const updatedUser = await this.updateBasicUserDetails(userId, userDto);
 
-      // Get applications and courses
-      await this.getUserApplications(userId);
-      await this.getUserCourses(userId);
-
       // Sync to Elasticsearch
       await this.syncUserToElasticsearch(updatedUser);
 
@@ -2768,15 +2764,5 @@ export class PostgresUserService implements IServicelocator {
     } catch (error) {
       console.error('Failed to update user profile in Elasticsearch:', error);
     }
-  }
-
-  private async getUserApplications(userId: string) {
-    // Implement logic to get user applications
-    return [];
-  }
-
-  private async getUserCourses(userId: string) {
-    // Implement logic to get user courses
-    return [];
   }
 }
