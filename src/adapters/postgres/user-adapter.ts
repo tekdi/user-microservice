@@ -1509,7 +1509,8 @@ export class PostgresUserService implements IServicelocator {
               // Add code, label, type, value, fieldId to each custom field object
               const fieldMeta = customFieldAttributes[fieldData.fieldId] ?? {};
               result['customFields'].push({
-                res,
+                fieldId: fieldData.fieldId,
+                value: fieldData.value,
               });
             } else {
               createFailures.push(

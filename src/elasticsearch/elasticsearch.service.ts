@@ -114,7 +114,10 @@ export class ElasticsearchService {
       })) as SearchResponse;
 
       if (!response.hits?.hits || response.hits.hits.length === 0) {
-        throw new Error('No hits found in the search response');
+        return {
+          hits: [],
+          total: response.hits.total || { value: 0, relation: 'eq' },
+        };
       }
 
       const transformedHits = response.hits.hits.map((hit) => {

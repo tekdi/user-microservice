@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ElasticsearchService } from './elasticsearch.service';
 import { IUser, IApplication, ICourse } from './interfaces/user.interface';
-
+import { Logger } from '@nestjs/common';
 @Injectable()
 export class UserElasticsearchService {
   private readonly indexName = 'users';
@@ -244,6 +244,8 @@ export class UserElasticsearchService {
   }
 
   async searchUsers(query: any) {
+    const logger = new Logger('UserElasticsearchService');
+
     try {
       if (!query) {
         throw new Error('Search query is required');
@@ -256,11 +258,12 @@ export class UserElasticsearchService {
         },
       };
 
-      // Add text search if query.q is provided
+      // Add text search
       if (query.q) {
         if (typeof query.q !== 'string') {
           throw new Error('Search query must be a string');
         }
+
         searchQuery.bool.must.push({
           multi_match: {
             query: query.q,
@@ -275,14 +278,10 @@ export class UserElasticsearchService {
         });
       }
 
-      // Add filters for any field
-      if (query.filters) {
-        if (typeof query.filters !== 'object') {
-          throw new Error('Filters must be an object');
-        }
+      // Filters
+      if (query.filters && typeof query.filters === 'object') {
         Object.entries(query.filters).forEach(([field, value]) => {
-          if (value) {
-            // Handle nested fields
+          if (value !== undefined && value !== null && value !== '') {
             if (field.includes('.')) {
               const [nestedPath, nestedField] = field.split('.');
               searchQuery.bool.filter.push({
@@ -302,25 +301,11 @@ export class UserElasticsearchService {
         });
       }
 
-      // Add tenant and cohort filters
-      if (query.tenantId) {
-        if (typeof query.tenantId !== 'string') {
-          throw new Error('tenantId must be a string');
-        }
-        searchQuery.bool.filter.push({
-          nested: {
-            path: 'tenantCohortRoleMapping',
-            query: {
-              term: { 'tenantCohortRoleMapping.tenantId': query.tenantId },
-            },
-          },
-        });
-      }
+      // Removed: tenantCohortRoleMapping nested filter — not mapped
+      // if (query.tenantId) ...
 
-      if (query.cohortId) {
-        if (typeof query.cohortId !== 'string') {
-          throw new Error('cohortId must be a string');
-        }
+      // cohortId (still valid)
+      if (query.cohortId && typeof query.cohortId === 'string') {
         searchQuery.bool.filter.push({
           nested: {
             path: 'applications',
@@ -331,12 +316,19 @@ export class UserElasticsearchService {
         });
       }
 
+      // Pagination safety
+      const size = Math.min(query.size || 10, 10000); // ES max size
+      const from = query.from || 0;
+
+      // Logging (safe)
+      logger.debug(`Elasticsearch query: ${JSON.stringify(searchQuery)}`);
+
       const result = await this.elasticsearchService.search(
         this.indexName,
         searchQuery,
         {
-          size: query.size || 10,
-          from: query.from || 0,
+          size,
+          from,
           sort: query.sort || [{ updatedAt: 'desc' }],
           _source: {
             includes: [
@@ -350,12 +342,12 @@ export class UserElasticsearchService {
           },
         }
       );
+
       return result;
     } catch (error) {
-      console.error('Failed to search users in Elasticsearch:', error);
-      throw new Error(
-        `Failed to search users in Elasticsearch: ${error.message}`
-      );
+      const message = `Failed to search users in Elasticsearch: ${error.message}`;
+      logger.error(message, error.stack);
+      throw new Error(message);
     }
   }
 
