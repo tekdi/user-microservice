@@ -790,6 +790,7 @@ export class PostgresUserService implements IServicelocator {
     T."collectionFramework",
     T."channelId",
     T.name AS tenantName, 
+    T.params,
     UTM."Id" AS userTenantMappingId
   FROM 
     public."UserTenantMapping" UTM
@@ -828,6 +829,7 @@ export class PostgresUserService implements IServicelocator {
           collectionFramework: data.collectionFramework,
           channelId: data.channelId,
           userTenantMappingId: data.usertenantmappingid,
+          params: data.params,
           roleId: roleId,
           roleName: roleName,
           // privileges: privileges,
