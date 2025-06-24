@@ -4,6 +4,7 @@ import {
   BadRequestException,
   Inject,
   forwardRef,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindOptionsWhere, Between, In } from 'typeorm';
@@ -1037,7 +1038,7 @@ export class FormSubmissionService {
       try {
         // Get the existing user document from Elasticsearch
         const userDoc = await this.userElasticsearchService.getUser(userId);
-        
+
         if (!userDoc) {
           throw new Error('User document not found in Elasticsearch');
         }
@@ -1045,7 +1046,7 @@ export class FormSubmissionService {
         // Get existing applications or initialize empty array
         const userSource = userDoc._source as IUser;
         const applications = userSource.applications || [];
-        
+
         // Use the actual submissionId and formId from the updatedSubmission
         const formIdToMatch = updatedSubmission.formId;
         const submissionIdToMatch = updatedSubmission.submissionId;
@@ -1056,18 +1057,14 @@ export class FormSubmissionService {
           const form = await this.formsService.getFormById(formIdToMatch);
           const fieldsObj = form && form.fields ? (form.fields as any) : null;
           if (
-            fieldsObj &&
-            fieldsObj.result &&
-            Array.isArray(fieldsObj.result) &&
-            fieldsObj.result[0] &&
-            fieldsObj.result[0].schema &&
-            fieldsObj.result[0].schema.properties
+            Array.isArray(fieldsObj?.result) &&
+            fieldsObj.result[0]?.schema?.properties
           ) {
             const schema = fieldsObj.result[0].schema.properties;
             for (const [pageKey, pageSchema] of Object.entries(schema)) {
               const pageName = pageKey === 'default' ? 'eligibility' : pageKey;
-              const fieldProps = (pageSchema as any).properties || {};
-              for (const [fieldKey, fieldSchema] of Object.entries(fieldProps)) {
+              const fieldProps = (pageSchema as any).properties ?? {};
+              for (const [fieldSchema] of Object.entries(fieldProps)) {
                 const fieldId = (fieldSchema as any).fieldId;
                 if (fieldId) {
                   fieldIdToPageName[fieldId] = pageName;
@@ -1076,65 +1073,83 @@ export class FormSubmissionService {
             }
           }
         } catch (err) {
+          const logger = new Logger('YourMethodNameOrClass');
+          logger.error('Schema fetch failed, cannot proceed', err);
           // If schema fetch fails, fallback to empty map (all fields go to 'default')
           fieldIdToPageName = {};
         }
         // --- END NEW LOGIC ---
 
         // Find the existing application for this form and submission
-        const existingAppIndex = applications.findIndex(app =>
-          app.formId === formIdToMatch && app.submissionId === submissionIdToMatch
+        const existingAppIndex = applications.findIndex(
+          (app) =>
+            app.formId === formIdToMatch &&
+            app.submissionId === submissionIdToMatch
         );
 
         // Prepare the updated fields data
         const updatedFields = {};
-        updatedFieldValues.forEach(field => {
+        updatedFieldValues.forEach((field) => {
           // Use the schema mapping to get the correct page name
           const pageKey = fieldIdToPageName[field.fieldId] || 'default';
-          if (!updatedFields[pageKey]) {
-            updatedFields[pageKey] = {
-              completed: true,
-              fields: {}
-            };
-          }
-          updatedFields[pageKey].fields[field.fieldname || field.fieldId] = field.value;
+
+          updatedFields[pageKey] ??= {
+            completed: true,
+            fields: {},
+          };
+          updatedFields[pageKey].fields[field.fieldname ?? field.fieldId] =
+            field.value;
         });
 
         if (existingAppIndex !== -1) {
           // Deep merge for each page's fields
-          const mergedPages = { ...((applications[existingAppIndex].progress && applications[existingAppIndex].progress.pages) || {}) };
+          const mergedPages = {
+            ...(applications[existingAppIndex]?.progress?.pages || {}),
+          };
           for (const [pageKey, pageValue] of Object.entries(updatedFields)) {
-            const newPage = pageValue as { completed: boolean; fields: { [key: string]: any } };
+            const newPage = pageValue as {
+              completed: boolean;
+              fields: { [key: string]: any };
+            };
             if (mergedPages[pageKey]) {
-              const existingPage = mergedPages[pageKey] as { completed: boolean; fields: { [key: string]: any } };
+              const existingPage = mergedPages[pageKey] as {
+                completed: boolean;
+                fields: { [key: string]: any };
+              };
               mergedPages[pageKey] = {
                 ...existingPage,
                 fields: {
                   ...existingPage.fields,
-                  ...newPage.fields
+                  ...newPage.fields,
                 },
-                completed: newPage.completed // update completed status if needed
+                completed: newPage.completed, // update completed status if needed
               };
             } else {
               mergedPages[pageKey] = newPage;
             }
           }
           // Merge overall progress
-          const mergedOverall = applications[existingAppIndex].progress && applications[existingAppIndex].progress.overall
+          const mergedOverall = applications[existingAppIndex]?.progress
+            ?.overall
             ? { ...applications[existingAppIndex].progress.overall }
-            : { completed: updatedFieldValues.length, total: updatedFieldValues.length };
+            : {
+                completed: updatedFieldValues.length,
+                total: updatedFieldValues.length,
+              };
 
           applications[existingAppIndex] = {
             ...applications[existingAppIndex],
             formId: formIdToMatch,
             submissionId: submissionIdToMatch,
-            formstatus: updatedSubmission.status || applications[existingAppIndex].formstatus,
+            formstatus:
+              updatedSubmission.status ??
+              applications[existingAppIndex].formstatus,
             progress: {
               pages: mergedPages,
-              overall: mergedOverall
+              overall: mergedOverall,
             },
             lastSavedAt: new Date().toISOString(),
-            submittedAt: new Date().toISOString()
+            submittedAt: new Date().toISOString(),
           };
         } else {
           // If no existing application found, create new application with minimal required fields
@@ -1149,25 +1164,24 @@ export class FormSubmissionService {
               pages: updatedFields,
               overall: {
                 completed: updatedFieldValues.length,
-                total: updatedFieldValues.length
-              }
+                total: updatedFieldValues.length,
+              },
             },
             lastSavedAt: new Date().toISOString(),
             submittedAt: new Date().toISOString(),
             cohortDetails: {
               name: '',
-              status: ''
-            }
+              status: '',
+            },
           });
         }
 
         // Update the Elasticsearch document with the modified applications array
         await this.userElasticsearchService.updateUser(userId, {
           doc: {
-            applications: applications
-          }
+            applications: applications,
+          },
         });
-
       } catch (elasticError) {
         // Log Elasticsearch error but don't fail the request
         console.error('Failed to update Elasticsearch:', elasticError);
