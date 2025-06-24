@@ -370,6 +370,9 @@ export class PostgresCohortMembersService {
         'name',
         'status',
         'cohortAcademicYearId',
+        'firstName',
+        'lastName',
+        'email',
       ];
       whereKeys.forEach((key) => {
         if (whereClause[key]) {
