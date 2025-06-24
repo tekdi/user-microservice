@@ -27,7 +27,7 @@ export class ElasticsearchService {
 
   constructor(private readonly configService: ConfigService) {
     const node =
-      this.configService.get<string>('ELASTICSEARCH_HOST') ||
+      this.configService.get<string>('ELASTICSEARCH_HOST') ??
       'http://localhost:9200';
     this.client = new Client({ node });
   }

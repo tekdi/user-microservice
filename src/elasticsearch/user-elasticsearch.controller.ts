@@ -4,7 +4,9 @@ import { IUser, IApplication, ICourse } from './interfaces/user.interface';
 
 @Controller('elasticsearch/users')
 export class UserElasticsearchController {
-  constructor(private readonly userElasticsearchService: UserElasticsearchService) {}
+  constructor(
+    private readonly userElasticsearchService: UserElasticsearchService
+  ) {}
 
   @Post()
   async createUser(@Body() userData: IUser) {
@@ -34,20 +36,23 @@ export class UserElasticsearchController {
       submittedAt: application.submittedAt || new Date().toISOString(),
       cohortDetails: {
         name: application.cohortDetails?.name || '',
-        description: application.cohortDetails?.description || '',
-        startDate: application.cohortDetails?.startDate || '',
-        endDate: application.cohortDetails?.endDate || '',
-        status: application.cohortDetails?.status || ''
+        description: application.cohortDetails?.description ?? '',
+        startDate: application.cohortDetails?.startDate ?? '',
+        endDate: application.cohortDetails?.endDate ?? '',
+        status: application.cohortDetails?.status || '',
       },
       progress: application.progress || {
         pages: {},
         overall: {
           total: 0,
-          completed: 0
-        }
-      }
+          completed: 0,
+        },
+      },
     };
-    return this.userElasticsearchService.updateApplication(userId, fullApplication);
+    return this.userElasticsearchService.updateApplication(
+      userId,
+      fullApplication
+    );
   }
 
   @Put(':userId/courses/:courseId')
@@ -66,11 +71,16 @@ export class UserElasticsearchController {
     @Param('pageId') pageId: string,
     @Body() pageData: { completed: boolean; fields: Record<string, any> }
   ) {
-    return this.userElasticsearchService.updateApplicationPage(userId, cohortId, pageId, pageData);
+    return this.userElasticsearchService.updateApplicationPage(
+      userId,
+      cohortId,
+      pageId,
+      pageData
+    );
   }
 
   @Get('search')
   async searchUsers(@Query() query: any) {
     return this.userElasticsearchService.searchUsers(query);
   }
-} 
+}

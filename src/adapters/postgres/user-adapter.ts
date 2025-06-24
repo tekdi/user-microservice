@@ -2736,6 +2736,13 @@ export class PostgresUserService implements IServicelocator {
       const customFields = await this.fieldsService.getUserCustomFieldDetails(
         user.userId
       );
+      let formattedDob: string | null = null;
+
+      if (user.dob instanceof Date) {
+        formattedDob = user.dob.toISOString();
+      } else if (typeof user.dob === 'string') {
+        formattedDob = user.dob;
+      }
       // Prepare the profile data
       const profile = {
         userId: user.userId,
@@ -2746,12 +2753,7 @@ export class PostgresUserService implements IServicelocator {
         email: user.email || '',
         mobile: user.mobile?.toString() || '',
         mobile_country_code: user.mobile_country_code || '',
-        dob:
-          user.dob instanceof Date
-            ? user.dob.toISOString()
-            : typeof user.dob === 'string'
-            ? user.dob
-            : null,
+        dob: formattedDob,
         gender: user.gender,
         address: user.address || '',
         district: user.district || '',

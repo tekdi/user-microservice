@@ -316,8 +316,8 @@ export class UserElasticsearchService {
       }
 
       // Pagination safety
-      const size = Math.min(query.size || 10, 10000); // ES max size
-      const from = query.from || 0;
+      const size = Math.min(query.size ?? 10, 10000); // ES max size
+      const from = query.from ?? 0;
 
       // Logging (safe)
       logger.debug(`Elasticsearch query: ${JSON.stringify(searchQuery)}`);
@@ -328,7 +328,7 @@ export class UserElasticsearchService {
         {
           size,
           from,
-          sort: query.sort || [{ updatedAt: 'desc' }],
+          sort: query.sort ?? [{ updatedAt: 'desc' }],
           _source: {
             includes: [
               'userId',
@@ -506,7 +506,7 @@ export class UserElasticsearchService {
       '3': 'education',
       '4': 'additional',
     };
-    return pageMap[pageId] || pageId;
+    return pageMap[pageId] ?? pageId;
   }
 
   async updateCourse(
