@@ -2746,7 +2746,12 @@ export class PostgresUserService implements IServicelocator {
         email: user.email || '',
         mobile: user.mobile?.toString() || '',
         mobile_country_code: user.mobile_country_code || '',
-        dob: user.dob ? new Date(user.dob).toISOString() : null,
+        dob:
+          user.dob instanceof Date
+            ? user.dob.toISOString()
+            : typeof user.dob === 'string'
+            ? user.dob
+            : null,
         gender: user.gender,
         address: user.address || '',
         district: user.district || '',
@@ -2762,7 +2767,7 @@ export class PostgresUserService implements IServicelocator {
         profile
       );
     } catch (error) {
-      console.error('Failed to update user profile in Elasticsearch:', error);
+      LoggerUtil.error('Failed to update user profile in Elasticsearch', error);
     }
   }
 }
