@@ -1090,7 +1090,7 @@ export class FormSubmissionService {
           for (const [pageKey, pageSchema] of Object.entries(schema)) {
             const pageName = pageKey === 'default' ? 'eligibility' : pageKey;
             const fieldProps = (pageSchema as any).properties ?? {};
-            for (const [fieldSchema] of Object.entries(fieldProps)) {
+            for (const [fieldKey, fieldSchema] of Object.entries(fieldProps)) {
               const fieldId = (fieldSchema as any).fieldId;
               if (fieldId) {
                 fieldIdToPageName[fieldId] = pageName;
@@ -1116,8 +1116,22 @@ export class FormSubmissionService {
       // Prepare the updated fields data
       const updatedFields = {};
       updatedFieldValues.forEach((field) => {
-        // Use the schema mapping to get the correct page name
-        const pageKey = fieldIdToPageName[field.fieldId] || 'default';
+        // Improved logic: Try schema, then existing pages, then fallback
+        let pageKey = fieldIdToPageName[field.fieldId];
+        if (!pageKey && existingAppIndex !== -1) {
+          // Try to find the field in existing pages
+          const existingPages = applications[existingAppIndex]?.progress?.pages || {};
+          for (const [existingPage, pageData] of Object.entries(existingPages)) {
+            if (pageData.fields && (field.fieldname in pageData.fields || field.fieldId in pageData.fields)) {
+              pageKey = existingPage;
+              break;
+            }
+          }
+        }
+        if (!pageKey) {
+          console.warn(`FieldId ${field.fieldId} not found in schema mapping or existing pages, using 'default'`);
+          pageKey = 'default';
+        }
 
         updatedFields[pageKey] ??= {
           completed: true,
