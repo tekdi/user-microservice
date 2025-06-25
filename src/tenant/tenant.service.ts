@@ -160,25 +160,22 @@ export class TenantService {
     public async createTenants(tenantCreateDto: TenantCreateDto, response: Response): Promise<Response> {
         let apiId = APIID.TENANT_CREATE;
         try {
-
-
-            if (typeof tenantCreateDto.params === 'string') {
+            // Parse JSON strings for params and contentFilter fields
+            if (tenantCreateDto.params && typeof tenantCreateDto.params === 'string') {
                 try {
                     tenantCreateDto.params = JSON.parse(tenantCreateDto.params);
-                } catch {
-                    tenantCreateDto.params = {};
+                } catch (error) {
+                    LoggerUtil.warn(`Failed to parse params field: ${error.message}`, apiId);
                 }
             }
-
-            if (typeof tenantCreateDto.contentFilter === 'string') {
+            
+            if (tenantCreateDto.contentFilter && typeof tenantCreateDto.contentFilter === 'string') {
                 try {
                     tenantCreateDto.contentFilter = JSON.parse(tenantCreateDto.contentFilter);
-                } catch {
-                    tenantCreateDto.contentFilter = {};
+                } catch (error) {
+                    LoggerUtil.warn(`Failed to parse contentFilter field: ${error.message}`, apiId);
                 }
             }
-
-
 
             let checkExitTenants = await this.tenantRepository.find({
                 where: {
@@ -274,6 +271,23 @@ export class TenantService {
     public async updateTenants(tenantId: string, tenantUpdateDto: TenantUpdateDto, response: Response) {
         let apiId = APIID.TENANT_UPDATE;
         try {
+            // Parse JSON strings for params and contentFilter fields
+            if (tenantUpdateDto.params && typeof tenantUpdateDto.params === 'string') {
+                try {
+                    tenantUpdateDto.params = JSON.parse(tenantUpdateDto.params);
+                } catch (error) {
+                    LoggerUtil.warn(`Failed to parse params field: ${error.message}`, apiId);
+                }
+            }
+            
+            if (tenantUpdateDto.contentFilter && typeof tenantUpdateDto.contentFilter === 'string') {
+                try {
+                    tenantUpdateDto.contentFilter = JSON.parse(tenantUpdateDto.contentFilter);
+                } catch (error) {
+                    LoggerUtil.warn(`Failed to parse contentFilter field: ${error.message}`, apiId);
+                }
+            }
+
             let checkExistingTenant = await this.tenantRepository.findOne({
                 where: { tenantId }
             })
