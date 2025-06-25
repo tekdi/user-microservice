@@ -1521,65 +1521,66 @@ export class PostgresUserService implements IServicelocator {
 
       // Add Elasticsearch sync with custom fields
       try {
-        // Get custom fields from the processed result (these may only have fieldId and value)
-        const customFields = result['customFields'] ?? [];
-
-        // Map custom fields for Elasticsearch: enrich with name and label
-        const elasticCustomFields = [];
-        for (const field of customFields) {
-          let name = '';
-          let label = '';
-          // Fetch field definition for name/label
-          const fieldDef = await this.fieldsService.getFieldByIdes(
-            field.fieldId
-          );
-          if (fieldDef && !('error' in fieldDef)) {
-            name = fieldDef.name ?? '';
-            label = fieldDef.label ?? '';
-          }
-          elasticCustomFields.push({
-            fieldId: field.fieldId,
-            name,
-            label,
-            value: field.value,
-          });
-        }
-        // Map user data to match IUser interface
-        const userForElastic: IUser = {
-          userId: result.userId,
-          profile: {
-            userId: result.userId,
-            username: result.username,
-            firstName: result.firstName,
-            lastName: result.lastName,
-            middleName: result.middleName || '',
-            email: result.email || '',
-            mobile: result.mobile ? result.mobile.toString() : '',
-            mobile_country_code: result.mobile_country_code || '',
-            gender: result.gender,
-            dob:
-              result.dob instanceof Date
-                ? result.dob.toISOString()
-                : result.dob ?? '',
-            address: result.address || '',
-            state: result.state || '',
-            district: result.district || '',
-            pincode: result.pincode || '',
-            status: result.status,
-            customFields: elasticCustomFields,
-          },
-          applications: [],
-          courses: [],
-          createdAt: result.createdAt
-            ? result.createdAt.toISOString()
-            : new Date().toISOString(),
-          updatedAt: result.updatedAt
-            ? result.updatedAt.toISOString()
-            : new Date().toISOString(),
-        };
-
-        // Use createUser to ensure new document creation
         if (isElasticsearchEnabled()) {
+          // Get custom fields from the processed result (these may only have fieldId and value)
+          const customFields = result['customFields'] ?? [];
+
+          // Map custom fields for Elasticsearch: enrich with name and label
+          const elasticCustomFields = [];
+          for (const field of customFields) {
+            let name = '';
+            let label = '';
+            // Fetch field definition for name/label
+            const fieldDef = await this.fieldsService.getFieldByIdes(
+              field.fieldId
+            );
+            if (fieldDef && !('error' in fieldDef)) {
+              name = fieldDef.name ?? '';
+              label = fieldDef.label ?? '';
+            }
+            elasticCustomFields.push({
+              fieldId: field.fieldId,
+              name,
+              label,
+              value: field.value,
+            });
+          }
+          // Map user data to match IUser interface
+          const userForElastic: IUser = {
+            userId: result.userId,
+            profile: {
+              userId: result.userId,
+              username: result.username,
+              firstName: result.firstName,
+              lastName: result.lastName,
+              middleName: result.middleName || '',
+              email: result.email || '',
+              mobile: result.mobile ? result.mobile.toString() : '',
+              mobile_country_code: result.mobile_country_code || '',
+              gender: result.gender,
+              dob:
+                result.dob instanceof Date
+                  ? result.dob.toISOString()
+                  : result.dob ?? '',
+              address: result.address || '',
+              state: result.state || '',
+              district: result.district || '',
+              pincode: result.pincode || '',
+              status: result.status,
+              customFields: elasticCustomFields,
+            },
+            applications: [],
+            courses: [],
+            createdAt: result.createdAt
+              ? result.createdAt.toISOString()
+              : new Date().toISOString(),
+            updatedAt: result.updatedAt
+              ? result.updatedAt.toISOString()
+              : new Date().toISOString(),
+          };
+
+          // Use createUser to ensure new document creation
+
           await this.userElasticsearchService.createUser(userForElastic);
           LoggerUtil.log('User synced to Elasticsearch successfully', apiId);
         }
@@ -2734,13 +2735,43 @@ export class PostgresUserService implements IServicelocator {
     }
   }
 
+  /**
+   * Sync user profile to Elasticsearch.
+   * This will upsert (update or create) the user document in Elasticsearch.
+   * If the document is missing, it will fetch the user from the database and create it.
+   */
   private async syncUserToElasticsearch(user: User) {
     try {
-      const customFields = await this.fieldsService.getUserCustomFieldDetails(
+      let customFields = await this.fieldsService.getUserCustomFieldDetails(
         user.userId
       );
-      let formattedDob: string | null = null;
 
+      // Filter out customFields that are part of any form schema for this user
+      // This ensures profile customFields only includes fields NOT used in any form submission
+      // (same logic as buildUserDocumentForElasticsearch)
+      const formSubmissions = await this.fieldsValueRepository.manager.getRepository('FormSubmission').find({ where: { itemId: user.userId } });
+      const allFormFieldIds = new Set<string>();
+      for (const submission of formSubmissions) {
+        try {
+          // Try to get the form schema for this submission
+          const formRepo = this.fieldsValueRepository.manager.getRepository('Form');
+          const form = await formRepo.findOne({ where: { formid: submission.formId } });
+          const fieldsObj = form && form.fields ? (form.fields as any) : null;
+          if (Array.isArray(fieldsObj?.result) && fieldsObj.result[0]?.schema?.properties) {
+            const schema = fieldsObj.result[0].schema.properties;
+            for (const pageSchema of Object.values(schema)) {
+              const fieldProps = (pageSchema as any).properties || {};
+              for (const fieldSchema of Object.values(fieldProps)) {
+                const fieldId = (fieldSchema as any).fieldId;
+                if (fieldId) allFormFieldIds.add(fieldId);
+              }
+            }
+          }
+        } catch (e) {}
+      }
+      customFields = customFields.filter(f => !allFormFieldIds.has(f.fieldId));
+
+      let formattedDob: string | null = null;
       if (user.dob instanceof Date) {
         formattedDob = user.dob.toISOString();
       } else if (typeof user.dob === 'string') {
@@ -2763,14 +2794,72 @@ export class PostgresUserService implements IServicelocator {
         state: user.state || '',
         pincode: user.pincode || '',
         status: user.status,
-        customFields, // Make sure this is an array of {fieldId, value}
+        customFields, // Now filtered to exclude form schema fields
       };
 
-      // Partial update: only update the profile field
+      // Upsert (update or create) the user profile in Elasticsearch
       if (isElasticsearchEnabled()) {
         await this.userElasticsearchService.updateUserProfile(
           user.userId,
-          profile
+          profile,
+          async (userId: string) => {
+            // Fetch the latest user from the database for upsert
+            const dbUser = await this.usersRepository.findOne({ where: { userId } });
+            if (!dbUser) return null;
+            let customFields = await this.fieldsService.getUserCustomFieldDetails(userId);
+            // Repeat the filtering for upsert callback
+            const formSubmissions = await this.fieldsValueRepository.manager.getRepository('FormSubmission').find({ where: { itemId: userId } });
+            const allFormFieldIds = new Set<string>();
+            for (const submission of formSubmissions) {
+              try {
+                const formRepo = this.fieldsValueRepository.manager.getRepository('Form');
+                const form = await formRepo.findOne({ where: { formid: submission.formId } });
+                const fieldsObj = form && form.fields ? (form.fields as any) : null;
+                if (Array.isArray(fieldsObj?.result) && fieldsObj.result[0]?.schema?.properties) {
+                  const schema = fieldsObj.result[0].schema.properties;
+                  for (const pageSchema of Object.values(schema)) {
+                    const fieldProps = (pageSchema as any).properties || {};
+                    for (const fieldSchema of Object.values(fieldProps)) {
+                      const fieldId = (fieldSchema as any).fieldId;
+                      if (fieldId) allFormFieldIds.add(fieldId);
+                    }
+                  }
+                }
+              } catch (e) {}
+            }
+            customFields = customFields.filter(f => !allFormFieldIds.has(f.fieldId));
+            let formattedDob: string | null = null;
+            if (dbUser.dob instanceof Date) {
+              formattedDob = dbUser.dob.toISOString();
+            } else if (typeof dbUser.dob === 'string') {
+              formattedDob = dbUser.dob;
+            }
+            return {
+              userId: dbUser.userId,
+              profile: {
+                userId: dbUser.userId,
+                username: dbUser.username,
+                firstName: dbUser.firstName,
+                lastName: dbUser.lastName,
+                middleName: dbUser.middleName || '',
+                email: dbUser.email || '',
+                mobile: dbUser.mobile?.toString() || '',
+                mobile_country_code: dbUser.mobile_country_code || '',
+                dob: formattedDob,
+                gender: dbUser.gender,
+                address: dbUser.address || '',
+                district: dbUser.district || '',
+                state: dbUser.state || '',
+                pincode: dbUser.pincode || '',
+                status: dbUser.status,
+                customFields,
+              },
+              applications: [],
+              courses: [],
+              createdAt: dbUser.createdAt ? dbUser.createdAt.toISOString() : new Date().toISOString(),
+              updatedAt: dbUser.updatedAt ? dbUser.updatedAt.toISOString() : new Date().toISOString(),
+            };
+          }
         );
       }
     } catch (error) {

@@ -30,6 +30,7 @@ import { FormSubmissionStatus } from 'src/forms/entities/form-submission.entity'
 import { FormSubmissionSearchDto } from 'src/forms/dto/form-submission-search.dto';
 import { FormsService } from 'src/forms/forms.service';
 import { isElasticsearchEnabled } from 'src/common/utils/elasticsearch.util';
+import { UserElasticsearchService } from 'src/elasticsearch/user-elasticsearch.service';
 @Injectable()
 export class PostgresCohortMembersService {
   constructor(
@@ -46,10 +47,10 @@ export class PostgresCohortMembersService {
     private readonly academicyearService: PostgresAcademicYearService,
     private readonly notificationRequest: NotificationRequest,
     private fieldsService: PostgresFieldsService,
-    private readonly elasticsearchService: ElasticsearchService,
     private readonly userService: PostgresUserService,
-    private readonly formsService: FormsService, // Add FormsService
-    private readonly formSubmissionService: FormSubmissionService // Add FormSubmissionService
+    private readonly formsService: FormsService,
+    private readonly formSubmissionService: FormSubmissionService,
+    private readonly userElasticsearchService: UserElasticsearchService
   ) {}
 
   //Get cohort member
@@ -659,9 +660,13 @@ export class PostgresCohortMembersService {
       // Update Elasticsearch with cohort member status
       if (isElasticsearchEnabled()) {
         try {
-          // First get the existing application data
-          const existingApplication =
-            await this.elasticsearchService.getApplication(cohortMembers.userId);
+          // First get the existing user document from Elasticsearch
+          const userDoc = await this.userElasticsearchService.getUser(cohortMembers.userId);
+          // Extract the application array if present
+          const source = userDoc && userDoc._source ? (userDoc._source as { applications?: any[] }) : undefined;
+          const existingApplication = source && Array.isArray(source.applications)
+            ? source.applications.find(app => app.cohortId === cohortMembers.cohortId)
+            : undefined;
 
           // Prepare the updated application data
           const updatedApplication = {
@@ -691,9 +696,14 @@ export class PostgresCohortMembersService {
                 }),
           };
 
-          await this.elasticsearchService.updateApplication(
+          // Upsert (update or create) the user document in Elasticsearch
+          // If the document is missing, it should fetch the user from the database and create it.
+          await this.userElasticsearchService.updateApplication(
             cohortMembers.userId,
-            updatedApplication
+            updatedApplication,
+            async (userId: string) => {
+              return await this.formSubmissionService.buildUserDocumentForElasticsearch(userId);
+            }
           );
         } catch (elasticError) {
           // Log Elasticsearch error but don't fail the request
@@ -880,11 +890,13 @@ export class PostgresCohortMembersService {
       // Update Elasticsearch with updated cohort member status
       if (isElasticsearchEnabled()) {
         try {
-          // First get the existing application data
-          const existingApplication =
-            await this.elasticsearchService.getApplication(
-              cohortMembershipToUpdate.userId
-            );
+          // First get the existing user document from Elasticsearch
+          const userDoc = await this.userElasticsearchService.getUser(cohortMembershipToUpdate.userId);
+          // Extract the application array if present
+          const source = userDoc && userDoc._source ? (userDoc._source as { applications?: any[] }) : undefined;
+          const existingApplication = source && Array.isArray(source.applications)
+            ? source.applications.find(app => app.cohortId === cohortMembershipToUpdate.cohortId)
+            : undefined;
 
           // Prepare the updated application data
           const updatedApplication = {
@@ -914,9 +926,14 @@ export class PostgresCohortMembersService {
                 }),
           };
 
-          await this.elasticsearchService.updateApplication(
+          // Upsert (update or create) the user document in Elasticsearch
+          // If the document is missing, it should fetch the user from the database and create it.
+          await this.userElasticsearchService.updateApplication(
             cohortMembershipToUpdate.userId,
-            updatedApplication
+            updatedApplication,
+            async (userId: string) => {
+              return await this.formSubmissionService.buildUserDocumentForElasticsearch(userId);
+            }
           );
         } catch (elasticError) {
           // Log Elasticsearch error but don't fail the request
@@ -948,7 +965,9 @@ export class PostgresCohortMembersService {
             shortlisted: 'onStudentShortlisted',
             rejected: 'onStudentRejected',
           };
+          
           //This is notification payload required to send
+
           const notificationPayload = {
             isQueue: false,
             context: 'USER',

@@ -35,8 +35,9 @@ export class UserElasticsearchService {
   async initialize() {
     try {
       // Delete existing index if it exists
-      // await this.deleteIndex();
+      await this.deleteIndex();
 
+      // Explicitly map all possible fields in customFields as text/keyword to avoid mapping conflicts
       const mapping = {
         mappings: {
           properties: {
@@ -63,7 +64,10 @@ export class UserElasticsearchService {
                   type: 'nested',
                   properties: {
                     fieldId: { type: 'keyword' },
-                    value: { type: 'text' },
+                    code: { type: 'keyword' }, // Always treat as string
+                    label: { type: 'text' },
+                    type: { type: 'keyword' },
+                    value: { type: 'text' } // Always treat as string for flexibility
                   },
                 },
               },
@@ -192,20 +196,58 @@ export class UserElasticsearchService {
     }
   }
 
-  async updateUser(userId: string, updateData: any): Promise<any> {
+  /**
+   * Update only the profile field in the Elasticsearch document for a user.
+   * If the document does not exist, fetch the user from the database and create it.
+   * @param userId
+   * @param profile
+   * @param fetchUserFromDb Optional callback to fetch user from DB if needed
+   */
+  async updateUserProfile(userId: string, profile: any, fetchUserFromDb?: (userId: string) => Promise<IUser | null>): Promise<any> {
     try {
-      const result = await this.elasticsearchService.update(
+      // Try to update the profile field in Elasticsearch
+      return await this.updateUser(userId, { doc: { profile } });
+    } catch (error: any) {
+      // If the document is missing, create it from DB
+      if (error?.meta?.body?.error?.type === 'document_missing_exception' && fetchUserFromDb) {
+        // Fetch user from DB
+        const userFromDb = await fetchUserFromDb(userId);
+        if (userFromDb) {
+          return await this.createUser(userFromDb);
+        } else {
+          throw new Error(`User with ID ${userId} not found in DB for upsert.`);
+        }
+      }
+      // Rethrow other errors
+      throw error;
+    }
+  }
+
+  /**
+   * Update user document in Elasticsearch. If missing, create from DB.
+   * @param userId
+   * @param updateData
+   * @param fetchUserFromDb Optional callback to fetch user from DB if needed
+   */
+  async updateUser(userId: string, updateData: any, fetchUserFromDb?: (userId: string) => Promise<IUser | null>): Promise<any> {
+    try {
+      return await this.elasticsearchService.update(
         this.indexName,
         userId,
         updateData,
         { retry_on_conflict: 3 }
       );
-      return result;
-    } catch (error) {
-      console.error('Error updating user in Elasticsearch:', error);
-      throw new Error(
-        `Failed to update user in Elasticsearch: ${error.message}`
-      );
+    } catch (error: any) {
+      // If the document is missing, create it from DB
+      if (error?.meta?.body?.error?.type === 'document_missing_exception' && fetchUserFromDb) {
+        const userFromDb = await fetchUserFromDb(userId);
+        if (userFromDb) {
+          return await this.createUser(userFromDb);
+        } else {
+          throw new Error(`User with ID ${userId} not found in DB for upsert.`);
+        }
+      }
+      throw error;
     }
   }
 
@@ -362,9 +404,17 @@ export class UserElasticsearchService {
     }
   }
 
+  /**
+   * Update or add an application (form submission) for a user in Elasticsearch.
+   * If the user document is missing, fetch user from DB and create it with the application.
+   * @param userId
+   * @param application
+   * @param fetchUserFromDb Optional callback to fetch user from DB if needed
+   */
   async updateApplication(
     userId: string,
-    application: IApplication
+    application: IApplication,
+    fetchUserFromDb?: (userId: string) => Promise<IUser | null>
   ): Promise<void> {
     try {
       const exists = await this.exists(userId);
@@ -488,9 +538,23 @@ export class UserElasticsearchService {
         },
       };
 
-      await this.elasticsearchService.update(this.indexName, userId, {
-        script,
-      });
+      if (exists) {
+        await this.elasticsearchService.update(this.indexName, userId, {
+          script,
+        });
+      } else if (fetchUserFromDb) {
+        // If the user document does not exist, fetch from DB and create
+        const userFromDb = await fetchUserFromDb(userId);
+        if (userFromDb) {
+          // Add the new application to the user's applications array
+          userFromDb.applications = [application];
+          await this.createUser(userFromDb);
+        } else {
+          throw new Error(`User with ID ${userId} not found in DB for upsert.`);
+        }
+      } else {
+        throw new Error('User document not found in Elasticsearch and no fetchUserFromDb callback provided.');
+      }
     } catch (error) {
       console.error('Failed to update application in Elasticsearch:', error);
       throw error;
@@ -702,10 +766,5 @@ export class UserElasticsearchService {
       console.error('Failed to sync user to Elasticsearch:', error);
       throw new Error(`Failed to sync user to Elasticsearch: ${error.message}`);
     }
-  }
-
-  async updateUserProfile(userId: string, profile: any): Promise<any> {
-    // Only update the profile field in the Elasticsearch document
-    return this.updateUser(userId, { doc: { profile } });
   }
 }
