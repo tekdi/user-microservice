@@ -53,6 +53,8 @@ import { LoggerUtil } from 'src/common/logger/LoggerUtil';
 import { OtpSendDTO } from './dto/otpSend.dto';
 import { OtpVerifyDTO } from './dto/otpVerify.dto';
 import { UserCreateSsoDto } from './dto/user-create-sso.dto';
+import { RecaptchaService } from './recaptcha.service';
+
 export interface UserData {
   context: string;
   tenantId: string;
@@ -63,7 +65,10 @@ export interface UserData {
 @ApiTags('User')
 @Controller()
 export class UserController {
-  constructor(private userAdapter: UserAdapter) {}
+  constructor(
+    private userAdapter: UserAdapter,
+    private recaptchaService: RecaptchaService
+  ) {}
 
   @UseFilters(new AllExceptionsFilter(APIID.USER_GET))
   @Get('read/:userId')
@@ -136,11 +141,16 @@ export class UserController {
     @Res() response: Response
   ) {
     const academicYearId = headers['academicyearid'];
-    // if (!academicYearId || !isUUID(academicYearId)) {
-    //   throw new BadRequestException(
-    //     "academicYearId is required and academicYearId must be a valid UUID."
-    //   );
-    // }
+    // Only validate reCAPTCHA if any tenantCohortRoleMapping has the student role
+    const isStudent = Array.isArray(userCreateDto.tenantCohortRoleMapping) &&
+      userCreateDto.tenantCohortRoleMapping.some(
+        mapping => mapping.roleId === '493c04e2-a9db-47f2-b304-503da358d5f4'
+      );
+    if (isStudent) {
+      // Validate the reCAPTCHA token
+      await this.recaptchaService.validateToken(userCreateDto.recaptchaToken);
+    }
+    // Proceed with user creation
     return await this.userAdapter
       .buildUserAdapter()
       .createUser(request, userCreateDto, academicYearId, response);
