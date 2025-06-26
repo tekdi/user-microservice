@@ -20,6 +20,10 @@ export class TenantUpdateDto {
     @IsOptional()
     params?: object;
 
+    @ApiPropertyOptional({ type: () => Object })
+    @IsOptional()
+    contentFilter?: object;
+
     //file path
     @ApiPropertyOptional({ type: () => [String] })
     @IsOptional()
