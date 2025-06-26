@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ElasticsearchService } from './elasticsearch.service';
 import { IUser, IApplication, ICourse } from './interfaces/user.interface';
+import { v4 as uuidv4 } from 'uuid';
 @Injectable()
 export class UserElasticsearchService {
   private readonly indexName = 'users';
@@ -298,158 +299,132 @@ export class UserElasticsearchService {
     }
   }
 
-  async searchUsers(query: any) {
+  /**
+   * Search users in Elasticsearch with support for filters, limit, and offset.
+   *
+   * This method now returns the response in the required Aspire Leaders API format:
+   * {
+   *   id: 'api.ES.Fetch',
+   *   ver: '1.0',
+   *   ts: <timestamp>,
+   *   params: { ... },
+   *   responseCode: 201,
+   *   result: {
+   *     data: [...],
+   *     totalCount: <number>
+   *   }
+   * }
+   *
+   * - Accepts POST body with limit, offset, and filters.
+   * - Handles pagination in the service (not controller).
+   * - If limit/offset are not provided, returns up to 10,000 records (safe cap).
+   * - All formatting and logic are handled here for consistency and reusability.
+   */
+  async searchUsers(body: any) {
     const logger = new Logger('UserElasticsearchService');
-
     try {
-      if (!query) {
+      if (!body) {
         throw new Error('Search query is required');
       }
-
+      const { limit, offset, ...query } = body;
       const searchQuery = {
         bool: {
           must: [],
           filter: [],
         },
       };
-
       // Add text search with partial matching support
       if (query.q) {
         if (typeof query.q !== 'string') {
           throw new Error('Search query must be a string');
         }
-
         const searchTerm = query.q.trim();
         if (searchTerm.length > 0) {
-          // Create a bool query for the search term with multiple matching strategies
           const textSearchQuery = {
             bool: {
               should: [
-                // Prefix matching for partial names (e.g., "k" matches "kalavathi")
-                {
-                  prefix: {
-                    'profile.firstName': {
-                      value: searchTerm.toLowerCase(),
-                      boost: 3.0,
-                    },
-                  },
-                },
-                {
-                  prefix: {
-                    'profile.lastName': {
-                      value: searchTerm.toLowerCase(),
-                      boost: 3.0,
-                    },
-                  },
-                },
-                // Wildcard matching for more flexible partial matching
-                {
-                  wildcard: {
-                    'profile.firstName': {
-                      value: `*${searchTerm.toLowerCase()}*`,
-                      boost: 2.0,
-                    },
-                  },
-                },
-                {
-                  wildcard: {
-                    'profile.lastName': {
-                      value: `*${searchTerm.toLowerCase()}*`,
-                      boost: 2.0,
-                    },
-                  },
-                },
-                // Exact match for email and username
-                {
-                  term: {
-                    'profile.email': {
-                      value: searchTerm.toLowerCase(),
-                      boost: 4.0,
-                    },
-                  },
-                },
-                {
-                  term: {
-                    'profile.username': {
-                      value: searchTerm.toLowerCase(),
-                      boost: 4.0,
-                    },
-                  },
-                },
-                // Fuzzy matching for typos and variations
-                {
-                  fuzzy: {
-                    'profile.firstName': {
-                      value: searchTerm,
-                      fuzziness: 'AUTO',
-                      boost: 1.0,
-                    },
-                  },
-                },
-                {
-                  fuzzy: {
-                    'profile.lastName': {
-                      value: searchTerm,
-                      fuzziness: 'AUTO',
-                      boost: 1.0,
-                    },
-                  },
-                },
+                { prefix: { 'profile.firstName': { value: searchTerm.toLowerCase(), boost: 3.0 } } },
+                { prefix: { 'profile.lastName': { value: searchTerm.toLowerCase(), boost: 3.0 } } },
+                { wildcard: { 'profile.firstName': { value: `*${searchTerm.toLowerCase()}*`, boost: 2.0 } } },
+                { wildcard: { 'profile.lastName': { value: `*${searchTerm.toLowerCase()}*`, boost: 2.0 } } },
+                { term: { 'profile.email': { value: searchTerm.toLowerCase(), boost: 4.0 } } },
+                { term: { 'profile.username': { value: searchTerm.toLowerCase(), boost: 4.0 } } },
+                { fuzzy: { 'profile.firstName': { value: searchTerm, fuzziness: 'AUTO', boost: 1.0 } } },
+                { fuzzy: { 'profile.lastName': { value: searchTerm, fuzziness: 'AUTO', boost: 1.0 } } },
               ],
               minimum_should_match: 1,
             },
           };
-
           searchQuery.bool.must.push(textSearchQuery);
         }
       }
-
-      // Filters
       if (query.filters && typeof query.filters === 'object') {
+        // Special handling for cohortId and cohortmemberstatus in applications
+        const appFilters: any = {};
         Object.entries(query.filters).forEach(([field, value]) => {
           if (value !== undefined && value !== null && value !== '') {
-            if (field.includes('.')) {
+            // Handle cohortId and cohortmemberstatus as nested application filters
+            if (field === 'cohortId' || field === 'cohortmemberstatus') {
+              appFilters[field] = value;
+              return;
+            }
+            // For name fields, use wildcard for partial/case-insensitive match
+            if ([
+              'firstName', 'lastName', 'middleName', 'username', 'email', 'status', 'district', 'state', 'pincode', 'gender', 'address'
+            ].includes(field)) {
+              searchQuery.bool.filter.push({
+                wildcard: { [`profile.${field}`]: `*${String(value).toLowerCase()}*` },
+              });
+            } else if (field.includes('.')) {
+              // For nested fields (not applications)
               const [nestedPath, nestedField] = field.split('.');
               searchQuery.bool.filter.push({
                 nested: {
                   path: nestedPath,
-                  query: {
-                    term: { [`${nestedPath}.${nestedField}`]: value },
-                  },
+                  query: { wildcard: { [`${nestedPath}.${nestedField}`]: `*${String(value).toLowerCase()}*` } },
                 },
               });
             } else {
+              // Default to wildcard for all other string fields
               searchQuery.bool.filter.push({
-                term: { [`profile.${field}`]: value },
+                wildcard: { [`profile.${field}`]: `*${String(value).toLowerCase()}*` },
               });
             }
           }
         });
+        // If cohortId or cohortmemberstatus filters are present, add nested application filter
+        if (appFilters.cohortId || appFilters.cohortmemberstatus) {
+          const appMust: any[] = [];
+          if (appFilters.cohortId) {
+            appMust.push({
+              wildcard: { 'applications.cohortId': `*${String(appFilters.cohortId).toLowerCase()}*` },
+            });
+          }
+          if (appFilters.cohortmemberstatus) {
+            appMust.push({
+              wildcard: { 'applications.cohortmemberstatus': `*${String(appFilters.cohortmemberstatus).toLowerCase()}*` },
+            });
+          }
+          searchQuery.bool.filter.push({
+            nested: {
+              path: 'applications',
+              query: { bool: { must: appMust } },
+            },
+          });
+        }
       }
-
-      // Removed: tenantCohortRoleMapping nested filter — not mapped
-      // if (query.tenantId) ...
-
-      // cohortId (still valid)
       if (query.cohortId && typeof query.cohortId === 'string') {
         searchQuery.bool.filter.push({
           nested: {
             path: 'applications',
-            query: {
-              term: { 'applications.cohortId': query.cohortId },
-            },
+            query: { term: { 'applications.cohortId': query.cohortId } },
           },
         });
       }
-
-      // Pagination safety
-      const size = Math.min(query.size ?? 10, 10000); // ES max size
-      const from = query.from ?? 0;
-
-      // Logging (safe)
+      const size = limit ? Number(limit) : 10000;
+      const from = offset ? Number(offset) : 0;
       logger.debug(`Elasticsearch query: ${JSON.stringify(searchQuery)}`);
-
-      const result = await this.elasticsearchService.search(
+      const esResult = await this.elasticsearchService.search(
         this.indexName,
         searchQuery,
         {
@@ -468,8 +443,24 @@ export class UserElasticsearchService {
           },
         }
       );
-
-      return result;
+      // Format the response as required
+      return {
+        id: 'api.ES.Fetch',
+        ver: '1.0',
+        ts: new Date().toISOString(),
+        params: {
+          resmsgid: uuidv4(),
+          status: 'successful',
+          err: null,
+          errmsg: null,
+          successmessage: 'Elasticsearch  Fetch successfully',
+        },
+        responseCode: 200,
+        result: {
+          data: esResult.hits || [],
+          totalCount: esResult.total?.value ?? esResult.total ?? 0,
+        },
+      };
     } catch (error) {
       const message = `Failed to search users in Elasticsearch: ${error.message}`;
       logger.error(message, error.stack);
@@ -794,64 +785,6 @@ export class UserElasticsearchService {
       throw new Error(
         `Failed to update application page in Elasticsearch: ${error.message}`
       );
-    }
-  }
-
-  async syncUserToElasticsearch(
-    user: IUser,
-    applications?: IApplication[],
-    courses?: ICourse[]
-  ) {
-    try {
-      // Handle empty date values
-      if (user.profile.dob === '') {
-        delete user.profile.dob;
-      }
-      if (user.createdAt === '') {
-        user.createdAt = new Date().toISOString();
-      }
-      if (user.updatedAt === '') {
-        user.updatedAt = new Date().toISOString();
-      }
-
-      // Ensure all required fields are present
-      const elasticUser: IUser = {
-        userId: user.userId,
-        profile: {
-          userId: user.profile.userId,
-          firstName: user.profile.firstName,
-          lastName: user.profile.lastName,
-          middleName: user.profile.middleName,
-          username: user.profile.username,
-          email: user.profile.email,
-          mobile_country_code: user.profile.mobile_country_code,
-          mobile: user.profile.mobile,
-          dob: user.profile.dob,
-          gender: user.profile.gender,
-          address: user.profile.address,
-          district: user.profile.district,
-          state: user.profile.state,
-          pincode: user.profile.pincode,
-          status: user.profile.status,
-          customFields: user.profile.customFields || {},
-        },
-        applications: applications || user.applications || [],
-        courses: courses || user.courses || [],
-        createdAt: user.createdAt,
-        updatedAt: user.updatedAt,
-      };
-
-      // Use update instead of index to ensure we only update after database changes
-      const result = await this.elasticsearchService.update(
-        this.indexName,
-        user.userId,
-        elasticUser,
-        { retry_on_conflict: 3 }
-      );
-      return result;
-    } catch (error) {
-      console.error('Failed to sync user to Elasticsearch:', error);
-      throw new Error(`Failed to sync user to Elasticsearch: ${error.message}`);
     }
   }
 }
