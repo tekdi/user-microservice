@@ -35,7 +35,7 @@ export class UserElasticsearchService {
   async initialize() {
     try {
       // Delete existing index if it exists
-      await this.deleteIndex();
+      // await this.deleteIndex();
 
       // Explicitly map all possible fields in customFields as text/keyword to avoid mapping conflicts
       const mapping = {
@@ -67,7 +67,7 @@ export class UserElasticsearchService {
                     code: { type: 'keyword' }, // Always treat as string
                     label: { type: 'text' },
                     type: { type: 'keyword' },
-                    value: { type: 'text' } // Always treat as string for flexibility
+                    value: { type: 'text' }, // Always treat as string for flexibility
                   },
                 },
               },
@@ -203,13 +203,20 @@ export class UserElasticsearchService {
    * @param profile
    * @param fetchUserFromDb Optional callback to fetch user from DB if needed
    */
-  async updateUserProfile(userId: string, profile: any, fetchUserFromDb?: (userId: string) => Promise<IUser | null>): Promise<any> {
+  async updateUserProfile(
+    userId: string,
+    profile: any,
+    fetchUserFromDb?: (userId: string) => Promise<IUser | null>
+  ): Promise<any> {
     try {
       // Try to update the profile field in Elasticsearch
       return await this.updateUser(userId, { doc: { profile } });
     } catch (error: any) {
       // If the document is missing, create it from DB
-      if (error?.meta?.body?.error?.type === 'document_missing_exception' && fetchUserFromDb) {
+      if (
+        error?.meta?.body?.error?.type === 'document_missing_exception' &&
+        fetchUserFromDb
+      ) {
         // Fetch user from DB
         const userFromDb = await fetchUserFromDb(userId);
         if (userFromDb) {
@@ -229,7 +236,11 @@ export class UserElasticsearchService {
    * @param updateData
    * @param fetchUserFromDb Optional callback to fetch user from DB if needed
    */
-  async updateUser(userId: string, updateData: any, fetchUserFromDb?: (userId: string) => Promise<IUser | null>): Promise<any> {
+  async updateUser(
+    userId: string,
+    updateData: any,
+    fetchUserFromDb?: (userId: string) => Promise<IUser | null>
+  ): Promise<any> {
     try {
       return await this.elasticsearchService.update(
         this.indexName,
@@ -239,7 +250,10 @@ export class UserElasticsearchService {
       );
     } catch (error: any) {
       // If the document is missing, create it from DB
-      if (error?.meta?.body?.error?.type === 'document_missing_exception' && fetchUserFromDb) {
+      if (
+        error?.meta?.body?.error?.type === 'document_missing_exception' &&
+        fetchUserFromDb
+      ) {
         const userFromDb = await fetchUserFromDb(userId);
         if (userFromDb) {
           return await this.createUser(userFromDb);
@@ -316,51 +330,51 @@ export class UserElasticsearchService {
                   prefix: {
                     'profile.firstName': {
                       value: searchTerm.toLowerCase(),
-                      boost: 3.0
-                    }
-                  }
+                      boost: 3.0,
+                    },
+                  },
                 },
                 {
                   prefix: {
                     'profile.lastName': {
                       value: searchTerm.toLowerCase(),
-                      boost: 3.0
-                    }
-                  }
+                      boost: 3.0,
+                    },
+                  },
                 },
                 // Wildcard matching for more flexible partial matching
                 {
                   wildcard: {
                     'profile.firstName': {
                       value: `*${searchTerm.toLowerCase()}*`,
-                      boost: 2.0
-                    }
-                  }
+                      boost: 2.0,
+                    },
+                  },
                 },
                 {
                   wildcard: {
                     'profile.lastName': {
                       value: `*${searchTerm.toLowerCase()}*`,
-                      boost: 2.0
-                    }
-                  }
+                      boost: 2.0,
+                    },
+                  },
                 },
                 // Exact match for email and username
                 {
                   term: {
                     'profile.email': {
                       value: searchTerm.toLowerCase(),
-                      boost: 4.0
-                    }
-                  }
+                      boost: 4.0,
+                    },
+                  },
                 },
                 {
                   term: {
                     'profile.username': {
                       value: searchTerm.toLowerCase(),
-                      boost: 4.0
-                    }
-                  }
+                      boost: 4.0,
+                    },
+                  },
                 },
                 // Fuzzy matching for typos and variations
                 {
@@ -368,22 +382,22 @@ export class UserElasticsearchService {
                     'profile.firstName': {
                       value: searchTerm,
                       fuzziness: 'AUTO',
-                      boost: 1.0
-                    }
-                  }
+                      boost: 1.0,
+                    },
+                  },
                 },
                 {
                   fuzzy: {
                     'profile.lastName': {
                       value: searchTerm,
                       fuzziness: 'AUTO',
-                      boost: 1.0
-                    }
-                  }
-                }
+                      boost: 1.0,
+                    },
+                  },
+                },
               ],
-              minimum_should_match: 1
-            }
+              minimum_should_match: 1,
+            },
           };
 
           searchQuery.bool.must.push(textSearchQuery);
@@ -624,7 +638,9 @@ export class UserElasticsearchService {
           throw new Error(`User with ID ${userId} not found in DB for upsert.`);
         }
       } else {
-        throw new Error('User document not found in Elasticsearch and no fetchUserFromDb callback provided.');
+        throw new Error(
+          'User document not found in Elasticsearch and no fetchUserFromDb callback provided.'
+        );
       }
     } catch (error) {
       console.error('Failed to update application in Elasticsearch:', error);
