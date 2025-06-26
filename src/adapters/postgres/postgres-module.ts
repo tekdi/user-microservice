@@ -23,7 +23,7 @@ import { CohortAcademicYear } from 'src/cohortAcademicYear/entities/cohortAcadem
 import { AcademicYear } from 'src/academicyears/entities/academicyears-entity';
 import { CohortAcademicYearService } from './cohortAcademicYear-adapter';
 import { AuthUtils } from '@utils/auth-util';
-import { FormsModule } from 'src/forms/forms.module';
+import { ElasticsearchModule } from 'src/elasticsearch/elasticsearch.module';
 
 @Module({
   imports: [
@@ -43,7 +43,7 @@ import { FormsModule } from 'src/forms/forms.module';
       CohortAcademicYear,
       AcademicYear,
     ]),
-    FormsModule,
+    ElasticsearchModule,
   ],
   providers: [
     PostgresUserService,
@@ -64,7 +64,6 @@ import { FormsModule } from 'src/forms/forms.module';
     JwtService,
     CohortAcademicYearService,
     PostgresAcademicYearService,
-    FormsModule,
   ],
 })
 export class PostgresModule {}

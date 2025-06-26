@@ -1,4 +1,11 @@
-import { Injectable, HttpStatus, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  HttpStatus,
+  BadRequestException,
+  Inject,
+  forwardRef,
+  Logger,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindOptionsWhere, Between, In } from 'typeorm';
 import {
@@ -26,6 +33,14 @@ import { FieldValuesSearchDto } from '../../fields/dto/field-values-search.dto';
 import { FieldsSearchDto } from '../../fields/dto/fields-search.dto';
 import jwt_decode from 'jwt-decode';
 import { Form } from '../entities/form.entity';
+import { UserElasticsearchService } from '../../elasticsearch/user-elasticsearch.service';
+import { FormsService } from '../../forms/forms.service';
+import { PostgresCohortService } from 'src/adapters/postgres/cohort-adapter';
+import { IUser } from '../../elasticsearch/interfaces/user.interface';
+import { LoggerUtil } from 'src/common/logger/LoggerUtil';
+import { isElasticsearchEnabled } from 'src/common/utils/elasticsearch.util';
+import { CohortMembers } from 'src/cohortMembers/entities/cohort-member.entity';
+import { Cohort } from 'src/cohort/entities/cohort.entity';
 
 interface DateRange {
   start: string;
@@ -72,7 +87,15 @@ export class FormSubmissionService {
     private fieldValuesRepository: Repository<FieldValues>,
     @InjectRepository(Form)
     private formRepository: Repository<Form>,
-    private fieldsService: FieldsService
+    @InjectRepository(CohortMembers)
+    private cohortMembersRepository: Repository<CohortMembers>,
+    @InjectRepository(Cohort)
+    private cohortRepository: Repository<Cohort>,
+    private readonly fieldsService: FieldsService,
+    private readonly userElasticsearchService: UserElasticsearchService,
+    private readonly formsService: FormsService,
+    @Inject(forwardRef(() => PostgresCohortService))
+    private readonly postgresCohortService: PostgresCohortService
   ) {}
 
   async create(
@@ -142,7 +165,7 @@ export class FormSubmissionService {
         formSubmission
       );
 
-      // Save field values using FieldsService
+      // Save field values using FieldsService 
       for (const fieldValue of createFormSubmissionDto.customFields) {
         const fieldValueDto = new FieldValuesDto({
           fieldId: fieldValue.fieldId,
@@ -164,6 +187,13 @@ export class FormSubmissionService {
       // Get the complete field values with field information
       const customFields = await this.fieldsService.getFieldsAndFieldsValues(
         savedSubmission.itemId
+      );
+
+      // Update Elasticsearch
+      await this.updateApplicationInElasticsearch(
+        userId,
+        savedSubmission,
+        createFormSubmissionDto.customFields
       );
 
       // Create response object
@@ -881,7 +911,8 @@ export class FormSubmissionService {
           throw new Error('Failed to update field values');
         }
       }
-
+      // Update Elasticsearch after successful form submission update
+      await this.updateApplicationInElasticsearch(userId, updatedSubmission, updatedFieldValues);
       const successResponse = {
         id: 'api.form.submission.update',
         ver: '1.0',
@@ -1030,4 +1061,568 @@ export class FormSubmissionService {
   private createFieldValuesSearchDto(filters: any): FieldValuesSearchDto {
     return new FieldValuesSearchDto({ filters });
   }
+
+  /**
+   * Update the user's applications array in Elasticsearch after a form submission update.
+   * This will upsert (update or create) the user document in Elasticsearch if missing.
+   * If the document is missing, it will fetch the user from the database and create it.
+   */
+  private async updateApplicationInElasticsearch(
+    userId: string,
+    updatedSubmission: FormSubmission,
+    updatedFieldValues: any[]
+  ): Promise<void> {
+    try {
+      // Get the existing user document from Elasticsearch
+      const userDoc = await this.userElasticsearchService.getUser(userId);
+
+      // Prepare the applications array (existing or new)
+      let applications: any[] = [];
+      if (userDoc && userDoc._source) {
+        const userSource = userDoc._source as IUser;
+        applications = userSource.applications || [];
+      }
+
+      // Use the actual submissionId and formId from the updatedSubmission
+      const formIdToMatch = updatedSubmission.formId;
+      const submissionIdToMatch = updatedSubmission.submissionId;
+
+      // --- NEW LOGIC: Fetch form schema and build fieldId -> pageName map ---
+      let fieldIdToPageName: Record<string, string> = {};
+      try {
+        const form = await this.formsService.getFormById(formIdToMatch);
+        const fieldsObj = form && form.fields ? (form.fields as any) : null;
+        if (
+          Array.isArray(fieldsObj?.result) &&
+          fieldsObj.result[0]?.schema?.properties
+        ) {
+          const schema = fieldsObj.result[0].schema.properties;
+          for (const [pageKey, pageSchema] of Object.entries(schema)) {
+            const pageName = pageKey === 'default' ? 'eligibility' : pageKey;
+            const fieldProps = (pageSchema as any).properties ?? {};
+            for (const [fieldKey, fieldSchema] of Object.entries(fieldProps)) {
+              const fieldId = (fieldSchema as any).fieldId;
+              if (fieldId) {
+                fieldIdToPageName[fieldId] = pageName;
+              }
+            }
+          }
+        }
+      } catch (err) {
+        const logger = new Logger('FormSubmissionService');
+        logger.error('Schema fetch failed, cannot proceed', err);
+        // If schema fetch fails, fallback to empty map (all fields go to 'default')
+        fieldIdToPageName = {};
+      }
+      // --- END NEW LOGIC ---
+
+      // Find the existing application for this form and submission
+      const existingAppIndex = applications.findIndex(
+        (app) =>
+          app.formId === formIdToMatch &&
+          app.submissionId === submissionIdToMatch
+      );
+
+      // Prepare the updated fields data
+      const updatedFields = {};
+      updatedFieldValues.forEach((field) => {
+        
+        // Improved logic: Try schema, then existing pages, then fallback
+        let pageKey = fieldIdToPageName[field.fieldId];
+        if (!pageKey && existingAppIndex !== -1) {
+          // Try to find the field in existing pages
+          const existingPages = applications[existingAppIndex]?.progress?.pages || {};
+          for (const [existingPage, pageData] of Object.entries(existingPages)) {
+            // Fix: add type assertion for pageData
+            const pageDataTyped = pageData as { fields?: any };
+            if (pageDataTyped.fields && (field.fieldname in pageDataTyped.fields || field.fieldId in pageDataTyped.fields)) {
+              pageKey = existingPage;
+              break;
+            }
+          }
+        }
+        if (!pageKey) {
+          console.warn(`FieldId ${field.fieldId} not found in schema mapping or existing pages, using 'default'`);
+          pageKey = 'default';
+        }
+
+        updatedFields[pageKey] ??= {
+          completed: true,
+          fields: {},
+        };
+        updatedFields[pageKey].fields[field.fieldname ?? field.fieldId] =
+          field.value;
+      });
+
+      if (existingAppIndex !== -1) {
+        // Deep merge for each page's fields
+        const mergedPages = {
+          ...(applications[existingAppIndex]?.progress?.pages || {}),
+        };
+        for (const [pageKey, pageValue] of Object.entries(updatedFields)) {
+          const newPage = pageValue as {
+            completed: boolean;
+            fields: { [key: string]: any };
+          };
+          if (mergedPages[pageKey]) {
+            const existingPage = mergedPages[pageKey] as {
+              completed: boolean;
+              fields: { [key: string]: any };
+            };
+            mergedPages[pageKey] = {
+              ...existingPage,
+              fields: {
+                ...existingPage.fields,
+                ...newPage.fields,
+              },
+              completed: newPage.completed, // update completed status if needed
+            };
+          } else {
+            mergedPages[pageKey] = newPage;
+          }
+        }
+        // Merge overall progress
+        const mergedOverall = applications[existingAppIndex]?.progress
+          ?.overall
+          ? { ...applications[existingAppIndex].progress.overall }
+          : {
+              completed: updatedFieldValues.length,
+              total: updatedFieldValues.length,
+            };
+
+        // --- Update cohortmemberstatus and cohortDetails logic ---
+        // cohortmemberstatus is not a property of FormSubmission; set as empty string or fetch from CohortMembers if needed
+        applications[existingAppIndex].cohortmemberstatus = ''; // TODO: Fetch from CohortMembers if needed
+        // Ensure cohortDetails is populated; if missing or empty, fetch from DB
+        if (!applications[existingAppIndex].cohortDetails || Object.keys(applications[existingAppIndex].cohortDetails).length === 0) {
+          applications[existingAppIndex].cohortDetails = await this.fetchCohortDetailsFromDB(updatedSubmission);
+        }
+        // --- End cohortmemberstatus and cohortDetails logic ---
+
+        applications[existingAppIndex] = {
+          ...applications[existingAppIndex],
+          formId: formIdToMatch,
+          submissionId: submissionIdToMatch,
+          formstatus:
+            updatedSubmission.status ??
+            applications[existingAppIndex].formstatus,
+          progress: {
+            pages: mergedPages,
+            overall: mergedOverall,
+          },
+          lastSavedAt: new Date().toISOString(),
+          submittedAt: new Date().toISOString(),
+        };
+      } else {
+        // If no existing application found, build from DB with correct cohortDetails
+        const newApp = await this.buildApplicationFromDB(updatedSubmission);
+        applications.push(newApp);
+      }
+
+      // Upsert (update or create) the user document in Elasticsearch
+      if (isElasticsearchEnabled()) {
+        await this.userElasticsearchService.updateUser(
+          userId,
+          { doc: { applications: applications } },
+          async (userId: string) => {
+            // Build the full user document for Elasticsearch, including profile and all applications
+            return await this.buildUserDocumentForElasticsearch(userId);
+          }
+        );
+      }
+    } catch (elasticError) {
+      // Log Elasticsearch error but don't fail the request
+      console.error('Failed to update Elasticsearch:', elasticError);
+    }
+  }
+
+  /**
+   * Helper to fetch cohort details from the database for a given submission.
+   * Returns an object with cohort details as required by the application schema.
+   * Fetches cohortId from the related Form entity.
+   */
+  private async fetchCohortDetailsFromDB(submission: FormSubmission): Promise<any> {
+    try {
+      // Get cohortId from the related Form
+      const form = await this.formsService.getFormById(submission.formId);
+      const cohortId = form?.contextId || '';
+      if (!cohortId) return { name: '', status: '' };
+      const mockResponse = { status: (code: number) => ({ json: (data: any) => data }) };
+      const cohortDetails = await this.postgresCohortService.getCohortsDetails(
+        { cohortId, getChildData: false },
+        mockResponse
+      );
+      if (cohortDetails?.result?.cohortData?.[0]) {
+        const cohortData = cohortDetails.result.cohortData[0];
+        const cohortFieldValues = cohortData.customField ?? [];
+        return {
+          name: cohortData.name ?? '',
+          status: cohortData.status ?? '',
+          ...cohortFieldValues.reduce((acc, field) => {
+            acc[field.label] = field.value ?? '';
+            return acc;
+          }, {} as Record<string, any>),
+        };
+      }
+    } catch (e) {}
+    return { name: '', status: '' };
+  }
+
+  /**
+   * Helper to build a full application object from the database, including cohortDetails and progress.
+   * Used when the application does not exist in Elasticsearch.
+   * Fetches cohortId from the related Form entity.
+   * cohortmemberstatus is set as an empty string (add logic to fetch from CohortMembers if needed).
+   */
+  private async buildApplicationFromDB(submission: FormSubmission): Promise<any> {
+    // Fetch form schema and custom fields
+    let schema: any = {};
+    let cohortId = '';
+    let cohortmemberstatus = '';
+    let cohortDetails = {};
+    try {
+      const form = await this.formsService.getFormById(submission.formId);
+      const fieldsObj = form && form.fields ? (form.fields as any) : null;
+      if (
+        Array.isArray(fieldsObj?.result) &&
+        fieldsObj.result[0]?.schema?.properties
+      ) {
+        schema = fieldsObj.result[0].schema.properties;
+      }
+      cohortId = form?.contextId || '';
+      // Fetch cohortmemberstatus and cohortDetails if cohortId exists
+      if (cohortId) {
+        // Fetch CohortMembers record for this user and cohort
+        const cohortMember = await this.cohortMembersRepository.findOne({
+          where: {
+            userId: submission.itemId,
+            cohortId: cohortId,
+          },
+        });
+        if (cohortMember) {
+          cohortmemberstatus = cohortMember.status;
+        }
+        // Always fetch detailed cohortDetails (including custom fields) from fetchCohortDetailsFromDB
+        // This ensures cohortDetails includes dynamic fields from Cohort, FieldValue, and Fields tables
+        cohortDetails = await this.fetchCohortDetailsFromDB(submission);
+      }
+    } catch (e) {
+      schema = {};
+    }
+    const submissionCustomFields = await this.fieldsService.getFieldsAndFieldsValues(submission.itemId);
+    const fieldIdToValue: Record<string, any> = {};
+    const fieldIdToFieldName: Record<string, string> = {};
+    for (const field of submissionCustomFields) {
+      fieldIdToValue[field.fieldId] = field.value;
+      fieldIdToFieldName[field.fieldId] = field.fieldname || field.fieldId;
+    }
+    const pages: Record<string, any> = {};
+    const formData: Record<string, any> = {};
+    for (const [pageKey, pageSchema] of Object.entries(schema)) {
+      const pageName = pageKey === 'default' ? 'eligibility' : pageKey;
+      pages[pageName] = { completed: true, fields: {} };
+      formData[pageName] = {};
+      const fieldProps = (pageSchema as any).properties || {};
+      for (const [fieldKey, fieldSchema] of Object.entries(fieldProps)) {
+        const fieldId = (fieldSchema as any).fieldId;
+        if (fieldId && fieldIdToValue[fieldId] !== undefined) {
+          let fieldName = fieldId;
+          if ((fieldSchema as any) && (fieldSchema as any).name) {
+            fieldName = (fieldSchema as any).name;
+          } else if (fieldIdToFieldName[fieldId]) {
+            fieldName = fieldIdToFieldName[fieldId];
+          }
+          const value = fieldIdToValue[fieldId];
+          pages[pageName].fields[fieldName] = value;
+          formData[pageName][fieldName] = value;
+        }
+      }
+    }
+    if (Object.keys(pages).length === 0) {
+      pages['default'] = {
+        completed: true,
+        fields: submissionCustomFields.reduce((acc, field) => {
+          acc[field.fieldname || field.fieldId] = field.value;
+          return acc;
+        }, {}),
+      };
+      formData['default'] = { ...pages['default'].fields };
+    }
+    // Fetch cohortDetails (already fetched above)
+    return {
+      formId: submission.formId,
+      submissionId: submission.submissionId,
+      cohortId, // Fetched from Form entity
+      status: submission.status,
+      cohortmemberstatus, // Now fetched from CohortMembers
+      formstatus: submission.status,
+      progress: {
+        pages,
+        overall: {
+          completed: submissionCustomFields.length,
+          total: submissionCustomFields.length,
+        },
+      },
+      lastSavedAt: submission.updatedAt ? submission.updatedAt.toISOString() : new Date().toISOString(),
+      submittedAt: submission.createdAt ? submission.createdAt.toISOString() : new Date().toISOString(),
+      cohortDetails, // Now fetched from Cohort
+      formData,
+    };
+  }
+
+  /**
+   * Helper to build the full user document for Elasticsearch upsert, including profile and all applications.
+   * This version fetches the form schema for each application and maps fields to the correct page and field name.
+   * Only user profile custom fields go in profile.customFields.
+   *
+   * Made public so it can be used as an upsert callback from other services (e.g., cohortMembers-adapter).
+   */
+  public async buildUserDocumentForElasticsearch(userId: string): Promise<IUser | null> {
+    // Fetch user profile from Users table
+    const userRepo = this.formRepository.manager.getRepository('Users');
+    const user = await userRepo.findOne({ where: { userId } });
+    if (!user) return null;
+    // Fetch profile custom fields (these are not form submission fields)
+    let profileCustomFields = await this.fieldsService.getFieldsAndFieldsValues(userId);
+
+    // Fetch all cohort memberships for this user
+    const cohortMemberships = await this.cohortMembersRepository.find({ where: { userId } });
+    // Fetch all form submissions for this user
+    const submissions = await this.formSubmissionRepository.find({ where: { itemId: userId } });
+
+    // Remove custom fields that are part of any form schema for this user
+    // Only include custom fields in profile that are NOT part of any form schema (i.e., not used in any form for this user)
+    const allFormFieldIds = new Set<string>();
+    for (const submission of submissions) {
+      try {
+        const form = await this.formsService.getFormById(submission.formId);
+        const fieldsObj = form && form.fields ? (form.fields as any) : null;
+        if (Array.isArray(fieldsObj?.result) && fieldsObj.result[0]?.schema?.properties) {
+          const schema = fieldsObj.result[0].schema.properties;
+          for (const pageSchema of Object.values(schema)) {
+            const fieldProps = (pageSchema as any).properties || {};
+            for (const fieldSchema of Object.values(fieldProps)) {
+              const fieldId = (fieldSchema as any).fieldId;
+              if (fieldId) allFormFieldIds.add(fieldId);
+            }
+          }
+        }
+      } catch (e) {}
+    }
+    profileCustomFields = profileCustomFields.filter(f => !allFormFieldIds.has(f.fieldId));
+
+    // Build maps for fast lookup
+    const membershipMap = new Map();
+    for (const m of cohortMemberships) membershipMap.set(m.cohortId, m);
+    const submissionMap = new Map();
+    for (const s of submissions) {
+      let cohortId = '';
+      try {
+        const form = await this.formsService.getFormById(s.formId);
+        cohortId = form?.contextId || '';
+      } catch {}
+      if (cohortId) submissionMap.set(cohortId, s);
+    }
+    // Union of all cohortIds
+    const allCohortIds = new Set([...membershipMap.keys(), ...submissionMap.keys()]);
+    const applications = [];
+    for (const cohortId of allCohortIds) {
+      const membership = membershipMap.get(cohortId);
+      const submission = submissionMap.get(cohortId);
+      // Fetch cohort details
+      const cohort = await this.cohortRepository.findOne({ where: { cohortId } });
+      // Prepare application fields
+      let formId = '', submissionId = '', status = '', formstatus = '', progress = { pages: {}, overall: { completed: 0, total: 0 } }, lastSavedAt = null, submittedAt = null, formData = {};
+      if (submission) {
+        formId = submission.formId;
+        submissionId = submission.submissionId;
+        status = submission.status;
+        formstatus = submission.status;
+        lastSavedAt = submission.updatedAt ? submission.updatedAt.toISOString() : new Date().toISOString();
+        submittedAt = submission.createdAt ? submission.createdAt.toISOString() : new Date().toISOString();
+        // Build progress/pages as before
+        let schema: any = {};
+        try {
+          const form = await this.formsService.getFormById(submission.formId);
+          const fieldsObj = form && form.fields ? (form.fields as any) : null;
+          if (Array.isArray(fieldsObj?.result) && fieldsObj.result[0]?.schema?.properties) {
+            schema = fieldsObj.result[0].schema.properties;
+          }
+        } catch (e) {
+          schema = {};
+        }
+        const submissionCustomFields = await this.fieldsService.getFieldsAndFieldsValues(submission.itemId);
+        const fieldIdToValue: Record<string, any> = {};
+        const fieldIdToFieldName: Record<string, string> = {};
+        for (const field of submissionCustomFields) {
+          fieldIdToValue[field.fieldId] = field.value;
+          fieldIdToFieldName[field.fieldId] = field.fieldname || field.fieldId;
+        }
+        const pages: Record<string, any> = {};
+        formData = {};
+        for (const [pageKey, pageSchema] of Object.entries(schema)) {
+          const pageName = pageKey === 'default' ? 'eligibility' : pageKey;
+          pages[pageName] = { completed: true, fields: {} };
+          formData[pageName] = {};
+          const fieldProps = (pageSchema as any).properties || {};
+          for (const [fieldKey, fieldSchema] of Object.entries(fieldProps)) {
+            const fieldId = (fieldSchema as any).fieldId;
+            if (fieldId && fieldIdToValue[fieldId] !== undefined) {
+              let fieldName = fieldId;
+              if ((fieldSchema as any) && (fieldSchema as any).name) {
+                fieldName = (fieldSchema as any).name;
+              } else if (fieldIdToFieldName[fieldId]) {
+                fieldName = fieldIdToFieldName[fieldId];
+              }
+              const value = fieldIdToValue[fieldId];
+              pages[pageName].fields[fieldName] = value;
+              formData[pageName][fieldName] = value;
+            }
+          }
+        }
+        if (Object.keys(pages).length === 0) {
+          pages['default'] = {
+            completed: true,
+            fields: submissionCustomFields.reduce((acc, field) => {
+              acc[field.fieldname || field.fieldId] = field.value;
+              return acc;
+            }, {}),
+          };
+          formData['default'] = { ...pages['default'].fields };
+        }
+        progress = {
+          pages,
+          overall: {
+            completed: submissionCustomFields.length,
+            total: submissionCustomFields.length,
+          },
+        };
+      }
+      applications.push({
+        formId,
+        submissionId,
+        cohortId,
+        status,
+        cohortmemberstatus: membership?.status || '',
+        formstatus,
+        progress,
+        lastSavedAt,
+        submittedAt,
+        cohortDetails: {
+          name: cohort?.name ?? '',
+          status: cohort?.status ?? '',
+        },
+        formData,
+      });
+    }
+    // Also, for any form submission that is not linked to a cohortId (contextId), add as a separate application
+    for (const submission of submissions) {
+      let cohortId = '';
+      try {
+        const form = await this.formsService.getFormById(submission.formId);
+        cohortId = form?.contextId || '';
+      } catch {}
+      if (!cohortId) {
+        // orphan submission
+        let schema: any = {};
+        try {
+          const form = await this.formsService.getFormById(submission.formId);
+          const fieldsObj = form && form.fields ? (form.fields as any) : null;
+          if (Array.isArray(fieldsObj?.result) && fieldsObj.result[0]?.schema?.properties) {
+            schema = fieldsObj.result[0].schema.properties;
+          }
+        } catch (e) {
+          schema = {};
+        }
+        const submissionCustomFields = await this.fieldsService.getFieldsAndFieldsValues(submission.itemId);
+        const fieldIdToValue: Record<string, any> = {};
+        const fieldIdToFieldName: Record<string, string> = {};
+        for (const field of submissionCustomFields) {
+          fieldIdToValue[field.fieldId] = field.value;
+          fieldIdToFieldName[field.fieldId] = field.fieldname || field.fieldId;
+        }
+        const pages: Record<string, any> = {};
+        let formData: Record<string, any> = {};
+        for (const [pageKey, pageSchema] of Object.entries(schema)) {
+          const pageName = pageKey === 'default' ? 'eligibility' : pageKey;
+          pages[pageName] = { completed: true, fields: {} };
+          formData[pageName] = {};
+          const fieldProps = (pageSchema as any).properties || {};
+          for (const [fieldKey, fieldSchema] of Object.entries(fieldProps)) {
+            const fieldId = (fieldSchema as any).fieldId;
+            if (fieldId && fieldIdToValue[fieldId] !== undefined) {
+              let fieldName = fieldId;
+              if ((fieldSchema as any) && (fieldSchema as any).name) {
+                fieldName = (fieldSchema as any).name;
+              } else if (fieldIdToFieldName[fieldId]) {
+                fieldName = fieldIdToFieldName[fieldId];
+              }
+              const value = fieldIdToValue[fieldId];
+              pages[pageName].fields[fieldName] = value;
+              formData[pageName][fieldName] = value;
+            }
+          }
+        }
+        if (Object.keys(pages).length === 0) {
+          pages['default'] = {
+            completed: true,
+            fields: submissionCustomFields.reduce((acc, field) => {
+              acc[field.fieldname || field.fieldId] = field.value;
+              return acc;
+            }, {}),
+          };
+          formData['default'] = { ...pages['default'].fields };
+        }
+        applications.push({
+          formId: submission.formId,
+          submissionId: submission.submissionId,
+          cohortId: '',
+          status: submission.status,
+          cohortmemberstatus: '',
+          formstatus: submission.status,
+          progress: {
+            pages,
+            overall: {
+              completed: submissionCustomFields.length,
+              total: submissionCustomFields.length,
+            },
+          },
+          lastSavedAt: submission.updatedAt ? submission.updatedAt.toISOString() : new Date().toISOString(),
+          submittedAt: submission.createdAt ? submission.createdAt.toISOString() : new Date().toISOString(),
+          cohortDetails: {
+            name: '',
+            status: '',
+          },
+          formData,
+        });
+      }
+    }
+    // Build the IUser object
+    return {
+      userId: user.userId,
+      profile: {
+        userId: user.userId,
+        username: user.username,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        middleName: user.middleName || '',
+        email: user.email || '',
+        mobile: user.mobile ? user.mobile.toString() : '',
+        mobile_country_code: user.mobile_country_code || '',
+        gender: user.gender,
+        dob: user.dob instanceof Date ? user.dob.toISOString() : (user.dob || ''),
+        address: user.address || '',
+        district: user.district || '',
+        state: user.state || '',
+        pincode: user.pincode || '',
+        status: user.status,
+        customFields: profileCustomFields, // Only user profile custom fields
+      },
+      applications,
+      courses: [],
+      createdAt: user.createdAt ? user.createdAt.toISOString() : new Date().toISOString(),
+      updatedAt: user.updatedAt ? user.updatedAt.toISOString() : new Date().toISOString(),
+    };
+  }
 }
+

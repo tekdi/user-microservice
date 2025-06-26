@@ -116,6 +116,7 @@ export class PostgresCohortService {
         name: data.name,
         parentId: data.parentId,
         type: data.type,
+        status: data.status,
         customField: await this.getCohortCustomFieldDetails(data.cohortId),
       };
       result.cohortData.push(cohortData);

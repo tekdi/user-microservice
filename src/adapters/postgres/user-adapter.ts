@@ -47,6 +47,9 @@ import { ActionType, UserUpdateDTO } from 'src/user/dto/user-update.dto';
 import config from '../../common/config';
 import { CalendarField } from 'src/fields/fieldValidators/fieldTypeClasses';
 import { UserCreateSsoDto } from 'src/user/dto/user-create-sso.dto';
+import { UserElasticsearchService } from '../../elasticsearch/user-elasticsearch.service';
+import { IUser } from '../../elasticsearch/interfaces/user.interface';
+import { isElasticsearchEnabled } from 'src/common/utils/elasticsearch.util';
 
 interface UpdateField {
   userId: string; // Required
@@ -90,7 +93,8 @@ export class PostgresUserService implements IServicelocator {
     private configService: ConfigService,
     private postgresAcademicYearService: PostgresAcademicYearService,
     private readonly cohortAcademicYearService: CohortAcademicYearService,
-    private readonly authUtils: AuthUtils
+    private readonly authUtils: AuthUtils,
+    private readonly userElasticsearchService: UserElasticsearchService
   ) {
     this.jwt_secret = this.configService.get<string>('RBAC_JWT_SECRET');
     this.jwt_password_reset_expires_In = this.configService.get<string>(
@@ -103,6 +107,17 @@ export class PostgresUserService implements IServicelocator {
     this.otpExpiry = this.configService.get<number>('OTP_EXPIRY') || 10; // default: 10 minutes
     this.otpDigits = this.configService.get<number>('OTP_DIGITS') || 6;
     this.smsKey = this.configService.get<string>('SMS_KEY');
+  }
+  async onModuleInit() {
+    await this.initializeElasticsearch();
+  }
+  private async initializeElasticsearch() {
+    try {
+      await this.userElasticsearchService.initialize();
+      LoggerUtil.log('Elasticsearch index initialized successfully');
+    } catch (error) {
+      LoggerUtil.error('Failed to initialize Elasticsearch index', error);
+    }
   }
 
   public async sendPasswordResetLink(
@@ -1023,6 +1038,11 @@ export class PostgresUserService implements IServicelocator {
         userDto?.userId
       );
 
+      const updatedUser = await this.updateBasicUserDetails(userId, userDto);
+
+      // Sync to Elasticsearch
+      await this.syncUserToElasticsearch(updatedUser);
+
       return await APIResponse.success(
         response,
         apiId,
@@ -1450,12 +1470,21 @@ export class PostgresUserService implements IServicelocator {
 
         if (customFields) {
           const customFieldAttributes = customFields.reduce(
-            (fieldDetail, { fieldId, fieldAttributes, fieldParams, name }) =>
+            (
+              fieldDetail,
+              { fieldId, fieldAttributes, fieldParams, name, label, type }
+            ) =>
               fieldDetail[`${fieldId}`]
                 ? fieldDetail
                 : {
                     ...fieldDetail,
-                    [`${fieldId}`]: { fieldAttributes, fieldParams, name },
+                    [`${fieldId}`]: {
+                      fieldAttributes,
+                      fieldParams,
+                      name,
+                      label,
+                      type,
+                    },
                   },
             {}
           );
@@ -1474,7 +1503,12 @@ export class PostgresUserService implements IServicelocator {
 
             if (res.correctValue) {
               if (!result['customFields']) result['customFields'] = [];
-              result['customFields'].push(res);
+              // Add code, label, type, value, fieldId to each custom field object
+              const fieldMeta = customFieldAttributes[fieldData.fieldId] ?? {};
+              result['customFields'].push({
+                fieldId: fieldData.fieldId,
+                value: fieldData.value,
+              });
             } else {
               createFailures.push(
                 `${fieldData.fieldId}: ${res?.valueIssue} - ${res.fieldName}`
@@ -1484,6 +1518,80 @@ export class PostgresUserService implements IServicelocator {
         }
       }
       LoggerUtil.log(API_RESPONSES.USER_CREATE_SUCCESSFULLY, apiId);
+
+      // Add Elasticsearch sync with custom fields
+      try {
+        if (isElasticsearchEnabled()) {
+          // Get custom fields from the processed result (these may only have fieldId and value)
+          const customFields = result['customFields'] ?? [];
+
+          // Map custom fields for Elasticsearch: enrich with name and label
+          const elasticCustomFields = [];
+          for (const field of customFields) {
+            let name = '';
+            let label = '';
+            // Fetch field definition for name/label
+            const fieldDef = await this.fieldsService.getFieldByIdes(
+              field.fieldId
+            );
+            if (fieldDef && !('error' in fieldDef)) {
+              name = fieldDef.name ?? '';
+              label = fieldDef.label ?? '';
+            }
+            elasticCustomFields.push({
+              fieldId: field.fieldId,
+              name,
+              label,
+              value: field.value,
+            });
+          }
+          // Map user data to match IUser interface
+          const userForElastic: IUser = {
+            userId: result.userId,
+            profile: {
+              userId: result.userId,
+              username: result.username,
+              firstName: result.firstName,
+              lastName: result.lastName,
+              middleName: result.middleName || '',
+              email: result.email || '',
+              mobile: result.mobile ? result.mobile.toString() : '',
+              mobile_country_code: result.mobile_country_code || '',
+              gender: result.gender,
+              dob:
+                result.dob instanceof Date
+                  ? result.dob.toISOString()
+                  : result.dob ?? '',
+              address: result.address || '',
+              state: result.state || '',
+              district: result.district || '',
+              pincode: result.pincode || '',
+              status: result.status,
+              customFields: elasticCustomFields,
+            },
+            applications: [],
+            courses: [],
+            createdAt: result.createdAt
+              ? result.createdAt.toISOString()
+              : new Date().toISOString(),
+            updatedAt: result.updatedAt
+              ? result.updatedAt.toISOString()
+              : new Date().toISOString(),
+          };
+
+          // Use createUser to ensure new document creation
+
+          await this.userElasticsearchService.createUser(userForElastic);
+          LoggerUtil.log('User synced to Elasticsearch successfully', apiId);
+        }
+      } catch (elasticError) {
+        // Log Elasticsearch error but don't fail the request
+        LoggerUtil.error(
+          'Elasticsearch sync failed but user was created in Keycloak and database',
+          elasticError
+        );
+      }
+
       APIResponse.success(
         response,
         apiId,
@@ -2624,6 +2732,125 @@ export class PostgresUserService implements IServicelocator {
       throw new Error(
         `${API_RESPONSES.EMAIL_NOTIFICATION_ERROR}:  ${e.message}`
       );
+    }
+  }
+
+  /**
+   * Get custom fields for a user, filtered to exclude fields that are part of form schemas.
+   * This ensures profile customFields only includes fields NOT used in any form submission.
+   */
+  private async getFilteredCustomFields(userId: string): Promise<any[]> {
+    let customFields = await this.fieldsService.getUserCustomFieldDetails(userId);
+    
+    const formSubmissions = await this.fieldsValueRepository.manager
+      .getRepository('FormSubmission')
+      .find({ where: { itemId: userId }, select: ['formId'] });
+      
+    const allFormFieldIds = new Set<string>();
+    for (const submission of formSubmissions) {
+      try {
+        const formRepo = this.fieldsValueRepository.manager.getRepository('Form');
+        const form = await formRepo.findOne({ where: { formid: submission.formId } });
+        const fieldsObj = form?.fields ? (form.fields as any) : null;
+        if (Array.isArray(fieldsObj?.result) && fieldsObj.result[0]?.schema?.properties) {
+          const schema = fieldsObj.result[0].schema.properties;
+          for (const pageSchema of Object.values(schema)) {
+            const fieldProps = (pageSchema as any).properties || {};
+            for (const fieldSchema of Object.values(fieldProps)) {
+              const fieldId = (fieldSchema as any).fieldId;
+              if (fieldId) allFormFieldIds.add(fieldId);
+            }
+          }
+        }
+      } catch (e) {
+        // Silent catch is acceptable here for optional filtering
+      }
+    }
+    
+    return customFields.filter(f => !allFormFieldIds.has(f.fieldId));
+  }
+
+  /**
+   * Sync user profile to Elasticsearch.
+   * This will upsert (update or create) the user document in Elasticsearch.
+   * If the document is missing, it will fetch the user from the database and create it.
+   */
+  private async syncUserToElasticsearch(user: User) {
+    try {
+      const customFields = await this.getFilteredCustomFields(user.userId);
+
+      let formattedDob: string | null = null;
+      if (user.dob instanceof Date) {
+        formattedDob = user.dob.toISOString();
+      } else if (typeof user.dob === 'string') {
+        formattedDob = user.dob;
+      }
+      // Prepare the profile data
+      const profile = {
+        userId: user.userId,
+        username: user.username,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        middleName: user.middleName || '',
+        email: user.email || '',
+        mobile: user.mobile?.toString() || '',
+        mobile_country_code: user.mobile_country_code || '',
+        dob: formattedDob,
+        gender: user.gender,
+        address: user.address || '',
+        district: user.district || '',
+        state: user.state || '',
+        pincode: user.pincode || '',
+        status: user.status,
+        customFields, // Now filtered to exclude form schema fields
+      };
+
+      // Upsert (update or create) the user profile in Elasticsearch
+      if (isElasticsearchEnabled()) {
+        await this.userElasticsearchService.updateUserProfile(
+          user.userId,
+          profile,
+          async (userId: string) => {
+            // Fetch the latest user from the database for upsert
+            const dbUser = await this.usersRepository.findOne({ where: { userId } });
+            if (!dbUser) return null;
+            const customFields = await this.getFilteredCustomFields(userId);
+            let formattedDob: string | null = null;
+            if (dbUser.dob instanceof Date) {
+              formattedDob = dbUser.dob.toISOString();
+            } else if (typeof dbUser.dob === 'string') {
+              formattedDob = dbUser.dob;
+            }
+            return {
+              userId: dbUser.userId,
+              profile: {
+                userId: dbUser.userId,
+                username: dbUser.username,
+                firstName: dbUser.firstName,
+                lastName: dbUser.lastName,
+                middleName: dbUser.middleName || '',
+                email: dbUser.email || '',
+                mobile: dbUser.mobile?.toString() || '',
+                mobile_country_code: dbUser.mobile_country_code || '',
+                dob: formattedDob,
+                gender: dbUser.gender,
+                address: dbUser.address || '',
+                district: dbUser.district || '',
+                state: dbUser.state || '',
+                pincode: dbUser.pincode || '',
+                status: dbUser.status,
+                customFields,
+              },
+              applications: [],
+              courses: [],
+              createdAt: dbUser.createdAt ? dbUser.createdAt.toISOString() : new Date().toISOString(),
+              updatedAt: dbUser.updatedAt ? dbUser.updatedAt.toISOString() : new Date().toISOString(),
+            };
+          }
+        );
+      }
+    } catch (error) {
+      LoggerUtil.error('Failed to update user profile in Elasticsearch', error);
     }
   }
 }
