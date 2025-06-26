@@ -1636,6 +1636,7 @@ export class PostgresUserService implements IServicelocator {
     user.mobile_country_code = userDto?.mobile_country_code;
     user.createdBy = userDto?.createdBy ?? null;
     user.updatedBy = userDto?.updatedBy ?? null;
+    user.country = userDto?.country || null;
 
     // Handle SSO-specific fields
     if ('provider' in userDto) {
@@ -2740,19 +2741,27 @@ export class PostgresUserService implements IServicelocator {
    * This ensures profile customFields only includes fields NOT used in any form submission.
    */
   private async getFilteredCustomFields(userId: string): Promise<any[]> {
-    let customFields = await this.fieldsService.getUserCustomFieldDetails(userId);
-    
+    let customFields = await this.fieldsService.getUserCustomFieldDetails(
+      userId
+    );
+
     const formSubmissions = await this.fieldsValueRepository.manager
       .getRepository('FormSubmission')
       .find({ where: { itemId: userId }, select: ['formId'] });
-      
+
     const allFormFieldIds = new Set<string>();
     for (const submission of formSubmissions) {
       try {
-        const formRepo = this.fieldsValueRepository.manager.getRepository('Form');
-        const form = await formRepo.findOne({ where: { formid: submission.formId } });
+        const formRepo =
+          this.fieldsValueRepository.manager.getRepository('Form');
+        const form = await formRepo.findOne({
+          where: { formid: submission.formId },
+        });
         const fieldsObj = form?.fields ? (form.fields as any) : null;
-        if (Array.isArray(fieldsObj?.result) && fieldsObj.result[0]?.schema?.properties) {
+        if (
+          Array.isArray(fieldsObj?.result) &&
+          fieldsObj.result[0]?.schema?.properties
+        ) {
           const schema = fieldsObj.result[0].schema.properties;
           for (const pageSchema of Object.values(schema)) {
             const fieldProps = (pageSchema as any).properties || {};
@@ -2766,8 +2775,8 @@ export class PostgresUserService implements IServicelocator {
         // Silent catch is acceptable here for optional filtering
       }
     }
-    
-    return customFields.filter(f => !allFormFieldIds.has(f.fieldId));
+
+    return customFields.filter((f) => !allFormFieldIds.has(f.fieldId));
   }
 
   /**
@@ -2812,7 +2821,9 @@ export class PostgresUserService implements IServicelocator {
           profile,
           async (userId: string) => {
             // Fetch the latest user from the database for upsert
-            const dbUser = await this.usersRepository.findOne({ where: { userId } });
+            const dbUser = await this.usersRepository.findOne({
+              where: { userId },
+            });
             if (!dbUser) return null;
             const customFields = await this.getFilteredCustomFields(userId);
             let formattedDob: string | null = null;
@@ -2843,8 +2854,12 @@ export class PostgresUserService implements IServicelocator {
               },
               applications: [],
               courses: [],
-              createdAt: dbUser.createdAt ? dbUser.createdAt.toISOString() : new Date().toISOString(),
-              updatedAt: dbUser.updatedAt ? dbUser.updatedAt.toISOString() : new Date().toISOString(),
+              createdAt: dbUser.createdAt
+                ? dbUser.createdAt.toISOString()
+                : new Date().toISOString(),
+              updatedAt: dbUser.updatedAt
+                ? dbUser.updatedAt.toISOString()
+                : new Date().toISOString(),
             };
           }
         );
