@@ -27,9 +27,31 @@ export class ElasticsearchService {
 
   constructor(private readonly configService: ConfigService) {
     const node =
-      this.configService.get<string>('ELASTICSEARCH_HOST') ??
+      process.env.ELASTICSEARCH_HOST ??
       'http://localhost:9200';
+    this.logger.log(`Attempting to connect to Elasticsearch host: ${node}`);
     this.client = new Client({ node });
+
+    // Listen for connection events
+    this.client.diagnostic.on('response', (err, result) => {
+      if (err) {
+        this.logger.error('Elasticsearch connection error:', err);
+      } else if (result && result.meta && result.meta.connection) {
+        this.logger.log(
+          `Elasticsearch host ${result.meta.connection.url.href} responded with status ${result.statusCode}`
+        );
+      }
+    });
+
+    // Initial ping
+    this.client
+      .ping()
+      .then(() => {
+        this.logger.log(`Successfully connected to Elasticsearch host: ${node}`);
+      })
+      .catch((error) => {
+        this.logger.error(`Failed to connect to Elasticsearch host: ${node}`, error);
+      });
   }
 
   async initialize(indexName: string, mappings: any) {
