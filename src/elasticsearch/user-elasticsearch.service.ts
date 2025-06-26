@@ -167,8 +167,8 @@ export class UserElasticsearchService {
           email: user.profile.email,
           mobile: user.profile.mobile,
           mobile_country_code: user.profile.mobile_country_code,
-          dob: user.profile.dob,
           gender: user.profile.gender,
+          dob: user.profile.dob,
           address: user.profile.address,
           district: user.profile.district,
           state: user.profile.state,
@@ -299,24 +299,95 @@ export class UserElasticsearchService {
         },
       };
 
-      // Add text search
+      // Add text search with partial matching support
       if (query.q) {
         if (typeof query.q !== 'string') {
           throw new Error('Search query must be a string');
         }
 
-        searchQuery.bool.must.push({
-          multi_match: {
-            query: query.q,
-            fields: [
-              'profile.firstName^2',
-              'profile.lastName^2',
-              'profile.email',
-              'profile.username',
-            ],
-            fuzziness: 'AUTO',
-          },
-        });
+        const searchTerm = query.q.trim();
+        if (searchTerm.length > 0) {
+          // Create a bool query for the search term with multiple matching strategies
+          const textSearchQuery = {
+            bool: {
+              should: [
+                // Prefix matching for partial names (e.g., "k" matches "kalavathi")
+                {
+                  prefix: {
+                    'profile.firstName': {
+                      value: searchTerm.toLowerCase(),
+                      boost: 3.0
+                    }
+                  }
+                },
+                {
+                  prefix: {
+                    'profile.lastName': {
+                      value: searchTerm.toLowerCase(),
+                      boost: 3.0
+                    }
+                  }
+                },
+                // Wildcard matching for more flexible partial matching
+                {
+                  wildcard: {
+                    'profile.firstName': {
+                      value: `*${searchTerm.toLowerCase()}*`,
+                      boost: 2.0
+                    }
+                  }
+                },
+                {
+                  wildcard: {
+                    'profile.lastName': {
+                      value: `*${searchTerm.toLowerCase()}*`,
+                      boost: 2.0
+                    }
+                  }
+                },
+                // Exact match for email and username
+                {
+                  term: {
+                    'profile.email': {
+                      value: searchTerm.toLowerCase(),
+                      boost: 4.0
+                    }
+                  }
+                },
+                {
+                  term: {
+                    'profile.username': {
+                      value: searchTerm.toLowerCase(),
+                      boost: 4.0
+                    }
+                  }
+                },
+                // Fuzzy matching for typos and variations
+                {
+                  fuzzy: {
+                    'profile.firstName': {
+                      value: searchTerm,
+                      fuzziness: 'AUTO',
+                      boost: 1.0
+                    }
+                  }
+                },
+                {
+                  fuzzy: {
+                    'profile.lastName': {
+                      value: searchTerm,
+                      fuzziness: 'AUTO',
+                      boost: 1.0
+                    }
+                  }
+                }
+              ],
+              minimum_should_match: 1
+            }
+          };
+
+          searchQuery.bool.must.push(textSearchQuery);
+        }
       }
 
       // Filters

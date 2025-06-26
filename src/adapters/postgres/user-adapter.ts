@@ -2736,40 +2736,48 @@ export class PostgresUserService implements IServicelocator {
   }
 
   /**
+   * Get custom fields for a user, filtered to exclude fields that are part of form schemas.
+   * This ensures profile customFields only includes fields NOT used in any form submission.
+   */
+  private async getFilteredCustomFields(userId: string): Promise<any[]> {
+    let customFields = await this.fieldsService.getUserCustomFieldDetails(userId);
+    
+    const formSubmissions = await this.fieldsValueRepository.manager
+      .getRepository('FormSubmission')
+      .find({ where: { itemId: userId }, select: ['formId'] });
+      
+    const allFormFieldIds = new Set<string>();
+    for (const submission of formSubmissions) {
+      try {
+        const formRepo = this.fieldsValueRepository.manager.getRepository('Form');
+        const form = await formRepo.findOne({ where: { formid: submission.formId } });
+        const fieldsObj = form?.fields ? (form.fields as any) : null;
+        if (Array.isArray(fieldsObj?.result) && fieldsObj.result[0]?.schema?.properties) {
+          const schema = fieldsObj.result[0].schema.properties;
+          for (const pageSchema of Object.values(schema)) {
+            const fieldProps = (pageSchema as any).properties || {};
+            for (const fieldSchema of Object.values(fieldProps)) {
+              const fieldId = (fieldSchema as any).fieldId;
+              if (fieldId) allFormFieldIds.add(fieldId);
+            }
+          }
+        }
+      } catch (e) {
+        // Silent catch is acceptable here for optional filtering
+      }
+    }
+    
+    return customFields.filter(f => !allFormFieldIds.has(f.fieldId));
+  }
+
+  /**
    * Sync user profile to Elasticsearch.
    * This will upsert (update or create) the user document in Elasticsearch.
    * If the document is missing, it will fetch the user from the database and create it.
    */
   private async syncUserToElasticsearch(user: User) {
     try {
-      let customFields = await this.fieldsService.getUserCustomFieldDetails(
-        user.userId
-      );
-
-      // Filter out customFields that are part of any form schema for this user
-      // This ensures profile customFields only includes fields NOT used in any form submission
-      // (same logic as buildUserDocumentForElasticsearch)
-      const formSubmissions = await this.fieldsValueRepository.manager.getRepository('FormSubmission').find({ where: { itemId: user.userId } });
-      const allFormFieldIds = new Set<string>();
-      for (const submission of formSubmissions) {
-        try {
-          // Try to get the form schema for this submission
-          const formRepo = this.fieldsValueRepository.manager.getRepository('Form');
-          const form = await formRepo.findOne({ where: { formid: submission.formId } });
-          const fieldsObj = form && form.fields ? (form.fields as any) : null;
-          if (Array.isArray(fieldsObj?.result) && fieldsObj.result[0]?.schema?.properties) {
-            const schema = fieldsObj.result[0].schema.properties;
-            for (const pageSchema of Object.values(schema)) {
-              const fieldProps = (pageSchema as any).properties || {};
-              for (const fieldSchema of Object.values(fieldProps)) {
-                const fieldId = (fieldSchema as any).fieldId;
-                if (fieldId) allFormFieldIds.add(fieldId);
-              }
-            }
-          }
-        } catch (e) {}
-      }
-      customFields = customFields.filter(f => !allFormFieldIds.has(f.fieldId));
+      const customFields = await this.getFilteredCustomFields(user.userId);
 
       let formattedDob: string | null = null;
       if (user.dob instanceof Date) {
@@ -2806,28 +2814,7 @@ export class PostgresUserService implements IServicelocator {
             // Fetch the latest user from the database for upsert
             const dbUser = await this.usersRepository.findOne({ where: { userId } });
             if (!dbUser) return null;
-            let customFields = await this.fieldsService.getUserCustomFieldDetails(userId);
-            // Repeat the filtering for upsert callback
-            const formSubmissions = await this.fieldsValueRepository.manager.getRepository('FormSubmission').find({ where: { itemId: userId } });
-            const allFormFieldIds = new Set<string>();
-            for (const submission of formSubmissions) {
-              try {
-                const formRepo = this.fieldsValueRepository.manager.getRepository('Form');
-                const form = await formRepo.findOne({ where: { formid: submission.formId } });
-                const fieldsObj = form && form.fields ? (form.fields as any) : null;
-                if (Array.isArray(fieldsObj?.result) && fieldsObj.result[0]?.schema?.properties) {
-                  const schema = fieldsObj.result[0].schema.properties;
-                  for (const pageSchema of Object.values(schema)) {
-                    const fieldProps = (pageSchema as any).properties || {};
-                    for (const fieldSchema of Object.values(fieldProps)) {
-                      const fieldId = (fieldSchema as any).fieldId;
-                      if (fieldId) allFormFieldIds.add(fieldId);
-                    }
-                  }
-                }
-              } catch (e) {}
-            }
-            customFields = customFields.filter(f => !allFormFieldIds.has(f.fieldId));
+            const customFields = await this.getFilteredCustomFields(userId);
             let formattedDob: string | null = null;
             if (dbUser.dob instanceof Date) {
               formattedDob = dbUser.dob.toISOString();
