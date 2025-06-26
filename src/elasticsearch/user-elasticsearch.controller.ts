@@ -95,11 +95,12 @@ export class UserElasticsearchController {
     return null;
   }
 
-  @Get('search')
-  async searchUsers(@Query() query: any) {
+  @Post('search')
+  async searchUsers(@Body() body: any) {
     if (isElasticsearchEnabled()) {
-      return this.userElasticsearchService.searchUsers(query);
+      return this.userElasticsearchService.searchUsers(body);
     }
     return null;
   }
+
 }
