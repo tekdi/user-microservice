@@ -1,5 +1,5 @@
 export default {
-  MINIMUM_AGE: parseInt(process.env.MINIMUM_AGE, 10) || 16, // Default to 18 if not set
+  MINIMUM_AGE: parseInt(process.env.MINIMUM_AGE, 10) || 10, // Default to 18 if not set
 
   isUserOldEnough(dobString: string): boolean {
     const minimumAge = this.MINIMUM_AGE;
