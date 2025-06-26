@@ -1636,7 +1636,7 @@ export class PostgresUserService implements IServicelocator {
     user.mobile_country_code = userDto?.mobile_country_code;
     user.createdBy = userDto?.createdBy ?? null;
     user.updatedBy = userDto?.updatedBy ?? null;
-    user.country = userDto?.country || null;
+    user.country = userDto?.country ?? null;
 
     // Handle SSO-specific fields
     if ('provider' in userDto) {
