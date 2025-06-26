@@ -308,7 +308,7 @@ export class UserElasticsearchService {
    *   ver: '1.0',
    *   ts: <timestamp>,
    *   params: { ... },
-   *   responseCode: 201,
+   *   responseCode: 200,
    *   result: {
    *     data: [...],
    *     totalCount: <number>
@@ -327,6 +327,15 @@ export class UserElasticsearchService {
         throw new Error('Search query is required');
       }
       const { limit, offset, ...query } = body;
+
+      // Add validation for limit and offset
+      if (
+        (limit !== undefined && (isNaN(Number(limit)) || Number(limit) < 0)) ||
+        (offset !== undefined && (isNaN(Number(offset)) || Number(offset) < 0))
+      ) {
+        throw new Error('limit and offset must be positive numbers');
+      }
+
       const searchQuery = {
         bool: {
           must: [],
@@ -421,8 +430,8 @@ export class UserElasticsearchService {
           },
         });
       }
-      const size = limit ? Number(limit) : 10000;
-      const from = offset ? Number(offset) : 0;
+      const size = limit ? Math.min(Number(limit), 10000) : 100;
+      const from = offset ? Math.max(Number(offset), 0) : 0;
       logger.debug(`Elasticsearch query: ${JSON.stringify(searchQuery)}`);
       const esResult = await this.elasticsearchService.search(
         this.indexName,
