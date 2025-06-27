@@ -1,9 +1,10 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ElasticsearchService } from './elasticsearch.service';
 import { IUser, IApplication, ICourse } from './interfaces/user.interface';
 import { v4 as uuidv4 } from 'uuid';
+import { isElasticsearchEnabled } from '../common/utils/elasticsearch.util';
 @Injectable()
-export class UserElasticsearchService {
+export class UserElasticsearchService implements OnModuleInit {
   private readonly indexName = 'users';
   private readonly logger = new Logger(UserElasticsearchService.name);
   constructor(private readonly elasticsearchService: ElasticsearchService) {}
@@ -170,6 +171,7 @@ export class UserElasticsearchService {
           mobile_country_code: user.profile.mobile_country_code,
           gender: user.profile.gender,
           dob: user.profile.dob,
+          country:user.profile.country,
           address: user.profile.address,
           district: user.profile.district,
           state: user.profile.state,
@@ -449,6 +451,7 @@ export class UserElasticsearchService {
                 'pincode',
                 'gender',
                 'address',
+                'country'
               ].includes(field)
             ) {
               searchQuery.bool.filter.push({
@@ -568,6 +571,19 @@ export class UserElasticsearchService {
         }
       );
       // Format the response as required
+      let hits = esResult.hits || [];
+      // If cohortId filter is present, filter applications array in each user
+      const cohortIdFilter = (query.filters && query.filters.cohortId) || query.cohortId;
+      if (cohortIdFilter) {
+        hits = hits.map((hit: any) => {
+          if (hit._source && Array.isArray(hit._source.applications)) {
+            hit._source.applications = hit._source.applications.filter(
+              (app: any) => app.cohortId === cohortIdFilter
+            );
+          }
+          return hit;
+        });
+      }
       return {
         id: 'api.ES.Fetch',
         ver: '1.0',
@@ -581,7 +597,7 @@ export class UserElasticsearchService {
         },
         responseCode: 200,
         result: {
-          data: esResult.hits || [],
+          data: hits,
           totalCount: esResult.total?.value ?? esResult.total ?? 0,
         },
       };
@@ -909,6 +925,12 @@ export class UserElasticsearchService {
       throw new Error(
         `Failed to update application page in Elasticsearch: ${error.message}`
       );
+    }
+  }
+
+  async onModuleInit() {
+    if (isElasticsearchEnabled()) {
+      await this.initialize();
     }
   }
 }

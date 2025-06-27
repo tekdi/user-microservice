@@ -50,6 +50,7 @@ export interface IProfile {
   mobile_country_code: string;
   gender: string;
   dob: string;
+  country:string;
   address: string;
   district: string;
   state: string;
