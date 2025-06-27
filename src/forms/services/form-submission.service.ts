@@ -1611,6 +1611,7 @@ export class FormSubmissionService {
         mobile_country_code: user.mobile_country_code || '',
         gender: user.gender,
         dob: user.dob instanceof Date ? user.dob.toISOString() : (user.dob || ''),
+        country:user.country,
         address: user.address || '',
         district: user.district || '',
         state: user.state || '',

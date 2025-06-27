@@ -3,6 +3,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Client } from '@elastic/elasticsearch';
 import { ConfigService } from '@nestjs/config';
 import { IUser, IProfile } from './interfaces/user.interface';
+import { isElasticsearchEnabled } from '../common/utils/elasticsearch.util';
 
 interface SearchResponse {
   hits: {
@@ -26,32 +27,38 @@ export class ElasticsearchService {
   private readonly client: Client;
 
   constructor(private readonly configService: ConfigService) {
-    const node =
-      process.env.ELASTICSEARCH_HOST ??
-      'http://localhost:9200';
-    this.logger.log(`Attempting to connect to Elasticsearch host: ${node}`);
-    this.client = new Client({ node });
+    if (isElasticsearchEnabled()) {
+      const node =
+        process.env.ELASTICSEARCH_HOST ??
+        'http://localhost:9200';
+      this.logger.log(`Attempting to connect to Elasticsearch host: ${node}`);
+      this.client = new Client({ node });
 
-    // Listen for connection events
-    this.client.diagnostic.on('response', (err, result) => {
-      if (err) {
-        this.logger.error('Elasticsearch connection error:', err);
-      } else if (result && result.meta && result.meta.connection) {
-        this.logger.log(
-          `Elasticsearch host ${result.meta.connection.url.href} responded with status ${result.statusCode}`
-        );
-      }
-    });
-
-    // Initial ping
-    this.client
-      .ping()
-      .then(() => {
-        this.logger.log(`Successfully connected to Elasticsearch host: ${node}`);
-      })
-      .catch((error) => {
-        this.logger.error(`Failed to connect to Elasticsearch host: ${node}`, error);
+      // Listen for connection events
+      this.client.diagnostic.on('response', (err, result) => {
+        if (err) {
+          this.logger.error('Elasticsearch connection error:', err);
+        } else if (result && result.meta && result.meta.connection) {
+          this.logger.log(
+            `Elasticsearch host ${result.meta.connection.url.href} responded with status ${result.statusCode}`
+          );
+        }
       });
+
+      // Initial ping
+      this.client
+        .ping()
+        .then(() => {
+          this.logger.log(`Successfully connected to Elasticsearch host: ${node}`);
+        })
+        .catch((error) => {
+          this.logger.error(`Failed to connect to Elasticsearch host: ${node}`, error);
+        });
+    } else {
+      this.logger.log('Elasticsearch is disabled by USE_ELASTICSEARCH flag.');
+      // @ts-ignore
+      this.client = undefined;
+    }
   }
 
   async initialize(indexName: string, mappings: any) {
@@ -162,6 +169,8 @@ export class ElasticsearchService {
               mobile: source?.profile?.mobile || '',
               mobile_country_code: source?.profile?.mobile_country_code || '',
               gender: source?.profile?.gender || '',
+              dob:source?.profile?.dob || '',
+              country:source?.profile?.country || '',
               address: source?.profile?.address || '',
               district: source?.profile?.district || '',
               state: source?.profile?.state || '',
@@ -240,6 +249,7 @@ export class ElasticsearchService {
         mobile_country_code: '',
         gender: '',
         dob: null,
+        country:'',
         address: '',
         district: '',
         state: '',
