@@ -410,9 +410,17 @@ export class UserElasticsearchService {
             });
           }
           if (appFilters.cohortmemberstatus) {
-            appMust.push({
-              wildcard: { 'applications.cohortmemberstatus': `*${String(appFilters.cohortmemberstatus).toLowerCase()}*` },
-            });
+            if (Array.isArray(appFilters.cohortmemberstatus)) {
+              // Use terms query for multiple statuses
+              appMust.push({
+                terms: { 'applications.cohortmemberstatus': appFilters.cohortmemberstatus.map((v: string) => v.toLowerCase()) }
+              });
+            } else {
+              // Fallback to wildcard for single string
+              appMust.push({
+                wildcard: { 'applications.cohortmemberstatus': `*${String(appFilters.cohortmemberstatus).toLowerCase()}*` },
+              });
+            }
           }
           searchQuery.bool.filter.push({
             nested: {
