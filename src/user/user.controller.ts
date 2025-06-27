@@ -17,6 +17,7 @@ import {
   ParseUUIDPipe,
   UseFilters,
   BadRequestException,
+  UnauthorizedException,
 } from '@nestjs/common';
 
 import {
@@ -67,7 +68,7 @@ export interface UserData {
 export class UserController {
   constructor(
     private userAdapter: UserAdapter,
-    private recaptchaService: RecaptchaService
+    private readonly recaptchaService: RecaptchaService
   ) {}
 
   @UseFilters(new AllExceptionsFilter(APIID.USER_GET))
@@ -159,6 +160,13 @@ export class UserController {
         // Validate the reCAPTCHA token
         await this.recaptchaService.validateToken(userCreateDto.recaptchaToken);
       } catch (error) {
+        // Optional: Log the original error here for debugging (e.g., using a Logger service)
+
+        // Re-throw if it's already an HTTP exception (preserve original message and status)
+        if (error instanceof UnauthorizedException) {
+          throw new BadRequestException(error.message); // You can also rethrow it as-is
+        }
+
         throw new BadRequestException('reCAPTCHA validation failed');
       }
     }
