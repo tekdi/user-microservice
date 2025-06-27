@@ -142,13 +142,25 @@ export class UserController {
   ) {
     const academicYearId = headers['academicyearid'];
     // Only validate reCAPTCHA if any tenantCohortRoleMapping has the student role
-    const isStudent = Array.isArray(userCreateDto.tenantCohortRoleMapping) &&
+    const isStudent =
+      Array.isArray(userCreateDto.tenantCohortRoleMapping) &&
       userCreateDto.tenantCohortRoleMapping.some(
-        mapping => mapping.roleId === '493c04e2-a9db-47f2-b304-503da358d5f4'
+        (mapping) => mapping.roleId === '493c04e2-a9db-47f2-b304-503da358d5f4'
       );
+    // If the user is a student, validate the reCAPTCHA token
     if (isStudent) {
-      // Validate the reCAPTCHA token
-      await this.recaptchaService.validateToken(userCreateDto.recaptchaToken);
+      // Check if the reCAPTCHA token is provided
+      if (!userCreateDto.recaptchaToken) {
+        throw new BadRequestException(
+          'reCAPTCHA token is required for student registration'
+        );
+      }
+      try {
+        // Validate the reCAPTCHA token
+        await this.recaptchaService.validateToken(userCreateDto.recaptchaToken);
+      } catch (error) {
+        throw new BadRequestException('reCAPTCHA validation failed');
+      }
     }
     // Proceed with user creation
     return await this.userAdapter
