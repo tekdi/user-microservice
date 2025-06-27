@@ -827,6 +827,7 @@ export class PostgresUserService implements IServicelocator {
         'createdBy',
         'deviceId',
         'mobile_country_code',
+        'country',
       ],
     });
     if (!userDetails) {
