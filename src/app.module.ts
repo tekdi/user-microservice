@@ -25,6 +25,7 @@ import { TenantModule } from './tenant/tenant.module';
 import { AcademicyearsModule } from './academicyears/academicyears.module';
 import { CohortAcademicYearModule } from './cohortAcademicYear/cohortAcademicYear.module';
 import { storageConfig } from './config/storage.config';
+import { ElasticsearchModule } from './elasticsearch/elasticsearch.module';
 
 /**
  * Main Application Module
@@ -63,29 +64,26 @@ import { storageConfig } from './config/storage.config';
     // MulterModule.register({
     //   dest: "./uploads",
     // }),
-
-    // Feature modules
-    UserModule, // User management
-    CohortModule, // Cohort management
-    CohortMembersModule, // Cohort member operations (includes shortlisting evaluation)
-    AssignTenantModule, // Tenant assignment
-    FieldsModule, // Custom fields management
-    AuthModule, // Authentication
-    AuthRbacModule, // Authentication with RBAC
-    DatabaseModule, // Database connectivity
-    FormsModule, // Form management (required for shortlisting rules)
-    TenantModule, // Tenant management
-    AcademicyearsModule, // Academic year management
-    CohortAcademicYearModule, // Cohort-academic year mappings
+    UserModule,
+    CohortModule,
+    CohortMembersModule,
+    AssignTenantModule,
+    FieldsModule,
+    AuthModule,
+    AuthRbacModule,
+    DatabaseModule,
+    FormsModule,
+    TenantModule,
+    AcademicyearsModule,
+    CohortAcademicYearModule,
+    ElasticsearchModule,
   ],
-  controllers: [
-    AppController, // Main application controller
-  ],
+  controllers: [AppController],
   providers: [
-    AppService, // Main application service
-    HttpService, // HTTP service for external API calls
+    AppService,
+    HttpService,
     {
-      provide: 'STORAGE_CONFIG', // File storage configuration
+      provide: 'STORAGE_CONFIG',
       useValue: storageConfig,
     },
   ],

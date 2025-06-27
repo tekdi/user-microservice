@@ -224,4 +224,12 @@ export class UserCreateDto {
   })
   @Expose()
   mobile_country_code: string;
+
+  @ApiPropertyOptional({
+    type: String,
+    description: 'The Google reCAPTCHA token for student registration',
+  })
+  @Expose()
+  @IsOptional()
+  recaptchaToken?: string;
 }

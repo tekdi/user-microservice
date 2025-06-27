@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { CohortMembersController } from './cohortMembers.controller';
 import { HttpModule } from '@nestjs/axios';
 import { CohortMembersAdapter } from './cohortMembersadapter';
@@ -14,6 +14,7 @@ import { CohortAcademicYear } from 'src/cohortAcademicYear/entities/cohortAcadem
 import { PostgresAcademicYearService } from 'src/adapters/postgres/academicyears-adapter';
 import { AcademicYear } from 'src/academicyears/entities/academicyears-entity';
 import { Tenants } from 'src/userTenantMapping/entities/tenant.entity';
+import { ElasticsearchModule } from 'src/elasticsearch/elasticsearch.module';
 import { FormsModule } from 'src/forms/forms.module';
 import { CohortMembersCronService } from './cohortMembers-cron.service';
 
@@ -60,12 +61,10 @@ import { CohortMembersCronService } from './cohortMembers-cron.service';
       AcademicYear, // Academic year definitions
       Tenants, // Multi-tenant support
     ]),
-    HttpModule, // For external API calls (notification service)
-    PostgresModule, // Database adapter module
-    FormsModule, // Forms functionality for rule evaluation
-  ],
-  controllers: [
-    CohortMembersController, // REST API endpoints for cohort member operations
+    HttpModule,
+    PostgresModule,
+    ElasticsearchModule,
+    forwardRef(() => FormsModule),
   ],
   providers: [
     CohortMembersAdapter, // Service locator for database adapters
