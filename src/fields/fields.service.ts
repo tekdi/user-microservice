@@ -15,6 +15,7 @@ import APIResponse from 'src/utils/response';
 import { log } from 'util';
 import { ErrorResponseTypeOrm } from 'src/error-response-typeorm';
 import { FieldValueConverter } from 'src/utils/field-value-converter';
+import { FieldValue, Field } from 'src/storage/interfaces/field-operations.interface';
 
 @Injectable()
 export class FieldsService {
@@ -442,14 +443,82 @@ export class FieldsService {
     return fieldResponse;
   }
 
-  async getField(fieldId: string): Promise<Fields> {
-    return this.fieldsRepository.findOne({ where: { fieldId } });
+  async getField(fieldId: string): Promise<Field | null> {
+    const field = await this.fieldsRepository.findOne({ where: { fieldId } });
+    
+    if (!field) {
+      return null;
+    }
+    
+    // Convert Fields entity to Field interface
+    return {
+      fieldId: field.fieldId,
+      name: field.name,
+      label: field.label,
+      type: field.type,
+      context: field.context,
+      state: field.state,
+      contextType: field.contextType,
+      fieldParams: field.fieldParams,
+      required: field.required,
+      metadata: field.metadata
+    };
   }
 
-  async getFieldValue(fieldId: string, itemId: string): Promise<FieldValues> {
-    return this.fieldsValuesRepository.findOne({ 
+  async getFieldValue(fieldId: string, itemId: string): Promise<FieldValue | null> {
+    const fieldValue = await this.fieldsValuesRepository.findOne({ 
       where: { fieldId: fieldId, itemId: itemId } 
     });
+    
+    if (!fieldValue) {
+      return null;
+    }
+    
+    // Convert FieldValues entity to FieldValue interface
+    return {
+      fieldValuesId: fieldValue.fieldValuesId,
+      value: fieldValue.value,
+      itemId: fieldValue.itemId,
+      fieldId: fieldValue.fieldId,
+      fileValue: fieldValue.fileValue,
+      textValue: fieldValue.textValue,
+      numberValue: fieldValue.numberValue,
+      calendarValue: fieldValue.calendarValue,
+      dropdownValue: fieldValue.dropdownValue,
+      radioValue: fieldValue.radioValue,
+      checkboxValue: fieldValue.checkboxValue,
+      textareaValue: fieldValue.textareaValue,
+      createdAt: fieldValue.createdAt,
+      updatedAt: fieldValue.updatedAt,
+      createdBy: fieldValue.createdBy,
+      updatedBy: fieldValue.updatedBy
+    };
+  }
+
+  async getFieldValuesByFieldId(fieldId: string): Promise<FieldValue[]> {
+    const fieldValues = await this.fieldsValuesRepository.find({ 
+      where: { fieldId: fieldId } 
+    });
+    
+    // Convert FieldValues entities to FieldValue interface
+    return fieldValues.map(fv => ({
+      fieldValuesId: fv.fieldValuesId,
+      value: fv.value,
+      itemId: fv.itemId,
+      fieldId: fv.fieldId,
+      fileValue: fv.fileValue,
+      textValue: fv.textValue,
+      numberValue: fv.numberValue,
+      calendarValue: fv.calendarValue,
+      dropdownValue: fv.dropdownValue,
+      radioValue: fv.radioValue,
+      checkboxValue: fv.checkboxValue,
+      textareaValue: fv.textareaValue,
+      createdAt: fv.createdAt,
+      updatedAt: fv.updatedAt,
+      createdBy: fv.createdBy,
+      updatedBy: fv.updatedBy
+    }));
   }
 
   async updateFieldValue(data: {

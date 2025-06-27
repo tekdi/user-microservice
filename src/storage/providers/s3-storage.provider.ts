@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { StorageProvider } from '../interfaces/storage.provider';
-import { S3Client, PutObjectCommand, DeleteObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, DeleteObjectCommand, HeadObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { ConfigService } from '@nestjs/config';
 import { v4 as uuidv4 } from 'uuid';
@@ -312,6 +312,62 @@ export class S3StorageProvider implements StorageProvider {
     } catch (error) {
       console.log(`Error verifying file ${key}:`, error);
       return { valid: false, deleted: false, reason: error.message };
+    }
+  }
+
+  /**
+   * Downloads a file from S3.
+   * @param filePath - The S3 key of the file to download
+   * @returns Promise resolving to file buffer and metadata
+   */
+  async download(filePath: string): Promise<{ buffer: Buffer; contentType: string; originalName: string; size: number }> {
+    try {
+      // First, get file metadata to check if it exists and get content type
+      const headCommand = new HeadObjectCommand({
+        Bucket: this.bucket,
+        Key: filePath,
+      });
+      
+      const headResult = await this.s3Client.send(headCommand);
+      
+      // Get the file content
+      const getCommand = new GetObjectCommand({
+        Bucket: this.bucket,
+        Key: filePath,
+      });
+      
+      const getResult = await this.s3Client.send(getCommand);
+      
+      if (!getResult.Body) {
+        throw new Error('File body is empty');
+      }
+      
+      // Convert stream to buffer
+      const chunks: Uint8Array[] = [];
+      const stream = getResult.Body as any;
+      
+      for await (const chunk of stream) {
+        chunks.push(chunk);
+      }
+      
+      const buffer = Buffer.concat(chunks);
+      
+      // Extract original filename from metadata or use the key
+      const originalName = headResult.Metadata?.originalFileName || 
+                          path.basename(filePath) || 
+                          'downloaded-file';
+      
+      return {
+        buffer,
+        contentType: headResult.ContentType || 'application/octet-stream',
+        originalName,
+        size: buffer.length
+      };
+    } catch (error) {
+      if (error.name === 'NoSuchKey') {
+        throw new Error('File not found in S3');
+      }
+      throw new Error(`Failed to download file: ${error.message}`);
     }
   }
 } 

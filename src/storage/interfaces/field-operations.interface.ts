@@ -78,6 +78,13 @@ export interface IFieldOperations {
   getFieldValue(fieldId: string, itemId: string): Promise<FieldValue | null>;
 
   /**
+   * Retrieves field values by field ID only (for admin access).
+   * @param fieldId - The field ID
+   * @returns Promise resolving to array of field values or empty array if not found
+   */
+  getFieldValuesByFieldId(fieldId: string): Promise<FieldValue[]>;
+
+  /**
    * Deletes a field value from the database.
    * @param fieldId - The field ID
    * @param itemId - The item ID (usually user ID)

@@ -6,11 +6,15 @@ import { LocalStorageProvider } from './providers/local-storage.provider';
 import { S3StorageProvider } from './providers/s3-storage.provider';
 import { FileUploadService } from './file-upload.service';
 import { FieldOperationsModule } from '../fields/field-operations.module';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { UserRoleMapping } from '../rbac/assign-role/entities/assign-role.entity';
+import { Role } from '../rbac/role/entities/role.entity';
 
 @Module({
   imports: [
     ConfigModule,
-    FieldOperationsModule
+    FieldOperationsModule,
+    TypeOrmModule.forFeature([UserRoleMapping, Role])
   ],
   providers: [
     StorageConfigService,

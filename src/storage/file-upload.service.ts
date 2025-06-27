@@ -9,6 +9,10 @@ import { HeadObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { FileTypeMapper } from '../utils/file-type-mapper';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { UserRoleMapping } from '../rbac/assign-role/entities/assign-role.entity';
+import { Role } from '../rbac/role/entities/role.entity';
 
 /**
  * File Upload Service
@@ -37,8 +41,40 @@ export class FileUploadService {
   constructor(
     private readonly storageConfig: StorageConfigService,
     @Inject('FIELD_OPERATIONS')
-    private readonly fieldOperations: IFieldOperations
+    private readonly fieldOperations: IFieldOperations,
+    @InjectRepository(UserRoleMapping)
+    private userRoleMappingRepository: Repository<UserRoleMapping>,
+    @InjectRepository(Role)
+    private roleRepository: Repository<Role>
   ) {}
+
+  /**
+   * Get user role from database
+   * @param userId - The user ID to get role for
+   * @returns User role or null if not found
+   */
+  private async getUserRole(userId: string): Promise<string | null> {
+    try {
+      // Get user role mapping
+      const userRoleMapping = await this.userRoleMappingRepository.findOne({
+        where: { userId: userId }
+      });
+
+      if (!userRoleMapping) {
+        return null;
+      }
+
+      // Get role details
+      const role = await this.roleRepository.findOne({
+        where: { roleId: userRoleMapping.roleId },
+        select: ['title', 'code']
+      });
+
+      return role ? role.title : null;
+    } catch (error) {
+      return null;
+    }
+  }
 
   /**
    * Upload a file directly to storage (local or S3)
@@ -426,6 +462,12 @@ export class FileUploadService {
         throw new FileValidationException('Field is not a file type');
       }
 
+      // Get user role from database (preferred) or fallback to JWT token
+      let actualUserRole = userRole;
+      if (!actualUserRole) {
+        actualUserRole = await this.getUserRole(userId);
+      }
+
       // Get the field value to find the file path
       // itemId represents the user who owns the file, so we look for fieldValue where itemId = userId
       const fieldValue = await this.fieldOperations.getFieldValue(fieldId, userId);
@@ -447,11 +489,6 @@ export class FileUploadService {
           const url = new URL(fieldValue.fileValue);
           // Remove the leading slash and get the path
           s3Key = url.pathname.substring(1);
-          
-          // Log for debugging
-          console.log('Original fileValue:', fieldValue.fileValue);
-          console.log('Extracted S3 key:', s3Key);
-          
         } catch (error) {
           throw new FileValidationException('Invalid file URL format');
         }
@@ -460,7 +497,8 @@ export class FileUploadService {
       // Authorization check
       const fileOwnerId = fieldValue.itemId; // itemId is the userId who owns the file
       const isOwner = fileOwnerId === userId;
-      const isAdmin = userRole === 'Admin' || userRole === 'admin';
+      const isAdmin = actualUserRole === 'Admin' || actualUserRole === 'admin' || 
+                     actualUserRole === 'ADMIN' || actualUserRole?.toLowerCase() === 'admin';
 
       if (!isOwner && !isAdmin) {
         throw new FileValidationException('You are not authorized to delete this file. Only the file owner or admin can delete it.');
@@ -492,6 +530,125 @@ export class FileUploadService {
         throw error;
       }
       throw new FileValidationException('Failed to delete file: ' + error.message);
+    }
+  }
+
+  /**
+   * Download a file with comprehensive authorization and validation.
+   *
+   * - Validates field and file record.
+   * - Only allows download by file owner or admin.
+   * - Verifies file exists in storage before download.
+   * - Returns file buffer and metadata for download.
+   *
+   * Authorization Rules:
+   * - Users can only download files where fieldValue.itemId === userId (file owner)
+   * - Admin users can download any file regardless of ownership
+   * - All other users are denied access
+   *
+   * @param fieldId - The field ID containing the file
+   * @param userId - The user ID requesting download
+   * @param userRole - Optional user role for admin authorization
+   * @returns File download result with buffer and metadata
+   * @throws FileValidationException if validation or authorization fails
+   */
+  async downloadFile(
+    fieldId: string,
+    userId: string,
+    userRole?: string
+  ): Promise<{ buffer: Buffer; contentType: string; originalName: string; size: number }> {
+    try {
+      // Get field configuration
+      const field = await this.fieldOperations.getField(fieldId);
+      if (!field) {
+        throw new FileValidationException('Field not found');
+      }
+
+      if (field.type !== 'file') {
+        throw new FileValidationException('Field type is not valid');
+      }
+
+      // Get user role from database (preferred) or fallback to JWT token
+      let actualUserRole = userRole;
+      if (!actualUserRole) {
+        actualUserRole = await this.getUserRole(userId);
+      }
+
+      // Check if user is admin - improved role detection
+      const isAdmin = actualUserRole === 'Admin' || actualUserRole === 'admin' || 
+                     actualUserRole === 'ADMIN' || actualUserRole?.toLowerCase() === 'admin';
+
+      // Get the field value to find the file path
+      let fieldValue;
+      
+      if (isAdmin) {
+        // For admin users, get all field values for this fieldId and use the first one
+        const fieldValues = await this.fieldOperations.getFieldValuesByFieldId(fieldId);
+        
+        if (fieldValues.length === 0) {
+          throw new FileValidationException('Field values does not found for this field');
+        }
+        // Use the first field value found (admin can access any file for this field)
+        fieldValue = fieldValues[0];
+      } else {
+        // For non-admin users, look for their own file
+        fieldValue = await this.fieldOperations.getFieldValue(fieldId, userId);
+        if (!fieldValue) {
+          throw new FileValidationException('Field values does not found for this field and user');
+        }
+      }
+
+      // Check if file path exists
+      if (!fieldValue.fileValue) {
+        throw new FileValidationException('File path not found in database');
+      }
+
+      // Authorization check for non-admin users
+      if (!isAdmin) {
+        const fileOwnerId = fieldValue.itemId; // itemId is the userId who owns the file
+        const isOwner = fileOwnerId === userId;
+
+        if (!isOwner) {
+          throw new FileValidationException('You are not authorized to download this file. Only the file owner or admin can download it.');
+        }
+      }
+
+      // Determine file path based on storage type
+      let filePath = fieldValue.fileValue;
+      
+      // For S3, fileValue contains the S3 key
+      // For local storage, fileValue contains the file path, fallback to value if not set
+      if (!filePath && fieldValue.value) {
+        filePath = fieldValue.value;
+      }
+
+      if (!filePath) {
+        throw new FileValidationException('File path not found in database');
+      }
+
+      // Extract S3 key from filePath if it's a full URL
+      let s3Key = filePath;
+      if (filePath.startsWith('http')) {
+        try {
+          const url = new URL(filePath);
+          // Remove the leading slash and get the path
+          s3Key = url.pathname.substring(1);
+        } catch (error) {
+          throw new FileValidationException('Invalid file URL format');
+        }
+      }
+
+      // Download file from storage
+      const storageProvider = this.storageConfig.getProvider();
+      const downloadResult = await storageProvider.download(s3Key);
+
+      return downloadResult;
+
+    } catch (error) {
+      if (error instanceof FileValidationException) {
+        throw error;
+      }
+      throw new FileValidationException('Failed to download file: ' + error.message);
     }
   }
 } 

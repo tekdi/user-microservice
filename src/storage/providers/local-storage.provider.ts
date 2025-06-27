@@ -105,4 +105,64 @@ export class LocalStorageProvider implements StorageProvider {
       key: filePath,
     };
   }
+
+  /**
+   * Downloads a file from local storage.
+   * @param filePath - The local file path to download
+   * @returns Promise resolving to file buffer and metadata
+   */
+  async download(filePath: string): Promise<{ buffer: Buffer; contentType: string; originalName: string; size: number }> {
+    try {
+      // Check if file exists
+      if (!fs.existsSync(filePath)) {
+        throw new Error('File not found in local storage');
+      }
+      
+      // Read file buffer
+      const buffer = await fs.promises.readFile(filePath);
+      
+      // Get file stats for size
+      const stats = await fs.promises.stat(filePath);
+      
+      // Determine content type based on file extension
+      const ext = path.extname(filePath).toLowerCase();
+      let contentType = 'application/octet-stream';
+      
+      // Simple content type mapping
+      const contentTypeMap: { [key: string]: string } = {
+        '.pdf': 'application/pdf',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.png': 'image/png',
+        '.gif': 'image/gif',
+        '.txt': 'text/plain',
+        '.doc': 'application/msword',
+        '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        '.xls': 'application/vnd.ms-excel',
+        '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        '.csv': 'text/csv',
+        '.zip': 'application/zip',
+        '.rar': 'application/x-rar-compressed'
+      };
+      
+      if (contentTypeMap[ext]) {
+        contentType = contentTypeMap[ext];
+      }
+      
+      // Extract original filename from path
+      const originalName = path.basename(filePath);
+      
+      return {
+        buffer,
+        contentType,
+        originalName,
+        size: stats.size
+      };
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        throw new Error('File not found in local storage');
+      }
+      throw new Error(`Failed to download file: ${error.message}`);
+    }
+  }
 } 
