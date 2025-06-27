@@ -108,19 +108,6 @@ export class PostgresUserService implements IServicelocator {
     this.otpDigits = this.configService.get<number>('OTP_DIGITS') || 6;
     this.smsKey = this.configService.get<string>('SMS_KEY');
   }
-  // async onModuleInit() {
-  //   if (isElasticsearchEnabled()) {
-  //     await this.initializeElasticsearch();
-  //   }
-  // }
-  // private async initializeElasticsearch() {
-  //   try {
-  //     await this.userElasticsearchService.initialize();
-  //     LoggerUtil.log('Elasticsearch index initialized successfully');
-  //   } catch (error) {
-  //     LoggerUtil.error('Failed to initialize Elasticsearch index', error);
-  //   }
-  // }
 
   public async sendPasswordResetLink(
     request: any,
