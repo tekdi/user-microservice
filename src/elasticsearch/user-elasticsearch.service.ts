@@ -171,7 +171,7 @@ export class UserElasticsearchService implements OnModuleInit {
           mobile_country_code: user.profile.mobile_country_code,
           gender: user.profile.gender,
           dob: user.profile.dob,
-          country:user.profile.country,
+          country: user.profile.country,
           address: user.profile.address,
           district: user.profile.district,
           state: user.profile.state,
@@ -451,7 +451,7 @@ export class UserElasticsearchService implements OnModuleInit {
                 'pincode',
                 'gender',
                 'address',
-                'country'
+                'country',
               ].includes(field)
             ) {
               searchQuery.bool.filter.push({
@@ -573,7 +573,7 @@ export class UserElasticsearchService implements OnModuleInit {
       // Format the response as required
       let hits = esResult.hits || [];
       // If cohortId filter is present, filter applications array in each user
-      const cohortIdFilter = (query.filters && query.filters.cohortId) || query.cohortId;
+      const cohortIdFilter = query.filters?.cohortId ?? query.cohortId;
       if (cohortIdFilter) {
         hits = hits.map((hit: any) => {
           if (hit._source && Array.isArray(hit._source.applications)) {

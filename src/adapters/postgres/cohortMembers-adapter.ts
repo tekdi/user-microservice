@@ -664,29 +664,42 @@ export class PostgresCohortMembersService {
       if (isElasticsearchEnabled()) {
         try {
           // First get the existing user document from Elasticsearch
-          const userDoc = await this.userElasticsearchService.getUser(cohortMembers.userId);
+          const userDoc = await this.userElasticsearchService.getUser(
+            cohortMembers.userId
+          );
           // Extract the application array if present
-          const source = userDoc && userDoc._source ? (userDoc._source as { applications?: any[] }) : undefined;
-          const existingApplication = source && Array.isArray(source.applications)
-            ? source.applications.find(app => app.cohortId === cohortMembers.cohortId)
-            : undefined;
+          const source =
+            userDoc && userDoc._source
+              ? (userDoc._source as { applications?: any[] })
+              : undefined;
+          const existingApplication =
+            source && Array.isArray(source.applications)
+              ? source.applications.find(
+                  (app) => app.cohortId === cohortMembers.cohortId
+                )
+              : undefined;
 
           if (!existingApplication) {
             // If application is missing, build and upsert the full user document (with progress pages)
-            const fullUserDoc = await this.formSubmissionService.buildUserDocumentForElasticsearch(cohortMembers.userId);
+            const fullUserDoc =
+              await this.formSubmissionService.buildUserDocumentForElasticsearch(
+                cohortMembers.userId
+              );
             if (fullUserDoc) {
               await this.userElasticsearchService.updateUser(
                 cohortMembers.userId,
                 { doc: fullUserDoc },
                 async (userId: string) => {
-                  return await this.formSubmissionService.buildUserDocumentForElasticsearch(userId);
+                  return await this.formSubmissionService.buildUserDocumentForElasticsearch(
+                    userId
+                  );
                 }
               );
             }
           } else {
             // Prepare the updated application data (minimal update)
             const updatedApplication = {
-              ...(existingApplication || {}),
+              ...(existingApplication ?? {}),
               cohortId: cohortMembers.cohortId,
               cohortmemberstatus: savedCohortMember.status ?? 'active',
             };
@@ -694,7 +707,9 @@ export class PostgresCohortMembersService {
               cohortMembers.userId,
               updatedApplication,
               async (userId: string) => {
-                return await this.formSubmissionService.buildUserDocumentForElasticsearch(userId);
+                return await this.formSubmissionService.buildUserDocumentForElasticsearch(
+                  userId
+                );
               }
             );
           }
@@ -884,29 +899,42 @@ export class PostgresCohortMembersService {
       if (isElasticsearchEnabled()) {
         try {
           // First get the existing user document from Elasticsearch
-          const userDoc = await this.userElasticsearchService.getUser(cohortMembershipToUpdate.userId);
+          const userDoc = await this.userElasticsearchService.getUser(
+            cohortMembershipToUpdate.userId
+          );
           // Extract the application array if present
-          const source = userDoc && userDoc._source ? (userDoc._source as { applications?: any[] }) : undefined;
-          const existingApplication = source && Array.isArray(source.applications)
-            ? source.applications.find(app => app.cohortId === cohortMembershipToUpdate.cohortId)
-            : undefined;
+          const source =
+            userDoc && userDoc._source
+              ? (userDoc._source as { applications?: any[] })
+              : undefined;
+          const existingApplication =
+            source && Array.isArray(source.applications)
+              ? source.applications.find(
+                  (app) => app.cohortId === cohortMembershipToUpdate.cohortId
+                )
+              : undefined;
 
           if (!existingApplication) {
             // If application is missing, build and upsert the full user document (with progress pages)
-            const fullUserDoc = await this.formSubmissionService.buildUserDocumentForElasticsearch(cohortMembershipToUpdate.userId);
+            const fullUserDoc =
+              await this.formSubmissionService.buildUserDocumentForElasticsearch(
+                cohortMembershipToUpdate.userId
+              );
             if (fullUserDoc) {
               await this.userElasticsearchService.updateUser(
                 cohortMembershipToUpdate.userId,
                 { doc: fullUserDoc },
                 async (userId: string) => {
-                  return await this.formSubmissionService.buildUserDocumentForElasticsearch(userId);
+                  return await this.formSubmissionService.buildUserDocumentForElasticsearch(
+                    userId
+                  );
                 }
               );
             }
           } else {
             // Prepare the updated application data (minimal update)
             const updatedApplication = {
-              ...(existingApplication || {}),
+              ...(existingApplication ?? {}),
               cohortId: cohortMembershipToUpdate.cohortId,
               cohortmemberstatus: result.status ?? 'active',
             };
@@ -914,7 +942,9 @@ export class PostgresCohortMembersService {
               cohortMembershipToUpdate.userId,
               updatedApplication,
               async (userId: string) => {
-                return await this.formSubmissionService.buildUserDocumentForElasticsearch(userId);
+                return await this.formSubmissionService.buildUserDocumentForElasticsearch(
+                  userId
+                );
               }
             );
           }
@@ -948,7 +978,7 @@ export class PostgresCohortMembersService {
             shortlisted: 'onStudentShortlisted',
             rejected: 'onStudentRejected',
           };
-          
+
           //This is notification payload required to send
 
           const notificationPayload = {
