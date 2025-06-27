@@ -352,14 +352,72 @@ export class UserElasticsearchService {
           const textSearchQuery = {
             bool: {
               should: [
-                { prefix: { 'profile.firstName': { value: searchTerm.toLowerCase(), boost: 3.0 } } },
-                { prefix: { 'profile.lastName': { value: searchTerm.toLowerCase(), boost: 3.0 } } },
-                { wildcard: { 'profile.firstName': { value: `*${searchTerm.toLowerCase()}*`, boost: 2.0 } } },
-                { wildcard: { 'profile.lastName': { value: `*${searchTerm.toLowerCase()}*`, boost: 2.0 } } },
-                { term: { 'profile.email': { value: searchTerm.toLowerCase(), boost: 4.0 } } },
-                { term: { 'profile.username': { value: searchTerm.toLowerCase(), boost: 4.0 } } },
-                { fuzzy: { 'profile.firstName': { value: searchTerm, fuzziness: 'AUTO', boost: 1.0 } } },
-                { fuzzy: { 'profile.lastName': { value: searchTerm, fuzziness: 'AUTO', boost: 1.0 } } },
+                {
+                  prefix: {
+                    'profile.firstName': {
+                      value: searchTerm.toLowerCase(),
+                      boost: 3.0,
+                    },
+                  },
+                },
+                {
+                  prefix: {
+                    'profile.lastName': {
+                      value: searchTerm.toLowerCase(),
+                      boost: 3.0,
+                    },
+                  },
+                },
+                {
+                  wildcard: {
+                    'profile.firstName': {
+                      value: `*${searchTerm.toLowerCase()}*`,
+                      boost: 2.0,
+                    },
+                  },
+                },
+                {
+                  wildcard: {
+                    'profile.lastName': {
+                      value: `*${searchTerm.toLowerCase()}*`,
+                      boost: 2.0,
+                    },
+                  },
+                },
+                {
+                  term: {
+                    'profile.email': {
+                      value: searchTerm.toLowerCase(),
+                      boost: 4.0,
+                    },
+                  },
+                },
+                {
+                  term: {
+                    'profile.username': {
+                      value: searchTerm.toLowerCase(),
+                      boost: 4.0,
+                    },
+                  },
+                },
+                {
+                  fuzzy: {
+                    'profile.firstName': {
+                      value: searchTerm,
+                      fuzziness: 'AUTO',
+                      boost: 1.0,
+                    },
+                  },
+                },
+                {
+                  fuzzy: {
+                    'profile.lastName': {
+                      value: searchTerm,
+                      fuzziness: 'AUTO',
+                      boost: 1.0,
+                    },
+                  },
+                },
               ],
               minimum_should_match: 1,
             },
@@ -378,11 +436,25 @@ export class UserElasticsearchService {
               return;
             }
             // For name fields, use wildcard for partial/case-insensitive match
-            if ([
-              'firstName', 'lastName', 'middleName', 'username', 'email', 'status', 'district', 'state', 'pincode', 'gender', 'address'
-            ].includes(field)) {
+            if (
+              [
+                'firstName',
+                'lastName',
+                'middleName',
+                'username',
+                'email',
+                'status',
+                'district',
+                'state',
+                'pincode',
+                'gender',
+                'address',
+              ].includes(field)
+            ) {
               searchQuery.bool.filter.push({
-                wildcard: { [`profile.${field}`]: `*${String(value).toLowerCase()}*` },
+                wildcard: {
+                  [`profile.${field}`]: `*${String(value).toLowerCase()}*`,
+                },
               });
             } else if (field.includes('.')) {
               // For nested fields (not applications)
@@ -390,13 +462,21 @@ export class UserElasticsearchService {
               searchQuery.bool.filter.push({
                 nested: {
                   path: nestedPath,
-                  query: { wildcard: { [`${nestedPath}.${nestedField}`]: `*${String(value).toLowerCase()}*` } },
+                  query: {
+                    wildcard: {
+                      [`${nestedPath}.${nestedField}`]: `*${String(
+                        value
+                      ).toLowerCase()}*`,
+                    },
+                  },
                 },
               });
             } else {
               // Default to wildcard for all other string fields
               searchQuery.bool.filter.push({
-                wildcard: { [`profile.${field}`]: `*${String(value).toLowerCase()}*` },
+                wildcard: {
+                  [`profile.${field}`]: `*${String(value).toLowerCase()}*`,
+                },
               });
             }
           }
@@ -406,19 +486,46 @@ export class UserElasticsearchService {
           const appMust: any[] = [];
           if (appFilters.cohortId) {
             appMust.push({
-              wildcard: { 'applications.cohortId': `*${String(appFilters.cohortId).toLowerCase()}*` },
+              wildcard: {
+                'applications.cohortId': `*${String(
+                  appFilters.cohortId
+                ).toLowerCase()}*`,
+              },
             });
           }
           if (appFilters.cohortmemberstatus) {
             if (Array.isArray(appFilters.cohortmemberstatus)) {
+              // Validate array contains only strings
+              const validStatuses = appFilters.cohortmemberstatus.filter(
+                (v) => typeof v === 'string' && v.trim().length > 0
+              );
+              if (validStatuses.length === 0) {
+                throw new Error(
+                  'cohortmemberstatus array must contain valid string values'
+                );
+              }
               // Use terms query for multiple statuses
               appMust.push({
-                terms: { 'applications.cohortmemberstatus': appFilters.cohortmemberstatus.map((v: string) => v.toLowerCase()) }
+                terms: {
+                  'applications.cohortmemberstatus': validStatuses.map((v) =>
+                    v.toLowerCase()
+                  ),
+                },
               });
             } else {
+              // Validate single value is a string
+              if (typeof appFilters.cohortmemberstatus !== 'string') {
+                throw new Error(
+                  'cohortmemberstatus must be a string or array of strings'
+                );
+              }
               // Fallback to wildcard for single string
               appMust.push({
-                wildcard: { 'applications.cohortmemberstatus': `*${String(appFilters.cohortmemberstatus).toLowerCase()}*` },
+                wildcard: {
+                  'applications.cohortmemberstatus': `*${String(
+                    appFilters.cohortmemberstatus
+                  ).toLowerCase()}*`,
+                },
               });
             }
           }
