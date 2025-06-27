@@ -2849,7 +2849,7 @@ export class PostgresUserService implements IServicelocator {
                 mobile_country_code: dbUser.mobile_country_code || '',
                 dob: formattedDob,
                 gender: dbUser.gender,
-                country: dbUser.country,
+                country: dbUser.country || '',
                 address: dbUser.address || '',
                 district: dbUser.district || '',
                 state: dbUser.state || '',
