@@ -1030,10 +1030,6 @@ export class PostgresCohortMembersService {
             });
           }
         } else {
-          console.log(
-            `⚠️ [TESTING] No email found for user ${cohortMembershipToUpdate.userId}`
-          );
-
           // Log email failure for missing email
           ShortlistingLogger.logEmailFailure({
             dateTime: new Date().toISOString(),
@@ -1828,6 +1824,11 @@ export class PostgresCohortMembersService {
     // Field ID for shortlist date - should be configured based on your field structure
     const shortlistDateFieldId = process.env.SHORTLIST_DATE_FIELD_ID;
 
+    if (!shortlistDateFieldId) {
+      throw new Error(
+        "SHORTLIST_DATE_FIELD_ID environment variable is required for shortlisting evaluation"
+      );
+    }
 
     const startTime = Date.now();
 

@@ -32,7 +32,10 @@ export class CohortMembersCronService {
    * NOTE: This internal cron job is DISABLED because an external cron job is being used
    * that calls the API endpoint directly with proper tenant/academic year/user context.
    */
-  // @Cron(CronExpression.EVERY_DAY_AT_2AM)
+
+  // Configuration flag to enable/disable internal cron job
+  private static readonly INTERNAL_CRON_ENABLED = false;
+  // @Cron(CronExpression.EVERY_DAY_AT_2AM, { disabled: !CohortMembersCronService.INTERNAL_CRON_ENABLED })
   async handleCohortMemberShortlistingEvaluation() {
     const startTime = Date.now();
 
