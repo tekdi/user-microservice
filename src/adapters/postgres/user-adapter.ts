@@ -790,6 +790,7 @@ export class PostgresUserService implements IServicelocator {
     T."collectionFramework",
     T."channelId",
     T.name AS tenantName, 
+    T.params,
     UTM."Id" AS userTenantMappingId
   FROM 
     public."UserTenantMapping" UTM
@@ -828,6 +829,7 @@ export class PostgresUserService implements IServicelocator {
           collectionFramework: data.collectionFramework,
           channelId: data.channelId,
           userTenantMappingId: data.usertenantmappingid,
+          params: data.params,
           roleId: roleId,
           roleName: roleName,
           // privileges: privileges,
@@ -2770,11 +2772,53 @@ export class PostgresUserService implements IServicelocator {
             // Get custom fields if any
             const customFields = await this.fieldsService.getCustomFieldDetails(userId, 'Users');
 
+            // Get cohort information for the user
+            let cohorts = [];
+            try {
+              // Query cohort members with cohort details using a comprehensive query
+              const cohortQuery = `
+                SELECT 
+                  cm."cohortId",
+                  cm."createdAt" as "joinedAt",
+                  cm."status" as "cohortMemberStatus",
+                  c."name" as "cohortName",
+                  c."type" as "cohortType",
+                  c."status" as "cohortStatus",
+                  c."tenantId"
+                FROM public."CohortMembers" cm
+                JOIN public."Cohort" c ON cm."cohortId" = c."cohortId"
+                WHERE cm."userId" = $1
+              `;
+              
+              const cohortResults = await this.usersRepository.query(cohortQuery, [userId]);
+              
+              if (cohortResults && cohortResults.length > 0) {
+                cohorts = cohortResults.map(result => ({
+                  cohortId: result.cohortId,
+                  joinedAt: result.joinedAt,
+                  tenantId: result.tenantId,
+                  cohortName: result.cohortName,
+                  cohortType: result.cohortType,
+                  cohortStatus: result.cohortStatus,
+                  cohortMemberStatus: result.cohortMemberStatus
+                }));
+              }
+            } catch (cohortError) {
+              LoggerUtil.error(
+                `Failed to fetch cohort data for Kafka event`,
+                `Error: ${cohortError.message}`,
+                apiId
+              );
+              // Don't fail the entire operation if cohort fetching fails
+              cohorts = [];
+            }
+
             // Build the complete data object
             userData = {
               ...user,
               tenantData: tenantRoleData,
               customFields: customFields || [],
+              cohorts: cohorts,
               eventTimestamp: new Date().toISOString()
             };
           }

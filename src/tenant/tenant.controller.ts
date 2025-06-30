@@ -60,7 +60,6 @@ export class TenantController {
         @GetUserId("userId", ParseUUIDPipe) userId: string
     ): Promise<Response> {
         const uploadedFiles = [];
-
         // Loop through each file and upload it
         if (files && files.length > 0) {
             for (const file of files) {
