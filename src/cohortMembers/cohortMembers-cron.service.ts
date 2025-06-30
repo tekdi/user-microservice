@@ -1,8 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
-import { PostgresCohortMembersService } from 'src/adapters/postgres/cohortMembers-adapter';
-import { Response } from 'express';
-import { LoggerUtil } from 'src/common/logger/LoggerUtil';
+import { Injectable, Logger } from "@nestjs/common";
+import { Cron, CronExpression } from "@nestjs/schedule";
+import { PostgresCohortMembersService } from "src/adapters/postgres/cohortMembers-adapter";
+import { LoggerUtil } from "src/common/logger/LoggerUtil";
 
 /**
  * Service responsible for automated cohort member shortlisting evaluation
@@ -29,37 +28,65 @@ export class CohortMembersCronService {
    * 4. Updates member status to 'shortlisted' or 'rejected'
    * 5. Sends email notifications based on results
    * 6. Logs failures for manual review
+   * 
+   * NOTE: This internal cron job is DISABLED because an external cron job is being used
+   * that calls the API endpoint directly with proper tenant/academic year/user context.
    */
-  @Cron(CronExpression.EVERY_DAY_AT_2AM)
+  // @Cron(CronExpression.EVERY_DAY_AT_2AM)
   async handleCohortMemberShortlistingEvaluation() {
     const startTime = Date.now();
 
     try {
       this.logger.log(
-        'Starting scheduled cohort member shortlisting evaluation'
+        "Starting scheduled cohort member shortlisting evaluation"
       );
 
-      // Get default tenant and academic year from environment variables
-      // These should be configured for the automated cron job
-      const defaultTenantId =
-        process.env.DEFAULT_TENANT_ID || '00000000-0000-0000-0000-000000000000';
-      const defaultAcademicYearId =
-        process.env.DEFAULT_ACADEMIC_YEAR_ID ||
-        '00000000-0000-0000-0000-000000000000';
+      // Get tenant and academic year from environment variables
+      // These must be configured for the automated cron job to work properly
+      const tenantId = process.env.DEFAULT_TENANT_ID;
+      const academicYearId = process.env.DEFAULT_ACADEMIC_YEAR_ID;
+      const systemUserId = process.env.SYSTEM_USER_ID;
 
-      // Create a mock response object for the service call
-      const mockResponse = {
-        status: (code: number) => mockResponse,
-        json: (data: any) => data,
-      } as Response;
+      // Validate that required environment variables are set
+      if (!tenantId) {
+        const error = "DEFAULT_TENANT_ID environment variable is not configured. Cron job cannot proceed.";
+        this.logger.error(error);
+        LoggerUtil.error(
+          "Scheduled shortlisting evaluation failed - missing configuration",
+          error,
+          "CohortMembersCron"
+        );
+        return;
+      }
 
-      // Call the evaluation service with default parameters
+      if (!academicYearId) {
+        const error = "DEFAULT_ACADEMIC_YEAR_ID environment variable is not configured. Cron job cannot proceed.";
+        this.logger.error(error);
+        LoggerUtil.error(
+          "Scheduled shortlisting evaluation failed - missing configuration",
+          error,
+          "CohortMembersCron"
+        );
+        return;
+      }
+
+      if (!systemUserId) {
+        const error = "SYSTEM_USER_ID environment variable is not configured. Cron job cannot proceed.";
+        this.logger.error(error);
+        LoggerUtil.error(
+          "Scheduled shortlisting evaluation failed - missing configuration",
+          error,
+          "CohortMembersCron"
+        );
+        return;
+      }
+
+      // Call the evaluation service with configured parameters using the internal method
       const result =
-        await this.cohortMembersService.evaluateCohortMemberShortlistingStatus(
-          defaultTenantId,
-          defaultAcademicYearId,
-          '00000000-0000-0000-0000-000000000001', // Default system user for scheduled jobs
-          mockResponse
+        await this.cohortMembersService.evaluateCohortMemberShortlistingStatusInternal(
+          tenantId,
+          academicYearId,
+          systemUserId // Use configured system user ID
         );
 
       const processingTime = Date.now() - startTime;
@@ -72,11 +99,11 @@ export class CohortMembersCronService {
 
       // Log success metrics for monitoring
       LoggerUtil.log(
-        'Scheduled shortlisting evaluation completed successfully',
+        "Scheduled shortlisting evaluation completed successfully",
         `Processing time: ${processingTime}ms, Result: ${JSON.stringify(
           result
         )}`,
-        'CohortMembersCron'
+        "CohortMembersCron"
       );
     } catch (error) {
       const processingTime = Date.now() - startTime;
@@ -88,9 +115,9 @@ export class CohortMembersCronService {
 
       // Log error for monitoring and alerting
       LoggerUtil.error(
-        'Scheduled shortlisting evaluation failed',
+        "Scheduled shortlisting evaluation failed",
         `Error: ${error.message}, Processing time: ${processingTime}ms`,
-        'CohortMembersCron'
+        "CohortMembersCron"
       );
     }
   }
@@ -102,27 +129,24 @@ export class CohortMembersCronService {
    * @param tenantId - The tenant ID for the evaluation
    * @param academicYearId - The academic year ID for the evaluation
    * @param userId - The user ID from the authenticated request
-   * @param res - Express response object
    * @returns Promise with evaluation results
    */
   async triggerShortlistingEvaluation(
     tenantId: string,
     academicYearId: string,
-    userId: string,
-    res: Response
+    userId: string
   ): Promise<any> {
     this.logger.log(
       `Manual trigger of shortlisting evaluation for tenant: ${tenantId}, academic year: ${academicYearId}, user: ${userId}`
     );
 
     try {
-      // Call the evaluation service with provided parameters
+      // Call the evaluation service with provided parameters using the internal method
       const result =
-        await this.cohortMembersService.evaluateCohortMemberShortlistingStatus(
+        await this.cohortMembersService.evaluateCohortMemberShortlistingStatusInternal(
           tenantId,
           academicYearId,
-          userId,
-          res
+          userId
         );
 
       this.logger.log(`Manual shortlisting evaluation completed successfully`);

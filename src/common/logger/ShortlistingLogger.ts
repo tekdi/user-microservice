@@ -1,7 +1,7 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import * as winston from 'winston';
-import { LoggerUtil } from './LoggerUtil';
+import * as fs from "fs";
+import * as path from "path";
+import * as winston from "winston";
+import { LoggerUtil } from "./LoggerUtil";
 
 /**
  * Interface defining the structure of a shortlisting failure log entry
@@ -26,9 +26,9 @@ export interface ShortlistingFailureLog {
  */
 export class ShortlistingLogger {
   /** Directory where log files are stored */
-  private static readonly LOG_DIR = 'logs';
+  private static readonly LOG_DIR = "logs";
   /** Name of the CSV file containing failure logs */
-  private static readonly FAILURE_LOG_FILE = 'shortlisting-failures.csv';
+  private static readonly FAILURE_LOG_FILE = "shortlisting-failures.csv";
   /** Winston logger instance for shortlisting operations */
   private static shortlistingLogger: winston.Logger;
 
@@ -37,16 +37,16 @@ export class ShortlistingLogger {
    * Creates a new logger if it doesn't exist
    */
   private static getShortlistingLogger(): winston.Logger {
-    if (!this.shortlistingLogger) {
+    if (!ShortlistingLogger.shortlistingLogger) {
       // Ensure logs directory exists
-      if (!fs.existsSync(this.LOG_DIR)) {
-        fs.mkdirSync(this.LOG_DIR, { recursive: true });
+      if (!fs.existsSync(ShortlistingLogger.LOG_DIR)) {
+        fs.mkdirSync(ShortlistingLogger.LOG_DIR, { recursive: true });
       }
 
       // Create date-based filename for today's shortlisting logs
-      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+      const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD format
       const shortlistingLogFile = path.join(
-        this.LOG_DIR,
+        ShortlistingLogger.LOG_DIR,
         `shortlisting-${today}.log`
       );
 
@@ -63,8 +63,8 @@ export class ShortlistingLogger {
         }
       );
 
-      this.shortlistingLogger = winston.createLogger({
-        level: 'info',
+      ShortlistingLogger.shortlistingLogger = winston.createLogger({
+        level: "info",
         format: winston.format.combine(
           winston.format.timestamp(),
           customFormat
@@ -73,12 +73,12 @@ export class ShortlistingLogger {
           new winston.transports.Console(),
           new winston.transports.File({
             filename: shortlistingLogFile,
-            level: 'info',
+            level: "info",
           }),
         ],
       });
     }
-    return this.shortlistingLogger;
+    return ShortlistingLogger.shortlistingLogger;
   }
 
   /**
@@ -92,9 +92,9 @@ export class ShortlistingLogger {
     message: string,
     context?: string,
     user?: string,
-    level: string = 'info'
+    level = "info"
   ) {
-    this.getShortlistingLogger().log({
+    ShortlistingLogger.getShortlistingLogger().log({
       level: level,
       message: message,
       context: context,
@@ -116,7 +116,7 @@ export class ShortlistingLogger {
     context?: string,
     user?: string
   ) {
-    this.getShortlistingLogger().error({
+    ShortlistingLogger.getShortlistingLogger().error({
       message: message,
       error: error,
       context: context,
@@ -131,17 +131,26 @@ export class ShortlistingLogger {
    */
   static initialize() {
     // Create logs directory if it doesn't exist
-    if (!fs.existsSync(this.LOG_DIR)) {
-      fs.mkdirSync(this.LOG_DIR, { recursive: true });
+    if (!fs.existsSync(ShortlistingLogger.LOG_DIR)) {
+      fs.mkdirSync(ShortlistingLogger.LOG_DIR, { recursive: true });
     }
 
     // Create CSV file with headers if it doesn't exist
-    const logFilePath = path.join(this.LOG_DIR, this.FAILURE_LOG_FILE);
+    const logFilePath = path.join(ShortlistingLogger.LOG_DIR, ShortlistingLogger.FAILURE_LOG_FILE);
     if (!fs.existsSync(logFilePath)) {
       const headers =
-        'Date and Time,Cohort Id,User Id,Email Sent Status,Reason for failure in detail\n';
+        "Date and Time,Cohort Id,User Id,Email Sent Status,Reason for failure in detail\n";
       fs.writeFileSync(logFilePath, headers);
     }
+  }
+
+  /**
+   * Escapes a value for CSV format by wrapping in quotes and doubling internal quotes
+   * @param value - The value to escape
+   * @returns Properly escaped CSV value
+   */
+  private static escapeCSV(value: string): string {
+    return `"${value.replace(/"/g, '""')}"`;
   }
 
   /**
@@ -151,27 +160,34 @@ export class ShortlistingLogger {
   static logFailure(failure: ShortlistingFailureLog) {
     try {
       // Ensure logging system is initialized
-      this.initialize();
+      ShortlistingLogger.initialize();
 
-      const logFilePath = path.join(this.LOG_DIR, this.FAILURE_LOG_FILE);
-      // Create CSV line with proper escaping for special characters
-      const csvLine = `"${failure.dateTime}","${failure.cohortId}","${failure.userId}","${failure.emailSentStatus}","${failure.failureReason}"\n`;
+      const logFilePath = path.join(ShortlistingLogger.LOG_DIR, ShortlistingLogger.FAILURE_LOG_FILE);
+      
+      // Create CSV line with proper escaping for all fields
+      const csvLine = [
+        ShortlistingLogger.escapeCSV(failure.dateTime),
+        ShortlistingLogger.escapeCSV(failure.cohortId),
+        ShortlistingLogger.escapeCSV(failure.userId),
+        ShortlistingLogger.escapeCSV(failure.emailSentStatus),
+        ShortlistingLogger.escapeCSV(failure.failureReason)
+      ].join(",") + "\n";
 
       // Append to CSV file
       fs.appendFileSync(logFilePath, csvLine);
 
       // Also log to the shortlisting logger for debugging and monitoring
-      this.logShortlistingError(
-        'Shortlisting evaluation failure',
+      ShortlistingLogger.logShortlistingError(
+        "Shortlisting evaluation failure",
         `Cohort: ${failure.cohortId}, User: ${failure.userId}, Email Status: ${failure.emailSentStatus}, Reason: ${failure.failureReason}`,
-        'ShortlistingEvaluation'
+        "ShortlistingEvaluation"
       );
     } catch (error) {
       // If CSV logging fails, still log to main logger
       LoggerUtil.error(
-        'Failed to write to shortlisting failure log',
+        "Failed to write to shortlisting failure log",
         error.message,
-        'ShortlistingLogger'
+        "ShortlistingLogger"
       );
     }
   }
@@ -181,7 +197,7 @@ export class ShortlistingLogger {
    * @returns Full path to the CSV log file
    */
   static getLogFilePath(): string {
-    return path.join(this.LOG_DIR, this.FAILURE_LOG_FILE);
+    return path.join(ShortlistingLogger.LOG_DIR, ShortlistingLogger.FAILURE_LOG_FILE);
   }
 
   /**
@@ -189,8 +205,8 @@ export class ShortlistingLogger {
    * @returns Full path to today's shortlisting log file
    */
   static getTodayShortlistingLogPath(): string {
-    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
-    return path.join(this.LOG_DIR, `shortlisting-${today}.log`);
+    const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD format
+    return path.join(ShortlistingLogger.LOG_DIR, `shortlisting-${today}.log`);
   }
 
   /**
@@ -198,7 +214,7 @@ export class ShortlistingLogger {
    * @returns True if the log file exists, false otherwise
    */
   static getLogFileExists(): boolean {
-    return fs.existsSync(this.getLogFilePath());
+    return fs.existsSync(ShortlistingLogger.getLogFilePath());
   }
 
   /**
@@ -207,8 +223,8 @@ export class ShortlistingLogger {
    * @returns Size of the log file in bytes, 0 if file doesn't exist
    */
   static getLogFileSize(): number {
-    if (this.getLogFileExists()) {
-      const stats = fs.statSync(this.getLogFilePath());
+    if (ShortlistingLogger.getLogFileExists()) {
+      const stats = fs.statSync(ShortlistingLogger.getLogFilePath());
       return stats.size;
     }
     return 0;
@@ -219,7 +235,7 @@ export class ShortlistingLogger {
    * @returns Size of today's shortlisting log file in bytes, 0 if file doesn't exist
    */
   static getTodayShortlistingLogSize(): number {
-    const logPath = this.getTodayShortlistingLogPath();
+    const logPath = ShortlistingLogger.getTodayShortlistingLogPath();
     if (fs.existsSync(logPath)) {
       const stats = fs.statSync(logPath);
       return stats.size;
@@ -237,18 +253,18 @@ export class ShortlistingLogger {
     dateTime: string;
     userId: string;
     email: string;
-    shortlistedStatus: 'shortlisted' | 'rejected';
+    shortlistedStatus: "shortlisted" | "rejected";
     failureReason: string;
     cohortId: string;
   }) {
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const today = new Date().toISOString().split("T")[0];
       const logFileName = `shortlisting-email-failed-${today}.csv`;
-      const logFilePath = path.join(this.LOG_DIR, logFileName);
+      const logFilePath = path.join(ShortlistingLogger.LOG_DIR, logFileName);
 
       // Create logs directory if it doesn't exist
-      if (!fs.existsSync(this.LOG_DIR)) {
-        fs.mkdirSync(this.LOG_DIR, { recursive: true });
+      if (!fs.existsSync(ShortlistingLogger.LOG_DIR)) {
+        fs.mkdirSync(ShortlistingLogger.LOG_DIR, { recursive: true });
       }
 
       // Check if file exists to determine if we need to write headers
@@ -256,29 +272,29 @@ export class ShortlistingLogger {
 
       // Prepare CSV line with proper comma delimiters
       const csvLine = [
-        `"${emailFailureData.dateTime}"`,
-        `"${emailFailureData.userId}"`,
-        `"${emailFailureData.email}"`,
-        `"${emailFailureData.shortlistedStatus}"`,
-        `"${emailFailureData.cohortId}"`,
-        `"${emailFailureData.failureReason.replace(/"/g, '""')}"`, // Escape quotes in reason
-      ].join(',');
+        ShortlistingLogger.escapeCSV(emailFailureData.dateTime),
+        ShortlistingLogger.escapeCSV(emailFailureData.userId),
+        ShortlistingLogger.escapeCSV(emailFailureData.email),
+        ShortlistingLogger.escapeCSV(emailFailureData.shortlistedStatus),
+        ShortlistingLogger.escapeCSV(emailFailureData.cohortId),
+        ShortlistingLogger.escapeCSV(emailFailureData.failureReason)
+      ].join(",");
 
       // Write to file (append mode)
       fs.appendFileSync(
         logFilePath,
         (fileExists
-          ? ''
-          : 'Date and time,userId,email,shortlisted status(shortlisted/rejected),cohortId,Email Failure reason\n') +
+          ? ""
+          : "Date and time,userId,email,shortlisted status(shortlisted/rejected),cohortId,Email Failure reason\n") +
           csvLine +
-          '\n'
+          "\n"
       );
 
       console.log(
         `📧 [EMAIL_FAILURE] Logged email failure for user ${emailFailureData.userId} in cohort ${emailFailureData.cohortId}: ${emailFailureData.failureReason}`
       );
     } catch (error) {
-      console.error('Error logging email failure:', error);
+      console.error("Error logging email failure:", error);
     }
   }
 
@@ -292,17 +308,17 @@ export class ShortlistingLogger {
     dateTime: string;
     userId: string;
     email: string;
-    shortlistedStatus: 'shortlisted' | 'rejected';
+    shortlistedStatus: "shortlisted" | "rejected";
     cohortId: string;
   }) {
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const today = new Date().toISOString().split("T")[0];
       const logFileName = `shortlisting-email-success-${today}.csv`;
-      const logFilePath = path.join(this.LOG_DIR, logFileName);
+      const logFilePath = path.join(ShortlistingLogger.LOG_DIR, logFileName);
 
       // Create logs directory if it doesn't exist
-      if (!fs.existsSync(this.LOG_DIR)) {
-        fs.mkdirSync(this.LOG_DIR, { recursive: true });
+      if (!fs.existsSync(ShortlistingLogger.LOG_DIR)) {
+        fs.mkdirSync(ShortlistingLogger.LOG_DIR, { recursive: true });
       }
 
       // Check if file exists to determine if we need to write headers
@@ -310,24 +326,24 @@ export class ShortlistingLogger {
 
       // Prepare CSV line with proper comma delimiters
       const csvLine = [
-        `"${emailSuccessData.dateTime}"`,
-        `"${emailSuccessData.userId}"`,
-        `"${emailSuccessData.email}"`,
-        `"${emailSuccessData.shortlistedStatus}"`,
-        `"${emailSuccessData.cohortId}"`,
-      ].join(',');
+        ShortlistingLogger.escapeCSV(emailSuccessData.dateTime),
+        ShortlistingLogger.escapeCSV(emailSuccessData.userId),
+        ShortlistingLogger.escapeCSV(emailSuccessData.email),
+        ShortlistingLogger.escapeCSV(emailSuccessData.shortlistedStatus),
+        ShortlistingLogger.escapeCSV(emailSuccessData.cohortId)
+      ].join(",");
 
       // Write to file (append mode)
       fs.appendFileSync(
         logFilePath,
         (fileExists
-          ? ''
-          : 'Date and time,userId,email,shortlisted status(shortlisted/rejected),cohortId\n') +
+          ? ""
+          : "Date and time,userId,email,shortlisted status(shortlisted/rejected),cohortId\n") +
           csvLine +
-          '\n'
+          "\n"
       );
     } catch (error) {
-      console.error('Error logging email success:', error);
+      console.error("Error logging email success:", error);
     }
   }
 }
