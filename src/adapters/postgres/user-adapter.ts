@@ -1,55 +1,55 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
-import { User } from '../../user/entities/user-entity';
-import { FieldValues } from 'src/fields/entities/fields-values.entity';
-import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
-import { UserCreateDto } from '../../user/dto/user-create.dto';
-import jwt_decode from 'jwt-decode';
+import { HttpStatus, Injectable } from "@nestjs/common";
+import { User } from "../../user/entities/user-entity";
+import { FieldValues } from "src/fields/entities/fields-values.entity";
+import { InjectRepository } from "@nestjs/typeorm";
+import { In, Repository } from "typeorm";
+import { UserCreateDto } from "../../user/dto/user-create.dto";
+import jwt_decode from "jwt-decode";
 import {
   getKeycloakAdminToken,
   createUserInKeyCloak,
   updateUserInKeyCloak,
   checkIfUsernameExistsInKeycloak,
   checkIfEmailExistsInKeycloak,
-} from '../../common/utils/keycloak.adapter.util';
-import { ErrorResponse } from 'src/error-response';
-import { SuccessResponse } from 'src/success-response';
-import { CohortMembers } from 'src/cohortMembers/entities/cohort-member.entity';
-import { isUUID } from 'class-validator';
-import { UserSearchDto } from 'src/user/dto/user-search.dto';
-import { UserTenantMapping } from 'src/userTenantMapping/entities/user-tenant-mapping.entity';
-import { UserRoleMapping } from 'src/rbac/assign-role/entities/assign-role.entity';
-import { Tenants } from 'src/userTenantMapping/entities/tenant.entity';
-import { Cohort } from 'src/cohort/entities/cohort.entity';
-import { Role } from 'src/rbac/role/entities/role.entity';
-import { UserData } from 'src/user/user.controller';
-import APIResponse from 'src/common/responses/response';
-import { Response, query } from 'express';
-import { APIID } from 'src/common/utils/api-id.config';
-import { IServicelocator } from '../userservicelocator';
-import { PostgresFieldsService } from './fields-adapter';
-import { PostgresRoleService } from './rbac/role-adapter';
-import { CustomFieldsValidation } from '@utils/custom-field-validation';
-import { NotificationRequest } from '@utils/notification.axios';
-import { JwtUtil } from '@utils/jwt-token';
-import { ConfigService } from '@nestjs/config';
-import { formatTime } from '@utils/formatTimeConversion';
-import { API_RESPONSES } from '@utils/response.messages';
-import { TokenExpiredError, JsonWebTokenError } from 'jsonwebtoken';
-import { CohortAcademicYearService } from './cohortAcademicYear-adapter';
-import { PostgresAcademicYearService } from './academicyears-adapter';
-import { LoggerUtil } from 'src/common/logger/LoggerUtil';
-import { AuthUtils } from '@utils/auth-util';
-import { OtpSendDTO } from 'src/user/dto/otpSend.dto';
-import { OtpVerifyDTO } from 'src/user/dto/otpVerify.dto';
-import { SendPasswordResetOTPDto } from 'src/user/dto/passwordReset.dto';
-import { ActionType, UserUpdateDTO } from 'src/user/dto/user-update.dto';
-import config from '../../common/config';
-import { CalendarField } from 'src/fields/fieldValidators/fieldTypeClasses';
-import { UserCreateSsoDto } from 'src/user/dto/user-create-sso.dto';
-import { UserElasticsearchService } from '../../elasticsearch/user-elasticsearch.service';
-import { IUser } from '../../elasticsearch/interfaces/user.interface';
-import { isElasticsearchEnabled } from 'src/common/utils/elasticsearch.util';
+} from "../../common/utils/keycloak.adapter.util";
+import { ErrorResponse } from "src/error-response";
+import { SuccessResponse } from "src/success-response";
+import { CohortMembers } from "src/cohortMembers/entities/cohort-member.entity";
+import { isUUID } from "class-validator";
+import { UserSearchDto } from "src/user/dto/user-search.dto";
+import { UserTenantMapping } from "src/userTenantMapping/entities/user-tenant-mapping.entity";
+import { UserRoleMapping } from "src/rbac/assign-role/entities/assign-role.entity";
+import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
+import { Cohort } from "src/cohort/entities/cohort.entity";
+import { Role } from "src/rbac/role/entities/role.entity";
+import { UserData } from "src/user/user.controller";
+import APIResponse from "src/common/responses/response";
+import { Response, query } from "express";
+import { APIID } from "src/common/utils/api-id.config";
+import { IServicelocator } from "../userservicelocator";
+import { PostgresFieldsService } from "./fields-adapter";
+import { PostgresRoleService } from "./rbac/role-adapter";
+import { CustomFieldsValidation } from "@utils/custom-field-validation";
+import { NotificationRequest } from "@utils/notification.axios";
+import { JwtUtil } from "@utils/jwt-token";
+import { ConfigService } from "@nestjs/config";
+import { formatTime } from "@utils/formatTimeConversion";
+import { API_RESPONSES } from "@utils/response.messages";
+import { TokenExpiredError, JsonWebTokenError } from "jsonwebtoken";
+import { CohortAcademicYearService } from "./cohortAcademicYear-adapter";
+import { PostgresAcademicYearService } from "./academicyears-adapter";
+import { LoggerUtil } from "src/common/logger/LoggerUtil";
+import { AuthUtils } from "@utils/auth-util";
+import { OtpSendDTO } from "src/user/dto/otpSend.dto";
+import { OtpVerifyDTO } from "src/user/dto/otpVerify.dto";
+import { SendPasswordResetOTPDto } from "src/user/dto/passwordReset.dto";
+import { ActionType, UserUpdateDTO } from "src/user/dto/user-update.dto";
+import config from "../../common/config";
+import { CalendarField } from "src/fields/fieldValidators/fieldTypeClasses";
+import { UserCreateSsoDto } from "src/user/dto/user-create-sso.dto";
+import { UserElasticsearchService } from "../../elasticsearch/user-elasticsearch.service";
+import { IUser } from "../../elasticsearch/interfaces/user.interface";
+import { isElasticsearchEnabled } from "src/common/utils/elasticsearch.util";
 
 interface UpdateField {
   userId: string; // Required
@@ -60,7 +60,7 @@ interface UpdateField {
 }
 @Injectable()
 export class PostgresUserService implements IServicelocator {
-  axios = require('axios');
+  axios = require("axios");
   jwt_password_reset_expires_In: any;
   jwt_secret: any;
   reset_frontEnd_url: any;
@@ -96,17 +96,17 @@ export class PostgresUserService implements IServicelocator {
     private readonly authUtils: AuthUtils,
     private readonly userElasticsearchService: UserElasticsearchService
   ) {
-    this.jwt_secret = this.configService.get<string>('RBAC_JWT_SECRET');
+    this.jwt_secret = this.configService.get<string>("RBAC_JWT_SECRET");
     this.jwt_password_reset_expires_In = this.configService.get<string>(
-      'PASSWORD_RESET_JWT_EXPIRES_IN'
+      "PASSWORD_RESET_JWT_EXPIRES_IN"
     );
     this.reset_frontEnd_url =
-      this.configService.get<string>('RESET_FRONTEND_URL');
+      this.configService.get<string>("RESET_FRONTEND_URL");
     this.reset_backEnd_url =
-      this.configService.get<string>('RESET_BACKEND_URL');
-    this.otpExpiry = this.configService.get<number>('OTP_EXPIRY') || 10; // default: 10 minutes
-    this.otpDigits = this.configService.get<number>('OTP_DIGITS') || 6;
-    this.smsKey = this.configService.get<string>('SMS_KEY');
+      this.configService.get<string>("RESET_BACKEND_URL");
+    this.otpExpiry = this.configService.get<number>("OTP_EXPIRY") || 10; // default: 10 minutes
+    this.otpDigits = this.configService.get<number>("OTP_DIGITS") || 6;
+    this.smsKey = this.configService.get<string>("SMS_KEY");
   }
 
   public async sendPasswordResetLink(
@@ -167,36 +167,36 @@ export class PostgresUserService implements IServicelocator {
       const programName = userData?.tenantData[0]?.tenantName;
       const capilatizeFirstLettterOfProgram = programName
         ? programName.charAt(0).toUpperCase() + programName.slice(1)
-        : 'Learner Account';
+        : "Learner Account";
 
       // Use key accordingly to send notification (For account verification or password reset)
       const notificationKey =
-        userData?.status === 'inactive'
-          ? 'onStudentCreated'
-          : 'OnForgotPasswordReset';
+        userData?.status === "inactive"
+          ? "onStudentCreated"
+          : "OnForgotPasswordReset";
 
       // Determine redirect URL for reset password based on user role
       const userRole = userData?.tenantData?.[0]?.roleName;
       let resetPasswordUrlPath = frontEndUrl;
 
-      if (userRole === 'Admin' || userRole === 'Regional Admin') {
+      if (userRole === "Admin" || userRole === "Regional Admin") {
         resetPasswordUrlPath = backEndUrl;
       }
 
       // Send Notification
       const notificationPayload = {
         isQueue: false,
-        context: 'USER',
+        context: "USER",
         key: notificationKey,
         replacements: {
-          '{username}': userData?.firstName
+          "{username}": userData?.firstName
             ? userData.firstName
             : userData?.username,
-          '{resetToken}': resetToken,
-          '{programName}': capilatizeFirstLettterOfProgram,
-          '{expireTime}': time,
-          '{resetPasswordUrl}': resetPasswordUrlPath,
-          '{redirectUrl}': redirectUrl,
+          "{resetToken}": resetToken,
+          "{programName}": capilatizeFirstLettterOfProgram,
+          "{expireTime}": time,
+          "{resetPasswordUrl}": resetPasswordUrlPath,
+          "{redirectUrl}": redirectUrl,
         },
         email: {
           receipients: [emailOfUser],
@@ -205,12 +205,12 @@ export class PostgresUserService implements IServicelocator {
 
       // Determine success and failure messages based on the notification key
       const failureMessage =
-        notificationKey === 'OnForgotPasswordReset'
+        notificationKey === "OnForgotPasswordReset"
           ? API_RESPONSES.RESET_PASSWORD_LINK_FAILED
           : API_RESPONSES.ACCOUNT_VERIFICATION_LINK_FAILED;
 
       const successMessage =
-        notificationKey === 'OnForgotPasswordReset'
+        notificationKey === "OnForgotPasswordReset"
           ? API_RESPONSES.RESET_PASSWORD_LINK_SUCCESS
           : API_RESPONSES.ACCOUNT_VERIFICATION_LINK_SUCCESS;
 
@@ -314,8 +314,8 @@ export class PostgresUserService implements IServicelocator {
           }
 
           // If the user account is currently inactive, activate it by updating the status
-          if (userData.status === 'inactive') {
-            updatePayload.status = 'active';
+          if (userData.status === "inactive") {
+            updatePayload.status = "active";
           }
 
           // Only call the update function if there is at least one field to update
@@ -356,7 +356,7 @@ export class PostgresUserService implements IServicelocator {
           API_RESPONSES.INVALID_LINK,
           HttpStatus.UNAUTHORIZED
         );
-      } else if (e.name === 'InvalidTokenError') {
+      } else if (e.name === "InvalidTokenError") {
         // Handle the case where the token is invalid
         return APIResponse.error(
           response,
@@ -393,7 +393,7 @@ export class PostgresUserService implements IServicelocator {
   ) {
     const apiId = APIID.USER_LIST;
     try {
-      let findData = await this.findAllUserDetails(userSearchDto);
+      const findData = await this.findAllUserDetails(userSearchDto);
 
       if (findData === false) {
         LoggerUtil.error(
@@ -421,7 +421,7 @@ export class PostgresUserService implements IServicelocator {
           new Set(
             userArray
               .map((user) => user.createdBy)
-              .filter((id) => typeof id === 'string')
+              .filter((id) => typeof id === "string")
           )
         );
 
@@ -494,8 +494,8 @@ export class PostgresUserService implements IServicelocator {
     let excludeCohortIdes;
     let excludeUserIdes;
 
-    offset = offset ? `OFFSET ${offset}` : '';
-    limit = limit ? `LIMIT ${limit}` : '';
+    offset = offset ? `OFFSET ${offset}` : "";
+    limit = limit ? `LIMIT ${limit}` : "";
     const result = {
       totalCount: 0,
       getUserDetails: [],
@@ -509,7 +509,7 @@ export class PostgresUserService implements IServicelocator {
       (column) => column.propertyName
     );
     const userKeys = userAllKeys.filter(
-      (key) => key !== 'district' && key !== 'state'
+      (key) => key !== "district" && key !== "state"
     );
 
     if (filters && Object.keys(filters).length > 0) {
@@ -518,17 +518,17 @@ export class PostgresUserService implements IServicelocator {
           whereCondition += ` AND `;
         }
         if (userKeys.includes(key)) {
-          if (key === 'firstName') {
+          if (key === "firstName") {
             whereCondition += ` U."${key}" ILIKE '%${value}%'`;
           } else {
-            if (key === 'status' || key === 'email') {
+            if (key === "status" || key === "email") {
               if (
                 Array.isArray(value) &&
-                value.every((item) => typeof item === 'string')
+                value.every((item) => typeof item === "string")
               ) {
                 const status = value
                   .map((item) => `'${item.trim().toLowerCase()}'`)
-                  .join(',');
+                  .join(",");
                 whereCondition += ` U."${key}" IN(${status})`;
               }
             } else {
@@ -537,7 +537,7 @@ export class PostgresUserService implements IServicelocator {
           }
           index++;
         } else {
-          if (key == 'role') {
+          if (key == "role") {
             whereCondition += ` R."name" = '${value}'`;
             index++;
           } else {
@@ -549,16 +549,16 @@ export class PostgresUserService implements IServicelocator {
 
     if (exclude && Object.keys(exclude).length > 0) {
       Object.entries(exclude).forEach(([key, value]) => {
-        if (key == 'cohortIds') {
+        if (key == "cohortIds") {
           excludeCohortIdes = value;
         }
-        if (key == 'userIds') {
+        if (key == "userIds") {
           excludeUserIdes = value;
         }
       });
     }
 
-    let orderingCondition = '';
+    let orderingCondition = "";
     if (sort && Object.keys(sort).length > 0) {
       orderingCondition = `ORDER BY U."${sort[0]}" ${sort[1]}`;
     }
@@ -567,7 +567,7 @@ export class PostgresUserService implements IServicelocator {
 
     //If source config in source details from fields table is not exist then return false
     if (Object.keys(searchCustomFields).length > 0) {
-      const context = 'USERS';
+      const context = "USERS";
       getUserIdUsingCustomFields =
         await this.fieldsService.filterUserUsingCustomFields(
           context,
@@ -582,34 +582,34 @@ export class PostgresUserService implements IServicelocator {
     if (getUserIdUsingCustomFields && getUserIdUsingCustomFields.length > 0) {
       const userIdsDependsOnCustomFields = getUserIdUsingCustomFields
         .map((userId) => `'${userId}'`)
-        .join(',');
+        .join(",");
       whereCondition += `${
-        index > 0 ? ' AND ' : ''
+        index > 0 ? " AND " : ""
       } U."userId" IN (${userIdsDependsOnCustomFields})`;
       index++;
     }
 
     const userIds =
       excludeUserIdes?.length > 0
-        ? excludeUserIdes.map((userId) => `'${userId}'`).join(',')
+        ? excludeUserIdes.map((userId) => `'${userId}'`).join(",")
         : null;
 
     const cohortIds =
       excludeCohortIdes?.length > 0
-        ? excludeCohortIdes.map((cohortId) => `'${cohortId}'`).join(',')
+        ? excludeCohortIdes.map((cohortId) => `'${cohortId}'`).join(",")
         : null;
 
     if (userIds || cohortIds) {
-      const userCondition = userIds ? ` U."userId" NOT IN (${userIds})` : '';
+      const userCondition = userIds ? ` U."userId" NOT IN (${userIds})` : "";
       const cohortCondition = cohortIds
         ? `CM."cohortId" NOT IN (${cohortIds})`
-        : '';
+        : "";
       const combinedCondition = [userCondition, cohortCondition]
         .filter(String)
-        .join(' AND ');
-      whereCondition += (index > 0 ? ' AND ' : '') + combinedCondition;
+        .join(" AND ");
+      whereCondition += (index > 0 ? " AND " : "") + combinedCondition;
     } else if (index === 0) {
-      whereCondition = '';
+      whereCondition = "";
     }
 
     //Get user core fields data
@@ -631,7 +631,7 @@ export class PostgresUserService implements IServicelocator {
         const customFields = await this.fieldsService.getUserCustomFieldDetails(
           userData.userId
         );
-        userData['customFields'] = customFields.map((data) => ({
+        userData["customFields"] = customFields.map((data) => ({
           fieldId: data?.fieldId,
           label: data?.label,
           value: data?.value,
@@ -688,7 +688,7 @@ export class PostgresUserService implements IServicelocator {
       let roleInUpper;
       if (userRole) {
         roleInUpper = userRole ? userRole.title.toUpperCase() : null;
-        userDetails['role'] = userRole.title;
+        userDetails["role"] = userRole.title;
       }
 
       if (!userDetails) {
@@ -714,7 +714,7 @@ export class PostgresUserService implements IServicelocator {
       let customFields;
 
       if (userData && userData?.fieldValue) {
-        const context = 'USERS';
+        const context = "USERS";
         const contextType = roleInUpper;
         // customFields = await this.fieldsService.getFieldValuesData(userData.userId, context, contextType, ['All'], true);
         customFields = await this.fieldsService.getUserCustomFieldDetails(
@@ -724,7 +724,7 @@ export class PostgresUserService implements IServicelocator {
 
       result.userData = userDetails;
 
-      result.userData['customFields'] = customFields;
+      result.userData["customFields"] = customFields;
 
       LoggerUtil.log(
         API_RESPONSES.USER_GET_SUCCESSFULLY,
@@ -787,7 +787,7 @@ export class PostgresUserService implements IServicelocator {
       where: {
         roleId: getRole.roleId,
       },
-      select: ['title', 'code'],
+      select: ["title", "code"],
     });
     return role;
   }
@@ -801,22 +801,22 @@ export class PostgresUserService implements IServicelocator {
     const userDetails = await this.usersRepository.findOne({
       where: whereClause,
       select: [
-        'userId',
-        'username',
-        'firstName',
-        'middleName',
-        'lastName',
-        'gender',
-        'dob',
-        'mobile',
-        'email',
-        'temporaryPassword',
-        'status',
-        'createdAt',
-        'createdBy',
-        'deviceId',
-        'mobile_country_code',
-        'country',
+        "userId",
+        "username",
+        "firstName",
+        "middleName",
+        "lastName",
+        "gender",
+        "dob",
+        "mobile",
+        "email",
+        "temporaryPassword",
+        "status",
+        "createdAt",
+        "createdBy",
+        "deviceId",
+        "mobile_country_code",
+        "country",
       ],
     });
     if (!userDetails) {
@@ -829,7 +829,7 @@ export class PostgresUserService implements IServicelocator {
     const tenantData = tenantId
       ? tenentDetails.filter((item) => item.tenantId === tenantId)
       : tenentDetails;
-    userDetails['tenantData'] = tenantData;
+    userDetails["tenantData"] = tenantData;
 
     return userDetails;
   }
@@ -935,7 +935,7 @@ export class PostgresUserService implements IServicelocator {
             keycloakReqBody
           );
 
-          if (keycloakUpdateResult === 'exists') {
+          if (keycloakUpdateResult === "exists") {
             return APIResponse.error(
               response,
               apiId,
@@ -972,7 +972,7 @@ export class PostgresUserService implements IServicelocator {
 
       if (userDto.userData) {
         await this.updateBasicUserDetails(userDto.userId, userDto.userData);
-        updatedData['basicDetails'] = userDto.userData;
+        updatedData["basicDetails"] = userDto.userData;
       }
 
       LoggerUtil.log(
@@ -1002,9 +1002,9 @@ export class PostgresUserService implements IServicelocator {
               fieldIdAndAttributes[data.fieldId]
             );
             if (result.correctValue) {
-              if (!updatedData['customFields'])
-                updatedData['customFields'] = [];
-              updatedData['customFields'].push(result);
+              if (!updatedData["customFields"])
+                updatedData["customFields"] = [];
+              updatedData["customFields"].push(result);
             } else {
               editFailures.push(
                 `${data.fieldId}: ${result?.valueIssue} - ${result.fieldName}`
@@ -1015,10 +1015,10 @@ export class PostgresUserService implements IServicelocator {
           }
         }
         if (unEditableIdes.length > 0) {
-          editIssues['uneditableFields'] = unEditableIdes;
+          editIssues["uneditableFields"] = unEditableIdes;
         }
         if (editFailures.length > 0) {
-          editIssues['editFieldsFailure'] = editFailures;
+          editIssues["editFieldsFailure"] = editFailures;
         }
       }
 
@@ -1059,7 +1059,7 @@ export class PostgresUserService implements IServicelocator {
 
   async updateUsernameInKeycloak(
     updateField: UpdateField
-  ): Promise<'exists' | false | true> {
+  ): Promise<"exists" | false | true> {
     try {
       const keycloakResponse = await getKeycloakAdminToken();
       const token = keycloakResponse.data.access_token;
@@ -1069,11 +1069,11 @@ export class PostgresUserService implements IServicelocator {
         updateField
       );
       if (checkUserinKeyCloakandDb) {
-        return 'exists';
+        return "exists";
       }
 
       //Update user in keyCloakService
-      let updateResult = await updateUserInKeyCloak(updateField, token);
+      const updateResult = await updateUserInKeyCloak(updateField, token);
       if (updateResult.success === false) {
         return false;
       }
@@ -1092,7 +1092,7 @@ export class PostgresUserService implements IServicelocator {
     userId: string,
     existingDeviceId: string[]
   ): Promise<string[]> {
-    let deviceIds = existingDeviceId || [];
+    const deviceIds = existingDeviceId || [];
     // Check if the device ID already exists
     if (deviceIds.includes(userDeviceId)) {
       return deviceIds; // No action if device ID already exists
@@ -1137,7 +1137,7 @@ export class PostgresUserService implements IServicelocator {
       return this.usersRepository.save(user);
     } catch (error) {
       // Re-throw or handle the error as needed
-      throw new Error('An error occurred while updating user details');
+      throw new Error("An error occurred while updating user details");
     }
   }
 
@@ -1151,28 +1151,28 @@ export class PostgresUserService implements IServicelocator {
       if (!code) {
         return response
           .status(400)
-          .json({ message: 'Missing authorization code' });
+          .json({ message: "Missing authorization code" });
       }
 
       const tokenUrl = `${process.env.KEYCLOAK}${process.env.KEYCLOAK_USER_TOKEN}`;
       const bodyParams = new URLSearchParams({
-        grant_type: 'authorization_code',
+        grant_type: "authorization_code",
         code,
         client_id: `${process.env.KEYCLOAK_CLIENT_ID}`, // match the curl value
         // redirect_uri: `${process.env.SSO_CALLBACK_URL}`, // match the curl
         redirect_uri:
           process.env.SSO_CALLBACK_URL ||
-          'https://aspire-learner-dev.tekdinext.com/',
+          "https://aspire-learner-dev.tekdinext.com/",
       });
 
       // Optional: include cookies if required (you'll need to capture these from the client)
       const headers: any = {
-        'Content-Type': 'application/x-www-form-urlencoded',
+        "Content-Type": "application/x-www-form-urlencoded",
         // 'Cookie': 'AWSALB=...; AWSALBCORS=...', // Optional if backend requires it
       };
 
       const tokenRes = await fetch(tokenUrl, {
-        method: 'POST',
+        method: "POST",
         headers,
         body: bodyParams,
       });
@@ -1188,7 +1188,7 @@ export class PostgresUserService implements IServicelocator {
       };
     } catch (error) {
       LoggerUtil.error(
-        'SSO Callback Error',
+        "SSO Callback Error",
         `Error Message: ${error.message}, Stack: ${error.stack}`
       );
       throw error;
@@ -1255,7 +1255,7 @@ export class PostgresUserService implements IServicelocator {
         response,
         apiId,
         API_RESPONSES.SERVICE_UNAVAILABLE,
-        'Keycloak service is currently unavailable',
+        "Keycloak service is currently unavailable",
         HttpStatus.SERVICE_UNAVAILABLE
       );
     }
@@ -1272,7 +1272,7 @@ export class PostgresUserService implements IServicelocator {
       apiId, // string message
       { userData: result },
       HttpStatus.CREATED,
-      'USER_CREATE_SUCCESSFULLY'
+      "USER_CREATE_SUCCESSFULLY"
       // This becomes the "id" field in the response
     );
   }
@@ -1292,7 +1292,7 @@ export class PostgresUserService implements IServicelocator {
       if (existingUser) {
         return APIResponse.error(
           response,
-          'USER_CREATE_SSO',
+          "USER_CREATE_SSO",
           API_RESPONSES.USER_EXISTS,
           API_RESPONSES.BAD_REQUEST,
           HttpStatus.BAD_REQUEST
@@ -1306,7 +1306,7 @@ export class PostgresUserService implements IServicelocator {
       );
     } catch (error) {
       LoggerUtil.error(
-        'SSO user DB sync failed',
+        "SSO user DB sync failed",
         `Error Message: ${error.message}, Stack: ${error.stack}`
       );
     }
@@ -1372,8 +1372,8 @@ export class PostgresUserService implements IServicelocator {
         return APIResponse.error(
           response,
           apiId,
-          'BAD_REQUEST',
-          validatedRoles.join('; '),
+          "BAD_REQUEST",
+          validatedRoles.join("; "),
           HttpStatus.BAD_REQUEST
         );
       }
@@ -1381,7 +1381,7 @@ export class PostgresUserService implements IServicelocator {
       userCreateDto.username = userCreateDto.username.toLocaleLowerCase();
       const userSchema = new UserCreateDto(userCreateDto);
 
-      let errKeycloak = '';
+      const errKeycloak = "";
       let resKeycloak;
 
       const keycloakResponse = await getKeycloakAdminToken();
@@ -1454,7 +1454,7 @@ export class PostgresUserService implements IServicelocator {
         }
 
         const customFields = await this.fieldsService.findCustomFields(
-          'USERS',
+          "USERS",
           roles
         );
 
@@ -1481,8 +1481,8 @@ export class PostgresUserService implements IServicelocator {
 
           for (const fieldValues of userCreateDto.customFields) {
             const fieldData = {
-              fieldId: fieldValues['fieldId'],
-              value: fieldValues['value'],
+              fieldId: fieldValues["fieldId"],
+              value: fieldValues["value"],
             };
 
             const res = await this.fieldsService.updateCustomFields(
@@ -1492,10 +1492,10 @@ export class PostgresUserService implements IServicelocator {
             );
 
             if (res.correctValue) {
-              if (!result['customFields']) result['customFields'] = [];
+              if (!result["customFields"]) result["customFields"] = [];
               // Add code, label, type, value, fieldId to each custom field object
               const fieldMeta = customFieldAttributes[fieldData.fieldId] ?? {};
-              result['customFields'].push({
+              result["customFields"].push({
                 fieldId: fieldData.fieldId,
                 value: fieldData.value,
               });
@@ -1513,20 +1513,20 @@ export class PostgresUserService implements IServicelocator {
       try {
         if (isElasticsearchEnabled()) {
           // Get custom fields from the processed result (these may only have fieldId and value)
-          const customFields = result['customFields'] ?? [];
+          const customFields = result["customFields"] ?? [];
 
           // Map custom fields for Elasticsearch: enrich with name and label
           const elasticCustomFields = [];
           for (const field of customFields) {
-            let name = '';
-            let label = '';
+            let name = "";
+            let label = "";
             // Fetch field definition for name/label
             const fieldDef = await this.fieldsService.getFieldByIdes(
               field.fieldId
             );
-            if (fieldDef && !('error' in fieldDef)) {
-              name = fieldDef.name ?? '';
-              label = fieldDef.label ?? '';
+            if (fieldDef && !("error" in fieldDef)) {
+              name = fieldDef.name ?? "";
+              label = fieldDef.label ?? "";
             }
             elasticCustomFields.push({
               fieldId: field.fieldId,
@@ -1543,10 +1543,10 @@ export class PostgresUserService implements IServicelocator {
               username: result.username,
               firstName: result.firstName,
               lastName: result.lastName,
-              middleName: result.middleName || '',
-              email: result.email || '',
-              mobile: result.mobile ? result.mobile.toString() : '',
-              mobile_country_code: result.mobile_country_code || '',
+              middleName: result.middleName || "",
+              email: result.email || "",
+              mobile: result.mobile ? result.mobile.toString() : "",
+              mobile_country_code: result.mobile_country_code || "",
               gender: result.gender,
               dob:
                 result.dob instanceof Date
@@ -1573,12 +1573,12 @@ export class PostgresUserService implements IServicelocator {
           // Use createUser to ensure new document creation
 
           await this.userElasticsearchService.createUser(userForElastic);
-          LoggerUtil.log('User synced to Elasticsearch successfully', apiId);
+          LoggerUtil.log("User synced to Elasticsearch successfully", apiId);
         }
       } catch (elasticError) {
         // Log Elasticsearch error but don't fail the request
         LoggerUtil.error(
-          'Elasticsearch sync failed but user was created in Keycloak and database',
+          "Elasticsearch sync failed but user was created in Keycloak and database",
           elasticError
         );
       }
@@ -1621,7 +1621,7 @@ export class PostgresUserService implements IServicelocator {
     user.middleName = userDto?.middleName;
     user.lastName = userDto?.lastName;
     user.gender = userDto?.gender;
-    user.status = userDto?.status as User['status'];
+    user.status = userDto?.status as User["status"];
     user.email = userDto?.email;
     user.mobile = Number(userDto?.mobile) || null;
     user.mobile_country_code = userDto?.mobile_country_code;
@@ -1630,7 +1630,7 @@ export class PostgresUserService implements IServicelocator {
     user.country = userDto?.country ?? null;
 
     // Handle SSO-specific fields
-    if ('provider' in userDto) {
+    if ("provider" in userDto) {
       user.provider = userDto.provider;
     }
 
@@ -1689,7 +1689,7 @@ export class PostgresUserService implements IServicelocator {
         return errors;
       },
       getFormattedErrors(): string {
-        return errors.join('; ');
+        return errors.join("; ");
       },
     };
   }
@@ -1701,9 +1701,9 @@ export class PostgresUserService implements IServicelocator {
 
     const error = [];
     for (const [key, value] of Object.entries(userCreateDto)) {
-      if (key === 'email') {
+      if (key === "email") {
         const checkValidEmail = CustomFieldsValidation.validate(
-          'email',
+          "email",
           userCreateDto.email
         );
         if (!checkValidEmail) {
@@ -1711,9 +1711,9 @@ export class PostgresUserService implements IServicelocator {
         }
       }
 
-      if (key === 'mobile') {
+      if (key === "mobile") {
         const checkValidMobile = CustomFieldsValidation.validate(
-          'mobile',
+          "mobile",
           userCreateDto.mobile
         );
         if (!checkValidMobile) {
@@ -1721,9 +1721,9 @@ export class PostgresUserService implements IServicelocator {
         }
       }
 
-      if (key === 'dob') {
+      if (key === "dob") {
         const checkValidDob = CustomFieldsValidation.validate(
-          'date',
+          "date",
           userCreateDto.dob
         );
         if (!checkValidDob) {
@@ -1740,7 +1740,7 @@ export class PostgresUserService implements IServicelocator {
 
         if (!academicYearId && cohortIds) {
           errorCollector.addError(
-            'Academic Year ID is required when a Cohort ID is provided.'
+            "Academic Year ID is required when a Cohort ID is provided."
           );
         }
 
@@ -1886,16 +1886,16 @@ export class PostgresUserService implements IServicelocator {
           userId: userId,
           tenantId: tenantId,
           roleId: roleId,
-          createdBy: request['user']?.userId || userId,
-          updatedBy: request['user']?.userId || userId,
+          createdBy: request["user"]?.userId || userId,
+          updatedBy: request["user"]?.userId || userId,
         });
       }
 
       const data = await this.userTenantMappingRepository.save({
         userId: userId,
         tenantId: tenantId,
-        createdBy: request['user']?.userId || userId,
-        updatedBy: request['user']?.userId || userId,
+        createdBy: request["user"]?.userId || userId,
+        updatedBy: request["user"]?.userId || userId,
       });
 
       LoggerUtil.log(API_RESPONSES.USER_TENANT);
@@ -2030,8 +2030,8 @@ export class PostgresUserService implements IServicelocator {
     userId: string
   ) {
     const data = JSON.stringify({
-      temporary: 'false',
-      type: 'password',
+      temporary: "false",
+      type: "password",
       value: newPassword,
     });
 
@@ -2043,16 +2043,16 @@ export class PostgresUserService implements IServicelocator {
     let apiResponse;
 
     const config = {
-      method: 'put',
+      method: "put",
       url:
         process.env.KEYCLOAK +
         process.env.KEYCLOAK_ADMIN +
-        '/' +
+        "/" +
         userId +
-        '/reset-password',
+        "/reset-password",
       headers: {
-        'Content-Type': 'application/json',
-        Authorization: 'Bearer ' + token,
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + token,
       },
       data: data,
     };
@@ -2075,14 +2075,14 @@ export class PostgresUserService implements IServicelocator {
         //Send Notification
         const notificationPayload = {
           isQueue: false,
-          context: 'USER',
-          key: 'OnPasswordReset',
+          context: "USER",
+          key: "OnPasswordReset",
           replacements: {
-            '{username}': userData?.name,
-            '{programName}': userData?.tenantData?.[0]?.tenantName
+            "{username}": userData?.name,
+            "{programName}": userData?.tenantData?.[0]?.tenantName
               ? userData.tenantData[0].tenantName.charAt(0).toUpperCase() +
                 userData.tenantData[0].tenantName.slice(1)
-              : '',
+              : "",
           },
           email: {
             receipients: [userData.email],
@@ -2109,7 +2109,7 @@ export class PostgresUserService implements IServicelocator {
       });
     } else {
       return new ErrorResponse({
-        errorCode: '400',
+        errorCode: "400",
         errorMessage: apiResponse.errors,
       });
     }
@@ -2120,9 +2120,9 @@ export class PostgresUserService implements IServicelocator {
     const encounteredKeys = [];
     const invalidateFields = [];
     const duplicateFieldKeys = [];
-    let error = '';
+    let error = "";
     for (const fieldsData of fieldValues) {
-      const fieldId = fieldsData['fieldId'];
+      const fieldId = fieldsData["fieldId"];
       const getFieldDetails: any = await this.fieldsService.getFieldByIdes(
         fieldId
       );
@@ -2132,18 +2132,18 @@ export class PostgresUserService implements IServicelocator {
       }
 
       if (encounteredKeys.includes(fieldId)) {
-        duplicateFieldKeys.push(`${fieldId} - ${getFieldDetails['name']}`);
+        duplicateFieldKeys.push(`${fieldId} - ${getFieldDetails["name"]}`);
       } else {
         encounteredKeys.push(fieldId);
       }
 
       if (
-        (getFieldDetails.type == 'checkbox' ||
-          getFieldDetails.type == 'drop_down' ||
-          getFieldDetails.type == 'textarea' ||
-          getFieldDetails.type == 'calendar' ||
-          getFieldDetails.type == 'radio') &&
-        getFieldDetails.sourceDetails.source == 'table'
+        (getFieldDetails.type == "checkbox" ||
+          getFieldDetails.type == "drop_down" ||
+          getFieldDetails.type == "textarea" ||
+          getFieldDetails.type == "calendar" ||
+          getFieldDetails.type == "radio") &&
+        getFieldDetails.sourceDetails.source == "table"
       ) {
         const getOption = await this.fieldsService.findDynamicOptions(
           getFieldDetails.sourceDetails.table
@@ -2155,37 +2155,37 @@ export class PostgresUserService implements IServicelocator {
             label: param.label,
           })),
         };
-        getFieldDetails['fieldParams'] = transformedFieldParams;
+        getFieldDetails["fieldParams"] = transformedFieldParams;
 
         // getFieldDetails['fieldParams'] = getOption
       } else {
-        getFieldDetails['fieldParams'] = getFieldDetails?.fieldParams || {};
+        getFieldDetails["fieldParams"] = getFieldDetails?.fieldParams || {};
       }
 
       const checkValidation = this.fieldsService.validateFieldValue(
         getFieldDetails,
-        fieldsData['value']
+        fieldsData["value"]
       );
       //checking validation for field value  of calendar
-      if (typeof checkValidation !== 'object') {
-        if (getFieldDetails.type === 'calendar') {
+      if (typeof checkValidation !== "object") {
+        if (getFieldDetails.type === "calendar") {
           const calendarField = new CalendarField(
             getFieldDetails,
             getFieldDetails.fieldParams
           );
 
           // Format the value based on showTime
-          const originalValue = fieldsData['value'][0];
+          const originalValue = fieldsData["value"][0];
           const formattedValue = calendarField.formatValue(originalValue);
 
           // Replace the value to store in formatted form
-          fieldsData['value'] = [formattedValue];
+          fieldsData["value"] = [formattedValue];
         }
       }
 
-      if (typeof checkValidation === 'object' && 'error' in checkValidation) {
+      if (typeof checkValidation === "object" && "error" in checkValidation) {
         invalidateFields.push(
-          `${fieldId}: ${getFieldDetails['name']} - ${checkValidation?.error?.message}`
+          `${fieldId}: ${getFieldDetails["name"]} - ${checkValidation?.error?.message}`
         );
       }
     }
@@ -2214,14 +2214,14 @@ export class PostgresUserService implements IServicelocator {
     if (roleIds) {
       const getRoleName = await this.roleRepository.find({
         where: { roleId: In(roleIds) },
-        select: ['title'],
+        select: ["title"],
       });
       contextType = getRoleName
         .map((role) => role?.title.toUpperCase())
-        .join(', ');
+        .join(", ");
     }
 
-    const context = 'USERS';
+    const context = "USERS";
     const getFieldIds = await this.fieldsService.getFieldIds(
       context,
       contextType
@@ -2235,7 +2235,7 @@ export class PostgresUserService implements IServicelocator {
 
     if (invalidFieldIds.length > 0) {
       return `The following fields are not valid for this user: ${invalidFieldIds.join(
-        ', '
+        ", "
       )}.`;
     }
   }
@@ -2402,13 +2402,13 @@ export class PostgresUserService implements IServicelocator {
         reason
       );
       const replacements = {
-        '{OTP}': otp,
-        '{otpExpiry}': expiresInMinutes,
+        "{OTP}": otp,
+        "{otpExpiry}": expiresInMinutes,
       };
       // Step 2:send SMS notification
       const notificationPayload = await this.smsNotification(
-        'OTP',
-        'SEND_OTP',
+        "OTP",
+        "SEND_OTP",
         replacements,
         [mobile]
       );
@@ -2433,7 +2433,7 @@ export class PostgresUserService implements IServicelocator {
       }
       // Determine the value to use for verification based on the reason
       let identifier: string;
-      if (reason === 'signup') {
+      if (reason === "signup") {
         if (!mobile) {
           return APIResponse.error(
             response,
@@ -2444,7 +2444,7 @@ export class PostgresUserService implements IServicelocator {
           );
         }
         identifier = this.formatMobileNumber(mobile); // Assuming this formats the mobile number
-      } else if (reason === 'forgot') {
+      } else if (reason === "forgot") {
         if (!username) {
           return APIResponse.error(
             response,
@@ -2464,7 +2464,7 @@ export class PostgresUserService implements IServicelocator {
           HttpStatus.BAD_REQUEST
         );
       }
-      const [hashValue, expires] = hash.split('.');
+      const [hashValue, expires] = hash.split(".");
       if (!hashValue || !expires || isNaN(parseInt(expires))) {
         return APIResponse.error(
           response,
@@ -2550,7 +2550,7 @@ export class PostgresUserService implements IServicelocator {
         const errorMessages = mailSend.result.sms.errors.map(
           (error: { error: string }) => error.error
         );
-        const combinedErrorMessage = errorMessages.join(', '); // Combine all error messages into one string
+        const combinedErrorMessage = errorMessages.join(", "); // Combine all error messages into one string
         throw new Error(`${API_RESPONSES.SMS_ERROR} :${combinedErrorMessage}`);
       }
       return mailSend;
@@ -2570,8 +2570,8 @@ export class PostgresUserService implements IServicelocator {
     const apiId = APIID.SEND_RESET_OTP;
     try {
       const username = body.username;
-      let error = [];
-      let success = [];
+      const error = [];
+      const success = [];
       const userData: any = await this.findUserDetails(null, username);
       if (!userData) {
         return APIResponse.error(
@@ -2592,8 +2592,8 @@ export class PostgresUserService implements IServicelocator {
           HttpStatus.BAD_REQUEST
         );
       }
-      const programName = userData?.tenantData[0]?.tenantName ?? '';
-      const reason = 'forgot';
+      const programName = userData?.tenantData[0]?.tenantName ?? "";
+      const reason = "forgot";
       const otp = this.authUtils.generateOtp(this.otpDigits).toString();
       const { hash, expires, expiresInMinutes } = this.generateOtpHash(
         username,
@@ -2602,39 +2602,39 @@ export class PostgresUserService implements IServicelocator {
       );
       if (userData.mobile) {
         const replacements = {
-          '{OTP}': otp,
-          '{otpExpiry}': expiresInMinutes,
+          "{OTP}": otp,
+          "{otpExpiry}": expiresInMinutes,
         };
         try {
-          await this.smsNotification('OTP', 'Reset_OTP', replacements, [
+          await this.smsNotification("OTP", "Reset_OTP", replacements, [
             userData.mobile,
           ]);
-          success.push({ type: 'SMS', message: API_RESPONSES.MOBILE_SENT_OTP });
+          success.push({ type: "SMS", message: API_RESPONSES.MOBILE_SENT_OTP });
         } catch (e) {
           error.push({
-            type: 'SMS',
+            type: "SMS",
             message: `${API_RESPONSES.MOBILE_OTP_SEND_FAILED} ${e.message}`,
           });
         }
       }
       if (userData.email) {
         const replacements = {
-          '{OTP}': otp,
-          '{otpExpiry}': expiresInMinutes,
-          '{programName}': programName,
-          '{username}': username,
+          "{OTP}": otp,
+          "{otpExpiry}": expiresInMinutes,
+          "{programName}": programName,
+          "{username}": username,
         };
         try {
-          await this.sendEmailNotification('OTP', 'Reset_OTP', replacements, [
+          await this.sendEmailNotification("OTP", "Reset_OTP", replacements, [
             userData.email,
           ]);
           success.push({
-            type: 'Email',
+            type: "Email",
             message: API_RESPONSES.EMAIL_SENT_OTP,
           });
         } catch (e) {
           error.push({
-            type: 'Email',
+            type: "Email",
             message: `${API_RESPONSES.EMAIL_OTP_SEND_FAILED}: ${e.message}`,
           });
         }
@@ -2642,18 +2642,18 @@ export class PostgresUserService implements IServicelocator {
       // Error
       if (error.length === 2) {
         // if both SMS and Email notification fail to sent
-        let errorMessage = '';
-        if (error.some((e) => e.type === 'SMS')) {
+        let errorMessage = "";
+        if (error.some((e) => e.type === "SMS")) {
           errorMessage += `SMS Error: ${error
-            .filter((e) => e.type === 'SMS')
+            .filter((e) => e.type === "SMS")
             .map((e) => e.message)
-            .join(', ')}. `;
+            .join(", ")}. `;
         }
-        if (error.some((e) => e.type === 'Email')) {
+        if (error.some((e) => e.type === "Email")) {
           errorMessage += `Email Error: ${error
-            .filter((e) => e.type === 'Email')
+            .filter((e) => e.type === "Email")
             .map((e) => e.message)
-            .join(', ')}.`;
+            .join(", ")}.`;
         }
 
         return APIResponse.error(
@@ -2715,7 +2715,7 @@ export class PostgresUserService implements IServicelocator {
         const errorMessages = mailSend.result.email.errors.map(
           (error: { error: string }) => error.error
         );
-        const combinedErrorMessage = errorMessages.join(', '); // Combine all error messages into one string
+        const combinedErrorMessage = errorMessages.join(", "); // Combine all error messages into one string
         throw new Error(`error :${combinedErrorMessage}`);
       }
       return mailSend;
@@ -2732,19 +2732,19 @@ export class PostgresUserService implements IServicelocator {
    * This ensures profile customFields only includes fields NOT used in any form submission.
    */
   private async getFilteredCustomFields(userId: string): Promise<any[]> {
-    let customFields = await this.fieldsService.getUserCustomFieldDetails(
+    const customFields = await this.fieldsService.getUserCustomFieldDetails(
       userId
     );
 
     const formSubmissions = await this.fieldsValueRepository.manager
-      .getRepository('FormSubmission')
-      .find({ where: { itemId: userId }, select: ['formId'] });
+      .getRepository("FormSubmission")
+      .find({ where: { itemId: userId }, select: ["formId"] });
 
     const allFormFieldIds = new Set<string>();
     for (const submission of formSubmissions) {
       try {
         const formRepo =
-          this.fieldsValueRepository.manager.getRepository('Form');
+          this.fieldsValueRepository.manager.getRepository("Form");
         const form = await formRepo.findOne({
           where: { formid: submission.formId },
         });
@@ -2782,7 +2782,7 @@ export class PostgresUserService implements IServicelocator {
       let formattedDob: string | null = null;
       if (user.dob instanceof Date) {
         formattedDob = user.dob.toISOString();
-      } else if (typeof user.dob === 'string') {
+      } else if (typeof user.dob === "string") {
         formattedDob = user.dob;
       }
       // Prepare the profile data
@@ -2791,17 +2791,17 @@ export class PostgresUserService implements IServicelocator {
         username: user.username,
         firstName: user.firstName,
         lastName: user.lastName,
-        middleName: user.middleName || '',
-        email: user.email || '',
-        mobile: user.mobile?.toString() || '',
-        mobile_country_code: user.mobile_country_code || '',
+        middleName: user.middleName || "",
+        email: user.email || "",
+        mobile: user.mobile?.toString() || "",
+        mobile_country_code: user.mobile_country_code || "",
         dob: formattedDob,
         country: user.country,
         gender: user.gender,
-        address: user.address || '',
-        district: user.district || '',
-        state: user.state || '',
-        pincode: user.pincode || '',
+        address: user.address || "",
+        district: user.district || "",
+        state: user.state || "",
+        pincode: user.pincode || "",
         status: user.status,
         customFields, // Now filtered to exclude form schema fields
       };
@@ -2821,7 +2821,7 @@ export class PostgresUserService implements IServicelocator {
             let formattedDob: string | null = null;
             if (dbUser.dob instanceof Date) {
               formattedDob = dbUser.dob.toISOString();
-            } else if (typeof dbUser.dob === 'string') {
+            } else if (typeof dbUser.dob === "string") {
               formattedDob = dbUser.dob;
             }
             return {
@@ -2831,10 +2831,10 @@ export class PostgresUserService implements IServicelocator {
                 username: dbUser.username,
                 firstName: dbUser.firstName,
                 lastName: dbUser.lastName,
-                middleName: dbUser.middleName || '',
-                email: dbUser.email || '',
-                mobile: dbUser.mobile?.toString() || '',
-                mobile_country_code: dbUser.mobile_country_code || '',
+                middleName: dbUser.middleName || "",
+                email: dbUser.email || "",
+                mobile: dbUser.mobile?.toString() || "",
+                mobile_country_code: dbUser.mobile_country_code || "",
                 dob: formattedDob,
                 gender: dbUser.gender,
                 country: dbUser.country || '',
@@ -2858,7 +2858,7 @@ export class PostgresUserService implements IServicelocator {
         );
       }
     } catch (error) {
-      LoggerUtil.error('Failed to update user profile in Elasticsearch', error);
+      LoggerUtil.error("Failed to update user profile in Elasticsearch", error);
     }
   }
 }

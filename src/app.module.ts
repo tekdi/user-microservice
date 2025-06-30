@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 // import { MulterModule } from "@nestjs/platform-express/multer";
@@ -26,10 +27,40 @@ import { CohortAcademicYearModule } from './cohortAcademicYear/cohortAcademicYea
 import { storageConfig } from './config/storage.config';
 import { ElasticsearchModule } from './elasticsearch/elasticsearch.module';
 
+/**
+ * Main Application Module
+ *
+ * This is the root module of the NestJS application that orchestrates all
+ * feature modules and provides global configuration.
+ *
+ * Key Features:
+ * - Global configuration management
+ * - Scheduled task execution (cron jobs)
+ * - Database connectivity
+ * - Authentication and authorization
+ * - Multi-tenant support
+ * - File storage configuration
+ *
+ * Scheduled Tasks:
+ * - Cohort member shortlisting evaluation (daily at 2 AM)
+ * - Other automated processes as needed
+ *
+ * Module Structure:
+ * - Core modules: User, Auth, RBAC, Database
+ * - Feature modules: Cohort, CohortMembers, Fields, Forms
+ * - Support modules: Tenant, AcademicYears, Storage
+ */
 @Module({
   imports: [
-    RbacModule,
-    ConfigModule.forRoot({ isGlobal: true }),
+    // Core system modules
+    RbacModule, // Role-based access control
+    ConfigModule.forRoot({ isGlobal: true }), // Global configuration management
+
+    // Scheduled task execution for automated processes
+    // Enables cron jobs like cohort member shortlisting evaluation
+    ScheduleModule.forRoot(),
+
+    // File upload configuration (commented out)
     // MulterModule.register({
     //   dest: "./uploads",
     // }),
