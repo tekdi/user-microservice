@@ -37,7 +37,12 @@ export class ElasticsearchService {
       // Listen for connection events
       this.client.diagnostic.on('response', (err, result) => {
         if (err) {
-          this.logger.error('Elasticsearch connection error:', err);
+           // Don't log document_missing_exception as an error since it's expected behavior
+           if ((err as any)?.meta?.body?.error?.type === 'document_missing_exception') {
+            this.logger.debug(`Document not found - this is expected for new documents`);
+          } else {
+            this.logger.error('Elasticsearch connection error:', err);
+          }
         } else if (result && result.meta && result.meta.connection) {
           this.logger.log(
             `Elasticsearch host ${result.meta.connection.url.href} responded with status ${result.statusCode}`
@@ -108,6 +113,12 @@ export class ElasticsearchService {
       });
       this.logger.log(`Document updated successfully in ${indexName}`);
     } catch (error) {
+       // Don't log document_missing_exception as an error since it's expected behavior
+    // when trying to update a document that doesn't exist
+    if (error?.meta?.body?.error?.type === 'document_missing_exception') {
+      this.logger.debug(`Document ${id} not found in ${indexName} - this is expected for new documents`);
+      throw error; // Still throw the error so calling code can handle it
+    }
       this.logger.error(`Failed to update document in ${indexName}:`, error);
       throw error;
     }
