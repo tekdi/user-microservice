@@ -1839,29 +1839,27 @@ export class PostgresCohortMembersService {
       );
 
       // Step 1: Process Active Cohorts
-      const currentDate = new Date().toISOString().split("T")[0];
+      const currentDateUTC = new Date().toISOString().split("T")[0]; // Use UTC date for timezone consistency
       const activeCohorts = await this.processActiveCohorts(
         tenantId,
         academicyearId,
         userId,
         shortlistDateFieldId,
-        currentDate
+        currentDateUTC
       );
 
       if (activeCohorts.length === 0) {
-        return {
-          totalProcessed: 0,
-          totalShortlisted: 0,
-          totalRejected: 0,
-          totalFailures: 0,
-          totalProcessingTimeMs: Date.now() - startTime,
-          recordsPerSecond: 0,
-          estimatedDailyCapacity: 0,
-          batchSize,
-          maxConcurrentBatches,
-          message: "No active cohorts found with shortlist date today",
-        };
+        ShortlistingLogger.logShortlisting(
+          "No active cohorts found with shortlist date today or earlier",
+          "ShortlistingEvaluation"
+        );
+        return [];
       }
+
+      ShortlistingLogger.logShortlisting(
+        `Found ${activeCohorts.length} active cohorts with shortlist date today or earlier`,
+        "ShortlistingEvaluation"
+      );
 
       // Step 2: Evaluate Each Cohort
       const cohortResults = [];
@@ -2342,22 +2340,19 @@ export class PostgresCohortMembersService {
   }
 
   /**
-   * Fetches active cohorts that have a shortlist date matching today's date
+   * Fetches active cohorts that have a shortlist date less than or equal to today's UTC date
    * Uses the configured shortlist date field to identify cohorts for processing
-   *
-   * This method:
-   * 1. Queries the Cohort table for active cohorts
-   * 2. Joins with FieldValues table using the shortlist date field ID
-   * 3. Filters by calendar value matching current date
-   * 4. Returns only cohorts that need processing today
+   * 
+   * This method handles timezone consistency and missed cron executions by including
+   * cohorts with shortlist dates from previous days that may have been missed
    *
    * @param shortlistDateFieldId - The field ID for the shortlist date field
-   * @param currentDate - Current date in YYYY-MM-DD format
+   * @param currentDateUTC - Current UTC date in YYYY-MM-DD format
    * @returns Promise with array of active cohorts for processing
    */
   private async getActiveCohortsWithShortlistDate(
     shortlistDateFieldId: string,
-    currentDate: string
+    currentDateUTC: string
   ) {
     // Optimized query with better indexing and reduced data transfer
     const query = `
@@ -2369,14 +2364,14 @@ export class PostgresCohortMembersService {
       INNER JOIN public."FieldValues" fv ON c."cohortId" = fv."itemId"
       WHERE c."status" = 'active'
       AND fv."fieldId" = $1
-      AND fv."calendarValue"::date = $2::date
+      AND fv."calendarValue"::date <= $2::date
       AND fv."itemId" IS NOT NULL
       ORDER BY c."cohortId"
     `;
 
     const results = await this.cohortRepository.query(query, [
       shortlistDateFieldId,
-      currentDate,
+      currentDateUTC,
     ]);
 
     return results;
@@ -2919,11 +2914,14 @@ export class PostgresCohortMembersService {
    * Main orchestration method for processing active cohorts
    * Handles the high-level flow of shortlisting evaluation
    * 
+   * This method processes cohorts with shortlist dates less than or equal to today's UTC date,
+   * ensuring timezone consistency and recovery from missed cron executions.
+   * 
    * @param tenantId - The tenant ID for the evaluation context
    * @param academicyearId - The academic year ID for the evaluation context
    * @param userId - The user ID from the authenticated request
    * @param shortlistDateFieldId - The field ID for shortlist date
-   * @param currentDate - Current date in YYYY-MM-DD format
+   * @param currentDateUTC - Current UTC date in YYYY-MM-DD format
    * @returns Promise with active cohorts to process
    */
   private async processActiveCohorts(
@@ -2931,24 +2929,24 @@ export class PostgresCohortMembersService {
     academicyearId: string,
     userId: string,
     shortlistDateFieldId: string,
-    currentDate: string
+    currentDateUTC: string
   ) {
     // Step 1: Fetch Active Cohorts with Shortlist Date = Today
     const activeCohorts = await this.getActiveCohortsWithShortlistDate(
       shortlistDateFieldId,
-      currentDate
+      currentDateUTC
     );
 
     if (activeCohorts.length === 0) {
       ShortlistingLogger.logShortlisting(
-        "No active cohorts found with shortlist date today",
+        "No active cohorts found with shortlist date today or earlier",
         "ShortlistingEvaluation"
       );
       return [];
     }
 
     ShortlistingLogger.logShortlisting(
-      `Found ${activeCohorts.length} active cohorts with shortlist date today`,
+      `Found ${activeCohorts.length} active cohorts with shortlist date today or earlier`,
       "ShortlistingEvaluation"
     );
 
