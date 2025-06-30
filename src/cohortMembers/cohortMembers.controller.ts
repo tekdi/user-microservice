@@ -313,7 +313,7 @@ export class CohortMembersController {
 
   //Get Cohort Members with Application
   @UseFilters(new AllExceptionsFilter(APIID.COHORT_MEMBER_SEARCH))
-  @Post('/222list-application333')
+  @Post('/list-application')
   @ApiBasicAuth('access-token')
   @ApiCreatedResponse({ description: 'Cohort Member list.' })
   @ApiNotFoundResponse({ description: 'Data not found' })
