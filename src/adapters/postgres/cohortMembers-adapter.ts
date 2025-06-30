@@ -685,45 +685,40 @@ export class PostgresCohortMembersService {
                 )
               : undefined;
 
-          // Prepare the updated application data
-          const updatedApplication = {
-            ...(existingApplication || {}), // Preserve all existing fields if they exist
-            cohortId: cohortMembers.cohortId,
-            cohortmemberstatus: savedCohortMember.status ?? "active",
-            // Only add these if there's no existing application
-            ...(existingApplication
-              ? {}
-              : {
-                  lastSavedAt: new Date().toISOString(),
-                  submittedAt: new Date().toISOString(),
-                  cohortDetails: {
-                    name: "",
-                    description: "",
-                    startDate: null,
-                    endDate: null,
-                    status: "active",
-                  },
-                  progress: {
-                    pages: {},
-                    overall: {
-                      completed: 0,
-                      total: 0,
-                    },
-                  },
-                }),
-          };
-
-          // Upsert (update or create) the user document in Elasticsearch
-          // If the document is missing, it should fetch the user from the database and create it.
-          await this.userElasticsearchService.updateApplication(
-            cohortMembers.userId,
-            updatedApplication,
-            async (userId: string) => {
-              return await this.formSubmissionService.buildUserDocumentForElasticsearch(
-                userId
+          if (!existingApplication) {
+            // If application is missing, build and upsert the full user document (with progress pages)
+            const fullUserDoc =
+              await this.formSubmissionService.buildUserDocumentForElasticsearch(
+                cohortMembers.userId
+              );
+            if (fullUserDoc) {
+              await this.userElasticsearchService.updateUser(
+                cohortMembers.userId,
+                { doc: fullUserDoc },
+                async (userId: string) => {
+                  return await this.formSubmissionService.buildUserDocumentForElasticsearch(
+                    userId
+                  );
+                }
               );
             }
-          );
+          } else {
+            // Prepare the updated application data (minimal update)
+            const updatedApplication = {
+              ...(existingApplication ?? {}),
+              cohortId: cohortMembers.cohortId,
+              cohortmemberstatus: savedCohortMember.status ?? 'active',
+            };
+            await this.userElasticsearchService.updateApplication(
+              cohortMembers.userId,
+              updatedApplication,
+              async (userId: string) => {
+                return await this.formSubmissionService.buildUserDocumentForElasticsearch(
+                  userId
+                );
+              }
+            );
+          }
         } catch (elasticError) {
           // Log Elasticsearch error but don't fail the request
           LoggerUtil.error(
@@ -924,45 +919,40 @@ export class PostgresCohortMembersService {
                 )
               : undefined;
 
-          // Prepare the updated application data
-          const updatedApplication = {
-            ...(existingApplication || {}), // Preserve all existing fields if they exist
-            cohortId: cohortMembershipToUpdate.cohortId,
-            cohortmemberstatus: result.status ?? "active",
-            // Only add these if there's no existing application
-            ...(existingApplication
-              ? {}
-              : {
-                  lastSavedAt: new Date().toISOString(),
-                  submittedAt: new Date().toISOString(),
-                  cohortDetails: {
-                    name: "",
-                    description: "",
-                    startDate: null,
-                    endDate: null,
-                    status: "active",
-                  },
-                  progress: {
-                    pages: {},
-                    overall: {
-                      completed: 0,
-                      total: 0,
-                    },
-                  },
-                }),
-          };
-
-          // Upsert (update or create) the user document in Elasticsearch
-          // If the document is missing, it should fetch the user from the database and create it.
-          await this.userElasticsearchService.updateApplication(
-            cohortMembershipToUpdate.userId,
-            updatedApplication,
-            async (userId: string) => {
-              return await this.formSubmissionService.buildUserDocumentForElasticsearch(
-                userId
+          if (!existingApplication) {
+            // If application is missing, build and upsert the full user document (with progress pages)
+            const fullUserDoc =
+              await this.formSubmissionService.buildUserDocumentForElasticsearch(
+                cohortMembershipToUpdate.userId
+              );
+            if (fullUserDoc) {
+              await this.userElasticsearchService.updateUser(
+                cohortMembershipToUpdate.userId,
+                { doc: fullUserDoc },
+                async (userId: string) => {
+                  return await this.formSubmissionService.buildUserDocumentForElasticsearch(
+                    userId
+                  );
+                }
               );
             }
-          );
+          } else {
+            // Prepare the updated application data (minimal update)
+            const updatedApplication = {
+              ...(existingApplication ?? {}),
+              cohortId: cohortMembershipToUpdate.cohortId,
+              cohortmemberstatus: result.status ?? 'active',
+            };
+            await this.userElasticsearchService.updateApplication(
+              cohortMembershipToUpdate.userId,
+              updatedApplication,
+              async (userId: string) => {
+                return await this.formSubmissionService.buildUserDocumentForElasticsearch(
+                  userId
+                );
+              }
+            );
+          }
         } catch (elasticError) {
           // Log Elasticsearch error but don't fail the request
           LoggerUtil.error(

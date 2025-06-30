@@ -1,8 +1,8 @@
 // src/elasticsearch/elasticsearch.service.ts
-import { Injectable, Logger } from "@nestjs/common";
-import { Client } from "@elastic/elasticsearch";
-import { ConfigService } from "@nestjs/config";
-import { IUser, IProfile } from "./interfaces/user.interface";
+import { Injectable, Logger } from '@nestjs/common';
+import { Client } from '@elastic/elasticsearch';
+import { ConfigService } from '@nestjs/config';
+import { IUser, IProfile } from './interfaces/user.interface';
 import { isElasticsearchEnabled } from '../common/utils/elasticsearch.util';
 
 interface SearchResponse {
@@ -160,20 +160,22 @@ export class ElasticsearchService {
           _source: {
             userId: source?.userId || "",
             profile: {
-              userId: source?.userId || "",
-              username: source?.profile?.username || "",
-              firstName: source?.profile?.firstName || "",
-              lastName: source?.profile?.lastName || "",
-              middleName: source?.profile?.middleName || "",
-              email: source?.profile?.email || "",
-              mobile: source?.profile?.mobile || "",
-              mobile_country_code: source?.profile?.mobile_country_code || "",
-              gender: source?.profile?.gender || "",
-              address: source?.profile?.address || "",
-              district: source?.profile?.district || "",
-              state: source?.profile?.state || "",
-              pincode: source?.profile?.pincode || "",
-              status: source?.profile?.status || "active",
+              userId: source?.userId || '',
+              username: source?.profile?.username || '',
+              firstName: source?.profile?.firstName || '',
+              lastName: source?.profile?.lastName || '',
+              middleName: source?.profile?.middleName || '',
+              email: source?.profile?.email || '',
+              mobile: source?.profile?.mobile || '',
+              mobile_country_code: source?.profile?.mobile_country_code || '',
+              gender: source?.profile?.gender || '',
+              dob:source?.profile?.dob || '',
+              country:source?.profile?.country || '',
+              address: source?.profile?.address || '',
+              district: source?.profile?.district || '',
+              state: source?.profile?.state || '',
+              pincode: source?.profile?.pincode || '',
+              status: source?.profile?.status || 'active',
               customFields: source?.profile?.customFields || [],
             },
             applications:
@@ -247,11 +249,12 @@ export class ElasticsearchService {
         mobile_country_code: "",
         gender: "",
         dob: null,
-        address: "",
-        district: "",
-        state: "",
-        pincode: "",
-        status: "active",
+        country:'',
+        address: '',
+        district: '',
+        state: '',
+        pincode: '',
+        status: 'active',
         customFields: [],
       };
 

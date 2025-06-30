@@ -108,19 +108,6 @@ export class PostgresUserService implements IServicelocator {
     this.otpDigits = this.configService.get<number>("OTP_DIGITS") || 6;
     this.smsKey = this.configService.get<string>("SMS_KEY");
   }
-  async onModuleInit() {
-    if (isElasticsearchEnabled()) {
-      await this.initializeElasticsearch();
-    }
-  }
-  private async initializeElasticsearch() {
-    try {
-      await this.userElasticsearchService.initialize();
-      LoggerUtil.log("Elasticsearch index initialized successfully");
-    } catch (error) {
-      LoggerUtil.error("Failed to initialize Elasticsearch index", error);
-    }
-  }
 
   public async sendPasswordResetLink(
     request: any,
@@ -1564,11 +1551,12 @@ export class PostgresUserService implements IServicelocator {
               dob:
                 result.dob instanceof Date
                   ? result.dob.toISOString()
-                  : result.dob ?? "",
-              address: result.address || "",
-              state: result.state || "",
-              district: result.district || "",
-              pincode: result.pincode || "",
+                  : result.dob ?? '',
+              country: result.country || '',
+              address: result.address || '',
+              state: result.state || '',
+              district: result.district || '',
+              pincode: result.pincode || '',
               status: result.status,
               customFields: elasticCustomFields,
             },
@@ -2808,6 +2796,7 @@ export class PostgresUserService implements IServicelocator {
         mobile: user.mobile?.toString() || "",
         mobile_country_code: user.mobile_country_code || "",
         dob: formattedDob,
+        country: user.country,
         gender: user.gender,
         address: user.address || "",
         district: user.district || "",
@@ -2848,10 +2837,11 @@ export class PostgresUserService implements IServicelocator {
                 mobile_country_code: dbUser.mobile_country_code || "",
                 dob: formattedDob,
                 gender: dbUser.gender,
-                address: dbUser.address || "",
-                district: dbUser.district || "",
-                state: dbUser.state || "",
-                pincode: dbUser.pincode || "",
+                country: dbUser.country || '',
+                address: dbUser.address || '',
+                district: dbUser.district || '',
+                state: dbUser.state || '',
+                pincode: dbUser.pincode || '',
                 status: dbUser.status,
                 customFields,
               },
