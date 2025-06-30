@@ -1,40 +1,40 @@
-import { Injectable } from "@nestjs/common";
-import { CohortMembersDto } from "src/cohortMembers/dto/cohortMembers.dto";
-import { CohortMembersSearchDto } from "src/cohortMembers/dto/cohortMembers-search.dto";
+import { Injectable } from '@nestjs/common';
+import { CohortMembersDto } from 'src/cohortMembers/dto/cohortMembers.dto';
+import { CohortMembersSearchDto } from 'src/cohortMembers/dto/cohortMembers-search.dto';
 import {
   CohortMembers,
   MemberStatus,
-} from "src/cohortMembers/entities/cohort-member.entity";
-import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
-import { PostgresFieldsService } from "./fields-adapter";
-import { HttpStatus } from "@nestjs/common";
-import { User } from "src/user/entities/user-entity";
-import { CohortMembersUpdateDto } from "src/cohortMembers/dto/cohortMember-update.dto";
-import { Fields } from "src/fields/entities/fields.entity";
-import { FieldValues } from "src/fields/entities/fields-values.entity";
-import { isUUID } from "class-validator";
-import { Cohort } from "src/cohort/entities/cohort.entity";
-import APIResponse from "src/common/responses/response";
-import { response, Response } from "express";
-import { APIID } from "src/common/utils/api-id.config";
-import { NotificationRequest } from "@utils/notification.axios";
-import { CohortAcademicYear } from "src/cohortAcademicYear/entities/cohortAcademicYear.entity";
-import { PostgresAcademicYearService } from "./academicyears-adapter";
-import { API_RESPONSES } from "@utils/response.messages";
-import { LoggerUtil } from "src/common/logger/LoggerUtil";
-import { ShortlistingLogger } from "src/common/logger/ShortlistingLogger";
-import { PostgresUserService } from "./user-adapter";
-import { isValid } from "date-fns";
-import { FieldValuesOptionDto } from "src/user/dto/user-create.dto";
-import { In } from "typeorm";
-import { ElasticsearchService } from "src/elasticsearch/elasticsearch.service";
-import { FormSubmissionService } from "src/forms/services/form-submission.service";
-import { FormSubmissionStatus } from "src/forms/entities/form-submission.entity";
-import { FormSubmissionSearchDto } from "src/forms/dto/form-submission-search.dto";
-import { FormsService } from "src/forms/forms.service";
-import { isElasticsearchEnabled } from "src/common/utils/elasticsearch.util";
-import { UserElasticsearchService } from "src/elasticsearch/user-elasticsearch.service";
+} from 'src/cohortMembers/entities/cohort-member.entity';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { PostgresFieldsService } from './fields-adapter';
+import { HttpStatus } from '@nestjs/common';
+import { User } from 'src/user/entities/user-entity';
+import { CohortMembersUpdateDto } from 'src/cohortMembers/dto/cohortMember-update.dto';
+import { Fields } from 'src/fields/entities/fields.entity';
+import { FieldValues } from 'src/fields/entities/fields-values.entity';
+import { isUUID } from 'class-validator';
+import { Cohort } from 'src/cohort/entities/cohort.entity';
+import APIResponse from 'src/common/responses/response';
+import { response, Response } from 'express';
+import { APIID } from 'src/common/utils/api-id.config';
+import { NotificationRequest } from '@utils/notification.axios';
+import { CohortAcademicYear } from 'src/cohortAcademicYear/entities/cohortAcademicYear.entity';
+import { PostgresAcademicYearService } from './academicyears-adapter';
+import { API_RESPONSES } from '@utils/response.messages';
+import { LoggerUtil } from 'src/common/logger/LoggerUtil';
+import { ShortlistingLogger } from 'src/common/logger/ShortlistingLogger';
+import { PostgresUserService } from './user-adapter';
+import { isValid } from 'date-fns';
+import { FieldValuesOptionDto } from 'src/user/dto/user-create.dto';
+import { In } from 'typeorm';
+import { ElasticsearchService } from 'src/elasticsearch/elasticsearch.service';
+import { FormSubmissionService } from 'src/forms/services/form-submission.service';
+import { FormSubmissionStatus } from 'src/forms/entities/form-submission.entity';
+import { FormSubmissionSearchDto } from 'src/forms/dto/form-submission-search.dto';
+import { FormsService } from 'src/forms/forms.service';
+import { isElasticsearchEnabled } from 'src/common/utils/elasticsearch.util';
+import { UserElasticsearchService } from 'src/elasticsearch/user-elasticsearch.service';
 @Injectable()
 export class PostgresCohortMembersService {
   constructor(
@@ -117,7 +117,7 @@ export class PostgresCohortMembersService {
 
         const cohortDetails = await this.getUserDetails(
           cohortId,
-          "cohortId",
+          'cohortId',
           fieldvalues,
           cohortAcademicyearId
         );
@@ -182,9 +182,9 @@ export class PostgresCohortMembersService {
         mobile: data?.mobile,
       };
 
-      if (fieldShowHide === "true") {
+      if (fieldShowHide === 'true') {
         const fieldValues = await this.getFieldandFieldValues(data.userId);
-        userDetails["customField"] = fieldValues;
+        userDetails['customField'] = fieldValues;
         results.userDetails.push(userDetails);
       } else {
         results.userDetails.push(userDetails);
@@ -220,7 +220,7 @@ export class PostgresCohortMembersService {
   async findCustomFields(role) {
     const customFields = await this.fieldsRepository.find({
       where: {
-        context: "USERS",
+        context: 'USERS',
         contextType: role.toUpperCase(),
       },
     });
@@ -239,7 +239,7 @@ export class PostgresCohortMembersService {
 
   async findUserName(searchData: string, searchKey: any, cohortAcademicYear) {
     let whereCase;
-    if (searchKey == "cohortId") {
+    if (searchKey == 'cohortId') {
       whereCase = `where CM."cohortId" =$1`;
     } else {
       whereCase = `where CM."userId" =$1`;
@@ -286,11 +286,11 @@ export class PostgresCohortMembersService {
       const whereClause = {};
       if (filters && Object.keys(filters).length > 0) {
         Object.entries(filters).forEach(([key, value]) => {
-          if (key === "cohortId") {
+          if (key === 'cohortId') {
             if (Array.isArray(value)) {
               whereClause[key] = value;
-            } else if (typeof value === "string") {
-              whereClause[key] = value.split(",").map((id) => id.trim()); // Convert to array
+            } else if (typeof value === 'string') {
+              whereClause[key] = value.split(',').map((id) => id.trim()); // Convert to array
             } else {
               return APIResponse.error(
                 res,
@@ -310,10 +310,10 @@ export class PostgresCohortMembersService {
         userYearExistInYear = [],
         finalExistRecord = [];
       // Check if cohortId exists for passing year
-      if (whereClause["cohortId"]) {
+      if (whereClause['cohortId']) {
         const getYearExistRecord = await this.isCohortExistForYear(
           academicyearId,
-          whereClause["cohortId"]
+          whereClause['cohortId']
         );
         if (getYearExistRecord.length === 0) {
           return APIResponse.error(
@@ -331,11 +331,11 @@ export class PostgresCohortMembersService {
       }
 
       // Check if userId exists for passing year
-      if (whereClause["userId"]) {
+      if (whereClause['userId']) {
         const getYearExitUser = await this.isUserExistForYear(
           academicyearId,
           // cohortMembersSearchDto.filters.userId
-          whereClause["userId"]
+          whereClause['userId']
         );
         if (getYearExitUser.length === 0) {
           return APIResponse.error(
@@ -354,8 +354,8 @@ export class PostgresCohortMembersService {
 
       // Validate if both cohortId and userId match in the same academic year
       if (
-        whereClause["userId"] &&
-        whereClause["cohortId"] &&
+        whereClause['userId'] &&
+        whereClause['cohortId'] &&
         !cohortYearExistInYear.some((cayId) =>
           userYearExistInYear.includes(cayId)
         )
@@ -370,18 +370,18 @@ export class PostgresCohortMembersService {
       }
       // Add cohortAcademicYearId filter if applicable
       if (finalExistRecord.length > 0) {
-        whereClause["cohortAcademicYearId"] = finalExistRecord;
+        whereClause['cohortAcademicYearId'] = finalExistRecord;
       }
       const whereKeys = [
-        "cohortId",
-        "userId",
-        "role",
-        "name",
-        "status",
-        "cohortAcademicYearId",
-        "firstName",
-        "lastName",
-        "email",
+        'cohortId',
+        'userId',
+        'role',
+        'name',
+        'status',
+        'cohortAcademicYearId',
+        'firstName',
+        'lastName',
+        'email',
       ];
       whereKeys.forEach((key) => {
         if (whereClause[key]) {
@@ -389,8 +389,8 @@ export class PostgresCohortMembersService {
         }
       });
 
-      if (limit) options.push(["limit", limit]);
-      if (offset) options.push(["offset", offset]);
+      if (limit) options.push(['limit', limit]);
+      if (offset) options.push(['offset', offset]);
 
       const order = {};
       if (sort) {
@@ -413,11 +413,11 @@ export class PostgresCohortMembersService {
       where = Array.from(uniqueWhere.entries());
       results = await this.getCohortMemberUserDetails(
         where,
-        "true",
+        'true',
         options,
         order
       );
-      if (results["userDetails"].length == 0) {
+      if (results['userDetails'].length == 0) {
         return APIResponse.error(
           res,
           apiId,
@@ -432,10 +432,10 @@ export class PostgresCohortMembersService {
         // Extract unique createdBy and updatedBy user IDs
         const userIds: string[] = Array.from(
           new Set(
-            results["userDetails"]
+            results['userDetails']
               .map((user) => [user.createdBy, user.updatedBy])
               .flat()
-              .filter((id) => typeof id === "string")
+              .filter((id) => typeof id === 'string')
           )
         ) as string[];
 
@@ -446,7 +446,7 @@ export class PostgresCohortMembersService {
 
             if (userDetails && Object.keys(userDetails).length > 0) {
               // Update userDetails with createdByName and updatedByName
-              results["userDetails"] = results["userDetails"].map((user) => ({
+              results['userDetails'] = results['userDetails'].map((user) => ({
                 ...user,
                 createdByName: user.createdBy
                   ? userDetails[user.createdBy] || null
@@ -556,7 +556,7 @@ export class PostgresCohortMembersService {
     if (getUserDetails.length > 0) {
       results.totalCount = parseInt(getUserDetails[0].total_count, 10);
       for (const data of getUserDetails) {
-        if (fieldShowHide === "false") {
+        if (fieldShowHide === 'false') {
           results.userDetails.push(data);
         } else {
           const fieldValues =
@@ -577,7 +577,7 @@ export class PostgresCohortMembersService {
             };
           });
 
-          data["customField"] = fieldValues.concat(fieldValuesForCohort);
+          data['customField'] = fieldValues.concat(fieldValuesForCohort);
           results.userDetails.push(data);
         }
       }
@@ -722,7 +722,7 @@ export class PostgresCohortMembersService {
         } catch (elasticError) {
           // Log Elasticsearch error but don't fail the request
           LoggerUtil.error(
-            "Failed to update Elasticsearch with cohort member status",
+            'Failed to update Elasticsearch with cohort member status',
             `Error: ${elasticError.message}`,
             apiId
           );
@@ -766,31 +766,31 @@ export class PostgresCohortMembersService {
     let limit, offset;
 
     if (where.length > 0) {
-      whereCase = "WHERE ";
+      whereCase = 'WHERE ';
 
       const processCondition = ([key, value]) => {
         switch (key) {
-          case "role":
+          case 'role':
             return `R."name"='${value}'`;
-          case "status": {
+          case 'status': {
             const statusValues = Array.isArray(value)
-              ? value.map((status) => `'${status}'`).join(", ")
+              ? value.map((status) => `'${status}'`).join(', ')
               : `'${value}'`;
             return `CM."status" IN (${statusValues})`;
           }
-          case "firstName": {
+          case 'firstName': {
             return `U."firstName" ILIKE '%${value}%'`;
           }
-          case "cohortAcademicYearId": {
+          case 'cohortAcademicYearId': {
             const cohortIdAcademicYear = Array.isArray(value)
-              ? value.map((id) => `'${id}'`).join(", ")
+              ? value.map((id) => `'${id}'`).join(', ')
               : `'${value}'`;
             return `CM."cohortAcademicYearId" IN (${cohortIdAcademicYear})`;
           }
-          case "cohortId": {
+          case 'cohortId': {
             //Handles UUID array properly
             const formattedIds = Array.isArray(value)
-              ? value.map((id) => `'${id}'`).join(", ")
+              ? value.map((id) => `'${id}'`).join(', ')
               : `'${value}'`;
             return `CM."${key}" IN (${formattedIds})`;
           }
@@ -799,7 +799,7 @@ export class PostgresCohortMembersService {
           }
         }
       };
-      whereCase += where.map(processCondition).join(" AND ");
+      whereCase += where.map(processCondition).join(' AND ');
     }
 
     let query = `SELECT U."userId", U."username",U."email", U."firstName", U."middleName", U."lastName", R."name" AS role, U."district", U."state",U."mobile",U."deviceId",U."gender",U."dob",
@@ -812,10 +812,10 @@ export class PostgresCohortMembersService {
       ON R."roleId" = UR."roleId" ${whereCase}`;
 
     options.forEach((option) => {
-      if (option[0] === "limit") {
+      if (option[0] === 'limit') {
         limit = option[1];
       }
-      if (option[0] === "offset") {
+      if (option[0] === 'offset') {
         offset = option[1];
       }
     });
@@ -823,7 +823,7 @@ export class PostgresCohortMembersService {
     if (order && Object.keys(order).length > 0) {
       const orderField = Object.keys(order)[0];
       const orderDirection =
-        order[orderField].toUpperCase() === "ASC" ? "ASC" : "DESC";
+        order[orderField].toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
       query += ` ORDER BY U."${orderField}" ${orderDirection}`;
     }
 
@@ -853,8 +853,8 @@ export class PostgresCohortMembersService {
         return APIResponse.error(
           res,
           apiId,
-          "Bad Request",
-          "Invalid input: Please Enter a valid UUID for cohortMembershipId.",
+          'Bad Request',
+          'Invalid input: Please Enter a valid UUID for cohortMembershipId.',
           HttpStatus.BAD_REQUEST
         );
       }
@@ -867,14 +867,14 @@ export class PostgresCohortMembersService {
         customFieldValidate =
           await this.fieldsService.validateCustomFieldByContext(
             cohortMembersUpdateDto,
-            "COHORTMEMBER",
-            "COHORTMEMBER"
+            'COHORTMEMBER',
+            'COHORTMEMBER'
           );
         if (!customFieldValidate || !isValid) {
           return APIResponse.error(
             response,
             apiId,
-            "BAD_REQUEST",
+            'BAD_REQUEST',
             `${customFieldValidate}`,
             HttpStatus.BAD_REQUEST
           );
@@ -890,8 +890,8 @@ export class PostgresCohortMembersService {
         return APIResponse.error(
           res,
           apiId,
-          "Not Found",
-          "Invalid input: Cohort member not found.",
+          'Not Found',
+          'Invalid input: Cohort member not found.',
           HttpStatus.NOT_FOUND
         );
       }
@@ -956,7 +956,7 @@ export class PostgresCohortMembersService {
         } catch (elasticError) {
           // Log Elasticsearch error but don't fail the request
           LoggerUtil.error(
-            "Failed to update Elasticsearch with cohort member status",
+            'Failed to update Elasticsearch with cohort member status',
             `Error: ${elasticError.message}`,
             apiId
           );
@@ -964,7 +964,7 @@ export class PostgresCohortMembersService {
       }
 
       // Send notification if applicable for this status onlu
-      const notifyStatuses = ["dropout", "shortlisted", "rejected"];
+      const notifyStatuses = ['dropout', 'shortlisted', 'rejected'];
       const { status, statusReason } = cohortMembersUpdateDto;
 
       if (notifyStatuses.includes(status)) {
@@ -979,26 +979,26 @@ export class PostgresCohortMembersService {
 
         if (userData?.email) {
           const validStatusKeys = {
-            dropout: "onStudentDropout",
-            shortlisted: "onStudentShortlisted",
-            rejected: "onStudentRejected",
+            dropout: 'onStudentDropout',
+            shortlisted: 'onStudentShortlisted',
+            rejected: 'onStudentRejected',
           };
 
           //This is notification payload required to send
 
           const notificationPayload = {
             isQueue: false,
-            context: "USER",
+            context: 'USER',
             key: validStatusKeys[status],
             replacements: {
-              "{username}": `${userData.firstName ?? ""} ${
-                userData.lastName ?? ""
+              '{username}': `${userData.firstName ?? ''} ${
+                userData.lastName ?? ''
               }`.trim(),
-              "{firstName}": userData.firstName ?? "",
-              "{lastName}": userData.lastName ?? "",
-              "{programName}": cohortData?.name ?? "the program",
-              "{status}": status,
-              "{statusReason}": statusReason ?? "Not specified",
+              '{firstName}': userData.firstName ?? '',
+              '{lastName}': userData.lastName ?? '',
+              '{programName}': cohortData?.name ?? 'the program',
+              '{status}': status,
+              '{statusReason}': statusReason ?? 'Not specified',
             },
             email: {
               receipients: [userData.email],
@@ -1015,8 +1015,8 @@ export class PostgresCohortMembersService {
               dateTime: new Date().toISOString(),
               userId: userData.userId,
               email: userData.email,
-              shortlistedStatus: status as "shortlisted" | "rejected",
-              failureReason: mailSend.result.email.errors.join(", "),
+              shortlistedStatus: status as 'shortlisted' | 'rejected',
+              failureReason: mailSend.result.email.errors.join(', '),
               cohortId: cohortMembershipToUpdate.cohortId,
             });
           } else {
@@ -1025,7 +1025,7 @@ export class PostgresCohortMembersService {
               dateTime: new Date().toISOString(),
               userId: userData.userId,
               email: userData.email,
-              shortlistedStatus: status as "shortlisted" | "rejected",
+              shortlistedStatus: status as 'shortlisted' | 'rejected',
               cohortId: cohortMembershipToUpdate.cohortId,
             });
           }
@@ -1034,8 +1034,8 @@ export class PostgresCohortMembersService {
           ShortlistingLogger.logEmailFailure({
             dateTime: new Date().toISOString(),
             userId: cohortMembershipToUpdate.userId,
-            email: "No email found",
-            shortlistedStatus: status as "shortlisted" | "rejected",
+            email: 'No email found',
+            shortlistedStatus: status as 'shortlisted' | 'rejected',
             failureReason: `No email found for user ${cohortMembershipToUpdate.userId}`,
             cohortId: cohortMembershipToUpdate.cohortId,
           });
@@ -1066,11 +1066,11 @@ export class PostgresCohortMembersService {
           );
         } else {
           const errorMessage =
-            responseForCustomField.error || "Internal server error";
+            responseForCustomField.error || 'Internal server error';
           return APIResponse.error(
             res,
             apiId,
-            "Internal Server Error",
+            'Internal Server Error',
             errorMessage,
             HttpStatus.INTERNAL_SERVER_ERROR
           );
@@ -1120,8 +1120,8 @@ export class PostgresCohortMembersService {
         return APIResponse.error(
           res,
           apiId,
-          "Not Found",
-          "Invalid input: Cohort member not found.",
+          'Not Found',
+          'Invalid input: Cohort member not found.',
           HttpStatus.NOT_FOUND
         );
       }
@@ -1135,7 +1135,7 @@ export class PostgresCohortMembersService {
         apiId,
         result,
         HttpStatus.OK,
-        "Cohort Member deleted Successfully."
+        'Cohort Member deleted Successfully.'
       );
     } catch (e) {
       LoggerUtil.error(
@@ -1492,7 +1492,7 @@ export class PostgresCohortMembersService {
           apiId,
           [],
           HttpStatus.OK,
-          "No cohort members found"
+          'No cohort members found'
         );
       }
 
@@ -1509,15 +1509,15 @@ export class PostgresCohortMembersService {
           res,
           apiId,
           API_RESPONSES.BAD_REQUEST,
-          "Invalid or missing cohortId for form contextId",
+          'Invalid or missing cohortId for form contextId',
           HttpStatus.BAD_REQUEST
         );
       }
       //to get the active form for cohort
       const form = await this.formsService.getFormData({
-        context: "COHORTMEMBER",
+        context: 'COHORTMEMBER',
         contextId,
-        contextType: "COHORTMEMBER",
+        contextType: 'COHORTMEMBER',
         tenantId,
       });
 
@@ -1525,7 +1525,7 @@ export class PostgresCohortMembersService {
       const enrichedResults = await Promise.all(
         userDetails.map(async (user) => {
           let formInfo = null;
-          if (form?.formid && form.status === "active") {
+          if (form?.formid && form.status === 'active') {
             // Fetch form submission for this user
             const dto = new FormSubmissionSearchDto({
               filters: {
@@ -1535,7 +1535,7 @@ export class PostgresCohortMembersService {
               },
               limit: 1,
               offset: 0,
-              sort: ["createdAt", "desc"],
+              sort: ['createdAt', 'desc'],
             });
             const submissionResult = await this.formSubmissionService.findAll(
               dto
@@ -1591,7 +1591,7 @@ export class PostgresCohortMembersService {
         res,
         apiId,
         API_RESPONSES.INTERNAL_SERVER_ERROR,
-        e.message ?? "Internal Server Error",
+        e.message ?? 'Internal Server Error',
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
@@ -1617,11 +1617,11 @@ export class PostgresCohortMembersService {
     const whereClause = {};
     if (filters && Object.keys(filters).length > 0) {
       Object.entries(filters).forEach(([key, value]) => {
-        if (key === "cohortId") {
+        if (key === 'cohortId') {
           if (Array.isArray(value)) {
             whereClause[key] = value;
-          } else if (typeof value === "string") {
-            whereClause[key] = value.split(",").map((id) => id.trim());
+          } else if (typeof value === 'string') {
+            whereClause[key] = value.split(',').map((id) => id.trim());
           }
         } else {
           whereClause[key] = value;
@@ -1632,20 +1632,20 @@ export class PostgresCohortMembersService {
     let cohortYearExistInYear = [],
       userYearExistInYear = [],
       finalExistRecord = [];
-    if (whereClause["cohortId"]) {
+    if (whereClause['cohortId']) {
       const getYearExistRecord = await this.isCohortExistForYear(
         academicyearId,
-        whereClause["cohortId"]
+        whereClause['cohortId']
       );
       cohortYearExistInYear = getYearExistRecord.map(
         (item) => item.cohortAcademicYearId
       );
       finalExistRecord = [...cohortYearExistInYear];
     }
-    if (whereClause["userId"]) {
+    if (whereClause['userId']) {
       const getYearExitUser = await this.isUserExistForYear(
         academicyearId,
-        whereClause["userId"]
+        whereClause['userId']
       );
       userYearExistInYear = getYearExitUser.map(
         (item) => item.cohortAcademicYearId
@@ -1653,8 +1653,8 @@ export class PostgresCohortMembersService {
       finalExistRecord = [...userYearExistInYear];
     }
     if (
-      whereClause["userId"] &&
-      whereClause["cohortId"] &&
+      whereClause['userId'] &&
+      whereClause['cohortId'] &&
       !cohortYearExistInYear.some((cayId) =>
         userYearExistInYear.includes(cayId)
       )
@@ -1662,15 +1662,15 @@ export class PostgresCohortMembersService {
       return { userDetails: [] };
     }
     if (finalExistRecord.length > 0) {
-      whereClause["cohortAcademicYearId"] = finalExistRecord;
+      whereClause['cohortAcademicYearId'] = finalExistRecord;
     }
     const whereKeys = [
-      "cohortId",
-      "userId",
-      "role",
-      "name",
-      "status",
-      "cohortAcademicYearId",
+      'cohortId',
+      'userId',
+      'role',
+      'name',
+      'status',
+      'cohortAcademicYearId',
     ];
     const uniqueWhere = new Map();
     whereKeys.forEach((key) => {
@@ -1684,8 +1684,8 @@ export class PostgresCohortMembersService {
       }
     });
     where = Array.from(uniqueWhere.entries());
-    if (limit) options.push(["limit", limit]);
-    if (offset) options.push(["offset", offset]);
+    if (limit) options.push(['limit', limit]);
+    if (offset) options.push(['offset', offset]);
     const order = {};
     if (sort) {
       const [sortField, sortOrder] = sort;
@@ -1693,17 +1693,17 @@ export class PostgresCohortMembersService {
     }
     results = await this.getCohortMemberUserDetails(
       where,
-      "true",
+      'true',
       options,
       order
     );
-    if (includeDisplayValues == true && results["userDetails"]?.length) {
+    if (includeDisplayValues == true && results['userDetails']?.length) {
       const userIds: string[] = Array.from(
         new Set(
-          results["userDetails"]
+          results['userDetails']
             .map((user) => [user.updatedBy, user.createdBy])
             .flat()
-            .filter((id) => typeof id === "string")
+            .filter((id) => typeof id === 'string')
         )
       ) as string[];
       if (userIds.length > 0) {
@@ -1711,7 +1711,7 @@ export class PostgresCohortMembersService {
           const userDetails = await this.getUserNamesByIds(userIds);
           if (userDetails && Object.keys(userDetails).length > 0) {
             // Get userDetails
-            results["userDetails"] = results["userDetails"].map((user) => ({
+            results['userDetails'] = results['userDetails'].map((user) => ({
               ...user,
 
               updatedByName: user.updatedBy
@@ -1784,7 +1784,7 @@ export class PostgresCohortMembersService {
         APIID.COHORT_MEMBER_EVALUATE_SHORTLISTING,
         result,
         HttpStatus.OK,
-        "Cohort member shortlisting evaluation completed successfully"
+        'Cohort member shortlisting evaluation completed successfully'
       );
     } catch (error) {
       return APIResponse.error(
@@ -1818,15 +1818,15 @@ export class PostgresCohortMembersService {
     const maxConcurrentBatches =
       parseInt(process.env.MAX_CONCURRENT_BATCHES) || 10;
     const enableEmailNotifications =
-      process.env.ENABLE_SHORTLISTING_EMAILS === "true";
-    const notifyStatuses = ["shortlisted", "rejected"];
+      process.env.ENABLE_SHORTLISTING_EMAILS === 'true';
+    const notifyStatuses = ['shortlisted', 'rejected'];
 
     // Field ID for shortlist date - should be configured based on your field structure
     const shortlistDateFieldId = process.env.SHORTLIST_DATE_FIELD_ID;
 
     if (!shortlistDateFieldId) {
       throw new Error(
-        "SHORTLIST_DATE_FIELD_ID environment variable is required for shortlisting evaluation"
+        'SHORTLIST_DATE_FIELD_ID environment variable is required for shortlisting evaluation'
       );
     }
 
@@ -1835,11 +1835,11 @@ export class PostgresCohortMembersService {
     try {
       ShortlistingLogger.logShortlisting(
         `Starting cohort member shortlisting evaluation with batch size: ${batchSize}, max concurrent batches: ${maxConcurrentBatches}`,
-        "ShortlistingEvaluation"
+        'ShortlistingEvaluation'
       );
 
       // Step 1: Process Active Cohorts
-      const currentDateUTC = new Date().toISOString().split("T")[0]; // Use UTC date for timezone consistency
+      const currentDateUTC = new Date().toISOString().split('T')[0]; // Use UTC date for timezone consistency
       const activeCohorts = await this.processActiveCohorts(
         tenantId,
         academicyearId,
@@ -1850,15 +1850,15 @@ export class PostgresCohortMembersService {
 
       if (activeCohorts.length === 0) {
         ShortlistingLogger.logShortlisting(
-          "No active cohorts found with shortlist date today or earlier",
-          "ShortlistingEvaluation"
+          'No active cohorts found with shortlist date today or earlier',
+          'ShortlistingEvaluation'
         );
         return [];
       }
 
       ShortlistingLogger.logShortlisting(
         `Found ${activeCohorts.length} active cohorts with shortlist date today or earlier`,
-        "ShortlistingEvaluation"
+        'ShortlistingEvaluation'
       );
 
       // Step 2: Evaluate Each Cohort
@@ -1891,7 +1891,7 @@ export class PostgresCohortMembersService {
       return {
         ...aggregatedResults,
         ...performanceMetrics,
-        message: "Cohort member shortlisting evaluation completed successfully",
+        message: 'Cohort member shortlisting evaluation completed successfully',
       };
     } catch (error) {
       const totalTime = Date.now() - startTime;
@@ -1899,7 +1899,7 @@ export class PostgresCohortMembersService {
       ShortlistingLogger.logShortlistingError(
         `Error in cohort member shortlisting evaluation after ${totalTime}ms`,
         error.message,
-        "ShortlistingEvaluation"
+        'ShortlistingEvaluation'
       );
 
       throw error;
@@ -1952,7 +1952,7 @@ export class PostgresCohortMembersService {
 
     ShortlistingLogger.logShortlisting(
       `Processing ${batches.length} batches for cohort ${cohortId} with max ${maxConcurrentBatches} concurrent batches`,
-      "ShortlistingEvaluation"
+      'ShortlistingEvaluation'
     );
 
     // Process batches with controlled concurrency to avoid overwhelming the system
@@ -1991,7 +1991,7 @@ export class PostgresCohortMembersService {
           )}/${
             batches.length
           } batches. Progress: ${totalProcessed} records processed`,
-          "ShortlistingEvaluation"
+          'ShortlistingEvaluation'
         );
       }
     }
@@ -2082,7 +2082,7 @@ export class PostgresCohortMembersService {
 
         // Update counters
         processed++;
-        if (evaluationResult.status === "shortlisted") {
+        if (evaluationResult.status === 'shortlisted') {
           shortlisted++;
         } else {
           rejected++;
@@ -2096,7 +2096,7 @@ export class PostgresCohortMembersService {
         ShortlistingLogger.logShortlistingError(
           `Failed to process member ${member.userId} in batch ${batchNumber}/${totalBatches}`,
           error.message,
-          "ShortlistingEvaluation"
+          'ShortlistingEvaluation'
         );
 
         // Log failure to CSV for manual review and analysis
@@ -2104,7 +2104,7 @@ export class PostgresCohortMembersService {
           dateTime: new Date().toISOString(),
           cohortId: cohortId,
           userId: member.userId,
-          emailSentStatus: "FAILED",
+          emailSentStatus: 'FAILED',
           failureReason: error.message,
         });
       }
@@ -2119,9 +2119,9 @@ export class PostgresCohortMembersService {
       // Log slow batches (>5 seconds)
       ShortlistingLogger.logShortlisting(
         `Slow batch detected: Batch ${batchNumber}/${totalBatches} took ${batchTime}ms for ${processed} records`,
-        "ShortlistingEvaluation",
+        'ShortlistingEvaluation',
         undefined,
-        "warn"
+        'warn'
       );
     }
 
@@ -2164,8 +2164,8 @@ export class PostgresCohortMembersService {
 
       // Send email notification if enabled and status requires notification
       const enableEmailNotifications =
-        process.env.ENABLE_SHORTLISTING_EMAILS !== "false";
-      const notifyStatuses = ["shortlisted", "rejected"];
+        process.env.ENABLE_SHORTLISTING_EMAILS !== 'false';
+      const notifyStatuses = ['shortlisted', 'rejected'];
 
       if (
         enableEmailNotifications &&
@@ -2184,24 +2184,24 @@ export class PostgresCohortMembersService {
 
           if (userData?.email) {
             const validStatusKeys = {
-              shortlisted: "onStudentShortlisted",
-              rejected: "onStudentRejected",
+              shortlisted: 'onStudentShortlisted',
+              rejected: 'onStudentRejected',
             };
 
             const notificationPayload = {
               isQueue: false,
-              context: "USER",
+              context: 'USER',
               key: validStatusKeys[evaluationResult.status],
               replacements: {
-                "{username}": `${userData.firstName ?? ""} ${
-                  userData.lastName ?? ""
+                '{username}': `${userData.firstName ?? ''} ${
+                  userData.lastName ?? ''
                 }`.trim(),
-                "{firstName}": userData.firstName ?? "",
-                "{lastName}": userData.lastName ?? "",
-                "{programName}": cohortData?.name ?? "the program",
-                "{status}": evaluationResult.status,
-                "{statusReason}":
-                  evaluationResult.statusReason ?? "Not specified",
+                '{firstName}': userData.firstName ?? '',
+                '{lastName}': userData.lastName ?? '',
+                '{programName}': cohortData?.name ?? 'the program',
+                '{status}': evaluationResult.status,
+                '{statusReason}':
+                  evaluationResult.statusReason ?? 'Not specified',
               },
               email: {
                 receipients: [userData.email],
@@ -2219,9 +2219,9 @@ export class PostgresCohortMembersService {
                 userId: userData.userId,
                 email: userData.email,
                 shortlistedStatus: evaluationResult.status as
-                  | "shortlisted"
-                  | "rejected",
-                failureReason: mailSend.result.email.errors.join(", "),
+                  | 'shortlisted'
+                  | 'rejected',
+                failureReason: mailSend.result.email.errors.join(', '),
                 cohortId: evaluationResult.cohortId,
               });
             } else {
@@ -2231,8 +2231,8 @@ export class PostgresCohortMembersService {
                 userId: userData.userId,
                 email: userData.email,
                 shortlistedStatus: evaluationResult.status as
-                  | "shortlisted"
-                  | "rejected",
+                  | 'shortlisted'
+                  | 'rejected',
                 cohortId: evaluationResult.cohortId,
               });
             }
@@ -2241,10 +2241,10 @@ export class PostgresCohortMembersService {
             ShortlistingLogger.logEmailFailure({
               dateTime: new Date().toISOString(),
               userId: evaluationResult.userId || cohortMembershipId,
-              email: "No email found",
+              email: 'No email found',
               shortlistedStatus: evaluationResult.status as
-                | "shortlisted"
-                | "rejected",
+                | 'shortlisted'
+                | 'rejected',
               failureReason: `No email found for user ${
                 evaluationResult.userId || cohortMembershipId
               }`,
@@ -2256,10 +2256,10 @@ export class PostgresCohortMembersService {
           ShortlistingLogger.logEmailFailure({
             dateTime: new Date().toISOString(),
             userId: evaluationResult.userId || cohortMembershipId,
-            email: "Unknown",
+            email: 'Unknown',
             shortlistedStatus: evaluationResult.status as
-              | "shortlisted"
-              | "rejected",
+              | 'shortlisted'
+              | 'rejected',
             failureReason: emailError.message,
             cohortId: evaluationResult.cohortId,
           });
@@ -2271,7 +2271,7 @@ export class PostgresCohortMembersService {
       ShortlistingLogger.logShortlistingError(
         `Failed to batch update member status for ${cohortMembershipId}`,
         error.message,
-        "ShortlistingEvaluation"
+        'ShortlistingEvaluation'
       );
       throw error;
     }
@@ -2342,7 +2342,7 @@ export class PostgresCohortMembersService {
   /**
    * Fetches active cohorts that have a shortlist date less than or equal to today's UTC date
    * Uses the configured shortlist date field to identify cohorts for processing
-   * 
+   *
    * This method handles timezone consistency and missed cron executions by including
    * cohorts with shortlist dates from previous days that may have been missed
    *
@@ -2388,14 +2388,14 @@ export class PostgresCohortMembersService {
   private async getActiveFormsForCohort(cohortId: string, tenantId: string) {
     // Find forms with the specific cohortId as contextId and tenantId
     const forms = await this.formsService.getFormDetail(
-      "COHORTMEMBER",
-      "COHORTMEMBER",
+      'COHORTMEMBER',
+      'COHORTMEMBER',
       tenantId,
       cohortId
     );
 
     // Filter to only active forms
-    const activeForms = forms.filter((form) => form.status === "active");
+    const activeForms = forms.filter((form) => form.status === 'active');
     return activeForms;
   }
 
@@ -2422,7 +2422,7 @@ export class PostgresCohortMembersService {
         } else {
           LoggerUtil.warn(
             `Form ${form.formid} has rules but invalid structure. Expected logic and conditions properties.`,
-            "ShortlistingEvaluation"
+            'ShortlistingEvaluation'
           );
         }
       }
@@ -2547,7 +2547,7 @@ export class PostgresCohortMembersService {
 
     // Recursively traverse all properties
     for (const [key, property] of Object.entries(schema.properties)) {
-      if (property && typeof property === "object") {
+      if (property && typeof property === 'object') {
         // Check if this property has a fieldId
         if ((property as any).fieldId) {
           fieldIds.push((property as any).fieldId);
@@ -2591,9 +2591,9 @@ export class PostgresCohortMembersService {
     // If no forms or rules are defined for this cohort, skip processing
     if (!formFieldsAndRules || formFieldsAndRules.length === 0) {
       return {
-        status: "submitted", // Keep original status, don't process
+        status: 'submitted', // Keep original status, don't process
         statusReason:
-          "No evaluation rules defined for this cohort - skipping shortlisting process",
+          'No evaluation rules defined for this cohort - skipping shortlisting process',
         userId: member.userId,
         cohortId: member.cohortId,
       };
@@ -2625,7 +2625,7 @@ export class PostgresCohortMembersService {
       }
     }
 
-    const finalStatus = allRulesPass ? "shortlisted" : "rejected";
+    const finalStatus = allRulesPass ? 'shortlisted' : 'rejected';
     const finalReason = allRulesPass
       ? this.formatShortlistedReason()
       : this.formatStatusReason(failedConditions);
@@ -2678,9 +2678,9 @@ export class PostgresCohortMembersService {
 
     // Apply the logic (AND/OR) to combine results
     let finalResult;
-    if (logic === "AND") {
+    if (logic === 'AND') {
       finalResult = results.every((result) => result === true);
-    } else if (logic === "OR") {
+    } else if (logic === 'OR') {
       finalResult = results.some((result) => result === true);
     } else {
       // Default to AND if logic is not specified
@@ -2711,9 +2711,9 @@ export class PostgresCohortMembersService {
     // Handle missing field values
     if (!fieldValue) {
       failedConditions.push({
-        fieldLabel: fieldName || "Unknown Field",
-        expectedValue: Array.isArray(value) ? value.join(", ") : value,
-        submittedValue: "Not submitted",
+        fieldLabel: fieldName || 'Unknown Field',
+        expectedValue: Array.isArray(value) ? value.join(', ') : value,
+        submittedValue: 'Not submitted',
       });
       return false;
     }
@@ -2725,7 +2725,7 @@ export class PostgresCohortMembersService {
     if (!isMatch) {
       failedConditions.push({
         fieldLabel: fieldName || fieldValue.label,
-        expectedValue: Array.isArray(value) ? value.join(", ") : value,
+        expectedValue: Array.isArray(value) ? value.join(', ') : value,
         submittedValue: submittedValue,
       });
     }
@@ -2777,21 +2777,21 @@ export class PostgresCohortMembersService {
     if (submittedValue === expectedValue) return true;
 
     // Handle comma-separated values in submitted value
-    if (submittedValue.includes(",")) {
-      const submittedArray = submittedValue.split(",").map((val) => val.trim());
+    if (submittedValue.includes(',')) {
+      const submittedArray = submittedValue.split(',').map((val) => val.trim());
       return submittedArray.some((val) => val === expectedValue);
     }
 
     // Handle comma-separated values in expected value
-    if (expectedValue.includes(",")) {
-      const expectedArray = expectedValue.split(",").map((val) => val.trim());
+    if (expectedValue.includes(',')) {
+      const expectedArray = expectedValue.split(',').map((val) => val.trim());
       return expectedArray.some((val) => val === submittedValue);
     }
 
     // Handle both having comma-separated values
-    if (submittedValue.includes(",") && expectedValue.includes(",")) {
-      const submittedArray = submittedValue.split(",").map((val) => val.trim());
-      const expectedArray = expectedValue.split(",").map((val) => val.trim());
+    if (submittedValue.includes(',') && expectedValue.includes(',')) {
+      const submittedArray = submittedValue.split(',').map((val) => val.trim());
+      const expectedArray = expectedValue.split(',').map((val) => val.trim());
       return submittedArray.some((submitted) =>
         expectedArray.includes(submitted)
       );
@@ -2809,18 +2809,18 @@ export class PostgresCohortMembersService {
    */
   private getTypedValue(fieldValue: any) {
     switch (fieldValue.type) {
-      case "text":
-      case "textarea":
+      case 'text':
+      case 'textarea':
         return fieldValue.textValue || fieldValue.textareaValue;
-      case "numeric":
+      case 'numeric':
         return fieldValue.numberValue;
-      case "calendar":
+      case 'calendar':
         return fieldValue.calendarValue;
-      case "drop_down":
+      case 'drop_down':
         return fieldValue.dropdownValue;
-      case "radio":
+      case 'radio':
         return fieldValue.radioValue;
-      case "checkbox":
+      case 'checkbox':
         return fieldValue.checkboxValue;
       default:
         return fieldValue.textValue;
@@ -2836,7 +2836,7 @@ export class PostgresCohortMembersService {
    */
   private formatStatusReason(failedConditions: any[]): string {
     if (!failedConditions || failedConditions.length === 0) {
-      return "Evaluation failed - no specific reason available";
+      return 'Evaluation failed - no specific reason available';
     }
 
     return failedConditions
@@ -2844,7 +2844,7 @@ export class PostgresCohortMembersService {
         (condition) =>
           `${condition.fieldLabel}: Expected "${condition.expectedValue}", Submitted "${condition.submittedValue}"`
       )
-      .join("; ");
+      .join('; ');
   }
 
   /**
@@ -2854,7 +2854,7 @@ export class PostgresCohortMembersService {
    * @returns Formatted status reason string for shortlisted members
    */
   private formatShortlistedReason(): string {
-    return "Congratulations! Your application has been shortlisted. All required shortlisting criteria have been met successfully.";
+    return 'Congratulations! Your application has been shortlisted. All required shortlisting criteria have been met successfully.';
   }
 
   /**
@@ -2869,9 +2869,9 @@ export class PostgresCohortMembersService {
       for (const item of obj) {
         fieldIds.push(...this.extractAllFieldIds(item));
       }
-    } else if (typeof obj === "object") {
+    } else if (typeof obj === 'object') {
       for (const key of Object.keys(obj)) {
-        if (key === "fieldId" && typeof obj[key] === "string") {
+        if (key === 'fieldId' && typeof obj[key] === 'string') {
           fieldIds.push(obj[key]);
         } else {
           fieldIds.push(...this.extractAllFieldIds(obj[key]));
@@ -2913,10 +2913,10 @@ export class PostgresCohortMembersService {
   /**
    * Main orchestration method for processing active cohorts
    * Handles the high-level flow of shortlisting evaluation
-   * 
+   *
    * This method processes cohorts with shortlist dates less than or equal to today's UTC date,
    * ensuring timezone consistency and recovery from missed cron executions.
-   * 
+   *
    * @param tenantId - The tenant ID for the evaluation context
    * @param academicyearId - The academic year ID for the evaluation context
    * @param userId - The user ID from the authenticated request
@@ -2939,15 +2939,15 @@ export class PostgresCohortMembersService {
 
     if (activeCohorts.length === 0) {
       ShortlistingLogger.logShortlisting(
-        "No active cohorts found with shortlist date today or earlier",
-        "ShortlistingEvaluation"
+        'No active cohorts found with shortlist date today or earlier',
+        'ShortlistingEvaluation'
       );
       return [];
     }
 
     ShortlistingLogger.logShortlisting(
       `Found ${activeCohorts.length} active cohorts with shortlist date today or earlier`,
-      "ShortlistingEvaluation"
+      'ShortlistingEvaluation'
     );
 
     return activeCohorts;
@@ -2956,7 +2956,7 @@ export class PostgresCohortMembersService {
   /**
    * Evaluates a single cohort for shortlisting
    * Handles form validation, member processing, and result aggregation for one cohort
-   * 
+   *
    * @param cohort - The cohort to evaluate
    * @param tenantId - The tenant ID for the evaluation context
    * @param batchSize - Number of records per batch
@@ -2976,7 +2976,7 @@ export class PostgresCohortMembersService {
     const cohortStartTime = Date.now();
     ShortlistingLogger.logShortlisting(
       `Processing cohort: ${cohort.cohortId} (${cohort.name})`,
-      "ShortlistingEvaluation"
+      'ShortlistingEvaluation'
     );
 
     // Step 2: Fetch Active Forms for this cohort
@@ -2992,14 +2992,20 @@ export class PostgresCohortMembersService {
 
       ShortlistingLogger.logShortlisting(
         `Found ${activeForms.length} active forms with rules for cohort: ${cohort.cohortId}`,
-        "ShortlistingEvaluation"
+        'ShortlistingEvaluation'
       );
     } else {
       ShortlistingLogger.logShortlisting(
         `No active forms found for cohort: ${cohort.cohortId}. Skipping shortlisting process for this cohort.`,
-        "ShortlistingEvaluation"
+        'ShortlistingEvaluation'
       );
-      return { processed: 0, shortlisted: 0, rejected: 0, failures: 0, processingTime: 0 };
+      return {
+        processed: 0,
+        shortlisted: 0,
+        rejected: 0,
+        failures: 0,
+        processingTime: 0,
+      };
     }
 
     // Check if any forms have valid rules structure and valid fieldIds
@@ -3010,9 +3016,15 @@ export class PostgresCohortMembersService {
     if (!hasValidRules) {
       ShortlistingLogger.logShortlisting(
         `No valid rules structure found for cohort: ${cohort.cohortId}. Skipping shortlisting process for this cohort.`,
-        "ShortlistingEvaluation"
+        'ShortlistingEvaluation'
       );
-      return { processed: 0, shortlisted: 0, rejected: 0, failures: 0, processingTime: 0 };
+      return {
+        processed: 0,
+        shortlisted: 0,
+        rejected: 0,
+        failures: 0,
+        processingTime: 0,
+      };
     }
 
     // Validate that all fieldIds in rules exist in form fields
@@ -3023,14 +3035,20 @@ export class PostgresCohortMembersService {
         `Cohort ${
           cohort.cohortId
         } has forms with invalid fieldIds: ${validationResult.invalidFieldIds.join(
-          ", "
+          ', '
         )}. Skipping shortlisting evaluation for this cohort.`,
         `Form IDs with invalid fieldIds: ${validationResult.invalidFormIds.join(
-          ", "
+          ', '
         )}`,
-        "ShortlistingEvaluation"
+        'ShortlistingEvaluation'
       );
-      return { processed: 0, shortlisted: 0, rejected: 0, failures: 0, processingTime: 0 };
+      return {
+        processed: 0,
+        shortlisted: 0,
+        rejected: 0,
+        failures: 0,
+        processingTime: 0,
+      };
     }
 
     // Step 4: Get "Submitted" Cohort Members for this cohort
@@ -3041,14 +3059,20 @@ export class PostgresCohortMembersService {
     if (submittedMembers.length === 0) {
       ShortlistingLogger.logShortlisting(
         `No submitted members found for cohort: ${cohort.cohortId}`,
-        "ShortlistingEvaluation"
+        'ShortlistingEvaluation'
       );
-      return { processed: 0, shortlisted: 0, rejected: 0, failures: 0, processingTime: 0 };
+      return {
+        processed: 0,
+        shortlisted: 0,
+        rejected: 0,
+        failures: 0,
+        processingTime: 0,
+      };
     }
 
     ShortlistingLogger.logShortlisting(
       `Found ${submittedMembers.length} submitted members for cohort: ${cohort.cohortId}`,
-      "ShortlistingEvaluation"
+      'ShortlistingEvaluation'
     );
 
     // Step 5: Process members in parallel batches for optimal performance
@@ -3066,19 +3090,19 @@ export class PostgresCohortMembersService {
 
     ShortlistingLogger.logShortlisting(
       `Cohort ${cohort.cohortId} completed in ${cohortProcessingTime}ms. Processed: ${batchResults.processed}, Shortlisted: ${batchResults.shortlisted}, Rejected: ${batchResults.rejected}, Failures: ${batchResults.failures}`,
-      "ShortlistingEvaluation"
+      'ShortlistingEvaluation'
     );
 
     return {
       ...batchResults,
-      processingTime: cohortProcessingTime
+      processingTime: cohortProcessingTime,
     };
   }
 
   /**
    * Aggregates results from multiple cohort processing operations
    * Combines individual cohort results into overall performance metrics
-   * 
+   *
    * @param cohortResults - Array of results from individual cohort processing
    * @returns Aggregated results with total counts and processing time
    */
@@ -3089,7 +3113,7 @@ export class PostgresCohortMembersService {
     let totalFailures = 0;
     let totalProcessingTime = 0;
 
-    cohortResults.forEach(result => {
+    cohortResults.forEach((result) => {
       totalProcessed += result.processed;
       totalShortlisted += result.shortlisted;
       totalRejected += result.rejected;
@@ -3102,14 +3126,14 @@ export class PostgresCohortMembersService {
       totalShortlisted,
       totalRejected,
       totalFailures,
-      totalProcessingTime
+      totalProcessingTime,
     };
   }
 
   /**
    * Calculates and formats performance metrics for the shortlisting evaluation
    * Provides insights into processing speed and system capacity
-   * 
+   *
    * @param totalProcessed - Total number of records processed
    * @param totalTime - Total processing time in milliseconds
    * @param batchSize - Batch size used for processing
@@ -3129,7 +3153,7 @@ export class PostgresCohortMembersService {
       `Shortlisting evaluation completed in ${totalTime}ms. Processed: ${totalProcessed}, Shortlisted: ${totalProcessed}, Rejected: ${totalProcessed}, Failures: ${totalProcessed}. Performance: ${recordsPerSecond.toFixed(
         2
       )} records/sec. Estimated daily capacity: ${estimatedDailyCapacity.toLocaleString()} records`,
-      "ShortlistingEvaluation"
+      'ShortlistingEvaluation'
     );
 
     return {
@@ -3137,7 +3161,7 @@ export class PostgresCohortMembersService {
       recordsPerSecond: parseFloat(recordsPerSecond.toFixed(2)),
       estimatedDailyCapacity: Math.round(estimatedDailyCapacity),
       batchSize,
-      maxConcurrentBatches
+      maxConcurrentBatches,
     };
   }
 }
