@@ -371,6 +371,14 @@ export class UserElasticsearchService implements OnModuleInit {
                   },
                 },
                 {
+                  prefix: {
+                    'profile.country': {
+                      value: searchTerm.toLowerCase(),
+                      boost: 3.0,
+                    },
+                  },
+                },
+                {
                   wildcard: {
                     'profile.firstName': {
                       value: `*${searchTerm.toLowerCase()}*`,
@@ -381,6 +389,14 @@ export class UserElasticsearchService implements OnModuleInit {
                 {
                   wildcard: {
                     'profile.lastName': {
+                      value: `*${searchTerm.toLowerCase()}*`,
+                      boost: 2.0,
+                    },
+                  },
+                },
+                {
+                  wildcard: {
+                    'profile.country': {
                       value: `*${searchTerm.toLowerCase()}*`,
                       boost: 2.0,
                     },
@@ -414,6 +430,15 @@ export class UserElasticsearchService implements OnModuleInit {
                 {
                   fuzzy: {
                     'profile.lastName': {
+                      value: searchTerm,
+                      fuzziness: 'AUTO',
+                      boost: 1.0,
+                    },
+                  },
+                },
+                {
+                  fuzzy: {
+                    'profile.country': {
                       value: searchTerm,
                       fuzziness: 'AUTO',
                       boost: 1.0,
@@ -454,11 +479,51 @@ export class UserElasticsearchService implements OnModuleInit {
                 'country',
               ].includes(field)
             ) {
-              searchQuery.bool.filter.push({
-                wildcard: {
-                  [`profile.${field}`]: `*${String(value).toLowerCase()}*`,
-                },
-              });
+              // Special handling for country to be more flexible
+              if (field === 'country') {
+                console.log(
+                  `Country filter - original value: "${value}", lowercase: "${String(
+                    value
+                  ).toLowerCase()}"`
+                );
+                searchQuery.bool.filter.push({
+                  bool: {
+                    should: [
+                      // Case-insensitive exact match
+                      {
+                        match: {
+                          [`profile.${field}`]: {
+                            query: String(value),
+                            operator: 'or',
+                            fuzziness: 'AUTO',
+                          },
+                        },
+                      },
+                      // Wildcard match for partial matching (case insensitive)
+                      {
+                        wildcard: {
+                          [`profile.${field}`]: `*${String(
+                            value
+                          ).toLowerCase()}*`,
+                        },
+                      },
+                      // Also try with original case
+                      {
+                        wildcard: {
+                          [`profile.${field}`]: `*${String(value)}*`,
+                        },
+                      },
+                    ],
+                    minimum_should_match: 1,
+                  },
+                });
+              } else {
+                searchQuery.bool.filter.push({
+                  wildcard: {
+                    [`profile.${field}`]: `*${String(value).toLowerCase()}*`,
+                  },
+                });
+              }
             } else if (field.includes('.')) {
               // For nested fields (not applications)
               const [nestedPath, nestedField] = field.split('.');
@@ -605,6 +670,32 @@ export class UserElasticsearchService implements OnModuleInit {
       const message = `Failed to search users in Elasticsearch: ${error.message}`;
       logger.error(message, error.stack);
       throw new Error(message);
+    }
+  }
+
+  /**
+   * Debug method to check what countries are stored in the index
+   */
+  async debugCountries() {
+    try {
+      const result = await this.elasticsearchService.search(
+        this.indexName,
+        {
+          match_all: {},
+        },
+        {
+          size: 1000,
+          _source: ['profile.country'],
+        }
+      );
+
+      const countries = result.hits
+        .map((hit) => hit._source?.profile?.country)
+        .filter(Boolean);
+      return countries;
+    } catch (error) {
+      console.error('Error debugging countries:', error);
+      throw error;
     }
   }
 
