@@ -1,8 +1,9 @@
 // src/elasticsearch/elasticsearch.service.ts
-import { Injectable, Logger } from '@nestjs/common';
-import { Client } from '@elastic/elasticsearch';
-import { ConfigService } from '@nestjs/config';
-import { IUser, IProfile } from './interfaces/user.interface';
+import { Injectable, Logger } from "@nestjs/common";
+import { Client } from "@elastic/elasticsearch";
+import { ConfigService } from "@nestjs/config";
+import { IUser, IProfile } from "./interfaces/user.interface";
+import { isElasticsearchEnabled } from '../common/utils/elasticsearch.util';
 
 interface SearchResponse {
   hits: {
@@ -26,32 +27,38 @@ export class ElasticsearchService {
   private readonly client: Client;
 
   constructor(private readonly configService: ConfigService) {
-    const node =
-      process.env.ELASTICSEARCH_HOST ??
-      'http://localhost:9200';
-    this.logger.log(`Attempting to connect to Elasticsearch host: ${node}`);
-    this.client = new Client({ node });
+    if (isElasticsearchEnabled()) {
+      const node =
+        process.env.ELASTICSEARCH_HOST ??
+        'http://localhost:9200';
+      this.logger.log(`Attempting to connect to Elasticsearch host: ${node}`);
+      this.client = new Client({ node });
 
-    // Listen for connection events
-    this.client.diagnostic.on('response', (err, result) => {
-      if (err) {
-        this.logger.error('Elasticsearch connection error:', err);
-      } else if (result && result.meta && result.meta.connection) {
-        this.logger.log(
-          `Elasticsearch host ${result.meta.connection.url.href} responded with status ${result.statusCode}`
-        );
-      }
-    });
-
-    // Initial ping
-    this.client
-      .ping()
-      .then(() => {
-        this.logger.log(`Successfully connected to Elasticsearch host: ${node}`);
-      })
-      .catch((error) => {
-        this.logger.error(`Failed to connect to Elasticsearch host: ${node}`, error);
+      // Listen for connection events
+      this.client.diagnostic.on('response', (err, result) => {
+        if (err) {
+          this.logger.error('Elasticsearch connection error:', err);
+        } else if (result && result.meta && result.meta.connection) {
+          this.logger.log(
+            `Elasticsearch host ${result.meta.connection.url.href} responded with status ${result.statusCode}`
+          );
+        }
       });
+
+      // Initial ping
+      this.client
+        .ping()
+        .then(() => {
+          this.logger.log(`Successfully connected to Elasticsearch host: ${node}`);
+        })
+        .catch((error) => {
+          this.logger.error(`Failed to connect to Elasticsearch host: ${node}`, error);
+        });
+    } else {
+      this.logger.log('Elasticsearch is disabled by USE_ELASTICSEARCH flag.');
+      // @ts-ignore
+      this.client = undefined;
+    }
   }
 
   async initialize(indexName: string, mappings: any) {
@@ -138,7 +145,7 @@ export class ElasticsearchService {
       if (!response.hits?.hits || response.hits.hits.length === 0) {
         return {
           hits: [],
-          total: response.hits.total || { value: 0, relation: 'eq' },
+          total: response.hits.total || { value: 0, relation: "eq" },
         };
       }
 
@@ -151,32 +158,32 @@ export class ElasticsearchService {
           _score: hit._score,
           _ignored: hit._ignored || [],
           _source: {
-            userId: source?.userId || '',
+            userId: source?.userId || "",
             profile: {
-              userId: source?.userId || '',
-              username: source?.profile?.username || '',
-              firstName: source?.profile?.firstName || '',
-              lastName: source?.profile?.lastName || '',
-              middleName: source?.profile?.middleName || '',
-              email: source?.profile?.email || '',
-              mobile: source?.profile?.mobile || '',
-              mobile_country_code: source?.profile?.mobile_country_code || '',
-              gender: source?.profile?.gender || '',
-              address: source?.profile?.address || '',
-              district: source?.profile?.district || '',
-              state: source?.profile?.state || '',
-              pincode: source?.profile?.pincode || '',
-              status: source?.profile?.status || 'active',
+              userId: source?.userId || "",
+              username: source?.profile?.username || "",
+              firstName: source?.profile?.firstName || "",
+              lastName: source?.profile?.lastName || "",
+              middleName: source?.profile?.middleName || "",
+              email: source?.profile?.email || "",
+              mobile: source?.profile?.mobile || "",
+              mobile_country_code: source?.profile?.mobile_country_code || "",
+              gender: source?.profile?.gender || "",
+              address: source?.profile?.address || "",
+              district: source?.profile?.district || "",
+              state: source?.profile?.state || "",
+              pincode: source?.profile?.pincode || "",
+              status: source?.profile?.status || "active",
               customFields: source?.profile?.customFields || [],
             },
             applications:
               source?.applications?.map((app) => ({
-                cohortId: app.cohortId || '',
-                formId: app.formId || '',
-                submissionId: app.submissionId || '',
-                status: app.status || '',
-                cohortmemberstatus: app.cohortmemberstatus || '',
-                formstatus: app.formstatus || '',
+                cohortId: app.cohortId || "",
+                formId: app.formId || "",
+                submissionId: app.submissionId || "",
+                status: app.status || "",
+                cohortmemberstatus: app.cohortmemberstatus || "",
+                formstatus: app.formstatus || "",
                 progress: app.progress || {},
                 lastSavedAt: app.lastSavedAt || null,
                 submittedAt: app.submittedAt || null,
@@ -222,7 +229,7 @@ export class ElasticsearchService {
           
           ctx._source.updatedAt = params.updatedAt;
         `,
-        lang: 'painless',
+        lang: "painless",
         params: {
           application,
           updatedAt: new Date().toISOString(),
@@ -231,20 +238,20 @@ export class ElasticsearchService {
 
       const defaultProfile: IProfile = {
         userId,
-        username: '',
-        firstName: '',
-        lastName: '',
-        middleName: '',
-        email: '',
-        mobile: '',
-        mobile_country_code: '',
-        gender: '',
+        username: "",
+        firstName: "",
+        lastName: "",
+        middleName: "",
+        email: "",
+        mobile: "",
+        mobile_country_code: "",
+        gender: "",
         dob: null,
-        address: '',
-        district: '',
-        state: '',
-        pincode: '',
-        status: 'active',
+        address: "",
+        district: "",
+        state: "",
+        pincode: "",
+        status: "active",
         customFields: [],
       };
 
@@ -260,7 +267,7 @@ export class ElasticsearchService {
         },
       };
 
-      await this.update('users', userId, updateBody);
+      await this.update("users", userId, updateBody);
       this.logger.log(
         `Application for user ${userId} updated successfully in Elasticsearch`
       );
@@ -275,20 +282,20 @@ export class ElasticsearchService {
 
   async searchUsers(query: any) {
     try {
-      const response = await this.search('users', query);
+      const response = await this.search("users", query);
       return response.hits.map((hit) => ({
         _id: hit._id,
         ...hit._source,
       }));
     } catch (error) {
-      this.logger.error('Failed to search users:', error);
+      this.logger.error("Failed to search users:", error);
       throw error;
     }
   }
 
   async getApplication(userId: string) {
     try {
-      const response = await this.get('users', userId);
+      const response = await this.get("users", userId);
       if (!response || !response._source) {
         return null;
       }
@@ -327,7 +334,7 @@ export class ElasticsearchService {
       });
       return response;
     } catch (error) {
-      this.logger.error('Bulk operation failed:', error);
+      this.logger.error("Bulk operation failed:", error);
       throw error;
     }
   }

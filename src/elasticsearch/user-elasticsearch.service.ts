@@ -1,10 +1,10 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { ElasticsearchService } from './elasticsearch.service';
-import { IUser, IApplication, ICourse } from './interfaces/user.interface';
-import { v4 as uuidv4 } from 'uuid';
+import { Injectable, Logger } from "@nestjs/common";
+import { ElasticsearchService } from "./elasticsearch.service";
+import { IUser, IApplication, ICourse } from "./interfaces/user.interface";
+import { v4 as uuidv4 } from "uuid";
 @Injectable()
 export class UserElasticsearchService {
-  private readonly indexName = 'users';
+  private readonly indexName = "users";
   private readonly logger = new Logger(UserElasticsearchService.name);
   constructor(private readonly elasticsearchService: ElasticsearchService) {}
 
@@ -13,7 +13,7 @@ export class UserElasticsearchService {
       await this.elasticsearchService.ping();
       return true;
     } catch (error) {
-      this.logger.error('Elasticsearch is not available:', error);
+      this.logger.error("Elasticsearch is not available:", error);
       return false;
     }
   }
@@ -42,93 +42,93 @@ export class UserElasticsearchService {
       const mapping = {
         mappings: {
           properties: {
-            userId: { type: 'keyword' },
+            userId: { type: "keyword" },
             profile: {
               properties: {
-                userId: { type: 'keyword' },
-                username: { type: 'keyword' },
-                firstName: { type: 'text' },
-                lastName: { type: 'text' },
-                middleName: { type: 'text' },
-                email: { type: 'keyword' },
-                mobile: { type: 'keyword' },
-                mobile_country_code: { type: 'keyword' },
-                gender: { type: 'keyword' },
-                dob: { type: 'date', null_value: null },
-                address: { type: 'text' },
-                state: { type: 'keyword' },
-                district: { type: 'keyword' },
-                country: { type: 'keyword' },
-                pincode: { type: 'keyword' },
-                status: { type: 'keyword' },
+                userId: { type: "keyword" },
+                username: { type: "keyword" },
+                firstName: { type: "text" },
+                lastName: { type: "text" },
+                middleName: { type: "text" },
+                email: { type: "keyword" },
+                mobile: { type: "keyword" },
+                mobile_country_code: { type: "keyword" },
+                gender: { type: "keyword" },
+                dob: { type: "date", null_value: null },
+                address: { type: "text" },
+                state: { type: "keyword" },
+                district: { type: "keyword" },
+                country: { type: "keyword" },
+                pincode: { type: "keyword" },
+                status: { type: "keyword" },
                 customFields: {
-                  type: 'nested',
+                  type: "nested",
                   properties: {
-                    fieldId: { type: 'keyword' },
-                    code: { type: 'keyword' }, // Always treat as string
-                    label: { type: 'text' },
-                    type: { type: 'keyword' },
-                    value: { type: 'text' }, // Always treat as string for flexibility
+                    fieldId: { type: "keyword" },
+                    code: { type: "keyword" }, // Always treat as string
+                    label: { type: "text" },
+                    type: { type: "keyword" },
+                    value: { type: "text" }, // Always treat as string for flexibility
                   },
                 },
               },
             },
             applications: {
-              type: 'nested',
+              type: "nested",
               properties: {
-                cohortId: { type: 'keyword' },
-                status: { type: 'keyword' },
-                cohortmemberstatus: { type: 'keyword' },
-                formstatus: { type: 'keyword' },
+                cohortId: { type: "keyword" },
+                status: { type: "keyword" },
+                cohortmemberstatus: { type: "keyword" },
+                formstatus: { type: "keyword" },
                 progress: {
                   properties: {
                     pages: {
-                      type: 'object',
+                      type: "object",
                       properties: {
-                        completed: { type: 'boolean' },
-                        fields: { type: 'object', dynamic: true },
+                        completed: { type: "boolean" },
+                        fields: { type: "object", dynamic: true },
                       },
                     },
                     overall: {
                       properties: {
-                        completed: { type: 'integer' },
-                        total: { type: 'integer' },
+                        completed: { type: "integer" },
+                        total: { type: "integer" },
                       },
                     },
                   },
                 },
-                lastSavedAt: { type: 'date', null_value: null },
-                submittedAt: { type: 'date', null_value: null },
+                lastSavedAt: { type: "date", null_value: null },
+                submittedAt: { type: "date", null_value: null },
                 cohortDetails: {
                   properties: {
-                    name: { type: 'text' },
-                    description: { type: 'text' },
-                    startDate: { type: 'date', null_value: null },
-                    endDate: { type: 'date', null_value: null },
-                    status: { type: 'keyword' },
+                    name: { type: "text" },
+                    description: { type: "text" },
+                    startDate: { type: "date", null_value: null },
+                    endDate: { type: "date", null_value: null },
+                    status: { type: "keyword" },
                   },
                 },
               },
             },
             courses: {
-              type: 'nested',
+              type: "nested",
               properties: {
-                courseId: { type: 'keyword' },
-                progress: { type: 'float' },
-                lessonsCompleted: { type: 'keyword' },
-                lastLessonAt: { type: 'date', null_value: null },
+                courseId: { type: "keyword" },
+                progress: { type: "float" },
+                lessonsCompleted: { type: "keyword" },
+                lastLessonAt: { type: "date", null_value: null },
                 courseDetails: {
                   properties: {
-                    name: { type: 'text' },
-                    description: { type: 'text' },
-                    duration: { type: 'integer' },
-                    status: { type: 'keyword' },
+                    name: { type: "text" },
+                    description: { type: "text" },
+                    duration: { type: "integer" },
+                    status: { type: "keyword" },
                   },
                 },
               },
             },
-            createdAt: { type: 'date', null_value: null },
-            updatedAt: { type: 'date', null_value: null },
+            createdAt: { type: "date", null_value: null },
+            updatedAt: { type: "date", null_value: null },
           },
         },
       };
@@ -136,7 +136,7 @@ export class UserElasticsearchService {
       await this.elasticsearchService.createIndex(this.indexName, mapping);
       console.log(`Index ${this.indexName} created successfully with mappings`);
     } catch (error) {
-      console.error('Failed to initialize Elasticsearch index:', error);
+      console.error("Failed to initialize Elasticsearch index:", error);
       throw new Error(
         `Failed to initialize Elasticsearch index: ${error.message}`
       );
@@ -146,13 +146,13 @@ export class UserElasticsearchService {
   async createUser(user: IUser) {
     try {
       // Handle empty date values
-      if (user.profile.dob === '') {
+      if (user.profile.dob === "") {
         user.profile.dob = undefined;
       }
-      if (user.createdAt === '') {
+      if (user.createdAt === "") {
         user.createdAt = new Date().toISOString();
       }
-      if (user.updatedAt === '') {
+      if (user.updatedAt === "") {
         user.updatedAt = new Date().toISOString();
       }
 
@@ -190,7 +190,7 @@ export class UserElasticsearchService {
       );
       return result;
     } catch (error) {
-      console.error('Failed to create user in Elasticsearch:', error);
+      console.error("Failed to create user in Elasticsearch:", error);
       throw new Error(
         `Failed to create user in Elasticsearch: ${error.message}`
       );
@@ -215,7 +215,7 @@ export class UserElasticsearchService {
     } catch (error: any) {
       // If the document is missing, create it from DB
       if (
-        error?.meta?.body?.error?.type === 'document_missing_exception' &&
+        error?.meta?.body?.error?.type === "document_missing_exception" &&
         fetchUserFromDb
       ) {
         // Fetch user from DB
@@ -252,7 +252,7 @@ export class UserElasticsearchService {
     } catch (error: any) {
       // If the document is missing, create it from DB
       if (
-        error?.meta?.body?.error?.type === 'document_missing_exception' &&
+        error?.meta?.body?.error?.type === "document_missing_exception" &&
         fetchUserFromDb
       ) {
         const userFromDb = await fetchUserFromDb(userId);
@@ -274,7 +274,7 @@ export class UserElasticsearchService {
       );
       return result;
     } catch (error) {
-      console.error('Failed to delete user from Elasticsearch:', error);
+      console.error("Failed to delete user from Elasticsearch:", error);
       throw new Error(
         `Failed to delete user from Elasticsearch: ${error.message}`
       );
@@ -292,7 +292,7 @@ export class UserElasticsearchService {
       if (error.meta?.statusCode === 404) {
         return null;
       }
-      console.error('Failed to get user from Elasticsearch:', error);
+      console.error("Failed to get user from Elasticsearch:", error);
       throw new Error(
         `Failed to get user from Elasticsearch: ${error.message}`
       );
@@ -321,10 +321,10 @@ export class UserElasticsearchService {
    * - All formatting and logic are handled here for consistency and reusability.
    */
   async searchUsers(body: any) {
-    const logger = new Logger('UserElasticsearchService');
+    const logger = new Logger("UserElasticsearchService");
     try {
       if (!body) {
-        throw new Error('Search query is required');
+        throw new Error("Search query is required");
       }
       const { limit, offset, ...query } = body;
 
@@ -333,7 +333,7 @@ export class UserElasticsearchService {
         (limit !== undefined && (isNaN(Number(limit)) || Number(limit) < 0)) ||
         (offset !== undefined && (isNaN(Number(offset)) || Number(offset) < 0))
       ) {
-        throw new Error('limit and offset must be positive numbers');
+        throw new Error("limit and offset must be positive numbers");
       }
 
       const searchQuery = {
@@ -344,8 +344,8 @@ export class UserElasticsearchService {
       };
       // Add text search with partial matching support
       if (query.q) {
-        if (typeof query.q !== 'string') {
-          throw new Error('Search query must be a string');
+        if (typeof query.q !== "string") {
+          throw new Error("Search query must be a string");
         }
         const searchTerm = query.q.trim();
         if (searchTerm.length > 0) {
@@ -354,7 +354,7 @@ export class UserElasticsearchService {
               should: [
                 {
                   prefix: {
-                    'profile.firstName': {
+                    "profile.firstName": {
                       value: searchTerm.toLowerCase(),
                       boost: 3.0,
                     },
@@ -362,7 +362,7 @@ export class UserElasticsearchService {
                 },
                 {
                   prefix: {
-                    'profile.lastName': {
+                    "profile.lastName": {
                       value: searchTerm.toLowerCase(),
                       boost: 3.0,
                     },
@@ -370,7 +370,7 @@ export class UserElasticsearchService {
                 },
                 {
                   wildcard: {
-                    'profile.firstName': {
+                    "profile.firstName": {
                       value: `*${searchTerm.toLowerCase()}*`,
                       boost: 2.0,
                     },
@@ -378,7 +378,7 @@ export class UserElasticsearchService {
                 },
                 {
                   wildcard: {
-                    'profile.lastName': {
+                    "profile.lastName": {
                       value: `*${searchTerm.toLowerCase()}*`,
                       boost: 2.0,
                     },
@@ -386,7 +386,7 @@ export class UserElasticsearchService {
                 },
                 {
                   term: {
-                    'profile.email': {
+                    "profile.email": {
                       value: searchTerm.toLowerCase(),
                       boost: 4.0,
                     },
@@ -394,7 +394,7 @@ export class UserElasticsearchService {
                 },
                 {
                   term: {
-                    'profile.username': {
+                    "profile.username": {
                       value: searchTerm.toLowerCase(),
                       boost: 4.0,
                     },
@@ -402,18 +402,18 @@ export class UserElasticsearchService {
                 },
                 {
                   fuzzy: {
-                    'profile.firstName': {
+                    "profile.firstName": {
                       value: searchTerm,
-                      fuzziness: 'AUTO',
+                      fuzziness: "AUTO",
                       boost: 1.0,
                     },
                   },
                 },
                 {
                   fuzzy: {
-                    'profile.lastName': {
+                    "profile.lastName": {
                       value: searchTerm,
-                      fuzziness: 'AUTO',
+                      fuzziness: "AUTO",
                       boost: 1.0,
                     },
                   },
@@ -425,30 +425,30 @@ export class UserElasticsearchService {
           searchQuery.bool.must.push(textSearchQuery);
         }
       }
-      if (query.filters && typeof query.filters === 'object') {
+      if (query.filters && typeof query.filters === "object") {
         // Special handling for cohortId and cohortmemberstatus in applications
         const appFilters: any = {};
         Object.entries(query.filters).forEach(([field, value]) => {
-          if (value !== undefined && value !== null && value !== '') {
+          if (value !== undefined && value !== null && value !== "") {
             // Handle cohortId and cohortmemberstatus as nested application filters
-            if (field === 'cohortId' || field === 'cohortmemberstatus') {
+            if (field === "cohortId" || field === "cohortmemberstatus") {
               appFilters[field] = value;
               return;
             }
             // For name fields, use wildcard for partial/case-insensitive match
             if (
               [
-                'firstName',
-                'lastName',
-                'middleName',
-                'username',
-                'email',
-                'status',
-                'district',
-                'state',
-                'pincode',
-                'gender',
-                'address',
+                "firstName",
+                "lastName",
+                "middleName",
+                "username",
+                "email",
+                "status",
+                "district",
+                "state",
+                "pincode",
+                "gender",
+                "address",
               ].includes(field)
             ) {
               searchQuery.bool.filter.push({
@@ -456,9 +456,9 @@ export class UserElasticsearchService {
                   [`profile.${field}`]: `*${String(value).toLowerCase()}*`,
                 },
               });
-            } else if (field.includes('.')) {
+            } else if (field.includes(".")) {
               // For nested fields (not applications)
-              const [nestedPath, nestedField] = field.split('.');
+              const [nestedPath, nestedField] = field.split(".");
               searchQuery.bool.filter.push({
                 nested: {
                   path: nestedPath,
@@ -487,7 +487,7 @@ export class UserElasticsearchService {
           if (appFilters.cohortId) {
             appMust.push({
               wildcard: {
-                'applications.cohortId': `*${String(
+                "applications.cohortId": `*${String(
                   appFilters.cohortId
                 ).toLowerCase()}*`,
               },
@@ -497,32 +497,32 @@ export class UserElasticsearchService {
             if (Array.isArray(appFilters.cohortmemberstatus)) {
               // Validate array contains only strings
               const validStatuses = appFilters.cohortmemberstatus.filter(
-                (v) => typeof v === 'string' && v.trim().length > 0
+                (v) => typeof v === "string" && v.trim().length > 0
               );
               if (validStatuses.length === 0) {
                 throw new Error(
-                  'cohortmemberstatus array must contain valid string values'
+                  "cohortmemberstatus array must contain valid string values"
                 );
               }
               // Use terms query for multiple statuses
               appMust.push({
                 terms: {
-                  'applications.cohortmemberstatus': validStatuses.map((v) =>
+                  "applications.cohortmemberstatus": validStatuses.map((v) =>
                     v.toLowerCase()
                   ),
                 },
               });
             } else {
               // Validate single value is a string
-              if (typeof appFilters.cohortmemberstatus !== 'string') {
+              if (typeof appFilters.cohortmemberstatus !== "string") {
                 throw new Error(
-                  'cohortmemberstatus must be a string or array of strings'
+                  "cohortmemberstatus must be a string or array of strings"
                 );
               }
               // Fallback to wildcard for single string
               appMust.push({
                 wildcard: {
-                  'applications.cohortmemberstatus': `*${String(
+                  "applications.cohortmemberstatus": `*${String(
                     appFilters.cohortmemberstatus
                   ).toLowerCase()}*`,
                 },
@@ -531,17 +531,17 @@ export class UserElasticsearchService {
           }
           searchQuery.bool.filter.push({
             nested: {
-              path: 'applications',
+              path: "applications",
               query: { bool: { must: appMust } },
             },
           });
         }
       }
-      if (query.cohortId && typeof query.cohortId === 'string') {
+      if (query.cohortId && typeof query.cohortId === "string") {
         searchQuery.bool.filter.push({
           nested: {
-            path: 'applications',
-            query: { term: { 'applications.cohortId': query.cohortId } },
+            path: "applications",
+            query: { term: { "applications.cohortId": query.cohortId } },
           },
         });
       }
@@ -554,30 +554,30 @@ export class UserElasticsearchService {
         {
           size,
           from,
-          sort: query.sort ?? [{ updatedAt: 'desc' }],
+          sort: query.sort ?? [{ updatedAt: "desc" }],
           _source: {
             includes: [
-              'userId',
-              'profile.*',
-              'applications.*',
-              'courses.*',
-              'createdAt',
-              'updatedAt',
+              "userId",
+              "profile.*",
+              "applications.*",
+              "courses.*",
+              "createdAt",
+              "updatedAt",
             ],
           },
         }
       );
       // Format the response as required
       return {
-        id: 'api.ES.Fetch',
-        ver: '1.0',
+        id: "api.ES.Fetch",
+        ver: "1.0",
         ts: new Date().toISOString(),
         params: {
           resmsgid: uuidv4(),
-          status: 'successful',
+          status: "successful",
           err: null,
           errmsg: null,
-          successmessage: 'Elasticsearch  Fetch successfully',
+          successmessage: "Elasticsearch  Fetch successfully",
         },
         responseCode: 200,
         result: {
@@ -647,7 +647,7 @@ export class UserElasticsearchService {
           application.cohortmemberstatus !== undefined
             ? application.cohortmemberstatus
             : existingCohortMemberStatus,
-        formstatus: application.formstatus || 'inactive',
+        formstatus: application.formstatus || "inactive",
         progress: {
           pages: {},
           overall: {
@@ -658,8 +658,8 @@ export class UserElasticsearchService {
         lastSavedAt: application.lastSavedAt || new Date().toISOString(),
         submittedAt: application.submittedAt || new Date().toISOString(),
         cohortDetails: application.cohortDetails || {
-          name: '',
-          status: 'active',
+          name: "",
+          status: "active",
         },
         formData: {},
       };
@@ -676,7 +676,7 @@ export class UserElasticsearchService {
           let pageCompleted = true;
 
           Object.entries(pageData).forEach(([fieldId, value]) => {
-            if (value !== null && value !== undefined && value !== '') {
+            if (value !== null && value !== undefined && value !== "") {
               // Use fieldId directly without schema or name
               fields[fieldId] = value;
               completedCount++;
@@ -687,7 +687,7 @@ export class UserElasticsearchService {
           });
 
           // Map page names
-          const pageName = pageId === 'default' ? 'eligibility' : pageId;
+          const pageName = pageId === "default" ? "eligibility" : pageId;
           pages[pageName] = {
             completed: pageCompleted,
             fields,
@@ -731,7 +731,7 @@ export class UserElasticsearchService {
           // Update the document's updatedAt timestamp
           ctx._source.updatedAt = params.updatedAt;
         `,
-        lang: 'painless',
+        lang: "painless",
         params: {
           application: mappedApplication,
           updatedAt: new Date().toISOString(),
@@ -754,11 +754,11 @@ export class UserElasticsearchService {
         }
       } else {
         throw new Error(
-          'User document not found in Elasticsearch and no fetchUserFromDb callback provided.'
+          "User document not found in Elasticsearch and no fetchUserFromDb callback provided."
         );
       }
     } catch (error) {
-      console.error('Failed to update application in Elasticsearch:', error);
+      console.error("Failed to update application in Elasticsearch:", error);
       throw error;
     }
   }
@@ -766,11 +766,11 @@ export class UserElasticsearchService {
   private getPageName(pageId: string): string {
     // Map page IDs to their corresponding names
     const pageMap = {
-      '0': 'eligibility',
-      '1': 'personalDetails',
-      '2': 'background',
-      '3': 'education',
-      '4': 'additional',
+      "0": "eligibility",
+      "1": "personalDetails",
+      "2": "background",
+      "3": "education",
+      "4": "additional",
     };
     return pageMap[pageId] ?? pageId;
   }
@@ -798,7 +798,7 @@ export class UserElasticsearchService {
             ctx._source.courses.add(params.course);
           }
         `,
-        lang: 'painless',
+        lang: "painless",
         params: {
           courseId,
           course,
@@ -813,7 +813,7 @@ export class UserElasticsearchService {
       );
       return result;
     } catch (error) {
-      console.error('Error updating course in Elasticsearch:', error);
+      console.error("Error updating course in Elasticsearch:", error);
       throw new Error(
         `Failed to update course in Elasticsearch: ${error.message}`
       );
@@ -830,23 +830,23 @@ export class UserElasticsearchService {
       // Validate input
       if (!userId || !cohortId || !pageId) {
         throw new Error(
-          'Missing required parameters: userId, cohortId, and pageId are required'
+          "Missing required parameters: userId, cohortId, and pageId are required"
         );
       }
 
       if (
         !pageData ||
-        typeof pageData.completed !== 'boolean' ||
+        typeof pageData.completed !== "boolean" ||
         !pageData.fields
       ) {
         throw new Error(
-          'Invalid page data: completed status and fields are required'
+          "Invalid page data: completed status and fields are required"
         );
       }
 
       // Validate fields object
-      if (typeof pageData.fields !== 'object') {
-        throw new Error('Invalid fields: must be an object');
+      if (typeof pageData.fields !== "object") {
+        throw new Error("Invalid fields: must be an object");
       }
 
       const script = {
@@ -888,7 +888,7 @@ export class UserElasticsearchService {
             ctx._source.applications.add(application);
           }
         `,
-        lang: 'painless',
+        lang: "painless",
         params: {
           cohortId,
           pageId,
@@ -905,7 +905,7 @@ export class UserElasticsearchService {
       );
       return result;
     } catch (error) {
-      console.error('Error updating application page in Elasticsearch:', error);
+      console.error("Error updating application page in Elasticsearch:", error);
       throw new Error(
         `Failed to update application page in Elasticsearch: ${error.message}`
       );
