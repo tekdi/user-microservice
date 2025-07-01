@@ -7,22 +7,17 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, FindOptionsWhere, Between, In } from 'typeorm';
+import { Repository, Between, In } from 'typeorm';
 import {
   FormSubmission,
   FormSubmissionStatus,
 } from '../entities/form-submission.entity';
-import {
-  CreateFormSubmissionDto,
-  FieldValueDto,
-} from '../dto/create-form-submission.dto';
+import { CreateFormSubmissionDto } from '../dto/create-form-submission.dto';
 import { UpdateFormSubmissionDto } from '../dto/update-form-submission.dto';
 import { FieldValues } from '../../fields/entities/fields-values.entity';
 import { Fields, FieldType } from '../../fields/entities/fields.entity';
-import { FieldValueConverter } from '../../utils/field-value-converter';
 import APIResponse from '../../common/responses/response';
 import { Response } from 'express';
-import { APIID } from '../../common/utils/api-id.config';
 import { API_RESPONSES } from '../../common/utils/response.messages';
 import { FieldsService } from '../../fields/fields.service';
 import { FieldValuesDto } from '../../fields/dto/field-values.dto';
@@ -873,7 +868,7 @@ export class FormSubmissionService {
             submission
           );
         } catch (error) {
-          throw new Error('Failed to update form submission details');
+          LoggerUtil.warn(`Failed to update form submission details`, error);
         }
       }
 
@@ -908,7 +903,7 @@ export class FormSubmissionService {
           const results = await Promise.all(fieldValuePromises);
           updatedFieldValues = results.filter((result) => result !== null);
         } catch (error) {
-          throw new Error('Failed to update field values');
+          LoggerUtil.warn(`Failed to update field values`, error);
         }
       }
       // Update Elasticsearch after successful form submission update
