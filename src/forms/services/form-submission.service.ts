@@ -1121,13 +1121,19 @@ export class FormSubmissionService {
       // --- END NEW LOGIC ---
 
       // Always fetch cohortId from the related Form entity
+      // Fetch cohortId from the related Form entity with proper error handling
       let cohortId = '';
       try {
         const form = await this.formsService.getFormById(formIdToMatch);
         cohortId = form?.contextId || '';
-      } catch (e) {
-        const logger = new Logger('FormSubmissionService');
-        logger.error(`Error fetching form with ID ${formIdToMatch}:`, e);
+        LoggerUtil.debug(
+          `Fetched cohortId: ${cohortId} for formId: ${formIdToMatch}`
+        );
+      } catch (error) {
+        LoggerUtil.warn(
+          `Failed to fetch cohortId for formId ${formIdToMatch}:`,
+          error
+        );
         cohortId = '';
       }
       let existingAppIndex = -1;
@@ -1135,8 +1141,15 @@ export class FormSubmissionService {
         existingAppIndex = applications.findIndex(
           (app) => app.cohortId === cohortId
         );
+        // If not found by cohortId, don't fallback to avoid inconsistencies
+        // Log this scenario for investigation
+        if (existingAppIndex === -1) {
+          LoggerUtil.warn(
+            `No application found for cohortId: ${cohortId}, will create new application`
+          );
+        }
       } else {
-        // fallback to old logic if cohortId is not available
+        // Use formId/submissionId only when cohortId is not available
         existingAppIndex = applications.findIndex(
           (app) =>
             app.formId === formIdToMatch &&
