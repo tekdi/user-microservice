@@ -678,47 +678,40 @@ export class PostgresCohortMembersService {
             userDoc && userDoc._source
               ? (userDoc._source as { applications?: any[] })
               : undefined;
-          const existingApplication =
-            source && Array.isArray(source.applications)
-              ? source.applications.find(
-                  (app) => app.cohortId === cohortMembers.cohortId
-                )
-              : undefined;
+          let applications = Array.isArray(source?.applications) ? [...source.applications] : [];
 
-          if (!existingApplication) {
-            // If application is missing, build and upsert the full user document (with progress pages)
-            const fullUserDoc =
-              await this.formSubmissionService.buildUserDocumentForElasticsearch(
-                cohortMembers.userId
-              );
-            if (fullUserDoc) {
-              await this.userElasticsearchService.updateUser(
-                cohortMembers.userId,
-                { doc: fullUserDoc },
-                async (userId: string) => {
-                  return await this.formSubmissionService.buildUserDocumentForElasticsearch(
-                    userId
-                  );
-                }
-              );
-            }
-          } else {
-            // Prepare the updated application data (minimal update)
-            const updatedApplication = {
-              ...(existingApplication ?? {}),
+          const appIndex = applications.findIndex(
+            (app) => app.cohortId === cohortMembers.cohortId
+          );
+
+          if (appIndex !== -1) {
+            // Update the existing application object for this cohortId
+            applications[appIndex] = {
+              ...applications[appIndex],
               cohortId: cohortMembers.cohortId,
               cohortmemberstatus: savedCohortMember.status ?? 'active',
+              // Optionally merge other fields here if needed
             };
-            await this.userElasticsearchService.updateApplication(
-              cohortMembers.userId,
-              updatedApplication,
-              async (userId: string) => {
-                return await this.formSubmissionService.buildUserDocumentForElasticsearch(
-                  userId
-                );
-              }
-            );
+          } else {
+            // Add a new application object for this cohortId
+            applications.push({
+              cohortId: cohortMembers.cohortId,
+              cohortmemberstatus: savedCohortMember.status ?? 'active',
+              // Add other default fields as needed
+            });
           }
+
+          // Now update the user document in Elasticsearch with the merged applications array
+          const baseDoc = (userDoc && userDoc._source && typeof userDoc._source === 'object') ? userDoc._source : {};
+          await this.userElasticsearchService.updateUser(
+            cohortMembers.userId,
+            { doc: { ...baseDoc, applications } },
+            async (userId: string) => {
+              return await this.formSubmissionService.buildUserDocumentForElasticsearch(
+                userId
+              );
+            }
+          );
         } catch (elasticError) {
           // Log Elasticsearch error but don't fail the request
           LoggerUtil.error(

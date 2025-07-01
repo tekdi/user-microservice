@@ -1120,12 +1120,27 @@ export class FormSubmissionService {
       }
       // --- END NEW LOGIC ---
 
-      // Find the existing application for this form and submission
-      const existingAppIndex = applications.findIndex(
-        (app) =>
-          app.formId === formIdToMatch &&
-          app.submissionId === submissionIdToMatch
-      );
+      // Always fetch cohortId from the related Form entity
+      let cohortId = "";
+      try {
+        const form = await this.formsService.getFormById(formIdToMatch);
+        cohortId = form?.contextId || "";
+      } catch (e) {
+        cohortId = "";
+      }
+      let existingAppIndex = -1;
+      if (cohortId) {
+        existingAppIndex = applications.findIndex(
+          (app) => app.cohortId === cohortId
+        );
+      } else {
+        // fallback to old logic if cohortId is not available
+        existingAppIndex = applications.findIndex(
+          (app) =>
+            app.formId === formIdToMatch &&
+            app.submissionId === submissionIdToMatch
+        );
+      }
 
       // Prepare the updated fields data
       const updatedFields = {};
@@ -1203,7 +1218,7 @@ export class FormSubmissionService {
 
         // --- Update cohortmemberstatus and cohortDetails logic ---
         // cohortmemberstatus is not a property of FormSubmission; set as empty string or fetch from CohortMembers if needed
-        applications[existingAppIndex].cohortmemberstatus = ""; // TODO: Fetch from CohortMembers if needed
+        applications[existingAppIndex].cohortmemberstatus = applications[existingAppIndex].cohortmemberstatus || ""; // preserve if already set
         // Ensure cohortDetails is populated; if missing or empty, fetch from DB
         if (
           !applications[existingAppIndex].cohortDetails ||
