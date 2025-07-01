@@ -155,6 +155,11 @@ export class FormSubmissionService {
         FormSubmissionStatus.ACTIVE;
       formSubmission.createdBy = userId;
       formSubmission.updatedBy = userId;
+      
+      // Add completionPercentage if provided
+      if (createFormSubmissionDto.formSubmission.completionPercentage !== undefined) {
+        formSubmission.completionPercentage = createFormSubmissionDto.formSubmission.completionPercentage;
+      }
 
       const savedSubmission = await this.formSubmissionRepository.save(
         formSubmission
@@ -862,6 +867,10 @@ export class FormSubmissionService {
           submission.itemId = userId;
           if (updateFormSubmissionDto.formSubmission.status) {
             submission.status = updateFormSubmissionDto.formSubmission.status;
+          }
+          // Add completionPercentage if provided
+          if (updateFormSubmissionDto.formSubmission.completionPercentage !== undefined) {
+            submission.completionPercentage = updateFormSubmissionDto.formSubmission.completionPercentage;
           }
           submission.updatedBy = userId;
           updatedSubmission = await this.formSubmissionRepository.save(

@@ -6,6 +6,7 @@ import {
   IsOptional,
   ValidateNested,
   ArrayNotEmpty,
+  IsNumber,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { FormSubmissionStatus } from '../entities/form-submission.entity';
@@ -43,6 +44,17 @@ export class FormSubmissionDto {
   @IsEnum(FormSubmissionStatus)
   @IsOptional()
   status?: FormSubmissionStatus;
+
+  @ApiProperty({
+    type: Number,
+    description: 'The completion percentage of the form submission (0-100)',
+    minimum: 0,
+    maximum: 100,
+    required: false,
+  })
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  completionPercentage?: number;
 }
 
 export class CreateFormSubmissionDto {
