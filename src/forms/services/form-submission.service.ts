@@ -5,42 +5,37 @@ import {
   Inject,
   forwardRef,
   Logger,
-} from "@nestjs/common";
-import { InjectRepository } from "@nestjs/typeorm";
-import { Repository, FindOptionsWhere, Between, In } from "typeorm";
+} from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository, Between, In } from 'typeorm';
 import {
   FormSubmission,
   FormSubmissionStatus,
-} from "../entities/form-submission.entity";
-import {
-  CreateFormSubmissionDto,
-  FieldValueDto,
-} from "../dto/create-form-submission.dto";
-import { UpdateFormSubmissionDto } from "../dto/update-form-submission.dto";
-import { FieldValues } from "../../fields/entities/fields-values.entity";
-import { Fields, FieldType } from "../../fields/entities/fields.entity";
-import { FieldValueConverter } from "../../utils/field-value-converter";
-import APIResponse from "../../common/responses/response";
-import { Response } from "express";
-import { APIID } from "../../common/utils/api-id.config";
-import { API_RESPONSES } from "../../common/utils/response.messages";
-import { FieldsService } from "../../fields/fields.service";
-import { FieldValuesDto } from "../../fields/dto/field-values.dto";
-import { ErrorResponseTypeOrm } from "../../error-response-typeorm";
-import { isUUID } from "class-validator";
-import { FormSubmissionSearchDto } from "../dto/form-submission-search.dto";
-import { FieldValuesSearchDto } from "../../fields/dto/field-values-search.dto";
-import { FieldsSearchDto } from "../../fields/dto/fields-search.dto";
-import jwt_decode from "jwt-decode";
-import { Form } from "../entities/form.entity";
-import { UserElasticsearchService } from "../../elasticsearch/user-elasticsearch.service";
-import { FormsService } from "../../forms/forms.service";
-import { PostgresCohortService } from "src/adapters/postgres/cohort-adapter";
-import { IUser } from "../../elasticsearch/interfaces/user.interface";
-import { LoggerUtil } from "src/common/logger/LoggerUtil";
-import { isElasticsearchEnabled } from "src/common/utils/elasticsearch.util";
-import { CohortMembers } from "src/cohortMembers/entities/cohort-member.entity";
-import { Cohort } from "src/cohort/entities/cohort.entity";
+} from '../entities/form-submission.entity';
+import { CreateFormSubmissionDto } from '../dto/create-form-submission.dto';
+import { UpdateFormSubmissionDto } from '../dto/update-form-submission.dto';
+import { FieldValues } from '../../fields/entities/fields-values.entity';
+import { Fields, FieldType } from '../../fields/entities/fields.entity';
+import APIResponse from '../../common/responses/response';
+import { Response } from 'express';
+import { API_RESPONSES } from '../../common/utils/response.messages';
+import { FieldsService } from '../../fields/fields.service';
+import { FieldValuesDto } from '../../fields/dto/field-values.dto';
+import { ErrorResponseTypeOrm } from '../../error-response-typeorm';
+import { isUUID } from 'class-validator';
+import { FormSubmissionSearchDto } from '../dto/form-submission-search.dto';
+import { FieldValuesSearchDto } from '../../fields/dto/field-values-search.dto';
+import { FieldsSearchDto } from '../../fields/dto/fields-search.dto';
+import jwt_decode from 'jwt-decode';
+import { Form } from '../entities/form.entity';
+import { UserElasticsearchService } from '../../elasticsearch/user-elasticsearch.service';
+import { FormsService } from '../../forms/forms.service';
+import { PostgresCohortService } from 'src/adapters/postgres/cohort-adapter';
+import { IUser } from '../../elasticsearch/interfaces/user.interface';
+import { LoggerUtil } from 'src/common/logger/LoggerUtil';
+import { isElasticsearchEnabled } from 'src/common/utils/elasticsearch.util';
+import { CohortMembers } from 'src/cohortMembers/entities/cohort-member.entity';
+import { Cohort } from 'src/cohort/entities/cohort.entity';
 
 interface DateRange {
   start: string;
@@ -49,7 +44,7 @@ interface DateRange {
 
 interface FilterValue {
   value: string | number | boolean | DateRange;
-  type: "string" | "number" | "boolean" | "date";
+  type: 'string' | 'number' | 'boolean' | 'date';
 }
 
 interface CustomFieldFilters {
@@ -108,23 +103,23 @@ export class FormSubmissionService {
       const userId = decoded?.sub;
 
       if (!userId) {
-        throw new BadRequestException("User ID not found in token");
+        throw new BadRequestException('User ID not found in token');
       }
 
       // Check if form exists and is active
       const form = await this.formRepository.findOne({
         where: {
           formid: createFormSubmissionDto.formSubmission.formId,
-          status: "active",
+          status: 'active',
         },
       });
 
       if (!form) {
         return APIResponse.error(
           response,
-          "api.form.submission.create",
-          "BAD_REQUEST",
-          "Form with the provided formId does not exist or is not active",
+          'api.form.submission.create',
+          'BAD_REQUEST',
+          'Form with the provided formId does not exist or is not active',
           HttpStatus.BAD_REQUEST
         );
       }
@@ -144,9 +139,9 @@ export class FormSubmissionService {
       if (existingSubmission) {
         return APIResponse.error(
           response,
-          "api.form.submission.create",
-          "BAD_REQUEST",
-          "Application with this formId and userId already exists with status ACTIVE or INACTIVE",
+          'api.form.submission.create',
+          'BAD_REQUEST',
+          'Application with this formId and userId already exists with status ACTIVE or INACTIVE',
           HttpStatus.BAD_REQUEST
         );
       }
@@ -198,15 +193,15 @@ export class FormSubmissionService {
 
       // Create response object
       const responseData = {
-        id: "api.form.submission.create",
-        ver: "1.0",
+        id: 'api.form.submission.create',
+        ver: '1.0',
         ts: new Date().toISOString(),
         params: {
           resmsgid: savedSubmission.submissionId,
-          status: "successful",
+          status: 'successful',
           err: null,
           errmsg: null,
-          successmessage: "Form saved successfully",
+          successmessage: 'Form saved successfully',
         },
         responseCode: HttpStatus.CREATED,
         result: {
@@ -219,7 +214,7 @@ export class FormSubmissionService {
     } catch (error) {
       return APIResponse.error(
         response,
-        "api.form.submission.create",
+        'api.form.submission.create',
         API_RESPONSES.INTERNAL_SERVER_ERROR,
         error.message,
         HttpStatus.INTERNAL_SERVER_ERROR
@@ -237,7 +232,7 @@ export class FormSubmissionService {
     }
 
     Object.entries(filters).forEach(([key, value]) => {
-      if (key === "customFieldsFilter" || !value) {
+      if (key === 'customFieldsFilter' || !value) {
         return;
       }
 
@@ -246,18 +241,18 @@ export class FormSubmissionService {
       }
 
       // Handle different types of filters
-      if (key === "status") {
+      if (key === 'status') {
         if (Array.isArray(value)) {
           whereClause[key] = In(
             value.map((status: string) => status.toLowerCase())
           );
-        } else if (typeof value === "string") {
+        } else if (typeof value === 'string') {
           whereClause[key] = value.toLowerCase();
         }
       }
       // Handle UUID fields (exact match)
       else if (
-        ["submissionId", "formId", "itemId", "createdBy", "updatedBy"].includes(
+        ['submissionId', 'formId', 'itemId', 'createdBy', 'updatedBy'].includes(
           key
         )
       ) {
@@ -267,9 +262,9 @@ export class FormSubmissionService {
         whereClause[key] = value;
       }
       // Handle date fields
-      else if (["createdAt", "updatedAt"].includes(key)) {
+      else if (['createdAt', 'updatedAt'].includes(key)) {
         if (
-          typeof value === "object" &&
+          typeof value === 'object' &&
           value !== null &&
           !Array.isArray(value)
         ) {
@@ -277,8 +272,8 @@ export class FormSubmissionService {
           if (
             dateRange.start &&
             dateRange.end &&
-            typeof dateRange.start === "string" &&
-            typeof dateRange.end === "string"
+            typeof dateRange.start === 'string' &&
+            typeof dateRange.end === 'string'
           ) {
             const startDate = new Date(dateRange.start);
             const endDate = new Date(dateRange.end);
@@ -289,7 +284,7 @@ export class FormSubmissionService {
 
             whereClause[key] = Between(startDate, endDate);
           }
-        } else if (typeof value === "string") {
+        } else if (typeof value === 'string') {
           const date = new Date(value);
           if (isNaN(date.getTime())) {
             throw new BadRequestException(`Invalid date format for ${key}`);
@@ -317,7 +312,7 @@ export class FormSubmissionService {
       order:
         sort?.length === 2
           ? { [sort[0]]: sort[1].toUpperCase() }
-          : { createdAt: "DESC" },
+          : { createdAt: 'DESC' },
       skip: offset,
       take: limit,
     });
@@ -377,10 +372,10 @@ export class FormSubmissionService {
 
     // Build query with joins
     const queryBuilder = this.formSubmissionRepository
-      .createQueryBuilder("fs")
-      .leftJoin(FieldValues, "fv", "fv.itemId = fs.itemId")
-      .leftJoin(Fields, "f", "f.fieldId = fv.fieldId")
-      .select("fs"); // Select all columns from form submission
+      .createQueryBuilder('fs')
+      .leftJoin(FieldValues, 'fv', 'fv.itemId = fs.itemId')
+      .leftJoin(Fields, 'f', 'f.fieldId = fv.fieldId')
+      .select('fs'); // Select all columns from form submission
 
     // Add conditions for each custom field filter
     Object.entries(customFieldFilters).forEach(([fieldId, expectedValue]) => {
@@ -400,7 +395,7 @@ export class FormSubmissionService {
           }
           // Check numberValue column first, then fall back to value column
           queryBuilder.andWhere(
-            "fv.fieldId = :fieldId AND (fv.numberValue = :numValue OR CAST(fv.value AS DECIMAL) = :numValue)",
+            'fv.fieldId = :fieldId AND (fv.numberValue = :numValue OR CAST(fv.value AS DECIMAL) = :numValue)',
             {
               fieldId,
               numValue,
@@ -411,24 +406,24 @@ export class FormSubmissionService {
         case FieldType.CALENDAR:
           try {
             if (!expectedValue) {
-              throw new Error("Date value is required");
+              throw new Error('Date value is required');
             }
 
             // Format the date value
             let dateStr = expectedValue as string;
-            if (dateStr.includes(" ") && !dateStr.includes("T")) {
-              dateStr = dateStr.replace(" ", "T");
+            if (dateStr.includes(' ') && !dateStr.includes('T')) {
+              dateStr = dateStr.replace(' ', 'T');
             }
 
             const dateValue = new Date(dateStr);
             if (isNaN(dateValue.getTime())) {
-              throw new Error("Invalid date format");
+              throw new Error('Invalid date format');
             }
 
             // Check calendarValue column first, then fall back to value column
-            const formattedDate = dateValue.toISOString().split("T")[0];
+            const formattedDate = dateValue.toISOString().split('T')[0];
             queryBuilder.andWhere(
-              "fv.fieldId = :fieldId AND (DATE(fv.calendarValue) = DATE(:dateValue::timestamp) OR DATE(fv.value::timestamp) = DATE(:dateValue::timestamp))",
+              'fv.fieldId = :fieldId AND (DATE(fv.calendarValue) = DATE(:dateValue::timestamp) OR DATE(fv.value::timestamp) = DATE(:dateValue::timestamp))',
               {
                 fieldId,
                 dateValue: formattedDate,
@@ -445,7 +440,7 @@ export class FormSubmissionService {
           // Check checkboxValue column first, then fall back to value column
           const boolValue = Boolean(expectedValue);
           queryBuilder.andWhere(
-            "fv.fieldId = :fieldId AND (fv.checkboxValue = :boolValue OR CAST(fv.value AS BOOLEAN) = :boolValue)",
+            'fv.fieldId = :fieldId AND (fv.checkboxValue = :boolValue OR CAST(fv.value AS BOOLEAN) = :boolValue)',
             {
               fieldId,
               boolValue,
@@ -463,7 +458,7 @@ export class FormSubmissionService {
             }
             const values = expectedValue.map((v) => v.toString());
             queryBuilder.andWhere(
-              "fv.fieldId = :fieldId AND (fv.dropdownValue ? :values OR fv.value IN (:...values))",
+              'fv.fieldId = :fieldId AND (fv.dropdownValue ? :values OR fv.value IN (:...values))',
               {
                 fieldId,
                 values,
@@ -472,7 +467,7 @@ export class FormSubmissionService {
           } else {
             const value = expectedValue.toString();
             queryBuilder.andWhere(
-              "fv.fieldId = :fieldId AND (fv.dropdownValue ? :value OR fv.value = :value)",
+              'fv.fieldId = :fieldId AND (fv.dropdownValue ? :value OR fv.value = :value)',
               {
                 fieldId,
                 value,
@@ -486,7 +481,7 @@ export class FormSubmissionService {
             // Check textValue column first, then fall back to value column with ILIKE
             const textSearchValue = expectedValue.toString();
             queryBuilder.andWhere(
-              "fv.fieldId = :fieldId AND (fv.textValue ILIKE :textSearchValue OR fv.value ILIKE :textSearchValue)",
+              'fv.fieldId = :fieldId AND (fv.textValue ILIKE :textSearchValue OR fv.value ILIKE :textSearchValue)',
               {
                 fieldId,
                 textSearchValue: `%${textSearchValue}%`,
@@ -499,7 +494,7 @@ export class FormSubmissionService {
           // Check textareaValue column first, then fall back to value column with ILIKE
           const textareaSearchValue = expectedValue.toString();
           queryBuilder.andWhere(
-            "fv.fieldId = :fieldId AND (fv.textareaValue ILIKE :textareaSearchValue OR fv.value ILIKE :textareaSearchValue)",
+            'fv.fieldId = :fieldId AND (fv.textareaValue ILIKE :textareaSearchValue OR fv.value ILIKE :textareaSearchValue)',
             {
               fieldId,
               textareaSearchValue: `%${textareaSearchValue}%`,
@@ -512,7 +507,7 @@ export class FormSubmissionService {
             // Check radioValue column first, then fall back to value column
             const radioValue = expectedValue.toString();
             queryBuilder.andWhere(
-              "fv.fieldId = :fieldId AND (fv.radioValue = :radioValue OR fv.value = :radioValue)",
+              'fv.fieldId = :fieldId AND (fv.radioValue = :radioValue OR fv.value = :radioValue)',
               {
                 fieldId,
                 radioValue,
@@ -524,7 +519,7 @@ export class FormSubmissionService {
         default:
           // For any other type, check value column with case-insensitive comparison
           queryBuilder.andWhere(
-            "fv.fieldId = :fieldId AND LOWER(fv.value) = LOWER(:defaultValue)",
+            'fv.fieldId = :fieldId AND LOWER(fv.value) = LOWER(:defaultValue)',
             {
               fieldId,
               defaultValue: expectedValue.toString(),
@@ -576,15 +571,15 @@ export class FormSubmissionService {
     );
 
     return {
-      id: "api.form.submission.search",
-      ver: "1.0",
+      id: 'api.form.submission.search',
+      ver: '1.0',
       ts: new Date().toISOString(),
       params: {
-        resmsgid: "",
-        status: "successful",
+        resmsgid: '',
+        status: 'successful',
         err: null,
         errmsg: null,
-        successmessage: "Form submissions retrieved successfully",
+        successmessage: 'Form submissions retrieved successfully',
       },
       responseCode: HttpStatus.OK,
       result: {
@@ -607,7 +602,7 @@ export class FormSubmissionService {
       // Validate limit and offset
       if (isNaN(limit) || isNaN(offset) || limit < 0 || offset < 0) {
         throw new BadRequestException(
-          "Invalid limit or offset value. Must be non-negative numbers."
+          'Invalid limit or offset value. Must be non-negative numbers.'
         );
       }
 
@@ -644,18 +639,18 @@ export class FormSubmissionService {
         filteredCount
       );
     } catch (error) {
-      console.error("Error in findAll:", error);
+      console.error('Error in findAll:', error);
       return {
-        id: "api.form.submission.search",
-        ver: "1.0",
+        id: 'api.form.submission.search',
+        ver: '1.0',
         ts: new Date().toISOString(),
         params: {
-          resmsgid: "",
-          status: "failed",
-          err: "SEARCH_FAILED",
+          resmsgid: '',
+          status: 'failed',
+          err: 'SEARCH_FAILED',
           errmsg:
             error.message ||
-            "An unexpected error occurred while searching form submissions",
+            'An unexpected error occurred while searching form submissions',
           successmessage: null,
         },
         responseCode:
@@ -672,14 +667,14 @@ export class FormSubmissionService {
       // Validate submissionId is a UUID
       if (!isUUID(submissionId)) {
         return {
-          id: "api.form.submission.get",
-          ver: "1.0",
+          id: 'api.form.submission.get',
+          ver: '1.0',
           ts: new Date().toISOString(),
           params: {
             resmsgid: submissionId,
-            status: "failed",
-            err: "INVALID_SUBMISSION_ID",
-            errmsg: "Invalid submission ID format. Expected a valid UUID.",
+            status: 'failed',
+            err: 'INVALID_SUBMISSION_ID',
+            errmsg: 'Invalid submission ID format. Expected a valid UUID.',
             successmessage: null,
           },
           responseCode: HttpStatus.BAD_REQUEST,
@@ -694,13 +689,13 @@ export class FormSubmissionService {
 
       if (!submission) {
         return {
-          id: "api.form.submission.get",
-          ver: "1.0",
+          id: 'api.form.submission.get',
+          ver: '1.0',
           ts: new Date().toISOString(),
           params: {
             resmsgid: submissionId,
-            status: "failed",
-            err: "SUBMISSION_NOT_FOUND",
+            status: 'failed',
+            err: 'SUBMISSION_NOT_FOUND',
             errmsg: `Form submission ID ${submissionId} not found`,
             successmessage: null,
           },
@@ -716,15 +711,15 @@ export class FormSubmissionService {
 
       // Create response object
       return {
-        id: "api.form.submission.get",
-        ver: "1.0",
+        id: 'api.form.submission.get',
+        ver: '1.0',
         ts: new Date().toISOString(),
         params: {
           resmsgid: submissionId,
-          status: "successful",
+          status: 'successful',
           err: null,
           errmsg: null,
-          successmessage: "Form submission details retrieved successfully",
+          successmessage: 'Form submission details retrieved successfully',
         },
         responseCode: HttpStatus.OK,
         result: {
@@ -743,16 +738,16 @@ export class FormSubmissionService {
       };
     } catch (error) {
       return {
-        id: "api.form.submission.get",
-        ver: "1.0",
+        id: 'api.form.submission.get',
+        ver: '1.0',
         ts: new Date().toISOString(),
         params: {
           resmsgid: submissionId,
-          status: "failed",
-          err: "FETCH_FAILED",
+          status: 'failed',
+          err: 'FETCH_FAILED',
           errmsg:
             error.message ||
-            "An unexpected error occurred while fetching the form submission",
+            'An unexpected error occurred while fetching the form submission',
           successmessage: null,
         },
         responseCode:
@@ -819,7 +814,7 @@ export class FormSubmissionService {
         fieldParams: field.fieldParams || {},
       };
     } catch (error) {
-      console.error("Error in updateFieldValues:", error);
+      console.error('Error in updateFieldValues:', error);
       return null;
     }
   }
@@ -836,13 +831,13 @@ export class FormSubmissionService {
       const userId = decoded?.sub;
 
       if (!userId) {
-        throw new BadRequestException("User ID not found in token");
+        throw new BadRequestException('User ID not found in token');
       }
 
       // Validate submissionId is a UUID
       if (!isUUID(submissionId)) {
         throw new BadRequestException(
-          "Invalid submission ID format. Expected a valid UUID."
+          'Invalid submission ID format. Expected a valid UUID.'
         );
       }
 
@@ -873,7 +868,7 @@ export class FormSubmissionService {
             submission
           );
         } catch (error) {
-          throw new Error("Failed to update form submission details");
+          LoggerUtil.warn(`Failed to update form submission details`, error);
         }
       }
 
@@ -885,11 +880,11 @@ export class FormSubmissionService {
             async (fieldValue) => {
               try {
                 const existingValue = await this.fieldValuesRepository
-                  .createQueryBuilder("fieldValue")
-                  .where("fieldValue.fieldId = :fieldId", {
+                  .createQueryBuilder('fieldValue')
+                  .where('fieldValue.fieldId = :fieldId', {
                     fieldId: fieldValue.fieldId,
                   })
-                  .andWhere("fieldValue.itemId = :itemId", { itemId: userId })
+                  .andWhere('fieldValue.itemId = :itemId', { itemId: userId })
                   .getOne();
 
                 const result = await this.updateFieldValues(
@@ -899,7 +894,7 @@ export class FormSubmissionService {
                 );
                 return result;
               } catch (error) {
-                console.error("Error updating field value:", error);
+                console.error('Error updating field value:', error);
                 return null;
               }
             }
@@ -908,7 +903,7 @@ export class FormSubmissionService {
           const results = await Promise.all(fieldValuePromises);
           updatedFieldValues = results.filter((result) => result !== null);
         } catch (error) {
-          throw new Error("Failed to update field values");
+          LoggerUtil.warn(`Failed to update field values`, error);
         }
       }
       // Update Elasticsearch after successful form submission update
@@ -918,15 +913,15 @@ export class FormSubmissionService {
         updatedFieldValues
       );
       const successResponse = {
-        id: "api.form.submission.update",
-        ver: "1.0",
+        id: 'api.form.submission.update',
+        ver: '1.0',
         ts: new Date().toISOString(),
         params: {
           resmsgid: submissionId,
-          status: "successful",
+          status: 'successful',
           err: null,
           errmsg: null,
-          successmessage: "Form updated successfully",
+          successmessage: 'Form updated successfully',
         },
         responseCode: HttpStatus.OK,
         result: {
@@ -938,19 +933,19 @@ export class FormSubmissionService {
       return response.status(HttpStatus.OK).json(successResponse);
     } catch (error) {
       const errorResponse = {
-        id: "api.form.submission.update",
-        ver: "1.0",
+        id: 'api.form.submission.update',
+        ver: '1.0',
         ts: new Date().toISOString(),
         params: {
           resmsgid: submissionId,
-          status: "failed",
+          status: 'failed',
           err:
             error instanceof BadRequestException
-              ? "BAD_REQUEST"
-              : "INTERNAL_SERVER_ERROR",
+              ? 'BAD_REQUEST'
+              : 'INTERNAL_SERVER_ERROR',
           errmsg:
             error.message ||
-            "An unexpected error occurred while updating the form submission",
+            'An unexpected error occurred while updating the form submission',
           successmessage: null,
         },
         responseCode:
@@ -964,19 +959,19 @@ export class FormSubmissionService {
     }
   }
 
-  async remove(submissionId: string, mode: "soft" | "hard" = "soft") {
+  async remove(submissionId: string, mode: 'soft' | 'hard' = 'soft') {
     try {
       // Validate submissionId is a UUID
       if (!isUUID(submissionId)) {
         return {
-          id: "api.form.submission.delete",
-          ver: "1.0",
+          id: 'api.form.submission.delete',
+          ver: '1.0',
           ts: new Date().toISOString(),
           params: {
             resmsgid: submissionId,
-            status: "failed",
-            err: "INVALID_SUBMISSION_ID",
-            errmsg: "Invalid submission ID format. Expected a valid UUID.",
+            status: 'failed',
+            err: 'INVALID_SUBMISSION_ID',
+            errmsg: 'Invalid submission ID format. Expected a valid UUID.',
             successmessage: null,
           },
           responseCode: HttpStatus.BAD_REQUEST,
@@ -990,13 +985,13 @@ export class FormSubmissionService {
 
       if (!submission) {
         return {
-          id: "api.form.submission.delete",
-          ver: "1.0",
+          id: 'api.form.submission.delete',
+          ver: '1.0',
           ts: new Date().toISOString(),
           params: {
             resmsgid: submissionId,
-            status: "failed",
-            err: "SUBMISSION_NOT_FOUND",
+            status: 'failed',
+            err: 'SUBMISSION_NOT_FOUND',
             errmsg: `Form submission ID ${submissionId} not found`,
             successmessage: null,
           },
@@ -1006,7 +1001,7 @@ export class FormSubmissionService {
       }
 
       let result;
-      if (mode === "hard") {
+      if (mode === 'hard') {
         // Permanent delete
         result = await this.formSubmissionRepository.remove(submission);
       } else {
@@ -1016,37 +1011,37 @@ export class FormSubmissionService {
       }
 
       return {
-        id: "api.form.submission.delete",
-        ver: "1.0",
+        id: 'api.form.submission.delete',
+        ver: '1.0',
         ts: new Date().toISOString(),
         params: {
           resmsgid: submissionId,
-          status: "successful",
+          status: 'successful',
           err: null,
           errmsg: null,
           successmessage:
-            mode === "hard"
-              ? "Form submission permanently deleted"
-              : "Form submission archived",
+            mode === 'hard'
+              ? 'Form submission permanently deleted'
+              : 'Form submission archived',
         },
         responseCode: HttpStatus.OK,
         result: {
           submissionId: result.submissionId,
-          status: mode === "hard" ? "deleted" : result.status,
+          status: mode === 'hard' ? 'deleted' : result.status,
         },
       };
     } catch (error) {
       return {
-        id: "api.form.submission.delete",
-        ver: "1.0",
+        id: 'api.form.submission.delete',
+        ver: '1.0',
         ts: new Date().toISOString(),
         params: {
           resmsgid: submissionId,
-          status: "failed",
-          err: "DELETE_FAILED",
+          status: 'failed',
+          err: 'DELETE_FAILED',
           errmsg:
             error.message ||
-            "An unexpected error occurred while deleting the form submission",
+            'An unexpected error occurred while deleting the form submission',
           successmessage: null,
         },
         responseCode:
@@ -1102,7 +1097,7 @@ export class FormSubmissionService {
         ) {
           const schema = fieldsObj.result[0].schema.properties;
           for (const [pageKey, pageSchema] of Object.entries(schema)) {
-            const pageName = pageKey === "default" ? "eligibility" : pageKey;
+            const pageName = pageKey === 'default' ? 'eligibility' : pageKey;
             const fieldProps = (pageSchema as any).properties ?? {};
             for (const [fieldKey, fieldSchema] of Object.entries(fieldProps)) {
               const fieldId = (fieldSchema as any).fieldId;
@@ -1113,19 +1108,49 @@ export class FormSubmissionService {
           }
         }
       } catch (err) {
-        const logger = new Logger("FormSubmissionService");
-        logger.error("Schema fetch failed, cannot proceed", err);
+        const logger = new Logger('FormSubmissionService');
+        logger.error('Schema fetch failed, cannot proceed', err);
         // If schema fetch fails, fallback to empty map (all fields go to 'default')
         fieldIdToPageName = {};
       }
       // --- END NEW LOGIC ---
 
-      // Find the existing application for this form and submission
-      const existingAppIndex = applications.findIndex(
-        (app) =>
-          app.formId === formIdToMatch &&
-          app.submissionId === submissionIdToMatch
-      );
+      // Always fetch cohortId from the related Form entity
+      // Fetch cohortId from the related Form entity with proper error handling
+      let cohortId = '';
+      try {
+        const form = await this.formsService.getFormById(formIdToMatch);
+        cohortId = form?.contextId || '';
+        LoggerUtil.debug(
+          `Fetched cohortId: ${cohortId} for formId: ${formIdToMatch}`
+        );
+      } catch (error) {
+        LoggerUtil.warn(
+          `Failed to fetch cohortId for formId ${formIdToMatch}:`,
+          error
+        );
+        cohortId = '';
+      }
+      let existingAppIndex = -1;
+      if (cohortId) {
+        existingAppIndex = applications.findIndex(
+          (app) => app.cohortId === cohortId
+        );
+        // If not found by cohortId, don't fallback to avoid inconsistencies
+        // Log this scenario for investigation
+        if (existingAppIndex === -1) {
+          LoggerUtil.warn(
+            `No application found for cohortId: ${cohortId}, will create new application`
+          );
+        }
+      } else {
+        // Use formId/submissionId only when cohortId is not available
+        existingAppIndex = applications.findIndex(
+          (app) =>
+            app.formId === formIdToMatch &&
+            app.submissionId === submissionIdToMatch
+        );
+      }
 
       // Prepare the updated fields data
       const updatedFields = {};
@@ -1155,7 +1180,7 @@ export class FormSubmissionService {
           console.warn(
             `FieldId ${field.fieldId} not found in schema mapping or existing pages, using 'default'`
           );
-          pageKey = "default";
+          pageKey = 'default';
         }
 
         updatedFields[pageKey] ??= {
@@ -1203,7 +1228,8 @@ export class FormSubmissionService {
 
         // --- Update cohortmemberstatus and cohortDetails logic ---
         // cohortmemberstatus is not a property of FormSubmission; set as empty string or fetch from CohortMembers if needed
-        applications[existingAppIndex].cohortmemberstatus = ""; // TODO: Fetch from CohortMembers if needed
+        applications[existingAppIndex].cohortmemberstatus =
+          applications[existingAppIndex].cohortmemberstatus ?? ''; // preserve if already set
         // Ensure cohortDetails is populated; if missing or empty, fetch from DB
         if (
           !applications[existingAppIndex].cohortDetails ||
@@ -1247,7 +1273,7 @@ export class FormSubmissionService {
       }
     } catch (elasticError) {
       // Log Elasticsearch error but don't fail the request
-      console.error("Failed to update Elasticsearch:", elasticError);
+      console.error('Failed to update Elasticsearch:', elasticError);
     }
   }
 
@@ -1262,8 +1288,8 @@ export class FormSubmissionService {
     try {
       // Get cohortId from the related Form
       const form = await this.formsService.getFormById(submission.formId);
-      const cohortId = form?.contextId || "";
-      if (!cohortId) return { name: "", status: "" };
+      const cohortId = form?.contextId || '';
+      if (!cohortId) return { name: '', status: '' };
       const mockResponse = {
         status: (code: number) => ({ json: (data: any) => data }),
       };
@@ -1275,16 +1301,16 @@ export class FormSubmissionService {
         const cohortData = cohortDetails.result.cohortData[0];
         const cohortFieldValues = cohortData.customField ?? [];
         return {
-          name: cohortData.name ?? "",
-          status: cohortData.status ?? "",
+          name: cohortData.name ?? '',
+          status: cohortData.status ?? '',
           ...cohortFieldValues.reduce((acc, field) => {
-            acc[field.label] = field.value ?? "";
+            acc[field.label] = field.value ?? '';
             return acc;
           }, {} as Record<string, any>),
         };
       }
     } catch (e) {}
-    return { name: "", status: "" };
+    return { name: '', status: '' };
   }
 
   /**
@@ -1298,8 +1324,8 @@ export class FormSubmissionService {
   ): Promise<any> {
     // Fetch form schema and custom fields
     let schema: any = {};
-    let cohortId = "";
-    let cohortmemberstatus = "";
+    let cohortId = '';
+    let cohortmemberstatus = '';
     let cohortDetails = {};
     try {
       const form = await this.formsService.getFormById(submission.formId);
@@ -1310,7 +1336,7 @@ export class FormSubmissionService {
       ) {
         schema = fieldsObj.result[0].schema.properties;
       }
-      cohortId = form?.contextId || "";
+      cohortId = form?.contextId || '';
       // Fetch cohortmemberstatus and cohortDetails if cohortId exists
       if (cohortId) {
         // Fetch CohortMembers record for this user and cohort
@@ -1341,7 +1367,7 @@ export class FormSubmissionService {
     const pages: Record<string, any> = {};
     const formData: Record<string, any> = {};
     for (const [pageKey, pageSchema] of Object.entries(schema)) {
-      const pageName = pageKey === "default" ? "eligibility" : pageKey;
+      const pageName = pageKey === 'default' ? 'eligibility' : pageKey;
       pages[pageName] = { completed: true, fields: {} };
       formData[pageName] = {};
       const fieldProps = (pageSchema as any).properties || {};
@@ -1361,14 +1387,14 @@ export class FormSubmissionService {
       }
     }
     if (Object.keys(pages).length === 0) {
-      pages["default"] = {
+      pages['default'] = {
         completed: true,
         fields: submissionCustomFields.reduce((acc, field) => {
           acc[field.fieldname || field.fieldId] = field.value;
           return acc;
         }, {}),
       };
-      formData["default"] = { ...pages["default"].fields };
+      formData['default'] = { ...pages['default'].fields };
     }
     // Fetch cohortDetails (already fetched above)
     return {
@@ -1407,7 +1433,7 @@ export class FormSubmissionService {
     userId: string
   ): Promise<IUser | null> {
     // Fetch user profile from Users table
-    const userRepo = this.formRepository.manager.getRepository("Users");
+    const userRepo = this.formRepository.manager.getRepository('Users');
     const user = await userRepo.findOne({ where: { userId } });
     if (!user) return null;
     // Fetch profile custom fields (these are not form submission fields)
@@ -1455,10 +1481,10 @@ export class FormSubmissionService {
     for (const m of cohortMemberships) membershipMap.set(m.cohortId, m);
     const submissionMap = new Map();
     for (const s of submissions) {
-      let cohortId = "";
+      let cohortId = '';
       try {
         const form = await this.formsService.getFormById(s.formId);
-        cohortId = form?.contextId || "";
+        cohortId = form?.contextId || '';
       } catch {}
       if (cohortId) submissionMap.set(cohortId, s);
     }
@@ -1476,10 +1502,10 @@ export class FormSubmissionService {
         where: { cohortId },
       });
       // Prepare application fields
-      let formId = "",
-        submissionId = "",
-        status = "",
-        formstatus = "",
+      let formId = '',
+        submissionId = '',
+        status = '',
+        formstatus = '',
         progress = { pages: {}, overall: { completed: 0, total: 0 } },
         lastSavedAt = null,
         submittedAt = null,
@@ -1520,7 +1546,7 @@ export class FormSubmissionService {
         const pages: Record<string, any> = {};
         formData = {};
         for (const [pageKey, pageSchema] of Object.entries(schema)) {
-          const pageName = pageKey === "default" ? "eligibility" : pageKey;
+          const pageName = pageKey === 'default' ? 'eligibility' : pageKey;
           pages[pageName] = { completed: true, fields: {} };
           formData[pageName] = {};
           const fieldProps = (pageSchema as any).properties || {};
@@ -1540,14 +1566,14 @@ export class FormSubmissionService {
           }
         }
         if (Object.keys(pages).length === 0) {
-          pages["default"] = {
+          pages['default'] = {
             completed: true,
             fields: submissionCustomFields.reduce((acc, field) => {
               acc[field.fieldname || field.fieldId] = field.value;
               return acc;
             }, {}),
           };
-          formData["default"] = { ...pages["default"].fields };
+          formData['default'] = { ...pages['default'].fields };
         }
         progress = {
           pages,
@@ -1562,24 +1588,24 @@ export class FormSubmissionService {
         submissionId,
         cohortId,
         status,
-        cohortmemberstatus: membership?.status || "",
+        cohortmemberstatus: membership?.status || '',
         formstatus,
         progress,
         lastSavedAt,
         submittedAt,
         cohortDetails: {
-          name: cohort?.name ?? "",
-          status: cohort?.status ?? "",
+          name: cohort?.name ?? '',
+          status: cohort?.status ?? '',
         },
         formData,
       });
     }
     // Also, for any form submission that is not linked to a cohortId (contextId), add as a separate application
     for (const submission of submissions) {
-      let cohortId = "";
+      let cohortId = '';
       try {
         const form = await this.formsService.getFormById(submission.formId);
-        cohortId = form?.contextId || "";
+        cohortId = form?.contextId || '';
       } catch {}
       if (!cohortId) {
         // orphan submission
@@ -1607,7 +1633,7 @@ export class FormSubmissionService {
         const pages: Record<string, any> = {};
         const formData: Record<string, any> = {};
         for (const [pageKey, pageSchema] of Object.entries(schema)) {
-          const pageName = pageKey === "default" ? "eligibility" : pageKey;
+          const pageName = pageKey === 'default' ? 'eligibility' : pageKey;
           pages[pageName] = { completed: true, fields: {} };
           formData[pageName] = {};
           const fieldProps = (pageSchema as any).properties || {};
@@ -1627,21 +1653,21 @@ export class FormSubmissionService {
           }
         }
         if (Object.keys(pages).length === 0) {
-          pages["default"] = {
+          pages['default'] = {
             completed: true,
             fields: submissionCustomFields.reduce((acc, field) => {
               acc[field.fieldname || field.fieldId] = field.value;
               return acc;
             }, {}),
           };
-          formData["default"] = { ...pages["default"].fields };
+          formData['default'] = { ...pages['default'].fields };
         }
         applications.push({
           formId: submission.formId,
           submissionId: submission.submissionId,
-          cohortId: "",
+          cohortId: '',
           status: submission.status,
-          cohortmemberstatus: "",
+          cohortmemberstatus: '',
           formstatus: submission.status,
           progress: {
             pages,
@@ -1657,8 +1683,8 @@ export class FormSubmissionService {
             ? submission.createdAt.toISOString()
             : new Date().toISOString(),
           cohortDetails: {
-            name: "",
-            status: "",
+            name: '',
+            status: '',
           },
           formData,
         });
@@ -1672,13 +1698,13 @@ export class FormSubmissionService {
         username: user.username,
         firstName: user.firstName,
         lastName: user.lastName,
-        middleName: user.middleName || "",
-        email: user.email || "",
-        mobile: user.mobile ? user.mobile.toString() : "",
-        mobile_country_code: user.mobile_country_code || "",
+        middleName: user.middleName || '',
+        email: user.email || '',
+        mobile: user.mobile ? user.mobile.toString() : '',
+        mobile_country_code: user.mobile_country_code || '',
         gender: user.gender,
-        dob: user.dob instanceof Date ? user.dob.toISOString() : (user.dob || ''),
-        country:user.country,
+        dob: user.dob instanceof Date ? user.dob.toISOString() : user.dob || '',
+        country: user.country,
         address: user.address || '',
         district: user.district || '',
         state: user.state || '',

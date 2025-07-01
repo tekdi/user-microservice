@@ -84,8 +84,8 @@ export class FormsService {
         return APIResponse.error(
           response,
           apiId,
-          'No Data found for this context OR Context Type OR Context Id',
           'NOT_FOUND',
+          'No Data found for this context OR Context Type OR Context Id',
           HttpStatus.NOT_FOUND
         );
       }
