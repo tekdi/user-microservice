@@ -1,0 +1,3 @@
+username,firstName,middleName,lastName,email,mobile,mobile_country_code,gender,dob,country,address,district,state,pincode,status,customFields
+john.doe,John,,Doe,john.doe@example.com,1234567890,+91,male,1990-01-01,India,123 Main St,District 1,State 1,123456,active,[]
+jane.smith,Jane,,Smith,jane.smith@example.com,9876543210,+91,female,1992-02-02,India,456 Park Ave,District 2,State 2,654321,active,[] 

@@ -26,6 +26,7 @@ import { AcademicyearsModule } from './academicyears/academicyears.module';
 import { CohortAcademicYearModule } from './cohortAcademicYear/cohortAcademicYear.module';
 import { storageConfig } from './config/storage.config';
 import { ElasticsearchModule } from './elasticsearch/elasticsearch.module';
+import { BulkImportModule } from './bulk-import/bulk-import.module';
 
 /**
  * Main Application Module
@@ -77,6 +78,7 @@ import { ElasticsearchModule } from './elasticsearch/elasticsearch.module';
     AcademicyearsModule,
     CohortAcademicYearModule,
     ElasticsearchModule,
+    BulkImportModule,
   ],
   controllers: [AppController],
   providers: [
