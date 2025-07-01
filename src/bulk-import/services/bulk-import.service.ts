@@ -24,6 +24,9 @@ import { isElasticsearchEnabled } from '../../common/utils/elasticsearch.util';
 import { v4 as uuidv4 } from 'uuid';
 import { ConfigService } from '@nestjs/config';
 import { getKeycloakAdminToken, createUserInKeyCloak } from '../../common/utils/keycloak.adapter.util';
+import APIResponse from '../../common/responses/response';
+import { APIID } from '../../common/utils/api-id.config';
+import { API_RESPONSES } from '../../common/utils/response.messages';
 
 @Injectable()
 export class BulkImportService {
@@ -45,13 +48,12 @@ export class BulkImportService {
     file: Express.Multer.File,
     cohortId: string,
     tenantId: string,
-    request: any,
-    response: any,
+    request: any
   ): Promise<{
     totalProcessed: number;
     successCount: number;
     failureCount: number;
-    failures: Array<{ row: number; error: string }>;
+    failures: Array<{ email: string; error: string }>;
   }> {
     const batchId = uuidv4();
 
@@ -59,7 +61,7 @@ export class BulkImportService {
       totalProcessed: 0,
       successCount: 0,
       failureCount: 0,
-      failures: [] as Array<{ row: number; error: string }>,
+      failures: [] as Array<{ email: string; error: string }>,
     };
 
     try {
@@ -67,6 +69,12 @@ export class BulkImportService {
       const userData = await this.parseFile(file);
       BulkImportLogger.logImportStart(batchId, userData.length);
 
+      const createdUserIds: string[] = [];
+      let loginUser = null;
+      if (request.headers.authorization) {
+        const decoded: any = require('jwt-decode')(request.headers.authorization);
+        loginUser = decoded?.sub;
+      }
       // Process each user
       for (let i = 0; i < userData.length; i++) {
         try {
@@ -95,49 +103,13 @@ export class BulkImportService {
           // Log only serializable part of createdUser
           if (createdUser && createdUser.userId) {
             BulkImportLogger.logUserCreationSuccess(batchId, i + 2, createdUser.userId, createdUser.username);
+            createdUserIds.push(createdUser.userId);
           } else {
             BulkImportLogger.logUserCreationError(batchId, i + 2, { message: 'User creation failed' }, user);
           }
 
           if (!createdUser || !createdUser.userId) {
             throw new Error('Failed to create user');
-          }
-
-          // 2. Create cohort member with shortlisted status
-          // Get userId from auth token for createdBy/updatedBy
-          let createdBy = null;
-          if (request.headers.authorization) {
-            const decoded: any = require('jwt-decode')(request.headers.authorization);
-            createdBy = decoded?.sub;
-          }
-          console.log("createdby",createdBy);
-          
-          const cohortMemberDto = new CohortMembersDto({
-            userId: createdUser.userId,
-            cohortId: cohortId,
-            statusReason: 'Added via bulk import',
-            tenantId: tenantId,
-            cohortAcademicYearId: request.headers.academicyearid,
-            createdBy: createdBy,
-            updatedBy: createdBy,
-          });
-          // Set status directly on the DTO object (bypassing DTO typing)
-          (cohortMemberDto as any).status = MemberStatus.SHORTLISTED;
-
-          let cohortMemberResult;
-          try {
-            cohortMemberResult = await this.cohortMembersService.createCohortMembers(
-              request.user,
-              cohortMemberDto,
-              response,
-              tenantId,
-              request.headers.deviceid,
-              request.headers.academicyearid
-            );
-            BulkImportLogger.logCohortMemberCreationSuccess(batchId, i + 2, createdUser.userId, cohortId);
-          } catch (cohortError) {
-            BulkImportLogger.logCohortMemberCreationError(batchId, i + 2, createdUser.userId, cohortId, cohortError);
-            throw cohortError;
           }
 
           // Send notification
@@ -174,10 +146,37 @@ export class BulkImportService {
           // Log only serializable error and user data
           BulkImportLogger.logUserCreationError(batchId, i + 2, { message: error.message, stack: error.stack }, userData[i]);
           results.failures.push({
-            row: i + 2, // +2 because Excel rows are 1-based and we skip header
+            email: userData[i]?.email,
             error: error.message,
           });
         }
+      }
+
+      // Bulk create cohort members after all users are created
+      if (createdUserIds.length > 0) {
+        // Pass status: MemberStatus.SHORTLISTED to ensure all created cohort members have status 'shortlisted' at creation time
+        await this.cohortMembersService.createBulkCohortMembers(
+          loginUser,
+          {
+            userId: createdUserIds,
+            cohortId: [cohortId],
+            status: MemberStatus.SHORTLISTED, // Set status at creation
+            statusReason: 'Added via bulk import', // Set status reason at creation
+          } as any, // Type assertion to allow extra properties
+          null,
+          tenantId,
+          request.headers.academicyearid
+        );
+
+        // Now update status to 'shortlisted' for all these users in this cohort and academic year
+        await this.cohortMembersRepository
+          .createQueryBuilder()
+          .update()
+          .set({ status: MemberStatus.SHORTLISTED })
+          .where("userId IN (:...userIds)", { userIds: createdUserIds })
+          .andWhere("cohortId = :cohortId", { cohortId })
+          .andWhere("cohortAcademicYearId = :cohortAcademicYearId", { cohortAcademicYearId: request.headers.academicyearid })
+          .execute();
       }
 
       BulkImportLogger.logImportEnd(batchId, {
@@ -185,11 +184,23 @@ export class BulkImportService {
         successCount: results.successCount,
         failureCount: results.failureCount,
       });
-
-      return results;
+    
+      // Wrap the summary in APIResponse.success
+      return APIResponse.success(
+        APIID.USER_BULK_IMPORT,
+        results,
+        200,
+        API_RESPONSES.BULK_IMPORT_SUCCESS
+      );
     } catch (error) {
       BulkImportLogger.logFileParsingError(batchId, error);
-      throw error;
+      // Wrap the error in APIResponse.error
+      return APIResponse.error(
+        APIID.USER_BULK_IMPORT,
+        error.message || API_RESPONSES.BULK_IMPORT_FAILURE,
+        error.message || 'Failed to process bulk import',
+        400
+      );
     }
   }
 

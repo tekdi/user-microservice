@@ -6,7 +6,6 @@ import {
   Body,
   Headers,
   Req,
-  Res,
   HttpStatus,
   UseFilters,
 } from '@nestjs/common';
@@ -61,41 +60,14 @@ export class BulkImportController {
     @UploadedFile() file: Express.Multer.File,
     @Body() bulkImportDto: BulkImportDto,
     @Headers('x-tenant-id') tenantId: string,
-    @Req() req: Request,
-    @Res() res: Response,
+    @Req() req: Request
   ) {
-    const batchId = uuidv4();
-    try {
-      const result = await this.bulkImportService.processBulkImport(
-        file,
-        bulkImportDto.cohortId,
-        tenantId,
-        req,
-        res,
-      );
-
-      BulkImportLogger.logImportEnd(batchId, {
-        totalProcessed: result.totalProcessed,
-        successCount: result.successCount,
-        failureCount: result.failureCount,
-      });
-
-      return APIResponse.success(
-        res,
-        APIID.USER_BULK_IMPORT,
-        result,
-        HttpStatus.OK,
-        API_RESPONSES.BULK_IMPORT_SUCCESS
-      );
-    } catch (error) {
-      BulkImportLogger.logFileParsingError(batchId, error);
-      return APIResponse.error(
-        res,
-        APIID.USER_BULK_IMPORT,
-        error.message || API_RESPONSES.BULK_IMPORT_FAILURE,
-        error.message || 'Failed to process bulk import',
-        HttpStatus.BAD_REQUEST
-      );
-    }
+    // The service will handle logging and response formatting
+    return await this.bulkImportService.processBulkImport(
+      file,
+      bulkImportDto.cohortId,
+      tenantId,
+      req
+    );
   }
 } 

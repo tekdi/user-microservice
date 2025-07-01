@@ -1194,6 +1194,8 @@ export class PostgresCohortMembersService {
       userId: string[];
       cohortId: string[];
       removeCohortId?: string[];
+      status?: string; // Allow status for bulk import
+      statusReason?: string; // Allow statusReason for bulk import
     },
     response: Response,
     tenantId: string,
@@ -1346,6 +1348,10 @@ export class PostgresCohortMembersService {
             const cohortMemberForAcademicYear = {
               ...cohortMembers,
               cohortAcademicYearId: cohortExists[0].cohortAcademicYearId,
+              // Use status from DTO if provided (e.g., for bulk import), otherwise default to ACTIVE
+              status: cohortMembersDto.status ? cohortMembersDto.status as MemberStatus : MemberStatus.ACTIVE, // Cast to MemberStatus
+              // Use statusReason from DTO if provided, otherwise default to empty string
+              statusReason: cohortMembersDto.statusReason || '',
             };
             // Need to add User in cohort for Academic year
             const result = await this.cohortMembersRepository.save(
