@@ -678,7 +678,9 @@ export class PostgresCohortMembersService {
             userDoc && userDoc._source
               ? (userDoc._source as { applications?: any[] })
               : undefined;
-          let applications = Array.isArray(source?.applications) ? [...source.applications] : [];
+          let applications = Array.isArray(source?.applications)
+            ? [...source.applications]
+            : [];
 
           const appIndex = applications.findIndex(
             (app) => app.cohortId === cohortMembers.cohortId
@@ -702,7 +704,8 @@ export class PostgresCohortMembersService {
           }
 
           // Now update the user document in Elasticsearch with the merged applications array
-          const baseDoc = (userDoc && userDoc._source && typeof userDoc._source === 'object') ? userDoc._source : {};
+          const baseDoc =
+            typeof userDoc?._source === 'object' ? userDoc._source : {};
           await this.userElasticsearchService.updateUser(
             cohortMembers.userId,
             { doc: { ...baseDoc, applications } },
