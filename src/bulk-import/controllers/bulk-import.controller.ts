@@ -8,6 +8,7 @@ import {
   Req,
   HttpStatus,
   UseFilters,
+  Res,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
@@ -60,14 +61,16 @@ export class BulkImportController {
     @UploadedFile() file: Express.Multer.File,
     @Body() bulkImportDto: BulkImportDto,
     @Headers('x-tenant-id') tenantId: string,
-    @Req() req: Request
+    @Req() req: Request,
+    @Res() res: Response
   ) {
     // The service will handle logging and response formatting
     return await this.bulkImportService.processBulkImport(
       file,
       bulkImportDto.cohortId,
       tenantId,
-      req
+      req,
+      res
     );
   }
 } 

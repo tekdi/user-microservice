@@ -3,6 +3,7 @@ import { Params } from './response-interface';
 import { Response } from 'express';
 export default class APIResponse {
   public static success<Type>(
+    response: Response,
     id: string,
     result: Type,
     statusCode: number,
@@ -24,12 +25,13 @@ export default class APIResponse {
         responseCode: statusCode,
         result,
       };
-      return resObj;
+      return response.status(statusCode).json(resObj);
     } catch (e) {
       return e;
     }
   }
   public static error(
+    response: Response,
     id: string,
     error: string,
     errmsg: string,
@@ -50,7 +52,7 @@ export default class APIResponse {
         responseCode: statusCode,
         result: {},
       };
-      return resObj;
+      return response.status(statusCode).json(resObj);
     } catch (e) {
       return e;
     }

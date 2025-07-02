@@ -48,7 +48,8 @@ export class BulkImportService {
     file: Express.Multer.File,
     cohortId: string,
     tenantId: string,
-    request: any
+    request: any,
+    response: Response
   ): Promise<{
     totalProcessed: number;
     successCount: number;
@@ -187,6 +188,7 @@ export class BulkImportService {
     
       // Wrap the summary in APIResponse.success
       return APIResponse.success(
+        response,
         APIID.USER_BULK_IMPORT,
         results,
         200,
@@ -196,6 +198,7 @@ export class BulkImportService {
       BulkImportLogger.logFileParsingError(batchId, error);
       // Wrap the error in APIResponse.error
       return APIResponse.error(
+        response,
         APIID.USER_BULK_IMPORT,
         error.message || API_RESPONSES.BULK_IMPORT_FAILURE,
         error.message || 'Failed to process bulk import',
