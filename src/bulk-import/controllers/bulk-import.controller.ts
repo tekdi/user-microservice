@@ -73,4 +73,13 @@ export class BulkImportController {
       res
     );
   }
+
+  @Post('xlsx-template')
+  async generateXlsxTemplate(
+    @Body('cohortId') cohortId: string,
+    @Headers('x-tenant-id') tenantId: string
+  ) {
+    // The service will return the full response object
+    return await this.bulkImportService.generateXlsxTemplateColumns(cohortId, tenantId);
+  }
 } 

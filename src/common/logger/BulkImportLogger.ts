@@ -4,30 +4,58 @@ import * as path from 'path';
 import * as winston from 'winston';
 
 export class BulkImportLogger {
-  private static readonly logger = new Logger('BulkImportLogger');
-  private static readonly logDir = 'logs/bulk-import';
-  private static readonly winstonLogger = winston.createLogger({
-    format: winston.format.combine(
-      winston.format.timestamp(),
-      winston.format.json()
-    ),
-    transports: [
-      new winston.transports.File({
-        filename: path.join(BulkImportLogger.logDir, 'bulk-import-error.log'),
-        level: 'error',
-      }),
-      new winston.transports.File({
-        filename: path.join(BulkImportLogger.logDir, 'bulk-import-info.log'),
-        level: 'info',
-      }),
-    ],
-  });
+  private static logger = new Logger('BulkImportLogger');
+  private static logDir = 'logs/bulk-import';
+  private static winstonLogger: winston.Logger = BulkImportLogger.createDefaultLogger();
 
-  static {
-    // Create log directory if it doesn't exist
+  static initializeLogger(cohortId: string) {
+    const now = new Date();
+    const datetime = now.toISOString().replace(/[:.]/g, '-');
+    const errorLog = `bulk-import-error-${cohortId}-${datetime}.log`;
+    const infoLog = `bulk-import-info-${cohortId}-${datetime}.log`;
+
     if (!fs.existsSync(BulkImportLogger.logDir)) {
       fs.mkdirSync(BulkImportLogger.logDir, { recursive: true });
     }
+
+    BulkImportLogger.winstonLogger = winston.createLogger({
+      format: winston.format.combine(
+        winston.format.timestamp(),
+        winston.format.json()
+      ),
+      transports: [
+        new winston.transports.File({
+          filename: path.join(BulkImportLogger.logDir, errorLog),
+          level: 'error',
+        }),
+        new winston.transports.File({
+          filename: path.join(BulkImportLogger.logDir, infoLog),
+          level: 'info',
+        }),
+      ],
+    });
+  }
+
+  private static createDefaultLogger() {
+    if (!fs.existsSync(BulkImportLogger.logDir)) {
+      fs.mkdirSync(BulkImportLogger.logDir, { recursive: true });
+    }
+    return winston.createLogger({
+      format: winston.format.combine(
+        winston.format.timestamp(),
+        winston.format.json()
+      ),
+      transports: [
+        new winston.transports.File({
+          filename: path.join(BulkImportLogger.logDir, 'bulk-import-error.log'),
+          level: 'error',
+        }),
+        new winston.transports.File({
+          filename: path.join(BulkImportLogger.logDir, 'bulk-import-info.log'),
+          level: 'info',
+        }),
+      ],
+    });
   }
 
   static logImportStart(batchId: string, totalRecords: number) {

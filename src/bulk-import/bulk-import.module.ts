@@ -16,6 +16,9 @@ import { UserModule } from '../user/user.module';
 import { CohortMembersModule } from '../cohortMembers/cohortMembers.module';
 import { ElasticsearchModule } from '../elasticsearch/elasticsearch.module';
 import { PostgresModule } from '../adapters/postgres/postgres-module';
+import { Cohort } from '../cohort/entities/cohort.entity';
+import { FormsModule } from '../forms/forms.module';
+import { Form } from '../forms/entities/form.entity';
 
 @Module({
   imports: [
@@ -28,12 +31,15 @@ import { PostgresModule } from '../adapters/postgres/postgres-module';
       Tenants,
       UserRoleMapping,
       Role,
+      Cohort,
+      Form,
     ]),
     UserModule,
     CohortMembersModule,
     ElasticsearchModule,
     PostgresModule,
     HttpModule,
+    FormsModule,
   ],
   controllers: [BulkImportController],
   providers: [
