@@ -32,7 +32,7 @@
 import { NestFactory } from "@nestjs/core";
 import { AppModule } from "./app.module";
 import { SwaggerModule, DocumentBuilder } from "@nestjs/swagger";
-import { RequestMethod } from "@nestjs/common";
+import { RequestMethod, ValidationPipe } from "@nestjs/common";
 import { join } from "path";
 import express = require("express");
 import { AllExceptionsFilter } from "./common/filters/exception.filter";
@@ -58,8 +58,8 @@ async function bootstrap() {
     )
     .build();
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup("api/swagger-docs", app, document);
-  app.useGlobalFilters(new AllExceptionsFilter())
+  SwaggerModule.setup("swagger-docs", app, document);
+  app.useGlobalFilters(new AllExceptionsFilter());
   app.enableCors();
   await app.listen(3000);
 }

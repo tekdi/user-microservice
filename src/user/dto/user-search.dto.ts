@@ -9,27 +9,42 @@ import {
   ValidateIf,
   ArrayMinSize,
   ArrayMaxSize,
+  IsEmail,
+  IsString,
+  Length,
+  IsPhoneNumber,
+  Matches,
+  IsDateString,
 } from "class-validator";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 
 export class setFilters {
   @ApiPropertyOptional({
-    type: String,
+    type: [String],
     description: "State",
   })
   state: string;
 
   @ApiPropertyOptional({
-    type: String,
+    type: [String],
     description: "District",
   })
+  @IsArray()
   district: string;
 
   @ApiPropertyOptional({
-    type: String,
+    type: [String],
     description: "Block",
   })
+  @IsArray()
   block: string;
+
+  @ApiPropertyOptional({
+    type: [String],
+    description: "Block",
+  })
+  @IsArray()
+  village: string;
 
   @ApiPropertyOptional({
     type: String,
@@ -38,16 +53,58 @@ export class setFilters {
   role: string;
 
   @ApiPropertyOptional({
-    type: String,
+    type: [String],
     description: "User Name",
   })
-  username: string;
+  @IsOptional()
+  @IsArray()
+  username: string[];
+
+
+  @ApiProperty({
+    type: [String],
+    description: " User IDs",
+    default: [],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsNotEmpty({ each: true })
+  @IsUUID(undefined, { each: true })
+  userId?: string[]; //This is dynamically used in db query
+
+  @ApiPropertyOptional({
+    type: [String],
+    description: "email Ids",
+  })
+  @IsOptional()
+  @IsArray()
+  @IsEmail({}, { each: true })
+  email: string[];
+
+  @ApiPropertyOptional({
+    type: [String],
+    description: "status",
+  })
+  @IsOptional()
+  @IsArray()
+  @IsEnum(['active', 'inactive'], { each: true })
+  status: string[];
+
+  @ApiPropertyOptional({ type: String, description: 'Start date in YYYY-MM-DD format' })
+  @IsOptional()
+  @IsDateString({}, { message: 'fromDate must be a valid date string (YYYY-MM-DD)' })
+  fromDate?: string;
+
+  @ApiPropertyOptional({ type: String, description: 'End date in YYYY-MM-DD format' })
+  @IsOptional()
+  @IsDateString({}, { message: 'toDate must be a valid date string (YYYY-MM-DD)' })
+  toDate?: string;
 
   @ApiPropertyOptional({
     type: String,
-    description: "User Id",
+    description: "Role",
   })
-  userId: string;
+  tenantId: string;
 }
 export class excludeFields {
   @ApiProperty({
@@ -76,8 +133,8 @@ export class excludeFields {
 }
 
 enum SortDirection {
-  ASC = 'asc',
-  DESC = 'desc',
+  ASC = "asc",
+  DESC = "desc",
 }
 
 export class tenantCohortRoleMappingDto {
@@ -112,6 +169,63 @@ export class tenantCohortRoleMappingDto {
   roleId: string;
 }
 
+export class SuggestUserDto{
+  @ApiProperty({ type: String, description: 'First name of the user', maxLength: 50 })
+  @Expose()
+  @IsNotEmpty()
+  @Length(1, 50)
+  firstName: string;
+
+  @ApiProperty({ type: String, description: 'Middle name of the user (optional)', maxLength: 50, required: false })
+  @Expose()
+  @IsOptional()
+  @Length(0, 50)
+  middleName?: string;
+
+  @ApiProperty({ type: String, description: 'Last name of the user', maxLength: 50 })
+  @Expose()
+  @IsNotEmpty()
+  @Length(1, 50)
+  lastName: string;
+  
+  @ApiPropertyOptional({ type: String, description: "User Name" })
+  @Expose()
+  @IsNotEmpty()
+  username: string;
+}
+
+export class ExistUserDto {  
+    @ApiProperty({ type: String, description: 'First name of the user', maxLength: 50 })
+    @Expose()
+    @IsOptional()
+    @Length(1, 50)
+    firstName?: string;
+  
+    @ApiProperty({ type: String, description: 'Middle name of the user (optional)', maxLength: 50, required: false })
+    @Expose()
+    @IsOptional()
+    @Length(0, 50)
+    middleName?: string;
+
+    @ApiProperty({ type: String, description: 'Middle name of the user (optional)', maxLength: 50, required: false })
+    @Expose()
+    @IsOptional()
+    @Length(0, 50)
+    lastName?: string;
+
+    @ApiProperty({ type: () => String })
+    @IsOptional()
+    @IsEmail()
+    email?: string;
+
+    @ApiProperty({ type: () => String, description: 'Mobile number of the user (optional)' })
+    @Expose()
+    @IsOptional()
+    @IsString({ message: 'Mobile number must be a string' })
+    @Matches(/^[0-9]{10}$/, { message: 'Mobile number must be between 10 digits and contain only numbers' })
+    mobile?: string;
+}
+
 export class UserSearchDto {
   @ApiProperty({
     type: Number,
@@ -140,13 +254,12 @@ export class UserSearchDto {
 
   @ApiProperty({
     type: [String],
-    description: 'Custom Fields Name',
+    description: "Custom Fields Name",
     default: [],
   })
   @Expose()
   @IsOptional()
   customFieldsName: string[];
-
 
   @ApiPropertyOptional({
     type: tenantCohortRoleMappingDto,
@@ -168,16 +281,19 @@ export class UserSearchDto {
 
   @ApiPropertyOptional({
     description: "Sort",
-    example: ["username", "asc"]
+    example: ["username", "asc"],
   })
   @IsArray()
   @IsOptional()
-  @ArrayMinSize(2, { message: 'Sort array must contain exactly two elements' })
-  @ArrayMaxSize(2, { message: 'Sort array must contain exactly two elements' })
+  @ArrayMinSize(2, { message: "Sort array must contain exactly two elements" })
+  @ArrayMaxSize(2, { message: "Sort array must contain exactly two elements" })
   sort: [string, string];
 
   @ValidateIf((o) => o.sort !== undefined)
-  @IsEnum(SortDirection, { each: true, message: 'Sort[1] must be either asc or desc' })
+  @IsEnum(SortDirection, {
+    each: true,
+    message: "Sort[1] must be either asc or desc",
+  })
   get sortDirection(): string | undefined {
     return this.sort ? this.sort[1] : undefined;
   }
@@ -186,4 +302,3 @@ export class UserSearchDto {
     Object.assign(this, partial);
   }
 }
-

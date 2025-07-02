@@ -1,7 +1,14 @@
-import { Exclude, Expose } from "class-transformer";
+import { Exclude, Expose, Type } from "class-transformer";
 import { ApiProperty } from "@nestjs/swagger";
-import { IsEnum, IsOptional, IsString, ValidateIf } from "class-validator";
+import {
+  IsEnum,
+  IsOptional,
+  IsString,
+  ValidateIf,
+  ValidateNested,
+} from "class-validator";
 import { MemberStatus } from "../entities/cohort-member.entity";
+import { FieldValuesOptionDto } from "src/user/dto/user-create.dto";
 export class CohortMembersUpdateDto {
   @Expose()
   tenantId: string;
@@ -37,8 +44,9 @@ export class CohortMembersUpdateDto {
     enum: MemberStatus,
     description: "The status of the cohort members",
   })
+  @IsOptional()
   @IsEnum(MemberStatus)
-  status: string;
+  status?: string;
 
   @ApiProperty({
     type: String,
@@ -60,9 +68,17 @@ export class CohortMembersUpdateDto {
     type: String,
     description: "The status change reason",
   })
-  @ValidateIf(o => o.status === MemberStatus.DROPOUT)
-  @IsString({ message: 'Reason is mandatory while dropping out a member' })
+  @ValidateIf((o) => o.status === MemberStatus.DROPOUT)
+  @IsString({ message: "Reason is mandatory while dropping out a member" })
   statusReason?: string;
+  @ApiProperty({
+    type: FieldValuesOptionDto,
+    description: "Array of Custom fields",
+  })
+  @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => FieldValuesOptionDto)
+  customFields?: FieldValuesOptionDto[];
 
   constructor(obj: any) {
     Object.assign(this, obj);

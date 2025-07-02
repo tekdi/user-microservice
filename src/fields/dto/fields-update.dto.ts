@@ -1,131 +1,162 @@
 import { Exclude, Expose } from "class-transformer";
 import {
-    MaxLength,
-    IsNotEmpty,
-    IsEmail,
-    IsString,
-    IsNumber,
-    IsEnum,
+  MaxLength,
+  IsNotEmpty,
+  IsEmail,
+  IsString,
+  IsNumber,
+  IsEnum,
+  IsOptional,
+  ValidateNested,
+  IsBoolean,
+  IsObject,
+  ValidateIf,
+  IsDefined,
 } from "class-validator";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { FieldType } from "../entities/fields.entity";
+import { Type } from "class-transformer";
+
+class FieldParams {
+  @ApiPropertyOptional({
+    type: Boolean,
+    description: "Specifies if the field can be created",
+    default: false,
+  })
+  @IsBoolean()
+  @IsDefined() // Ensures this field is required
+  isCreate: boolean;
+
+  @ApiPropertyOptional({
+    type: Array,
+    description: "Options for the field",
+    default: [],
+  })
+  @IsOptional()
+  @IsObject({ each: true })
+  options: { name: string; value: string }[];
+}
+
 export class FieldsUpdateDto {
-    //generated fields
-    @Expose()
-    fieldId: string;
+  // Generated fields
+  @Expose()
+  fieldId: string;
 
-    //name
-    @ApiPropertyOptional({
-        type: String,
-        description: "The name of the fields",
-        default: "",
-    })
-    @Expose()
-    name: string;
+  // Name
+  @ApiPropertyOptional({
+    type: String,
+    description: "The name of the fields",
+    default: "",
+  })
+  @Expose()
+  name: string;
 
-    //label
-    @ApiPropertyOptional({
-        type: String,
-        description: "The label of the fields",
-        default: "",
-    })
-    @Expose()
-    label: string;
+  // Label
+  @ApiPropertyOptional({
+    type: String,
+    description: "The label of the fields",
+    default: "",
+  })
+  @Expose()
+  label: string;
 
-    //context
-    @ApiPropertyOptional({
-        type: String,
-        description: "The context of the fields",
-        default: "",
-    })
-    @Expose()
-    context: string;
+  // Context
+  @ApiPropertyOptional({
+    type: String,
+    description: "The context of the fields",
+    default: "",
+  })
+  @Expose()
+  context: string;
 
-    //contextType
-    @ApiPropertyOptional({
-        type: String,
-        description: "The contextType of the fields",
-        default: "",
-    })
-    @Expose()
-    contextType: string;
+  // Context Type
+  @ApiPropertyOptional({
+    type: String,
+    description: "The contextType of the fields",
+    default: "",
+  })
+  @Expose()
+  contextType: string;
 
-    //type
-    @ApiPropertyOptional({
-        enum: FieldType,
-        default: FieldType.TEXT,
-        nullable: false
-    })
-    @IsEnum(FieldType)
-    @Expose()
-    type: string;
-
-    //ordering
-    @ApiPropertyOptional({
-        type: Number,
-        description: "The ordering of the fields",
-        default: 0,
-    })
-    @Expose()
-    ordering: Number;
-
-    //required
-    @ApiPropertyOptional({
-        type: Boolean,
-        description: "The required of the fields",
-        default: true,
-    })
-    @Expose()
-    required: boolean;
+  // Type
+  @ApiPropertyOptional({
+    enum: FieldType,
+    default: FieldType.TEXT,
+    nullable: false,
+  })
+  @IsEnum(FieldType, { message: 'type must be a valid enum value' })
+  @ValidateIf((o) => o.type !== undefined) // Validate only if type is defined
+  @Expose()
+  type: string;
 
 
+  // Ordering
+  @ApiPropertyOptional({
+    type: Number,
+    description: "The ordering of the fields",
+    default: 0,
+  })
+  @Expose()
+  ordering: number;
 
-    //tenantId
-    @ApiPropertyOptional({
-        type: String,
-        description: "The tenantId of the fields",
-        default: "",
-    })
-    @Expose()
-    tenantId: string;
+  // Required
+  @ApiPropertyOptional({
+    type: Boolean,
+    description: "The required of the fields",
+    default: true,
+  })
+  @Expose()
+  required: boolean;
 
-    // fieldParams
-    @ApiPropertyOptional({
-        type: Object,
-        description: "The fieldParams of the fields",
-        default: {},
-    })
-    @Expose()
-    fieldParams: object;
+  // Tenant ID
+  @ApiPropertyOptional({
+    type: String,
+    description: "The tenantId of the fields",
+    default: "",
+  })
+  @Expose()
+  tenantId: string;
 
-    //fieldAttributes
-    @ApiPropertyOptional({
-        type: Object,
-        description: "The fieldAttributes of the fields",
-        default: {},
-    })
-    @Expose()
-    fieldAttributes: object;
+  // FieldParams
+  @ApiPropertyOptional({
+    type: FieldParams,
+    description: "The fieldParams of the fields",
+    default: {},
+  })
+  @ValidateNested()
+  @Type(() => FieldParams)
+  @ValidateIf((o) => o.fieldParams !== undefined) // Validate only if fieldParams is present
+  @Expose()
+  fieldParams: FieldParams;
 
-    //sourceDetails
-    @ApiPropertyOptional({
-        type: Object,
-        description: "The sourceDetails of the fields",
-        default: {},
-    })
-    @Expose()
-    sourceDetails: object;
+  // FieldAttributes
+  @ApiPropertyOptional({
+    type: Object,
+    description: "The fieldAttributes of the fields",
+    default: {},
+  })
+  @Expose()
+  fieldAttributes: object;
 
-    //dependsOn
-    @ApiPropertyOptional({
-        type: String,
-        description: "The dependsOn of the fields",
-        default: {},
-    })
-    @Expose()
-    dependsOn: string;
+  // SourceDetails
+  @ApiPropertyOptional({
+    type: Object,
+    description: "The sourceDetails of the fields",
+    default: {},
+  })
+  @Expose()
+  sourceDetails: object;
 
-    constructor(obj: any) {
-        Object.assign(this, obj);
-    }
+  // DependsOn
+  @ApiPropertyOptional({
+    type: String,
+    description: "The dependsOn of the fields",
+    default: {},
+  })
+  @Expose()
+  dependsOn: string;
+
+  constructor(obj: any) {
+    Object.assign(this, obj);
+  }
 }
