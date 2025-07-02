@@ -61,6 +61,7 @@ interface FormSubmissionFilters {
   createdAt?: string | DateRange;
   updatedAt?: string | DateRange;
   customFieldsFilter?: CustomFieldFilters;
+  completionPercentage?: string[];
 }
 
 interface FieldSearchResult {
@@ -255,6 +256,21 @@ export class FormSubmissionService {
           whereClause[key] = value.toLowerCase();
         }
       }
+      // Handle completion percentage ranges
+      else if (key === 'completionPercentage') {
+        if (Array.isArray(value) && value.length > 0) {
+          // Validate each range in the array
+          value.forEach((range: string, index: number) => {
+            const [min, max] = range.split('-').map(Number);
+            if (isNaN(min) || isNaN(max) || min < 0 || max > 100 || min > max) {
+              throw new BadRequestException(
+                `Invalid completion percentage range at index ${index}: ${range}. Must be in format "min-max" where 0 <= min <= max <= 100`
+              );
+            }
+          });
+          whereClause[key] = value;
+        }
+      }
       // Handle UUID fields (exact match)
       else if (
         ['submissionId', 'formId', 'itemId', 'createdBy', 'updatedBy'].includes(
@@ -312,15 +328,49 @@ export class FormSubmissionService {
     offset: number,
     limit: number
   ) {
-    return await this.formSubmissionRepository.findAndCount({
-      where: whereClause,
-      order:
-        sort?.length === 2
-          ? { [sort[0]]: sort[1].toUpperCase() }
-          : { createdAt: 'DESC' },
-      skip: offset,
-      take: limit,
+    // Handle completion percentage ranges separately
+    const { completionPercentage, ...otherFilters } = whereClause;
+    let queryBuilder = this.formSubmissionRepository.createQueryBuilder('fs');
+
+    // Apply other filters
+    Object.entries(otherFilters).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        if (Array.isArray(value)) {
+          queryBuilder.andWhere(`fs.${key} IN (:...${key})`, { [key]: value });
+        } else {
+          queryBuilder.andWhere(`fs.${key} = :${key}`, { [key]: value });
+        }
+      }
     });
+
+    // Handle completion percentage ranges (only if present in whereClause)
+    if (completionPercentage && Array.isArray(completionPercentage) && completionPercentage.length > 0) {
+      // Multiple ranges - use OR conditions (union)
+      const rangeConditions = completionPercentage.map((range, index) => {
+        const [min, max] = range.split('-').map(Number);
+        return `(fs.completionPercentage >= :min${index} AND fs.completionPercentage <= :max${index})`;
+      });
+
+      const parameters = {};
+      completionPercentage.forEach((range, index) => {
+        const [min, max] = range.split('-').map(Number);
+        parameters[`min${index}`] = min;
+        parameters[`max${index}`] = max;
+      });
+
+      queryBuilder.andWhere(`(${rangeConditions.join(' OR ')})`, parameters);
+    }
+
+    // Apply sorting and pagination
+    if (sort?.length === 2) {
+      queryBuilder.orderBy(`fs.${sort[0]}`, sort[1].toUpperCase() as 'ASC' | 'DESC');
+    } else {
+      queryBuilder.orderBy('fs.createdAt', 'DESC');
+    }
+
+    queryBuilder.skip(offset).take(limit);
+
+    return await queryBuilder.getManyAndCount();
   }
 
   private async applyCustomFieldFilters(
