@@ -1,8 +1,7 @@
-import { CacheModule, Module } from "@nestjs/common";
+import { Module } from "@nestjs/common";
 import { UserController } from "./user.controller";
 import { HttpModule } from "@nestjs/axios";
 import { UserAdapter } from "./useradapter";
-import { HasuraModule } from "src/adapters/hasura/hasura.module";
 import { PostgresModule } from "src/adapters/postgres/postgres-module";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { User } from "./entities/user-entity";
@@ -14,16 +13,33 @@ import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
 import { UserRoleMapping } from "src/rbac/assign-role/entities/assign-role.entity";
 import { Cohort } from "src/cohort/entities/cohort.entity";
 import { Role } from "src/rbac/role/entities/role.entity";
-
+import { CohortMembersModule } from "src/cohortMembers/cohortMembers.module";
+import { UploadS3Service } from "src/common/services/upload-S3.service";
+import { AutomaticMemberService } from "src/automatic-member/automatic-member.service";
+import { AutomaticMember } from "src/automatic-member/entity/automatic-member.entity";
+import { KafkaModule } from "src/kafka/kafka.module";
+import { OblfService } from "src/common/services/oblf.service";
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, FieldValues, Fields, CohortMembers,UserTenantMapping,Tenants,UserRoleMapping,Cohort,Role]),
+    TypeOrmModule.forFeature([
+      User,
+      FieldValues,
+      Fields,
+      CohortMembers,
+      UserTenantMapping,
+      Tenants,
+      UserRoleMapping,
+      Cohort,
+      Role,
+      AutomaticMember,
+    ]),
     HttpModule,
-    HasuraModule,
     PostgresModule,
+    CohortMembersModule,
+    KafkaModule,
   ],
   controllers: [UserController],
-  providers: [UserAdapter],
+  providers: [UserAdapter, UploadS3Service, AutomaticMemberService, OblfService],
 })
 export class UserModule {}

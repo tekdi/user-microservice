@@ -1,10 +1,14 @@
 import { BadRequestException, HttpStatus, Injectable } from "@nestjs/common";
+import jwt_decode from "jwt-decode";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Form } from "./entities/form.entity";
-import { Repository } from "typeorm";
+import { IsNull, Repository } from "typeorm";
 import { PostgresFieldsService } from "../adapters/postgres/fields-adapter";
 import APIResponse from "src/common/responses/response";
 import { CohortContextType } from "./utils/form-class";
+import { FormCreateDto } from "./dto/form-create.dto";
+import { APIID } from "@utils/api-id.config";
+import { API_RESPONSES } from "@utils/response.messages";
 
 @Injectable()
 export class FormsService {
@@ -15,8 +19,8 @@ export class FormsService {
   ) { }
 
   async getForm(requiredData, response) {
-    let apiId = "getFormData";
-    try {
+    let apiId = APIID.FORM_GET;
+    try {      
       if (!requiredData.context && !requiredData.contextType) {
         return APIResponse.error(
           response,
@@ -26,8 +30,11 @@ export class FormsService {
           HttpStatus.BAD_REQUEST
         );
       }
+
+
       const { context, contextType, tenantId } = requiredData;
       const validationResult = await this.validateFormInput(requiredData);
+
       if (validationResult.error) {
         return APIResponse.error(
           response,
@@ -59,22 +66,26 @@ export class FormsService {
           HttpStatus.NOT_FOUND
         );
       }
+
+      // console.log(formData);
+      
       const mappedResponse = await Promise.all(
         formData.fields.result.map(async (data) => {
           if (!data.coreField) {
-            const whereClause = `"fieldId" = '${data.fieldId}'`;
+            const whereClause = `"fieldId" = '${data.fieldId}'`;            
             const [customFieldData] = await this.fieldsService.getFieldData(
-              whereClause
+              whereClause,
+              tenantId
             );
-            delete customFieldData.sourceDetails;
-            customFieldData.order = data.order;
-            return customFieldData;
+            customFieldData.validation = data.validation;
+            customFieldData.order = data.order;            
+            return { ...data, ...customFieldData };
           }
           return data;
         })
       );
 
-      let result = {
+      const result = {
         formid: formData.formid,
         title: formData.title,
         fields: mappedResponse,
@@ -100,31 +111,34 @@ export class FormsService {
   }
 
   async getFormData(whereClause): Promise<any> {
-
-    let query = this.formRepository.createQueryBuilder('form')
-      .select(['form.formid', 'form.title', 'form.fields'])
-      .where('form.context = :context', { context: whereClause.context });
+    let query = this.formRepository
+      .createQueryBuilder("form")
+      .select(["form.formid", "form.title", "form.fields"])
+      .where("form.context = :context", { context: whereClause.context });
 
     if (whereClause.contextType !== undefined) {
       if (whereClause.contextType === null) {
-        query = query.andWhere('form.contextType IS NULL');
+        query = query.andWhere("form.contextType IS NULL");
       } else {
-        query = query.andWhere('form.contextType = :contextType', { contextType: whereClause.contextType });
+        query = query.andWhere("form.contextType = :contextType", {
+          contextType: whereClause.contextType,
+        });
       }
     }
     if (whereClause.tenantId) {
-      query = query.andWhere('form.tenantId = :tenantId', { tenantId: whereClause.tenantId });
+      query = query.andWhere("form.tenantId = :tenantId", {
+        tenantId: whereClause.tenantId,
+      });
     } else {
-      query = query.andWhere('form.tenantId IS NULL');
+      query = query.andWhere("form.tenantId IS NULL");
     }
     const result = await query.getOne();
     return result || false;
   }
 
-
   async checkValidUserContextType() {
-    let query = `select name from "Roles" r`;
-    let roleName = await this.formRepository.query(query);
+    const query = `select name from "Roles" r`;
+    const roleName = await this.formRepository.query(query);
     return roleName;
   }
 
@@ -137,7 +151,7 @@ export class FormsService {
     requiredData: any
   ): Promise<{ error: string | null }> {
     delete requiredData.tenantId;
-    const allowedKeys = ["context", "contextType"];
+    const allowedKeys = ["context", "contextType", "userId"];
     const extraKeys = Object.keys(requiredData).filter(
       (key) => !allowedKeys.includes(key)
     );
@@ -154,6 +168,7 @@ export class FormsService {
 
     if (context) {
       const validContextTypes = await this.getValidContextTypes(context);
+
       if (validContextTypes.length === 0) {
         return { error: `Invalid context: ${context}` };
       }
@@ -169,14 +184,142 @@ export class FormsService {
     return { error: null };
   }
 
+
   private async getValidContextTypes(context: string): Promise<string[]> {
     switch (context.toLowerCase()) {
       case "users":
         return await this.getUserContextTypesFromDB();
       case "cohorts":
         return Object.values(CohortContextType);
+      case "cohortmember":
+        return ["COHORTMEMBER"];
+      case "tenant":
+        return ["TENANT"];
       default:
         return [];
     }
+  }
+
+  public async createForm(request, formCreateDto: FormCreateDto, response) {
+    let apiId = APIID.FORM_CREATE;
+
+    try {
+      formCreateDto.contextType = formCreateDto.contextType.toUpperCase();
+      formCreateDto.context = formCreateDto.context.toUpperCase();
+      formCreateDto.title = formCreateDto.title.toUpperCase();
+
+      formCreateDto.tenantId = formCreateDto?.tenantId?.trim()?.length
+        ? formCreateDto.tenantId
+        : null;
+      const checkFormExists = await this.getFormDetail(
+        formCreateDto.context,
+        formCreateDto.contextType,
+        formCreateDto.tenantId
+      );
+
+      if (checkFormExists.length) {
+        return APIResponse.error(
+          response,
+          apiId,
+          "BAD_REQUEST",
+          API_RESPONSES.FORM_EXISTS,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      const validForm = await this.validateFormFields(
+        formCreateDto.fields?.result
+      );
+
+      if (!validForm) {
+        return APIResponse.error(
+          response,
+          apiId,
+          "BAD_REQUEST",
+          API_RESPONSES.INVALID_FORM,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      const validContextTypes = await this.getValidContextTypes(
+        formCreateDto.context
+      );
+      if (validContextTypes.length === 0) {
+        return APIResponse.error(
+          response,
+          apiId,
+          "BAD_REQUEST",
+          API_RESPONSES.INVALID_CONTEXT(formCreateDto.context),
+          HttpStatus.BAD_REQUEST
+        );
+      }
+      if (
+        formCreateDto.contextType &&
+        !validContextTypes.includes(formCreateDto.contextType)
+      ) {
+        return APIResponse.error(
+          response,
+          apiId,
+          "BAD_REQUEST",
+          API_RESPONSES.INVALID_CONTEXTTYPE(
+            formCreateDto.context,
+            validContextTypes.join(", ")
+          ),
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      const result = await this.formRepository.save(formCreateDto);
+
+      return APIResponse.success(
+        response,
+        apiId,
+        result,
+        HttpStatus.OK,
+        API_RESPONSES.FORM_CREATED_SUCCESSFULLY
+      );
+    } catch (error) {
+      const errorMessage = error.message || "Internal server error";
+      return APIResponse.error(
+        response,
+        apiId,
+        "INTERNAL_SERVER_ERROR",
+        errorMessage,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  private async validateFormFields(formFields) {
+    const fieldIds = [];
+    if (Array.isArray(formFields)) {
+      for (const element of formFields) {
+        if (element["coreField"] === 0 && element["fieldId"]?.trim().length) {
+          fieldIds.push(element["fieldId"]);
+        } else if (
+          (element["coreField"] === 0 && !element["fieldId"]) ||
+          (element["coreField"] === 1 && element["fieldId"] !== null)
+        ) {
+          return false;
+        }
+      }
+
+      const fieldsData = await this.fieldsService.getFieldsByIds(fieldIds);
+
+      if (fieldsData.length === fieldIds.length) {
+        return true;
+      }
+      return false;
+    }
+  }
+
+  async getFormDetail(context: string, contextType: string, tenantId: string) {
+    return await this.formRepository.find({
+      where: {
+        context,
+        contextType,
+        tenantId: tenantId || IsNull(),
+      },
+    });
   }
 }

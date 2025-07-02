@@ -4,7 +4,7 @@ import {
   IsOptional,
   ValidateNested,
   IsEnum,
-  IsBoolean,
+  IsArray,
   IsString,
 } from "class-validator";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
@@ -17,39 +17,37 @@ export class CohortCreateDto {
   @Expose()
   tenantId: string;
 
-  @Expose()
-  @IsOptional()
-  createdAt?: string;
+  academicYearId: string;
 
   @Expose()
-  @IsOptional()
-  updatedAt?: string;
+  createdAt: string;
 
-  // programId
+  @Expose()
+  updatedAt: string;
+
+  //programId
   @ApiPropertyOptional({
     type: String,
     description: "The programId of the cohort",
     default: "",
   })
   @Expose()
-  @IsOptional()
-  programId?: string;
+  programId: string;
 
-  // parentId
+  //parentId
   @ApiPropertyOptional({
     type: String,
     description: "The parentId of the cohort",
     default: "",
   })
   @Expose()
-  @IsOptional()
-  parentId?: string;
+  parentId: string;
 
-  // referenceId
+  //referenceId
   @Expose()
   referenceId: string;
 
-  // name
+  //name
   @ApiProperty({
     type: String,
     description: "The name of the cohort",
@@ -59,7 +57,7 @@ export class CohortCreateDto {
   @IsNotEmpty()
   name: string;
 
-  // type
+  //type
   @ApiProperty({
     type: String,
     description: "The type of the cohort",
@@ -69,46 +67,44 @@ export class CohortCreateDto {
   @IsNotEmpty()
   type: string;
 
+  //status
+  // @Expose()
+  // status: string;
   @ApiProperty({
     type: String,
     description: "The status of Cohort",
   })
   @IsOptional()
-  @IsEnum(['active', 'archived', 'inactive'], {
-    message: 'Status must be one of: active, archived, inactive',
+  @IsEnum(["active", "archived", "inactive"], {
+    message: "Status must be one of: active, archived, inactive",
   })
   @Expose()
-  status?: string;
+  status: string;
 
-  // attendanceCaptureImage
-  @ApiProperty({
-    type: Boolean,
-    description: "Capture image while marking the attendance",
-    default: false,
-  })
+  //attendanceCaptureImage
   @Expose()
+  attendanceCaptureImage: boolean;
+
+  //file path
+  @ApiPropertyOptional({ type: () => [String] })
+  @IsArray()
+  @IsString({ each: true })    
   @IsOptional()
-  @IsBoolean()
-  attendanceCaptureImage?: boolean;
+  image: string[];
 
-  // metadata
-  @ApiPropertyOptional({
-    type: String,
-    description: "Additional metadata for the cohort",
-    default: "",
-  })
+  //metadata
   @Expose()
   @IsString()
   @IsOptional()
   metadata?: string;
 
-  // createdBy
+  //createdBy
   @Expose()
   @IsString()
   @IsOptional()
   createdBy?: string;
 
-  // updatedBy
+  //updatedBy
   @Expose()
   @IsString()
   @IsOptional()
@@ -136,5 +132,35 @@ export class CohortCreateDto {
     if (obj) {
       Object.assign(this, obj);
     }
+  }
+}
+
+export class ReturnResponseBody {
+  @Expose()
+  cohortId: string;
+  @Expose()
+  parentId: string;
+  @Expose()
+  name: string;
+  @Expose()
+  type: string;
+  @Expose()
+  status: string;
+  @Expose()
+  tenantId: string;
+  @Expose()
+  academicYearId: string;
+  @Expose()
+  image: string[];
+
+  constructor(cohortDto: CohortCreateDto) {
+    this.cohortId = cohortDto.cohortId;
+    this.parentId = cohortDto.parentId;
+    this.name = cohortDto.name;
+    this.type = cohortDto.type;
+    this.status = cohortDto.status;
+    this.tenantId = cohortDto.tenantId;
+    this.academicYearId = cohortDto.academicYearId;
+    this.image = cohortDto.image;
   }
 }

@@ -4,7 +4,6 @@ import { ConfigModule, ConfigService } from "@nestjs/config";
 import { AuthRbacService } from "./authRbac.service";
 import { AuthRbacController } from "./authRbac.controller";
 import { UserAdapter } from "src/user/useradapter";
-import { HasuraModule } from "src/adapters/hasura/hasura.module";
 import { PostgresModule } from "src/adapters/postgres/postgres-module";
 import { PostgresRoleService } from "src/adapters/postgres/rbac/role-adapter";
 import { Role } from "src/rbac/role/entities/role.entity";
@@ -26,7 +25,6 @@ import { RolePrivilegeMapping } from "src/rbac/assign-privilege/entities/assign-
       }),
       inject: [ConfigService],
     }),
-    HasuraModule,
     PostgresModule,
   ],
   providers: [AuthRbacService, UserAdapter, PostgresRoleService],

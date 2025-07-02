@@ -18,13 +18,25 @@ import { FieldsModule } from "./fields/fields.module";
 import { AttendanceModule } from "./attendance/attendance.module";
 import { UserModule } from "./user/user.module";
 import { RbacModule } from "./rbac/rbac.module";
-import { AssignTenantModule } from './userTenantMapping/user-tenant-mapping.module';
-import { FormsModule } from './forms/forms.module';
-
+import { AssignTenantModule } from "./userTenantMapping/user-tenant-mapping.module";
+import { FormsModule } from "./forms/forms.module";
+import { HttpService } from "@utils/http-service";
+import { TenantModule } from "./tenant/tenant.module";
+import { AcademicyearsModule } from "./academicyears/academicyears.module";
+import { CohortAcademicYearModule } from "./cohortAcademicYear/cohortAcademicYear.module";
+import { AutomaticMemberModule } from "./automatic-member/automatic-member.module";
+import { PermissionMiddleware } from "./middleware/permission.middleware";
+import { RolePermissionModule } from "./permissionRbac/rolePermissionMapping/role-permission.module";
+import { LocationModule } from "./location/location.module";
+import { KafkaModule } from "./kafka/kafka.module";
+import kafkaConfig from "./kafka/kafka.config";
 @Module({
   imports: [
     RbacModule,
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({
+      load: [kafkaConfig], // Load the Kafka config
+      isGlobal: true, // Makes config accessible globally
+    }),
     // MulterModule.register({
     //   dest: "./uploads",
     // }),
@@ -38,8 +50,15 @@ import { FormsModule } from './forms/forms.module';
     AuthRbacModule,
     DatabaseModule,
     FormsModule,
+    TenantModule,
+    AcademicyearsModule,
+    CohortAcademicYearModule,
+    AutomaticMemberModule,
+    RolePermissionModule,
+    LocationModule,
+    KafkaModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [AppService, HttpService],
 })
 export class AppModule {}

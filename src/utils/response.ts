@@ -1,91 +1,77 @@
-import { v4 } from 'uuid';
-import { ServerResponse, Params } from './response-interface';
+import { v4 as uuidv4 } from "uuid";
+import { HttpStatus } from "@nestjs/common";
+
+
+// Response structure interface
+export interface ServerResponse<T = any> {
+  id: string;
+  params: Params;
+  responseCode: number;
+  result: T;
+  ts: string;
+  ver: string;
+}
+
+export interface Params {
+  resmsgid: string;
+  err?: string;
+  status: "successful" | "failed";
+  errmsg?: string;
+}
 
 export default class APIResponse {
-  public static success<Type>(
-    id: string,
-    result: Type,
-    statusCode: string,
-  ): ServerResponse {
-    try {
-      const params: Params = {
-        resmsgid: v4(),
-        status: 'successful',
-        err: null,
-        errmsg: null,
-      };
-
-      const resObj: ServerResponse = {
-        id,
-        ver: '1.0',
-        ts: new Date().toISOString(),
-        params,
-        responseCode: statusCode,
-        result,
-      };
-      return resObj;
-    } catch (e) {
-      return e;
-    }
-  }
-
-  public static error(
-    id: string,
-    errmsg: string,
-    error: string,
-    statusCode: string,
-  ): ServerResponse {
-    try {
-      const params: Params = {
-        resmsgid: v4(),
-        status: 'failed',
-        err: error,
-        errmsg: errmsg,
-      };
-
-      const resObj: ServerResponse = {
-        id,
-        ver: '1.0',
-        ts: new Date().toISOString(),
-        params,
-        responseCode: statusCode,
-        result: { success: false },
-      };
-      return resObj;
-    } catch (e) {
-      return e;
-    }
-  }
-
-  public static search(dtoFileName){
-    let { limit, page, filters } = dtoFileName;
+  public static search(dtoFileName) {
+    let { limit } = dtoFileName;
+    const { page, filters } = dtoFileName;
 
     let offset = 0;
     if (page > 1) {
-        offset = parseInt(limit) * (page - 1);
+      offset = parseInt(limit) * (page - 1);
     }
-    
-    if (limit.trim() === '') {
-        limit = '0';
+
+    if (limit.trim() === "") {
+      limit = "0";
     }
 
     const whereClause = {};
     if (filters && Object.keys(filters).length > 0) {
-        Object.entries(filters).forEach(([key, value]) => {
-            whereClause[key] = value;
-        });
+      Object.entries(filters).forEach(([key, value]) => {
+        whereClause[key] = value;
+      });
     }
-    return {offset,limit,whereClause};
+    return { offset, limit, whereClause };
+  }
+  private static readonly API_VERSION = "1.0"; // Set version as a constant
+
+  public static success<T>(id: string, result: T, statusCode: HttpStatus = HttpStatus.OK): ServerResponse<T> {
+    return {
+      id,
+      ver: APIResponse.API_VERSION,
+      ts: new Date().toISOString(),
+      params: {
+        resmsgid: uuidv4(),
+        status: "successful",
+        err: null,
+        errmsg: null,
+      },
+      responseCode: statusCode,
+      result,
+    };
   }
 
-//   public static handleBadRequests(
-//     response: Response,
-//     apiId: string,
-//     errmsg: string,
-//     error: string,
-//   ) {
-//     return response
-//       .status(HttpStatus.BAD_REQUEST)
-//       .json(APIResponse.error(apiId, errmsg, error, 'BAD_REQUEST'));
-//   }
+  public static error(id: string, errmsg: string, errorCode: string, statusCode: HttpStatus): ServerResponse {
+    return {
+      id,
+      ver: APIResponse.API_VERSION,
+      ts: new Date().toISOString(),
+      params: {
+        resmsgid: uuidv4(),
+        status: "failed",
+        err: errorCode,
+        errmsg,
+      },
+      responseCode: statusCode,
+      result: { success: false },
+    };
+  }
 }

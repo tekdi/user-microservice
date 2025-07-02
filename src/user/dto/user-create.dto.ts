@@ -1,17 +1,18 @@
 import { Expose, Type } from "class-transformer";
 import {
-  MaxLength,
   IsNotEmpty,
-  IsEmail,
   IsString,
-  IsNumber,
   IsArray,
   IsUUID,
   ValidateNested,
   IsOptional,
+  Length,
+  IsEnum,
+  IsDateString,
 } from "class-validator";
 import { User } from "../entities/user-entity";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { NotInFuture } from "src/utils/dob-not-in-future.validator";
 
 export class tenantRoleMappingDto {
   @ApiProperty({
@@ -20,7 +21,7 @@ export class tenantRoleMappingDto {
   })
   @Expose()
   @IsOptional()
-  @IsUUID(undefined, { message: 'Tenant Id must be a valid UUID' })
+  @IsUUID(undefined, { message: "Tenant Id must be a valid UUID" })
   tenantId: string;
 
   @ApiPropertyOptional({
@@ -30,8 +31,9 @@ export class tenantRoleMappingDto {
   })
   @Expose()
   @IsOptional()
+  @IsArray()
   @IsUUID(undefined, { each: true })
-  cohortId: string[];
+  cohortIds: string[];
 
   @ApiPropertyOptional({
     type: String,
@@ -39,7 +41,7 @@ export class tenantRoleMappingDto {
   })
   @IsOptional()
   @Expose()
-  @IsUUID(undefined, { message: 'Role Id must be a valid UUID' })
+  @IsUUID(undefined, { message: "Role Id must be a valid UUID" })
   roleId: string;
 }
 
@@ -49,7 +51,7 @@ export class FieldValuesOptionDto {
     description: "Field Id",
   })
   @Expose()
-  @IsUUID(undefined, { message: 'Field Id must be a valid UUID' })
+  @IsUUID(undefined, { message: "Field Id must be a valid UUID" })
   fieldId: string;
 
   @ApiProperty({
@@ -60,23 +62,72 @@ export class FieldValuesOptionDto {
   value: string;
 }
 
+export class AutomaticMemberDto {
+  @ApiProperty({ type: Boolean, description: 'Indicates whether the member is automatic or not' })
+  @Expose()
+  value: boolean;
+
+  @ApiProperty({ type: String})
+  @Expose()
+  @IsUUID(undefined, { message: "Field Id must be a valid UUID" })
+  fieldId: string;
+
+  @ApiProperty({ type: String})
+  @Expose()
+  @IsString()
+  fieldName: string;
+}
+
 export class UserCreateDto {
   @Expose()
   userId: string;
 
-  @ApiPropertyOptional({ type: () => String })
+  @ApiProperty({ type: () => String })
   @Expose()
-  username?: string;
+  @IsNotEmpty()
+  username: string;
 
   @ApiProperty({ type: () => String })
   @Expose()
   name: string;
+
+	@ApiProperty({ type: String, description: 'First name of the user', maxLength: 50 })
+  @Expose()
+  @IsString()
+  @Length(1, 50)
+  firstName: string;
+
+  @ApiPropertyOptional({ type: String, description: 'Middle name of the user (optional)', maxLength: 50, required: false })
+  @Expose()
+  @IsOptional()
+  @IsString()
+  @Length(0, 50)
+  middleName?: string;
+
+  @ApiProperty({ type: String, description: 'Last name of the user', maxLength: 50 })
+  @Expose()
+  @IsString()
+  @Length(1, 50)
+  lastName: string;
+
+  @ApiProperty({
+    type: String,
+    description: 'Gender of the user',
+    enum: ['male', 'female', 'transgender']
+  })
+  @Expose()
+  @IsEnum(['male', 'female', 'transgender'])
+  gender: string;
+
 
   @ApiPropertyOptional({
     type: String,
     description: "The date of Birth of the user",
   })
   @Expose()
+  @IsOptional()
+  @IsDateString() // Ensures it's a valid date format
+  @NotInFuture({ message: 'The birth date cannot be in the future' })
   dob: string;
 
   @ApiPropertyOptional({
@@ -93,10 +144,11 @@ export class UserCreateDto {
   @Expose()
   email: string;
 
-  @ApiPropertyOptional({
+  @ApiProperty({
     type: String,
     description: "The password of the user",
   })
+  @IsNotEmpty()
   @Expose()
   password: string;
 
@@ -140,9 +192,13 @@ export class UserCreateDto {
   @Expose()
   updatedBy: string;
 
+  @ApiPropertyOptional({ type: () => AutomaticMemberDto, description: 'Details of automatic membership' })
+  @Expose()
+  automaticMember ?: AutomaticMemberDto;
+
   @ApiProperty({
     type: [tenantRoleMappingDto],
-    description: 'List of user attendance details',
+    description: "List of user attendance details",
   })
   @ValidateNested({ each: true })
   @Type(() => tenantRoleMappingDto)
@@ -157,12 +213,7 @@ export class UserCreateDto {
   @Type(() => FieldValuesOptionDto)
   customFields: FieldValuesOptionDto[];
 
-
-
   constructor(partial: Partial<UserCreateDto>) {
     Object.assign(this, partial);
   }
 }
-
-
-
