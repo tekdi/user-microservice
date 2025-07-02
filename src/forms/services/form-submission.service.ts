@@ -562,6 +562,7 @@ export class FormSubmissionService {
           updatedAt: submission.updatedAt,
           createdBy: submission.createdBy,
           updatedBy: submission.updatedBy,
+          completionPercentage: submission.completionPercentage,
         };
 
         if (includeDisplayValues) {
@@ -737,6 +738,7 @@ export class FormSubmissionService {
             updatedAt: submission.updatedAt,
             createdBy: submission.createdBy,
             updatedBy: submission.updatedBy,
+            completionPercentage: submission.completionPercentage,
           },
           customFields,
         },
