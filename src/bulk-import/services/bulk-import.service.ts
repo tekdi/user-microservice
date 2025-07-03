@@ -32,6 +32,7 @@ import { Form } from '../../forms/entities/form.entity';
 import { FormsService } from '../../forms/forms.service';
 import { FormSubmissionService } from '../../forms/services/form-submission.service';
 import { FieldValuesDto } from '../../fields/dto/field-values.dto';
+import { UserElasticsearchService } from '../../elasticsearch/user-elasticsearch.service';
 
 @Injectable()
 export class BulkImportService {
@@ -52,7 +53,8 @@ export class BulkImportService {
     private readonly elasticsearchService: ElasticsearchService,
     private readonly configService: ConfigService,
     private readonly formsService: FormsService,
-    private readonly formSubmissionService: FormSubmissionService
+    private readonly formSubmissionService: FormSubmissionService,
+    private readonly userElasticsearchService: UserElasticsearchService
   ) {}
 
   async processBulkImport(
@@ -115,11 +117,12 @@ export class BulkImportService {
             // Send password reset link using existing function to avoid code duplication
             try {
               // Call the existing sendPasswordResetLink function from PostgresUserService
-              await this.userService.sendPasswordResetLink(
+              // Discard its return value to avoid polluting the bulk import response
+              void this.userService.sendPasswordResetLink(
                 request, // pass the original request
                 createdUser.username, // username
                 '', // redirectUrl (empty or set as needed)
-                response // use the existing response parameter
+                null // do NOT pass the Express response object, so only the summary is sent
               );
             } catch (notifError) {
               BulkImportLogger.logNotificationError(batchId, i + 2, createdUser.userId, notifError);
@@ -130,11 +133,6 @@ export class BulkImportService {
 
           if (!createdUser || !createdUser.userId) {
             throw new Error('Failed to create user');
-          }
-
-          // Update Elasticsearch if enabled
-          if (isElasticsearchEnabled()) {
-            await this.updateElasticsearch(createdUser, cohortId);
           }
 
           BulkImportLogger.logUserCreationSuccess(batchId, i + 2, createdUser.userId, user.username);
@@ -252,7 +250,25 @@ export class BulkImportService {
         successCount: results.successCount,
         failureCount: results.failureCount,
       });
-    
+
+      // After all DB operations, update Elasticsearch with full user document for each user
+      if (isElasticsearchEnabled()) {
+        for (const userId of createdUserIds) {
+          try {
+            const userDoc = await this.formSubmissionService.buildUserDocumentForElasticsearch(userId);
+            // TEST LOG: Log the full userDoc being sent to ES for verification
+            console.log('ES USER DOC FOR', userId, JSON.stringify(userDoc, null, 2));
+            // END TEST LOG
+            if (userDoc) {
+              // For testing: add a comment here to indicate this is the new ES logic
+              // New ES logic: upsert full user document after all DB operations
+              await this.userElasticsearchService.createUser(userDoc);
+            }
+          } catch (esError) {
+            BulkImportLogger.logElasticsearchError(batchId, 0, userId, esError);
+          }
+        }
+      }
       // Wrap the summary in APIResponse.success
       return APIResponse.success(
         response,
