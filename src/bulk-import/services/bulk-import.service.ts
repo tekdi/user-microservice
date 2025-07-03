@@ -23,8 +23,12 @@ import { ElasticsearchService } from '../../elasticsearch/elasticsearch.service'
 import { isElasticsearchEnabled } from '../../common/utils/elasticsearch.util';
 import { v4 as uuidv4 } from 'uuid';
 import { ConfigService } from '@nestjs/config';
-import { getKeycloakAdminToken, createUserInKeyCloak } from '../../common/utils/keycloak.adapter.util';
+import {
+  getKeycloakAdminToken,
+  createUserInKeyCloak,
+} from '../../common/utils/keycloak.adapter.util';
 import APIResponse from '../../common/responses/response';
+import { randomBytes } from 'crypto';
 import { APIID } from '../../common/utils/api-id.config';
 import { API_RESPONSES } from '../../common/utils/response.messages';
 import { Cohort } from '../../cohort/entities/cohort.entity';
@@ -87,7 +91,9 @@ export class BulkImportService {
       const createdUserIds: string[] = [];
       let loginUser = null;
       if (request.headers.authorization) {
-        const decoded: any = require('jwt-decode')(request.headers.authorization);
+        const decoded: any = require('jwt-decode')(
+          request.headers.authorization
+        );
         loginUser = decoded?.sub;
       }
       // Process each user
@@ -107,11 +113,20 @@ export class BulkImportService {
           userCreateDto.tenantCohortRoleMapping = [tenantRoleMapping];
 
           // Keep response for compatibility, but do not log or stringify it
-          const createdUser = await this.createUserForBulk(request, userCreateDto, request.headers.academicyearid);
+          const createdUser = await this.createUserForBulk(
+            request,
+            userCreateDto,
+            request.headers.academicyearid
+          );
 
           // Log only serializable part of createdUser
           if (createdUser && createdUser.userId) {
-            BulkImportLogger.logUserCreationSuccess(batchId, i + 2, createdUser.userId, createdUser.username);
+            BulkImportLogger.logUserCreationSuccess(
+              batchId,
+              i + 2,
+              createdUser.userId,
+              createdUser.username
+            );
             createdUserIds.push(createdUser.userId);
 
             // Send password reset link using existing function to avoid code duplication
@@ -125,23 +140,43 @@ export class BulkImportService {
                 null // do NOT pass the Express response object, so only the summary is sent
               );
             } catch (notifError) {
-              BulkImportLogger.logNotificationError(batchId, i + 2, createdUser.userId, notifError);
+              BulkImportLogger.logNotificationError(
+                batchId,
+                i + 2,
+                createdUser.userId,
+                notifError
+              );
             }
           } else {
-            BulkImportLogger.logUserCreationError(batchId, i + 2, { message: 'User creation failed' }, user);
+            BulkImportLogger.logUserCreationError(
+              batchId,
+              i + 2,
+              { message: 'User creation failed' },
+              user
+            );
           }
 
           if (!createdUser || !createdUser.userId) {
             throw new Error('Failed to create user');
           }
 
-          BulkImportLogger.logUserCreationSuccess(batchId, i + 2, createdUser.userId, user.username);
+          BulkImportLogger.logUserCreationSuccess(
+            batchId,
+            i + 2,
+            createdUser.userId,
+            user.username
+          );
 
           results.successCount++;
         } catch (error) {
           results.failureCount++;
           // Log only serializable error and user data
-          BulkImportLogger.logUserCreationError(batchId, i + 2, { message: error.message, stack: error.stack }, userData[i]);
+          BulkImportLogger.logUserCreationError(
+            batchId,
+            i + 2,
+            { message: error.message, stack: error.stack },
+            userData[i]
+          );
           results.failures.push({
             email: userData[i]?.email,
             error: error.message,
@@ -170,9 +205,11 @@ export class BulkImportService {
           .createQueryBuilder()
           .update()
           .set({ status: MemberStatus.SHORTLISTED })
-          .where("userId IN (:...userIds)", { userIds: createdUserIds })
-          .andWhere("cohortId = :cohortId", { cohortId })
-          .andWhere("cohortAcademicYearId = :cohortAcademicYearId", { cohortAcademicYearId: request.headers.academicyearid })
+          .where('userId IN (:...userIds)', { userIds: createdUserIds })
+          .andWhere('cohortId = :cohortId', { cohortId })
+          .andWhere('cohortAcademicYearId = :cohortAcademicYearId', {
+            cohortAcademicYearId: request.headers.academicyearid,
+          })
           .execute();
 
         // --- BULK FORM SUBMISSION CREATION ---
@@ -183,15 +220,23 @@ export class BulkImportService {
           tenantId,
           cohortId
         );
-        const activeForm = Array.isArray(forms) ? forms.find(f => f.status === 'active') : null;
+        const activeForm = Array.isArray(forms)
+          ? forms.find((f) => f.status === 'active')
+          : null;
         if (activeForm && activeForm.formid && activeForm.fields) {
           // 2. Build a map of field label+id from xlsx headers
           // Assume file is xlsx and parse headers
           let xlsxHeaders: string[] = [];
-          if (file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || file.mimetype === 'application/vnd.ms-excel') {
+          if (
+            file.mimetype ===
+              'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+            file.mimetype === 'application/vnd.ms-excel'
+          ) {
             const workbook = xlsx.read(file.buffer, { type: 'buffer' });
             const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-            const headerRow = xlsx.utils.sheet_to_json(worksheet, { header: 1 })[0];
+            const headerRow = xlsx.utils.sheet_to_json(worksheet, {
+              header: 1,
+            })[0];
             xlsxHeaders = Array.isArray(headerRow) ? headerRow : [];
           } else if (file.mimetype === 'text/csv') {
             // For CSV, use keys from the first userData row
@@ -199,12 +244,17 @@ export class BulkImportService {
           }
 
           // 3. Extract fieldId from headers in format: Label (fieldId)
-          const fieldHeaderMap: { [header: string]: { fieldId: string, label: string } } = {};
-          const fieldIdRegex = /^(.*)\s*\(([^)]+)\)$/;
+          const fieldHeaderMap: {
+            [header: string]: { fieldId: string; label: string };
+          } = {};
+          const fieldIdRegex = /^([^\(]+?)\s*\(([^()]+)\)$/;
           for (const header of xlsxHeaders) {
             const match = fieldIdRegex.exec(header);
             if (match) {
-              fieldHeaderMap[header] = { label: match[1].trim(), fieldId: match[2].trim() };
+              fieldHeaderMap[header] = {
+                label: match[1].trim(),
+                fieldId: match[2].trim(),
+              };
             }
           }
 
@@ -214,10 +264,15 @@ export class BulkImportService {
             const userId = createdUserIds[i];
             if (!userId) continue;
             // Build customFields array for this user
-            const customFields = Object.entries(fieldHeaderMap).map(([header, { fieldId }]) => ({
-              fieldId,
-              value: user[header] !== undefined && user[header] !== null ? String(user[header]) : ''
-            }));
+            const customFields = Object.entries(fieldHeaderMap).map(
+              ([header, { fieldId }]) => ({
+                fieldId,
+                value:
+                  user[header] !== undefined && user[header] !== null
+                    ? String(user[header])
+                    : '',
+              })
+            );
             // Build CreateFormSubmissionDto
             const createFormSubmissionDto = {
               userId: userId, // The imported user's ID
@@ -230,12 +285,18 @@ export class BulkImportService {
             };
             // Call internal method to create form submission with correct userId, createdBy, updatedBy
             try {
-              const formSubmissionResult = await this.createFormSubmissionForBulk(
-                createFormSubmissionDto,
-                loginUser // adminId for createdBy/updatedBy
-              );
+              const formSubmissionResult =
+                await this.createFormSubmissionForBulk(
+                  createFormSubmissionDto,
+                  loginUser // adminId for createdBy/updatedBy
+                );
             } catch (formError) {
-              BulkImportLogger.logUserCreationError(batchId, i + 2, { message: 'Form submission failed', error: formError.message }, user);
+              BulkImportLogger.logUserCreationError(
+                batchId,
+                i + 2,
+                { message: 'Form submission failed', error: formError.message },
+                user
+              );
               results.failures.push({
                 email: user?.email,
                 error: 'Form submission failed: ' + formError.message,
@@ -255,7 +316,10 @@ export class BulkImportService {
       if (isElasticsearchEnabled()) {
         for (const userId of createdUserIds) {
           try {
-            const userDoc = await this.formSubmissionService.buildUserDocumentForElasticsearch(userId);
+            const userDoc =
+              await this.formSubmissionService.buildUserDocumentForElasticsearch(
+                userId
+              );
             // END TEST LOG
             if (userDoc) {
               // For testing: add a comment here to indicate this is the new ES logic
@@ -399,7 +463,11 @@ export class BulkImportService {
     }
     // Age validation
     const minAge = this.configService.get('MINIMUM_AGE');
-    if (userCreateDto?.dob && minAge && !this.isUserOldEnough(userCreateDto.dob, minAge)) {
+    if (
+      userCreateDto?.dob &&
+      minAge &&
+      !this.isUserOldEnough(userCreateDto.dob, minAge)
+    ) {
       throw new Error(`User must be at least ${minAge} years old.`);
     }
     // Custom field validation
@@ -430,9 +498,8 @@ export class BulkImportService {
     // Check if user exists in Keycloak or DB
     const keycloakResponse = await getKeycloakAdminToken();
     const token = keycloakResponse.data.access_token;
-    const checkUserinKeyCloakandDb = await this.userService.checkUserinKeyCloakandDb(
-      userCreateDto
-    );
+    const checkUserinKeyCloakandDb =
+      await this.userService.checkUserinKeyCloakandDb(userCreateDto);
     if (checkUserinKeyCloakandDb) {
       throw new Error('User already exists.');
     }
@@ -442,7 +509,9 @@ export class BulkImportService {
       throw new Error(resKeycloak);
     }
     if (resKeycloak.statusCode !== 201) {
-      throw new Error(resKeycloak.message || 'Failed to create user in Keycloak.');
+      throw new Error(
+        resKeycloak.message || 'Failed to create user in Keycloak.'
+      );
     }
     userCreateDto.userId = resKeycloak.userId;
     // Create user in DB
@@ -475,10 +544,12 @@ export class BulkImportService {
    * Helper to generate a random password
    */
   private generateRandomPassword(length = 10): string {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+-=';
+    const chars =
+      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+-=';
+    const bytes = randomBytes(length);
     let password = '';
     for (let i = 0; i < length; i++) {
-      password += chars.charAt(Math.floor(Math.random() * chars.length));
+      password += chars[bytes[i] % chars.length];
     }
     return password;
   }
@@ -487,7 +558,10 @@ export class BulkImportService {
    * Generates the xlsx template columns for a given cohortId.
    * Returns the response as per requirements, or error if cohort/form is not active.
    */
-  async generateXlsxTemplateColumns(cohortId: string, tenantId: string): Promise<any> {
+  async generateXlsxTemplateColumns(
+    cohortId: string,
+    tenantId: string
+  ): Promise<any> {
     // Step 1: Check if cohort is active
     const cohort = await this.cohortRepository.findOne({ where: { cohortId } });
     if (!cohort || cohort.status !== 'active') {
@@ -500,10 +574,10 @@ export class BulkImportService {
           status: 'failed',
           err: 'COHORT_NOT_ACTIVE',
           errmsg: 'Cohort is not active',
-          successmessage: null
+          successmessage: null,
         },
         responseCode: 400,
-        result: { data: [] }
+        result: { data: [] },
       };
     }
 
@@ -514,7 +588,9 @@ export class BulkImportService {
       tenantId,
       cohortId
     );
-    const activeForm = Array.isArray(forms) ? forms.find(f => f.status === 'active') : null;
+    const activeForm = Array.isArray(forms)
+      ? forms.find((f) => f.status === 'active')
+      : null;
     if (!activeForm) {
       return {
         id: 'api.cohort.download-xlsx-template',
@@ -525,10 +601,10 @@ export class BulkImportService {
           status: 'failed',
           err: 'ACTIVE_FORM_NOT_FOUND',
           errmsg: 'Active form for this cohort is not available',
-          successmessage: null
+          successmessage: null,
         },
         responseCode: 400,
-        result: { data: [] }
+        result: { data: [] },
       };
     }
 
@@ -536,7 +612,9 @@ export class BulkImportService {
     let dynamicColumns: string[] = [];
     if (activeForm.fields && Array.isArray(activeForm.fields)) {
       // If fields is an array of field objects
-      dynamicColumns = activeForm.fields.map((field: any) => `${field.title} (${field.fieldId})`);
+      dynamicColumns = activeForm.fields.map(
+        (field: any) => `${field.title} (${field.fieldId})`
+      );
     } else if (activeForm.fields && typeof activeForm.fields === 'object') {
       // If fields is an object, flatten and extract
       const extractFields = (obj: any): string[] => {
@@ -567,7 +645,7 @@ export class BulkImportService {
       'gender',
       'dob',
       'country',
-      'status'
+      'status',
     ];
     const allColumns = [...defaultColumns, ...dynamicColumns];
 
@@ -581,21 +659,25 @@ export class BulkImportService {
         status: 'successful',
         err: null,
         errmsg: null,
-        successmessage: 'Template created successfully'
+        successmessage: 'Template created successfully',
       },
       responseCode: 200,
       result: {
-        data: allColumns
-      }
+        data: allColumns,
+      },
     };
   }
 
   /**
    * Internal helper to create a form submission for bulk import, setting userId as itemId and admin as createdBy/updatedBy
    */
-  private async createFormSubmissionForBulk(createFormSubmissionDto: any, adminId: string) {
+  private async createFormSubmissionForBulk(
+    createFormSubmissionDto: any,
+    adminId: string
+  ) {
     // Directly use the repository to avoid token-based userId extraction
-    const { userId, tenantId, formSubmission, customFields } = createFormSubmissionDto;
+    const { userId, tenantId, formSubmission, customFields } =
+      createFormSubmissionDto;
     // Check if form exists and is active
     const form = await this.formRepository.findOne({
       where: {
@@ -604,10 +686,14 @@ export class BulkImportService {
       },
     });
     if (!form) {
-      throw new Error('Form with the provided formId does not exist or is not active');
+      throw new Error(
+        'Form with the provided formId does not exist or is not active'
+      );
     }
     // Check for existing submission
-    const existingSubmission = await this.formSubmissionService['formSubmissionRepository'].findOne({
+    const existingSubmission = await this.formSubmissionService[
+      'formSubmissionRepository'
+    ].findOne({
       where: {
         formId: formSubmission.formId,
         itemId: userId,
@@ -618,14 +704,18 @@ export class BulkImportService {
       throw new Error('Application with this formId and userId already exists');
     }
     // Create form submission
-    const submission = this.formSubmissionService['formSubmissionRepository'].create({
+    const submission = this.formSubmissionService[
+      'formSubmissionRepository'
+    ].create({
       formId: formSubmission.formId,
       itemId: userId,
       status: formSubmission.status || 'active',
       createdBy: adminId,
       updatedBy: adminId,
     });
-    const savedSubmission = await this.formSubmissionService['formSubmissionRepository'].save(submission);
+    const savedSubmission = await this.formSubmissionService[
+      'formSubmissionRepository'
+    ].save(submission);
     // Save custom fields
     for (const fieldValue of customFields) {
       const fieldValueDto = new FieldValuesDto({
