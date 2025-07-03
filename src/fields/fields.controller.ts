@@ -53,6 +53,17 @@ import APIResponse from 'src/common/responses/response';
 import { API_RESPONSES } from 'src/common/utils/response.messages';
 import { StorageProvider } from 'src/storage/interfaces/storage.provider';
 
+// Extend Express Request type to include user
+interface RequestWithUser extends Request {
+  user?: {
+    sub: string;
+    userId: string;
+    name: string;
+    username: string;
+    [key: string]: any;
+  };
+}
+
 @ApiTags('Fields')
 @Controller('fields')
 export class FieldsController {
@@ -281,12 +292,13 @@ export class FieldsController {
       .getFormCustomField(requiredData, response);
   }
 
-  @Post(':fieldId/upload')
+  @Post('upload/:fieldId')
   @UseInterceptors(FileInterceptor('file'))
   @UseFilters(new AllExceptionsFilter(APIID.FIELDVALUES_CREATE))
   async uploadFile(
     @Param('fieldId') fieldId: string,
     @Param('itemId') itemId: string,
+    @Query('userId') userId: string,
     @UploadedFile() file: Express.Multer.File,
     @Res() response: Response
   ) {
@@ -294,7 +306,8 @@ export class FieldsController {
       const fileUrl = await this.fileUploadService.uploadFile(
         file,
         fieldId,
-        itemId
+        itemId,
+        userId
       );
       return APIResponse.success(
         response,
@@ -305,51 +318,454 @@ export class FieldsController {
       );
     } catch (error) {
       if (error instanceof FileValidationException) {
+        // Prefer the detailed error from the exception's response property if available
         const errorResponse = error.getResponse() as any;
+        const errorMsg =
+          errorResponse && errorResponse.error
+            ? errorResponse.error
+            : error.message;
         return APIResponse.error(
           response,
           APIID.FIELDVALUES_CREATE,
-          errorResponse.error,
-          errorResponse.message,
+          errorMsg,
+          'File Validation Error',
           HttpStatus.BAD_REQUEST
         );
       }
       return APIResponse.error(
         response,
         APIID.FIELDVALUES_CREATE,
-        API_RESPONSES.SERVER_ERROR,
         'Failed to upload file: ' + error.message,
+        API_RESPONSES.SERVER_ERROR,
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }
 
-  @Post(':fieldId/presigned-url')
+  @Post('presigned-url/:fieldId')
+  @UseGuards(JwtAuthGuard)
+  @UseInterceptors(FileInterceptor('file'))
+  @UseFilters(new AllExceptionsFilter(APIID.FIELDVALUES_CREATE))
   async getPresignedUrl(
     @Param('fieldId') fieldId: string,
-    @Body() body: { fileName: string; contentType: string },
+    @Query('fileType') fileType: string,
+    @UploadedFile() file: Express.Multer.File,
+    @Req() request: RequestWithUser,
     @Res() response: Response
   ) {
     try {
-      const storageProvider = this.storageConfig.getProvider();
-      const presignedUrl = await storageProvider.getPresignedUrl(
-        body.fileName,
-        body.contentType
+      // Always prefer userId from bearer token first
+      const userId = request.user?.userId || request.user?.sub;
+      if (!userId) {
+        return APIResponse.error(
+          response,
+          APIID.FIELDVALUES_CREATE,
+          'User ID is required from authentication token.',
+          'USER_ID_REQUIRED',
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      // Determine file type - either from query param or from uploaded file
+      let detectedFileType: string | undefined;
+      
+      if (file) {
+        // If file is uploaded, get type from file extension
+        detectedFileType = file.originalname.split('.').pop()?.toLowerCase();
+        if (!detectedFileType) {
+          return APIResponse.error(
+            response,
+            APIID.FIELDVALUES_CREATE,
+            'Could not determine file type from the uploaded file.',
+            'INVALID_FILE',
+            HttpStatus.BAD_REQUEST
+          );
+        }
+      } else if (fileType && fileType !== 'undefined') {
+        // If no file but fileType query param exists, use that
+        detectedFileType = fileType;
+      } else {
+        return APIResponse.error(
+          response,
+          APIID.FIELDVALUES_CREATE,
+          'Either upload a file or provide fileType query parameter.',
+          'FILE_TYPE_REQUIRED',
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      const result = await this.fileUploadService.getPresignedUrl(
+        fieldId,
+        userId,
+        detectedFileType,
+        file
       );
+
       return APIResponse.success(
         response,
         APIID.FIELDVALUES_CREATE,
-        { url: presignedUrl },
+        result,
         HttpStatus.OK,
         'Presigned URL generated successfully'
       );
     } catch (error) {
+      // Only log unexpected errors, not validation errors
+      if (!(error instanceof FileValidationException)) {
+        console.log('Error in FieldsController getPresignedUrl:', error);
+      }
+      
+      // Custom error message for file type validation
+      if (
+        error instanceof FileValidationException &&
+        error.message &&
+        error.message.includes('Allowed file types are')
+      ) {
+        // Extract allowed types from error message
+        return APIResponse.error(
+          response,
+          APIID.FIELDVALUES_CREATE,
+          error.message,
+          'File Validation Error',
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      if (error instanceof FileValidationException) {
+        // Prefer the detailed error from the exception's response property if available
+        const errorResponse = error.getResponse() as any;
+        const errorMsg =
+          errorResponse && errorResponse.error
+            ? errorResponse.error
+            : error.message;
+        return APIResponse.error(
+          response,
+          APIID.FIELDVALUES_CREATE,
+          errorMsg,
+          'File Validation Error',
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
       return APIResponse.error(
         response,
         APIID.FIELDVALUES_CREATE,
-        error.message,
-        error.error || 'Storage Error',
-        error.statusCode || HttpStatus.INTERNAL_SERVER_ERROR
+        'Failed to generate presigned URL',
+        API_RESPONSES.SERVER_ERROR,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  @Post('verify-upload/:fieldId')
+  @UseGuards(JwtAuthGuard)
+  @UseFilters(new AllExceptionsFilter(APIID.FIELDVALUES_CREATE))
+  async verifyUpload(
+    @Param('fieldId') fieldId: string,
+    @Body() body: { key: string; expectedContentType: string; expectedSize?: number },
+    @Req() request: RequestWithUser,
+    @Res() response: Response
+  ) {
+    try {
+      // Extract userId from bearer token
+      const userId = request.user?.userId || request.user?.sub;
+      if (!userId) {
+        return APIResponse.error(
+          response,
+          APIID.FIELDVALUES_CREATE,
+          'User ID is required from authentication token.',
+          'USER_ID_REQUIRED',
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      // Check if using S3 storage provider
+      const storageProvider = this.storageConfig.getProvider();
+      if (!(storageProvider instanceof S3StorageProvider)) {
+        return APIResponse.error(
+          response,
+          APIID.FIELDVALUES_CREATE,
+          'File verification and cleanup is only supported for S3 storage with presigned URL method.',
+          'VERIFICATION_NOT_SUPPORTED',
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      // Get the actual upload directory from the storage provider
+      const uploadDir = (storageProvider as any).uploadDir || 'uploads';
+      
+      // Verify the file was uploaded via presigned URL (check if key contains expected path structure)
+      if (!body.key || !body.key.includes(uploadDir)) {
+        return APIResponse.error(
+          response,
+          APIID.FIELDVALUES_CREATE,
+          `File verification is only supported for files uploaded via presigned URL method. Key must contain '${uploadDir}'.`,
+          'INVALID_FILE_KEY',
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      const result = await storageProvider.verifyAndCleanupFile(
+        body.key,
+        body.expectedContentType,
+        body.expectedSize
+      );
+
+      if (result.valid) {
+        return APIResponse.success(
+          response,
+          APIID.FIELDVALUES_CREATE,
+          { 
+            key: body.key, 
+            status: 'valid',
+            storageType: 'S3',
+            method: 'presigned-url'
+          },
+          HttpStatus.OK,
+          'File verification successful (S3 presigned URL method)'
+        );
+      } else {
+        return APIResponse.error(
+          response,
+          APIID.FIELDVALUES_CREATE,
+          result.reason || 'FILE_VERIFICATION_FAILED',
+          'File Verification Error (S3 presigned URL method)',
+          result.deleted ? HttpStatus.OK : HttpStatus.BAD_REQUEST
+        );
+      }
+    } catch (error) {
+      return APIResponse.error(
+        response,
+        APIID.FIELDVALUES_CREATE,
+        'Failed to verify upload: ' + error.message,
+        API_RESPONSES.SERVER_ERROR,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  @Post('upload-complete/:fieldId')
+  @UseGuards(JwtAuthGuard)
+  @UseInterceptors(FileInterceptor('file'))
+  @UseFilters(new AllExceptionsFilter(APIID.FIELDVALUES_CREATE))
+  async uploadComplete(
+    @Param('fieldId') fieldId: string,
+    @Query('fileType') fileType: string,
+    @UploadedFile() file: Express.Multer.File,
+    @Req() request: RequestWithUser,
+    @Res() response: Response
+  ) {
+    try {
+      // Always prefer userId from bearer token first
+      const userId = request.user?.userId || request.user?.sub;
+      if (!userId) {
+        return APIResponse.error(
+          response,
+          APIID.FIELDVALUES_CREATE,
+          'User ID is required from authentication token.',
+          'USER_ID_REQUIRED',
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      // Determine file type - either from query param or from uploaded file
+      let detectedFileType: string | undefined;
+      
+      if (file) {
+        // If file is uploaded, get type from file extension
+        detectedFileType = file.originalname.split('.').pop()?.toLowerCase();
+        if (!detectedFileType) {
+          return APIResponse.error(
+            response,
+            APIID.FIELDVALUES_CREATE,
+            'Could not determine file type from the uploaded file.',
+            'INVALID_FILE',
+            HttpStatus.BAD_REQUEST
+          );
+        }
+      } else if (fileType && fileType !== 'undefined') {
+        // If no file but fileType query param exists, use that
+        detectedFileType = fileType;
+      } else {
+        return APIResponse.error(
+          response,
+          APIID.FIELDVALUES_CREATE,
+          'Either upload a file or provide fileType query parameter.',
+          'FILE_TYPE_REQUIRED',
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      // Step 1: Generate presigned URL with file data
+      const presignedResult = await this.fileUploadService.getPresignedUrl(
+        fieldId,
+        userId,
+        detectedFileType,
+        file
+      );
+
+      // Step 2: Upload to S3 using the presigned URL
+      if (presignedResult.binaryData && presignedResult.fileSize) {
+        const uploadResponse = await fetch(presignedResult.url, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': presignedResult["Content-Type"],
+            'Content-Length': presignedResult.fileSize.toString()
+          },
+          body: presignedResult.binaryData
+        });
+
+        if (!uploadResponse.ok) {
+          return APIResponse.error(
+            response,
+            APIID.FIELDVALUES_CREATE,
+            `Failed to upload to S3: ${uploadResponse.status} ${uploadResponse.statusText}`,
+            'S3_UPLOAD_FAILED',
+            HttpStatus.INTERNAL_SERVER_ERROR
+          );
+        }
+      }
+
+      // Step 3: Verify the uploaded file
+      const storageProvider = this.storageConfig.getProvider();
+      if (storageProvider instanceof S3StorageProvider) {
+        const verificationResult = await storageProvider.verifyAndCleanupFile(
+          presignedResult.key,
+          presignedResult["Content-Type"],
+          presignedResult.fileSize
+        );
+
+        if (!verificationResult.valid) {
+          return APIResponse.error(
+            response,
+            APIID.FIELDVALUES_CREATE,
+            verificationResult.reason || 'File verification failed',
+            'VERIFICATION_FAILED',
+            verificationResult.deleted ? HttpStatus.OK : HttpStatus.BAD_REQUEST
+          );
+        }
+      }
+
+      // All steps completed successfully
+      return APIResponse.success(
+        response,
+        APIID.FIELDVALUES_CREATE,
+        {
+          key: presignedResult.key,
+          url: presignedResult.url,
+          status: 'uploaded_and_verified',
+          storageType: 'S3',
+          method: 'complete_upload',
+          fileSize: presignedResult.fileSize,
+          originalFileName: presignedResult.originalFileName,
+          contentType: presignedResult["Content-Type"]
+        },
+        HttpStatus.OK,
+        'File uploaded and verified successfully'
+      );
+
+    } catch (error) {
+      // Only log unexpected errors, not validation errors
+      if (!(error instanceof FileValidationException)) {
+        console.log('Error in FieldsController uploadComplete:', error);
+      }
+      
+      if (error instanceof FileValidationException) {
+        // Prefer the detailed error from the exception's response property if available
+        const errorResponse = error.getResponse() as any;
+        const errorMsg =
+          errorResponse && errorResponse.error
+            ? errorResponse.error
+            : error.message;
+        return APIResponse.error(
+          response,
+          APIID.FIELDVALUES_CREATE,
+          errorMsg,
+          'File Validation Error',
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      return APIResponse.error(
+        response,
+        APIID.FIELDVALUES_CREATE,
+        'Failed to complete upload: ' + error.message,
+        API_RESPONSES.SERVER_ERROR,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  @Delete('delete-file/:fieldId')
+  @UseGuards(JwtAuthGuard)
+  @UseFilters(new AllExceptionsFilter(APIID.FIELDVALUES_DELETE))
+  async deleteFile(
+    @Param('fieldId') fieldId: string,
+    @Req() request: RequestWithUser,
+    @Res() response: Response
+  ) {
+    try {
+      // Extract userId and role from bearer token
+      const userId = request.user?.userId || request.user?.sub;
+      const userRole = request.user?.role || request.user?.realm_access?.roles?.[0];
+      
+      if (!userId) {
+        return APIResponse.error(
+          response,
+          APIID.FIELDVALUES_DELETE,
+          'User ID is required from authentication token.',
+          'USER_ID_REQUIRED',
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      const result = await this.fileUploadService.deleteFile(
+        fieldId,
+        userId,
+        userRole
+      );
+
+      return APIResponse.success(
+        response,
+        APIID.FIELDVALUES_DELETE,
+        {
+          fieldId,
+          deletedPath: result.deletedPath,
+          status: 'deleted',
+          storageType: 'S3',
+          method: 'delete-file'
+        },
+        HttpStatus.OK,
+        result.message
+      );
+
+    } catch (error) {
+      // Only log unexpected errors, not validation errors
+      if (!(error instanceof FileValidationException)) {
+        console.log('Error in FieldsController deleteFile:', error);
+      }
+      
+      if (error instanceof FileValidationException) {
+        // Prefer the detailed error from the exception's response property if available
+        const errorResponse = error.getResponse() as any;
+        const errorMsg =
+          errorResponse && errorResponse.error
+            ? errorResponse.error
+            : error.message;
+        return APIResponse.error(
+          response,
+          APIID.FIELDVALUES_DELETE,
+          errorMsg,
+          'File Deletion Error',
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      return APIResponse.error(
+        response,
+        APIID.FIELDVALUES_DELETE,
+        'Failed to delete file: ' + error.message,
+        API_RESPONSES.SERVER_ERROR,
+        HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }

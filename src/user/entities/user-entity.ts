@@ -33,7 +33,13 @@ export class User {
 
   @Column({
     type: 'enum',
-    enum: ['male', 'female', 'transgender'],
+    enum: [
+      'male',
+      'female',
+      'transgender',
+      'non-binary',
+      'I do not want to disclose',
+    ],
     nullable: false,
   })
   gender: string;
@@ -109,4 +115,7 @@ export class User {
 
   @Column({ nullable: true })
   provider: string;
+
+  @Column({ nullable: true })
+  country: string;
 }

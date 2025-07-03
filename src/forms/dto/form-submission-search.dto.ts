@@ -71,6 +71,18 @@ export class FiltersProperty {
   updatedBy?: string;
 
   @ApiPropertyOptional({
+    type: [String],
+    description: 'Completion percentage ranges to filter by (e.g., ["1-20", "21-40", "41-60"])',
+    example: ["1-20", "21-40", "41-60", "61-80", "81-100"],
+    required: false,
+  })
+  @Expose()
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  completionPercentage?: string[];
+
+  @ApiPropertyOptional({
     type: Object,
     description: 'Custom fields to filter by using fieldId as key',
     example: {

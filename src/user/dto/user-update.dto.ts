@@ -61,10 +61,22 @@ class UserDataDTO {
   @ApiProperty({
     type: String,
     description: 'Gender of the user',
-    enum: ['male', 'female', 'transgender'],
+    enum: [
+      'male',
+      'female',
+      'transgender',
+      'non-binary',
+      'I do not want to disclose',
+    ],
   })
   @Expose()
-  @IsEnum(['male', 'female', 'transgender'])
+  @IsEnum([
+    'male',
+    'female',
+    'transgender',
+    'non-binary',
+    'I do not want to disclose',
+  ])
   @IsOptional()
   gender?: string;
 

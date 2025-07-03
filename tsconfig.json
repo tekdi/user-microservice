@@ -23,7 +23,20 @@
     "paths": {
       "@utils/*": [
         "src/common/utils/*"
+      ],
+      "@storage/*": [
+        "src/storage/*"
+      ],
+      "@config/*": [
+        "src/config/*"
       ]
     }
-  }
+  },
+  "include": [
+    "src/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
 }

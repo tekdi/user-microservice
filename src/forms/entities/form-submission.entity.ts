@@ -51,4 +51,12 @@ export class FormSubmission {
 
   @Column('uuid', { nullable: true })
   updatedBy?: string;
+
+  @Column('numeric', { 
+    precision: 5, 
+    scale: 2, 
+    default: 0,
+    nullable: true 
+  })
+  completionPercentage?: number;
 }

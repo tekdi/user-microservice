@@ -7,15 +7,12 @@ import {
   IsEnum,
   IsNotEmpty,
   IsNumber,
-  IsNumberString,
   IsObject,
   IsOptional,
   IsString,
   IsUUID,
   ValidateIf,
-  ValidationArguments,
-  ValidationOptions,
-  registerDecorator,
+  IsDateString,
 } from 'class-validator';
 import { CohortDto } from './cohort.dto';
 import { Expose } from 'class-transformer';
@@ -124,6 +121,26 @@ export class filtersProperty {
     description: 'Block',
   })
   blocks: string;
+
+  @ApiPropertyOptional({
+    type: String,
+    format: 'date-time', // optional but recommended
+    description: 'Created At timestamp',
+    example: '2025-07-01T10:00:00Z',
+  })
+  @IsOptional()
+  @IsDateString()
+  createdAt?: string;
+
+  @ApiPropertyOptional({
+    type: String,
+    format: 'date-time', // optional but recommended
+    description: 'Updated At timestamp',
+    example: '2025-07-01T10:00:00Z',
+  })
+  @IsOptional()
+  @IsDateString()
+  updatedAt?: string;
 
   //customFieldsName
   @ApiProperty({

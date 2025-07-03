@@ -14,6 +14,7 @@ import { UserRoleMapping } from "src/rbac/assign-role/entities/assign-role.entit
 import { Cohort } from "src/cohort/entities/cohort.entity";
 import { Role } from "src/rbac/role/entities/role.entity";
 import { CohortMembersModule } from "src/cohortMembers/cohortMembers.module";
+import { RecaptchaService } from './recaptcha.service';
 
 @Module({
   imports: [
@@ -33,6 +34,6 @@ import { CohortMembersModule } from "src/cohortMembers/cohortMembers.module";
     CohortMembersModule
   ],
   controllers: [UserController],
-  providers: [UserAdapter],
+  providers: [UserAdapter, RecaptchaService],
 })
 export class UserModule {}

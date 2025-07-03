@@ -17,6 +17,7 @@ import {
   ParseUUIDPipe,
   UseFilters,
   BadRequestException,
+  UnauthorizedException,
 } from '@nestjs/common';
 
 import {
@@ -53,6 +54,8 @@ import { LoggerUtil } from 'src/common/logger/LoggerUtil';
 import { OtpSendDTO } from './dto/otpSend.dto';
 import { OtpVerifyDTO } from './dto/otpVerify.dto';
 import { UserCreateSsoDto } from './dto/user-create-sso.dto';
+import { RecaptchaService } from './recaptcha.service';
+
 export interface UserData {
   context: string;
   tenantId: string;
@@ -63,7 +66,10 @@ export interface UserData {
 @ApiTags('User')
 @Controller()
 export class UserController {
-  constructor(private userAdapter: UserAdapter) {}
+  constructor(
+    private userAdapter: UserAdapter,
+    private readonly recaptchaService: RecaptchaService
+  ) {}
 
   @UseFilters(new AllExceptionsFilter(APIID.USER_GET))
   @Get('read/:userId')
@@ -136,11 +142,35 @@ export class UserController {
     @Res() response: Response
   ) {
     const academicYearId = headers['academicyearid'];
-    // if (!academicYearId || !isUUID(academicYearId)) {
-    //   throw new BadRequestException(
-    //     "academicYearId is required and academicYearId must be a valid UUID."
-    //   );
-    // }
+    // Only validate reCAPTCHA if any tenantCohortRoleMapping has the student role
+    const isStudent =
+      Array.isArray(userCreateDto.tenantCohortRoleMapping) &&
+      userCreateDto.tenantCohortRoleMapping.some(
+        (mapping) => mapping.roleId === '493c04e2-a9db-47f2-b304-503da358d5f4'
+      );
+    // If the user is a student, validate the reCAPTCHA token
+    if (isStudent) {
+      // Check if the reCAPTCHA token is provided
+      if (!userCreateDto.recaptchaToken) {
+        throw new BadRequestException(
+          'reCAPTCHA token is required for student registration'
+        );
+      }
+      try {
+        // Validate the reCAPTCHA token
+        await this.recaptchaService.validateToken(userCreateDto.recaptchaToken);
+      } catch (error) {
+        // Optional: Log the original error here for debugging (e.g., using a Logger service)
+
+        // Re-throw if it's already an HTTP exception (preserve original message and status)
+        if (error instanceof UnauthorizedException) {
+          throw new BadRequestException(error.message); // You can also rethrow it as-is
+        }
+
+        throw new BadRequestException('reCAPTCHA validation failed');
+      }
+    }
+    // Proceed with user creation
     return await this.userAdapter
       .buildUserAdapter()
       .createUser(request, userCreateDto, academicYearId, response);

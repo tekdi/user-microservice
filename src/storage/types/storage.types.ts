@@ -11,6 +11,7 @@ export interface StorageConfig {
     bucket: string;
     accessKeyId: string;
     secretAccessKey: string;
+    minFileSizeBytes?: number; // Minimum file size in bytes for validation
   };
 }
 

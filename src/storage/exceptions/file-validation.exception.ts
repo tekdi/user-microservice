@@ -1,14 +1,30 @@
 import { HttpException, HttpStatus } from '@nestjs/common';
 
+/**
+ * FileValidationException
+ *
+ * Custom exception for file validation errors:
+ * - File type validation failures
+ * - File size validation failures
+ * - Field configuration errors
+ * - Storage operation failures
+ *
+ * Extends NestJS HttpException for proper error handling.
+ */
 export class FileValidationException extends HttpException {
-  constructor(message: string) {
+  /**
+   * Creates a new FileValidationException.
+   * @param message - The error message
+   * @param statusCode - HTTP status code (defaults to 400 Bad Request)
+   */
+  constructor(message: string, statusCode: number = HttpStatus.BAD_REQUEST) {
     super(
       {
-        statusCode: HttpStatus.BAD_REQUEST,
-        message: 'File Validation Error',
-        error: message
+        statusCode,
+        error: 'File Validation Error',
+        message,
       },
-      HttpStatus.BAD_REQUEST
+      statusCode
     );
   }
 } 

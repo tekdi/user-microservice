@@ -43,8 +43,8 @@ export class AuthService {
         return APIResponse.error(
           response,
           apiId,
-          errorMessage,
           'Bad Request',
+          errorMessage,
           HttpStatus.BAD_REQUEST
         );
       }
