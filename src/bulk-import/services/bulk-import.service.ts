@@ -111,33 +111,25 @@ export class BulkImportService {
           if (createdUser && createdUser.userId) {
             BulkImportLogger.logUserCreationSuccess(batchId, i + 2, createdUser.userId, createdUser.username);
             createdUserIds.push(createdUser.userId);
+
+            // Send password reset link using existing function to avoid code duplication
+            try {
+              // Call the existing sendPasswordResetLink function from PostgresUserService
+              await this.userService.sendPasswordResetLink(
+                request, // pass the original request
+                createdUser.username, // username
+                '', // redirectUrl (empty or set as needed)
+                response // use the existing response parameter
+              );
+            } catch (notifError) {
+              BulkImportLogger.logNotificationError(batchId, i + 2, createdUser.userId, notifError);
+            }
           } else {
             BulkImportLogger.logUserCreationError(batchId, i + 2, { message: 'User creation failed' }, user);
           }
 
           if (!createdUser || !createdUser.userId) {
             throw new Error('Failed to create user');
-          }
-
-          // Send notification
-          const notificationPayload = {
-            isQueue: false,
-            context: 'USER',
-            key: 'onStudentCreated',
-            replacements: {
-              '{username}': user.firstName || user.username,
-              '{programName}': 'the program',
-            },
-            email: {
-              receipients: [user.email],
-            },
-          };
-          try {
-            await this.notificationRequest.sendNotification(notificationPayload);
-            // Log notification success
-            console.log(`Notification sent successfully to ${user.email}`);
-          } catch (notifError) {
-            BulkImportLogger.logNotificationError(batchId, i + 2, createdUser.userId, notifError);
           }
 
           // Update Elasticsearch if enabled
