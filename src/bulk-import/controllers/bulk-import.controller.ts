@@ -60,7 +60,7 @@ export class BulkImportController {
   async bulkImportUsers(
     @UploadedFile() file: Express.Multer.File,
     @Body() bulkImportDto: BulkImportDto,
-    @Headers('x-tenant-id') tenantId: string,
+    @Headers('tenantid') tenantId: string,
     @Req() req: Request,
     @Res() res: Response
   ) {
@@ -74,12 +74,38 @@ export class BulkImportController {
     );
   }
 
+  // Generate XLSX Template for Cohort
   @Post('xlsx-template')
+  @ApiHeader({
+    name: 'tenantid',
+    description: 'Tenant ID',
+    required: true,
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        cohortId: {
+          type: 'string',
+          description: 'Cohort ID to generate template for',
+        },
+      },
+      required: ['cohortId'],
+    },
+  })
+  @ApiCreatedResponse({
+    description: 'Template columns generated successfully',
+  })
+  @ApiBadRequestResponse({
+    description: 'Cohort not active or form not found',
+  })
   async generateXlsxTemplate(
     @Body('cohortId') cohortId: string,
-    @Headers('x-tenant-id') tenantId: string
+    @Headers('tenantid') tenantId: string
   ) {
-    // The service will return the full response object
-    return await this.bulkImportService.generateXlsxTemplateColumns(cohortId, tenantId);
+    return await this.bulkImportService.generateXlsxTemplateColumns(
+      cohortId,
+      tenantId
+    );
   }
-} 
+}

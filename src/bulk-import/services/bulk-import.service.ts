@@ -459,7 +459,7 @@ export class BulkImportService {
     userCreateDto.username = userCreateDto.email;
     // Remove mobile if empty or not provided, to skip validation
     if (!userCreateDto.mobile || userCreateDto.mobile.trim() === '') {
-      delete userCreateDto.mobile;
+      userCreateDto.mobile = undefined;
     }
     // Age validation
     const minAge = this.configService.get('MINIMUM_AGE');
@@ -486,7 +486,6 @@ export class BulkImportService {
       userCreateDto,
       academicYearId
     );
-    console.log('DEBUG: validatedRoles:', JSON.stringify(validatedRoles));
     if (
       Array.isArray(validatedRoles) &&
       validatedRoles.some((item) => item?.code === undefined)
