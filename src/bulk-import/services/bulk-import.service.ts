@@ -256,8 +256,6 @@ export class BulkImportService {
         for (const userId of createdUserIds) {
           try {
             const userDoc = await this.formSubmissionService.buildUserDocumentForElasticsearch(userId);
-            // TEST LOG: Log the full userDoc being sent to ES for verification
-            console.log('ES USER DOC FOR', userId, JSON.stringify(userDoc, null, 2));
             // END TEST LOG
             if (userDoc) {
               // For testing: add a comment here to indicate this is the new ES logic
