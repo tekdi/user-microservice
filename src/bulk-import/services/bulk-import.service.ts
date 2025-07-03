@@ -133,7 +133,7 @@ export class BulkImportService {
             try {
               // Call the existing sendPasswordResetLink function from PostgresUserService
               // Discard its return value to avoid polluting the bulk import response
-              void this.userService.sendPasswordResetLink(
+              await this.userService.sendPasswordResetLink(
                 request, // pass the original request
                 createdUser.username, // username
                 '', // redirectUrl (empty or set as needed)

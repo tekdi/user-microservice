@@ -1345,7 +1345,14 @@ export class PostgresCohortMembersService {
               ...cohortMembers,
               cohortAcademicYearId: cohortExists[0].cohortAcademicYearId,
               // Use status from DTO if provided (e.g., for bulk import), otherwise default to ACTIVE
-              status: cohortMembersDto.status ? cohortMembersDto.status as MemberStatus : MemberStatus.ACTIVE, // Cast to MemberStatus
+              // status: cohortMembersDto.status ? cohortMembersDto.status as MemberStatus : MemberStatus.ACTIVE, // Cast to MemberStatus
+              status: cohortMembersDto.status
+                ? Object.values(MemberStatus).includes(
+                    cohortMembersDto.status as MemberStatus
+                  )
+                  ? (cohortMembersDto.status as MemberStatus)
+                  : MemberStatus.ACTIVE
+                : MemberStatus.ACTIVE,
               // Use statusReason from DTO if provided, otherwise default to empty string
               statusReason: cohortMembersDto.statusReason || '',
             };

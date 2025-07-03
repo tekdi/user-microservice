@@ -44,8 +44,13 @@ export class BulkImportController {
     description: 'Bulk import users from CSV/XLSX file',
   })
   @ApiHeader({
-    name: 'x-tenant-id',
+    name: 'tenantid',
     description: 'Tenant ID',
+    required: true,
+  })
+  @ApiHeader({
+    name: 'academicyearid',
+    description: 'Academic Year ID',
     required: true,
   })
   @ApiCreatedResponse({
