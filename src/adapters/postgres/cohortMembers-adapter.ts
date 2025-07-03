@@ -891,6 +891,10 @@ export class PostgresCohortMembersService {
           HttpStatus.NOT_FOUND
         );
       }
+
+      // Store the previous status before updating
+      const previousStatus = cohortMembershipToUpdate.status;
+
       Object.assign(cohortMembershipToUpdate, cohortMembersUpdateDto);
       const result = await this.cohortMembersRepository.save(
         cohortMembershipToUpdate
@@ -959,9 +963,18 @@ export class PostgresCohortMembersService {
         }
       }
 
-      // Send notification if applicable for this status onlu
-      const notifyStatuses = ['dropout', 'shortlisted', 'rejected'];
+      // Send notification if applicable for this status only
+      let notifyStatuses: string[] = [];
       const { status, statusReason } = cohortMembersUpdateDto;
+
+      // Send notification if applicable for this status only
+      if (previousStatus === 'applied' && status === 'submitted') {
+        notifyStatuses = ['submitted'];
+      }
+      else
+      {
+        notifyStatuses = ['dropout', 'shortlisted', 'rejected'];
+      }
 
       if (notifyStatuses.includes(status)) {
         const [userData, cohortData] = await Promise.all([
@@ -978,6 +991,7 @@ export class PostgresCohortMembersService {
             dropout: 'onStudentDropout',
             shortlisted: 'onStudentShortlisted',
             rejected: 'onStudentRejected',
+            submitted: 'onApplicationSubmission',
           };
 
           //This is notification payload required to send
@@ -995,6 +1009,7 @@ export class PostgresCohortMembersService {
               '{programName}': cohortData?.name ?? 'the program',
               '{status}': status,
               '{statusReason}': statusReason ?? 'Not specified',
+              '{currentYear}': new Date().getFullYear(),
             },
             email: {
               receipients: [userData.email],
