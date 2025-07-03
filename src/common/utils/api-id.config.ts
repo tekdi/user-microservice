@@ -28,6 +28,7 @@ export const APIID = {
   USER_RESET_PASSWORD_LINK: 'api.user.sendLinkForResetPassword',
   USER_FORGOT_PASSWORD: 'api.user.forgotPassword',
   USER_DELETE: 'api.user.delete',
+  USER_BULK_IMPORT: 'api.user.bulkImport',
 
   // Role Management APIs
   ROLE_GET: 'api.role.get',

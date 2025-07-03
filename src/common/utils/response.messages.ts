@@ -222,4 +222,7 @@ export const API_RESPONSES = {
   FORM_SUBMISSION_UPDATED_SUCCESSFULLY: 'Application updated successfully',
   FORM_SUBMISSION_DELETED_SUCCESSFULLY: 'Application deleted successfully',
   FORM_SUBMISSION_NOT_FOUND: 'Application not found',
+
+  BULK_IMPORT_SUCCESS: 'Users imported successfully',
+  BULK_IMPORT_FAILURE: 'Failed to import users',
 };
