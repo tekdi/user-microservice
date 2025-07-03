@@ -1,4 +1,4 @@
-import { ConsoleLogger, HttpStatus, Injectable } from "@nestjs/common";
+import { ConsoleLogger, HttpStatus, Injectable, Param } from "@nestjs/common";
 import { ReturnResponseBody } from "src/cohort/dto/cohort-create.dto";
 import { CohortSearchDto } from "src/cohort/dto/cohort-search.dto";
 import { CohortCreateDto } from "src/cohort/dto/cohort-create.dto";
@@ -157,38 +157,40 @@ export class PostgresCohortService {
 
   public async findCohortName(userId: any, academicYearId?: string) {
 
-    let query = `
+    const baseQuery = `
                     SELECT 
                       c."name", 
                       c."cohortId", 
                       c."parentId", 
+                      c."params",
                       c."type", 
                       cm."status" AS cohortmemberstatus, 
                       c."status", 
-                      cm."cohortMembershipId"
-                      FROM public."CohortMembers" AS cm
-                      LEFT JOIN public."Cohort" AS c ON cm."cohortId" = c."cohortId"
-                      WHERE cm."userId" = $1
+                      cm."cohortMembershipId",
+                      cm."params"->>'slot' AS teacherSlot
                   `;
-    if (academicYearId) {
-      query += `
-                      AND cm."academicYear" = $2
-                  `;
-    } 
-    // const additionalFields = academicYearId
-    //   ? `, cay."cohortAcademicYearId", cay."academicYearId"`
-    //   : ``;
 
-    // const joins = academicYearId
-    //   ? `
-    //   JOIN public."CohortAcademicYear" cay ON cm."cohortAcademicYearId" = cay."cohortAcademicYearId"
-    //   WHERE cm."userId" = $1 AND cay."academicYearId" = $2
-    // `
-    //   : `
-    //   LEFT JOIN public."Cohort" AS c ON cm."cohortId" = c."cohortId"
-    //   WHERE cm."userId" = $1
-    // `;
+    const additionalFields = academicYearId
+      ? `, cay."cohortAcademicYearId", cay."academicYearId"`
+      : ``;
 
+    const joins = academicYearId
+      ? `
+      JOIN public."CohortAcademicYear" cay ON cm."cohortAcademicYearId" = cay."cohortAcademicYearId"
+      WHERE cm."userId" = $1 AND cay."academicYearId" = $2
+    `
+      : `
+      LEFT JOIN public."Cohort" AS c ON cm."cohortId" = c."cohortId"
+      WHERE cm."userId" = $1
+    `;
+
+    const query = `
+                  ${baseQuery}
+                  ${additionalFields}
+                  FROM public."CohortMembers" AS cm
+                  JOIN public."Cohort" AS c ON cm."cohortId" = c."cohortId"
+                  ${joins}
+                `;
 
     const params = academicYearId ? [userId, academicYearId] : [userId];
 
@@ -1078,10 +1080,12 @@ export class PostgresCohortService {
           cohortName: cohort?.name,
           cohortId: cohort?.cohortId,
           parentId: cohort?.parentId,
+          params: cohort?.params,
           cohortMemberStatus: cohort?.cohortmemberstatus,
           cohortMembershipId: cohort?.cohortMembershipId,
           cohortStatus: cohort?.cohortstatus || cohort?.status,
           type: cohort?.type,
+          teacherSlot: cohort?.teacherslot,
           customField: await this.fieldsService.getCustomFieldDetails(cohort.cohortId, 'Cohort'),
           childData: requiredData.getChildData
             ? await this.getCohortHierarchy(cohort.cohortId, requiredData.customField)
