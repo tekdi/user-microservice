@@ -116,6 +116,7 @@ export class PostgresCohortService {
         name: data.name,
         parentId: data.parentId,
         type: data.type,
+        status: data.status,
         customField: await this.getCohortCustomFieldDetails(data.cohortId),
       };
       result.cohortData.push(cohortData);
@@ -1163,10 +1164,10 @@ export class PostgresCohortService {
         // Step 1: Get cohortIds for checking form existence
         const cohortIds = cohortData.map((c) => c.cohortId);
         //the cohort Id is present in the Forms Table as contextId will check here
-        const formMappedCohortIds = await this.getCohortMappedFormId(
-          cohortIds,
-          apiId
-        );
+        const {
+          createdFormIds: formMappedCohortIds,
+          publishedFormIds: formPublishedCohortIds,
+        } = await this.getCohortMappedFormId(cohortIds, apiId);
 
         for (const data of cohortData) {
           const customFieldsData = await this.getCohortDataWithCustomfield(
@@ -1190,6 +1191,7 @@ export class PostgresCohortService {
 
           // Step 4: Add isFormCreated flag
           data['isFormCreated'] = formMappedCohortIds.has(data.cohortId);
+          data['isFormPublished'] = formPublishedCohortIds.has(data.cohortId);
 
           results.cohortDetails.push(data);
         }
@@ -1265,21 +1267,34 @@ export class PostgresCohortService {
   private async getCohortMappedFormId(
     cohortIds: string[],
     apiId?: string
-  ): Promise<Set<string>> {
+  ): Promise<{ createdFormIds: Set<string>; publishedFormIds: Set<string> }> {
     try {
-      const rawForms: Array<{ contextId: string }> =
+      const rawForms: Array<{ contextId: string; status: string }> =
         await this.dataSource.query(
-          `SELECT DISTINCT "contextId" FROM forms WHERE "contextId" = ANY($1)`,
+          `SELECT DISTINCT "contextId", "status" FROM forms WHERE "contextId" = ANY($1)`,
           [cohortIds]
         );
-      return new Set(rawForms.map((f) => f.contextId));
+      const createdFormIds = new Set<string>();
+      const publishedFormIds = new Set<string>();
+
+      for (const form of rawForms) {
+        createdFormIds.add(form.contextId);
+        if (form.status === 'active') {
+          publishedFormIds.add(form.contextId);
+        }
+      }
+
+      return { createdFormIds, publishedFormIds };
     } catch (error) {
       LoggerUtil.error(
         'Error querying forms table',
         `Error: ${error.message}`,
         apiId || 'FORM_QUERY'
       );
-      return new Set();
+      return {
+        createdFormIds: new Set(),
+        publishedFormIds: new Set(),
+      };
     }
   }
 

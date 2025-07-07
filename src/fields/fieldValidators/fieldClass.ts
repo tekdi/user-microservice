@@ -21,6 +21,8 @@ export interface FieldParams {
   minDate?: string; // e.g., "16Y"
   maxDate?: string; // e.g., "2025-12-31"
   showTime?: boolean;
+  allowedTypes?: string[];
+  maxSize?: number;
 }
 
 export interface SchemaField {

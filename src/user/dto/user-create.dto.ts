@@ -107,11 +107,23 @@ export class UserCreateDto {
   @ApiProperty({
     type: String,
     description: 'Gender of the user',
-    enum: ['male', 'female', 'transgender'],
+    enum: [
+      'male',
+      'female',
+      'transgender',
+      'non-binary',
+      'I do not want to disclose',
+    ],
   })
   @Expose()
   @IsOptional()
-  @IsEnum(['male', 'female', 'transgender'])
+  @IsEnum([
+    'male',
+    'female',
+    'transgender',
+    'non-binary',
+    'I do not want to disclose',
+  ])
   gender: string;
 
   @ApiPropertyOptional({
@@ -224,4 +236,12 @@ export class UserCreateDto {
   })
   @Expose()
   mobile_country_code: string;
+
+  @ApiPropertyOptional({
+    type: String,
+    description: 'The Google reCAPTCHA token for student registration',
+  })
+  @Expose()
+  @IsOptional()
+  recaptchaToken?: string;
 }

@@ -1,4 +1,9 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import {
+  HttpStatus,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import jwt_decode from 'jwt-decode';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Form } from './entities/form.entity';
@@ -79,8 +84,8 @@ export class FormsService {
         return APIResponse.error(
           response,
           apiId,
-          'No Data found for this context OR Context Type OR Context Id',
           'NOT_FOUND',
+          'No Data found for this context OR Context Type OR Context Id',
           HttpStatus.NOT_FOUND
         );
       }
@@ -625,6 +630,33 @@ export class FormsService {
         'INTERNAL_SERVER_ERROR',
         HttpStatus.INTERNAL_SERVER_ERROR
       );
+    }
+  }
+
+  /**
+   * Retrieves a form by its ID.
+   * @param formId The ID of the form to retrieve.
+   * @returns A Promise that resolves to the Form entity.
+   * @throws NotFoundException if the form with the given ID does not exist.
+   */
+  async getFormById(formId: string): Promise<Form> {
+    try {
+      const form = await this.formRepository.findOne({
+        where: { formid: formId },
+      });
+
+      if (!form) {
+        throw new NotFoundException(`Form with ID ${formId} not found`);
+      }
+
+      return form;
+    } catch (error) {
+      Logger.error(
+        `Failed to get form by ID ${formId}: ${error.message}`,
+        error.stack,
+        FormsService.name // context string for log origin
+      );
+      throw error;
     }
   }
 }

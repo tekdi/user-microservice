@@ -1,11 +1,9 @@
 import {
   ApiTags,
   ApiBody,
-  ApiForbiddenResponse,
   ApiCreatedResponse,
   ApiBasicAuth,
   ApiHeader,
-  ApiOkResponse,
   ApiQuery,
   ApiNotFoundResponse,
   ApiBadRequestResponse,
@@ -28,6 +26,7 @@ import {
   UseFilters,
   BadRequestException,
   Request,
+  HttpStatus,
 } from '@nestjs/common';
 import { CohortMembersSearchDto } from './dto/cohortMembers-search.dto';
 import { CohortMembersDto } from './dto/cohortMembers.dto';
@@ -39,12 +38,29 @@ import { APIID } from 'src/common/utils/api-id.config';
 import { BulkCohortMember } from './dto/bulkMember-create.dto';
 import { isUUID } from 'class-validator';
 import { API_RESPONSES } from '@utils/response.messages';
+import APIResponse from 'src/common/responses/response';
+import { ShortlistingLogger } from 'src/common/logger/ShortlistingLogger';
+import { CohortMembersCronService } from './cohortMembers-cron.service';
+
+// Extend Express Request type to include user
+interface RequestWithUser extends Request {
+  user?: {
+    sub: string;
+    userId: string;
+    name: string;
+    username: string;
+    [key: string]: any;
+  };
+}
 
 @ApiTags('Cohort Member')
 @Controller('cohortmember')
 // @UseGuards(JwtAuthGuard)
 export class CohortMembersController {
-  constructor(private readonly cohortMemberAdapter: CohortMembersAdapter) {}
+  constructor(
+    private readonly cohortMemberAdapter: CohortMembersAdapter,
+    private readonly cohortMembersCronService: CohortMembersCronService
+  ) {}
 
   //create cohort members
   @UseFilters(new AllExceptionsFilter(APIID.COHORT_MEMBER_CREATE))
@@ -334,5 +350,132 @@ export class CohortMembersController {
         academicyearId,
         response
       );
+  }
+
+  /**
+   * Manual trigger endpoint for cohort member shortlisting evaluation
+   * Allows immediate processing of shortlisting evaluation for testing or urgent processing
+   *
+   * This endpoint:
+   * 1. Validates required headers (tenantid, academicyearid)
+   * 2. Triggers the shortlisting evaluation process
+   * 3. Returns detailed performance metrics and processing results
+   *
+   * The evaluation process:
+   * - Fetches active cohorts with shortlist date = today
+   * - Processes submitted members in parallel batches
+   * - Evaluates form rules against user field values
+   * - Updates member status to 'shortlisted' or 'rejected'
+   * - Sends email notifications based on results
+   * - Logs failures for manual review
+   *
+   * Performance: Can handle 100k+ records per cohort with optimized parallel processing
+   *
+   * @param req - Express request object containing headers
+   * @param res - Express response object
+   * @returns JSON response with processing results and performance metrics
+   */
+  @Post('cron/evaluate-shortlisting-status')
+  async evaluateShortlistingStatus(
+    @Req() req: RequestWithUser,
+    @Res() res: Response,
+    @Query('userid') queryUserId?: string
+  ) {
+    const apiId = APIID.COHORT_MEMBER_EVALUATE_SHORTLISTING;
+
+    try {
+      // Extract required headers for tenant and academic year context
+      const tenantId = req.headers['tenantid'] as string;
+      const academicyearId = req.headers['academicyearid'] as string;
+      const headerUserId = req.headers['userid'] as string;
+
+      // Use query parameter if header is not available
+      const userId = headerUserId || queryUserId;
+
+      if (!userId) {
+        return APIResponse.error(
+          res,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          'User ID not found in request. Please ensure you are authenticated.',
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      // Validate required headers
+      if (!tenantId) {
+        return APIResponse.error(
+          res,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          API_RESPONSES.TANANT_ID_REQUIRED,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      if (!academicyearId) {
+        return APIResponse.error(
+          res,
+          apiId,
+          'Academic year ID is required in headers',
+          API_RESPONSES.BAD_REQUEST,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      // Validate UUID format for both parameters
+      if (!isUUID(tenantId)) {
+        return APIResponse.error(
+          res,
+          apiId,
+          'Invalid tenant ID format. Must be a valid UUID.',
+          API_RESPONSES.BAD_REQUEST,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      if (!isUUID(academicyearId)) {
+        return APIResponse.error(
+          res,
+          apiId,
+          'Invalid academic year ID format. Must be a valid UUID.',
+          API_RESPONSES.BAD_REQUEST,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      // Trigger the shortlisting evaluation process with user ID
+      const result =
+        await this.cohortMembersCronService.triggerShortlistingEvaluation(
+          tenantId,
+          academicyearId,
+          userId
+        );
+
+      // Return success response with the result data
+      return APIResponse.success(
+        res,
+        apiId,
+        result,
+        HttpStatus.OK,
+        'Cohort member shortlisting evaluation completed successfully'
+      );
+    } catch (error) {
+      // Log the error for debugging and monitoring
+      ShortlistingLogger.logShortlistingError(
+        'Error in manual shortlisting evaluation endpoint',
+        `Error: ${error.message}`,
+        apiId
+      );
+
+      // Return error response
+      return APIResponse.error(
+        res,
+        apiId,
+        `Error: ${error.message}`,
+        API_RESPONSES.INTERNAL_SERVER_ERROR,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
   }
 }
