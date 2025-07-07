@@ -222,4 +222,13 @@ export const API_RESPONSES = {
   FORM_SUBMISSION_UPDATED_SUCCESSFULLY: 'Application updated successfully',
   FORM_SUBMISSION_DELETED_SUCCESSFULLY: 'Application deleted successfully',
   FORM_SUBMISSION_NOT_FOUND: 'Application not found',
+
+  //Tenant Config
+  TENANT_CONFIG_CREATED_SUCCESSFULLY: 'Tenant configuration created successfully',
+  TENANT_CONFIG_UPDATED_SUCCESSFULLY: 'Tenant configuration updated successfully',
+  TENANT_CONFIG_DELETED_SUCCESSFULLY: 'Tenant configuration deleted successfully',
+  TENANT_CONFIG_NOT_FOUND: 'Tenant configuration not found',
+  CONFIGURATION_NOT_FOUND_FOR_CONTEXT: 'Configuration not found for context:',
+  TENANT_CONFIG_RETRIEVED_SUCCESSFULLY: 'Tenant configuration retrieved successfully',
+  CONFIGURATION_ALREADY_EXISTS_FOR_CONTEXT: 'Configuration already exists for context:',
 };
