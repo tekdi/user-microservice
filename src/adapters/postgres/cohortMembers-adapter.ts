@@ -2054,7 +2054,6 @@ export class PostgresCohortMembersService {
     let failures = 0;
 
     const batchStartTime = Date.now();
-    const fieldFetchStartTime = Date.now();
     // Pre-fetch all user field values for this batch to reduce database calls
     // This optimization significantly improves performance for large batches
     // Skip field value fetching if no rules exist (automatic shortlisting)
@@ -2066,9 +2065,7 @@ export class PostgresCohortMembersService {
     }
 
     // Process each member in the batch
-    const evaluationStartTime = Date.now();
     for (const member of members) {
-      const memberStartTime = Date.now();
       try {
         // Get pre-fetched field values for this user (empty array if no rules exist)
         const userFieldValues = userFieldValuesMap.get(member.userId) || [];
@@ -2397,8 +2394,6 @@ export class PostgresCohortMembersService {
   private async getBatchUserFieldValues(userIds: string[]) {
     if (userIds.length === 0) return new Map();
 
-    const queryStartTime = Date.now();
-
     // Optimized query with better indexing and reduced data transfer
     const query = `
       SELECT 
@@ -2431,8 +2426,6 @@ export class PostgresCohortMembersService {
       }
       userFieldValuesMap.get(userId).push(fv);
     }
-
-    const processingTime = Date.now() - queryStartTime;
 
     return userFieldValuesMap;
   }
@@ -3749,7 +3742,6 @@ export class PostgresCohortMembersService {
     let failures = 0;
 
     const batchStartTime = Date.now();
-    const userFetchStartTime = Date.now();
 
     // Pre-fetch all user data for this batch to reduce database calls
     const userIds = members.map((m) => m.userId);
@@ -3767,10 +3759,8 @@ export class PostgresCohortMembersService {
     }
 
     // Process each member in the batch
-    const emailStartTime = Date.now();
     
     for (const member of members) {
-      const memberStartTime = Date.now();
       try {
         // Get user data for this member
         const userData = userDataMap.get(member.userId);
