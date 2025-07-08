@@ -1178,7 +1178,19 @@ export class PostgresUserService implements IServicelocator {
     response: Response
   ) {
     const apiId = APIID.USER_CREATE;
-    // It is considered that if user is not present in keycloak it is not present in database as well
+    const userContext = {
+      username: userCreateDto?.username,
+      email: userCreateDto?.email,
+      firstName: userCreateDto?.firstName,
+      lastName: userCreateDto?.lastName
+    };
+
+    // Log user creation attempt with context
+    LoggerUtil.log(
+      `User creation attempt started for ${userContext.username}`,
+      apiId,
+      userContext.username
+    );
 
     try {
       if (request.headers.authorization) {
@@ -1217,6 +1229,12 @@ export class PostgresUserService implements IServicelocator {
         Array.isArray(validatedRoles) &&
         validatedRoles.some((item) => item?.code === undefined)
       ) {
+        LoggerUtil.error(
+          `Role validation failed for ${userContext.username}`,
+          validatedRoles.join("; "),
+          apiId,
+          userContext.username
+        );
         return APIResponse.error(
           response,
           apiId,
@@ -1232,6 +1250,12 @@ export class PostgresUserService implements IServicelocator {
 
       //Validaion if try to assign on cohort and automaticMember
       if (userCreateDto.automaticMember?.value === true && userCreateDto.tenantCohortRoleMapping?.[0]?.cohortIds?.length > 0) {
+        LoggerUtil.error(
+          `Invalid operation for ${userContext.username}: Cannot assign automatic member with cohort`,
+          `User cannot be assigned as automatic member while also being assigned to a center`,
+          apiId,
+          userContext.username
+        );
         return APIResponse.error(
           response,
           apiId,
@@ -1253,6 +1277,12 @@ export class PostgresUserService implements IServicelocator {
       );
       // let checkUserinDb = await this.checkUserinKeyCloakandDb(userCreateDto.username);
       if (checkUserinKeyCloakandDb) {
+        LoggerUtil.error(
+          `User ${userContext.username} already exists`,
+          `User with username ${userCreateDto.username} or email ${userCreateDto.email} already exists`,
+          apiId,
+          userContext.username
+        );
         return APIResponse.error(
           response,
           apiId,
@@ -1263,11 +1293,22 @@ export class PostgresUserService implements IServicelocator {
       }
 
       // Multi tenant for roles is not currently supported in keycloak
+      LoggerUtil.log(
+        `Creating user ${userContext.username} in Keycloak`,
+        apiId,
+        userContext.username
+      );
+
       resKeycloak = await createUserInKeyCloak(userSchema, token, validatedRoles[0]?.title)
 
       if (resKeycloak.statusCode !== 201) {
         if (resKeycloak.statusCode === 409) {
-          LoggerUtil.log(API_RESPONSES.EMAIL_EXIST, apiId);
+          LoggerUtil.error(
+            `Email already exists in Keycloak for ${userContext.username}`,
+            `${resKeycloak.message} ${resKeycloak.email}`,
+            apiId,
+            userContext.username
+          );
 
           return APIResponse.error(
             response,
@@ -1277,7 +1318,12 @@ export class PostgresUserService implements IServicelocator {
             HttpStatus.CONFLICT
           );
         } else {
-          LoggerUtil.log(API_RESPONSES.SERVER_ERROR, apiId);
+          LoggerUtil.error(
+            `Keycloak user creation failed for ${userContext.username}`,
+            `${resKeycloak.message}`,
+            apiId,
+            userContext.username
+          );
           return APIResponse.error(
             response,
             apiId,
@@ -1288,12 +1334,20 @@ export class PostgresUserService implements IServicelocator {
         }
       }
 
-      LoggerUtil.log(API_RESPONSES.USER_CREATE_KEYCLOAK, apiId);
-
+      LoggerUtil.log(
+        `User ${userContext.username} created successfully in Keycloak`,
+        apiId,
+        userContext.username
+      );
 
       userCreateDto.userId = resKeycloak.userId;
 
       // if cohort given then check for academic year
+      LoggerUtil.log(
+        `Creating user ${userContext.username} in database`,
+        apiId,
+        userContext.username
+      );
 
       const result = await this.createUserInDatabase(
         request,
@@ -1302,7 +1356,11 @@ export class PostgresUserService implements IServicelocator {
         response
       );
 
-      LoggerUtil.log(API_RESPONSES.USER_CREATE_IN_DB, apiId);
+      LoggerUtil.log(
+        `User ${userContext.username} created successfully in database`,
+        apiId,
+        userContext.username
+      );
 
       const createFailures = [];
       if (
@@ -1357,7 +1415,12 @@ export class PostgresUserService implements IServicelocator {
           }
         }
       }
-      LoggerUtil.log(API_RESPONSES.USER_CREATE_SUCCESSFULLY, apiId);
+
+      LoggerUtil.log(
+        `User ${userContext.username} created successfully with ID: ${result.userId}`,
+        apiId,
+        userContext.username
+      );
       
       // Send response to the client
       APIResponse.success(
@@ -1371,16 +1434,18 @@ export class PostgresUserService implements IServicelocator {
       // Produce user created event to Kafka asynchronously - after response is sent to client
       this.publishUserEvent('created', result.userId, apiId)
         .catch(error => LoggerUtil.error(
-          `Failed to publish user created event to Kafka`,
+          `Failed to publish user created event to Kafka for ${userContext.username}`,
           `Error: ${error.message}`,
-          apiId
+          apiId,
+          userContext.username
         ));
     } catch (e) {
 
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
         `Error: ${e.message}`,
-        apiId
+        apiId,
+        userContext.username
       );
       const errorMessage = e.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
       return APIResponse.error(
@@ -2054,6 +2119,13 @@ export class PostgresUserService implements IServicelocator {
       .map((fieldValue) => fieldValue.fieldId);
 
     if (invalidFieldIds.length > 0) {
+      // Log the invalid field validation error with role context
+      LoggerUtil.error(
+        `Invalid custom fields provided for role`,
+        `Role: ${contextType || 'Unknown'}, Invalid Field IDs: ${invalidFieldIds.join(", ")}, User: ${userCreateDto.username || 'Unknown'}`,
+        apiId,
+        userCreateDto.username
+      );
       return `The following fields are not valid for this user: ${invalidFieldIds.join(
         ", "
       )}.`;
