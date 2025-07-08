@@ -843,6 +843,108 @@ export class PostgresCohortMembersService {
     return result;
   }
 
+  async getUsersWithCompletionFilter(where: any, options: any, order: any, completionPercentageRanges: { min: number; max: number }[], formId: string) {
+    let whereCase = ``;
+    let limit, offset;
+
+    if (where.length > 0) {
+      whereCase = 'WHERE ';
+
+      const processCondition = ([key, value]) => {
+        switch (key) {
+          case 'role':
+            return `R."name"='${value}'`;
+          case 'status': {
+            const statusValues = Array.isArray(value)
+              ? value.map((status) => `'${status}'`).join(', ')
+              : `'${value}'`;
+            return `CM."status" IN (${statusValues})`;
+          }
+          case 'firstName': {
+            return `U."firstName" ILIKE '%${value}%'`;
+          }
+          case 'country': {
+            const countryValues = Array.isArray(value)
+              ? value.map((country) => `'${country}'`).join(', ')
+              : `'${value}'`;
+            return `U."country" IN (${countryValues})`;
+          }
+          case 'cohortAcademicYearId': {
+            const cohortIdAcademicYear = Array.isArray(value)
+              ? value.map((id) => `'${id}'`).join(', ')
+              : `'${value}'`;
+            return `CM."cohortAcademicYearId" IN (${cohortIdAcademicYear})`;
+          }
+          case 'cohortId': {
+            //Handles UUID array properly
+            const formattedIds = Array.isArray(value)
+              ? value.map((id) => `'${id}'`).join(', ')
+              : `'${value}'`;
+            return `CM."${key}" IN (${formattedIds})`;
+          }
+          default: {
+            return `CM."${key}"='${value}'`;
+          }
+        }
+      };
+      whereCase += where.map(processCondition).join(' AND ');
+    }
+
+    // Build completion percentage filter conditions
+    const completionConditions = completionPercentageRanges.map(range => 
+      `(FS."completionPercentage" >= ${range.min} AND FS."completionPercentage" <= ${range.max})`
+    ).join(' OR ');
+
+    // Add completion percentage filter to WHERE clause
+    const completionFilter = `(FS."formId" = '${formId}' AND FS."status" = 'active' AND (${completionConditions}))`;
+    
+    if (whereCase) {
+      whereCase += ` AND ${completionFilter}`;
+    } else {
+      whereCase = `WHERE ${completionFilter}`;
+    }
+
+    let query = `SELECT U."userId", U."username",U."email", U."firstName", U."middleName", U."lastName", R."name" AS role, U."district", U."state",U."mobile",U."deviceId",U."gender",U."dob",U."country",
+      CM."status", CM."statusReason",CM."cohortMembershipId",CM."status",CM."createdAt", CM."updatedAt",U."createdBy",U."updatedBy", COUNT(*) OVER() AS total_count  
+      FROM public."CohortMembers" CM
+      INNER JOIN public."Users" U
+      ON CM."userId" = U."userId"
+      INNER JOIN public."UserRolesMapping" UR
+      ON UR."userId" = U."userId"
+      INNER JOIN public."Roles" R
+      ON R."roleId" = UR."roleId"
+      INNER JOIN public."formSubmissions" FS
+      ON FS."itemId" = U."userId" ${whereCase}`;
+
+    options.forEach((option) => {
+      if (option[0] === 'limit') {
+        limit = option[1];
+      }
+      if (option[0] === 'offset') {
+        offset = option[1];
+      }
+    });
+
+    if (order && Object.keys(order).length > 0) {
+      const orderField = Object.keys(order)[0];
+      const orderDirection =
+        order[orderField].toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+      query += ` ORDER BY U."${orderField}" ${orderDirection}`;
+    }
+
+    if (limit !== undefined) {
+      query += ` LIMIT ${limit}`;
+    }
+
+    if (offset !== undefined) {
+      query += ` OFFSET ${offset}`;
+    }
+
+    const result = await this.usersRepository.query(query);
+
+    return result;
+  }
+
   public async updateCohortMembers(
     cohortMembershipId: string,
     loginUser: any,
@@ -1491,9 +1593,9 @@ export class PostgresCohortMembersService {
         tenantId,
         academicyearId
       );
-      const userDetails = results.userDetails || [];
+      const initialUserDetails = results.userDetails || [];
 
-      if (!userDetails.length) {
+      if (!initialUserDetails.length) {
         return APIResponse.success(
           res,
           apiId,
@@ -1530,7 +1632,7 @@ export class PostgresCohortMembersService {
 
       // Step 3: For each userId, fetch their submissions and enrich
       const enrichedResults = await Promise.all(
-        userDetails.map(async (user) => {
+        initialUserDetails.map(async (user) => {
           let formInfo = null;
           if (form?.formid && form.status === 'active') {
             // Fetch form submission for this user
@@ -1606,27 +1708,142 @@ export class PostgresCohortMembersService {
         );
       }
 
-      // Apply in-memory completionPercentage filter if present
-      let filteredResults = enrichedResults;
-      if (completionPercentageRanges.length > 0) {
-        filteredResults = enrichedResults.filter((user) => {
-          // Use the correct property name as per your enrichment logic
-          const percentage = user.form?.completionPercentage ?? 0;
-          const isInRange = completionPercentageRanges.some(
-            ({ min, max }) => percentage >= min && percentage <= max
-          );
-          return isInRange;
-        });
-      }
-
-      // Extract total_count from the first user and remove it from all users
+      // Use optimized database query if completion percentage filtering is needed
+      let finalUserDetails = [];
       let totalCount = 0;
-      if (filteredResults.length > 0 && filteredResults[0].total_count) {
-        totalCount = parseInt(filteredResults[0].total_count, 10);
-        // Remove total_count from each user object
-        filteredResults.forEach((user) => {
-          delete user.total_count;
+
+      if (completionPercentageRanges.length > 0 && form?.formid) {
+        // Use optimized database query with JOIN to formSubmissions table
+        const { limit, offset } = cohortMembersSearchDto;
+        const { sort, filters } = cohortMembersSearchDto;
+        
+        let where: any[] = [];
+        const whereClause = {};
+        if (filters && Object.keys(filters).length > 0) {
+          Object.entries(filters).forEach(([key, value]) => {
+            if (key === 'cohortId') {
+              if (Array.isArray(value)) {
+                whereClause[key] = value;
+              } else if (typeof value === 'string') {
+                whereClause[key] = value.split(',').map((id) => id.trim());
+              }
+            } else {
+              whereClause[key] = value;
+            }
+          });
+        }
+
+        // Build where conditions for optimized query
+        const whereKeys = [
+          'cohortId',
+          'userId',
+          'role',
+          'name',
+          'status',
+          'cohortAcademicYearId',
+          'firstName',
+          'lastName',
+          'email',
+          'country',
+        ];
+        const uniqueWhere = new Map();
+        whereKeys.forEach((key) => {
+          if (whereClause[key]) {
+            const value = Array.isArray(whereClause[key])
+              ? whereClause[key]
+              : [whereClause[key]];
+            if (!uniqueWhere.has(key)) {
+              uniqueWhere.set(key, value);
+            }
+          }
         });
+        where = Array.from(uniqueWhere.entries());
+
+        const options = [];
+        if (limit) options.push(['limit', limit]);
+        if (offset) options.push(['offset', offset]);
+        
+        const order = {};
+        if (sort) {
+          const [sortField, sortOrder] = sort;
+          order[sortField] = sortOrder;
+        }
+
+        // Use optimized query with completion percentage filtering
+        const optimizedResults = await this.getUsersWithCompletionFilter(
+          where,
+          options,
+          order,
+          completionPercentageRanges,
+          form.formid
+        );
+
+        if (optimizedResults.length > 0) {
+          totalCount = parseInt(optimizedResults[0].total_count, 10);
+          
+          // Enrich the results with form data and custom fields
+          finalUserDetails = await Promise.all(
+            optimizedResults.map(async (user) => {
+              let formInfo = {
+                title: form.title,
+                formId: form.formid,
+                formStatus: form.status,
+                formSubmissionId: null,
+                formSubmissionStatus: null,
+                formSubmissionCreatedAt: null,
+                formSubmissionUpdatedAt: null,
+                completionPercentage: null,
+              };
+
+              // Get form submission details for this user
+              const dto = new FormSubmissionSearchDto({
+                filters: {
+                  formId: form.formid,
+                  itemId: user.userId,
+                  status: [FormSubmissionStatus.ACTIVE],
+                },
+                limit: 1,
+                offset: 0,
+                sort: ['createdAt', 'desc'],
+              });
+              const submissionResult = await this.formSubmissionService.findAll(dto);
+
+              if (submissionResult?.result?.formSubmissions?.length > 0) {
+                const submission = submissionResult.result.formSubmissions[0];
+                formInfo.formSubmissionId = submission.submissionId;
+                formInfo.formSubmissionStatus = submission.status;
+                formInfo.formSubmissionCreatedAt = submission.createdAt
+                  ? new Date(submission.createdAt).toISOString().slice(0, 10)
+                  : null;
+                formInfo.formSubmissionUpdatedAt = submission.updatedAt
+                  ? new Date(submission.updatedAt).toISOString().slice(0, 10)
+                  : null;
+                formInfo.completionPercentage = submission.completionPercentage ?? 0;
+              }
+
+              // Get custom fields
+              const fieldValues = await this.fieldsService.getUserCustomFieldDetails(user.userId);
+              let fieldValuesForCohort = await this.fieldsService.getFieldsAndFieldsValues(user.cohortMembershipId);
+              fieldValuesForCohort = fieldValuesForCohort.map((field) => ({
+                fieldId: field.fieldId,
+                label: field.label,
+                value: field.value,
+                type: field.type,
+                code: field.code,
+              }));
+
+              return {
+                ...user,
+                customField: fieldValues.concat(fieldValuesForCohort),
+                form: formInfo,
+              };
+            })
+          );
+        }
+      } else {
+        // Use existing flow for cases without completion percentage filtering
+        finalUserDetails = enrichedResults;
+        totalCount = finalUserDetails.length;
       }
 
       // Create response with result as array and total_count as separate property
@@ -1642,7 +1859,7 @@ export class PostgresCohortMembersService {
           successmessage: API_RESPONSES.COHORT_GET_SUCCESSFULLY,
         },
         responseCode: HttpStatus.OK,
-        result: filteredResults,
+        result: finalUserDetails,
         total_count: totalCount,
       };
       return res.status(HttpStatus.OK).json(responseObj);
