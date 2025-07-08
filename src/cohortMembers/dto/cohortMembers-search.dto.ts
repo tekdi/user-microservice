@@ -55,6 +55,16 @@ class FiltersDto {
   @IsOptional()
   @IsArray()
   status?: string[]; // Assuming status is an array of strings
+
+  @ApiPropertyOptional({ type: [String], description: 'Form Submission Completion Percentage Ranges', example: ['1-20', '21-40'] })
+  @IsOptional()
+  @IsArray()
+  formSubmissionCompletionPercentage?: string[];
+
+  @ApiPropertyOptional({ type: [String], description: 'Completion Percentage Ranges (alias for formSubmissionCompletionPercentage)', example: ['1-20', '21-40'] })
+  @IsOptional()
+  @IsArray()
+  completionPercentage?: string[];
 }
 export class CohortMembersSearchDto {
   @ApiProperty({

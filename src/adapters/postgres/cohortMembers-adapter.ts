@@ -778,6 +778,12 @@ export class PostgresCohortMembersService {
           case 'firstName': {
             return `U."firstName" ILIKE '%${value}%'`;
           }
+          case 'country': {
+            const countryValues = Array.isArray(value)
+              ? value.map((country) => `'${country}'`).join(', ')
+              : `'${value}'`;
+            return `U."country" IN (${countryValues})`;
+          }
           case 'cohortAcademicYearId': {
             const cohortIdAcademicYear = Array.isArray(value)
               ? value.map((id) => `'${id}'`).join(', ')
@@ -1479,15 +1485,6 @@ export class PostgresCohortMembersService {
       const cohortId = filters?.cohortId;
       const userId = filters?.userId;
 
-      if (!cohortId || !userId) {
-        return APIResponse.error(
-          res,
-          apiId,
-          API_RESPONSES.BAD_REQUEST,
-          `Both cohortId and userId are required.`,
-          HttpStatus.BAD_REQUEST
-        );
-      }
       //get the cohort userDetails same as searchcohortmembers
       const results = await this.getCohortMembersData(
         cohortMembersSearchDto,
@@ -1555,6 +1552,7 @@ export class PostgresCohortMembersService {
             let formSubmissionStatus = null;
             let formSubmissionCreatedAt = null;
             let formSubmissionUpdatedAt = null;
+            let completionPercentage = null; // Default to 0 if not available
 
             if (submissionResult?.result?.formSubmissions?.length > 0) {
               const submission = submissionResult.result.formSubmissions[0];
@@ -1566,6 +1564,7 @@ export class PostgresCohortMembersService {
               formSubmissionUpdatedAt = submission.updatedAt
                 ? new Date(submission.updatedAt).toISOString().slice(0, 10)
                 : null;
+              completionPercentage = submission.completionPercentage ?? 0; // Default to 0 if not available
             }
             formInfo = {
               title: form.title, //form title
@@ -1575,6 +1574,7 @@ export class PostgresCohortMembersService {
               formSubmissionStatus,
               formSubmissionCreatedAt,
               formSubmissionUpdatedAt,
+              completionPercentage, // This is the field used for filtering
             };
           }
           return {
@@ -1584,13 +1584,70 @@ export class PostgresCohortMembersService {
         })
       );
 
-      return APIResponse.success(
-        res,
-        apiId,
-        enrichedResults,
-        HttpStatus.OK,
-        API_RESPONSES.COHORT_GET_SUCCESSFULLY
-      );
+      // Validate and extract formSubmissionCompletionPercentage filter from filters
+      let completionPercentageRanges: { min: number; max: number }[] = [];
+
+      // Check for both field names - prioritize formSubmissionCompletionPercentage
+      const completionPercentageFilter =
+        cohortMembersSearchDto.filters?.formSubmissionCompletionPercentage ||
+        cohortMembersSearchDto.filters?.completionPercentage;
+
+      if (completionPercentageFilter?.length) {
+        completionPercentageRanges = completionPercentageFilter.map(
+          (range: string, index: number) => {
+            const [min, max] = range.split('-').map(Number);
+            if (isNaN(min) || isNaN(max) || min < 0 || max > 100 || min > max) {
+              throw new Error(
+                `Invalid completion percentage range at index ${index}: ${range}. Must be in format "min-max" where 0 <= min <= max <= 100`
+              );
+            }
+            return { min, max };
+          }
+        );
+      }
+
+      // Apply in-memory completionPercentage filter if present
+      let filteredResults = enrichedResults;
+      if (completionPercentageRanges.length > 0) {
+        filteredResults = enrichedResults.filter((user) => {
+          // Use the correct property name as per your enrichment logic
+          const percentage = user.form?.completionPercentage ?? 0;
+          const isInRange = completionPercentageRanges.some(
+            ({ min, max }) => percentage >= min && percentage <= max
+          );
+          return isInRange;
+        });
+      }
+
+      // Extract total_count from the first user and remove it from all users
+      let totalCount = 0;
+      if (filteredResults.length > 0 && filteredResults[0].total_count) {
+        totalCount = parseInt(filteredResults[0].total_count, 10);
+        // Remove total_count from each user object
+        filteredResults.forEach((user) => {
+          delete user.total_count;
+        });
+      }
+
+      console.log(filteredResults);
+
+      // Create response with result as array and total_count as separate property
+      const responseObj = {
+        id: apiId,
+        ver: '1.0',
+        ts: new Date().toISOString(),
+        params: {
+          resmsgid: require('uuid').v4(),
+          status: 'successful',
+          err: null,
+          errmsg: null,
+          successmessage: API_RESPONSES.COHORT_GET_SUCCESSFULLY,
+        },
+        responseCode: HttpStatus.OK,
+        result: filteredResults,
+        total_count: totalCount,
+      };
+      return res.status(HttpStatus.OK).json(responseObj);
     } catch (e) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
@@ -1681,6 +1738,10 @@ export class PostgresCohortMembersService {
       'name',
       'status',
       'cohortAcademicYearId',
+      'firstName',
+      'lastName',
+      'email',
+      'country',
     ];
     const uniqueWhere = new Map();
     whereKeys.forEach((key) => {

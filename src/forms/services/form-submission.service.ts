@@ -249,9 +249,7 @@ export class FormSubmissionService {
       // Handle different types of filters
       if (key === 'status') {
         if (Array.isArray(value)) {
-          whereClause[key] = In(
-            value.map((status: string) => status.toLowerCase())
-          );
+          whereClause[key] = value;
         } else if (typeof value === 'string') {
           whereClause[key] = value.toLowerCase();
         }
