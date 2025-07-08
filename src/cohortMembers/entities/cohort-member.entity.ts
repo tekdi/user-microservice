@@ -53,6 +53,10 @@ export class CohortMembers {
   })
   status: MemberStatus;
 
-  @Column({ type: 'boolean', default: false, nullable: true })
-  rejection_email_sent: boolean;
+  /**
+  * Indicates whether a rejection email notification has been sent to this cohort member
+  * Used to prevent duplicate rejection email notifications
+  */
+  @Column({ name: 'rejection_email_sent', type: 'boolean', default: false })
+  rejectionEmailSent: boolean;
 }

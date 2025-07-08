@@ -3808,7 +3808,7 @@ export class PostgresCohortMembersService {
         // Update rejection_email_sent flag
         await this.cohortMembersRepository.update(
           { cohortMembershipId: member.cohortMembershipId },
-          { rejection_email_sent: true }
+          { rejectionEmailSent: true }
         );
 
         // Update counters
@@ -3873,59 +3873,54 @@ export class PostgresCohortMembersService {
     cohortId: string,
     userId: string
   ) {
-    try {
-      // Get cohort data for email personalization
-      const cohortData = await this.cohortRepository.findOne({
-        where: { cohortId: cohortId },
+    // Get cohort data for email personalization
+    const cohortData = await this.cohortRepository.findOne({
+      where: { cohortId: cohortId },
+    });
+
+    const notificationPayload = {
+      isQueue: false,
+      context: 'USER',
+      key: 'onStudentRejected', // Rejection template
+      replacements: {
+        '{username}': `${userData.firstName ?? ''} ${
+          userData.lastName ?? ''
+        }`.trim(),
+        '{firstName}': userData.firstName ?? '',
+        '{lastName}': userData.lastName ?? '',
+        '{programName}': cohortData?.name ?? 'the program',
+        '{status}': 'rejected',
+        '{statusReason}': member.statusReason ?? 'Not specified',
+      },
+      email: {
+        receipients: [userData.email],
+      },
+    };
+
+    const mailSend = await this.notificationRequest.sendNotification(
+      notificationPayload
+    );
+
+    if (mailSend?.result?.email?.errors?.length > 0) {
+      // Log email failure
+      ShortlistingLogger.logRejectionEmailFailure({
+        dateTime: new Date().toISOString(),
+        userId: userData.userId,
+        email: userData.email,
+        shortlistedStatus: 'rejected',
+        failureReason: mailSend.result.email.errors.join(', '),
+        cohortId: cohortId,
       });
-
-      const notificationPayload = {
-        isQueue: false,
-        context: 'USER',
-        key: 'onStudentRejected', // Rejection template
-        replacements: {
-          '{username}': `${userData.firstName ?? ''} ${
-            userData.lastName ?? ''
-          }`.trim(),
-          '{firstName}': userData.firstName ?? '',
-          '{lastName}': userData.lastName ?? '',
-          '{programName}': cohortData?.name ?? 'the program',
-          '{status}': 'rejected',
-          '{statusReason}': member.statusReason ?? 'Not specified',
-        },
-        email: {
-          receipients: [userData.email],
-        },
-      };
-
-      const mailSend = await this.notificationRequest.sendNotification(
-        notificationPayload
-      );
-
-      if (mailSend?.result?.email?.errors?.length > 0) {
-        // Log email failure
-        ShortlistingLogger.logRejectionEmailFailure({
-          dateTime: new Date().toISOString(),
-          userId: userData.userId,
-          email: userData.email,
-          shortlistedStatus: 'rejected',
-          failureReason: mailSend.result.email.errors.join(', '),
-          cohortId: cohortId,
-        });
-        throw new Error(`Email sending failed: ${mailSend.result.email.errors.join(', ')}`);
-      } else {
-        // Log email success
-        ShortlistingLogger.logRejectionEmailSuccess({
-          dateTime: new Date().toISOString(),
-          userId: userData.userId,
-          email: userData.email,
-          shortlistedStatus: 'rejected',
-          cohortId: cohortId,
-        });
-      }
-    } catch (error) {
-      // Re-throw the error to be handled by the calling method
-      throw error;
+      throw new Error(`Email sending failed: ${mailSend.result.email.errors.join(', ')}`);
+    } else {
+      // Log email success
+      ShortlistingLogger.logRejectionEmailSuccess({
+        dateTime: new Date().toISOString(),
+        userId: userData.userId,
+        email: userData.email,
+        shortlistedStatus: 'rejected',
+        cohortId: cohortId,
+      });
     }
   }
 
