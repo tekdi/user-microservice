@@ -850,9 +850,11 @@ export class PostgresCohortMembersService {
     order: any,
     additionalJoins: string = '',
     additionalWhereConditions: string = ''
-  ): { query: string; limit: number; offset: number } {
+  ): { query: string; parameters: any[]; limit: number; offset: number } {
     let whereCase = ``;
     let limit, offset;
+    let parameters: any[] = [];
+    let parameterIndex = 1;
 
     if (where.length > 0) {
       whereCase = 'WHERE ';
@@ -860,7 +862,8 @@ export class PostgresCohortMembersService {
       const processCondition = ([key, value]) => {
         switch (key) {
           case 'role':
-            return `R."name"='${value}'`;
+            parameters.push(value);
+            return `R."name"=$${parameterIndex++}`;
           case 'status': {
             const statusValues = Array.isArray(value)
               ? value.map((status) => `'${status}'`).join(', ')
@@ -868,7 +871,8 @@ export class PostgresCohortMembersService {
             return `CM."status" IN (${statusValues})`;
           }
           case 'firstName': {
-            return `U."firstName" ILIKE '%${value}%'`;
+            parameters.push(`%${value}%`);
+            return `U."firstName" ILIKE $${parameterIndex++}`;
           }
           case 'country': {
             const countryValues = Array.isArray(value)
@@ -890,7 +894,8 @@ export class PostgresCohortMembersService {
             return `CM."${key}" IN (${formattedIds})`;
           }
           default: {
-            return `CM."${key}"='${value}'`;
+            parameters.push(value);
+            return `CM."${key}"=$${parameterIndex++}`;
           }
         }
       };
@@ -940,7 +945,7 @@ export class PostgresCohortMembersService {
       query += ` OFFSET ${offset}`;
     }
 
-    return { query, limit, offset };
+    return { query, parameters, limit, offset };
   }
 
   // Helper method to build query with completion filter
@@ -950,7 +955,7 @@ export class PostgresCohortMembersService {
     order: any,
     completionPercentageRanges: { min: number; max: number }[],
     formId: string
-  ): { query: string; limit: number; offset: number } {
+  ): { query: string; parameters: any[]; limit: number; offset: number } {
     // Build completion percentage filter conditions
     const completionConditions = completionPercentageRanges
       .map(
@@ -982,7 +987,7 @@ export class PostgresCohortMembersService {
     completionPercentageRanges: { min: number; max: number }[],
     formId: string
   ) {
-    const { query } = this.buildQueryWithCompletionFilter(
+    const { query, parameters } = this.buildQueryWithCompletionFilter(
       where,
       options,
       order,
@@ -990,7 +995,7 @@ export class PostgresCohortMembersService {
       formId
     );
 
-    const result = await this.usersRepository.query(query);
+    const result = await this.usersRepository.query(query, parameters);
     return result;
   }
 
