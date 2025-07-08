@@ -52,4 +52,7 @@ export class CohortMembers {
     default: MemberStatus.ACTIVE,
   })
   status: MemberStatus;
+
+  @Column({ type: 'boolean', default: false, nullable: true })
+  rejection_email_sent: boolean;
 }

@@ -478,4 +478,130 @@ export class CohortMembersController {
       );
     }
   }
+
+  /**
+   * Manual trigger endpoint for sending rejection email notifications
+   * Allows immediate processing of rejection email notifications for testing or urgent processing
+   *
+   * This endpoint:
+   * 1. Validates required headers (tenantid, academicyearid)
+   * 2. Triggers the rejection email notification process
+   * 3. Returns detailed performance metrics and processing results
+   *
+   * The notification process:
+   * - Fetches active cohorts with rejection notification date = today or earlier
+   * - Processes rejected members who haven't received emails yet
+   * - Sends personalized rejection email notifications
+   * - Updates rejection_email_sent flag to prevent duplicate emails
+   * - Logs failures for manual review
+   *
+   * Performance: Can handle 100k+ records per cohort with optimized parallel processing
+   *
+   * @param req - Express request object containing headers
+   * @param res - Express response object
+   * @returns JSON response with processing results and performance metrics
+   */
+  @Post('cron/send-rejection-emails')
+  async sendRejectionEmails(
+    @Req() req: RequestWithUser,
+    @Res() res: Response,
+    @Query('userid') queryUserId?: string
+  ) {
+    const apiId = APIID.COHORT_MEMBER_SEND_REJECTION_EMAILS;
+
+    try {
+      // Extract required headers for tenant and academic year context
+      const tenantId = req.headers['tenantid'] as string;
+      const academicyearId = req.headers['academicyearid'] as string;
+      const headerUserId = req.headers['userid'] as string;
+
+      // Use query parameter if header is not available
+      const userId = headerUserId || queryUserId;
+
+      if (!userId) {
+        return APIResponse.error(
+          res,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          'User ID not found in request. Please ensure you are authenticated.',
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      // Validate required headers
+      if (!tenantId) {
+        return APIResponse.error(
+          res,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          API_RESPONSES.TANANT_ID_REQUIRED,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      if (!academicyearId) {
+        return APIResponse.error(
+          res,
+          apiId,
+          'Academic year ID is required in headers',
+          API_RESPONSES.BAD_REQUEST,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      // Validate UUID format for both parameters
+      if (!isUUID(tenantId)) {
+        return APIResponse.error(
+          res,
+          apiId,
+          'Invalid tenant ID format. Must be a valid UUID.',
+          API_RESPONSES.BAD_REQUEST,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      if (!isUUID(academicyearId)) {
+        return APIResponse.error(
+          res,
+          apiId,
+          'Invalid academic year ID format. Must be a valid UUID.',
+          API_RESPONSES.BAD_REQUEST,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      // Trigger the rejection email notification process with user ID
+      const result =
+        await this.cohortMembersCronService.triggerRejectionEmailNotification(
+          tenantId,
+          academicyearId,
+          userId
+        );
+
+      // Return success response with the result data
+      return APIResponse.success(
+        res,
+        apiId,
+        result,
+        HttpStatus.OK,
+        'Rejection email notifications completed successfully'
+      );
+    } catch (error) {
+      // Log the error for debugging and monitoring
+      ShortlistingLogger.logShortlistingError(
+        'Error in manual rejection email notification endpoint',
+        `Error: ${error.message}`,
+        apiId
+      );
+
+      // Return error response
+      return APIResponse.error(
+        res,
+        apiId,
+        `Error: ${error.message}`,
+        API_RESPONSES.INTERNAL_SERVER_ERROR,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
 }
