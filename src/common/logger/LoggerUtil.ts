@@ -1,5 +1,6 @@
 import * as winston from 'winston';
 import * as path from 'path';
+import * as fs from 'fs';
 
 export class LoggerUtil {
     private static logger: winston.Logger;
@@ -8,6 +9,11 @@ export class LoggerUtil {
         if (!this.logger) {
             // Get log directory from environment variable, default to 'logs'
             const logDir = process.env.LOG_DIR || 'logs';
+            
+            // Ensure log directory exists
+            if (!fs.existsSync(logDir)) {
+                fs.mkdirSync(logDir, { recursive: true });
+            }
             
             const customFormat = winston.format.printf(
                 ({ timestamp, level, message, context, user, error }) => {
@@ -39,6 +45,12 @@ export class LoggerUtil {
         }
         return this.logger;
     }
+
+    // Method to reset logger (useful for testing or when files are deleted)
+    static resetLogger() {
+        this.logger = null;
+    }
+
     static log(
         message: string,
         context?: string,
@@ -75,7 +87,7 @@ export class LoggerUtil {
             context: context,
             timestamp: new Date().toISOString(),
         });
-    }internet
+    }
 
     static debug(message: string, context?: string) {
         this.getLogger().debug({

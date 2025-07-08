@@ -1178,6 +1178,9 @@ export class PostgresUserService implements IServicelocator {
     response: Response
   ) {
     const apiId = APIID.USER_CREATE;
+    const startTime = Date.now();
+    const stepTimings = {};
+    
     const userContext = {
       username: userCreateDto?.username,
       email: userCreateDto?.email,
@@ -1193,12 +1196,17 @@ export class PostgresUserService implements IServicelocator {
     );
 
     try {
+      // Step 1: Extract user info from JWT token
+      const jwtStartTime = Date.now();
       if (request.headers.authorization) {
         const decoded: any = jwt_decode(request.headers.authorization);
         userCreateDto.createdBy = decoded?.sub;
         userCreateDto.updatedBy = decoded?.sub;
       }
+      stepTimings['jwt_extraction'] = Date.now() - jwtStartTime;
 
+      // Step 2: Validate custom fields
+      const customFieldStartTime = Date.now();
       let customFieldError;
       if (userCreateDto.customFields && userCreateDto.customFields.length > 0) {
         customFieldError = await this.validateCustomField(
@@ -1217,8 +1225,10 @@ export class PostgresUserService implements IServicelocator {
           );
         }
       }
+      stepTimings['custom_field_validation'] = Date.now() - customFieldStartTime;
 
-      // check and validate all fields
+      // Step 3: Validate request body and roles
+      const validationStartTime = Date.now();
       const validatedRoles: any = await this.validateRequestBody(
         userCreateDto,
         academicYearId
@@ -1243,12 +1253,10 @@ export class PostgresUserService implements IServicelocator {
           HttpStatus.BAD_REQUEST
         );
       }
+      stepTimings['request_validation'] = Date.now() - validationStartTime;
 
-      // if(userCreateDto.email){
-        // let sendOtp = await this.sendOtpOnMail(userCreateDto.email, userCreateDto.firstName, 'signup');
-      // }
-
-      //Validaion if try to assign on cohort and automaticMember
+      // Step 4: Validate automatic member vs cohort assignment
+      const businessLogicStartTime = Date.now();
       if (userCreateDto.automaticMember?.value === true && userCreateDto.tenantCohortRoleMapping?.[0]?.cohortIds?.length > 0) {
         LoggerUtil.error(
           `Invalid operation for ${userContext.username}: Cannot assign automatic member with cohort`,
@@ -1264,18 +1272,19 @@ export class PostgresUserService implements IServicelocator {
           HttpStatus.BAD_REQUEST
         );
       }
+      stepTimings['business_logic_validation'] = Date.now() - businessLogicStartTime;
 
+      // Step 5: Prepare username and check Keycloak
+      const keycloakCheckStartTime = Date.now();
       userCreateDto.username = userCreateDto.username.toLocaleLowerCase();
       const userSchema = new UserCreateDto(userCreateDto);
-
-      let resKeycloak;
 
       const keycloakResponse = await getKeycloakAdminToken();
       const token = keycloakResponse.data.access_token;
       const checkUserinKeyCloakandDb = await this.checkUserinKeyCloakandDb(
         userCreateDto
       );
-      // let checkUserinDb = await this.checkUserinKeyCloakandDb(userCreateDto.username);
+      
       if (checkUserinKeyCloakandDb) {
         LoggerUtil.error(
           `User ${userContext.username} already exists`,
@@ -1291,15 +1300,34 @@ export class PostgresUserService implements IServicelocator {
           HttpStatus.BAD_REQUEST
         );
       }
+      stepTimings['keycloak_user_check'] = Date.now() - keycloakCheckStartTime;
 
-      // Multi tenant for roles is not currently supported in keycloak
+      // Step 6: Create user in Keycloak
+      const keycloakCreateStartTime = Date.now();
       LoggerUtil.log(
         `Creating user ${userContext.username} in Keycloak`,
         apiId,
         userContext.username
       );
 
-      resKeycloak = await createUserInKeyCloak(userSchema, token, validatedRoles[0]?.title)
+      const resKeycloak = await createUserInKeyCloak(userSchema, token, validatedRoles[0]?.title)
+
+      // Handle the case where createUserInKeyCloak returns a string (error)
+      if (typeof resKeycloak === 'string') {
+        LoggerUtil.error(
+          `Keycloak user creation failed for ${userContext.username}`,
+          resKeycloak,
+          apiId,
+          userContext.username
+        );
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.SERVER_ERROR,
+          resKeycloak,
+          HttpStatus.INTERNAL_SERVER_ERROR
+        );
+      }
 
       if (resKeycloak.statusCode !== 201) {
         if (resKeycloak.statusCode === 409) {
@@ -1342,7 +1370,8 @@ export class PostgresUserService implements IServicelocator {
 
       userCreateDto.userId = resKeycloak.userId;
 
-      // if cohort given then check for academic year
+      // Step 7: Create user in database
+      const dbCreateStartTime = Date.now();
       LoggerUtil.log(
         `Creating user ${userContext.username} in database`,
         apiId,
@@ -1355,6 +1384,7 @@ export class PostgresUserService implements IServicelocator {
         academicYearId,
         response
       );
+      stepTimings['database_user_creation'] = Date.now() - dbCreateStartTime;
 
       LoggerUtil.log(
         `User ${userContext.username} created successfully in database`,
@@ -1362,6 +1392,8 @@ export class PostgresUserService implements IServicelocator {
         userContext.username
       );
 
+      // Step 8: Handle custom fields
+      const customFieldsStartTime = Date.now();
       const createFailures = [];
       if (
         result &&
@@ -1398,26 +1430,37 @@ export class PostgresUserService implements IServicelocator {
               value: fieldValues["value"],
             };
 
-            const res = await this.fieldsService.updateCustomFields(
+            const res = await this.fieldsService.updateUserCustomFields(
               userId,
               fieldData,
               customFieldAttributes[fieldData.fieldId]
             );
+            console.log(res);
 
-            if (res.correctValue) {
-              if (!result["customFields"]) result["customFields"] = [];
-              result["customFields"].push(res);
-            } else {
-              createFailures.push(
-                `${fieldData.fieldId}: ${res?.valueIssue} - ${res.fieldName}`
-              );
-            }
+            // if (res.correctValue) {
+            //   if (!result["customFields"]) result["customFields"] = [];
+            //   result["customFields"].push(res);
+            // } else {
+            //   createFailures.push(
+            //     `${fieldData.fieldId}: ${res?.valueIssue} - ${res.fieldName}`
+            //   );
+            // }
           }
         }
       }
+      stepTimings['custom_fields_processing'] = Date.now() - customFieldsStartTime;
 
+      // Step 9: Log performance metrics
+      const totalTime = Date.now() - startTime;
       LoggerUtil.log(
         `User ${userContext.username} created successfully with ID: ${result.userId}`,
+        apiId,
+        userContext.username
+      );
+      
+      // Log performance breakdown
+      LoggerUtil.log(
+        `Performance breakdown for user creation (${userContext.username}): Total: ${totalTime}ms | JWT: ${stepTimings['jwt_extraction']}ms | Custom Fields Validation: ${stepTimings['custom_field_validation']}ms | Request Validation: ${stepTimings['request_validation']}ms | Business Logic: ${stepTimings['business_logic_validation']}ms | Keycloak Check: ${stepTimings['keycloak_user_check']}ms | Keycloak Creation: ${stepTimings['keycloak_user_creation']}ms | Database Creation: ${stepTimings['database_user_creation']}ms | Custom Fields Processing: ${stepTimings['custom_fields_processing']}ms`,
         apiId,
         userContext.username
       );
