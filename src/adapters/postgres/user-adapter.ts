@@ -1312,6 +1312,9 @@ export class PostgresUserService implements IServicelocator {
 
       const resKeycloak = await createUserInKeyCloak(userSchema, token, validatedRoles[0]?.title)
 
+      // Capture Keycloak creation timing immediately after the call
+      stepTimings['keycloak_user_creation'] = Date.now() - keycloakCreateStartTime;
+
       // Handle the case where createUserInKeyCloak returns a string (error)
       if (typeof resKeycloak === 'string') {
         LoggerUtil.error(
