@@ -1738,7 +1738,6 @@ export class PostgresCohortMembersService {
 
       // Check for both field names - prioritize formSubmissionCompletionPercentage
       const completionPercentageFilter =
-        cohortMembersSearchDto.filters?.formSubmissionCompletionPercentage ||
         cohortMembersSearchDto.filters?.completionPercentage;
 
       if (completionPercentageFilter?.length) {
@@ -1815,8 +1814,8 @@ export class PostgresCohortMembersService {
             apiId
           );
           return APIResponse.error(
-        res,
-        apiId,
+            res,
+            apiId,
             API_RESPONSES.BAD_REQUEST,
             `Completion percentage filter validation failed: ${validationError.message}. Expected format: "min-max" where 0 <= min <= max <= 100 (e.g., "0-50", "25-75", "80-100")`,
             HttpStatus.BAD_REQUEST
