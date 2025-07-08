@@ -1635,20 +1635,17 @@ export class PostgresCohortMembersService {
         initialUserDetails.map(async (user) => {
           let formInfo = null;
           if (form?.formid && form.status === 'active') {
-            // Fetch form submission for this user
-            const dto = new FormSubmissionSearchDto({
-              filters: {
+            // Fetch form submission for this user - directly query to avoid TypeORM In() operator issues
+            const submission = await this.formSubmissionService['formSubmissionRepository'].findOne({
+              where: {
                 formId: form.formid,
                 itemId: user.userId,
-                status: [FormSubmissionStatus.ACTIVE],
+                status: FormSubmissionStatus.ACTIVE,
               },
-              limit: 1,
-              offset: 0,
-              sort: ['createdAt', 'desc'],
+              order: {
+                createdAt: 'DESC',
+              },
             });
-            const submissionResult = await this.formSubmissionService.findAll(
-              dto
-            );
 
             let formSubmissionId = null;
             let formSubmissionStatus = null;
@@ -1656,8 +1653,7 @@ export class PostgresCohortMembersService {
             let formSubmissionUpdatedAt = null;
             let completionPercentage = null; // Default to 0 if not available
 
-            if (submissionResult?.result?.formSubmissions?.length > 0) {
-              const submission = submissionResult.result.formSubmissions[0];
+            if (submission) {
               formSubmissionId = submission.submissionId;
               formSubmissionStatus = submission.status;
               formSubmissionCreatedAt = submission.createdAt
@@ -1795,21 +1791,19 @@ export class PostgresCohortMembersService {
                 completionPercentage: null,
               };
 
-              // Get form submission details for this user
-              const dto = new FormSubmissionSearchDto({
-                filters: {
+              // Get form submission details for this user - directly query to avoid TypeORM In() operator issues
+              const submission = await this.formSubmissionService['formSubmissionRepository'].findOne({
+                where: {
                   formId: form.formid,
                   itemId: user.userId,
-                  status: [FormSubmissionStatus.ACTIVE],
+                  status: FormSubmissionStatus.ACTIVE,
                 },
-                limit: 1,
-                offset: 0,
-                sort: ['createdAt', 'desc'],
+                order: {
+                  createdAt: 'DESC',
+                },
               });
-              const submissionResult = await this.formSubmissionService.findAll(dto);
 
-              if (submissionResult?.result?.formSubmissions?.length > 0) {
-                const submission = submissionResult.result.formSubmissions[0];
+              if (submission) {
                 formInfo.formSubmissionId = submission.submissionId;
                 formInfo.formSubmissionStatus = submission.status;
                 formInfo.formSubmissionCreatedAt = submission.createdAt
