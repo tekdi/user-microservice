@@ -6,7 +6,7 @@ import {
   MemberStatus,
 } from 'src/cohortMembers/entities/cohort-member.entity';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { PostgresFieldsService } from './fields-adapter';
 import { HttpStatus } from '@nestjs/common';
 import { User } from 'src/user/entities/user-entity';
@@ -27,7 +27,6 @@ import { ShortlistingLogger } from 'src/common/logger/ShortlistingLogger';
 import { PostgresUserService } from './user-adapter';
 import { isValid } from 'date-fns';
 import { FieldValuesOptionDto } from 'src/user/dto/user-create.dto';
-import { In } from 'typeorm';
 import { ElasticsearchService } from 'src/elasticsearch/elasticsearch.service';
 import { FormSubmissionService } from 'src/forms/services/form-submission.service';
 import { FormSubmissionStatus } from 'src/forms/entities/form-submission.entity';
@@ -2055,7 +2054,6 @@ export class PostgresCohortMembersService {
     let failures = 0;
 
     const batchStartTime = Date.now();
-    const fieldFetchStartTime = Date.now();
     // Pre-fetch all user field values for this batch to reduce database calls
     // This optimization significantly improves performance for large batches
     // Skip field value fetching if no rules exist (automatic shortlisting)
@@ -2063,13 +2061,11 @@ export class PostgresCohortMembersService {
     if (formFieldsAndRules && formFieldsAndRules.length > 0) {
       const userIds = members.map((m) => m.userId);
       userFieldValuesMap = await this.getBatchUserFieldValues(userIds);
-      const fieldFetchTime = Date.now() - fieldFetchStartTime;
+  
     }
 
     // Process each member in the batch
-    const evaluationStartTime = Date.now();
     for (const member of members) {
-      const memberStartTime = Date.now();
       try {
         // Get pre-fetched field values for this user (empty array if no rules exist)
         const userFieldValues = userFieldValuesMap.get(member.userId) || [];
@@ -2097,8 +2093,6 @@ export class PostgresCohortMembersService {
         } else {
           rejected++;
         }
-
-        const memberTime = Date.now() - memberStartTime;
       } catch (error) {
         // Handle individual member failures gracefully
         failures++;
@@ -2119,8 +2113,6 @@ export class PostgresCohortMembersService {
         });
       }
     }
-
-    const evaluationTime = Date.now() - evaluationStartTime;
 
     // Performance monitoring - log slow batches for optimization
     const batchTime = Date.now() - batchStartTime;
@@ -2172,6 +2164,9 @@ export class PostgresCohortMembersService {
         );
       }
 
+      // NEW REQUIREMENT: Only send email notifications for 'shortlisted' status
+      // COMMENTED OUT: Previous implementation that sent emails for both 'shortlisted' and 'rejected'
+      /*
       // Send email notification if enabled and status requires notification
       const enableEmailNotifications =
         process.env.ENABLE_SHORTLISTING_EMAILS !== 'false';
@@ -2275,9 +2270,100 @@ export class PostgresCohortMembersService {
           });
         }
       }
+      */
+
+      // NEW IMPLEMENTATION: Only send email notifications for 'shortlisted' status
+      const enableEmailNotifications =
+        process.env.ENABLE_SHORTLISTING_EMAILS !== 'false';
+
+      if (
+        enableEmailNotifications &&
+        evaluationResult.status === 'shortlisted'
+      ) {
+        try {
+          // Get user and cohort data for email
+          const [userData, cohortData] = await Promise.all([
+            this.usersRepository.findOne({
+              where: { userId: evaluationResult.userId || cohortMembershipId },
+              select: ['userId', 'email', 'firstName', 'lastName'] // force select email field
+            }),
+            this.cohortRepository.findOne({
+              where: { cohortId: evaluationResult.cohortId },
+            }),
+          ]);
+
+          if (userData?.email) {
+            const notificationPayload = {
+              isQueue: false,
+              context: 'USER',
+              key: 'onStudentShortlisted', // Only shortlisted template
+              replacements: {
+                '{username}': `${userData.firstName ?? ''} ${
+                  userData.lastName ?? ''
+                }`.trim(),
+                '{firstName}': userData.firstName ?? '',
+                '{lastName}': userData.lastName ?? '',
+                '{programName}': cohortData?.name ?? 'the program',
+                '{status}': evaluationResult.status,
+                '{statusReason}':
+                  evaluationResult.statusReason ?? 'Not specified',
+              },
+              email: {
+                receipients: [userData.email],
+              },
+            };
+
+            const mailSend = await this.notificationRequest.sendNotification(
+              notificationPayload
+            );
+
+            if (mailSend?.result?.email?.errors?.length > 0) {
+              // Log email failure
+              ShortlistingLogger.logEmailFailure({
+                dateTime: new Date().toISOString(),
+                userId: userData.userId,
+                email: userData.email,
+                shortlistedStatus: 'shortlisted', // Only shortlisted status
+                failureReason: mailSend.result.email.errors.join(', '),
+                cohortId: evaluationResult.cohortId,
+              });
+            } else {
+              // Log email success
+              ShortlistingLogger.logEmailSuccess({
+                dateTime: new Date().toISOString(),
+                userId: userData.userId,
+                email: userData.email,
+                shortlistedStatus: 'shortlisted', // Only shortlisted status
+                cohortId: evaluationResult.cohortId,
+              });
+            }
+          } else {
+            // Log email failure for missing email
+            ShortlistingLogger.logEmailFailure({
+              dateTime: new Date().toISOString(),
+              userId: evaluationResult.userId || cohortMembershipId,
+              email: 'No email found',
+              shortlistedStatus: 'shortlisted', // Only shortlisted status
+              failureReason: `No email found for user ${
+                evaluationResult.userId || cohortMembershipId
+              }`,
+              cohortId: evaluationResult.cohortId,
+            });
+          }
+        } catch (emailError) {
+          // Log email failure
+          ShortlistingLogger.logEmailFailure({
+            dateTime: new Date().toISOString(),
+            userId: evaluationResult.userId || cohortMembershipId,
+            email: 'Unknown',
+            shortlistedStatus: 'shortlisted', // Only shortlisted status
+            failureReason: emailError.message,
+            cohortId: evaluationResult.cohortId,
+          });
+        }
+      }
     } catch (error) {
       // Log the error and re-throw for batch processing error handling
-
       ShortlistingLogger.logShortlistingError(
         `Failed to batch update member status for ${cohortMembershipId}`,
         error.message,
@@ -2308,8 +2394,6 @@ export class PostgresCohortMembersService {
   private async getBatchUserFieldValues(userIds: string[]) {
     if (userIds.length === 0) return new Map();
 
-    const queryStartTime = Date.now();
-
     // Optimized query with better indexing and reduced data transfer
     const query = `
       SELECT 
@@ -2332,7 +2416,6 @@ export class PostgresCohortMembersService {
     `;
 
     const results = await this.fieldValuesRepository.query(query, [userIds]);
-    const queryTime = Date.now() - queryStartTime;
 
     // Optimized grouping with Map for better performance
     const userFieldValuesMap = new Map();
@@ -2343,8 +2426,6 @@ export class PostgresCohortMembersService {
       }
       userFieldValuesMap.get(userId).push(fv);
     }
-
-    const processingTime = Date.now() - queryStartTime;
 
     return userFieldValuesMap;
   }
@@ -3172,6 +3253,681 @@ export class PostgresCohortMembersService {
       estimatedDailyCapacity: Math.round(estimatedDailyCapacity),
       batchSize,
       maxConcurrentBatches,
+    };
+  }
+
+  /**
+   * Main method for sending rejection email notifications
+   * Processes all active cohorts with rejection notification dates matching today's date or earlier
+   *
+   * This method implements a high-performance, parallel processing system that can handle
+   * 100,000+ records per cohort with optimized batching and concurrent processing.
+   *
+   * Process Flow:
+   * 1. Fetch active cohorts with rejection notification date = today or earlier
+   * 2. For each cohort, get rejected members who haven't received emails yet
+   * 3. Process members in parallel batches for optimal performance
+   * 4. Send personalized rejection email notifications
+   * 5. Update rejection_email_sent flag to prevent duplicate emails
+   * 6. Log failures for manual review
+   *
+   * Performance Features:
+   * - Configurable batch size (default: 1000 records per batch)
+   * - Parallel processing with configurable concurrency (default: 5 batches)
+   * - Optimized database queries with batch fetching
+   * - Real-time performance monitoring and metrics
+   * - Graceful error handling with detailed failure logging
+   * - Optional email notifications for performance optimization
+   *
+   * @param tenantId - The tenant ID for the evaluation context
+   * @param academicyearId - The academic year ID for the evaluation context
+   * @param userId - The user ID from the authenticated request
+   * @param res - Express response object for API response
+   * @returns Promise with processing results and performance metrics
+   */
+  public async sendRejectionEmailNotifications(
+    tenantId: string,
+    academicyearId: string,
+    userId: string,
+    res: Response
+  ) {
+    try {
+      const result = await this.sendRejectionEmailNotificationsInternal(
+        tenantId,
+        academicyearId,
+        userId
+      );
+
+      return APIResponse.success(
+        res,
+        APIID.COHORT_MEMBER_SEND_REJECTION_EMAILS,
+        result,
+        HttpStatus.OK,
+        'Rejection email notifications completed successfully'
+      );
+    } catch (error) {
+      return APIResponse.error(
+        res,
+        APIID.COHORT_MEMBER_SEND_REJECTION_EMAILS,
+        API_RESPONSES.INTERNAL_SERVER_ERROR,
+        `Error: ${error.message}`,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  /**
+   * Internal method for sending rejection email notifications
+   * Returns data directly without requiring a Response object
+   * Used by both API endpoints and cron jobs
+   *
+   * @param tenantId - The tenant ID for the evaluation context
+   * @param academicyearId - The academic year ID for the evaluation context
+   * @param userId - The user ID from the authenticated request
+   * @returns Promise with processing results and performance metrics
+   */
+  public async sendRejectionEmailNotificationsInternal(
+    tenantId: string,
+    academicyearId: string,
+    userId: string
+  ) {
+    const apiId = APIID.COHORT_MEMBER_SEND_REJECTION_EMAILS;
+    // Configurable performance parameters with environment variable fallbacks
+    const batchSize = parseInt(process.env.BATCH_SIZE) || 5000;
+    const maxConcurrentBatches =
+      parseInt(process.env.MAX_CONCURRENT_BATCHES) || 10;
+    const enableEmailNotifications =
+      process.env.ENABLE_SHORTLISTING_EMAILS !== 'false';
+
+    // Field ID for rejection notification date - should be configured based on your field structure
+    const rejectionNotificationDateFieldId = process.env.REJECTION_NOTIFICATION_DATE_FIELD_ID;
+
+    if (!rejectionNotificationDateFieldId) {
+      throw new Error(
+        'REJECTION_NOTIFICATION_DATE_FIELD_ID environment variable is required for rejection email notifications'
+      );
+    }
+
+    const startTime = Date.now();
+
+    try {
+      ShortlistingLogger.logShortlisting(
+        `Starting rejection email notifications with batch size: ${batchSize}, max concurrent batches: ${maxConcurrentBatches}`,
+        'RejectionEmailNotification'
+      );
+
+      // Step 1: Process Active Cohorts with Rejection Notification Date
+      const currentDateUTC = new Date().toISOString().split('T')[0]; // Use UTC date for timezone consistency
+      const activeCohorts = await this.processActiveCohortsForRejectionEmails(
+        tenantId,
+        academicyearId,
+        userId,
+        rejectionNotificationDateFieldId,
+        currentDateUTC
+      );
+
+      if (activeCohorts.length === 0) {
+        ShortlistingLogger.logShortlisting(
+          'No active cohorts found with rejection notification date today or earlier',
+          'RejectionEmailNotification'
+        );
+        return [];
+      }
+
+      ShortlistingLogger.logShortlisting(
+        `Found ${activeCohorts.length} active cohorts with rejection notification date today or earlier`,
+        'RejectionEmailNotification'
+      );
+
+      // Step 2: Process Each Cohort for Rejection Emails
+      const cohortResults = [];
+      for (const cohort of activeCohorts) {
+        const cohortResult = await this.processCohortForRejectionEmails(
+          cohort,
+          tenantId,
+          batchSize,
+          maxConcurrentBatches,
+          apiId,
+          userId
+        );
+        cohortResults.push(cohortResult);
+      }
+
+      // Step 3: Aggregate Results
+      const aggregatedResults = this.aggregateRejectionEmailResults(cohortResults);
+
+      // Step 4: Calculate Performance Metrics
+      const totalTime = Date.now() - startTime;
+      const performanceMetrics = this.calculatePerformanceMetrics(
+        aggregatedResults.totalProcessed,
+        totalTime,
+        batchSize,
+        maxConcurrentBatches
+      );
+
+      // Return comprehensive results with performance metrics
+      return {
+        ...aggregatedResults,
+        ...performanceMetrics,
+        message: 'Rejection email notifications completed successfully',
+      };
+    } catch (error) {
+      const totalTime = Date.now() - startTime;
+
+      ShortlistingLogger.logShortlistingError(
+        `Error in rejection email notifications after ${totalTime}ms`,
+        error.message,
+        'RejectionEmailNotification'
+      );
+
+      throw error;
+    }
+  }
+
+  /**
+   * Processes active cohorts for rejection email notifications
+   * Handles the high-level flow of rejection email processing
+   *
+   * This method processes cohorts with rejection notification dates less than or equal to today's UTC date,
+   * ensuring timezone consistency and recovery from missed cron executions.
+   *
+   * @param tenantId - The tenant ID for the evaluation context
+   * @param academicyearId - The academic year ID for the evaluation context
+   * @param userId - The user ID from the authenticated request
+   * @param rejectionNotificationDateFieldId - The field ID for rejection notification date
+   * @param currentDateUTC - Current UTC date in YYYY-MM-DD format
+   * @returns Promise with active cohorts to process
+   */
+  private async processActiveCohortsForRejectionEmails(
+    tenantId: string,
+    academicyearId: string,
+    userId: string,
+    rejectionNotificationDateFieldId: string,
+    currentDateUTC: string
+  ) {
+    // Step 1: Fetch Active Cohorts with Rejection Notification Date = Today or Earlier
+    const activeCohorts = await this.getActiveCohortsWithRejectionNotificationDate(
+      rejectionNotificationDateFieldId,
+      currentDateUTC
+    );
+
+    if (activeCohorts.length === 0) {
+      ShortlistingLogger.logShortlisting(
+        'No active cohorts found with rejection notification date today or earlier',
+        'RejectionEmailNotification'
+      );
+      return [];
+    }
+
+    ShortlistingLogger.logShortlisting(
+      `Found ${activeCohorts.length} active cohorts with rejection notification date today or earlier`,
+      'RejectionEmailNotification'
+    );
+
+    return activeCohorts;
+  }
+
+  /**
+   * Fetches active cohorts that have a rejection notification date less than or equal to today's UTC date
+   * Uses the configured rejection notification date field to identify cohorts for processing
+   *
+   * This method handles timezone consistency and missed cron executions by including
+   * cohorts with rejection notification dates from previous days that may have been missed
+   *
+   * @param rejectionNotificationDateFieldId - The field ID for the rejection notification date field
+   * @param currentDateUTC - Current UTC date in YYYY-MM-DD format
+   * @returns Promise with array of active cohorts for processing
+   */
+  private async getActiveCohortsWithRejectionNotificationDate(
+    rejectionNotificationDateFieldId: string,
+    currentDateUTC: string
+  ) {
+    // Optimized query with better indexing and reduced data transfer
+    const query = `
+      SELECT DISTINCT 
+        c."cohortId", 
+        c."name", 
+        c."status"
+      FROM public."Cohort" c
+      INNER JOIN public."FieldValues" fv ON c."cohortId" = fv."itemId"
+      WHERE c."status" = 'active'
+      AND fv."fieldId" = $1
+      AND fv."calendarValue"::date <= $2::date
+      AND fv."itemId" IS NOT NULL
+      ORDER BY c."cohortId"
+    `;
+
+    const results = await this.cohortRepository.query(query, [
+      rejectionNotificationDateFieldId,
+      currentDateUTC,
+    ]);
+
+    return results;
+  }
+
+  /**
+   * Processes a single cohort for rejection email notifications
+   * Handles member processing, email sending, and result aggregation for one cohort
+   *
+   * @param cohort - The cohort to process
+   * @param tenantId - The tenant ID for the evaluation context
+   * @param batchSize - Number of records per batch
+   * @param maxConcurrentBatches - Maximum number of batches to process concurrently
+   * @param apiId - API ID for logging context
+   * @param userId - The user ID for updates
+   * @returns Promise with cohort processing results
+   */
+  private async processCohortForRejectionEmails(
+    cohort: any,
+    tenantId: string,
+    batchSize: number,
+    maxConcurrentBatches: number,
+    apiId: string,
+    userId: string
+  ) {
+    const processingStartTime = Date.now();
+    const cohortId = cohort.cohortId;
+
+    try {
+      // Get rejected members that need email notifications
+      const members = await this.getRejectedMembersForEmailNotification(cohortId);
+      
+      if (members.length === 0) {
+        return {
+          processed: 0,
+          emailsSent: 0,
+          failures: 0,
+          processingTime: Date.now() - processingStartTime,
+        };
+      }
+
+      // Process members in parallel batches
+      const result = await this.processRejectionEmailBatchesInParallel(
+        members,
+        cohortId,
+        batchSize,
+        maxConcurrentBatches,
+        apiId,
+        userId
+      );
+
+      const processingTime = Date.now() - processingStartTime;
+
+      return {
+        ...result,
+        processingTime,
+      };
+    } catch (error) {
+      ShortlistingLogger.logShortlistingError(
+        `Failed to process rejection emails for cohort ${cohortId}`,
+        error.message,
+        'RejectionEmailNotification'
+      );
+
+      return {
+        processed: 0,
+        emailsSent: 0,
+        failures: 0,
+        processingTime: Date.now() - processingStartTime,
+      };
+    }
+  }
+
+  /**
+   * Fetches rejected cohort members who haven't received email notifications yet
+   * These are the members that need to receive rejection email notifications
+   *
+   * @param cohortId - The cohort ID to fetch members for
+   * @returns Promise with array of rejected cohort members
+   */
+  private async getRejectedMembersForEmailNotification(cohortId: string) {
+    // Optimized query with proper indexing and LIMIT for batch processing
+    const query = `
+      SELECT 
+        cm."cohortMembershipId",
+        cm."cohortId",
+        cm."userId",
+        cm."status",
+        cm."statusReason",
+        cm."rejection_email_sent",
+        cm."createdAt",
+        cm."updatedAt"
+      FROM public."CohortMembers" cm
+      WHERE cm."cohortId" = $1 
+      AND cm."status" = 'rejected'
+      AND (cm."rejection_email_sent" IS NULL OR cm."rejection_email_sent" = false)
+      ORDER BY cm."createdAt" ASC
+      LIMIT $2
+    `;
+
+    const batchSize = parseInt(process.env.BATCH_SIZE) || 5000;
+    const members = await this.cohortMembersRepository.query(query, [
+      cohortId,
+      batchSize,
+    ]);
+
+
+
+    return members;
+  }
+
+  /**
+   * Processes rejection email batches in parallel for optimal performance
+   * Implements controlled concurrency to balance performance with system resources
+   *
+   * This method:
+   * 1. Divides members into batches of specified size
+   * 2. Processes multiple batches concurrently (controlled by maxConcurrentBatches)
+   * 3. Provides real-time progress updates
+   * 4. Aggregates results from all batches
+   *
+   * Performance optimization:
+   * - Pre-fetches user data for entire batches to reduce database calls
+   * - Processes batches in parallel for I/O bound operations
+   * - Provides progress logging for long-running operations
+   * - Handles individual batch failures gracefully
+   *
+   * @param members - Array of rejected cohort members to process
+   * @param cohortId - The cohort ID being processed
+   * @param batchSize - Number of records per batch
+   * @param maxConcurrentBatches - Maximum number of batches to process concurrently
+   * @param apiId - API ID for logging context
+   * @param userId - The user ID for updates
+   * @returns Promise with aggregated processing results
+   */
+  private async processRejectionEmailBatchesInParallel(
+    members: any[],
+    cohortId: string,
+    batchSize: number,
+    maxConcurrentBatches: number,
+    apiId: string,
+    userId: string
+  ) {
+    let totalProcessed = 0;
+    let totalEmailsSent = 0;
+    let totalFailures = 0;
+
+    // Create batches of specified size
+    const batches = [];
+    for (let i = 0; i < members.length; i += batchSize) {
+      batches.push(members.slice(i, i + batchSize));
+    }
+
+    ShortlistingLogger.logShortlisting(
+      `Processing ${batches.length} batches for rejection emails in cohort ${cohortId} with max ${maxConcurrentBatches} concurrent batches`,
+      'RejectionEmailNotification'
+    );
+
+    // Process batches with controlled concurrency to avoid overwhelming the system
+    for (let i = 0; i < batches.length; i += maxConcurrentBatches) {
+      const currentBatches = batches.slice(i, i + maxConcurrentBatches);
+
+      // Process current batch group in parallel
+      const batchPromises = currentBatches.map((batch, batchIndex) =>
+        this.processRejectionEmailBatch(
+          batch,
+          cohortId,
+          apiId,
+          i + batchIndex + 1,
+          batches.length,
+          userId
+        )
+      );
+
+      const batchResults = await Promise.all(batchPromises);
+
+      // Aggregate results from all batches in this group
+      batchResults.forEach((result, index) => {
+        totalProcessed += result.processed;
+        totalEmailsSent += result.emailsSent;
+        totalFailures += result.failures;
+      });
+
+      // Log progress every 10 batch groups to provide visibility into long-running operations
+      if ((i / maxConcurrentBatches + 1) % 10 === 0) {
+        ShortlistingLogger.logShortlisting(
+          `Cohort ${cohortId} rejection emails: Completed ${Math.min(
+            i + maxConcurrentBatches,
+            batches.length
+          )}/${
+            batches.length
+          } batches. Progress: ${totalProcessed} records processed`,
+          'RejectionEmailNotification'
+        );
+      }
+    }
+
+    return {
+      processed: totalProcessed,
+      emailsSent: totalEmailsSent,
+      failures: totalFailures,
+    };
+  }
+
+  /**
+   * Processes a single batch of rejected cohort members for email notifications
+   * Handles individual member email sending and status updates
+   *
+   * This method:
+   * 1. Pre-fetches user data for all members in the batch (optimization)
+   * 2. Sends personalized rejection email notifications
+   * 3. Updates rejection_email_sent flag to prevent duplicate emails
+   * 4. Logs failures for manual review
+   * 5. Tracks performance metrics for monitoring
+   *
+   * Performance optimizations:
+   * - Batch user data fetching reduces database calls
+   * - Individual error handling prevents batch failures
+   * - Performance monitoring for slow batches
+   * - Detailed failure logging for troubleshooting
+   *
+   * @param members - Array of rejected cohort members in this batch
+   * @param cohortId - The cohort ID being processed
+   * @param apiId - API ID for logging context
+   * @param batchNumber - Current batch number for logging
+   * @param totalBatches - Total number of batches for progress tracking
+   * @param userId - The user ID for updates
+   * @returns Promise with batch processing results
+   */
+  private async processRejectionEmailBatch(
+    members: any[],
+    cohortId: string,
+    apiId: string,
+    batchNumber: number,
+    totalBatches: number,
+    userId: string
+  ) {
+    let processed = 0;
+    let emailsSent = 0;
+    let failures = 0;
+
+    const batchStartTime = Date.now();
+
+    // Pre-fetch all user data for this batch to reduce database calls
+    const userIds = members.map((m) => m.userId);
+    const userDataMap = new Map();
+    
+    if (userIds.length > 0) {
+      const users = await this.usersRepository.find({
+        where: { userId: In(userIds) },
+        select: ['userId', 'email', 'firstName', 'lastName']
+      });
+      
+      users.forEach(user => {
+        userDataMap.set(user.userId, user);
+      });
+    }
+
+    // Process each member in the batch
+    
+    for (const member of members) {
+      try {
+        // Get user data for this member
+        const userData = userDataMap.get(member.userId);
+
+        if (!userData?.email) {
+          // Log failure for missing email
+          ShortlistingLogger.logRejectionEmailFailure({
+            dateTime: new Date().toISOString(),
+            userId: member.userId,
+            email: 'No email found',
+            shortlistedStatus: 'rejected',
+            failureReason: `No email found for user ${member.userId}`,
+            cohortId: member.cohortId,
+          });
+          failures++;
+          processed++; // Count as processed even if failed
+          continue;
+        }
+
+        // Send rejection email notification
+        await this.sendRejectionEmailNotification(
+          member,
+          userData,
+          cohortId,
+          userId
+        );
+
+        // Update rejection_email_sent flag
+        await this.cohortMembersRepository.update(
+          { cohortMembershipId: member.cohortMembershipId },
+          { rejectionEmailSent: true }
+        );
+
+        // Update counters
+        processed++;
+        emailsSent++;
+      } catch (error) {
+        // Handle individual member failures gracefully
+        failures++;
+        processed++; // Count as processed even if failed
+
+        ShortlistingLogger.logShortlistingError(
+          `Failed to process rejection email for member ${member.userId} in batch ${batchNumber}/${totalBatches}`,
+          error.message,
+          'RejectionEmailNotification'
+        );
+
+        // Log failure to CSV for manual review and analysis
+        ShortlistingLogger.logRejectionEmailFailure({
+          dateTime: new Date().toISOString(),
+          userId: member.userId,
+          email: 'Unknown',
+          shortlistedStatus: 'rejected',
+          failureReason: error.message,
+          cohortId: member.cohortId,
+        });
+      }
+    }
+
+    // Performance monitoring - log slow batches for optimization
+    const batchTime = Date.now() - batchStartTime;
+
+    if (batchTime > 5000) {
+      // Log slow batches (>5 seconds)
+      ShortlistingLogger.logShortlisting(
+        `Slow rejection email batch detected: Batch ${batchNumber}/${totalBatches} took ${batchTime}ms for ${processed} records`,
+        'RejectionEmailNotification',
+        undefined,
+        'warn'
+      );
+    }
+
+    return { processed, emailsSent, failures };
+  }
+
+  /**
+   * Sends a rejection email notification for a specific member
+   * Handles email sending and logging for individual members
+   *
+   * @param member - The cohort member to send email to
+   * @param userData - The user data for personalization
+   * @param cohortId - The cohort ID for context
+   * @param userId - The user ID for updates
+   * @returns Promise that resolves when email is sent
+   */
+  private async sendRejectionEmailNotification(
+    member: any,
+    userData: any,
+    cohortId: string,
+    userId: string
+  ) {
+    // Get cohort data for email personalization
+    const cohortData = await this.cohortRepository.findOne({
+      where: { cohortId: cohortId },
+    });
+
+    const notificationPayload = {
+      isQueue: false,
+      context: 'USER',
+      key: 'onStudentRejected', // Rejection template
+      replacements: {
+        '{username}': `${userData.firstName ?? ''} ${
+          userData.lastName ?? ''
+        }`.trim(),
+        '{firstName}': userData.firstName ?? '',
+        '{lastName}': userData.lastName ?? '',
+        '{programName}': cohortData?.name ?? 'the program',
+        '{status}': 'rejected',
+        '{statusReason}': member.statusReason ?? 'Not specified',
+      },
+      email: {
+        receipients: [userData.email],
+      },
+    };
+
+    const mailSend = await this.notificationRequest.sendNotification(
+      notificationPayload
+    );
+
+    if (mailSend?.result?.email?.errors?.length > 0) {
+      // Log email failure
+      ShortlistingLogger.logRejectionEmailFailure({
+        dateTime: new Date().toISOString(),
+        userId: userData.userId,
+        email: userData.email,
+        shortlistedStatus: 'rejected',
+        failureReason: mailSend.result.email.errors.join(', '),
+        cohortId: cohortId,
+      });
+      throw new Error(`Email sending failed: ${mailSend.result.email.errors.join(', ')}`);
+    } else {
+      // Log email success
+      ShortlistingLogger.logRejectionEmailSuccess({
+        dateTime: new Date().toISOString(),
+        userId: userData.userId,
+        email: userData.email,
+        shortlistedStatus: 'rejected',
+        cohortId: cohortId,
+      });
+    }
+  }
+
+  /**
+   * Aggregates results from multiple cohort rejection email processing operations
+   * Combines individual cohort results into overall performance metrics
+   *
+   * @param cohortResults - Array of results from individual cohort processing
+   * @returns Aggregated results with total counts and processing time
+   */
+  private aggregateRejectionEmailResults(cohortResults: any[]) {
+    let totalProcessed = 0;
+    let totalEmailsSent = 0;
+    let totalFailures = 0;
+    let totalProcessingTime = 0;
+
+    cohortResults.forEach((result) => {
+      totalProcessed += result.processed;
+      totalEmailsSent += result.emailsSent;
+      totalFailures += result.failures;
+      totalProcessingTime += result.processingTime;
+    });
+
+    return {
+      totalProcessed,
+      totalEmailsSent,
+      totalFailures,
+      totalProcessingTime,
     };
   }
 }

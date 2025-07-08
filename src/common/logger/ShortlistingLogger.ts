@@ -346,4 +346,108 @@ export class ShortlistingLogger {
       console.error("Error logging email success:", error);
     }
   }
+
+  /**
+   * Logs rejection email failure information
+   * Creates a separate log file with detailed rejection email failure information
+   *
+   * @param emailFailureData - Object containing rejection email failure details
+   */
+  static logRejectionEmailFailure(emailFailureData: {
+    dateTime: string;
+    userId: string;
+    email: string;
+    shortlistedStatus: "shortlisted" | "rejected";
+    failureReason: string;
+    cohortId: string;
+  }) {
+    try {
+      const today = new Date().toISOString().split("T")[0];
+      const logFileName = `rejection-email-failed-${today}.csv`;
+      const logFilePath = path.join(ShortlistingLogger.LOG_DIR, logFileName);
+
+      // Create logs directory if it doesn't exist
+      if (!fs.existsSync(ShortlistingLogger.LOG_DIR)) {
+        fs.mkdirSync(ShortlistingLogger.LOG_DIR, { recursive: true });
+      }
+
+      // Check if file exists to determine if we need to write headers
+      const fileExists = fs.existsSync(logFilePath);
+
+      // Prepare CSV line with proper comma delimiters
+      const csvLine = [
+        ShortlistingLogger.escapeCSV(emailFailureData.dateTime),
+        ShortlistingLogger.escapeCSV(emailFailureData.userId),
+        ShortlistingLogger.escapeCSV(emailFailureData.email),
+        ShortlistingLogger.escapeCSV(emailFailureData.shortlistedStatus),
+        ShortlistingLogger.escapeCSV(emailFailureData.cohortId),
+        ShortlistingLogger.escapeCSV(emailFailureData.failureReason)
+      ].join(",");
+
+      // Write to file (append mode)
+      fs.appendFileSync(
+        logFilePath,
+        (fileExists
+          ? ""
+          : "Date and time,userId,email,shortlisted status(shortlisted/rejected),cohortId,Email Failure reason\n") +
+          csvLine +
+          "\n"
+      );
+
+      console.log(
+        `📧 [REJECTION_EMAIL_FAILURE] Logged rejection email failure for user ${emailFailureData.userId} in cohort ${emailFailureData.cohortId}: ${emailFailureData.failureReason}`
+      );
+    } catch (error) {
+      console.error("Error logging rejection email failure:", error);
+    }
+  }
+
+  /**
+   * Logs rejection email success information
+   * Creates a separate log file with successful rejection email information
+   *
+   * @param emailSuccessData - Object containing rejection email success details
+   */
+  static logRejectionEmailSuccess(emailSuccessData: {
+    dateTime: string;
+    userId: string;
+    email: string;
+    shortlistedStatus: "shortlisted" | "rejected";
+    cohortId: string;
+  }) {
+    try {
+      const today = new Date().toISOString().split("T")[0];
+      const logFileName = `rejection-email-success-${today}.csv`;
+      const logFilePath = path.join(ShortlistingLogger.LOG_DIR, logFileName);
+
+      // Create logs directory if it doesn't exist
+      if (!fs.existsSync(ShortlistingLogger.LOG_DIR)) {
+        fs.mkdirSync(ShortlistingLogger.LOG_DIR, { recursive: true });
+      }
+
+      // Check if file exists to determine if we need to write headers
+      const fileExists = fs.existsSync(logFilePath);
+
+      // Prepare CSV line with proper comma delimiters
+      const csvLine = [
+        ShortlistingLogger.escapeCSV(emailSuccessData.dateTime),
+        ShortlistingLogger.escapeCSV(emailSuccessData.userId),
+        ShortlistingLogger.escapeCSV(emailSuccessData.email),
+        ShortlistingLogger.escapeCSV(emailSuccessData.shortlistedStatus),
+        ShortlistingLogger.escapeCSV(emailSuccessData.cohortId)
+      ].join(",");
+
+      // Write to file (append mode)
+      fs.appendFileSync(
+        logFilePath,
+        (fileExists
+          ? ""
+          : "Date and time,userId,email,shortlisted status(shortlisted/rejected),cohortId\n") +
+          csvLine +
+          "\n"
+      );
+    } catch (error) {
+      console.error("Error logging rejection email success:", error);
+    }
+  }
 }

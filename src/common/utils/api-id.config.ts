@@ -54,6 +54,7 @@ export const APIID = {
   COHORT_MEMBER_SEARCH: 'api.cohortmember.list',
   COHORT_MEMBER_DELETE: 'api.cohortmember.delete',
   COHORT_MEMBER_EVALUATE_SHORTLISTING: 'api.cohortmember.evaluateShortlisting',
+  COHORT_MEMBER_SEND_REJECTION_EMAILS: 'api.cohortmember.sendRejectionEmails',
 
   // Privilege Assignment APIs
   ASSIGNPRIVILEGE_CREATE: 'api.assignprivilege.create',
