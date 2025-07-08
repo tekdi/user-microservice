@@ -1840,23 +1840,15 @@ export class PostgresCohortMembersService {
         totalCount = finalUserDetails.length;
       }
 
-      // Create response with result as array and total_count as separate property
-      const responseObj = {
-        id: apiId,
-        ver: '1.0',
-        ts: new Date().toISOString(),
-        params: {
-          resmsgid: require('uuid').v4(),
-          status: 'successful',
-          err: null,
-          errmsg: null,
-          successmessage: API_RESPONSES.COHORT_GET_SUCCESSFULLY,
-        },
-        responseCode: HttpStatus.OK,
-        result: finalUserDetails,
-        total_count: totalCount,
-      };
-      return res.status(HttpStatus.OK).json(responseObj);
+      // Use the new APIResponse method that supports total_count
+      return APIResponse.successWithTotal(
+        res,
+        apiId,
+        finalUserDetails,
+        totalCount,
+        HttpStatus.OK,
+        API_RESPONSES.COHORT_GET_SUCCESSFULLY
+      );
     } catch (e) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
