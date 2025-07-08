@@ -2062,7 +2062,7 @@ export class PostgresCohortMembersService {
     if (formFieldsAndRules && formFieldsAndRules.length > 0) {
       const userIds = members.map((m) => m.userId);
       userFieldValuesMap = await this.getBatchUserFieldValues(userIds);
-      const fieldFetchTime = Date.now() - fieldFetchStartTime;
+  
     }
 
     // Process each member in the batch
@@ -2096,8 +2096,6 @@ export class PostgresCohortMembersService {
         } else {
           rejected++;
         }
-
-        const memberTime = Date.now() - memberStartTime;
       } catch (error) {
         // Handle individual member failures gracefully
         failures++;
@@ -2118,8 +2116,6 @@ export class PostgresCohortMembersService {
         });
       }
     }
-
-    const evaluationTime = Date.now() - evaluationStartTime;
 
     // Performance monitoring - log slow batches for optimization
     const batchTime = Date.now() - batchStartTime;
@@ -2425,7 +2421,6 @@ export class PostgresCohortMembersService {
     `;
 
     const results = await this.fieldValuesRepository.query(query, [userIds]);
-    const queryTime = Date.now() - queryStartTime;
 
     // Optimized grouping with Map for better performance
     const userFieldValuesMap = new Map();
@@ -3771,8 +3766,6 @@ export class PostgresCohortMembersService {
       });
     }
 
-    const userFetchTime = Date.now() - userFetchStartTime;
-
     // Process each member in the batch
     const emailStartTime = Date.now();
     
@@ -3814,8 +3807,6 @@ export class PostgresCohortMembersService {
         // Update counters
         processed++;
         emailsSent++;
-
-        const memberTime = Date.now() - memberStartTime;
       } catch (error) {
         // Handle individual member failures gracefully
         failures++;
@@ -3838,8 +3829,6 @@ export class PostgresCohortMembersService {
         });
       }
     }
-
-    const emailTime = Date.now() - emailStartTime;
 
     // Performance monitoring - log slow batches for optimization
     const batchTime = Date.now() - batchStartTime;
