@@ -1690,6 +1690,24 @@ export class PostgresFieldsService implements IServicelocatorfields {
     return result;
   }
 
+  async updateUserCustomFields(itemId, data, fieldAttributesAndParams) {
+    // Ensure value is stored as an array
+    if (!Array.isArray(data.value)) {
+      data.value = [data.value];
+    }
+  
+    const result = await this.fieldsValuesRepository.insert({
+      itemId,
+      fieldId: data.fieldId,
+      value: data.value,
+    });
+  
+    return {
+      ...result,
+      correctValue: true,
+    };
+  }
+  
   validateFieldValue(field: any, value: any) {
     try {
       const fieldInstance = FieldFactory.createField(
