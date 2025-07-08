@@ -843,7 +843,14 @@ export class PostgresCohortMembersService {
     return result;
   }
 
-  async getUsersWithCompletionFilter(where: any, options: any, order: any, completionPercentageRanges: { min: number; max: number }[], formId: string) {
+  // Generic helper method to build base query with common logic
+  private buildBaseQuery(
+    where: any,
+    options: any,
+    order: any,
+    additionalJoins: string = '',
+    additionalWhereConditions: string = ''
+  ): { query: string; limit: number; offset: number } {
     let whereCase = ``;
     let limit, offset;
 
@@ -890,18 +897,13 @@ export class PostgresCohortMembersService {
       whereCase += where.map(processCondition).join(' AND ');
     }
 
-    // Build completion percentage filter conditions
-    const completionConditions = completionPercentageRanges.map(range => 
-      `(FS."completionPercentage" >= ${range.min} AND FS."completionPercentage" <= ${range.max})`
-    ).join(' OR ');
-
-    // Add completion percentage filter to WHERE clause
-    const completionFilter = `(FS."formId" = '${formId}' AND FS."status" = 'active' AND (${completionConditions}))`;
-    
-    if (whereCase) {
-      whereCase += ` AND ${completionFilter}`;
-    } else {
-      whereCase = `WHERE ${completionFilter}`;
+    // Add additional where conditions if provided
+    if (additionalWhereConditions) {
+      if (whereCase) {
+        whereCase += ` AND ${additionalWhereConditions}`;
+      } else {
+        whereCase = `WHERE ${additionalWhereConditions}`;
+      }
     }
 
     let query = `SELECT U."userId", U."username",U."email", U."firstName", U."middleName", U."lastName", R."name" AS role, U."district", U."state",U."mobile",U."deviceId",U."gender",U."dob",U."country",
@@ -912,9 +914,7 @@ export class PostgresCohortMembersService {
       INNER JOIN public."UserRolesMapping" UR
       ON UR."userId" = U."userId"
       INNER JOIN public."Roles" R
-      ON R."roleId" = UR."roleId"
-      INNER JOIN public."formSubmissions" FS
-      ON FS."itemId" = U."userId" ${whereCase}`;
+      ON R."roleId" = UR."roleId"${additionalJoins} ${whereCase}`;
 
     options.forEach((option) => {
       if (option[0] === 'limit') {
@@ -940,8 +940,57 @@ export class PostgresCohortMembersService {
       query += ` OFFSET ${offset}`;
     }
 
-    const result = await this.usersRepository.query(query);
+    return { query, limit, offset };
+  }
 
+  // Helper method to build query with completion filter
+  private buildQueryWithCompletionFilter(
+    where: any,
+    options: any,
+    order: any,
+    completionPercentageRanges: { min: number; max: number }[],
+    formId: string
+  ): { query: string; limit: number; offset: number } {
+    // Build completion percentage filter conditions
+    const completionConditions = completionPercentageRanges
+      .map(
+        (range) =>
+          `(FS."completionPercentage" >= ${range.min} AND FS."completionPercentage" <= ${range.max})`
+      )
+      .join(' OR ');
+
+    // Add completion percentage filter to WHERE clause
+    const completionFilter = `(FS."formId" = '${formId}' AND FS."status" = 'active' AND (${completionConditions}))`;
+
+    const additionalJoins = `
+      INNER JOIN public."formSubmissions" FS
+      ON FS."itemId" = U."userId"`;
+
+    return this.buildBaseQuery(
+      where,
+      options,
+      order,
+      additionalJoins,
+      completionFilter
+    );
+  }
+
+  async getUsersWithCompletionFilter(
+    where: any,
+    options: any,
+    order: any,
+    completionPercentageRanges: { min: number; max: number }[],
+    formId: string
+  ) {
+    const { query } = this.buildQueryWithCompletionFilter(
+      where,
+      options,
+      order,
+      completionPercentageRanges,
+      formId
+    );
+
+    const result = await this.usersRepository.query(query);
     return result;
   }
 
@@ -1636,7 +1685,9 @@ export class PostgresCohortMembersService {
           let formInfo = null;
           if (form?.formid && form.status === 'active') {
             // Fetch form submission for this user - directly query to avoid TypeORM In() operator issues
-            const submission = await this.formSubmissionService['formSubmissionRepository'].findOne({
+            const submission = await this.formSubmissionService[
+              'formSubmissionRepository'
+            ].findOne({
               where: {
                 formId: form.formid,
                 itemId: user.userId,
@@ -1691,17 +1742,86 @@ export class PostgresCohortMembersService {
         cohortMembersSearchDto.filters?.completionPercentage;
 
       if (completionPercentageFilter?.length) {
-        completionPercentageRanges = completionPercentageFilter.map(
-          (range: string, index: number) => {
-            const [min, max] = range.split('-').map(Number);
-            if (isNaN(min) || isNaN(max) || min < 0 || max > 100 || min > max) {
-              throw new Error(
-                `Invalid completion percentage range at index ${index}: ${range}. Must be in format "min-max" where 0 <= min <= max <= 100`
-              );
+        try {
+          completionPercentageRanges = completionPercentageFilter.map(
+            (range: string, index: number) => {
+              // Check for empty or invalid input
+              if (!range || typeof range !== 'string') {
+                throw new Error(
+                  `Range at index ${index} must be a non-empty string. Received: ${typeof range}`
+                );
+              }
+
+              // Trim whitespace and check for empty string after trimming
+              const trimmedRange = range.trim();
+              if (!trimmedRange) {
+                throw new Error(
+                  `Range at index ${index} cannot be empty or contain only whitespace`
+                );
+              }
+
+              // Check for proper format with exactly one hyphen
+              const parts = trimmedRange.split('-');
+              if (parts.length !== 2) {
+                throw new Error(
+                  `Range at index ${index}: "${range}" must contain exactly one hyphen in format "min-max" (e.g., "0-50", "25-75", "80-100")`
+                );
+              }
+
+              // Validate and parse numeric values
+              const [minStr, maxStr] = parts;
+              const min = Number(minStr.trim());
+              const max = Number(maxStr.trim());
+
+              // Check for non-numeric values
+              if (isNaN(min)) {
+                throw new Error(
+                  `Invalid minimum value at index ${index}: "${minStr}". Must be a valid number between 0 and 100`
+                );
+              }
+
+              if (isNaN(max)) {
+                throw new Error(
+                  `Invalid maximum value at index ${index}: "${maxStr}". Must be a valid number between 0 and 100`
+                );
+              }
+
+              // Validate range constraints
+              if (min < 0) {
+                throw new Error(
+                  `Minimum value at index ${index}: ${min} must be greater than or equal to 0`
+                );
+              }
+
+              if (max > 100) {
+                throw new Error(
+                  `Maximum value at index ${index}: ${max} must be less than or equal to 100`
+                );
+              }
+
+              if (min > max) {
+                throw new Error(
+                  `Invalid range at index ${index}: ${min}-${max}. Minimum value (${min}) cannot be greater than maximum value (${max})`
+                );
+              }
+
+              return { min, max };
             }
-            return { min, max };
-          }
-        );
+          );
+        } catch (validationError) {
+          LoggerUtil.error(
+            `Completion percentage filter validation failed`,
+            `Error: ${validationError.message}`,
+            apiId
+          );
+          return APIResponse.error(
+        res,
+        apiId,
+            API_RESPONSES.BAD_REQUEST,
+            `Completion percentage filter validation failed: ${validationError.message}. Expected format: "min-max" where 0 <= min <= max <= 100 (e.g., "0-50", "25-75", "80-100")`,
+            HttpStatus.BAD_REQUEST
+          );
+        }
       }
 
       // Use optimized database query if completion percentage filtering is needed
@@ -1712,7 +1832,7 @@ export class PostgresCohortMembersService {
         // Use optimized database query with JOIN to formSubmissions table
         const { limit, offset } = cohortMembersSearchDto;
         const { sort, filters } = cohortMembersSearchDto;
-        
+
         let where: any[] = [];
         const whereClause = {};
         if (filters && Object.keys(filters).length > 0) {
@@ -1758,7 +1878,7 @@ export class PostgresCohortMembersService {
         const options = [];
         if (limit) options.push(['limit', limit]);
         if (offset) options.push(['offset', offset]);
-        
+
         const order = {};
         if (sort) {
           const [sortField, sortOrder] = sort;
@@ -1776,7 +1896,7 @@ export class PostgresCohortMembersService {
 
         if (optimizedResults.length > 0) {
           totalCount = parseInt(optimizedResults[0].total_count, 10);
-          
+
           // Enrich the results with form data and custom fields
           finalUserDetails = await Promise.all(
             optimizedResults.map(async (user) => {
@@ -1792,7 +1912,9 @@ export class PostgresCohortMembersService {
               };
 
               // Get form submission details for this user - directly query to avoid TypeORM In() operator issues
-              const submission = await this.formSubmissionService['formSubmissionRepository'].findOne({
+              const submission = await this.formSubmissionService[
+                'formSubmissionRepository'
+              ].findOne({
                 where: {
                   formId: form.formid,
                   itemId: user.userId,
@@ -1812,12 +1934,17 @@ export class PostgresCohortMembersService {
                 formInfo.formSubmissionUpdatedAt = submission.updatedAt
                   ? new Date(submission.updatedAt).toISOString().slice(0, 10)
                   : null;
-                formInfo.completionPercentage = submission.completionPercentage ?? 0;
+                formInfo.completionPercentage =
+                  submission.completionPercentage ?? 0;
               }
 
               // Get custom fields
-              const fieldValues = await this.fieldsService.getUserCustomFieldDetails(user.userId);
-              let fieldValuesForCohort = await this.fieldsService.getFieldsAndFieldsValues(user.cohortMembershipId);
+              const fieldValues =
+                await this.fieldsService.getUserCustomFieldDetails(user.userId);
+              let fieldValuesForCohort =
+                await this.fieldsService.getFieldsAndFieldsValues(
+                  user.cohortMembershipId
+                );
               fieldValuesForCohort = fieldValuesForCohort.map((field) => ({
                 fieldId: field.fieldId,
                 label: field.label,
