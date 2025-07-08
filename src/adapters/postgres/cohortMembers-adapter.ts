@@ -1629,8 +1629,6 @@ export class PostgresCohortMembersService {
         });
       }
 
-      console.log(filteredResults);
-
       // Create response with result as array and total_count as separate property
       const responseObj = {
         id: apiId,
