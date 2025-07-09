@@ -15,6 +15,7 @@ import { FormCreateDto } from './dto/form-create.dto';
 import { APIID } from '@utils/api-id.config';
 import { API_RESPONSES } from '@utils/response.messages';
 import { FormStatus } from './dto/form-create.dto';
+import { json } from 'stream/consumers';
 
 @Injectable()
 export class FormsService {
@@ -180,7 +181,10 @@ export class FormsService {
     let query = this.formRepository
       .createQueryBuilder('form')
       .select(['form.formid', 'form.title', 'form.status', 'form.fields'])
-      .where('form.context = :context', { context: whereClause.context });
+      .where('form.context = :context', { context: whereClause.context })
+      .andWhere('form.status != :archivedStatus', {
+        archivedStatus: 'archived',
+      }); // Exclude archived forms
 
     if (whereClause.contextType !== undefined) {
       if (whereClause.contextType === null) {
