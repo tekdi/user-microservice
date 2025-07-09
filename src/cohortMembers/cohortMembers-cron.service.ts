@@ -164,4 +164,44 @@ export class CohortMembersCronService {
       throw error;
     }
   }
+
+  /**
+   * Manual trigger method for rejection email notification processing
+   * Can be called programmatically for testing or immediate processing
+   *
+   * @param tenantId - The tenant ID for the evaluation
+   * @param academicYearId - The academic year ID for the evaluation
+   * @param userId - The user ID from the authenticated request
+   * @returns Promise with processing results
+   */
+  async triggerRejectionEmailNotification(
+    tenantId: string,
+    academicYearId: string,
+    userId: string
+  ): Promise<any> {
+    this.logger.log(
+      `Manual trigger of rejection email notification for tenant: ${tenantId}, academic year: ${academicYearId}, user: ${userId}`
+    );
+
+    try {
+      // Call the rejection email service with provided parameters using the internal method
+      const result =
+        await this.cohortMembersService.sendRejectionEmailNotificationsInternal(
+          tenantId,
+          academicYearId,
+          userId
+        );
+
+      this.logger.log(`Manual rejection email notification completed successfully`);
+      return result;
+    } catch (error) {
+      this.logger.error(
+        `Manual rejection email notification failed: ${error.message}`,
+        error.stack
+      );
+
+      // Re-throw the error to be handled by the controller
+      throw error;
+    }
+  }
 }
