@@ -1970,12 +1970,16 @@ export class PostgresCohortMembersService {
         totalCount = finalUserDetails.length;
       }
 
-      // Use the new APIResponse method that supports total_count
-      return APIResponse.successWithTotal(
+      // Create the new response structure with totalCount inside result and userDetails array
+      const resultWithTotalCount = {
+        totalCount: totalCount,
+        userDetails: finalUserDetails
+      };
+
+      return APIResponse.success(
         res,
         apiId,
-        finalUserDetails,
-        totalCount,
+        resultWithTotalCount,
         HttpStatus.OK,
         API_RESPONSES.COHORT_GET_SUCCESSFULLY
       );
