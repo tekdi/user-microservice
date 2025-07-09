@@ -182,7 +182,7 @@ export class FormsService {
       .select(['form.formid', 'form.title', 'form.status', 'form.fields'])
       .where('form.context = :context', { context: whereClause.context })
       .andWhere('form.status != :archivedStatus', {
-        archivedStatus: 'archived',
+        archivedStatus: FormStatus.ARCHIVED,
       }); // Exclude archived forms
 
     if (whereClause.contextType !== undefined) {
