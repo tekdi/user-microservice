@@ -101,24 +101,18 @@ async function createUserInKeyCloak(query, token, role: string) {
   } catch (error) {
     // Handle errors and log relevant details
     if (error.response) {
-      console.error("Error Response Status:", error.response.status);
-      console.error("Error Response Data:", error.response.data);
-      console.error("Error Response Headers:", error.response.headers);
-
       return {
         statusCode: error.response.status,
         message: error.response.data.errorMessage || "Error occurred during user creation",
         email: query.email || "No email provided",
       };
     } else if (error.request) {
-      console.error("No response received:", error.request);
       return {
         statusCode: 500,
         message: "No response received from Keycloak",
         email: query.email || "No email provided",
       };
     } else {
-      console.error("Error setting up request:", error.message);
       return {
         statusCode: 500,
         message: `Error setting up request: ${error.message}`,

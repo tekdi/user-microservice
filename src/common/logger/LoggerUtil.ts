@@ -1,20 +1,10 @@
 import * as winston from 'winston';
-import * as path from 'path';
-import * as fs from 'fs';
 
 export class LoggerUtil {
     private static logger: winston.Logger;
 
     static getLogger() {
         if (!this.logger) {
-            // Get log directory from environment variable, default to 'logs'
-            const logDir = process.env.LOG_DIR || 'logs';
-            
-            // Ensure log directory exists
-            if (!fs.existsSync(logDir)) {
-                fs.mkdirSync(logDir, { recursive: true });
-            }
-            
             const customFormat = winston.format.printf(
                 ({ timestamp, level, message, context, user, error }) => {
                     return JSON.stringify({
@@ -33,13 +23,6 @@ export class LoggerUtil {
                 format: winston.format.combine(winston.format.timestamp(), customFormat),
                 transports: [
                     new winston.transports.Console(),
-                    new winston.transports.File({ 
-                        filename: path.join(logDir, 'error.log'), 
-                        level: 'error' 
-                    }),
-                    new winston.transports.File({ 
-                        filename: path.join(logDir, 'combined.log') 
-                    }),
                 ],
             });
         }
