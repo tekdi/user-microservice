@@ -130,14 +130,7 @@ export class UploadS3Service {
         API_RESPONSES.SIGNED_URL_SUCCESS
       );
     } catch (error) {
-      console.error("Presigned URL Error:", error);
-      return APIResponse.error(
-        response,
-        APIID.SIGNED_URL,
-        API_RESPONSES.BAD_REQUEST,
-        API_RESPONSES.SIGNED_URL_FAILED,
-        HttpStatus.BAD_REQUEST
-      );
+      throw new Error(`Failed to generate presigned URL: ${error.message}`);
     }
   }
 
