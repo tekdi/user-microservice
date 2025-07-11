@@ -69,14 +69,23 @@ export class BulkImportController {
     @Req() req: Request,
     @Res() res: Response
   ) {
-    // The service will handle logging and response formatting
-    return await this.bulkImportService.processBulkImport(
-      file,
-      bulkImportDto.cohortId,
-      tenantId,
-      req,
-      res
-    );
+    const batchId = uuidv4();
+
+    try {
+      // The service will handle logging and response formatting
+      const result = await this.bulkImportService.processBulkImport(
+        file,
+        bulkImportDto.cohortId,
+        tenantId,
+        req,
+        res
+      );
+
+      return result;
+    } catch (error) {
+      // Log the error with the batch ID for easier tracking
+      throw error;
+    }
   }
 
   // Generate XLSX Template for Cohort
