@@ -2893,32 +2893,54 @@ export class PostgresUserService implements IServicelocator {
             // Get cohort information for the user
             let cohorts = [];
             try {
-              // Query cohort members with cohort details using a comprehensive query
+              // Enhanced query to fetch batch, parent cohort, and academic year details
               const cohortQuery = `
+                WITH BatchData AS (
+                  SELECT 
+                    cm."cohortId" as "batchId",
+                    cm."createdAt" as "joinedAt",
+                    cm."status" as "cohortMemberStatus",
+                    batch."name" as "batchName",
+                    batch."type" as "batchType",
+                    batch."status" as "batchStatus",
+                    batch."tenantId",
+                    batch."parentId" as "cohortId"
+                  FROM public."CohortMembers" cm
+                  JOIN public."Cohort" batch ON cm."cohortId" = batch."cohortId"
+                  WHERE cm."userId" = $1 AND batch."type" = 'BATCH'
+                )
                 SELECT 
-                  cm."cohortId",
-                  cm."createdAt" as "joinedAt",
-                  cm."status" as "cohortMemberStatus",
-                  c."name" as "cohortName",
-                  c."type" as "cohortType",
-                  c."status" as "cohortStatus",
-                  c."tenantId"
-                FROM public."CohortMembers" cm
-                JOIN public."Cohort" c ON cm."cohortId" = c."cohortId"
-                WHERE cm."userId" = $1
+                  bd.*,
+                  cohort."name" as "cohortName",
+                  cohort."type" as "cohortType",
+                  cay."academicYearId",
+                  ay."session" as "academicYearSession"
+                FROM BatchData bd
+                LEFT JOIN public."Cohort" cohort ON bd."cohortId" = cohort."cohortId" AND cohort."type" = 'COHORT'
+                LEFT JOIN public."CohortAcademicYear" cay ON bd."cohortId" = cay."cohortId"
+                LEFT JOIN public."AcademicYears" ay ON cay."academicYearId" = ay."academicYearId"
               `;
               
               const cohortResults = await this.usersRepository.query(cohortQuery, [userId]);
               
               if (cohortResults && cohortResults.length > 0) {
                 cohorts = cohortResults.map(result => ({
-                  cohortId: result.cohortId,
+                  // Batch details
+                  batchId: result.batchId,
+                  batchName: result.batchName,
+                  batchStatus: result.batchStatus,
                   joinedAt: result.joinedAt,
+                  cohortMemberStatus: result.cohortMemberStatus,
                   tenantId: result.tenantId,
+                  
+                  // Parent Cohort details
+                  cohortId: result.cohortId,
                   cohortName: result.cohortName,
                   cohortType: result.cohortType,
-                  cohortStatus: result.cohortStatus,
-                  cohortMemberStatus: result.cohortMemberStatus
+                  
+                  // Academic Year details
+                  academicYearId: result.academicYearId,
+                  academicYearSession: result.academicYearSession
                 }));
               }
             } catch (cohortError) {
@@ -2949,7 +2971,7 @@ export class PostgresUserService implements IServicelocator {
           userData = { userId };
         }
       }
-
+      console.log(userData,"hii");
       await this.kafkaService.publishUserEvent(eventType, userData, userId);
       LoggerUtil.log(`User ${eventType} event published to Kafka for user ${userId}`, apiId);
     } catch (error) {
