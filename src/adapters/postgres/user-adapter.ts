@@ -1438,7 +1438,6 @@ export class PostgresUserService implements IServicelocator {
               fieldData,
               customFieldAttributes[fieldData.fieldId]
             );
-            console.log(res);
 
             // if (res.correctValue) {
             //   if (!result["customFields"]) result["customFields"] = [];
@@ -2344,15 +2343,12 @@ export class PostgresUserService implements IServicelocator {
       // Step 1: Format mobile number and generate OTP
       const mobileWithCode = this.formatMobileNumber(mobile);
       const otp = this.authUtils.generateOtp(this.otpDigits).toString();
-      console.log(this.otpDigits, this.otpExpiry,"testing OTP changes");
       const { hash, expires, expiresInMinutes } = this.generateOtpHash(mobileWithCode, otp, reason);
       const replacements = {
         "{OTP}": otp,
         "{otpExpiry}": expiresInMinutes
       };
-      console.log(replacements, "replacements");
       // Step 2:send SMS notification
-      console.log(this.msg91TemplateKey,"Key");
       const notificationPayload = await this.smsNotification("OTP", "SEND_OTP", replacements, [mobile]);
       return { notificationPayload, hash, expires, expiresInMinutes };
     }
@@ -2464,9 +2460,7 @@ export class PostgresUserService implements IServicelocator {
   
       // Verify OTP hash
       const data = `${identifier}.${otp}.${reason}.${expires}`;
-      console.log(data);
       const calculatedHash = this.authUtils.calculateHash(data, this.smsKey);
-      console.log(calculatedHash, hashValue);
       if (calculatedHash === hashValue) {
         // For forgot password flow, include the reset token in response
         const responseData = { success: true };
@@ -2654,7 +2648,7 @@ export class PostgresUserService implements IServicelocator {
           receipients: emailReceipt,
         },
       };
-      console.log("notificationPayload",notificationPayload);
+      // console.log("notificationPayload",notificationPayload);
       
       const mailSend = await this.notificationRequest.sendNotification(
         notificationPayload
@@ -2691,7 +2685,7 @@ export class PostgresUserService implements IServicelocator {
         "{eventName}": "Shiksha Graha OTP",
         "{action}": "register"
       };
-      console.log("hii",replacements,email)
+      // console.log("hii",replacements,email)
 
       // Step 4: Send email notification
       const notificationPayload = await this.sendEmailNotification("OTP", "SendOtpOnMail", replacements, [email]);
