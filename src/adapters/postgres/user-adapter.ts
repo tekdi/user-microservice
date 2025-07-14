@@ -2910,13 +2910,12 @@ export class PostgresUserService implements IServicelocator {
                   cay."academicYearId",
                   ay."session" as "academicYearSession"
                 FROM BatchData bd
-                LEFT JOIN public."Cohort" cohort ON bd."cohortId" = cohort."cohortId" AND cohort."type" = 'COHORT'
-                LEFT JOIN public."CohortAcademicYear" cay ON bd."cohortId" = cay."cohortId"
-                LEFT JOIN public."AcademicYears" ay ON cay."academicYearId" = ay."academicYearId"
+                LEFT JOIN public."Cohort" cohort ON bd."cohortId":: UUID = cohort."cohortId" AND cohort."type" = 'COHORT'
+                LEFT JOIN public."CohortAcademicYear" cay ON bd."cohortId":: UUID = cay."cohortId"
+                LEFT JOIN public."AcademicYears" ay ON cay."academicYearId" = ay."id"
               `;
               
               const cohortResults = await this.usersRepository.query(cohortQuery, [userId]);
-              
               if (cohortResults && cohortResults.length > 0) {
                 cohorts = cohortResults.map(result => ({
                   // Batch details
@@ -2965,7 +2964,6 @@ export class PostgresUserService implements IServicelocator {
           userData = { userId };
         }
       }
-      console.log(userData,"hii");
       await this.kafkaService.publishUserEvent(eventType, userData, userId);
       LoggerUtil.log(`User ${eventType} event published to Kafka for user ${userId}`, apiId);
     } catch (error) {
