@@ -419,18 +419,6 @@ export class PostgresCohortService {
         cohortCreateDto.updatedBy
       );
 
-      // Publish cohort created event to Kafka
-      try {
-        await this.kafkaService.publishCohortEvent('created', response, response.cohortId);
-      } catch (kafkaError) {
-        LoggerUtil.error(
-          'Failed to publish cohort created event to Kafka',
-          `Error: ${kafkaError.message}`,
-          apiId
-        );
-        // Don't fail the request if Kafka publishing fails
-      }
-
       const resBody = new ReturnResponseBody({
         ...response,
         academicYearId: academicYearId,
@@ -439,13 +427,24 @@ export class PostgresCohortService {
         API_RESPONSES.CREATE_COHORT,
       )
 
-      return APIResponse.success(
+      // Send response to the client
+      const apiResponse = APIResponse.success(
         res,
         apiId,
         resBody,
         HttpStatus.CREATED,
         API_RESPONSES.CREATE_COHORT
       );
+
+      // Publish cohort created event to Kafka asynchronously - after response is sent to client
+      this.publishCohortEvent('created', response.cohortId, academicYearId, apiId)
+        .catch(error => LoggerUtil.error(
+          `Failed to publish cohort created event to Kafka`,
+          `Error: ${error.message}`,
+          apiId
+        ));
+
+      return apiResponse;
     } catch (error) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
@@ -623,32 +622,28 @@ export class PostgresCohortService {
           }
         }
 
-        // Publish cohort updated event to Kafka
-        try {
-          const updatedCohortData = {
-            ...existingCohorDetails,
-            ...cohortUpdateDto
-          };
-          await this.kafkaService.publishCohortEvent('updated', updatedCohortData, cohortId);
-        } catch (kafkaError) {
-          LoggerUtil.error(
-            'Failed to publish cohort updated event to Kafka',
-            `Error: ${kafkaError.message}`,
-            apiId
-          );
-          // Don't fail the request if Kafka publishing fails
-        }
-
         LoggerUtil.log(
           API_RESPONSES.COHORT_UPDATED_SUCCESSFULLY,
         )
-        return APIResponse.success(
+
+        // Send response to the client
+        const apiResponse = APIResponse.success(
           res,
           apiId,
           response?.affected,
           HttpStatus.OK,
           API_RESPONSES.COHORT_UPDATED_SUCCESSFULLY
         );
+
+        // Publish cohort updated event to Kafka asynchronously - after response is sent to client
+        this.publishCohortEvent('updated', cohortId, null, apiId)
+          .catch(error => LoggerUtil.error(
+            `Failed to publish cohort updated event to Kafka`,
+            `Error: ${error.message}`,
+            apiId
+          ));
+
+        return apiResponse;
       } else {
         return APIResponse.error(
           res,
@@ -979,31 +974,24 @@ export class PostgresCohortService {
         await this.cohortMembersRepository.delete({ cohortId: cohortId });
         await this.fieldValuesRepository.delete({ itemId: cohortId });
 
-        // Publish cohort deleted event to Kafka
-        try {
-          const deletedCohortData = {
-            cohortId,
-            status: 'archived',
-            updatedBy: userId,
-            deletedAt: new Date().toISOString()
-          };
-          await this.kafkaService.publishCohortEvent('deleted', deletedCohortData, cohortId);
-        } catch (kafkaError) {
-          LoggerUtil.error(
-            'Failed to publish cohort deleted event to Kafka',
-            `Error: ${kafkaError.message}`,
-            apiId
-          );
-          // Don't fail the request if Kafka publishing fails
-        }
-
-        return APIResponse.success(
+        // Send response to the client
+        const apiResponse = APIResponse.success(
           response,
           apiId,
           affectedrows[1],
           HttpStatus.OK,
           "Cohort Deleted Successfully."
         );
+
+        // Publish cohort deleted event to Kafka asynchronously - after response is sent to client
+        this.publishCohortEvent('deleted', cohortId, null, apiId)
+          .catch(error => LoggerUtil.error(
+            `Failed to publish cohort deleted event to Kafka`,
+            `Error: ${error.message}`,
+            apiId
+          ));
+
+        return apiResponse;
       } else {
         return APIResponse.error(
           response,
@@ -1177,6 +1165,95 @@ export class PostgresCohortService {
         errorMessage,
         HttpStatus.INTERNAL_SERVER_ERROR
       );
+    }
+  }
+
+  /**
+   * Publish cohort events to Kafka
+   * @param eventType Type of event (created, updated, deleted)
+   * @param cohortId Cohort ID for whom the event is published
+   * @param apiId API ID for logging
+   */
+  private async publishCohortEvent(
+    eventType: 'created' | 'updated' | 'deleted',
+    cohortId: string,
+    academicYearId: string | null,
+    apiId: string
+  ): Promise<void> {
+    try {
+      // For delete events, we may want to include just basic information since the cohort might already be removed
+      let cohortData: any;
+      
+      if (eventType === 'deleted') {
+        cohortData = {
+          cohortId: cohortId,
+          deletedAt: new Date().toISOString()
+        };
+      } else {
+        // For create and update, fetch complete data from DB
+        try {
+          // Get basic cohort information
+          const cohort = await this.cohortRepository.findOne({
+            where: { cohortId: cohortId },
+            select: [
+              "cohortId",
+              "name",
+              "type",
+              "status",
+              "parentId",
+              "tenantId",
+              "createdAt",
+              "updatedAt",
+              "createdBy",
+              "updatedBy"
+            ]
+          });
+
+          if (!cohort) {
+            LoggerUtil.error(`Failed to fetch cohort data for Kafka event`, `Cohort with ID ${cohortId} not found`);
+            cohortData = { cohortId };
+          } else {
+            // Get custom fields for the cohort
+            let customFields = [];
+            try {
+              customFields = await this.fieldsService.getCustomFieldDetails(cohortId, 'Cohort');
+            } catch (customFieldError) {
+              LoggerUtil.error(
+                `Failed to fetch custom fields for Kafka event`,
+                `Error: ${customFieldError.message}`,
+                apiId
+              );
+              // Don't fail the entire operation if custom fields fetching fails
+              customFields = [];
+            }
+
+            // Build the cohort data object
+            cohortData = {
+              ...cohort,
+              ...(academicYearId && { academicYearId }),
+              customFields: customFields || [],
+              eventTimestamp: new Date().toISOString()
+            };
+          }
+        } catch (error) {
+          LoggerUtil.error(
+            `Failed to fetch cohort data for Kafka event`,
+            `Error: ${error.message}`
+          );
+          // Return at least the cohortId if we can't fetch complete data
+          cohortData = { cohortId };
+        }
+      }
+
+      await this.kafkaService.publishCohortEvent(eventType, cohortData, cohortId);
+      LoggerUtil.log(`Cohort ${eventType} event published to Kafka for cohort ${cohortId}`, apiId);
+    } catch (error) {
+      LoggerUtil.error(
+        `Failed to publish cohort ${eventType} event to Kafka`,
+        `Error: ${error.message}`,
+        apiId
+      );
+      // Don't throw the error to avoid affecting the main operation
     }
   }
 }
