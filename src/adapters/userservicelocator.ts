@@ -17,9 +17,10 @@ export interface IServicelocator {
   //   request?: any,
   // );
   getUsersDetailsById(userData: UserData, response: any);
-  updateUser(userDto?: UserUpdateDTO, response?: Response): Promise<void>;
-  createUser(request: any, userDto: UserCreateDto, academicYearId: string, response: Response);
-  findUserDetails(userID: any, username: string, tenantId?: string);
+  updateUser(userDto?: any, response?: any);
+  updateUserByName(userDto?: any, response?: any);
+  createUser(request: any, userDto: UserCreateDto, response: Response);
+  findUserDetails(userID: any, username: String,tenantId?: string)
   searchUser(
     tenantId: string,
     request: any,

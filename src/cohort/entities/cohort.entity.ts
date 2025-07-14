@@ -60,4 +60,8 @@ export class Cohort {
 
   @Column()
   updatedBy: string;
+
+  @Column('jsonb', { nullable: true })
+  params?: object;
+
 }

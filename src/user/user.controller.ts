@@ -177,6 +177,33 @@ export class UserController {
       .updateUser(userUpdateDto, response);
   }
 
+
+  @UseFilters(new AllExceptionsFilter(APIID.USER_UPDATE))
+  @Patch("updateByName/:name")
+  @UsePipes(new ValidationPipe())
+  @UseGuards(JwtAuthGuard)
+  @ApiBasicAuth("access-token")
+  @ApiBody({ type: UserUpdateDTO })
+  @ApiCreatedResponse({ description: "User has been updated successfully." })
+  @ApiForbiddenResponse({ description: "Forbidden" })
+  @ApiHeader({
+    name: "tenantid",
+  })
+  public async updateUserByName(
+    @Headers() headers,
+    @Param("name") name: string,
+    @Req() request: Request,
+    @Body() userUpdateDto: UserUpdateDTO,
+    @Res() response: Response
+  ) {
+    console.log(userUpdateDto);
+    
+    // userDto.tenantId = headers["tenantid"];
+    userUpdateDto.name = name;
+    return await this.userAdapter.buildUserAdapter().updateUserByName(userUpdateDto, response);
+  }
+
+
   @UseFilters(new AllExceptionsFilter(APIID.USER_LIST))
   @Post("/list")
   // @UseGuards(JwtAuthGuard)
