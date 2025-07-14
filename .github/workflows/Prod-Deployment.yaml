@@ -3,12 +3,12 @@ name: PROD-BACKEND-TAG-BASE-DEPLOYMENT
 on:
   push:
     tags:
-      - 'v*'   # This will trigger on tags starting with 'v'
+      - 'al-v*'   # This will trigger on tags starting with 'v'
 
 env:
-  ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
-  EKS_CLUSTER_NAME: ${{ secrets.EKS_CLUSTER_NAME_PROD }}
-  AWS_REGION: ${{ secrets.AWS_REGION_NAME }}
+  ECR_REPOSITORY_AL: ${{ secrets.ECR_REPOSITORY_AL }}
+  EKS_CLUSTER_NAME_AL: ${{ secrets.EKS_CLUSTER_NAME_PROD_AL }}
+  AWS_REGION_AL: ${{ secrets.AWS_REGION_NAME_AL }}
 
 jobs:
   BACKEND-TAG-BASE-DEPLOYMENT-PROD:
@@ -29,20 +29,16 @@ jobs:
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v1
       with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ env.AWS_REGION }}
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_AL }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_AL }}
+        aws-region: ${{ env.AWS_REGION_AL }}
         
     - name: Setup Node Env
       uses: actions/setup-node@v3
       with:
         node-version: 21.1.0
 
-    - name: Copy .env file
-      env:
-        ENV_FILE_CONTENT: ${{ secrets.ENV_FILE_CONTENT_PROD }}
-      run: echo "$ENV_FILE_CONTENT" > manifest/configmap.yaml
-
+  
     - name: Show PWD and list content and Latest 3 commits 
       run: |
            echo "Fetching all branches to ensure complete history"
@@ -62,26 +58,24 @@ jobs:
 
     - name: Build, tag, and push image to Amazon ECR
       env:
-        ECR_REGISTRY: ${{ secrets.ECR_REPOSITORY }}
+        ECR_REGISTRY: ${{ secrets.ECR_REPOSITORY_AL }}
         IMAGE_TAG: ${{ env.TAG }}
       run: |
-        docker build -t ${{ secrets.ECR_REPOSITORY }}:${{ env.TAG }} .
-        docker push ${{ secrets.ECR_REPOSITORY }}:${{ env.TAG }}
+        docker build -t ${{ secrets.ECR_REPOSITORY_AL }}:${{ env.TAG }} .
+        docker push ${{ secrets.ECR_REPOSITORY_AL }}:${{ env.TAG }}
 
     - name: Update kube config
-      run: aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER_NAME_PROD }} --region ${{ secrets.AWS_REGION_NAME }}
+      run: aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER_NAME_PROD_AL }} --region ${{ secrets.AWS_REGION_NAME_AL }}
 
     - name: Deploy to EKS
       env:
-        ECR_REGISTRY: ${{ secrets.ECR_REPOSITORY }}
+        ECR_REGISTRY: ${{ secrets.ECR_REPOSITORY_AL }}
         IMAGE_TAG: ${{ env.TAG }}
       run: |
-        export ECR_REPOSITORY=${{ secrets.ECR_REPOSITORY }}
+        export ECR_REPOSITORY=${{ secrets.ECR_REPOSITORY_AL }}
         export IMAGE_TAG=${{ env.TAG }}
         envsubst < manifest/backend.yaml > manifest/backend-updated.yaml
         cat manifest/backend-updated.yaml
-        kubectl delete deployment backend
         kubectl apply -f manifest/backend-updated.yaml
-        kubectl apply -f manifest/configmap.yaml
         sleep 10
         kubectl get pods | grep backend
