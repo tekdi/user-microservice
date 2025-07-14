@@ -76,6 +76,6 @@ jobs:
         export IMAGE_TAG=${{ env.TAG }}
         envsubst < manifest/backend.yaml > manifest/backend-updated.yaml
         cat manifest/backend-updated.yaml
-        kubectl apply -f manifest/backend-updated.yaml
-        sleep 10
+        kubectl apply -f manifest/backend-updated.yaml -n prod
+        sleep 15
         kubectl get pods | grep backend
