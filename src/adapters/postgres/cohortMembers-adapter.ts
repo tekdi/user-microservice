@@ -427,6 +427,52 @@ export class PostgresCohortMembersService {
         );
       }
 
+      // NEW: Add cohort details to each user
+      if (results['userDetails'] && results['userDetails'].length > 0) {
+        // Get unique cohort IDs from the results
+        const cohortIds = [...new Set(results['userDetails'].map(user => user.cohortId))].filter(id => id) as string[];
+        
+        // Fetch cohort details for all unique cohort IDs
+        const cohortDetailsMap = new Map<string, any>();
+                
+        for (const cohortId of cohortIds) {
+          try {
+            // Get basic cohort information
+            const cohort = await this.cohortRepository.findOne({
+              where: { cohortId: cohortId },
+              select: ['cohortId', 'name', 'parentId', 'type', 'status']
+            });
+            
+            if (cohort) {
+              // Get cohort custom fields using local method
+              const cohortCustomFields = await this.getCohortCustomFieldDetails(cohortId);
+              
+              cohortDetailsMap.set(cohortId, {
+                cohortId: cohort.cohortId,
+                name: cohort.name,
+                parentId: cohort.parentId,
+                type: cohort.type,
+                status: cohort.status,
+                customFields: cohortCustomFields
+              });
+            }
+          } catch (error) {
+            LoggerUtil.error(
+              `Failed to fetch cohort details for cohortId: ${cohortId}`,
+              `Error: ${error.message}`,
+              apiId
+            );
+            // Continue with other cohorts even if one fails
+          }
+        }
+        
+        // Add cohort details to each user
+        results['userDetails'] = results['userDetails'].map(user => ({
+          ...user,
+          cohort: cohortDetailsMap.get(user.cohortId) || null
+        }));
+      }
+
       // Check if CSV export is requested
       if (includeDisplayValues == true) {
         // Extract unique createdBy and updatedBy user IDs
@@ -805,7 +851,7 @@ export class PostgresCohortMembersService {
     }
 
     let query = `SELECT U."userId", U."username",U."email", U."firstName", U."middleName", U."lastName", R."name" AS role, U."district", U."state",U."mobile",U."deviceId",U."gender",U."dob",U."country",
-      CM."status", CM."statusReason",CM."cohortMembershipId",CM."status",CM."createdAt", CM."updatedAt",U."createdBy",U."updatedBy", COUNT(*) OVER() AS total_count  FROM public."CohortMembers" CM
+      CM."status", CM."statusReason",CM."cohortMembershipId",CM."cohortId",CM."status",CM."createdAt", CM."updatedAt",U."createdBy",U."updatedBy", COUNT(*) OVER() AS total_count  FROM public."CohortMembers" CM
       INNER JOIN public."Users" U
       ON CM."userId" = U."userId"
       INNER JOIN public."UserRolesMapping" UR
@@ -911,7 +957,7 @@ export class PostgresCohortMembersService {
     }
 
     let query = `SELECT U."userId", U."username",U."email", U."firstName", U."middleName", U."lastName", R."name" AS role, U."district", U."state",U."mobile",U."deviceId",U."gender",U."dob",U."country",
-      CM."status", CM."statusReason",CM."cohortMembershipId",CM."status",CM."createdAt", CM."updatedAt",U."createdBy",U."updatedBy", COUNT(*) OVER() AS total_count  
+      CM."status", CM."statusReason",CM."cohortMembershipId",CM."cohortId",CM."status",CM."createdAt", CM."updatedAt",U."createdBy",U."updatedBy", COUNT(*) OVER() AS total_count  
       FROM public."CohortMembers" CM
       INNER JOIN public."Users" U
       ON CM."userId" = U."userId"
@@ -1344,6 +1390,78 @@ export class PostgresCohortMembersService {
       return false;
     }
     return existCohort;
+  }
+
+  /**
+   * Get cohort custom field details
+   * This method replicates the functionality from PostgresCohortService
+   * to avoid circular dependency
+   */
+  public async getCohortCustomFieldDetails(cohortId: string) {
+    const query = `
+    SELECT DISTINCT 
+      f."fieldId",
+      f."label", 
+      COALESCE(
+        CASE f."type"
+          WHEN 'text' THEN fv."textValue"::text
+          WHEN 'number' THEN fv."numberValue"::text
+          WHEN 'calendar' THEN fv."calendarValue"::text
+          WHEN 'dropdown' THEN fv."dropdownValue"::text
+          WHEN 'radio' THEN fv."radioValue"
+          WHEN 'checkbox' THEN fv."checkboxValue"::text
+          WHEN 'textarea' THEN fv."textareaValue"
+          WHEN 'file' THEN fv."fileValue"
+        END,
+        fv."value"
+      ) as "value",
+      f."type", 
+      f."fieldParams",
+      f."sourceDetails"
+    FROM public."Cohort" c
+    LEFT JOIN (
+      SELECT DISTINCT ON (fv."fieldId", fv."itemId") fv.*
+      FROM public."FieldValues" fv
+    ) fv ON fv."itemId" = c."cohortId"
+    INNER JOIN public."Fields" f ON fv."fieldId" = f."fieldId"
+    WHERE c."cohortId" = $1;
+  `;
+    
+    let result = await this.cohortMembersRepository.query(query, [cohortId]);
+    result = result.map(async (data) => {
+      const originalValue = data.value;
+      let processedValue = data.value;
+
+      if (data?.sourceDetails) {
+        if (data.sourceDetails.source === 'fieldparams') {
+          data.fieldParams.options.forEach((option) => {
+            if (data.value === option.value) {
+              processedValue = option.label;
+            }
+          });
+        } else if (data.sourceDetails.source === 'table') {
+          const labels = await this.fieldsService.findDynamicOptions(
+            data.sourceDetails.table,
+            `value='${data.value}'`
+          );
+          if (labels && labels.length > 0) {
+            processedValue = labels[0].name;
+          }
+        }
+      }
+
+      delete data.fieldParams;
+      delete data.sourceDetails;
+
+      return {
+        ...data,
+        value: processedValue,
+        code: originalValue,
+      };
+    });
+
+    result = await Promise.all(result);
+    return result;
   }
 
   public async cohortUserMapping(userId, cohortId, cohortAcademicYearId) {
