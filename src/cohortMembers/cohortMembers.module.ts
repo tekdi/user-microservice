@@ -65,7 +65,6 @@ import { CohortMembersCronService } from './cohortMembers-cron.service';
     PostgresModule,
     ElasticsearchModule,
     forwardRef(() => FormsModule),
-
   ],
   controllers: [CohortMembersController],
   providers: [

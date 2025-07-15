@@ -41,7 +41,6 @@ import { FormsModule } from 'src/forms/forms.module';
     PostgresModule,
     ElasticsearchModule,
     forwardRef(() => FormsModule),
-
   ],
   controllers: [CohortController],
   providers: [
