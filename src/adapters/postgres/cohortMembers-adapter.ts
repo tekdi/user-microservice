@@ -427,6 +427,56 @@ export class PostgresCohortMembersService {
         );
       }
 
+      // NEW: Add cohort details to each user
+      if (results['userDetails'] && results['userDetails'].length > 0) {
+        // Get unique cohort IDs from the results
+        const cohortIds = [
+          ...new Set(results['userDetails'].map((user) => user.cohortId)),
+        ].filter((id) => id) as string[];
+
+        // Fetch cohort details for all unique cohort IDs
+        const cohortDetailsMap = new Map<string, any>();
+
+        for (const cohortId of cohortIds) {
+          try {
+            // Get basic cohort information
+            const cohort = await this.cohortRepository.findOne({
+              where: { cohortId: cohortId },
+              select: ['cohortId', 'name', 'parentId', 'type', 'status'],
+            });
+
+            if (cohort) {
+              // Get cohort custom fields using local method
+              const cohortCustomFields = await this.getCohortCustomFieldDetails(
+                cohortId
+              );
+
+              cohortDetailsMap.set(cohortId, {
+                cohortId: cohort.cohortId,
+                name: cohort.name,
+                parentId: cohort.parentId,
+                type: cohort.type,
+                status: cohort.status,
+                customFields: cohortCustomFields,
+              });
+            }
+          } catch (error) {
+            LoggerUtil.error(
+              `Failed to fetch cohort details for cohortId: ${cohortId}`,
+              `Error: ${error.message}`,
+              apiId
+            );
+            // Continue with other cohorts even if one fails
+          }
+        }
+
+        // Add cohort details to each user
+        results['userDetails'] = results['userDetails'].map((user) => ({
+          ...user,
+          cohort: cohortDetailsMap.get(user.cohortId) || null,
+        }));
+      }
+
       // Check if CSV export is requested
       if (includeDisplayValues == true) {
         // Extract unique createdBy and updatedBy user IDs
@@ -805,7 +855,7 @@ export class PostgresCohortMembersService {
     }
 
     let query = `SELECT U."userId", U."username",U."email", U."firstName", U."middleName", U."lastName", R."name" AS role, U."district", U."state",U."mobile",U."deviceId",U."gender",U."dob",U."country",
-      CM."status", CM."statusReason",CM."cohortMembershipId",CM."status",CM."createdAt", CM."updatedAt",U."createdBy",U."updatedBy", COUNT(*) OVER() AS total_count  FROM public."CohortMembers" CM
+      CM."status", CM."statusReason",CM."cohortMembershipId",CM."cohortId",CM."status",CM."createdAt", CM."updatedAt",U."createdBy",U."updatedBy", COUNT(*) OVER() AS total_count  FROM public."CohortMembers" CM
       INNER JOIN public."Users" U
       ON CM."userId" = U."userId"
       INNER JOIN public."UserRolesMapping" UR
@@ -911,7 +961,7 @@ export class PostgresCohortMembersService {
     }
 
     let query = `SELECT U."userId", U."username",U."email", U."firstName", U."middleName", U."lastName", R."name" AS role, U."district", U."state",U."mobile",U."deviceId",U."gender",U."dob",U."country",
-      CM."status", CM."statusReason",CM."cohortMembershipId",CM."status",CM."createdAt", CM."updatedAt",U."createdBy",U."updatedBy", COUNT(*) OVER() AS total_count  
+      CM."status", CM."statusReason",CM."cohortMembershipId",CM."cohortId",CM."status",CM."createdAt", CM."updatedAt",U."createdBy",U."updatedBy", COUNT(*) OVER() AS total_count  
       FROM public."CohortMembers" CM
       INNER JOIN public."Users" U
       ON CM."userId" = U."userId"
@@ -1344,6 +1394,24 @@ export class PostgresCohortMembersService {
       return false;
     }
     return existCohort;
+  }
+
+  /**
+   * Get cohort custom field details using the existing fields service
+   * This avoids code duplication by leveraging the existing PostgresFieldsService
+   */
+  public async getCohortCustomFieldDetails(cohortId: string) {
+    if (!cohortId || typeof cohortId !== 'string') {
+      throw new Error('Invalid cohortId parameter');
+    }
+    // Use the existing fields service to get cohort custom field details
+    return await this.fieldsService.getFieldValuesData(
+      cohortId,
+      'COHORT',
+      'COHORT',
+      null,
+      true
+    );
   }
 
   public async cohortUserMapping(userId, cohortId, cohortAcademicYearId) {
@@ -1986,7 +2054,7 @@ export class PostgresCohortMembersService {
       // Create the new response structure with totalCount inside result and userDetails array
       const resultWithTotalCount = {
         totalCount: totalCount,
-        userDetails: finalUserDetails
+        userDetails: finalUserDetails,
       };
 
       return APIResponse.success(
@@ -2471,7 +2539,6 @@ export class PostgresCohortMembersService {
     if (formFieldsAndRules && formFieldsAndRules.length > 0) {
       const userIds = members.map((m) => m.userId);
       userFieldValuesMap = await this.getBatchUserFieldValues(userIds);
-  
     }
 
     // Process each member in the batch
@@ -2695,7 +2762,7 @@ export class PostgresCohortMembersService {
           const [userData, cohortData] = await Promise.all([
             this.usersRepository.findOne({
               where: { userId: evaluationResult.userId || cohortMembershipId },
-              select: ['userId', 'email', 'firstName', 'lastName'] // force select email field
+              select: ['userId', 'email', 'firstName', 'lastName'], // force select email field
             }),
             this.cohortRepository.findOne({
               where: { cohortId: evaluationResult.cohortId },
@@ -3750,7 +3817,8 @@ export class PostgresCohortMembersService {
       process.env.ENABLE_SHORTLISTING_EMAILS !== 'false';
 
     // Field ID for rejection notification date - should be configured based on your field structure
-    const rejectionNotificationDateFieldId = process.env.REJECTION_NOTIFICATION_DATE_FIELD_ID;
+    const rejectionNotificationDateFieldId =
+      process.env.REJECTION_NOTIFICATION_DATE_FIELD_ID;
 
     if (!rejectionNotificationDateFieldId) {
       throw new Error(
@@ -3804,7 +3872,8 @@ export class PostgresCohortMembersService {
       }
 
       // Step 3: Aggregate Results
-      const aggregatedResults = this.aggregateRejectionEmailResults(cohortResults);
+      const aggregatedResults =
+        this.aggregateRejectionEmailResults(cohortResults);
 
       // Step 4: Calculate Performance Metrics
       const totalTime = Date.now() - startTime;
@@ -3856,10 +3925,11 @@ export class PostgresCohortMembersService {
     currentDateUTC: string
   ) {
     // Step 1: Fetch Active Cohorts with Rejection Notification Date = Today or Earlier
-    const activeCohorts = await this.getActiveCohortsWithRejectionNotificationDate(
-      rejectionNotificationDateFieldId,
-      currentDateUTC
-    );
+    const activeCohorts =
+      await this.getActiveCohortsWithRejectionNotificationDate(
+        rejectionNotificationDateFieldId,
+        currentDateUTC
+      );
 
     if (activeCohorts.length === 0) {
       ShortlistingLogger.logShortlisting(
@@ -3940,8 +4010,10 @@ export class PostgresCohortMembersService {
 
     try {
       // Get rejected members that need email notifications
-      const members = await this.getRejectedMembersForEmailNotification(cohortId);
-      
+      const members = await this.getRejectedMembersForEmailNotification(
+        cohortId
+      );
+
       if (members.length === 0) {
         return {
           processed: 0,
@@ -4015,8 +4087,6 @@ export class PostgresCohortMembersService {
       cohortId,
       batchSize,
     ]);
-
-
 
     return members;
   }
@@ -4156,20 +4226,20 @@ export class PostgresCohortMembersService {
     // Pre-fetch all user data for this batch to reduce database calls
     const userIds = members.map((m) => m.userId);
     const userDataMap = new Map();
-    
+
     if (userIds.length > 0) {
       const users = await this.usersRepository.find({
         where: { userId: In(userIds) },
-        select: ['userId', 'email', 'firstName', 'lastName']
+        select: ['userId', 'email', 'firstName', 'lastName'],
       });
-      
-      users.forEach(user => {
+
+      users.forEach((user) => {
         userDataMap.set(user.userId, user);
       });
     }
 
     // Process each member in the batch
-    
+
     for (const member of members) {
       try {
         // Get user data for this member
@@ -4300,7 +4370,9 @@ export class PostgresCohortMembersService {
         failureReason: mailSend.result.email.errors.join(', '),
         cohortId: cohortId,
       });
-      throw new Error(`Email sending failed: ${mailSend.result.email.errors.join(', ')}`);
+      throw new Error(
+        `Email sending failed: ${mailSend.result.email.errors.join(', ')}`
+      );
     } else {
       // Log email success
       ShortlistingLogger.logRejectionEmailSuccess({
