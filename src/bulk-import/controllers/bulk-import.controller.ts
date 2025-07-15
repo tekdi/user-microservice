@@ -68,20 +68,15 @@ export class BulkImportController {
     @Req() req: Request,
     @Res() res: Response
   ) {
-    
     try {
-      // The service will handle logging and response formatting
-      const result = await this.bulkImportService.processBulkImport(
+      return await this.bulkImportService.processBulkImport(
         file,
         bulkImportDto.cohortId,
         tenantId,
         req,
         res
       );
-
-      return result;
     } catch (error) {
-      // Log the error with the batch ID for easier tracking
       throw error;
     }
   }
