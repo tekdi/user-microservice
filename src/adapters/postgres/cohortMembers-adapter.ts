@@ -827,6 +827,9 @@ export class PostgresCohortMembersService {
           case 'firstName': {
             return `U."firstName" ILIKE '%${value}%'`;
           }
+          case 'email': {
+            return `U."email" ILIKE '%${value}%'`;
+          }
           case 'country': {
             const countryValues = Array.isArray(value)
               ? value.map((country) => `'${country}'`).join(', ')
@@ -922,6 +925,10 @@ export class PostgresCohortMembersService {
           case 'firstName': {
             parameters.push(`%${value}%`);
             return `U."firstName" ILIKE $${parameterIndex++}`;
+          }
+          case 'email': {
+            parameters.push(`%${value}%`);
+            return `U."email" ILIKE $${parameterIndex++}`;
           }
           case 'country': {
             const countryValues = Array.isArray(value)
