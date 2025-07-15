@@ -1393,75 +1393,12 @@ export class PostgresCohortMembersService {
   }
 
   /**
-   * Get cohort custom field details
-   * This method replicates the functionality from PostgresCohortService
-   * to avoid circular dependency
+   * Get cohort custom field details using the existing fields service
+   * This avoids code duplication by leveraging the existing PostgresFieldsService
    */
   public async getCohortCustomFieldDetails(cohortId: string) {
-    const query = `
-    SELECT DISTINCT 
-      f."fieldId",
-      f."label", 
-      COALESCE(
-        CASE f."type"
-          WHEN 'text' THEN fv."textValue"::text
-          WHEN 'number' THEN fv."numberValue"::text
-          WHEN 'calendar' THEN fv."calendarValue"::text
-          WHEN 'dropdown' THEN fv."dropdownValue"::text
-          WHEN 'radio' THEN fv."radioValue"
-          WHEN 'checkbox' THEN fv."checkboxValue"::text
-          WHEN 'textarea' THEN fv."textareaValue"
-          WHEN 'file' THEN fv."fileValue"
-        END,
-        fv."value"
-      ) as "value",
-      f."type", 
-      f."fieldParams",
-      f."sourceDetails"
-    FROM public."Cohort" c
-    LEFT JOIN (
-      SELECT DISTINCT ON (fv."fieldId", fv."itemId") fv.*
-      FROM public."FieldValues" fv
-    ) fv ON fv."itemId" = c."cohortId"
-    INNER JOIN public."Fields" f ON fv."fieldId" = f."fieldId"
-    WHERE c."cohortId" = $1;
-  `;
-    
-    let result = await this.cohortMembersRepository.query(query, [cohortId]);
-    result = result.map(async (data) => {
-      const originalValue = data.value;
-      let processedValue = data.value;
-
-      if (data?.sourceDetails) {
-        if (data.sourceDetails.source === 'fieldparams') {
-          data.fieldParams.options.forEach((option) => {
-            if (data.value === option.value) {
-              processedValue = option.label;
-            }
-          });
-        } else if (data.sourceDetails.source === 'table') {
-          const labels = await this.fieldsService.findDynamicOptions(
-            data.sourceDetails.table,
-            `value='${data.value}'`
-          );
-          if (labels && labels.length > 0) {
-            processedValue = labels[0].name;
-          }
-        }
-      }
-
-      delete data.fieldParams;
-      delete data.sourceDetails;
-
-      return {
-        ...data,
-        value: processedValue,
-        code: originalValue,
-      };
-    });
-
-    result = await Promise.all(result);
-    return result;
+    // Use the existing fields service to get cohort custom field details
+    return await this.fieldsService.getFieldValuesData(cohortId, 'COHORT', 'COHORT', null, true);
   }
 
   public async cohortUserMapping(userId, cohortId, cohortAcademicYearId) {
