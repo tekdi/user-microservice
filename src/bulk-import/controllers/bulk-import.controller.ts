@@ -28,7 +28,6 @@ import { APIID } from '../../common/utils/api-id.config';
 import APIResponse from '../../common/responses/response';
 import { API_RESPONSES } from '../../common/utils/response.messages';
 import { BulkImportLogger } from '../../common/logger/BulkImportLogger';
-import { v4 as uuidv4 } from 'uuid';
 
 @Controller('bulk-import')
 @ApiTags('Bulk Import')
@@ -69,8 +68,7 @@ export class BulkImportController {
     @Req() req: Request,
     @Res() res: Response
   ) {
-    const batchId = uuidv4();
-
+    
     try {
       // The service will handle logging and response formatting
       const result = await this.bulkImportService.processBulkImport(
