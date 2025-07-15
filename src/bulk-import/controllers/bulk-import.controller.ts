@@ -28,7 +28,6 @@ import { APIID } from '../../common/utils/api-id.config';
 import APIResponse from '../../common/responses/response';
 import { API_RESPONSES } from '../../common/utils/response.messages';
 import { BulkImportLogger } from '../../common/logger/BulkImportLogger';
-import { v4 as uuidv4 } from 'uuid';
 
 @Controller('bulk-import')
 @ApiTags('Bulk Import')
@@ -69,14 +68,17 @@ export class BulkImportController {
     @Req() req: Request,
     @Res() res: Response
   ) {
-    // The service will handle logging and response formatting
-    return await this.bulkImportService.processBulkImport(
-      file,
-      bulkImportDto.cohortId,
-      tenantId,
-      req,
-      res
-    );
+    try {
+      return await this.bulkImportService.processBulkImport(
+        file,
+        bulkImportDto.cohortId,
+        tenantId,
+        req,
+        res
+      );
+    } catch (error) {
+      throw error;
+    }
   }
 
   // Generate XLSX Template for Cohort

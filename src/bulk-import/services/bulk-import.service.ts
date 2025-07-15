@@ -83,13 +83,38 @@ export class BulkImportService {
     };
 
     try {
+      // Validate cohortId
+      if (!cohortId || cohortId === 'undefined' || cohortId === 'null') {
+        throw new Error('Valid cohort ID is required for bulk import.');
+      }
+
+      // Validate UUID format
+      const uuidRegex =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(cohortId)) {
+        throw new Error('Cohort ID must be a valid UUID format.');
+      }
+
       BulkImportLogger.initializeLogger(cohortId);
       // Parse file based on mimetype
       const userData = await this.parseFile(file);
+
+      // Validate that userData is an array and has data
+      if (!userData || !Array.isArray(userData) || userData.length === 0) {
+        throw new Error(
+          'No valid data found in the uploaded file. Please check the file format and content.'
+        );
+      }
+
       BulkImportLogger.logImportStart(batchId, userData.length);
 
       const createdUserIds: string[] = [];
       let loginUser = null;
+
+      // Ensure createdUserIds is always an array
+      if (!createdUserIds || !Array.isArray(createdUserIds)) {
+        throw new Error('Failed to initialize user ID tracking array');
+      }
       if (request.headers.authorization) {
         const decoded: any = require('jwt-decode')(
           request.headers.authorization
@@ -101,6 +126,20 @@ export class BulkImportService {
         try {
           results.totalProcessed++;
           const user = userData[i];
+
+          // Validate user data
+          if (!user || typeof user !== 'object') {
+            throw new Error(`Invalid user data at row ${i + 2}`);
+          }
+
+          // Validate required fields
+          if (!user.email || !user.firstName || !user.lastName) {
+            throw new Error(
+              `Missing required fields (email, firstName, lastName) at row ${
+                i + 2
+              }`
+            );
+          }
 
           // 1. Create user (do not change userService.createUser signature)
           const userCreateDto = this.mapToUserCreateDto(user);
@@ -171,14 +210,15 @@ export class BulkImportService {
         } catch (error) {
           results.failureCount++;
           // Log only serializable error and user data
+          const userDataItem = userData[i] || {};
           BulkImportLogger.logUserCreationError(
             batchId,
             i + 2,
             { message: error.message, stack: error.stack },
-            userData[i]
+            userDataItem
           );
           results.failures.push({
-            email: userData[i]?.email,
+            email: (userDataItem as any)?.email || 'Unknown',
             error: error.message,
           });
         }
@@ -264,15 +304,18 @@ export class BulkImportService {
             const userId = createdUserIds[i];
             if (!userId) continue;
             // Build customFields array for this user
-            const customFields = Object.entries(fieldHeaderMap).map(
-              ([header, { fieldId }]) => ({
-                fieldId,
-                value:
-                  user[header] !== undefined && user[header] !== null
-                    ? String(user[header])
-                    : '',
-              })
-            );
+            const customFields =
+              fieldHeaderMap && Object.keys(fieldHeaderMap).length > 0
+                ? Object.entries(fieldHeaderMap).map(
+                    ([header, { fieldId }]) => ({
+                      fieldId,
+                      value:
+                        user[header] !== undefined && user[header] !== null
+                          ? String(user[header])
+                          : '',
+                    })
+                  )
+                : [];
             // Build CreateFormSubmissionDto
             const createFormSubmissionDto = {
               userId: userId, // The imported user's ID
@@ -390,13 +433,31 @@ export class BulkImportService {
   }
 
   private parseExcel(file: Express.Multer.File): BulkImportUserData[] {
-    const workbook = xlsx.read(file.buffer, { type: 'buffer' });
-    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-    const jsonData = xlsx.utils.sheet_to_json(worksheet);
-    return jsonData.map((row) => this.validateAndTransformRow(row));
+    try {
+      const workbook = xlsx.read(file.buffer, { type: 'buffer' });
+      if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+        throw new Error('No sheets found in the Excel file');
+      }
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      if (!worksheet) {
+        throw new Error('First sheet is empty or invalid');
+      }
+      const jsonData = xlsx.utils.sheet_to_json(worksheet);
+      if (!Array.isArray(jsonData) || jsonData.length === 0) {
+        throw new Error('No data found in the Excel file');
+      }
+      return jsonData.map((row) => this.validateAndTransformRow(row));
+    } catch (error) {
+      throw new Error(`Failed to parse Excel file: ${error.message}`);
+    }
   }
 
   private validateAndTransformRow(row: any): BulkImportUserData {
+    // Ensure row is an object
+    if (!row || typeof row !== 'object') {
+      throw new Error('Invalid row data: row must be an object');
+    }
+
     // Always set username from email, never from file
     return {
       ...row,
@@ -411,6 +472,10 @@ export class BulkImportService {
     });
     // Always set username to email
     dto.username = dto.email;
+    // Ensure customFields is always an array to prevent undefined errors
+    if (!dto.customFields) {
+      dto.customFields = [];
+    }
     return dto;
   }
 
@@ -461,6 +526,11 @@ export class BulkImportService {
     if (!userCreateDto.mobile || userCreateDto.mobile.trim() === '') {
       userCreateDto.mobile = undefined;
     }
+
+    // For bulk import, mobile is optional - if not provided, remove it from the DTO to skip validation
+    if (!userCreateDto.mobile) {
+      delete userCreateDto.mobile;
+    }
     // Age validation
     const minAge = this.configService.get('MINIMUM_AGE');
     if (
@@ -471,7 +541,11 @@ export class BulkImportService {
       throw new Error(`User must be at least ${minAge} years old.`);
     }
     // Custom field validation
-    if (userCreateDto.customFields && userCreateDto.customFields.length > 0) {
+    if (
+      userCreateDto.customFields &&
+      Array.isArray(userCreateDto.customFields) &&
+      userCreateDto.customFields.length > 0
+    ) {
       const customFieldError = await this.userService.validateCustomField(
         userCreateDto,
         null,
@@ -486,11 +560,39 @@ export class BulkImportService {
       userCreateDto,
       academicYearId
     );
-    if (
-      Array.isArray(validatedRoles) &&
-      validatedRoles.some((item) => item?.code === undefined)
-    ) {
-      throw new Error('Invalid roles or academic year.');
+    // Handle validation response - it can return error messages or role objects
+    if (Array.isArray(validatedRoles)) {
+      // Check if the array contains error messages (strings) instead of role objects
+      const hasErrorMessages = validatedRoles.some(
+        (item) => typeof item === 'string'
+      );
+
+      if (hasErrorMessages) {
+        console.error(
+          `[CREATE_USER_FOR_BULK] Validation errors found for email: ${userCreateDto.email}`,
+          {
+            errors: validatedRoles,
+          }
+        );
+        throw new Error(`Validation failed: ${validatedRoles.join('; ')}`);
+      }
+
+      // Check if roles are valid (have code property)
+      const invalidItems = validatedRoles.filter(
+        (item) => item?.code === undefined
+      );
+      if (invalidItems.length > 0) {
+        console.error(
+          `[CREATE_USER_FOR_BULK] Invalid roles found for email: ${userCreateDto.email}`,
+          {
+            invalidItems,
+            allRoles: validatedRoles,
+          }
+        );
+        throw new Error('Invalid roles or academic year.');
+      }
+    } else if (validatedRoles === false) {
+      throw new Error('No tenant cohort role mapping provided.');
     }
     userCreateDto.username = userCreateDto.username.toLocaleLowerCase();
     const userSchema = new UserCreateDto(userCreateDto);
@@ -716,18 +818,24 @@ export class BulkImportService {
       'formSubmissionRepository'
     ].save(submission);
     // Save custom fields
-    for (const fieldValue of customFields) {
-      const fieldValueDto = new FieldValuesDto({
-        fieldId: fieldValue.fieldId,
-        value: fieldValue.value,
-        itemId: userId,
-        createdBy: adminId,
-        updatedBy: adminId,
-      });
-      await this.formSubmissionService['fieldsService'].createFieldValues(
-        null,
-        fieldValueDto
-      );
+    if (
+      customFields &&
+      Array.isArray(customFields) &&
+      customFields.length > 0
+    ) {
+      for (const fieldValue of customFields) {
+        const fieldValueDto = new FieldValuesDto({
+          fieldId: fieldValue.fieldId,
+          value: fieldValue.value,
+          itemId: userId,
+          createdBy: adminId,
+          updatedBy: adminId,
+        });
+        await this.formSubmissionService['fieldsService'].createFieldValues(
+          null,
+          fieldValueDto
+        );
+      }
     }
     // Optionally update Elasticsearch, etc. (if needed)
     return savedSubmission;
