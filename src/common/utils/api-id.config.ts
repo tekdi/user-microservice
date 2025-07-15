@@ -77,6 +77,7 @@ export const APIID = {
   FIELDVALUES_CREATE: 'api.fieldValues.create',
   FIELDVALUES_SEARCH: 'api.fieldValues.search',
   FIELDVALUES_DELETE: 'api.fieldValues.delete',
+  FIELDVALUES_DOWNLOAD: 'api.fieldValues.download',
   FIELD_OPTIONS_DELETE: 'api.fields.options.delete',
   FIELD_DELETE: 'api.fields.delete',
 

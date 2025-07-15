@@ -6,6 +6,8 @@ import {
   ApiBasicAuth,
   ApiHeader,
   ApiQuery,
+  ApiOperation,
+  ApiParam,
 } from '@nestjs/swagger';
 import {
   Controller,
@@ -764,6 +766,91 @@ export class FieldsController {
         response,
         APIID.FIELDVALUES_DELETE,
         'Failed to delete file: ' + error.message,
+        API_RESPONSES.SERVER_ERROR,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  @Get('download-file/:fieldId')
+  @UseGuards(JwtAuthGuard)
+  @UseFilters(new AllExceptionsFilter(APIID.FIELDVALUES_DOWNLOAD))
+  @ApiOperation({ 
+    summary: 'Download a file from a field',
+    description: 'Downloads a file associated with a specific field. Only the file owner or admin users can download files.'
+  })
+  @ApiParam({ 
+    name: 'fieldId', 
+    type: String, 
+    description: 'The ID of the field containing the file to download' 
+  })
+  @ApiHeader({ 
+    name: 'Authorization', 
+    description: 'Bearer token for authentication' 
+  })
+  @ApiForbiddenResponse({ 
+    description: 'User is not authorized to download this file' 
+  })
+  async downloadFile(
+    @Param('fieldId') fieldId: string,
+    @Req() request: RequestWithUser,
+    @Res() response: Response
+  ) {
+    try {
+      // Extract userId and role from bearer token
+      const userId = request.user?.userId || request.user?.sub;
+      const userRole = request.user?.role || request.user?.realm_access?.roles?.[0];
+      
+      if (!userId) {
+        return APIResponse.error(
+          response,
+          APIID.FIELDVALUES_DOWNLOAD,
+          'User ID is required from authentication token.',
+          'USER_ID_REQUIRED',
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      const downloadResult = await this.fileUploadService.downloadFile(
+        fieldId,
+        userId,
+        userRole
+      );
+
+      // Set response headers for file download
+      response.setHeader('Content-Type', downloadResult.contentType);
+      response.setHeader('Content-Disposition', `attachment; filename="${downloadResult.originalName}"`);
+      response.setHeader('Content-Length', downloadResult.size.toString());
+      response.setHeader('X-Field-Id', fieldId);
+      response.setHeader('X-File-Name', downloadResult.originalName);
+      response.setHeader('X-File-Size', downloadResult.size.toString());
+      response.setHeader('X-Status', 'downloaded');
+
+      // Send the file buffer and end the response
+      response.send(downloadResult.buffer);
+
+    } catch (error) {
+      // Only log unexpected errors, not validation errors
+      if (!(error instanceof FileValidationException)) {
+        console.log('Error in FieldsController downloadFile:', error);
+      }
+      
+      if (error instanceof FileValidationException) {
+        // Extract the error message directly from the exception
+        const errorMsg = error.message;
+        return APIResponse.error(
+          response,
+          APIID.FIELDVALUES_DOWNLOAD,
+          errorMsg,
+          'File Download Error',
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      return APIResponse.error(
+        response,
+        APIID.FIELDVALUES_DOWNLOAD,
+        'Failed to download file: ' + error.message,
         API_RESPONSES.SERVER_ERROR,
         HttpStatus.INTERNAL_SERVER_ERROR
       );

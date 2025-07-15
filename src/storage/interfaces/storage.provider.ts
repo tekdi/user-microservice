@@ -4,6 +4,7 @@
  * Defines the contract for storage providers (local and S3):
  * - File upload operations
  * - File deletion operations
+ * - File download operations
  * - URL generation
  * - Presigned URL generation for direct uploads
  *
@@ -24,6 +25,13 @@ export interface StorageProvider {
    * @returns Promise that resolves when deletion is complete
    */
   delete(filePath: string): Promise<void>;
+
+  /**
+   * Downloads a file from storage.
+   * @param filePath - The file path/key to download
+   * @returns Promise resolving to file buffer and metadata
+   */
+  download(filePath: string): Promise<{ buffer: Buffer; contentType: string; originalName: string; size: number }>;
 
   /**
    * Returns the public URL for a file.
