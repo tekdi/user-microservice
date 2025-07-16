@@ -187,7 +187,8 @@ export class FormSubmissionService {
 
       // Get the complete field values with field information
       const customFields = await this.fieldsService.getFieldsAndFieldsValues(
-        savedSubmission.itemId
+        savedSubmission.itemId,
+        createFormSubmissionDto.formSubmission.formId // Pass formId for checkbox processing
       );
 
       // Update Elasticsearch
@@ -616,10 +617,10 @@ export class FormSubmissionService {
         };
 
         if (includeDisplayValues) {
-          result.customFields =
-            await this.fieldsService.getFieldsAndFieldsValues(
-              submission.itemId
-            );
+          result.customFields = await this.fieldsService.getFieldsAndFieldsValues(
+            submission.itemId,
+            submission.formId // Pass formId for checkbox processing
+          );
         }
 
         return result;
@@ -762,7 +763,8 @@ export class FormSubmissionService {
 
       // Get field values using the existing FieldsService
       const customFields = await this.fieldsService.getFieldsAndFieldsValues(
-        submission.itemId
+        submission.itemId,
+        submission.formId // Pass formId for checkbox processing
       );
 
       // Create response object
