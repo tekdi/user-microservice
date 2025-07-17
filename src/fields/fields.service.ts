@@ -388,7 +388,7 @@ export class FieldsService {
 
       // Recursively search through all object values
       for (const key in obj) {
-        if (obj.hasOwnProperty(obj, key)) {
+        if (obj.hasOwnProperty(key)) {
           const value = obj[key];
           if (typeof value === 'object' && value !== null) {
             const result = searchFields(value);
