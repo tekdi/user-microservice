@@ -2882,7 +2882,17 @@ export class PostgresUserService implements IServicelocator {
             const tenantRoleData = await this.userTenantRoleData(userId);
             
             // Get custom fields if any
-            const customFields = await this.fieldsService.getCustomFieldDetails(userId, 'Users');
+            const customFieldsRows = await this.usersRepository.query(`
+              SELECT fv."fieldId", f.name, f.type, fv.value
+              FROM public."FieldValues" fv
+              JOIN public."Fields" f ON fv."fieldId" = f."fieldId"
+              WHERE fv."itemId" = $1
+            `, [userId]);
+            const customFields = customFieldsRows.reduce((acc, row) => {
+              acc[row.name] = { type: row.type, value: row.value };
+              return acc;
+            }, {});
+          
 
             // Get cohort information for the user
             let cohorts = [];
