@@ -349,11 +349,11 @@ export class FieldsService {
       const fieldType = fieldMetadata.type; // Type from schema: "boolean", "string", "array"
 
       switch (fieldType) {
-        case 'boolean':
+        case 'boolean': {
           const booleanResult =
             checkboxValue === 'true' || checkboxValue === '1';
           return booleanResult;
-
+        }
         case 'string':
           return checkboxValue; // Current workflow - return as string
 
