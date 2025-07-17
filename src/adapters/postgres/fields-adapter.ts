@@ -1194,7 +1194,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
       } = fieldsOptionsSearchDto;
 
       offset = offset || 0;
-      limit = limit || 200;
+      limit = limit || 1000;
 
       const condition: any = {
         name: fieldName,
