@@ -1435,6 +1435,9 @@ export class PostgresCohortMembersService {
               if (params.updateData.status != null) {
                 ctx._source.applications[i].status = params.updateData.status;
               }
+              if (params.updateData.completionPercentage != null) {
+                ctx._source.applications[i].completionPercentage = params.updateData.completionPercentage;
+              }
               if (params.updateData.updatedAt != null) {
                 ctx._source.applications[i].updatedAt = params.updateData.updatedAt;
               }
@@ -1481,6 +1484,7 @@ export class PostgresCohortMembersService {
             cohortmemberstatus: updateData.cohortmemberstatus,
             statusReason: updateData.statusReason,
             status: updateData.status,
+            completionPercentage: updateData.completionPercentage,
             updatedAt: new Date().toISOString(),
           },
         },
@@ -1870,6 +1874,8 @@ export class PostgresCohortMembersService {
         academicyearId
       );
       const initialUserDetails = results.userDetails || [];
+      // FIXED: Store the original total count from database query
+      const originalTotalCount = results.totalCount || 0;
 
       if (!initialUserDetails.length) {
         return APIResponse.success(
@@ -1918,7 +1924,7 @@ export class PostgresCohortMembersService {
               where: {
                 formId: form.formid,
                 itemId: user.userId,
-                status: FormSubmissionStatus.ACTIVE,
+                // status: FormSubmissionStatus.ACTIVE,
               },
               order: {
                 createdAt: 'DESC',
@@ -2144,7 +2150,7 @@ export class PostgresCohortMembersService {
                 where: {
                   formId: form.formid,
                   itemId: user.userId,
-                  status: FormSubmissionStatus.ACTIVE,
+                  // status: FormSubmissionStatus.ACTIVE,
                 },
                 order: {
                   createdAt: 'DESC',
@@ -2190,7 +2196,8 @@ export class PostgresCohortMembersService {
       } else {
         // Use existing flow for cases without completion percentage filtering
         finalUserDetails = enrichedResults;
-        totalCount = finalUserDetails.length;
+        // FIXED: Use the original total count from database query instead of limited results length
+        totalCount = originalTotalCount;
       }
 
       // Create the new response structure with totalCount inside result and userDetails array
@@ -2361,7 +2368,11 @@ export class PostgresCohortMembersService {
         }
       }
     }
-    return results;
+    // FIXED: Return both totalCount and userDetails from getCohortMemberUserDetails
+    return {
+      totalCount: (results as any).totalCount || 0,
+      userDetails: results.userDetails || []
+    };
   }
 
   /**
@@ -2796,11 +2807,12 @@ export class PostgresCohortMembersService {
 
           if (cohortMemberDetails) {
             // Use the existing field-specific update method to preserve all existing data
+            // FIXED: Update cohortmemberstatus instead of status to match Elasticsearch structure
             await this.updateElasticsearchWithFieldSpecificChanges(
               cohortMemberDetails.userId,
               cohortMemberDetails.cohortId,
               {
-                status: evaluationResult.status,
+                cohortmemberstatus: evaluationResult.status, // FIXED: Use cohortmemberstatus instead of status
                 statusReason: evaluationResult.statusReason,
               },
               null // existingApplication is null since we're doing a minimal update

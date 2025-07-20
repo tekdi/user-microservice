@@ -81,6 +81,7 @@ export class UserElasticsearchService implements OnModuleInit {
                 status: { type: 'keyword' },
                 cohortmemberstatus: { type: 'keyword' },
                 formstatus: { type: 'keyword' },
+                completionPercentage: { type: 'float' }, // FIXED: Add completionPercentage field
                 progress: {
                   properties: {
                     pages: {
