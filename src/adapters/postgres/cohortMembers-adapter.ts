@@ -1126,7 +1126,7 @@ export class PostgresCohortMembersService {
           const userDoc = await this.userElasticsearchService.getUser(
             cohortMembershipToUpdate.userId
           );
-          
+
           // Extract the application array if present
           const source =
             userDoc && userDoc._source
@@ -1392,13 +1392,13 @@ export class PostgresCohortMembersService {
 
   /**
    * SOLUTION 3: Field-specific Elasticsearch update method
-   * 
+   *
    * PROBLEM: The previous updateApplication method was completely replacing the application object,
    * which caused deletion of all existing data like progress, formData, etc.
-   * 
+   *
    * SOLUTION: Use Elasticsearch Painless scripts to update only specific fields while preserving
    * all existing data that's not being updated.
-   * 
+   *
    * @param userId - User ID to update
    * @param cohortId - Cohort ID for the application
    * @param updateData - Object containing only the fields to update
@@ -1432,9 +1432,7 @@ export class PostgresCohortMembersService {
               if (params.updateData.statusReason != null) {
                 ctx._source.applications[i].statusReason = params.updateData.statusReason;
               }
-              if (params.updateData.status != null) {
-                ctx._source.applications[i].status = params.updateData.status;
-              }
+
               if (params.updateData.completionPercentage != null) {
                 ctx._source.applications[i].completionPercentage = params.updateData.completionPercentage;
               }
@@ -1458,7 +1456,6 @@ export class PostgresCohortMembersService {
             newApplication.cohortId = params.cohortId;
             newApplication.cohortmemberstatus = params.updateData.cohortmemberstatus;
             newApplication.statusReason = params.updateData.statusReason;
-            newApplication.status = params.updateData.status;
             newApplication.updatedAt = params.updateData.updatedAt;
             newApplication.createdAt = params.updateData.updatedAt;
             
@@ -1483,7 +1480,6 @@ export class PostgresCohortMembersService {
           updateData: {
             cohortmemberstatus: updateData.cohortmemberstatus,
             statusReason: updateData.statusReason,
-            status: updateData.status,
             completionPercentage: updateData.completionPercentage,
             updatedAt: new Date().toISOString(),
           },
@@ -1493,7 +1489,7 @@ export class PostgresCohortMembersService {
       // Check if user document exists by trying to get it
       // This is safer than using private methods and provides the same functionality
       const userDoc = await this.userElasticsearchService.getUser(userId);
-      
+
       if (userDoc) {
         // Update existing document with field-specific changes using the script
         // This ensures only specific fields are updated while preserving existing data
@@ -1501,19 +1497,26 @@ export class PostgresCohortMembersService {
           userId,
           { script },
           async (userId: string) => {
-            return await this.formSubmissionService.buildUserDocumentForElasticsearch(userId);
+            return await this.formSubmissionService.buildUserDocumentForElasticsearch(
+              userId
+            );
           }
         );
       } else {
         // If user document doesn't exist, create it with the new application
         // This maintains backward compatibility for new users
-        const fullUserDoc = await this.formSubmissionService.buildUserDocumentForElasticsearch(userId);
+        const fullUserDoc =
+          await this.formSubmissionService.buildUserDocumentForElasticsearch(
+            userId
+          );
         if (fullUserDoc) {
           await this.userElasticsearchService.updateUser(
             userId,
             { doc: fullUserDoc },
             async (userId: string) => {
-              return await this.formSubmissionService.buildUserDocumentForElasticsearch(userId);
+              return await this.formSubmissionService.buildUserDocumentForElasticsearch(
+                userId
+              );
             }
           );
         }
@@ -2371,7 +2374,7 @@ export class PostgresCohortMembersService {
     // FIXED: Return both totalCount and userDetails from getCohortMemberUserDetails
     return {
       totalCount: (results as any).totalCount || 0,
-      userDetails: results.userDetails || []
+      userDetails: results.userDetails || [],
     };
   }
 
@@ -2800,10 +2803,11 @@ export class PostgresCohortMembersService {
       if (isElasticsearchEnabled()) {
         try {
           // Get the cohort member details to get userId and cohortId for Elasticsearch update
-          const cohortMemberDetails = await this.cohortMembersRepository.findOne({
-            where: { cohortMembershipId: cohortMembershipId },
-            select: ['userId', 'cohortId']
-          });
+          const cohortMemberDetails =
+            await this.cohortMembersRepository.findOne({
+              where: { cohortMembershipId: cohortMembershipId },
+              select: ['userId', 'cohortId'],
+            });
 
           if (cohortMemberDetails) {
             // Use the existing field-specific update method to preserve all existing data

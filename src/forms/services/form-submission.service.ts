@@ -156,10 +156,14 @@ export class FormSubmissionService {
         FormSubmissionStatus.ACTIVE;
       formSubmission.createdBy = userId;
       formSubmission.updatedBy = userId;
-      
+
       // Add completionPercentage if provided
-      if (createFormSubmissionDto.formSubmission.completionPercentage !== undefined) {
-        formSubmission.completionPercentage = createFormSubmissionDto.formSubmission.completionPercentage;
+      if (
+        createFormSubmissionDto.formSubmission.completionPercentage !==
+        undefined
+      ) {
+        formSubmission.completionPercentage =
+          createFormSubmissionDto.formSubmission.completionPercentage;
       }
 
       const savedSubmission = await this.formSubmissionRepository.save(
@@ -345,7 +349,11 @@ export class FormSubmissionService {
     });
 
     // Handle completion percentage ranges (only if present in whereClause)
-    if (completionPercentage && Array.isArray(completionPercentage) && completionPercentage.length > 0) {
+    if (
+      completionPercentage &&
+      Array.isArray(completionPercentage) &&
+      completionPercentage.length > 0
+    ) {
       // Multiple ranges - use OR conditions (union)
       const rangeConditions = completionPercentage.map((range, index) => {
         const [min, max] = range.split('-').map(Number);
@@ -364,7 +372,10 @@ export class FormSubmissionService {
 
     // Apply sorting and pagination
     if (sort?.length === 2) {
-      queryBuilder.orderBy(`fs.${sort[0]}`, sort[1].toUpperCase() as 'ASC' | 'DESC');
+      queryBuilder.orderBy(
+        `fs.${sort[0]}`,
+        sort[1].toUpperCase() as 'ASC' | 'DESC'
+      );
     } else {
       queryBuilder.orderBy('fs.createdAt', 'DESC');
     }
@@ -617,10 +628,11 @@ export class FormSubmissionService {
         };
 
         if (includeDisplayValues) {
-          result.customFields = await this.fieldsService.getFieldsAndFieldsValues(
-            submission.itemId,
-            submission.formId // Pass formId for checkbox processing
-          );
+          result.customFields =
+            await this.fieldsService.getFieldsAndFieldsValues(
+              submission.itemId,
+              submission.formId // Pass formId for checkbox processing
+            );
         }
 
         return result;
@@ -923,8 +935,12 @@ export class FormSubmissionService {
             submission.status = updateFormSubmissionDto.formSubmission.status;
           }
           // Add completionPercentage if provided
-          if (updateFormSubmissionDto.formSubmission.completionPercentage !== undefined) {
-            submission.completionPercentage = updateFormSubmissionDto.formSubmission.completionPercentage;
+          if (
+            updateFormSubmissionDto.formSubmission.completionPercentage !==
+            undefined
+          ) {
+            submission.completionPercentage =
+              updateFormSubmissionDto.formSubmission.completionPercentage;
           }
           submission.updatedBy = userId;
           updatedSubmission = await this.formSubmissionRepository.save(
@@ -1151,30 +1167,101 @@ export class FormSubmissionService {
 
       // --- NEW LOGIC: Fetch form schema and build fieldId -> pageName map ---
       let fieldIdToPageName: Record<string, string> = {};
+      let fieldIdToFieldName: Record<string, string> = {};
       try {
         const form = await this.formsService.getFormById(formIdToMatch);
         const fieldsObj = form && form.fields ? (form.fields as any) : null;
-        if (
-          Array.isArray(fieldsObj?.result) &&
-          fieldsObj.result[0]?.schema?.properties
-        ) {
-          const schema = fieldsObj.result[0].schema.properties;
-          for (const [pageKey, pageSchema] of Object.entries(schema)) {
-            const pageName = pageKey === 'default' ? 'eligibility' : pageKey;
-            const fieldProps = (pageSchema as any).properties ?? {};
-            for (const [fieldKey, fieldSchema] of Object.entries(fieldProps)) {
+
+        // Handle different schema structures
+        let schema: any = {};
+        if (fieldsObj) {
+          // Try different possible schema structures
+          if (
+            Array.isArray(fieldsObj?.result) &&
+            fieldsObj.result[0]?.schema?.properties
+          ) {
+            // Structure: { result: [{ schema: { properties: {...} } }] }
+            schema = fieldsObj.result[0].schema.properties;
+          } else if (fieldsObj?.schema?.properties) {
+            // Structure: { schema: { properties: {...} } }
+            schema = fieldsObj.schema.properties;
+          } else if (fieldsObj?.properties) {
+            // Structure: { properties: {...} }
+            schema = fieldsObj.properties;
+          } else if (typeof fieldsObj === 'object' && fieldsObj !== null) {
+            // Try to find schema in nested structure
+            const findSchema = (obj: any): any => {
+              if (obj?.schema?.properties) return obj.schema.properties;
+              if (obj?.properties) return obj.properties;
+              if (Array.isArray(obj)) {
+                for (const item of obj) {
+                  const found = findSchema(item);
+                  if (found) return found;
+                }
+              } else if (typeof obj === 'object') {
+                for (const key in obj) {
+                  const found = findSchema(obj[key]);
+                  if (found) return found;
+                }
+              }
+              return null;
+            };
+            schema = findSchema(fieldsObj) || {};
+          }
+        }
+
+        // Build fieldId to pageName mapping and fieldId to fieldName mapping
+        for (const [pageKey, pageSchema] of Object.entries(schema)) {
+          const pageName = pageKey === 'default' ? 'eligibilityCheck' : pageKey;
+          const fieldProps = (pageSchema as any).properties || {};
+
+          // Function to recursively extract field mappings from properties
+          const extractFieldMappings = (
+            properties: any,
+            currentPage: string
+          ) => {
+            for (const [fieldKey, fieldSchema] of Object.entries(properties)) {
               const fieldId = (fieldSchema as any).fieldId;
+              const fieldTitle = (fieldSchema as any).title || fieldKey;
+
               if (fieldId) {
-                fieldIdToPageName[fieldId] = pageName;
+                fieldIdToPageName[fieldId] = currentPage;
+                fieldIdToFieldName[fieldId] = fieldTitle;
+              }
+
+              // Handle nested dependencies structure
+              if ((fieldSchema as any).dependencies) {
+                const dependencies = (fieldSchema as any).dependencies;
+                for (const [depKey, depSchema] of Object.entries(
+                  dependencies
+                )) {
+                  if ((depSchema as any).oneOf) {
+                    // Handle oneOf dependencies
+                    for (const oneOfItem of (depSchema as any).oneOf) {
+                      if (oneOfItem.properties) {
+                        extractFieldMappings(oneOfItem.properties, currentPage);
+                      }
+                    }
+                  } else if ((depSchema as any).properties) {
+                    // Handle direct properties dependencies
+                    extractFieldMappings(
+                      (depSchema as any).properties,
+                      currentPage
+                    );
+                  }
+                }
               }
             }
-          }
+          };
+
+          extractFieldMappings(fieldProps, pageName);
         }
       } catch (err) {
         const logger = new Logger('FormSubmissionService');
         logger.error('Schema fetch failed, cannot proceed', err);
         // If schema fetch fails, fallback to empty map (all fields go to 'default')
         fieldIdToPageName = {};
+        fieldIdToFieldName = {};
       }
       // --- END NEW LOGIC ---
 
@@ -1241,46 +1328,34 @@ export class FormSubmissionService {
         }
         if (!pageKey) {
           console.warn(
-            `FieldId ${field.fieldId} not found in schema mapping or existing pages, using 'default'`
+            `FieldId ${field.fieldId} not found in schema mapping or existing pages, using 'eligibilityCheck'`
           );
-          pageKey = 'default';
+          pageKey = 'eligibilityCheck';
         }
 
         updatedFields[pageKey] ??= {
           completed: true,
           fields: {},
         };
-        updatedFields[pageKey].fields[field.fieldname ?? field.fieldId] =
-          field.value;
+        // Use field name from schema if available, otherwise use fieldname or fieldId
+        const fieldName =
+          fieldIdToFieldName[field.fieldId] || field.fieldname || field.fieldId;
+        updatedFields[pageKey].fields[fieldName] = field.value;
       });
 
       if (existingAppIndex !== -1) {
-        // Deep merge for each page's fields
-        const mergedPages = {
-          ...(applications[existingAppIndex]?.progress?.pages || {}),
-        };
+        // COMPLETELY REPLACE old pages structure instead of merging
+        const mergedPages = {};
+
+        // Only use the new schema-based mapping, don't merge with old data
         for (const [pageKey, pageValue] of Object.entries(updatedFields)) {
           const newPage = pageValue as {
             completed: boolean;
             fields: { [key: string]: any };
           };
-          if (mergedPages[pageKey]) {
-            const existingPage = mergedPages[pageKey] as {
-              completed: boolean;
-              fields: { [key: string]: any };
-            };
-            mergedPages[pageKey] = {
-              ...existingPage,
-              fields: {
-                ...existingPage.fields,
-                ...newPage.fields,
-              },
-              completed: newPage.completed, // update completed status if needed
-            };
-          } else {
-            mergedPages[pageKey] = newPage;
-          }
+          mergedPages[pageKey] = newPage;
         }
+
         // Merge overall progress
         const mergedOverall = applications[existingAppIndex]?.progress?.overall
           ? { ...applications[existingAppIndex].progress.overall }
@@ -1288,6 +1363,102 @@ export class FormSubmissionService {
               completed: updatedFieldValues.length,
               total: updatedFieldValues.length,
             };
+
+        // Calculate completion percentage based on total fields in schema vs completed fields
+        let completionPercentage = 0;
+        try {
+          const form = await this.formsService.getFormById(formIdToMatch);
+          const fieldsObj = form && form.fields ? (form.fields as any) : null;
+          let totalSchemaFields = 0;
+
+          if (fieldsObj) {
+            // Count total fields in schema including dependencies
+            const countFieldsInSchema = (schema: any): number => {
+              let count = 0;
+              for (const [pageKey, pageSchema] of Object.entries(schema)) {
+                const fieldProps = (pageSchema as any).properties || {};
+
+                const countFieldsInProperties = (properties: any): number => {
+                  let fieldCount = 0;
+                  for (const [fieldKey, fieldSchema] of Object.entries(
+                    properties
+                  )) {
+                    const fieldId = (fieldSchema as any).fieldId;
+                    if (fieldId) {
+                      fieldCount++;
+                    }
+
+                    // Handle nested dependencies structure
+                    if ((fieldSchema as any).dependencies) {
+                      const dependencies = (fieldSchema as any).dependencies;
+                      for (const [depKey, depSchema] of Object.entries(
+                        dependencies
+                      )) {
+                        if ((depSchema as any).oneOf) {
+                          // Handle oneOf dependencies
+                          for (const oneOfItem of (depSchema as any).oneOf) {
+                            if (oneOfItem.properties) {
+                              fieldCount += countFieldsInProperties(
+                                oneOfItem.properties
+                              );
+                            }
+                          }
+                        } else if ((depSchema as any).properties) {
+                          // Handle direct properties dependencies
+                          fieldCount += countFieldsInProperties(
+                            (depSchema as any).properties
+                          );
+                        }
+                      }
+                    }
+                  }
+                  return fieldCount;
+                };
+
+                count += countFieldsInProperties(fieldProps);
+              }
+              return count;
+            };
+
+            let schema: any = {};
+            if (
+              Array.isArray(fieldsObj?.result) &&
+              fieldsObj.result[0]?.schema?.properties
+            ) {
+              schema = fieldsObj.result[0].schema.properties;
+            } else if (fieldsObj?.schema?.properties) {
+              schema = fieldsObj.schema.properties;
+            } else if (fieldsObj?.properties) {
+              schema = fieldsObj.properties;
+            }
+
+            totalSchemaFields = countFieldsInSchema(schema);
+          }
+
+          // Calculate percentage based on completed fields vs total schema fields
+          if (totalSchemaFields > 0) {
+            completionPercentage = Math.round(
+              (updatedFieldValues.length / totalSchemaFields) * 100
+            );
+          } else {
+            // Fallback: use the overall progress
+            completionPercentage =
+              mergedOverall.total > 0
+                ? Math.round(
+                    (mergedOverall.completed / mergedOverall.total) * 100
+                  )
+                : 0;
+          }
+        } catch (error) {
+          console.error('Error calculating completion percentage:', error);
+          // Fallback calculation if schema parsing fails
+          completionPercentage =
+            mergedOverall.total > 0
+              ? Math.round(
+                  (mergedOverall.completed / mergedOverall.total) * 100
+                )
+              : 0;
+        }
 
         // --- Update cohortmemberstatus and cohortDetails logic ---
         // cohortmemberstatus is not a property of FormSubmission; set as empty string or fetch from CohortMembers if needed
@@ -1310,8 +1481,8 @@ export class FormSubmissionService {
           formstatus:
             updatedSubmission.status ??
             applications[existingAppIndex].formstatus,
-          // FIXED: Add completionPercentage from form submission
-          completionPercentage: updatedSubmission.completionPercentage ?? 0,
+          // FIXED: Add calculated completionPercentage
+          completionPercentage: completionPercentage,
           progress: {
             pages: mergedPages,
             overall: mergedOverall,
@@ -1319,6 +1490,23 @@ export class FormSubmissionService {
           lastSavedAt: new Date().toISOString(),
           submittedAt: new Date().toISOString(),
         };
+
+        // Also update the FormSubmission entity in the database
+        try {
+          const submissionToUpdate =
+            await this.formSubmissionRepository.findOne({
+              where: { submissionId: submissionIdToMatch },
+            });
+          if (submissionToUpdate) {
+            submissionToUpdate.completionPercentage = completionPercentage;
+            await this.formSubmissionRepository.save(submissionToUpdate);
+          }
+        } catch (error) {
+          console.error(
+            'Failed to update FormSubmission completionPercentage:',
+            error
+          );
+        }
       } else {
         // If no existing application found, build from DB with correct cohortDetails
         const newApp = await this.buildApplicationFromDB(updatedSubmission);
@@ -1395,12 +1583,44 @@ export class FormSubmissionService {
     try {
       const form = await this.formsService.getFormById(submission.formId);
       const fieldsObj = form && form.fields ? (form.fields as any) : null;
-      if (
-        Array.isArray(fieldsObj?.result) &&
-        fieldsObj.result[0]?.schema?.properties
-      ) {
-        schema = fieldsObj.result[0].schema.properties;
+
+      // Handle different schema structures
+      if (fieldsObj) {
+        // Try different possible schema structures
+        if (
+          Array.isArray(fieldsObj?.result) &&
+          fieldsObj.result[0]?.schema?.properties
+        ) {
+          // Structure: { result: [{ schema: { properties: {...} } }] }
+          schema = fieldsObj.result[0].schema.properties;
+        } else if (fieldsObj?.schema?.properties) {
+          // Structure: { schema: { properties: {...} } }
+          schema = fieldsObj.schema.properties;
+        } else if (fieldsObj?.properties) {
+          // Structure: { properties: {...} }
+          schema = fieldsObj.properties;
+        } else if (typeof fieldsObj === 'object' && fieldsObj !== null) {
+          // Try to find schema in nested structure
+          const findSchema = (obj: any): any => {
+            if (obj?.schema?.properties) return obj.schema.properties;
+            if (obj?.properties) return obj.properties;
+            if (Array.isArray(obj)) {
+              for (const item of obj) {
+                const found = findSchema(item);
+                if (found) return found;
+              }
+            } else if (typeof obj === 'object') {
+              for (const key in obj) {
+                const found = findSchema(obj[key]);
+                if (found) return found;
+              }
+            }
+            return null;
+          };
+          schema = findSchema(fieldsObj) || {};
+        }
       }
+
       cohortId = form?.contextId || '';
       // Fetch cohortmemberstatus and cohortDetails if cohortId exists
       if (cohortId) {
@@ -1431,35 +1651,84 @@ export class FormSubmissionService {
     }
     const pages: Record<string, any> = {};
     const formData: Record<string, any> = {};
+
+    // Build fieldId to pageName and fieldName mappings from schema
+    const fieldIdToPageName: Record<string, string> = {};
+    const fieldIdToSchemaFieldName: Record<string, string> = {};
+
     for (const [pageKey, pageSchema] of Object.entries(schema)) {
-      const pageName = pageKey === 'default' ? 'eligibility' : pageKey;
+      const pageName = pageKey === 'default' ? 'eligibilityCheck' : pageKey;
+      const fieldProps = (pageSchema as any).properties || {};
+
+      // Function to recursively extract field mappings from properties
+      const extractFieldMappings = (properties: any, currentPage: string) => {
+        for (const [fieldKey, fieldSchema] of Object.entries(properties)) {
+          const fieldId = (fieldSchema as any).fieldId;
+          const fieldTitle = (fieldSchema as any).title || fieldKey;
+
+          if (fieldId) {
+            fieldIdToPageName[fieldId] = currentPage;
+            fieldIdToSchemaFieldName[fieldId] = fieldTitle;
+          }
+
+          // Handle nested dependencies structure
+          if ((fieldSchema as any).dependencies) {
+            const dependencies = (fieldSchema as any).dependencies;
+            for (const [depKey, depSchema] of Object.entries(dependencies)) {
+              if ((depSchema as any).oneOf) {
+                // Handle oneOf dependencies
+                for (const oneOfItem of (depSchema as any).oneOf) {
+                  if (oneOfItem.properties) {
+                    extractFieldMappings(oneOfItem.properties, currentPage);
+                  }
+                }
+              } else if ((depSchema as any).properties) {
+                // Handle direct properties dependencies
+                extractFieldMappings(
+                  (depSchema as any).properties,
+                  currentPage
+                );
+              }
+            }
+          }
+        }
+      };
+
+      extractFieldMappings(fieldProps, pageName);
+    }
+
+    // Now build pages using the mappings
+    for (const [pageKey, pageSchema] of Object.entries(schema)) {
+      const pageName = pageKey === 'default' ? 'eligibilityCheck' : pageKey;
       pages[pageName] = { completed: true, fields: {} };
       formData[pageName] = {};
-      const fieldProps = (pageSchema as any).properties || {};
-      for (const [fieldKey, fieldSchema] of Object.entries(fieldProps)) {
-        const fieldId = (fieldSchema as any).fieldId;
-        if (fieldId && fieldIdToValue[fieldId] !== undefined) {
-          let fieldName = fieldId;
-          if ((fieldSchema as any) && (fieldSchema as any).name) {
-            fieldName = (fieldSchema as any).name;
-          } else if (fieldIdToFieldName[fieldId]) {
-            fieldName = fieldIdToFieldName[fieldId];
-          }
-          const value = fieldIdToValue[fieldId];
-          pages[pageName].fields[fieldName] = value;
-          formData[pageName][fieldName] = value;
-        }
+    }
+
+    // Map field values to correct pages using the schema mappings
+    for (const field of submissionCustomFields) {
+      const pageName = fieldIdToPageName[field.fieldId] || 'eligibilityCheck';
+      const fieldName =
+        fieldIdToSchemaFieldName[field.fieldId] ||
+        field.fieldname ||
+        field.fieldId;
+
+      if (!pages[pageName]) {
+        pages[pageName] = { completed: true, fields: {} };
+        formData[pageName] = {};
       }
+
+      pages[pageName].fields[fieldName] = field.value;
+      formData[pageName][fieldName] = field.value;
     }
     if (Object.keys(pages).length === 0) {
-      pages['default'] = {
+      pages['eligibilityCheck'] = {
         completed: true,
         fields: submissionCustomFields.reduce((acc, field) => {
           acc[field.fieldname || field.fieldId] = field.value;
           return acc;
         }, {}),
       };
-      formData['default'] = { ...pages['default'].fields };
+      formData['eligibilityCheck'] = { ...pages['eligibilityCheck'].fields };
     }
     // Fetch cohortDetails (already fetched above)
     return {
@@ -1524,21 +1793,77 @@ export class FormSubmissionService {
       try {
         const form = await this.formsService.getFormById(submission.formId);
         const fieldsObj = form && form.fields ? (form.fields as any) : null;
-        if (
-          Array.isArray(fieldsObj?.result) &&
-          fieldsObj.result[0]?.schema?.properties
-        ) {
-          const schema = fieldsObj.result[0].schema.properties;
-          for (const pageSchema of Object.values(schema)) {
-            const fieldProps = (pageSchema as any).properties || {};
-            for (const fieldSchema of Object.values(fieldProps)) {
-              const fieldId = (fieldSchema as any).fieldId;
-              if (fieldId) allFormFieldIds.add(fieldId);
+
+        // Handle different schema structures
+        if (fieldsObj) {
+          // Try different possible schema structures
+          if (
+            Array.isArray(fieldsObj?.result) &&
+            fieldsObj.result[0]?.schema?.properties
+          ) {
+            // Structure: { result: [{ schema: { properties: {...} } }] }
+            const schema = fieldsObj.result[0].schema.properties;
+            for (const pageSchema of Object.values(schema)) {
+              const fieldProps = (pageSchema as any).properties || {};
+              for (const fieldSchema of Object.values(fieldProps)) {
+                const fieldId = (fieldSchema as any).fieldId;
+                if (fieldId) allFormFieldIds.add(fieldId);
+              }
+            }
+          } else if (fieldsObj?.schema?.properties) {
+            // Structure: { schema: { properties: {...} } }
+            const schema = fieldsObj.schema.properties;
+            for (const pageSchema of Object.values(schema)) {
+              const fieldProps = (pageSchema as any).properties || {};
+              for (const fieldSchema of Object.values(fieldProps)) {
+                const fieldId = (fieldSchema as any).fieldId;
+                if (fieldId) allFormFieldIds.add(fieldId);
+              }
+            }
+          } else if (fieldsObj?.properties) {
+            // Structure: { properties: {...} }
+            const schema = fieldsObj.properties;
+            for (const pageSchema of Object.values(schema)) {
+              const fieldProps = (pageSchema as any).properties || {};
+              for (const fieldSchema of Object.values(fieldProps)) {
+                const fieldId = (fieldSchema as any).fieldId;
+                if (fieldId) allFormFieldIds.add(fieldId);
+              }
+            }
+          } else if (typeof fieldsObj === 'object' && fieldsObj !== null) {
+            // Try to find schema in nested structure
+            const findSchema = (obj: any): any => {
+              if (obj?.schema?.properties) return obj.schema.properties;
+              if (obj?.properties) return obj.properties;
+              if (Array.isArray(obj)) {
+                for (const item of obj) {
+                  const found = findSchema(item);
+                  if (found) return found;
+                }
+              } else if (typeof obj === 'object') {
+                for (const key in obj) {
+                  const found = findSchema(obj[key]);
+                  if (found) return found;
+                }
+              }
+              return null;
+            };
+            const schema = findSchema(fieldsObj);
+            if (schema) {
+              for (const pageSchema of Object.values(schema)) {
+                const fieldProps = (pageSchema as any).properties || {};
+                for (const fieldSchema of Object.values(fieldProps)) {
+                  const fieldId = (fieldSchema as any).fieldId;
+                  if (fieldId) allFormFieldIds.add(fieldId);
+                }
+              }
             }
           }
         }
       } catch (e) {}
     }
+
+    // Filter out form-related fields from profile custom fields
     profileCustomFields = profileCustomFields.filter(
       (f) => !allFormFieldIds.has(f.fieldId)
     );
@@ -1593,11 +1918,42 @@ export class FormSubmissionService {
         try {
           const form = await this.formsService.getFormById(submission.formId);
           const fieldsObj = form && form.fields ? (form.fields as any) : null;
-          if (
-            Array.isArray(fieldsObj?.result) &&
-            fieldsObj.result[0]?.schema?.properties
-          ) {
-            schema = fieldsObj.result[0].schema.properties;
+
+          // Handle different schema structures
+          if (fieldsObj) {
+            // Try different possible schema structures
+            if (
+              Array.isArray(fieldsObj?.result) &&
+              fieldsObj.result[0]?.schema?.properties
+            ) {
+              // Structure: { result: [{ schema: { properties: {...} } }] }
+              schema = fieldsObj.result[0].schema.properties;
+            } else if (fieldsObj?.schema?.properties) {
+              // Structure: { schema: { properties: {...} } }
+              schema = fieldsObj.schema.properties;
+            } else if (fieldsObj?.properties) {
+              // Structure: { properties: {...} }
+              schema = fieldsObj.properties;
+            } else if (typeof fieldsObj === 'object' && fieldsObj !== null) {
+              // Try to find schema in nested structure
+              const findSchema = (obj: any): any => {
+                if (obj?.schema?.properties) return obj.schema.properties;
+                if (obj?.properties) return obj.properties;
+                if (Array.isArray(obj)) {
+                  for (const item of obj) {
+                    const found = findSchema(item);
+                    if (found) return found;
+                  }
+                } else if (typeof obj === 'object') {
+                  for (const key in obj) {
+                    const found = findSchema(obj[key]);
+                    if (found) return found;
+                  }
+                }
+                return null;
+              };
+              schema = findSchema(fieldsObj) || {};
+            }
           }
         } catch (e) {
           schema = {};
@@ -1612,35 +1968,92 @@ export class FormSubmissionService {
         }
         const pages: Record<string, any> = {};
         formData = {};
+
+        // Build fieldId to pageName and fieldName mappings from schema
+        const fieldIdToPageName: Record<string, string> = {};
+        const fieldIdToSchemaFieldName: Record<string, string> = {};
+
         for (const [pageKey, pageSchema] of Object.entries(schema)) {
-          const pageName = pageKey === 'default' ? 'eligibility' : pageKey;
+          const pageName = pageKey === 'default' ? 'eligibilityCheck' : pageKey;
+          const fieldProps = (pageSchema as any).properties || {};
+
+          // Function to recursively extract field mappings from properties
+          const extractFieldMappings = (
+            properties: any,
+            currentPage: string
+          ) => {
+            for (const [fieldKey, fieldSchema] of Object.entries(properties)) {
+              const fieldId = (fieldSchema as any).fieldId;
+              const fieldTitle = (fieldSchema as any).title || fieldKey;
+
+              if (fieldId) {
+                fieldIdToPageName[fieldId] = currentPage;
+                fieldIdToSchemaFieldName[fieldId] = fieldTitle;
+              }
+
+              // Handle nested dependencies structure
+              if ((fieldSchema as any).dependencies) {
+                const dependencies = (fieldSchema as any).dependencies;
+                for (const [depKey, depSchema] of Object.entries(
+                  dependencies
+                )) {
+                  if ((depSchema as any).oneOf) {
+                    // Handle oneOf dependencies
+                    for (const oneOfItem of (depSchema as any).oneOf) {
+                      if (oneOfItem.properties) {
+                        extractFieldMappings(oneOfItem.properties, currentPage);
+                      }
+                    }
+                  } else if ((depSchema as any).properties) {
+                    // Handle direct properties dependencies
+                    extractFieldMappings(
+                      (depSchema as any).properties,
+                      currentPage
+                    );
+                  }
+                }
+              }
+            }
+          };
+
+          extractFieldMappings(fieldProps, pageName);
+        }
+
+        // Now build pages using the mappings
+        for (const [pageKey, pageSchema] of Object.entries(schema)) {
+          const pageName = pageKey === 'default' ? 'eligibilityCheck' : pageKey;
           pages[pageName] = { completed: true, fields: {} };
           formData[pageName] = {};
-          const fieldProps = (pageSchema as any).properties || {};
-          for (const [fieldKey, fieldSchema] of Object.entries(fieldProps)) {
-            const fieldId = (fieldSchema as any).fieldId;
-            if (fieldId && fieldIdToValue[fieldId] !== undefined) {
-              let fieldName = fieldId;
-              if ((fieldSchema as any) && (fieldSchema as any).name) {
-                fieldName = (fieldSchema as any).name;
-              } else if (fieldIdToFieldName[fieldId]) {
-                fieldName = fieldIdToFieldName[fieldId];
-              }
-              const value = fieldIdToValue[fieldId];
-              pages[pageName].fields[fieldName] = value;
-              formData[pageName][fieldName] = value;
-            }
+        }
+
+        // Map field values to correct pages using the schema mappings
+        for (const field of submissionCustomFields) {
+          const pageName =
+            fieldIdToPageName[field.fieldId] || 'eligibilityCheck';
+          const fieldName =
+            fieldIdToSchemaFieldName[field.fieldId] ||
+            field.fieldname ||
+            field.fieldId;
+
+          if (!pages[pageName]) {
+            pages[pageName] = { completed: true, fields: {} };
+            formData[pageName] = {};
           }
+
+          pages[pageName].fields[fieldName] = field.value;
+          formData[pageName][fieldName] = field.value;
         }
         if (Object.keys(pages).length === 0) {
-          pages['default'] = {
+          pages['eligibilityCheck'] = {
             completed: true,
             fields: submissionCustomFields.reduce((acc, field) => {
               acc[field.fieldname || field.fieldId] = field.value;
               return acc;
             }, {}),
           };
-          formData['default'] = { ...pages['default'].fields };
+          formData['eligibilityCheck'] = {
+            ...pages['eligibilityCheck'].fields,
+          };
         }
         progress = {
           pages,
@@ -1682,11 +2095,42 @@ export class FormSubmissionService {
         try {
           const form = await this.formsService.getFormById(submission.formId);
           const fieldsObj = form && form.fields ? (form.fields as any) : null;
-          if (
-            Array.isArray(fieldsObj?.result) &&
-            fieldsObj.result[0]?.schema?.properties
-          ) {
-            schema = fieldsObj.result[0].schema.properties;
+
+          // Handle different schema structures
+          if (fieldsObj) {
+            // Try different possible schema structures
+            if (
+              Array.isArray(fieldsObj?.result) &&
+              fieldsObj.result[0]?.schema?.properties
+            ) {
+              // Structure: { result: [{ schema: { properties: {...} } }] }
+              schema = fieldsObj.result[0].schema.properties;
+            } else if (fieldsObj?.schema?.properties) {
+              // Structure: { schema: { properties: {...} } }
+              schema = fieldsObj.schema.properties;
+            } else if (fieldsObj?.properties) {
+              // Structure: { properties: {...} }
+              schema = fieldsObj.properties;
+            } else if (typeof fieldsObj === 'object' && fieldsObj !== null) {
+              // Try to find schema in nested structure
+              const findSchema = (obj: any): any => {
+                if (obj?.schema?.properties) return obj.schema.properties;
+                if (obj?.properties) return obj.properties;
+                if (Array.isArray(obj)) {
+                  for (const item of obj) {
+                    const found = findSchema(item);
+                    if (found) return found;
+                  }
+                } else if (typeof obj === 'object') {
+                  for (const key in obj) {
+                    const found = findSchema(obj[key]);
+                    if (found) return found;
+                  }
+                }
+                return null;
+              };
+              schema = findSchema(fieldsObj) || {};
+            }
           }
         } catch (e) {
           schema = {};
@@ -1701,35 +2145,92 @@ export class FormSubmissionService {
         }
         const pages: Record<string, any> = {};
         const formData: Record<string, any> = {};
+
+        // Build fieldId to pageName and fieldName mappings from schema
+        const fieldIdToPageName: Record<string, string> = {};
+        const fieldIdToSchemaFieldName: Record<string, string> = {};
+
         for (const [pageKey, pageSchema] of Object.entries(schema)) {
-          const pageName = pageKey === 'default' ? 'eligibility' : pageKey;
+          const pageName = pageKey === 'default' ? 'eligibilityCheck' : pageKey;
+          const fieldProps = (pageSchema as any).properties || {};
+
+          // Function to recursively extract field mappings from properties
+          const extractFieldMappings = (
+            properties: any,
+            currentPage: string
+          ) => {
+            for (const [fieldKey, fieldSchema] of Object.entries(properties)) {
+              const fieldId = (fieldSchema as any).fieldId;
+              const fieldTitle = (fieldSchema as any).title || fieldKey;
+
+              if (fieldId) {
+                fieldIdToPageName[fieldId] = currentPage;
+                fieldIdToSchemaFieldName[fieldId] = fieldTitle;
+              }
+
+              // Handle nested dependencies structure
+              if ((fieldSchema as any).dependencies) {
+                const dependencies = (fieldSchema as any).dependencies;
+                for (const [depKey, depSchema] of Object.entries(
+                  dependencies
+                )) {
+                  if ((depSchema as any).oneOf) {
+                    // Handle oneOf dependencies
+                    for (const oneOfItem of (depSchema as any).oneOf) {
+                      if (oneOfItem.properties) {
+                        extractFieldMappings(oneOfItem.properties, currentPage);
+                      }
+                    }
+                  } else if ((depSchema as any).properties) {
+                    // Handle direct properties dependencies
+                    extractFieldMappings(
+                      (depSchema as any).properties,
+                      currentPage
+                    );
+                  }
+                }
+              }
+            }
+          };
+
+          extractFieldMappings(fieldProps, pageName);
+        }
+
+        // Now build pages using the mappings
+        for (const [pageKey, pageSchema] of Object.entries(schema)) {
+          const pageName = pageKey === 'default' ? 'eligibilityCheck' : pageKey;
           pages[pageName] = { completed: true, fields: {} };
           formData[pageName] = {};
-          const fieldProps = (pageSchema as any).properties || {};
-          for (const [fieldKey, fieldSchema] of Object.entries(fieldProps)) {
-            const fieldId = (fieldSchema as any).fieldId;
-            if (fieldId && fieldIdToValue[fieldId] !== undefined) {
-              let fieldName = fieldId;
-              if ((fieldSchema as any) && (fieldSchema as any).name) {
-                fieldName = (fieldSchema as any).name;
-              } else if (fieldIdToFieldName[fieldId]) {
-                fieldName = fieldIdToFieldName[fieldId];
-              }
-              const value = fieldIdToValue[fieldId];
-              pages[pageName].fields[fieldName] = value;
-              formData[pageName][fieldName] = value;
-            }
+        }
+
+        // Map field values to correct pages using the schema mappings
+        for (const field of submissionCustomFields) {
+          const pageName =
+            fieldIdToPageName[field.fieldId] || 'eligibilityCheck';
+          const fieldName =
+            fieldIdToSchemaFieldName[field.fieldId] ||
+            field.fieldname ||
+            field.fieldId;
+
+          if (!pages[pageName]) {
+            pages[pageName] = { completed: true, fields: {} };
+            formData[pageName] = {};
           }
+
+          pages[pageName].fields[fieldName] = field.value;
+          formData[pageName][fieldName] = field.value;
         }
         if (Object.keys(pages).length === 0) {
-          pages['default'] = {
+          pages['eligibilityCheck'] = {
             completed: true,
             fields: submissionCustomFields.reduce((acc, field) => {
               acc[field.fieldname || field.fieldId] = field.value;
               return acc;
             }, {}),
           };
-          formData['default'] = { ...pages['default'].fields };
+          formData['eligibilityCheck'] = {
+            ...pages['eligibilityCheck'].fields,
+          };
         }
         applications.push({
           formId: submission.formId,
