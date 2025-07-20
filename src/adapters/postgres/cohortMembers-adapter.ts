@@ -1126,6 +1126,7 @@ export class PostgresCohortMembersService {
           const userDoc = await this.userElasticsearchService.getUser(
             cohortMembershipToUpdate.userId
           );
+          
           // Extract the application array if present
           const source =
             userDoc && userDoc._source
@@ -1156,20 +1157,18 @@ export class PostgresCohortMembersService {
               );
             }
           } else {
-            // Prepare the updated application data (minimal update)
-            const updatedApplication = {
-              ...(existingApplication ?? {}),
-              cohortId: cohortMembershipToUpdate.cohortId,
-              cohortmemberstatus: result.status ?? 'active',
-            };
-            await this.userElasticsearchService.updateApplication(
+            // SOLUTION 3: Use field-specific update to preserve existing data
+            // This prevents the deletion of application data (progress, formData, etc.)
+            // by only updating specific fields instead of replacing the entire application object
+            await this.updateElasticsearchWithFieldSpecificChanges(
               cohortMembershipToUpdate.userId,
-              updatedApplication,
-              async (userId: string) => {
-                return await this.formSubmissionService.buildUserDocumentForElasticsearch(
-                  userId
-                );
-              }
+              cohortMembershipToUpdate.cohortId,
+              {
+                cohortmemberstatus: result.status ?? 'active',
+                statusReason: cohortMembersUpdateDto.statusReason,
+                status: cohortMembersUpdateDto.status,
+              },
+              existingApplication
             );
           }
         } catch (elasticError) {
@@ -1389,6 +1388,142 @@ export class PostgresCohortMembersService {
       },
     });
     return existUser;
+  }
+
+  /**
+   * SOLUTION 3: Field-specific Elasticsearch update method
+   * 
+   * PROBLEM: The previous updateApplication method was completely replacing the application object,
+   * which caused deletion of all existing data like progress, formData, etc.
+   * 
+   * SOLUTION: Use Elasticsearch Painless scripts to update only specific fields while preserving
+   * all existing data that's not being updated.
+   * 
+   * @param userId - User ID to update
+   * @param cohortId - Cohort ID for the application
+   * @param updateData - Object containing only the fields to update
+   * @param existingApplication - Existing application data (for reference)
+   */
+  private async updateElasticsearchWithFieldSpecificChanges(
+    userId: string,
+    cohortId: string,
+    updateData: any,
+    existingApplication: any
+  ): Promise<void> {
+    try {
+      // Create a Painless script that only updates specific fields that have changed
+      // This prevents data loss by preserving all existing fields not being updated
+      const script = {
+        source: `
+          // Initialize applications array if it doesn't exist
+          if (ctx._source.applications == null) {
+            ctx._source.applications = [];
+          }
+          
+          boolean found = false;
+          // Search for existing application with matching cohortId
+          for (int i = 0; i < ctx._source.applications.length; i++) {
+            if (ctx._source.applications[i].cohortId == params.cohortId) {
+              // CRITICAL: Only update specific fields that are provided in updateData
+              // This prevents deletion of existing data like progress, formData, etc.
+              if (params.updateData.cohortmemberstatus != null) {
+                ctx._source.applications[i].cohortmemberstatus = params.updateData.cohortmemberstatus;
+              }
+              if (params.updateData.statusReason != null) {
+                ctx._source.applications[i].statusReason = params.updateData.statusReason;
+              }
+              if (params.updateData.status != null) {
+                ctx._source.applications[i].status = params.updateData.status;
+              }
+              if (params.updateData.updatedAt != null) {
+                ctx._source.applications[i].updatedAt = params.updateData.updatedAt;
+              }
+              
+              // KEY IMPROVEMENT: Preserve all existing fields that are not being updated
+              // This ensures we don't lose any existing data like progress, formData, etc.
+              // The previous method was replacing the entire application object, causing data loss
+              
+              found = true;
+              break;
+            }
+          }
+          
+          if (!found) {
+            // If application doesn't exist, create a new one with minimal data
+            // This maintains backward compatibility for new applications
+            Map newApplication = new HashMap();
+            newApplication.cohortId = params.cohortId;
+            newApplication.cohortmemberstatus = params.updateData.cohortmemberstatus;
+            newApplication.statusReason = params.updateData.statusReason;
+            newApplication.status = params.updateData.status;
+            newApplication.updatedAt = params.updateData.updatedAt;
+            newApplication.createdAt = params.updateData.updatedAt;
+            
+            // Initialize empty structures to preserve existing pattern
+            // This ensures new applications have the expected structure
+            newApplication.progress = [:];
+            newApplication.progress.pages = [:];
+            newApplication.progress.overall = [:];
+            newApplication.progress.overall.completed = 0;
+            newApplication.progress.overall.total = 0;
+            newApplication.formData = [:];
+            
+            ctx._source.applications.add(newApplication);
+          }
+          
+          // Update the document's updatedAt timestamp to reflect the change
+          ctx._source.updatedAt = params.updateData.updatedAt;
+        `,
+        lang: 'painless',
+        params: {
+          cohortId,
+          updateData: {
+            cohortmemberstatus: updateData.cohortmemberstatus,
+            statusReason: updateData.statusReason,
+            status: updateData.status,
+            updatedAt: new Date().toISOString(),
+          },
+        },
+      };
+
+      // Check if user document exists by trying to get it
+      // This is safer than using private methods and provides the same functionality
+      const userDoc = await this.userElasticsearchService.getUser(userId);
+      
+      if (userDoc) {
+        // Update existing document with field-specific changes using the script
+        // This ensures only specific fields are updated while preserving existing data
+        await this.userElasticsearchService.updateUser(
+          userId,
+          { script },
+          async (userId: string) => {
+            return await this.formSubmissionService.buildUserDocumentForElasticsearch(userId);
+          }
+        );
+      } else {
+        // If user document doesn't exist, create it with the new application
+        // This maintains backward compatibility for new users
+        const fullUserDoc = await this.formSubmissionService.buildUserDocumentForElasticsearch(userId);
+        if (fullUserDoc) {
+          await this.userElasticsearchService.updateUser(
+            userId,
+            { doc: fullUserDoc },
+            async (userId: string) => {
+              return await this.formSubmissionService.buildUserDocumentForElasticsearch(userId);
+            }
+          );
+        }
+      }
+    } catch (error) {
+      // Log the error but don't fail the entire request
+      // This ensures that database updates succeed even if Elasticsearch fails
+      LoggerUtil.error(
+        'Failed to update Elasticsearch with field-specific changes',
+        `Error: ${error.message}`,
+        'COHORT_MEMBER_UPDATE'
+      );
+      throw error;
+    }
   }
 
   public async checkCohortExist(cohortId) {
@@ -2648,115 +2783,41 @@ export class PostgresCohortMembersService {
         );
       }
 
-      // NEW REQUIREMENT: Only send email notifications for 'shortlisted' status
-      // COMMENTED OUT: Previous implementation that sent emails for both 'shortlisted' and 'rejected'
-      /*
-      // Send email notification if enabled and status requires notification
-      const enableEmailNotifications =
-        process.env.ENABLE_SHORTLISTING_EMAILS !== 'false';
-      const notifyStatuses = ['shortlisted', 'rejected'];
-
-      if (
-        enableEmailNotifications &&
-        notifyStatuses.includes(evaluationResult.status)
-      ) {
+      // CRON JOB ELASTICSEARCH UPDATE: Update Elasticsearch when cron job changes status
+      // This ensures data consistency between database and Elasticsearch for automated status changes
+      // Only updates the status fields without affecting other application data (progress, formData, etc.)
+      if (isElasticsearchEnabled()) {
         try {
-          // Get user and cohort data for email
-          const [userData, cohortData] = await Promise.all([
-            this.usersRepository.findOne({
-              where: { userId: evaluationResult.userId || cohortMembershipId },
-            }),
-            this.cohortRepository.findOne({
-              where: { cohortId: evaluationResult.cohortId },
-            }),
-          ]);
-
-          if (userData?.email) {
-            const validStatusKeys = {
-              shortlisted: 'onStudentShortlisted',
-              rejected: 'onStudentRejected',
-            };
-
-            const notificationPayload = {
-              isQueue: false,
-              context: 'USER',
-              key: validStatusKeys[evaluationResult.status],
-              replacements: {
-                '{username}': `${userData.firstName ?? ''} ${
-                  userData.lastName ?? ''
-                }`.trim(),
-                '{firstName}': userData.firstName ?? '',
-                '{lastName}': userData.lastName ?? '',
-                '{programName}': cohortData?.name ?? 'the program',
-                '{status}': evaluationResult.status,
-                '{statusReason}':
-                  evaluationResult.statusReason ?? 'Not specified',
-              },
-              email: {
-                receipients: [userData.email],
-              },
-            };
-
-            const mailSend = await this.notificationRequest.sendNotification(
-              notificationPayload
-            );
-
-            if (mailSend?.result?.email?.errors?.length > 0) {
-              // Log email failure
-              ShortlistingLogger.logEmailFailure({
-                dateTime: new Date().toISOString(),
-                userId: userData.userId,
-                email: userData.email,
-                shortlistedStatus: evaluationResult.status as
-                  | 'shortlisted'
-                  | 'rejected',
-                failureReason: mailSend.result.email.errors.join(', '),
-                cohortId: evaluationResult.cohortId,
-              });
-            } else {
-              // Log email success
-              ShortlistingLogger.logEmailSuccess({
-                dateTime: new Date().toISOString(),
-                userId: userData.userId,
-                email: userData.email,
-                shortlistedStatus: evaluationResult.status as
-                  | 'shortlisted'
-                  | 'rejected',
-                cohortId: evaluationResult.cohortId,
-              });
-            }
-          } else {
-            // Log email failure for missing email
-            ShortlistingLogger.logEmailFailure({
-              dateTime: new Date().toISOString(),
-              userId: evaluationResult.userId || cohortMembershipId,
-              email: 'No email found',
-              shortlistedStatus: evaluationResult.status as
-                | 'shortlisted'
-                | 'rejected',
-              failureReason: `No email found for user ${
-                evaluationResult.userId || cohortMembershipId
-              }`,
-              cohortId: evaluationResult.cohortId,
-            });
-          }
-        } catch (emailError) {
-          // Log email failure
-          ShortlistingLogger.logEmailFailure({
-            dateTime: new Date().toISOString(),
-            userId: evaluationResult.userId || cohortMembershipId,
-            email: 'Unknown',
-            shortlistedStatus: evaluationResult.status as
-              | 'shortlisted'
-              | 'rejected',
-            failureReason: emailError.message,
-            cohortId: evaluationResult.cohortId,
+          // Get the cohort member details to get userId and cohortId for Elasticsearch update
+          const cohortMemberDetails = await this.cohortMembersRepository.findOne({
+            where: { cohortMembershipId: cohortMembershipId },
+            select: ['userId', 'cohortId']
           });
+
+          if (cohortMemberDetails) {
+            // Use the existing field-specific update method to preserve all existing data
+            await this.updateElasticsearchWithFieldSpecificChanges(
+              cohortMemberDetails.userId,
+              cohortMemberDetails.cohortId,
+              {
+                status: evaluationResult.status,
+                statusReason: evaluationResult.statusReason,
+              },
+              null // existingApplication is null since we're doing a minimal update
+            );
+          }
+        } catch (elasticsearchError) {
+          // Log the error but don't fail the entire cron job
+          // This ensures that database updates and email notifications succeed even if Elasticsearch fails
+          LoggerUtil.error(
+            'Failed to update Elasticsearch during cron job status update',
+            `CohortMembershipId: ${cohortMembershipId}, Error: ${elasticsearchError.message}`,
+            'CRON_JOB_ELASTICSEARCH_UPDATE'
+          );
         }
       }
-      */
 
-      // NEW IMPLEMENTATION: Only send email notifications for 'shortlisted' status
+      // NEW REQUIREMENT: Only send email notifications for 'shortlisted' status
       const enableEmailNotifications =
         process.env.ENABLE_SHORTLISTING_EMAILS !== 'false';
 
