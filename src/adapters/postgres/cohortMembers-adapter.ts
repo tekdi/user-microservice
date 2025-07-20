@@ -2783,115 +2783,41 @@ export class PostgresCohortMembersService {
         );
       }
 
-      // NEW REQUIREMENT: Only send email notifications for 'shortlisted' status
-      // COMMENTED OUT: Previous implementation that sent emails for both 'shortlisted' and 'rejected'
-      /*
-      // Send email notification if enabled and status requires notification
-      const enableEmailNotifications =
-        process.env.ENABLE_SHORTLISTING_EMAILS !== 'false';
-      const notifyStatuses = ['shortlisted', 'rejected'];
-
-      if (
-        enableEmailNotifications &&
-        notifyStatuses.includes(evaluationResult.status)
-      ) {
+      // CRON JOB ELASTICSEARCH UPDATE: Update Elasticsearch when cron job changes status
+      // This ensures data consistency between database and Elasticsearch for automated status changes
+      // Only updates the status fields without affecting other application data (progress, formData, etc.)
+      if (isElasticsearchEnabled()) {
         try {
-          // Get user and cohort data for email
-          const [userData, cohortData] = await Promise.all([
-            this.usersRepository.findOne({
-              where: { userId: evaluationResult.userId || cohortMembershipId },
-            }),
-            this.cohortRepository.findOne({
-              where: { cohortId: evaluationResult.cohortId },
-            }),
-          ]);
-
-          if (userData?.email) {
-            const validStatusKeys = {
-              shortlisted: 'onStudentShortlisted',
-              rejected: 'onStudentRejected',
-            };
-
-            const notificationPayload = {
-              isQueue: false,
-              context: 'USER',
-              key: validStatusKeys[evaluationResult.status],
-              replacements: {
-                '{username}': `${userData.firstName ?? ''} ${
-                  userData.lastName ?? ''
-                }`.trim(),
-                '{firstName}': userData.firstName ?? '',
-                '{lastName}': userData.lastName ?? '',
-                '{programName}': cohortData?.name ?? 'the program',
-                '{status}': evaluationResult.status,
-                '{statusReason}':
-                  evaluationResult.statusReason ?? 'Not specified',
-              },
-              email: {
-                receipients: [userData.email],
-              },
-            };
-
-            const mailSend = await this.notificationRequest.sendNotification(
-              notificationPayload
-            );
-
-            if (mailSend?.result?.email?.errors?.length > 0) {
-              // Log email failure
-              ShortlistingLogger.logEmailFailure({
-                dateTime: new Date().toISOString(),
-                userId: userData.userId,
-                email: userData.email,
-                shortlistedStatus: evaluationResult.status as
-                  | 'shortlisted'
-                  | 'rejected',
-                failureReason: mailSend.result.email.errors.join(', '),
-                cohortId: evaluationResult.cohortId,
-              });
-            } else {
-              // Log email success
-              ShortlistingLogger.logEmailSuccess({
-                dateTime: new Date().toISOString(),
-                userId: userData.userId,
-                email: userData.email,
-                shortlistedStatus: evaluationResult.status as
-                  | 'shortlisted'
-                  | 'rejected',
-                cohortId: evaluationResult.cohortId,
-              });
-            }
-          } else {
-            // Log email failure for missing email
-            ShortlistingLogger.logEmailFailure({
-              dateTime: new Date().toISOString(),
-              userId: evaluationResult.userId || cohortMembershipId,
-              email: 'No email found',
-              shortlistedStatus: evaluationResult.status as
-                | 'shortlisted'
-                | 'rejected',
-              failureReason: `No email found for user ${
-                evaluationResult.userId || cohortMembershipId
-              }`,
-              cohortId: evaluationResult.cohortId,
-            });
-          }
-        } catch (emailError) {
-          // Log email failure
-          ShortlistingLogger.logEmailFailure({
-            dateTime: new Date().toISOString(),
-            userId: evaluationResult.userId || cohortMembershipId,
-            email: 'Unknown',
-            shortlistedStatus: evaluationResult.status as
-              | 'shortlisted'
-              | 'rejected',
-            failureReason: emailError.message,
-            cohortId: evaluationResult.cohortId,
+          // Get the cohort member details to get userId and cohortId for Elasticsearch update
+          const cohortMemberDetails = await this.cohortMembersRepository.findOne({
+            where: { cohortMembershipId: cohortMembershipId },
+            select: ['userId', 'cohortId']
           });
+
+          if (cohortMemberDetails) {
+            // Use the existing field-specific update method to preserve all existing data
+            await this.updateElasticsearchWithFieldSpecificChanges(
+              cohortMemberDetails.userId,
+              cohortMemberDetails.cohortId,
+              {
+                status: evaluationResult.status,
+                statusReason: evaluationResult.statusReason,
+              },
+              null // existingApplication is null since we're doing a minimal update
+            );
+          }
+        } catch (elasticsearchError) {
+          // Log the error but don't fail the entire cron job
+          // This ensures that database updates and email notifications succeed even if Elasticsearch fails
+          LoggerUtil.error(
+            'Failed to update Elasticsearch during cron job status update',
+            `CohortMembershipId: ${cohortMembershipId}, Error: ${elasticsearchError.message}`,
+            'CRON_JOB_ELASTICSEARCH_UPDATE'
+          );
         }
       }
-      */
 
-      // NEW IMPLEMENTATION: Only send email notifications for 'shortlisted' status
+      // NEW REQUIREMENT: Only send email notifications for 'shortlisted' status
       const enableEmailNotifications =
         process.env.ENABLE_SHORTLISTING_EMAILS !== 'false';
 
