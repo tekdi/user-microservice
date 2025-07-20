@@ -1310,6 +1310,8 @@ export class FormSubmissionService {
           formstatus:
             updatedSubmission.status ??
             applications[existingAppIndex].formstatus,
+          // FIXED: Add completionPercentage from form submission
+          completionPercentage: updatedSubmission.completionPercentage ?? 0,
           progress: {
             pages: mergedPages,
             overall: mergedOverall,
@@ -1467,6 +1469,8 @@ export class FormSubmissionService {
       status: submission.status,
       cohortmemberstatus, // Now fetched from CohortMembers
       formstatus: submission.status,
+      // FIXED: Add completionPercentage from form submission
+      completionPercentage: submission.completionPercentage ?? 0,
       progress: {
         pages,
         overall: {
@@ -1653,6 +1657,8 @@ export class FormSubmissionService {
         status,
         cohortmemberstatus: membership?.status || '',
         formstatus,
+        // FIXED: Add completionPercentage from form submission
+        completionPercentage: submission?.completionPercentage ?? 0,
         progress,
         lastSavedAt,
         submittedAt,
@@ -1732,6 +1738,8 @@ export class FormSubmissionService {
           status: submission.status,
           cohortmemberstatus: '',
           formstatus: submission.status,
+          // FIXED: Add completionPercentage from form submission
+          completionPercentage: submission.completionPercentage ?? 0,
           progress: {
             pages,
             overall: {

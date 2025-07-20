@@ -1435,6 +1435,9 @@ export class PostgresCohortMembersService {
               if (params.updateData.status != null) {
                 ctx._source.applications[i].status = params.updateData.status;
               }
+              if (params.updateData.completionPercentage != null) {
+                ctx._source.applications[i].completionPercentage = params.updateData.completionPercentage;
+              }
               if (params.updateData.updatedAt != null) {
                 ctx._source.applications[i].updatedAt = params.updateData.updatedAt;
               }
@@ -1481,6 +1484,7 @@ export class PostgresCohortMembersService {
             cohortmemberstatus: updateData.cohortmemberstatus,
             statusReason: updateData.statusReason,
             status: updateData.status,
+            completionPercentage: updateData.completionPercentage,
             updatedAt: new Date().toISOString(),
           },
         },
