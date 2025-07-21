@@ -66,10 +66,16 @@ export class UserElasticsearchService implements OnModuleInit {
                   type: 'nested',
                   properties: {
                     fieldId: { type: 'keyword' },
+                    fieldValuesId: { type: 'keyword' },
+                    fieldname: { type: 'text' },
                     code: { type: 'keyword' }, // Always treat as string
                     label: { type: 'text' },
                     type: { type: 'keyword' },
                     value: { type: 'text' }, // Always treat as string for flexibility
+                    context: { type: 'keyword' },
+                    contextType: { type: 'keyword' },
+                    state: { type: 'keyword' },
+                    fieldParams: { type: 'object', dynamic: true },
                   },
                 },
               },
@@ -78,7 +84,6 @@ export class UserElasticsearchService implements OnModuleInit {
               type: 'nested',
               properties: {
                 cohortId: { type: 'keyword' },
-                status: { type: 'keyword' },
                 cohortmemberstatus: { type: 'keyword' },
                 formstatus: { type: 'keyword' },
                 completionPercentage: { type: 'float' }, // FIXED: Add completionPercentage field
@@ -446,6 +451,44 @@ export class UserElasticsearchService implements OnModuleInit {
                     },
                   },
                 },
+                // Search in custom fields
+                {
+                  nested: {
+                    path: 'profile.customFields',
+                    query: {
+                      bool: {
+                        should: [
+                          {
+                            match: {
+                              'profile.customFields.label': {
+                                query: searchTerm,
+                                boost: 2.0,
+                              },
+                            },
+                          },
+                          {
+                            match: {
+                              'profile.customFields.value': {
+                                query: searchTerm,
+                                boost: 2.0,
+                              },
+                            },
+                          },
+                          {
+                            match: {
+                              'profile.customFields.fieldname': {
+                                query: searchTerm,
+                                boost: 2.0,
+                              },
+                            },
+                          },
+                        ],
+                        minimum_should_match: 1,
+                      },
+                    },
+                    score_mode: 'max',
+                  },
+                },
               ],
               minimum_should_match: 1,
             },
@@ -458,11 +501,90 @@ export class UserElasticsearchService implements OnModuleInit {
         const appFilters: any = {};
         Object.entries(query.filters).forEach(([field, value]) => {
           if (value !== undefined && value !== null && value !== '') {
-            // Handle cohortId and cohortmemberstatus as nested application filters
-            if (field === 'cohortId' || field === 'cohortmemberstatus') {
+            // Handle cohortId, cohortmemberstatus, and completionPercentage as nested application filters
+            if (
+              field === 'cohortId' ||
+              field === 'cohortmemberstatus' ||
+              field === 'completionPercentage'
+            ) {
               appFilters[field] = value;
               return;
             }
+
+            // Handle custom fields filtering
+            if (field.startsWith('customFields.')) {
+              const customFieldName = field.replace('customFields.', '');
+
+              searchQuery.bool.filter.push({
+                nested: {
+                  path: 'profile.customFields',
+                  query: {
+                    bool: {
+                      must: [
+                        // Match by fieldname OR label (more flexible)
+                        {
+                          bool: {
+                            should: [
+                              {
+                                term: {
+                                  'profile.customFields.fieldname':
+                                    customFieldName,
+                                },
+                              },
+                              {
+                                wildcard: {
+                                  'profile.customFields.fieldname': `*${customFieldName}*`,
+                                },
+                              },
+                              {
+                                match: {
+                                  'profile.customFields.label': {
+                                    query: customFieldName,
+                                    operator: 'and',
+                                  },
+                                },
+                              },
+                            ],
+                            minimum_should_match: 1,
+                          },
+                        },
+                        // Match by value (flexible match)
+                        {
+                          bool: {
+                            should: [
+                              {
+                                term: {
+                                  'profile.customFields.value': String(value),
+                                },
+                              },
+                              {
+                                wildcard: {
+                                  'profile.customFields.value': `*${String(
+                                    value
+                                  ).toLowerCase()}*`,
+                                },
+                              },
+                              {
+                                match: {
+                                  'profile.customFields.value': {
+                                    query: String(value),
+                                    operator: 'or',
+                                    fuzziness: 'AUTO',
+                                  },
+                                },
+                              },
+                            ],
+                            minimum_should_match: 1,
+                          },
+                        },
+                      ],
+                    },
+                  },
+                },
+              });
+              return;
+            }
+
             // For name fields, use wildcard for partial/case-insensitive match
             if (
               [
@@ -550,8 +672,12 @@ export class UserElasticsearchService implements OnModuleInit {
             }
           }
         });
-        // If cohortId or cohortmemberstatus filters are present, add nested application filter
-        if (appFilters.cohortId || appFilters.cohortmemberstatus) {
+        // If cohortId, cohortmemberstatus, or completionPercentage filters are present, add nested application filter
+        if (
+          appFilters.cohortId ||
+          appFilters.cohortmemberstatus ||
+          appFilters.completionPercentage
+        ) {
           const appMust: any[] = [];
           if (appFilters.cohortId) {
             appMust.push({
@@ -598,6 +724,19 @@ export class UserElasticsearchService implements OnModuleInit {
               });
             }
           }
+          if (appFilters.completionPercentage !== undefined) {
+            const completionValue = Number(appFilters.completionPercentage);
+            if (!isNaN(completionValue)) {
+              appMust.push({
+                range: {
+                  'applications.completionPercentage': {
+                    gte: completionValue,
+                    lte: completionValue,
+                  },
+                },
+              });
+            }
+          }
           searchQuery.bool.filter.push({
             nested: {
               path: 'applications',
@@ -629,6 +768,7 @@ export class UserElasticsearchService implements OnModuleInit {
               'userId',
               'profile.*',
               'applications.*',
+              'applications.completionPercentage',
               'courses.*',
               'createdAt',
               'updatedAt',
@@ -671,32 +811,6 @@ export class UserElasticsearchService implements OnModuleInit {
       const message = `Failed to search users in Elasticsearch: ${error.message}`;
       logger.error(message, error.stack);
       throw new Error(message);
-    }
-  }
-
-  /**
-   * Debug method to check what countries are stored in the index
-   */
-  async debugCountries() {
-    try {
-      const result = await this.elasticsearchService.search(
-        this.indexName,
-        {
-          match_all: {},
-        },
-        {
-          size: 1000,
-          _source: ['profile.country'],
-        }
-      );
-
-      const countries = result.hits
-        .map((hit) => hit._source?.profile?.country)
-        .filter(Boolean);
-      return countries;
-    } catch (error) {
-      console.error('Error debugging countries:', error);
-      throw error;
     }
   }
 
@@ -810,8 +924,20 @@ export class UserElasticsearchService implements OnModuleInit {
           },
         };
 
+        // Calculate completion percentage
+        const completionPercentage =
+          totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+        mappedApplication.completionPercentage = completionPercentage;
+
         // Also update formData with the same structure
         mappedApplication.formData = application.formData;
+      } else if (application.completionPercentage !== undefined) {
+        // If completionPercentage is provided directly, use it
+        mappedApplication.completionPercentage =
+          application.completionPercentage;
+      } else {
+        // Default to 0 if no form data and no completion percentage provided
+        mappedApplication.completionPercentage = 0;
       }
 
       // Update existing document with new application
@@ -977,6 +1103,32 @@ export class UserElasticsearchService implements OnModuleInit {
               ctx._source.applications[i].progress.pages[params.pageId] = params.pageData;
               ctx._source.applications[i].formData[params.pageId] = params.pageData.fields;
               ctx._source.applications[i].lastSavedAt = params.lastSavedAt;
+              
+              // Recalculate completion percentage
+              int totalFields = 0;
+              int completedFields = 0;
+              
+              // Count total and completed fields across all pages
+              for (String pageKey : ctx._source.applications[i].progress.pages.keySet()) {
+                Map page = ctx._source.applications[i].progress.pages[pageKey];
+                if (page != null && page.fields != null) {
+                  for (String fieldKey : page.fields.keySet()) {
+                    totalFields++;
+                    Object fieldValue = page.fields[fieldKey];
+                    if (fieldValue != null && fieldValue.toString().trim().length() > 0) {
+                      completedFields++;
+                    }
+                  }
+                }
+              }
+              
+              // Calculate completion percentage
+              if (totalFields > 0) {
+                ctx._source.applications[i].completionPercentage = Math.round((completedFields * 100.0) / totalFields);
+              } else {
+                ctx._source.applications[i].completionPercentage = 0;
+              }
+              
               found = true;
               break;
             }
@@ -993,6 +1145,29 @@ export class UserElasticsearchService implements OnModuleInit {
             application.progress = progress;
             application.formData = formData;
             application.lastSavedAt = params.lastSavedAt;
+            
+            // Calculate completion percentage for new application
+            int totalFields = 0;
+            int completedFields = 0;
+            
+            // Count fields in the current page
+            if (params.pageData.fields != null) {
+              for (String fieldKey : params.pageData.fields.keySet()) {
+                totalFields++;
+                Object fieldValue = params.pageData.fields[fieldKey];
+                if (fieldValue != null && fieldValue.toString().trim().length() > 0) {
+                  completedFields++;
+                }
+              }
+            }
+            
+            // Calculate completion percentage
+            if (totalFields > 0) {
+              application.completionPercentage = Math.round((completedFields * 100.0) / totalFields);
+            } else {
+              application.completionPercentage = 0;
+            }
+            
             ctx._source.applications.add(application);
           }
         `,

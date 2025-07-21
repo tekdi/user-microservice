@@ -36,7 +36,6 @@ export class UserElasticsearchController {
   ) {
     const fullApplication: IApplication = {
       cohortId,
-      status: application.status || 'SUBMITTED',
       cohortmemberstatus: application.cohortmemberstatus || 'SUBMITTED',
       formstatus: application.formstatus || 'SUBMITTED',
       lastSavedAt: application.lastSavedAt || new Date().toISOString(),
