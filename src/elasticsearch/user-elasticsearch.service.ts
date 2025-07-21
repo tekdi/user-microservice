@@ -37,7 +37,7 @@ export class UserElasticsearchService implements OnModuleInit {
   async initialize() {
     try {
       // Delete existing index if it exists
-      await this.deleteIndex();
+      // await this.deleteIndex();
 
       // Explicitly map all possible fields in customFields as text/keyword to avoid mapping conflicts
       const mapping = {
