@@ -37,7 +37,7 @@ export class UserElasticsearchService implements OnModuleInit {
   async initialize() {
     try {
       // Delete existing index if it exists
-      // await this.deleteIndex();
+      await this.deleteIndex();
 
       // Explicitly map all possible fields in customFields as text/keyword to avoid mapping conflicts
       const mapping = {
@@ -141,7 +141,9 @@ export class UserElasticsearchService implements OnModuleInit {
       };
 
       await this.elasticsearchService.createIndex(this.indexName, mapping);
-      this.logger.log(`Index ${this.indexName} created successfully with mappings`);
+      this.logger.log(
+        `Index ${this.indexName} created successfully with mappings`
+      );
     } catch (error) {
       this.logger.error('Failed to initialize Elasticsearch index:', error);
       throw new Error(
@@ -963,12 +965,13 @@ export class UserElasticsearchService implements OnModuleInit {
         );
       }
     } catch (error) {
-      this.logger.error('Failed to update application in Elasticsearch:', error);
+      this.logger.error(
+        'Failed to update application in Elasticsearch:',
+        error
+      );
       throw error;
     }
   }
-
-
 
   private getPageName(pageId: string): string {
     // Map page IDs to their corresponding names
@@ -1161,7 +1164,10 @@ export class UserElasticsearchService implements OnModuleInit {
       );
       return result;
     } catch (error) {
-      this.logger.error('Error updating application page in Elasticsearch:', error);
+      this.logger.error(
+        'Error updating application page in Elasticsearch:',
+        error
+      );
       throw new Error(
         `Failed to update application page in Elasticsearch: ${error.message}`
       );
