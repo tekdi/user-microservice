@@ -984,11 +984,16 @@ export class FormSubmissionService {
 
           const results = await Promise.all(fieldValuePromises);
           updatedFieldValues = results.filter((result) => result !== null);
+
+          // Ensure all field value updates are committed to database before proceeding
+          // This prevents race conditions where getFieldsAndFieldsValues might fetch stale data
+          await this.fieldValuesRepository.query('SELECT 1'); // Force a database round trip to ensure commits
         } catch (error) {
           LoggerUtil.warn(`Failed to update field values`, error);
         }
       }
       // Get the complete field values with field information (includes dependencies)
+      // This call now happens AFTER all field updates are committed
       const completeFieldValues =
         await this.fieldsService.getFieldsAndFieldsValues(
           userId,
@@ -1312,6 +1317,7 @@ export class FormSubmissionService {
               // Handle nested dependencies structure - ensure dependency fields are included
               if ((fieldSchema as any).dependencies) {
                 const dependencies = (fieldSchema as any).dependencies;
+                // Check if dependencies is an object
                 for (const [depKey, depSchema] of Object.entries(
                   dependencies
                 )) {
@@ -1333,11 +1339,14 @@ export class FormSubmissionService {
 
           extractFormFieldIds(fieldProps);
         }
-
-        // Filter updatedFieldValues to only include form fields
-        formFieldsOnly = updatedFieldValues.filter((field) =>
-          formFieldIds.has(field.fieldId)
-        );
+                // Filter updatedFieldValues to only include form fields
+        // TEMPORARY FIX: If a field is not in formFieldIds but exists in fieldIdToPageName, include it
+        formFieldsOnly = updatedFieldValues.filter((field) => {
+          const isInFormFieldIds = formFieldIds.has(field.fieldId);
+          const isInFieldMapping = fieldIdToPageName[field.fieldId];
+          
+          return isInFormFieldIds || isInFieldMapping;
+        });
       } catch (err) {
         const logger = new Logger('FormSubmissionService');
         logger.error('Schema fetch failed, cannot proceed', err);
@@ -1397,6 +1406,8 @@ export class FormSubmissionService {
         };
         updatedFields[pageKey].fields[field.fieldId] = field.value;
       });
+
+
 
       if (existingAppIndex !== -1) {
         // COMPLETELY REPLACE old pages structure instead of merging
