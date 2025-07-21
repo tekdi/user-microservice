@@ -29,7 +29,7 @@ export class UserElasticsearchService implements OnModuleInit {
         this.logger.log(`Index ${this.indexName} deleted successfully`);
       }
     } catch (error) {
-      console.error(`Failed to delete index ${this.indexName}:`, error);
+      this.logger.error(`Failed to delete index ${this.indexName}:`, error);
       throw error;
     }
   }
@@ -141,9 +141,9 @@ export class UserElasticsearchService implements OnModuleInit {
       };
 
       await this.elasticsearchService.createIndex(this.indexName, mapping);
-      console.log(`Index ${this.indexName} created successfully with mappings`);
+      this.logger.log(`Index ${this.indexName} created successfully with mappings`);
     } catch (error) {
-      console.error('Failed to initialize Elasticsearch index:', error);
+      this.logger.error('Failed to initialize Elasticsearch index:', error);
       throw new Error(
         `Failed to initialize Elasticsearch index: ${error.message}`
       );
@@ -198,7 +198,7 @@ export class UserElasticsearchService implements OnModuleInit {
       );
       return result;
     } catch (error) {
-      console.error('Failed to create user in Elasticsearch:', error);
+      this.logger.error('Failed to create user in Elasticsearch:', error);
       throw new Error(
         `Failed to create user in Elasticsearch: ${error.message}`
       );
@@ -282,7 +282,7 @@ export class UserElasticsearchService implements OnModuleInit {
       );
       return result;
     } catch (error) {
-      console.error('Failed to delete user from Elasticsearch:', error);
+      this.logger.error('Failed to delete user from Elasticsearch:', error);
       throw new Error(
         `Failed to delete user from Elasticsearch: ${error.message}`
       );
@@ -300,7 +300,7 @@ export class UserElasticsearchService implements OnModuleInit {
       if (error.meta?.statusCode === 404) {
         return null;
       }
-      console.error('Failed to get user from Elasticsearch:', error);
+      this.logger.error('Failed to get user from Elasticsearch:', error);
       throw new Error(
         `Failed to get user from Elasticsearch: ${error.message}`
       );
@@ -460,14 +460,6 @@ export class UserElasticsearchService implements OnModuleInit {
                         should: [
                           {
                             match: {
-                              'profile.customFields.label': {
-                                query: searchTerm,
-                                boost: 2.0,
-                              },
-                            },
-                          },
-                          {
-                            match: {
                               'profile.customFields.value': {
                                 query: searchTerm,
                                 boost: 2.0,
@@ -521,31 +513,10 @@ export class UserElasticsearchService implements OnModuleInit {
                   query: {
                     bool: {
                       must: [
-                        // Match by fieldname OR label (more flexible)
+                        // Match by fieldId
                         {
-                          bool: {
-                            should: [
-                              {
-                                term: {
-                                  'profile.customFields.fieldname':
-                                    customFieldName,
-                                },
-                              },
-                              {
-                                wildcard: {
-                                  'profile.customFields.fieldname': `*${customFieldName}*`,
-                                },
-                              },
-                              {
-                                match: {
-                                  'profile.customFields.label': {
-                                    query: customFieldName,
-                                    operator: 'and',
-                                  },
-                                },
-                              },
-                            ],
-                            minimum_should_match: 1,
+                          term: {
+                            'profile.customFields.fieldId': customFieldName,
                           },
                         },
                         // Match by value (flexible match)
@@ -604,7 +575,7 @@ export class UserElasticsearchService implements OnModuleInit {
             ) {
               // Special handling for country to be more flexible
               if (field === 'country') {
-                console.log(
+                this.logger.log(
                   `Country filter - original value: "${value}", lowercase: "${String(
                     value
                   ).toLowerCase()}"`
@@ -755,7 +726,7 @@ export class UserElasticsearchService implements OnModuleInit {
       }
       const size = limit ? Math.min(Number(limit), 10000) : 100;
       const from = offset ? Math.max(Number(offset), 0) : 0;
-      logger.debug(`Elasticsearch query: ${JSON.stringify(searchQuery)}`);
+
       const esResult = await this.elasticsearchService.search(
         this.indexName,
         searchQuery,
@@ -992,10 +963,12 @@ export class UserElasticsearchService implements OnModuleInit {
         );
       }
     } catch (error) {
-      console.error('Failed to update application in Elasticsearch:', error);
+      this.logger.error('Failed to update application in Elasticsearch:', error);
       throw error;
     }
   }
+
+
 
   private getPageName(pageId: string): string {
     // Map page IDs to their corresponding names
@@ -1047,7 +1020,7 @@ export class UserElasticsearchService implements OnModuleInit {
       );
       return result;
     } catch (error) {
-      console.error('Error updating course in Elasticsearch:', error);
+      this.logger.error('Error updating course in Elasticsearch:', error);
       throw new Error(
         `Failed to update course in Elasticsearch: ${error.message}`
       );
@@ -1188,7 +1161,7 @@ export class UserElasticsearchService implements OnModuleInit {
       );
       return result;
     } catch (error) {
-      console.error('Error updating application page in Elasticsearch:', error);
+      this.logger.error('Error updating application page in Elasticsearch:', error);
       throw new Error(
         `Failed to update application page in Elasticsearch: ${error.message}`
       );

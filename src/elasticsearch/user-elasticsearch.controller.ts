@@ -71,7 +71,11 @@ export class UserElasticsearchController {
     @Body() course: Partial<ICourse>
   ) {
     if (isElasticsearchEnabled()) {
-      return this.userElasticsearchService.updateCourse(userId, courseId, course);
+      return this.userElasticsearchService.updateCourse(
+        userId,
+        courseId,
+        course
+      );
     }
     return null;
   }
@@ -101,5 +105,4 @@ export class UserElasticsearchController {
     }
     return null;
   }
-
 }

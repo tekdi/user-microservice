@@ -1168,6 +1168,7 @@ export class FormSubmissionService {
       // --- NEW LOGIC: Fetch form schema and build fieldId -> pageName map ---
       let fieldIdToPageName: Record<string, string> = {};
       let fieldIdToFieldName: Record<string, string> = {};
+      let formFieldsOnly: any[] = [];
       try {
         const form = await this.formsService.getFormById(formIdToMatch);
         const fieldsObj = form && form.fields ? (form.fields as any) : null;
@@ -1256,12 +1257,54 @@ export class FormSubmissionService {
 
           extractFieldMappings(fieldProps, pageName);
         }
+        
+        // Filter updatedFieldValues to only include form fields (not custom fields)
+        const formFieldIds = new Set<string>();
+        for (const [pageKey, pageSchema] of Object.entries(schema)) {
+          const fieldProps = (pageSchema as any).properties || {};
+          
+          const extractFormFieldIds = (properties: any) => {
+            for (const [fieldKey, fieldSchema] of Object.entries(properties)) {
+              const fieldId = (fieldSchema as any).fieldId;
+              if (fieldId) {
+                formFieldIds.add(fieldId);
+              }
+              
+              // Handle nested dependencies structure
+              if ((fieldSchema as any).dependencies) {
+                const dependencies = (fieldSchema as any).dependencies;
+                for (const [depKey, depSchema] of Object.entries(dependencies)) {
+                  if ((depSchema as any).oneOf) {
+                    // Handle oneOf dependencies
+                    for (const oneOfItem of (depSchema as any).oneOf) {
+                      if (oneOfItem.properties) {
+                        extractFormFieldIds(oneOfItem.properties);
+                      }
+                    }
+                  } else if ((depSchema as any).properties) {
+                    // Handle direct properties dependencies
+                    extractFormFieldIds((depSchema as any).properties);
+                  }
+                }
+              }
+            }
+          };
+          
+          extractFormFieldIds(fieldProps);
+        }
+        
+        // Filter updatedFieldValues to only include form fields
+        formFieldsOnly = updatedFieldValues.filter(field => 
+          formFieldIds.has(field.fieldId)
+        );
       } catch (err) {
         const logger = new Logger('FormSubmissionService');
         logger.error('Schema fetch failed, cannot proceed', err);
         // If schema fetch fails, fallback to empty map (all fields go to 'default')
         fieldIdToPageName = {};
         fieldIdToFieldName = {};
+        // If schema fetch fails, don't filter fields (use all updatedFieldValues)
+        formFieldsOnly = updatedFieldValues;
       }
       // --- END NEW LOGIC ---
 
@@ -1271,9 +1314,7 @@ export class FormSubmissionService {
       try {
         const form = await this.formsService.getFormById(formIdToMatch);
         cohortId = form?.contextId || '';
-        LoggerUtil.debug(
-          `Fetched cohortId: ${cohortId} for formId: ${formIdToMatch}`
-        );
+
       } catch (error) {
         LoggerUtil.warn(
           `Failed to fetch cohortId for formId ${formIdToMatch}:`,
@@ -1289,9 +1330,7 @@ export class FormSubmissionService {
         // If not found by cohortId, don't fallback to avoid inconsistencies
         // Log this scenario for investigation
         if (existingAppIndex === -1) {
-          LoggerUtil.warn(
-            `No application found for cohortId: ${cohortId}, will create new application`
-          );
+          
         }
       } else {
         // Use formId/submissionId only when cohortId is not available
@@ -1304,22 +1343,15 @@ export class FormSubmissionService {
 
       // Prepare the updated fields data
       const updatedFields = {};
-      updatedFieldValues.forEach((field) => {
-        // Improved logic: Try schema, then existing pages, then fallback
+      formFieldsOnly.forEach((field) => {
         let pageKey = fieldIdToPageName[field.fieldId];
         if (!pageKey && existingAppIndex !== -1) {
-          // Try to find the field in existing pages
-          const existingPages =
-            applications[existingAppIndex]?.progress?.pages || {};
-          for (const [existingPage, pageData] of Object.entries(
-            existingPages
-          )) {
-            // Fix: add type assertion for pageData
+          const existingPages = applications[existingAppIndex]?.progress?.pages || {};
+          for (const [existingPage, pageData] of Object.entries(existingPages)) {
             const pageDataTyped = pageData as { fields?: any };
             if (
               pageDataTyped.fields &&
-              (field.fieldname in pageDataTyped.fields ||
-                field.fieldId in pageDataTyped.fields)
+              (field.fieldId in pageDataTyped.fields)
             ) {
               pageKey = existingPage;
               break;
@@ -1327,20 +1359,13 @@ export class FormSubmissionService {
           }
         }
         if (!pageKey) {
-          console.warn(
-            `FieldId ${field.fieldId} not found in schema mapping or existing pages, using 'eligibilityCheck'`
-          );
           pageKey = 'eligibilityCheck';
         }
-
         updatedFields[pageKey] ??= {
           completed: true,
           fields: {},
         };
-        // Use field name from schema if available, otherwise use fieldname or fieldId
-        const fieldName =
-          fieldIdToFieldName[field.fieldId] || field.fieldname || field.fieldId;
-        updatedFields[pageKey].fields[fieldName] = field.value;
+        updatedFields[pageKey].fields[field.fieldId] = field.value;
       });
 
       if (existingAppIndex !== -1) {
@@ -1450,7 +1475,7 @@ export class FormSubmissionService {
                 : 0;
           }
         } catch (error) {
-          console.error('Error calculating completion percentage:', error);
+          LoggerUtil.warn('Error calculating completion percentage:', error);
           // Fallback calculation if schema parsing fails
           completionPercentage =
             mergedOverall.total > 0
@@ -1502,7 +1527,7 @@ export class FormSubmissionService {
             await this.formSubmissionRepository.save(submissionToUpdate);
           }
         } catch (error) {
-          console.error(
+          LoggerUtil.warn(
             'Failed to update FormSubmission completionPercentage:',
             error
           );
@@ -1526,7 +1551,7 @@ export class FormSubmissionService {
       }
     } catch (elasticError) {
       // Log Elasticsearch error but don't fail the request
-      console.error('Failed to update Elasticsearch:', elasticError);
+              LoggerUtil.warn('Failed to update Elasticsearch:', elasticError);
     }
   }
 
@@ -1543,26 +1568,32 @@ export class FormSubmissionService {
       const form = await this.formsService.getFormById(submission.formId);
       const cohortId = form?.contextId || '';
       if (!cohortId) return { name: '', status: '' };
-      const mockResponse = {
-        status: (code: number) => ({ json: (data: any) => data }),
-      };
-      const cohortDetails = await this.postgresCohortService.getCohortsDetails(
-        { cohortId, getChildData: false },
-        mockResponse
-      );
-      if (cohortDetails?.result?.cohortData?.[0]) {
-        const cohortData = cohortDetails.result.cohortData[0];
-        const cohortFieldValues = cohortData.customField ?? [];
+
+      // Use the same approach as cohort members service for consistency
+      // Get basic cohort information directly from database
+      const cohort = await this.cohortRepository.findOne({
+        where: { cohortId: cohortId },
+        select: ['cohortId', 'name', 'parentId', 'type', 'status'],
+      });
+
+      if (cohort) {
+        // Get cohort custom fields using the same method as cohort members service
+        const cohortCustomFields = await this.postgresCohortService.getCohortCustomFieldDetails(
+          cohortId
+        );
+
         return {
-          name: cohortData.name ?? '',
-          status: cohortData.status ?? '',
-          ...cohortFieldValues.reduce((acc, field) => {
-            acc[field.label] = field.value ?? '';
-            return acc;
-          }, {} as Record<string, any>),
+          cohortId: cohort.cohortId,
+          name: cohort.name,
+          parentId: cohort.parentId,
+          type: cohort.type,
+          status: cohort.status,
+          customFields: cohortCustomFields,
         };
       }
-    } catch (e) {}
+    } catch (e) {
+              LoggerUtil.warn('Failed to fetch cohort details:', e);
+    }
     return { name: '', status: '' };
   }
 
@@ -1717,14 +1748,14 @@ export class FormSubmissionService {
         formData[pageName] = {};
       }
 
-      pages[pageName].fields[fieldName] = field.value;
-      formData[pageName][fieldName] = field.value;
+      pages[pageName].fields[field.fieldId] = field.value;
+      formData[pageName][field.fieldId] = field.value;
     }
     if (Object.keys(pages).length === 0) {
       pages['eligibilityCheck'] = {
         completed: true,
         fields: submissionCustomFields.reduce((acc, field) => {
-          acc[field.fieldname || field.fieldId] = field.value;
+          acc[field.fieldId] = field.value;
           return acc;
         }, {}),
       };
@@ -1960,9 +1991,51 @@ export class FormSubmissionService {
         }
         const submissionCustomFields =
           await this.fieldsService.getFieldsAndFieldsValues(submission.itemId);
+        
+        // Filter submissionCustomFields to only include form fields (not custom fields)
+        // Get all field IDs that are part of the current form schema
+        const formFieldIds = new Set<string>();
+        for (const [pageKey, pageSchema] of Object.entries(schema)) {
+          const fieldProps = (pageSchema as any).properties || {};
+          
+          const extractFormFieldIds = (properties: any) => {
+            for (const [fieldKey, fieldSchema] of Object.entries(properties)) {
+              const fieldId = (fieldSchema as any).fieldId;
+              if (fieldId) {
+                formFieldIds.add(fieldId);
+              }
+              
+              // Handle nested dependencies structure
+              if ((fieldSchema as any).dependencies) {
+                const dependencies = (fieldSchema as any).dependencies;
+                for (const [depKey, depSchema] of Object.entries(dependencies)) {
+                  if ((depSchema as any).oneOf) {
+                    // Handle oneOf dependencies
+                    for (const oneOfItem of (depSchema as any).oneOf) {
+                      if (oneOfItem.properties) {
+                        extractFormFieldIds(oneOfItem.properties);
+                      }
+                    }
+                  } else if ((depSchema as any).properties) {
+                    // Handle direct properties dependencies
+                    extractFormFieldIds((depSchema as any).properties);
+                  }
+                }
+              }
+            }
+          };
+          
+          extractFormFieldIds(fieldProps);
+        }
+        
+        // Filter submissionCustomFields to only include form fields
+        const formFieldsOnly = submissionCustomFields.filter(field => 
+          formFieldIds.has(field.fieldId)
+        );
+        
         const fieldIdToValue: Record<string, any> = {};
         const fieldIdToFieldName: Record<string, string> = {};
-        for (const field of submissionCustomFields) {
+        for (const field of formFieldsOnly) {
           fieldIdToValue[field.fieldId] = field.value;
           fieldIdToFieldName[field.fieldId] = field.fieldname || field.fieldId;
         }
@@ -2027,7 +2100,7 @@ export class FormSubmissionService {
         }
 
         // Map field values to correct pages using the schema mappings
-        for (const field of submissionCustomFields) {
+        for (const field of formFieldsOnly) {
           const pageName =
             fieldIdToPageName[field.fieldId] || 'eligibilityCheck';
           const fieldName =
@@ -2040,14 +2113,14 @@ export class FormSubmissionService {
             formData[pageName] = {};
           }
 
-          pages[pageName].fields[fieldName] = field.value;
-          formData[pageName][fieldName] = field.value;
+          pages[pageName].fields[field.fieldId] = field.value;
+          formData[pageName][field.fieldId] = field.value;
         }
         if (Object.keys(pages).length === 0) {
           pages['eligibilityCheck'] = {
             completed: true,
-            fields: submissionCustomFields.reduce((acc, field) => {
-              acc[field.fieldname || field.fieldId] = field.value;
+            fields: formFieldsOnly.reduce((acc, field) => {
+              acc[field.fieldId] = field.value;
               return acc;
             }, {}),
           };
@@ -2058,11 +2131,41 @@ export class FormSubmissionService {
         progress = {
           pages,
           overall: {
-            completed: submissionCustomFields.length,
-            total: submissionCustomFields.length,
+            completed: formFieldsOnly.length,
+            total: formFieldsOnly.length,
           },
         };
       }
+      // Get detailed cohortDetails using the same method as fetchCohortDetailsFromDB
+      let detailedCohortDetails: any = { name: cohort?.name ?? '', status: cohort?.status ?? '' };
+      if (cohortId) {
+        try {
+          // Get basic cohort information directly from database
+          const cohortDetails = await this.cohortRepository.findOne({
+            where: { cohortId: cohortId },
+            select: ['cohortId', 'name', 'parentId', 'type', 'status'],
+          });
+
+          if (cohortDetails) {
+            // Get cohort custom fields using the same method as cohort members service
+            const cohortCustomFields = await this.postgresCohortService.getCohortCustomFieldDetails(
+              cohortId
+            );
+
+            detailedCohortDetails = {
+              cohortId: cohortDetails.cohortId,
+              name: cohortDetails.name,
+              parentId: cohortDetails.parentId,
+              type: cohortDetails.type,
+              status: cohortDetails.status,
+              customFields: cohortCustomFields,
+            };
+          }
+        } catch (e) {
+          LoggerUtil.warn('Failed to fetch detailed cohort details:', e);
+        }
+      }
+
       applications.push({
         formId,
         submissionId,
@@ -2075,10 +2178,7 @@ export class FormSubmissionService {
         progress,
         lastSavedAt,
         submittedAt,
-        cohortDetails: {
-          name: cohort?.name ?? '',
-          status: cohort?.status ?? '',
-        },
+        cohortDetails: detailedCohortDetails as any,
         formData,
       });
     }
@@ -2137,9 +2237,51 @@ export class FormSubmissionService {
         }
         const submissionCustomFields =
           await this.fieldsService.getFieldsAndFieldsValues(submission.itemId);
+        
+        // Filter submissionCustomFields to only include form fields (not custom fields)
+        // Get all field IDs that are part of the current form schema
+        const formFieldIds = new Set<string>();
+        for (const [pageKey, pageSchema] of Object.entries(schema)) {
+          const fieldProps = (pageSchema as any).properties || {};
+          
+          const extractFormFieldIds = (properties: any) => {
+            for (const [fieldKey, fieldSchema] of Object.entries(properties)) {
+              const fieldId = (fieldSchema as any).fieldId;
+              if (fieldId) {
+                formFieldIds.add(fieldId);
+              }
+              
+              // Handle nested dependencies structure
+              if ((fieldSchema as any).dependencies) {
+                const dependencies = (fieldSchema as any).dependencies;
+                for (const [depKey, depSchema] of Object.entries(dependencies)) {
+                  if ((depSchema as any).oneOf) {
+                    // Handle oneOf dependencies
+                    for (const oneOfItem of (depSchema as any).oneOf) {
+                      if (oneOfItem.properties) {
+                        extractFormFieldIds(oneOfItem.properties);
+                      }
+                    }
+                  } else if ((depSchema as any).properties) {
+                    // Handle direct properties dependencies
+                    extractFormFieldIds((depSchema as any).properties);
+                  }
+                }
+              }
+            }
+          };
+          
+          extractFormFieldIds(fieldProps);
+        }
+        
+        // Filter submissionCustomFields to only include form fields
+        const formFieldsOnly = submissionCustomFields.filter(field => 
+          formFieldIds.has(field.fieldId)
+        );
+        
         const fieldIdToValue: Record<string, any> = {};
         const fieldIdToFieldName: Record<string, string> = {};
-        for (const field of submissionCustomFields) {
+        for (const field of formFieldsOnly) {
           fieldIdToValue[field.fieldId] = field.value;
           fieldIdToFieldName[field.fieldId] = field.fieldname || field.fieldId;
         }
@@ -2204,7 +2346,7 @@ export class FormSubmissionService {
         }
 
         // Map field values to correct pages using the schema mappings
-        for (const field of submissionCustomFields) {
+        for (const field of formFieldsOnly) {
           const pageName =
             fieldIdToPageName[field.fieldId] || 'eligibilityCheck';
           const fieldName =
@@ -2217,14 +2359,14 @@ export class FormSubmissionService {
             formData[pageName] = {};
           }
 
-          pages[pageName].fields[fieldName] = field.value;
-          formData[pageName][fieldName] = field.value;
+          pages[pageName].fields[field.fieldId] = field.value;
+          formData[pageName][field.fieldId] = field.value;
         }
         if (Object.keys(pages).length === 0) {
           pages['eligibilityCheck'] = {
             completed: true,
-            fields: submissionCustomFields.reduce((acc, field) => {
-              acc[field.fieldname || field.fieldId] = field.value;
+            fields: formFieldsOnly.reduce((acc, field) => {
+              acc[field.fieldId] = field.value;
               return acc;
             }, {}),
           };
@@ -2244,8 +2386,8 @@ export class FormSubmissionService {
           progress: {
             pages,
             overall: {
-              completed: submissionCustomFields.length,
-              total: submissionCustomFields.length,
+              completed: formFieldsOnly.length,
+              total: formFieldsOnly.length,
             },
           },
           lastSavedAt: submission.updatedAt
