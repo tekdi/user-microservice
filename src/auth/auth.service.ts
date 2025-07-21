@@ -22,8 +22,8 @@ type LoginResponse = {
 export class AuthService {
   constructor(
     private readonly useradapter: UserAdapter,
-    private readonly keycloakService: KeycloakService
-  ) { }
+    private readonly keycloakService: KeycloakService,
+  ) {}
 
   async login(authDto, response: Response) {
     const apiId = APIID.LOGIN;
@@ -50,7 +50,7 @@ export class AuthService {
         apiId,
         res,
         HttpStatus.OK,
-        "Auth Token fetched Successfully."
+        "Auth Token fetched Successfully.",
       );
     } catch (error) {
       if (error.response && error.response.status === 401) {
@@ -62,7 +62,7 @@ export class AuthService {
           apiId,
           "Internal Server Error",
           `Error : ${errorMessage}`,
-          HttpStatus.INTERNAL_SERVER_ERROR
+          HttpStatus.INTERNAL_SERVER_ERROR,
         );
       }
     }
@@ -82,7 +82,7 @@ export class AuthService {
         apiId,
         data,
         HttpStatus.OK,
-        "User fetched by auth token Successfully."
+        "User fetched by auth token Successfully.",
       );
     } catch (e) {
       const errorMessage = e?.message || "Something went wrong";
@@ -91,14 +91,14 @@ export class AuthService {
         apiId,
         "Internal Server Error",
         `Error : ${errorMessage}`,
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
 
   async refreshToken(
     refreshToken: string,
-    response: Response
+    response: Response,
   ): Promise<LoginResponse> {
     const apiId = APIID.REFRESH;
     const { access_token, expires_in, refresh_token, refresh_expires_in } =
@@ -117,7 +117,7 @@ export class AuthService {
       apiId,
       res,
       HttpStatus.OK,
-      "Refresh Token fetched Successfully."
+      "Refresh Token fetched Successfully.",
     );
   }
 
@@ -130,7 +130,7 @@ export class AuthService {
         apiId,
         logout,
         HttpStatus.OK,
-        "Logged Out Successfully."
+        "Logged Out Successfully.",
       );
     } catch (error) {
       if (error.response && error.response.status === 400) {
@@ -142,7 +142,7 @@ export class AuthService {
           apiId,
           "Internal Server Error",
           `Error : ${errorMessage}`,
-          HttpStatus.INTERNAL_SERVER_ERROR
+          HttpStatus.INTERNAL_SERVER_ERROR,
         );
       }
     }

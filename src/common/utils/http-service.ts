@@ -19,7 +19,7 @@ export class HttpService {
 
   async get<T>(
     url: string,
-    config?: AxiosRequestConfig
+    config?: AxiosRequestConfig,
   ): Promise<AxiosResponse<T>> {
     return this.axiosInstance.get<T>(url, config);
   }
@@ -27,7 +27,7 @@ export class HttpService {
   async post<T>(
     url: string,
     data?: any,
-    config?: AxiosRequestConfig
+    config?: AxiosRequestConfig,
   ): Promise<AxiosResponse<T>> {
     try {
       return await this.axiosInstance.post<T>(url, data, config);
@@ -42,14 +42,14 @@ export class HttpService {
   async put<T>(
     url: string,
     data?: any,
-    config?: AxiosRequestConfig
+    config?: AxiosRequestConfig,
   ): Promise<AxiosResponse<T>> {
     return this.axiosInstance.put<T>(url, data, config);
   }
 
   async delete<T>(
     url: string,
-    config?: AxiosRequestConfig
+    config?: AxiosRequestConfig,
   ): Promise<AxiosResponse<T>> {
     return this.axiosInstance.delete<T>(url, config);
   }

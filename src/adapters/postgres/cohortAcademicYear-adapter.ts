@@ -12,21 +12,27 @@ import { PostgresAcademicYearService } from "./academicyears-adapter";
 import { Cohort } from "src/cohort/entities/cohort.entity";
 
 @Injectable()
-export class CohortAcademicYearService implements IServiceLocatorCohortAcademicYear {
-
+export class CohortAcademicYearService
+  implements IServiceLocatorCohortAcademicYear
+{
   constructor(
     private readonly postgresAcademicYearService: PostgresAcademicYearService,
     @InjectRepository(Cohort)
     private readonly cohortRepository: Repository<Cohort>,
     @InjectRepository(CohortAcademicYear)
     private readonly cohortAcademicYearRepository: Repository<CohortAcademicYear>,
-  ) { }
+  ) {}
 
-  async createCohortAcademicYear(tenantId: string, request: Request, cohortAcademicYearDto: CohortAcademicYearDto, response: Response) {
+  async createCohortAcademicYear(
+    tenantId: string,
+    request: Request,
+    cohortAcademicYearDto: CohortAcademicYearDto,
+    response: Response,
+  ) {
     const apiId = APIID.ADD_COHORT_TO_ACADEMIC_YEAR;
     try {
       const existingCohort = await this.cohortRepository.findOne({
-        where: { cohortId: cohortAcademicYearDto.cohortId, status: 'active' },
+        where: { cohortId: cohortAcademicYearDto.cohortId, status: "active" },
       });
 
       if (!existingCohort) {
@@ -35,7 +41,7 @@ export class CohortAcademicYearService implements IServiceLocatorCohortAcademicY
           apiId,
           HttpStatus.NOT_FOUND.toLocaleString(),
           API_RESPONSES.COHORT_NOT_FOUND,
-          HttpStatus.NOT_FOUND
+          HttpStatus.NOT_FOUND,
         );
       }
 
@@ -45,7 +51,7 @@ export class CohortAcademicYearService implements IServiceLocatorCohortAcademicY
           apiId,
           HttpStatus.BAD_REQUEST.toLocaleString(),
           API_RESPONSES.TENANTID_MISMATCHED,
-          HttpStatus.BAD_REQUEST
+          HttpStatus.BAD_REQUEST,
         );
       }
 
@@ -53,7 +59,7 @@ export class CohortAcademicYearService implements IServiceLocatorCohortAcademicY
       const academicYear =
         await this.postgresAcademicYearService.getActiveAcademicYear(
           cohortAcademicYearDto.academicYearId,
-          tenantId
+          tenantId,
         );
 
       if (!academicYear) {
@@ -62,11 +68,16 @@ export class CohortAcademicYearService implements IServiceLocatorCohortAcademicY
           apiId,
           HttpStatus.NOT_FOUND.toLocaleString(),
           API_RESPONSES.ACADEMICYEAR_NOT_FOUND,
-          HttpStatus.NOT_FOUND
+          HttpStatus.NOT_FOUND,
         );
       }
 
-      const createdAcademicYear = await this.insertCohortAcademicYear(cohortAcademicYearDto.cohortId, cohortAcademicYearDto.academicYearId, cohortAcademicYearDto.createdBy, cohortAcademicYearDto.updatedBy);
+      const createdAcademicYear = await this.insertCohortAcademicYear(
+        cohortAcademicYearDto.cohortId,
+        cohortAcademicYearDto.academicYearId,
+        cohortAcademicYearDto.createdBy,
+        cohortAcademicYearDto.updatedBy,
+      );
 
       if (createdAcademicYear) {
         return APIResponse.success(
@@ -74,10 +85,9 @@ export class CohortAcademicYearService implements IServiceLocatorCohortAcademicY
           apiId,
           createdAcademicYear,
           HttpStatus.OK,
-          API_RESPONSES.ADD_COHORT_TO_ACADEMIC_YEAR
+          API_RESPONSES.ADD_COHORT_TO_ACADEMIC_YEAR,
         );
       }
-
     } catch (error) {
       const errorMessage = error.message || "Internal server error";
       return APIResponse.error(
@@ -85,7 +95,7 @@ export class CohortAcademicYearService implements IServiceLocatorCohortAcademicY
         apiId,
         "Internal Server Error",
         errorMessage,
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
@@ -94,7 +104,7 @@ export class CohortAcademicYearService implements IServiceLocatorCohortAcademicY
     cohortId: string,
     academicYearId: string,
     createdBy: string,
-    updatedBy: string
+    updatedBy: string,
   ) {
     const cohortAcademicYear = new CohortAcademicYear();
     cohortAcademicYear.cohortId = cohortId;
@@ -106,7 +116,7 @@ export class CohortAcademicYearService implements IServiceLocatorCohortAcademicY
 
   async getCohortsAcademicYear(
     academicYearId: string,
-    tenantId: string
+    tenantId: string,
   ): Promise<CohortAcademicYear[]> {
     const query = `
       SELECT cay.*
@@ -127,5 +137,4 @@ export class CohortAcademicYearService implements IServiceLocatorCohortAcademicY
       where: { academicYearId: yearId, cohortId: cohortId },
     });
   }
-
 }

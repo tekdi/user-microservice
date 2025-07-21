@@ -69,7 +69,7 @@ export class CohortController {
     @Param("cohortId") cohortId: string,
     @Res() response: Response,
     @Query("children") children: string,
-    @Query("customField") customField: string
+    @Query("customField") customField: string,
   ) {
     const academicYearId = headers["academicyearid"];
     const getChildDataValueBoolean = children === "true";
@@ -106,9 +106,8 @@ export class CohortController {
     @Body() cohortCreateDto: CohortCreateDto,
     @UploadedFile() image,
     @Res() response: Response,
-    @GetUserId("userId", ParseUUIDPipe) userId: string  
+    @GetUserId("userId", ParseUUIDPipe) userId: string,
   ) {
-      
     const tenantId = headers["tenantid"];
     const academicYearId = headers["academicyearid"];
     if (!tenantId || !isUUID(tenantId)) {
@@ -149,7 +148,7 @@ export class CohortController {
     @Headers() headers,
     @Req() request: Request,
     @Body() cohortSearchDto: CohortSearchDto,
-    @Res() response: Response
+    @Res() response: Response,
   ) {
     const tenantId = headers["tenantid"];
     const academicYearId = headers["academicyearid"];
@@ -173,7 +172,7 @@ export class CohortController {
         filename: editFileName,
       }),
       fileFilter: imageFileFilter,
-    })
+    }),
   )
   @ApiBody({ type: CohortUpdateDto })
   @ApiOkResponse({ description: "Cohort has been updated successfully" })
@@ -186,7 +185,7 @@ export class CohortController {
     @Body() cohortUpdateDto: CohortUpdateDto,
     @UploadedFile() image,
     @Res() response: Response,
-    @GetUserId("userId", ParseUUIDPipe) userId: string
+    @GetUserId("userId", ParseUUIDPipe) userId: string,
   ) {
     cohortUpdateDto.updatedBy = userId;
     return await this.cohortAdapter
@@ -202,7 +201,7 @@ export class CohortController {
   public async updateCohortStatus(
     @Param("cohortId") cohortId: string,
     @Res() response: Response,
-    @GetUserId("userId", ParseUUIDPipe) userId: string
+    @GetUserId("userId", ParseUUIDPipe) userId: string,
   ) {
     return await this.cohortAdapter
       .buildCohortAdapter()
@@ -226,7 +225,7 @@ export class CohortController {
     @Param("userId", ParseUUIDPipe) userId: string,
     @Query("children") children: string,
     @Query("customField") customField: string | null = null,
-    @Res() response: Response
+    @Res() response: Response,
   ) {
     const tenantId = headers["tenantid"];
     const academicYearId = headers["academicyearid"];

@@ -10,7 +10,6 @@ import { Cohort } from "src/cohort/entities/cohort.entity";
 import { AcademicYear } from "src/academicyears/entities/academicyears-entity";
 import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
 
-
 @Module({
   imports: [
     PostgresModule,
@@ -18,11 +17,15 @@ import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
       CohortAcademicYear,
       Cohort,
       AcademicYear,
-      Tenants
+      Tenants,
     ]),
   ],
   controllers: [CohortAcademicYearController],
-  providers: [CohortAcademicYearAdapter, CohortAcademicYearService, PostgresAcademicYearService],
-  exports: [CohortAcademicYearService]
+  providers: [
+    CohortAcademicYearAdapter,
+    CohortAcademicYearService,
+    PostgresAcademicYearService,
+  ],
+  exports: [CohortAcademicYearService],
 })
-export class CohortAcademicYearModule { }
+export class CohortAcademicYearModule {}

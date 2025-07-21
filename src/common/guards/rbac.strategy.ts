@@ -35,7 +35,7 @@ export class RbacJwtStrategy extends PassportStrategy(Strategy, "jwt-rbac") {
     }
 
     const isAuthorized = requiredPermissions.every((permission: string) =>
-      userPermissions.includes(permission)
+      userPermissions.includes(permission),
     );
 
     if (isAuthorized) {

@@ -84,11 +84,10 @@ export class FieldsUpdateDto {
     default: FieldType.TEXT,
     nullable: false,
   })
-  @IsEnum(FieldType, { message: 'type must be a valid enum value' })
+  @IsEnum(FieldType, { message: "type must be a valid enum value" })
   @ValidateIf((o) => o.type !== undefined) // Validate only if type is defined
   @Expose()
   type: string;
-
 
   // Ordering
   @ApiPropertyOptional({

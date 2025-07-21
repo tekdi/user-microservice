@@ -9,7 +9,7 @@ export interface IServicelocatorcohort {
     tenantid: string,
     academicYearId: string,
     cohortSearchDto: CohortSearchDto,
-    response
+    response,
   );
   updateCohort(cohortId: string, cohortUpdateDto: CohortUpdateDto, response);
   updateCohortStatus(cohortId: string, response, userId: string);

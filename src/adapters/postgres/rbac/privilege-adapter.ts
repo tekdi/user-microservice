@@ -23,13 +23,13 @@ export class PostgresPrivilegeService {
     @InjectRepository(RolePrivilegeMapping)
     private rolePrivilegeMappingRepository: Repository<RolePrivilegeMapping>,
     @InjectRepository(Role)
-    private roleRepository: Repository<Role>
+    private roleRepository: Repository<Role>,
   ) {}
 
   public async createPrivilege(
     loggedinUser: any,
     createPrivilegesDto: CreatePrivilegesDto,
-    response: Response
+    response: Response,
   ) {
     const privileges = [];
     const errors = [];
@@ -63,7 +63,7 @@ export class PostgresPrivilegeService {
         apiId,
         "Internal Server Error",
         errorMessage,
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
     return APIResponse.success(
@@ -76,7 +76,7 @@ export class PostgresPrivilegeService {
         errors,
       },
       HttpStatus.CREATED,
-      "Privileges successfully Created"
+      "Privileges successfully Created",
     );
   }
 
@@ -97,7 +97,7 @@ export class PostgresPrivilegeService {
   public async getPrivilege(
     privilegeId: string,
     request: any,
-    response: Response
+    response: Response,
   ) {
     const apiId = APIID.PRIVILEGE_BYPRIVILEGEID;
     try {
@@ -107,7 +107,7 @@ export class PostgresPrivilegeService {
           apiId,
           `Please Enter valid PrivilegeId (UUID)`,
           "Invalid PrivilegeId (UUID)",
-          HttpStatus.BAD_REQUEST
+          HttpStatus.BAD_REQUEST,
         );
       }
 
@@ -120,7 +120,7 @@ export class PostgresPrivilegeService {
           apiId,
           `Privilege not found`,
           "Not found",
-          HttpStatus.NOT_FOUND
+          HttpStatus.NOT_FOUND,
         );
       }
 
@@ -129,7 +129,7 @@ export class PostgresPrivilegeService {
         apiId,
         privilege,
         HttpStatus.OK,
-        "Privilege fetched successfully"
+        "Privilege fetched successfully",
       );
     } catch (e) {
       const errorMessage = e.message || "Internal server error";
@@ -138,7 +138,7 @@ export class PostgresPrivilegeService {
         apiId,
         "Internal Server Error",
         errorMessage,
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
@@ -194,7 +194,7 @@ export class PostgresPrivilegeService {
         APIID.ROLE_GET,
         { privileges, totalCount },
         HttpStatus.OK,
-        "privileges fetched successfully"
+        "privileges fetched successfully",
       );
     } catch (e) {
       const errorMessage = e.message || "Internal server error";
@@ -203,7 +203,7 @@ export class PostgresPrivilegeService {
         APIID.PRIVILEGE_BYROLEID,
         "Internal Server Error",
         errorMessage,
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
@@ -220,7 +220,7 @@ export class PostgresPrivilegeService {
           apiId,
           `Privilege not found`,
           "Not found",
-          HttpStatus.NOT_FOUND
+          HttpStatus.NOT_FOUND,
         );
       }
       // Delete the privilege
@@ -236,7 +236,7 @@ export class PostgresPrivilegeService {
         APIID.PRIVILEGE_DELETE,
         { rowCount: response.affected },
         HttpStatus.OK,
-        "Privilege deleted successfully."
+        "Privilege deleted successfully.",
       );
     } catch (e) {
       const errorMessage = e.message || "Internal server error";
@@ -245,7 +245,7 @@ export class PostgresPrivilegeService {
         APIID.PRIVILEGE_DELETE,
         "Internal Server Error",
         errorMessage,
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
@@ -254,7 +254,7 @@ export class PostgresPrivilegeService {
     tenantId,
     roleId,
     request,
-    response: Response
+    response: Response,
   ) {
     const apiId = APIID.PRIVILEGE_BYROLEID;
     if (!isUUID(tenantId) || !isUUID(roleId)) {
@@ -263,14 +263,14 @@ export class PostgresPrivilegeService {
         apiId,
         `Please Enter valid tenantId and roleId (UUID)`,
         "Invalid Tenant Id or Role Id",
-        HttpStatus.BAD_REQUEST
+        HttpStatus.BAD_REQUEST,
       );
     }
 
     try {
       const valid = await this.checkValidTenantIdRoleIdCombination(
         tenantId,
-        roleId
+        roleId,
       );
       if (!valid) {
         return APIResponse.error(
@@ -278,7 +278,7 @@ export class PostgresPrivilegeService {
           apiId,
           `Invalid combination of roleId and tenantId`,
           "Invalid roleId or tenantId ",
-          HttpStatus.BAD_REQUEST
+          HttpStatus.BAD_REQUEST,
         );
       }
 
@@ -293,7 +293,7 @@ export class PostgresPrivilegeService {
           const privilegeDto = new PrivilegeDto(item);
           privilegeDto.title = item.name;
           return new PrivilegeResponseDto(privilegeDto);
-        }
+        },
       );
 
       if (!privilegeResponseArray.length) {
@@ -302,7 +302,7 @@ export class PostgresPrivilegeService {
           apiId,
           `No privileges assigned to the role`,
           "Not found",
-          HttpStatus.NOT_FOUND
+          HttpStatus.NOT_FOUND,
         );
       }
       return APIResponse.success(
@@ -310,7 +310,7 @@ export class PostgresPrivilegeService {
         apiId,
         privilegeResponseArray,
         HttpStatus.OK,
-        "privilege fetched successfully by Role Id"
+        "privilege fetched successfully by Role Id",
       );
     } catch (error) {
       const errorMessage = error.message || "Internal server error";
@@ -319,7 +319,7 @@ export class PostgresPrivilegeService {
         apiId,
         "Internal Server Error",
         errorMessage,
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }

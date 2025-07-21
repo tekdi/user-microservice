@@ -10,7 +10,7 @@ export class NotificationRequest {
   private readonly url: string;
   constructor(
     private readonly configService: ConfigService,
-    private readonly httpService: HttpService
+    private readonly httpService: HttpService,
   ) {
     this.url = this.configService.get("NOTIFICATION_URL");
   }
@@ -33,7 +33,7 @@ export class NotificationRequest {
       if (error.code === "ECONNREFUSED") {
         throw new HttpException(
           API_RESPONSES.SERVICE_UNAVAILABLE,
-          HttpStatus.SERVICE_UNAVAILABLE
+          HttpStatus.SERVICE_UNAVAILABLE,
         );
       }
       if (error.response) {
@@ -46,14 +46,14 @@ export class NotificationRequest {
               `Bad Request: ${
                 errorDetails.params?.errmsg || API_RESPONSES.BAD_REQUEST
               }`,
-              HttpStatus.BAD_REQUEST
+              HttpStatus.BAD_REQUEST,
             );
           case 404:
             throw new HttpException(
               `Not Found: ${
                 errorDetails.params?.errmsg || API_RESPONSES.NOT_FOUND
               }`,
-              HttpStatus.NOT_FOUND
+              HttpStatus.NOT_FOUND,
             );
           case 500:
             throw new HttpException(
@@ -61,20 +61,20 @@ export class NotificationRequest {
                 errorDetails.params?.errmsg ||
                 API_RESPONSES.INTERNAL_SERVER_ERROR
               }`,
-              HttpStatus.INTERNAL_SERVER_ERROR
+              HttpStatus.INTERNAL_SERVER_ERROR,
             );
           default:
             throw new HttpException(
               `Unexpected Error: ${
                 errorDetails.params?.errmsg || API_RESPONSES.UNEXPECTED_ERROR
               }`,
-              HttpStatus.INTERNAL_SERVER_ERROR
+              HttpStatus.INTERNAL_SERVER_ERROR,
             );
         }
       }
       throw new HttpException(
         API_RESPONSES.INTERNAL_SERVER_ERROR,
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }

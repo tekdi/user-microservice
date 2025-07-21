@@ -10,7 +10,7 @@ export class FieldFactory {
   static createField(
     type: string,
     fieldAttributes: FieldAttributes,
-    fieldParams: FieldParams
+    fieldParams: FieldParams,
   ): Field {
     switch (type) {
       case "drop_down":

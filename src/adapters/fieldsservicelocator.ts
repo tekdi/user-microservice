@@ -17,32 +17,32 @@ export interface IServicelocatorfields {
     fieldId: any,
     request: any,
     fieldsUpdateDto: FieldsUpdateDto,
-    response: Response
+    response: Response,
   );
   // getFields(tenantId, fieldsId, request);
   searchFields(
     tenantid,
     request: any,
     fieldsSearchDto: FieldsSearchDto,
-    response: Response
+    response: Response,
   );
   // updateFields(fieldsId: string, request: any, fieldsDto: FieldsDto);
   //field values
   createFieldValues(
     request: any,
     fieldValuesDto: FieldValuesDto,
-    response: Response
+    response: Response,
   );
   // getFieldValues(id, request);
   searchFieldValues(
     request: any,
     fieldValuesSearchDto: FieldValuesSearchDto,
-    response: Response
+    response: Response,
   );
   updateFieldValues(id: string, request: any, fieldValuesDto: FieldValuesDto);
   getFieldOptions(
     fieldsOptionsSearchDto: FieldsOptionsSearchDto,
-    response: Response
+    response: Response,
   );
   deleteFieldOptions(requiredData, response);
   getFormCustomField(requiredData, response);

@@ -6,9 +6,8 @@ import { S3Client } from "@aws-sdk/client-s3";
 import APIResponse from "../responses/response";
 import { API_RESPONSES } from "@utils/response.messages";
 import { APIID } from "@utils/api-id.config";
-import { v4 as uuidv4 } from 'uuid';
+import { v4 as uuidv4 } from "uuid";
 import { createPresignedPost } from "@aws-sdk/s3-presigned-post";
-
 
 @Injectable()
 export class UploadS3Service {
@@ -62,28 +61,40 @@ export class UploadS3Service {
   //   }
   // }
 
-
-  async getPresignedUrl(filename: string, fileType: string, response, foldername?: string): Promise<string> {
+  async getPresignedUrl(
+    filename: string,
+    fileType: string,
+    response,
+    foldername?: string,
+  ): Promise<string> {
     try {
       const allowedFileTypes = [
-        '.jpg', '.jpeg', '.png', '.webp', // Images
-        '.pdf', '.doc', '.docx',          // Documents
-        '.mp4', '.mov',                   // Videos
-        '.txt', '.csv'                    // Text files
+        ".jpg",
+        ".jpeg",
+        ".png",
+        ".webp", // Images
+        ".pdf",
+        ".doc",
+        ".docx", // Documents
+        ".mp4",
+        ".mov", // Videos
+        ".txt",
+        ".csv", // Text files
       ];
-  
+
       const mimeTypeMap = {
-        '.jpg': 'image/jpeg',
-        '.jpeg': 'image/jpeg',
-        '.png': 'image/png',
-        '.webp': 'image/webp',
-        '.pdf': 'application/pdf',
-        '.doc': 'application/msword',
-        '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        '.mp4': 'video/mp4',
-        '.mov': 'video/quicktime',
-        '.txt': 'text/plain',
-        '.csv': 'text/csv',
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".webp": "image/webp",
+        ".pdf": "application/pdf",
+        ".doc": "application/msword",
+        ".docx":
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ".mp4": "video/mp4",
+        ".mov": "video/quicktime",
+        ".txt": "text/plain",
+        ".csv": "text/csv",
       };
 
       // Validate file extension
@@ -102,24 +113,23 @@ export class UploadS3Service {
       // Construct unique file key
       // const newKey = `${filename}-${uuidv4()}${fileType}`;
       const extension = fileType;
-      const folderPath = foldername ? `${foldername}/` : '';
+      const folderPath = foldername ? `${foldername}/` : "";
       const newKey = `${folderPath}${filename}-${uuidv4()}${extension}`;
-
 
       const result = await createPresignedPost(this.s3Client, {
         Bucket: this.bucketName,
         Key: newKey,
         Conditions: [
-          ['starts-with', '$Content-Type', 'image/'],
+          ["starts-with", "$Content-Type", "image/"],
           ["eq", "$Content-Type", contentType], // ✅ this enforces exact match
           ["eq", "$key", newKey], // ✅ makes sure they don't change key
           ["content-length-range", 0, 5 * 1024 * 1024], // max 5MB
-        ]as any[],
+        ] as any[],
         Fields: {
           key: newKey,
-          "Content-Type": contentType
+          "Content-Type": contentType,
         },
-        Expires: 300 // 5 minutes
+        Expires: 300, // 5 minutes
       });
 
       return APIResponse.success(
@@ -127,11 +137,10 @@ export class UploadS3Service {
         APIID.SIGNED_URL,
         result,
         HttpStatus.OK,
-        API_RESPONSES.SIGNED_URL_SUCCESS
+        API_RESPONSES.SIGNED_URL_SUCCESS,
       );
     } catch (error) {
       throw new Error(`Failed to generate presigned URL: ${error.message}`);
     }
   }
-
 }

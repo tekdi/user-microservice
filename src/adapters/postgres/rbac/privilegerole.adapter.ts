@@ -12,12 +12,12 @@ import { APIID } from "src/common/utils/api-id.config";
 export class PostgresAssignPrivilegeService {
   constructor(
     @InjectRepository(RolePrivilegeMapping)
-    private rolePrivilegeMappingRepository: Repository<RolePrivilegeMapping>
+    private rolePrivilegeMappingRepository: Repository<RolePrivilegeMapping>,
   ) {}
   public async createPrivilegeRole(
     request: Request,
     createPrivilegeRoleDto: CreatePrivilegeRoleDto,
-    response: Response
+    response: Response,
   ) {
     const apiId = APIID.ASSIGNPRIVILEGE_CREATE;
     try {
@@ -30,7 +30,7 @@ export class PostgresAssignPrivilegeService {
           roleId: createPrivilegeRoleDto.roleId,
           tenantId: createPrivilegeRoleDto.tenantId,
           privilegeId,
-        })
+        }),
       );
       const existingPrivileges = await this.rolePrivilegeMappingRepository.find(
         {
@@ -39,12 +39,12 @@ export class PostgresAssignPrivilegeService {
             tenantId: createPrivilegeRoleDto.tenantId,
             privilegeId: In(createPrivilegeRoleDto.privilegeId),
           },
-        }
+        },
       );
 
       const newPrivileges = privilegeRoles.filter((privilegeRole) => {
         return !existingPrivileges.some(
-          (existing) => existing.privilegeId === privilegeRole.privilegeId
+          (existing) => existing.privilegeId === privilegeRole.privilegeId,
         );
       });
 
@@ -57,7 +57,7 @@ export class PostgresAssignPrivilegeService {
         apiId,
         result,
         HttpStatus.CREATED,
-        "Privileges assigned successfully."
+        "Privileges assigned successfully.",
       );
     } catch (error) {
       if (error.code === "23503") {
@@ -66,7 +66,7 @@ export class PostgresAssignPrivilegeService {
           apiId,
           "Not Found",
           `Privilege Id or Role Id Doesn't Exist in Database.`,
-          HttpStatus.NOT_FOUND
+          HttpStatus.NOT_FOUND,
         );
       }
 
@@ -75,7 +75,7 @@ export class PostgresAssignPrivilegeService {
         apiId,
         "Not Found",
         `Error is: ${error}.`,
-        HttpStatus.NOT_FOUND
+        HttpStatus.NOT_FOUND,
       );
     }
   }
@@ -91,7 +91,7 @@ export class PostgresAssignPrivilegeService {
   public async getPrivilegeRole(
     roleId: string,
     request: Request,
-    response: Response
+    response: Response,
   ) {
     const apiId = APIID.ASSIGNPRIVILEGE_GET;
     try {
@@ -101,12 +101,12 @@ export class PostgresAssignPrivilegeService {
           apiId,
           "Bad Request",
           "Please Enter Valid User ID.",
-          HttpStatus.BAD_REQUEST
+          HttpStatus.BAD_REQUEST,
         );
       }
       const privileges = await this.getPrivilegesForRoleAndTenant(
         roleId,
-        request.headers["tenantid"]
+        request.headers["tenantid"],
       );
 
       if (!privileges) {
@@ -115,7 +115,7 @@ export class PostgresAssignPrivilegeService {
           apiId,
           "Not Found",
           "No Role Found.",
-          HttpStatus.NOT_FOUND
+          HttpStatus.NOT_FOUND,
         );
       }
 
@@ -124,7 +124,7 @@ export class PostgresAssignPrivilegeService {
         apiId,
         privileges,
         HttpStatus.OK,
-        "Privileges for role fetched successfully."
+        "Privileges for role fetched successfully.",
       );
     } catch (error) {
       return APIResponse.error(
@@ -132,7 +132,7 @@ export class PostgresAssignPrivilegeService {
         apiId,
         "Internal Server Error",
         `Something went wrong.`,
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }

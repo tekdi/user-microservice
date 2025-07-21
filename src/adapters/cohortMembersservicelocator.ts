@@ -9,27 +9,27 @@ export interface IServicelocatorcohortMembers {
     response: any,
     tenantId: string,
     deviceId: string,
-    academicyearid: string
+    academicyearid: string,
   );
   getCohortMembers(
     cohortMemberId: string,
     tenantId: string,
     fieldvalue: string,
     academicyearId: string,
-    response: Response
+    response: Response,
   );
   searchCohortMembers(
     cohortMembersSearchDto: CohortMembersSearchDto,
     tenantId: string,
     academicyearId: string,
-    response: Response
+    response: Response,
   );
   updateCohortMembers(
     cohortMembershipId: string,
     loginUser: any,
     cohortMemberUpdateDto: CohortMembersUpdateDto,
 
-    response: any
+    response: any,
   );
   deleteCohortMemberById(tenantid, cohortMembershipId, response);
   createBulkCohortMembers(
@@ -37,6 +37,6 @@ export interface IServicelocatorcohortMembers {
     cohortMembersDto,
     response,
     tenantId,
-    academicyearId: string
+    academicyearId: string,
   );
 }

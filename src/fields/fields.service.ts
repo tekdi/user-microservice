@@ -20,7 +20,7 @@ export class FieldsService {
     @InjectRepository(Fields)
     private fieldsRepository: Repository<Fields>,
     @InjectRepository(FieldValues)
-    private fieldsValuesRepository: Repository<FieldValues>
+    private fieldsValuesRepository: Repository<FieldValues>,
   ) {}
 
   //fields
@@ -57,7 +57,7 @@ export class FieldsService {
   async searchFields(
     tenantId: string,
     request: any,
-    fieldsSearchDto: FieldsSearchDto
+    fieldsSearchDto: FieldsSearchDto,
   ) {
     try {
       const getConditionalData = APIResponse.search(fieldsSearchDto);
@@ -68,7 +68,7 @@ export class FieldsService {
       const getFieldValue = await this.searchFieldData(
         offset,
         limit,
-        whereClause
+        whereClause,
       );
 
       return new SuccessResponse({
@@ -98,9 +98,8 @@ export class FieldsService {
       queryOptions.take = parseInt(limit);
     }
 
-    const [results, totalCount] = await this.fieldsRepository.findAndCount(
-      queryOptions
-    );
+    const [results, totalCount] =
+      await this.fieldsRepository.findAndCount(queryOptions);
 
     const mappedResponse = await this.mappedResponseField(results);
     return { mappedResponse, totalCount };
@@ -135,7 +134,7 @@ export class FieldsService {
 
   async searchFieldValues(
     request: any,
-    fieldValuesSearchDto: FieldValuesSearchDto
+    fieldValuesSearchDto: FieldValuesSearchDto,
   ) {
     try {
       const getConditionalData = APIResponse.search(fieldValuesSearchDto);
@@ -146,7 +145,7 @@ export class FieldsService {
       const getFieldValue = await this.getSearchFieldValueData(
         offset,
         limit,
-        whereClause
+        whereClause,
       );
 
       return new SuccessResponse({
@@ -166,7 +165,7 @@ export class FieldsService {
   async getSearchFieldValueData(
     offset: number,
     limit: string,
-    searchData: any
+    searchData: any,
   ) {
     const queryOptions: any = {
       where: searchData,
@@ -208,7 +207,7 @@ export class FieldsService {
       });
       const response = await this.fieldsValuesRepository.update(
         id,
-        fieldValuesDto
+        fieldValuesDto,
       );
 
       return response;

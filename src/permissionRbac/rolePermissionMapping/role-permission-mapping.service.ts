@@ -10,16 +10,16 @@ import { LoggerUtil } from "src/common/logger/LoggerUtil";
 export class RolePermissionService {
   constructor(
     @InjectRepository(RolePermission)
-    private rolePermissionRepository: Repository<RolePermission>
+    private rolePermissionRepository: Repository<RolePermission>,
   ) {}
 
   //getPermission for middleware
   public async getPermissionForMiddleware(
     roleTitle: string,
-    apiPath: string
+    apiPath: string,
   ): Promise<any> {
     try {
-      let result = await this.rolePermissionRepository.find({
+      const result = await this.rolePermissionRepository.find({
         where: { roleTitle: roleTitle, apiPath: apiPath },
       });
       LoggerUtil.log("Permission from DB: " + JSON.stringify(result));
@@ -31,11 +31,11 @@ export class RolePermissionService {
   public async getPermission(
     roleTitle: string,
     apiPath: string,
-    response: Response
+    response: Response,
   ): Promise<any> {
     const apiId = "api.get.permission";
     try {
-      let result = await this.rolePermissionRepository.find({
+      const result = await this.rolePermissionRepository.find({
         where: { roleTitle: roleTitle, apiPath: apiPath },
       });
       return APIResponse.success(
@@ -43,7 +43,7 @@ export class RolePermissionService {
         apiId,
         result,
         HttpStatus.OK,
-        "Permission fetch successfully."
+        "Permission fetch successfully.",
       );
     } catch (error) {
       return APIResponse.error(
@@ -51,7 +51,7 @@ export class RolePermissionService {
         apiId,
         "Failed to fetch permission data.",
         error.message,
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
@@ -59,11 +59,11 @@ export class RolePermissionService {
   //create permission
   public async createPermission(
     permissionCreateDto: RolePermissionCreateDto,
-    response: Response
+    response: Response,
   ): Promise<any> {
     const apiId = "api.create.permission";
     try {
-      let result = await this.rolePermissionRepository.save({
+      const result = await this.rolePermissionRepository.save({
         roleTitle: permissionCreateDto.roleTitle,
         apiPath: permissionCreateDto.apiPath,
         requestType: permissionCreateDto.requestType,
@@ -74,7 +74,7 @@ export class RolePermissionService {
         apiId,
         result,
         HttpStatus.OK,
-        "Permission added succesfully."
+        "Permission added succesfully.",
       );
     } catch (error) {
       return APIResponse.error(
@@ -82,7 +82,7 @@ export class RolePermissionService {
         apiId,
         "Failed to add permission data.",
         error.message,
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
@@ -90,25 +90,25 @@ export class RolePermissionService {
   //update permission by permissionId
   public async updatePermission(
     rolePermissionCreateDto: RolePermissionCreateDto,
-    response: Response
+    response: Response,
   ): Promise<any> {
     const apiId = "api.update.permission";
     try {
-      let result = await this.rolePermissionRepository.update(
+      const result = await this.rolePermissionRepository.update(
         rolePermissionCreateDto.rolePermissionId,
         {
           roleTitle: rolePermissionCreateDto.roleTitle,
           apiPath: rolePermissionCreateDto.apiPath,
           requestType: rolePermissionCreateDto.requestType,
           module: rolePermissionCreateDto.module,
-        }
+        },
       );
       return APIResponse.success(
         response,
         apiId,
         result,
         HttpStatus.OK,
-        "Permission updated succesfully."
+        "Permission updated succesfully.",
       );
     } catch (error) {
       return APIResponse.error(
@@ -116,7 +116,7 @@ export class RolePermissionService {
         apiId,
         "Failed to update permission data.",
         error.message,
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
@@ -124,17 +124,18 @@ export class RolePermissionService {
   //delete permission by permissionId
   public async deletePermission(
     rolePermissionId: string,
-    response: Response
+    response: Response,
   ): Promise<any> {
     const apiId = "api.delete.permission";
     try {
-      let result = await this.rolePermissionRepository.delete(rolePermissionId);
+      const result =
+        await this.rolePermissionRepository.delete(rolePermissionId);
       return APIResponse.success(
         response,
         apiId,
         result,
         HttpStatus.OK,
-        "Permission deleted succesfully."
+        "Permission deleted succesfully.",
       );
     } catch (error) {
       return APIResponse.error(
@@ -142,7 +143,7 @@ export class RolePermissionService {
         apiId,
         "Failed to delete permission data.",
         error.message,
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }

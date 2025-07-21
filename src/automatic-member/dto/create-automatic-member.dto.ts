@@ -1,7 +1,14 @@
 // import { IsUUID,IsObject, IsBoolean, IsOptional } from 'class-validator';
 
 import { Expose, Type } from "class-transformer";
-import { IsBoolean, IsUUID, IsObject, IsOptional, IsString, IsArray } from "class-validator";
+import {
+  IsBoolean,
+  IsUUID,
+  IsObject,
+  IsOptional,
+  IsString,
+  IsArray,
+} from "class-validator";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { PrimaryGeneratedColumn } from "typeorm";
 
@@ -16,22 +23,31 @@ class ConditionDto {
   @IsUUID(undefined, { message: "Field ID must be a valid UUID" })
   fieldId: string;
 
-  @ApiPropertyOptional({ type: String, description: "The operator for the condition (e.g., '=', '!=')" })
+  @ApiPropertyOptional({
+    type: String,
+    description: "The operator for the condition (e.g., '=', '!=')",
+  })
   @Expose()
   @IsString()
-  operator ?: string;
+  operator?: string;
 }
 
 class AllowedActionsDto {
-  @ApiPropertyOptional({ type: [String], description: "Allowed actions for users" })
+  @ApiPropertyOptional({
+    type: [String],
+    description: "Allowed actions for users",
+  })
   @Expose()
   @IsArray()
-  user ?: string[];
+  user?: string[];
 
-  @ApiPropertyOptional({ type: [String], description: "Allowed actions for cohorts" })
+  @ApiPropertyOptional({
+    type: [String],
+    description: "Allowed actions for cohorts",
+  })
   @Expose()
   @IsArray()
-  cohort ?: string[];
+  cohort?: string[];
 }
 
 export class RulesDto {
@@ -46,11 +62,14 @@ export class RulesDto {
   @IsString()
   cohortField: string;
 
-  @ApiPropertyOptional({ type: () => AllowedActionsDto, description: "Allowed actions for user and cohort" })
+  @ApiPropertyOptional({
+    type: () => AllowedActionsDto,
+    description: "Allowed actions for user and cohort",
+  })
   @Expose()
   @IsObject()
   @Type(() => AllowedActionsDto)
-  allowedActions ?: AllowedActionsDto;
+  allowedActions?: AllowedActionsDto;
 }
 
 export class CreateAutomaticMemberDto {

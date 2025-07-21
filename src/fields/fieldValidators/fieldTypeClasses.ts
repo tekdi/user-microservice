@@ -52,7 +52,7 @@ export class RadioField extends Field {
 
   validate(value: any): boolean {
     const fieldParamsOptions = this.fieldParams.options.map(
-      ({ value }) => value
+      ({ value }) => value,
     );
     if (!fieldParamsOptions.includes(value)) {
       throw new Error("Invalid option selected.");

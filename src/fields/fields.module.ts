@@ -1,4 +1,5 @@
-import { CacheModule, Module } from "@nestjs/common";
+import { Module } from "@nestjs/common";
+import { CacheModule } from "@nestjs/cache-manager";
 import { FieldsController } from "./fields.controller";
 import { HttpModule } from "@nestjs/axios";
 import { FieldsAdapter } from "./fieldsadapter";
@@ -13,6 +14,10 @@ import { PostgresModule } from "src/adapters/postgres/postgres-module";
     TypeOrmModule.forFeature([FieldValues]),
     HttpModule,
     PostgresModule,
+    CacheModule.register({
+      ttl: 300, // Cache TTL in seconds (5 minutes)
+      max: 100, // Maximum number of items in cache
+    }),
   ],
   controllers: [FieldsController],
   providers: [FieldsAdapter],

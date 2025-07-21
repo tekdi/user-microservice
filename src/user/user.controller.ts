@@ -33,7 +33,11 @@ import {
   ApiConflictResponse,
 } from "@nestjs/swagger";
 
-import { ExistUserDto, SuggestUserDto, UserSearchDto } from "./dto/user-search.dto";
+import {
+  ExistUserDto,
+  SuggestUserDto,
+  UserSearchDto,
+} from "./dto/user-search.dto";
 import { UserAdapter } from "./useradapter";
 import { UserCreateDto } from "./dto/user-create.dto";
 import { UserUpdateDTO } from "./dto/user-update.dto";
@@ -66,7 +70,7 @@ export interface UserData {
 export class UserController {
   constructor(
     private userAdapter: UserAdapter,
-    private readonly uploadS3Service: UploadS3Service
+    private readonly uploadS3Service: UploadS3Service,
   ) {}
 
   @UseFilters(new AllExceptionsFilter(APIID.USER_GET))
@@ -91,13 +95,13 @@ export class UserController {
     @Req() request: Request,
     @Res() response: Response,
     @Param("userId", ParseUUIDPipe) userId: string,
-    @Query("fieldvalue") fieldvalue: string | null = null
+    @Query("fieldvalue") fieldvalue: string | null = null,
   ) {
     const tenantId = headers["tenantid"];
     if (!tenantId) {
       LoggerUtil.warn(
         `${API_RESPONSES.BAD_REQUEST}`,
-        `Error: Missing tenantId in request headers for user ${userId}`
+        `Error: Missing tenantId in request headers for user ${userId}`,
       );
       return response
         .status(400)
@@ -137,7 +141,7 @@ export class UserController {
     @Headers() headers,
     @Req() request: Request,
     @Body() userCreateDto: UserCreateDto,
-    @Res() response: Response
+    @Res() response: Response,
   ) {
     const academicYearId = headers["academicyearid"];
     // if (!academicYearId || !isUUID(academicYearId)) {
@@ -165,7 +169,7 @@ export class UserController {
     @Param("userid") userId: string,
     @GetUserId("loginUserId", ParseUUIDPipe) loginUserId: string,
     @Body() userUpdateDto: UserUpdateDTO,
-    @Res() response: Response
+    @Res() response: Response,
   ) {
     userUpdateDto.userData.updatedBy = loginUserId;
     userUpdateDto.userId = userId;
@@ -194,7 +198,7 @@ export class UserController {
     @Headers() headers,
     @Req() request: Request,
     @Res() response: Response,
-    @Body() userSearchDto: UserSearchDto
+    @Body() userSearchDto: UserSearchDto,
   ) {
     const tenantId = headers["tenantid"];
     return await this.userAdapter
@@ -209,7 +213,7 @@ export class UserController {
   public async sendPasswordResetLink(
     @Req() request: Request,
     @Res() response: Response,
-    @Body() reqBody: SendPasswordResetLinkDto
+    @Body() reqBody: SendPasswordResetLinkDto,
   ) {
     return await this.userAdapter
       .buildUserAdapter()
@@ -217,7 +221,7 @@ export class UserController {
         request,
         reqBody.username,
         reqBody.redirectUrl,
-        response
+        response,
       );
   }
 
@@ -228,7 +232,7 @@ export class UserController {
   public async forgotPassword(
     @Req() request: Request,
     @Res() response: Response,
-    @Body() reqBody: ForgotPasswordDto
+    @Body() reqBody: ForgotPasswordDto,
   ) {
     return await this.userAdapter
       .buildUserAdapter()
@@ -246,7 +250,7 @@ export class UserController {
   public async resetUserPassword(
     @Req() request: Request,
     @Res() response: Response,
-    @Body() reqBody: ResetUserPasswordDto
+    @Body() reqBody: ResetUserPasswordDto,
   ) {
     return await this.userAdapter
       .buildUserAdapter()
@@ -254,7 +258,7 @@ export class UserController {
         request,
         reqBody.userName,
         reqBody.newPassword,
-        response
+        response,
       );
   }
 
@@ -266,14 +270,13 @@ export class UserController {
   async checkUser(
     @Req() request: Request,
     @Body() existUserDto: ExistUserDto,
-    @Res() response: Response
+    @Res() response: Response,
   ) {
     const result = await this.userAdapter
       .buildUserAdapter()
       .checkUser(request, response, existUserDto);
     return response.status(result.statusCode).json(result);
   }
-
 
   // required for FTL
   @UseFilters(new AllExceptionsFilter(APIID.SUGGEST_USERNAME))
@@ -285,14 +288,13 @@ export class UserController {
   async suggestUsername(
     @Req() request: Request,
     @Body() suggestUserDto: SuggestUserDto,
-    @Res() response: Response
+    @Res() response: Response,
   ) {
     const result = await this.userAdapter
       .buildUserAdapter()
       .suggestUsername(request, response, suggestUserDto);
     return response.status(result.statusCode).json(result);
   }
-
 
   //delete
   @UseFilters(new AllExceptionsFilter(APIID.USER_DELETE))
@@ -308,7 +310,7 @@ export class UserController {
     @Headers() headers,
     @Param("userId") userId: string,
     @Req() request: Request,
-    @Res() response: Response
+    @Res() response: Response,
   ) {
     return await this.userAdapter
       .buildUserAdapter()
@@ -340,7 +342,7 @@ export class UserController {
   public async sendPasswordResetOTP(
     @Req() request: Request,
     @Res() response: Response,
-    @Body() reqBody: SendPasswordResetOTPDto
+    @Body() reqBody: SendPasswordResetOTPDto,
   ) {
     return await this.userAdapter
       .buildUserAdapter()
@@ -351,13 +353,13 @@ export class UserController {
     @Query("filename") filename: string,
     @Query("foldername") foldername: string,
     @Query("fileType") fileType: string,
-    @Res() response
+    @Res() response,
   ) {
     const url = await this.uploadS3Service.getPresignedUrl(
       filename,
       fileType,
       response,
-      foldername
+      foldername,
     );
     return { url };
   }
