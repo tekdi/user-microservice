@@ -873,7 +873,8 @@ export class UserElasticsearchService implements OnModuleInit {
           Object.entries(pageData).forEach(([fieldId, value]) => {
             if (value !== null && value !== undefined && value !== '') {
               // Use fieldId directly without schema or name
-              fields[fieldId] = value;
+              // Process field value for Elasticsearch - convert arrays to comma-separated strings
+              fields[fieldId] = this.processFieldValueForElasticsearch(value);
               completedCount++;
             } else {
               pageCompleted = false;
@@ -1178,5 +1179,20 @@ export class UserElasticsearchService implements OnModuleInit {
     if (isElasticsearchEnabled()) {
       await this.initialize();
     }
+  }
+
+  /**
+   * Helper function to process field values for Elasticsearch storage.
+   * Converts array values to comma-separated strings for multiselect fields.
+   * @param value - The field value to process
+   * @returns Processed value (array becomes comma-separated string, other types unchanged)
+   */
+  private processFieldValueForElasticsearch(value: any): any {
+    // If value is an array, convert to comma-separated string
+    if (Array.isArray(value)) {
+      return value.join(', ');
+    }
+    // Return value as-is for non-array values
+    return value;
   }
 }
