@@ -1113,7 +1113,6 @@ export class PostgresCohortMembersService {
 
       // Store the previous status before updating
       const previousStatus = cohortMembershipToUpdate.status;
-
       
       Object.assign(cohortMembershipToUpdate, cohortMembersUpdateDto);
       const result = await this.cohortMembersRepository.save(
