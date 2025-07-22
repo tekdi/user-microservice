@@ -1404,7 +1404,8 @@ export class FormSubmissionService {
           completed: true,
           fields: {},
         };
-        updatedFields[pageKey].fields[field.fieldId] = field.value;
+        // Process field value for Elasticsearch - convert arrays to comma-separated strings
+        updatedFields[pageKey].fields[field.fieldId] = this.processFieldValueForElasticsearch(field.value);
       });
 
 
@@ -1876,15 +1877,17 @@ export class FormSubmissionService {
           formData[pageName] = {};
         }
 
-        pages[pageName].fields[field.fieldId] = field.value;
-        formData[pageName][field.fieldId] = field.value;
+        // Process field value for Elasticsearch - convert arrays to comma-separated strings
+        pages[pageName].fields[field.fieldId] = this.processFieldValueForElasticsearch(field.value);
+        formData[pageName][field.fieldId] = this.processFieldValueForElasticsearch(field.value);
       }
 
       if (Object.keys(pages).length === 0) {
         pages['eligibilityCheck'] = {
           completed: true,
           fields: formFieldsOnly.reduce((acc, field) => {
-            acc[field.fieldId] = field.value;
+            // Process field value for Elasticsearch - convert arrays to comma-separated strings
+            acc[field.fieldId] = this.processFieldValueForElasticsearch(field.value);
             return acc;
           }, {}),
         };
@@ -2593,14 +2596,16 @@ export class FormSubmissionService {
             formData[pageName] = {};
           }
 
-          pages[pageName].fields[field.fieldId] = field.value;
-          formData[pageName][field.fieldId] = field.value;
+          // Process field value for Elasticsearch - convert arrays to comma-separated strings
+          pages[pageName].fields[field.fieldId] = this.processFieldValueForElasticsearch(field.value);
+          formData[pageName][field.fieldId] = this.processFieldValueForElasticsearch(field.value);
         }
         if (Object.keys(pages).length === 0) {
           pages['eligibilityCheck'] = {
             completed: true,
             fields: formFieldsOnly.reduce((acc, field) => {
-              acc[field.fieldId] = field.value;
+              // Process field value for Elasticsearch - convert arrays to comma-separated strings
+              acc[field.fieldId] = this.processFieldValueForElasticsearch(field.value);
               return acc;
             }, {}),
           };
@@ -3020,6 +3025,21 @@ export class FormSubmissionService {
         ? user.updatedAt.toISOString()
         : new Date().toISOString(),
     };
+  }
+
+  /**
+   * Helper function to process field values for Elasticsearch storage.
+   * Converts array values to comma-separated strings for multiselect fields.
+   * @param value - The field value to process
+   * @returns Processed value (array becomes comma-separated string, other types unchanged)
+   */
+  private processFieldValueForElasticsearch(value: any): any {
+    // If value is an array, convert to comma-separated string
+    if (Array.isArray(value)) {
+      return value.join(', ');
+    }
+    // Return value as-is for non-array values
+    return value;
   }
 }
 
