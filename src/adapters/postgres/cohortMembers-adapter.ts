@@ -1114,6 +1114,7 @@ export class PostgresCohortMembersService {
       // Store the previous status before updating
       const previousStatus = cohortMembershipToUpdate.status;
 
+      
       Object.assign(cohortMembershipToUpdate, cohortMembersUpdateDto);
       const result = await this.cohortMembersRepository.save(
         cohortMembershipToUpdate
@@ -1255,6 +1256,14 @@ export class PostgresCohortMembersService {
               shortlistedStatus: status as 'shortlisted' | 'rejected',
               cohortId: cohortMembershipToUpdate.cohortId,
             });
+
+            // Update rejection_email_sent to true if status is rejected and email was sent successfully
+            if (status === 'rejected') {
+              await this.cohortMembersRepository.update(
+                { cohortMembershipId: cohortMembershipId },
+                { rejectionEmailSent: true }
+              );
+            }
           }
         } else {
           // Log email failure for missing email
