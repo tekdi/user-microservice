@@ -7,7 +7,7 @@ export default class APIResponse {
     id: string,
     result: Type,
     statusCode: number,
-    successmessage: string
+    successmessage: string,
   ) {
     try {
       const params: Params = {
@@ -35,7 +35,7 @@ export default class APIResponse {
     id: string,
     errmsg: string,
     error: string,
-    statusCode: number
+    statusCode: number,
   ) {
     try {
       const params: Params = {

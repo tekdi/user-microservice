@@ -30,7 +30,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       exception instanceof HttpException
         ? exception.name
         : "Internal Server Error", // error
-      status
+      status,
     );
   }
 }

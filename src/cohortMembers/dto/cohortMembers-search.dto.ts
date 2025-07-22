@@ -29,7 +29,7 @@ class FiltersDto {
   @IsString()
   @IsUUID()
   @ValidateIf((o) => !o.cohortId)
-  userId?: string; 
+  userId?: string;
 
   @ApiPropertyOptional({ type: String, description: "Role", example: "" })
   @IsOptional()

@@ -52,7 +52,7 @@ export class ResponseAssignRoleDto {
 
   constructor(
     data: { userId: string; roleId: string; tenantId: string },
-    message: string
+    message: string,
   ) {
     this.userId = data.userId;
     this.roleId = data.roleId;

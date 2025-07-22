@@ -52,7 +52,7 @@ export class RoleController {
   public async getRole(
     @Param("id", ParseUUIDPipe) roleId: string,
     @Req() request: Request,
-    @Res() response: Response
+    @Res() response: Response,
   ) {
     return await this.roleAdapter
       .buildRbacAdapter()
@@ -71,7 +71,7 @@ export class RoleController {
   public async createRole(
     @Req() request: Request,
     @Body() createRolesDto: CreateRolesDto,
-    @Res() response: Response
+    @Res() response: Response,
   ) {
     return await this.roleAdapter
       .buildRbacAdapter()
@@ -90,7 +90,7 @@ export class RoleController {
     @Param("id") roleId: string,
     @Req() request: Request,
     @Body() roleDto: RoleDto,
-    @Res() response: Response
+    @Res() response: Response,
   ) {
     return await this.roleAdapter
       .buildRbacAdapter()
@@ -111,7 +111,7 @@ export class RoleController {
     @Headers() headers,
     @Req() request: Request,
     @Body() roleSearchDto: RoleSearchDto,
-    @Res() response: Response
+    @Res() response: Response,
   ) {
     // let tenantid = headers["tenantid"];
     return await this.roleAdapter
@@ -129,7 +129,7 @@ export class RoleController {
   @ApiBadRequestResponse({ description: "Bad request" })
   public async deleteRole(
     @Param("roleId") roleId: string,
-    @Res() response: Response
+    @Res() response: Response,
   ) {
     return await this.roleAdapter
       .buildRbacAdapter()

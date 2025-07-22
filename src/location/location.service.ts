@@ -11,12 +11,12 @@ import { Response } from "express";
 export class LocationService {
   constructor(
     @InjectRepository(Location)
-    private locationRepository: Repository<Location>
+    private locationRepository: Repository<Location>,
   ) {}
 
   async create(
     createLocationDto: CreateLocationDto,
-    response: Response
+    response: Response,
   ): Promise<Response> {
     const apiId = "api.create.location";
     try {
@@ -27,7 +27,7 @@ export class LocationService {
         apiId,
         result,
         HttpStatus.OK,
-        "Location created successfully"
+        "Location created successfully",
       );
     } catch (e) {
       return APIResponse.error(
@@ -35,7 +35,7 @@ export class LocationService {
         apiId,
         "Internal Server Error",
         e,
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
@@ -52,7 +52,7 @@ export class LocationService {
           apiId,
           "Location not found",
           null,
-          HttpStatus.NOT_FOUND
+          HttpStatus.NOT_FOUND,
         );
       }
       return APIResponse.success(
@@ -60,7 +60,7 @@ export class LocationService {
         apiId,
         location,
         HttpStatus.OK,
-        "Location found successfully"
+        "Location found successfully",
       );
     } catch (e) {
       return APIResponse.error(
@@ -68,7 +68,7 @@ export class LocationService {
         apiId,
         "Internal Server Error",
         e,
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
@@ -77,7 +77,7 @@ export class LocationService {
   async update(
     id: string,
     updateLocationDto: any,
-    response
+    response,
   ): Promise<Response> {
     const apiId = "api.update.location";
     try {
@@ -90,7 +90,7 @@ export class LocationService {
           apiId,
           "Location not found",
           null,
-          HttpStatus.NOT_FOUND
+          HttpStatus.NOT_FOUND,
         );
       }
       await this.locationRepository.update(id, updateLocationDto);
@@ -99,7 +99,7 @@ export class LocationService {
         apiId,
         null,
         HttpStatus.OK,
-        "Location updated successfully"
+        "Location updated successfully",
       );
     } catch (e) {
       return APIResponse.error(
@@ -107,7 +107,7 @@ export class LocationService {
         apiId,
         "Internal Server Error",
         e,
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
@@ -125,7 +125,7 @@ export class LocationService {
           apiId,
           "Location not found",
           null,
-          HttpStatus.NOT_FOUND
+          HttpStatus.NOT_FOUND,
         );
       }
       await this.locationRepository.delete(id);
@@ -134,7 +134,7 @@ export class LocationService {
         apiId,
         null,
         HttpStatus.OK,
-        "Location deleted successfully"
+        "Location deleted successfully",
       );
     } catch (e) {
       return APIResponse.error(
@@ -142,7 +142,7 @@ export class LocationService {
         apiId,
         "Internal Server Error",
         e,
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
@@ -159,7 +159,7 @@ export class LocationService {
           apiId,
           allLocations,
           HttpStatus.OK,
-          "All locations retrieved successfully"
+          "All locations retrieved successfully",
         );
       }
 
@@ -177,7 +177,7 @@ export class LocationService {
         apiId,
         result,
         HttpStatus.OK,
-        "Location filtered successfully"
+        "Location filtered successfully",
       );
     } catch (e) {
       return APIResponse.error(
@@ -185,7 +185,7 @@ export class LocationService {
         apiId,
         "Internal Server Error",
         e,
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }

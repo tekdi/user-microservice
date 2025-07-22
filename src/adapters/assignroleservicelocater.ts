@@ -4,7 +4,7 @@ export interface IServicelocatorassignRole {
   createAssignRole(
     request: any,
     createAssignRoleDto: CreateAssignRoleDto,
-    response: Response
+    response: Response,
   );
   getAssignedRole(userId, request, response: Response);
   deleteAssignedRole(deleteAssignRoleDto, response: Response);

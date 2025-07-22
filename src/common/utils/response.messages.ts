@@ -80,7 +80,7 @@ export const API_RESPONSES = {
     `User with userId ${userId} does not exist for this academic year.`,
   UNAUTHORIZED: "Unauthorized",
   INVALID_TOKEN: "Token Invalid",
-  INVALID_OPTION: 'Invalid Option Selected',
+  INVALID_OPTION: "Invalid Option Selected",
 
   //User Api messages
   USER_UPDATED_SUCCESSFULLY: "User updated successfully.",
@@ -109,9 +109,10 @@ export const API_RESPONSES = {
   USER_GET_BY_EMAIL_AND_TENANT_ID_SUCCESSFULLY:
     "User details fetched successfully by email and tenantId",
   USER_CREATE_KEYCLOAK: "User created successfully on keycloak",
-  USERNAME_EXISTS_KEYCLOAK: 'Username is already exists in keycloak',
-  UPDATE_USER_KEYCLOAK_ERROR:'Failed to update username details in Keycloak.',
-  USERNAME_SUGGEST_SUCCESSFULLY:'Username is already taken. Suggested a new unique username.',
+  USERNAME_EXISTS_KEYCLOAK: "Username is already exists in keycloak",
+  UPDATE_USER_KEYCLOAK_ERROR: "Failed to update username details in Keycloak.",
+  USERNAME_SUGGEST_SUCCESSFULLY:
+    "Username is already taken. Suggested a new unique username.",
 
   //Create user
   USER_CREATE_SUCCESSFULLY: `User created successfully`,
@@ -213,7 +214,7 @@ export const API_RESPONSES = {
   EMAIL_ERROR: "Email notification failed",
   SIGNED_URL_SUCCESS: "Signed URL generated successfully",
   SIGNED_URL_FAILED: "Error while generating signed URL",
-  INVALID_FILE_TYPE: "Invalid file type. Allowed file types are: '.jpg','.jpeg','.png','.webp','.pdf','.doc','.docx','.mp4','.mov','.txt','.csv'",
-  FILE_SIZE_ERROR: "File too large. Maximum allowed file size is 10MB."
+  INVALID_FILE_TYPE:
+    "Invalid file type. Allowed file types are: '.jpg','.jpeg','.png','.webp','.pdf','.doc','.docx','.mp4','.mov','.txt','.csv'",
+  FILE_SIZE_ERROR: "File too large. Maximum allowed file size is 10MB.",
 };
-

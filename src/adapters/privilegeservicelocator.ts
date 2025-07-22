@@ -8,7 +8,7 @@ export interface IServicelocator {
   createPrivilege(
     loggedinUser: any,
     createPrivileges: CreatePrivilegesDto,
-    response?: Response
+    response?: Response,
   );
   getPrivilege(privilegeId?: string, request?: any, response?: Response);
   // updatePrivilege(privilegeId, request, privilegeDto)
@@ -17,7 +17,7 @@ export interface IServicelocator {
     tenantId: string,
     roleId: string,
     request: any,
-    response?: Response
+    response?: Response,
   );
   // updatePrivilege(privilegeId, request, privilegeDto)
   deletePrivilege(privilegeId, response?: Response);

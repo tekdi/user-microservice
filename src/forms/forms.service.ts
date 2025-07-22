@@ -15,22 +15,21 @@ export class FormsService {
   constructor(
     private readonly fieldsService: PostgresFieldsService,
     @InjectRepository(Form)
-    private readonly formRepository: Repository<Form>
-  ) { }
+    private readonly formRepository: Repository<Form>,
+  ) {}
 
   async getForm(requiredData, response) {
-    let apiId = APIID.FORM_GET;
-    try {      
+    const apiId = APIID.FORM_GET;
+    try {
       if (!requiredData.context && !requiredData.contextType) {
         return APIResponse.error(
           response,
           apiId,
           "BAD_REQUEST",
           "Context in Query Params is required",
-          HttpStatus.BAD_REQUEST
+          HttpStatus.BAD_REQUEST,
         );
       }
-
 
       const { context, contextType, tenantId } = requiredData;
       const validationResult = await this.validateFormInput(requiredData);
@@ -41,7 +40,7 @@ export class FormsService {
           apiId,
           "BAD_REQUEST",
           validationResult.error,
-          HttpStatus.BAD_REQUEST
+          HttpStatus.BAD_REQUEST,
         );
       }
 
@@ -63,26 +62,26 @@ export class FormsService {
           apiId,
           "NOT_FOUND",
           "No Data found for this context OR Context Type",
-          HttpStatus.NOT_FOUND
+          HttpStatus.NOT_FOUND,
         );
       }
 
       // console.log(formData);
-      
+
       const mappedResponse = await Promise.all(
         formData.fields.result.map(async (data) => {
           if (!data.coreField) {
-            const whereClause = `"fieldId" = '${data.fieldId}'`;            
+            const whereClause = `"fieldId" = '${data.fieldId}'`;
             const [customFieldData] = await this.fieldsService.getFieldData(
               whereClause,
-              tenantId
+              tenantId,
             );
             customFieldData.validation = data.validation;
-            customFieldData.order = data.order;            
+            customFieldData.order = data.order;
             return { ...data, ...customFieldData };
           }
           return data;
-        })
+        }),
       );
 
       const result = {
@@ -96,7 +95,7 @@ export class FormsService {
         apiId,
         result,
         HttpStatus.OK,
-        "Fields fetched successfully."
+        "Fields fetched successfully.",
       );
     } catch (error) {
       const errorMessage = error.message || "Internal server error";
@@ -105,7 +104,7 @@ export class FormsService {
         apiId,
         "INTERNAL_SERVER_ERROR",
         errorMessage,
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
@@ -148,18 +147,18 @@ export class FormsService {
   }
 
   private async validateFormInput(
-    requiredData: any
+    requiredData: any,
   ): Promise<{ error: string | null }> {
     delete requiredData.tenantId;
     const allowedKeys = ["context", "contextType", "userId"];
     const extraKeys = Object.keys(requiredData).filter(
-      (key) => !allowedKeys.includes(key)
+      (key) => !allowedKeys.includes(key),
     );
 
     if (extraKeys.length > 0) {
       return {
         error: `Invalid keys provided: ${extraKeys.join(
-          ", "
+          ", ",
         )}. Only 'context', 'contextType' is allowed.`,
       };
     }
@@ -175,7 +174,7 @@ export class FormsService {
       if (contextType && !validContextTypes.includes(contextType)) {
         return {
           error: `Invalid contextType. For the context '${context}', it must be one of: ${validContextTypes.join(
-            ", "
+            ", ",
           )}`,
         };
       }
@@ -183,7 +182,6 @@ export class FormsService {
 
     return { error: null };
   }
-
 
   private async getValidContextTypes(context: string): Promise<string[]> {
     switch (context.toLowerCase()) {
@@ -201,7 +199,7 @@ export class FormsService {
   }
 
   public async createForm(request, formCreateDto: FormCreateDto, response) {
-    let apiId = APIID.FORM_CREATE;
+    const apiId = APIID.FORM_CREATE;
 
     try {
       formCreateDto.contextType = formCreateDto.contextType.toUpperCase();
@@ -214,7 +212,7 @@ export class FormsService {
       const checkFormExists = await this.getFormDetail(
         formCreateDto.context,
         formCreateDto.contextType,
-        formCreateDto.tenantId
+        formCreateDto.tenantId,
       );
 
       if (checkFormExists.length) {
@@ -223,12 +221,12 @@ export class FormsService {
           apiId,
           "BAD_REQUEST",
           API_RESPONSES.FORM_EXISTS,
-          HttpStatus.BAD_REQUEST
+          HttpStatus.BAD_REQUEST,
         );
       }
 
       const validForm = await this.validateFormFields(
-        formCreateDto.fields?.result
+        formCreateDto.fields?.result,
       );
 
       if (!validForm) {
@@ -237,12 +235,12 @@ export class FormsService {
           apiId,
           "BAD_REQUEST",
           API_RESPONSES.INVALID_FORM,
-          HttpStatus.BAD_REQUEST
+          HttpStatus.BAD_REQUEST,
         );
       }
 
       const validContextTypes = await this.getValidContextTypes(
-        formCreateDto.context
+        formCreateDto.context,
       );
       if (validContextTypes.length === 0) {
         return APIResponse.error(
@@ -250,7 +248,7 @@ export class FormsService {
           apiId,
           "BAD_REQUEST",
           API_RESPONSES.INVALID_CONTEXT(formCreateDto.context),
-          HttpStatus.BAD_REQUEST
+          HttpStatus.BAD_REQUEST,
         );
       }
       if (
@@ -263,9 +261,9 @@ export class FormsService {
           "BAD_REQUEST",
           API_RESPONSES.INVALID_CONTEXTTYPE(
             formCreateDto.context,
-            validContextTypes.join(", ")
+            validContextTypes.join(", "),
           ),
-          HttpStatus.BAD_REQUEST
+          HttpStatus.BAD_REQUEST,
         );
       }
 
@@ -276,7 +274,7 @@ export class FormsService {
         apiId,
         result,
         HttpStatus.OK,
-        API_RESPONSES.FORM_CREATED_SUCCESSFULLY
+        API_RESPONSES.FORM_CREATED_SUCCESSFULLY,
       );
     } catch (error) {
       const errorMessage = error.message || "Internal server error";
@@ -285,7 +283,7 @@ export class FormsService {
         apiId,
         "INTERNAL_SERVER_ERROR",
         errorMessage,
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }

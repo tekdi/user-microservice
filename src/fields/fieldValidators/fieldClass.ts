@@ -47,7 +47,7 @@ export interface Option {
 export abstract class Field {
   constructor(
     protected fieldAttributes: FieldAttributes,
-    protected fieldParams?: FieldParams
+    protected fieldParams?: FieldParams,
   ) {}
 
   abstract validate(value: any): boolean;

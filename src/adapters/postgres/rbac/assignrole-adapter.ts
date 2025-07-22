@@ -27,12 +27,12 @@ export class PostgresAssignroleService {
     @InjectRepository(UserRoleMapping)
     private userRoleMappingRepository: Repository<UserRoleMapping>,
     @InjectRepository(Role)
-    private roleRepository: Repository<Role>
+    private roleRepository: Repository<Role>,
   ) {}
   public async createAssignRole(
     request: Request,
     createAssignRoleDto: CreateAssignRoleDto,
-    response: Response
+    response: Response,
   ) {
     const apiId = APIID.USERROLE_CREATE;
     try {
@@ -47,7 +47,7 @@ export class PostgresAssignroleService {
           apiId,
           `Roles array cannot be empty.`,
           "empty array found",
-          HttpStatus.BAD_REQUEST
+          HttpStatus.BAD_REQUEST,
         );
       }
       const result = [];
@@ -92,8 +92,8 @@ export class PostgresAssignroleService {
         result.push(
           new ResponseAssignRoleDto(
             data,
-            `Role assigned successfully to the user in the specified tenant.`
-          )
+            `Role assigned successfully to the user in the specified tenant.`,
+          ),
         );
       }
 
@@ -103,7 +103,7 @@ export class PostgresAssignroleService {
           apiId,
           `Please Enter Valid User ID`,
           "Invalid User ID",
-          HttpStatus.BAD_REQUEST
+          HttpStatus.BAD_REQUEST,
         );
       }
       return APIResponse.success(
@@ -116,7 +116,7 @@ export class PostgresAssignroleService {
           errors,
         },
         HttpStatus.CREATED,
-        "Role successfully Created"
+        "Role successfully Created",
       );
     } catch (error) {
       if (error.code === "23503") {
@@ -125,7 +125,7 @@ export class PostgresAssignroleService {
           apiId,
           `User Id or Role Id Doesn't Exist in Database`,
           "Not found",
-          HttpStatus.NOT_FOUND
+          HttpStatus.NOT_FOUND,
         );
       }
       const errorMessage = error.message || "Internal server error";
@@ -134,7 +134,7 @@ export class PostgresAssignroleService {
         apiId,
         "Internal Server Error",
         errorMessage,
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
@@ -142,7 +142,7 @@ export class PostgresAssignroleService {
   public async getAssignedRole(
     userId: string,
     request: Request,
-    response: Response
+    response: Response,
   ) {
     const apiId = APIID.USERROLE_GET;
     try {
@@ -152,7 +152,7 @@ export class PostgresAssignroleService {
           apiId,
           `Please Enter Valid User ID`,
           "Invalid User ID",
-          HttpStatus.BAD_REQUEST
+          HttpStatus.BAD_REQUEST,
         );
       }
 
@@ -163,7 +163,7 @@ export class PostgresAssignroleService {
           apiId,
           `User Id or Role Id Doesn't Exist in Database`,
           "Not found",
-          HttpStatus.NOT_FOUND
+          HttpStatus.NOT_FOUND,
         );
       }
       return APIResponse.success(
@@ -171,7 +171,7 @@ export class PostgresAssignroleService {
         apiId,
         result,
         HttpStatus.OK,
-        "User role fetched successfully"
+        "User role fetched successfully",
       );
     } catch (error) {
       const errorMessage = error.message || "Internal server error";
@@ -180,14 +180,14 @@ export class PostgresAssignroleService {
         apiId,
         "Internal Server Error",
         errorMessage,
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
 
   public async deleteAssignedRole(
     deleteAssignRoleDto: DeleteAssignRoleDto,
-    res: Response
+    res: Response,
   ) {
     const apiId = APIID.USERROLE_DELETE;
     try {
@@ -198,7 +198,7 @@ export class PostgresAssignroleService {
           apiId,
           `Invalid userId format. Please provide a valid UUID.`,
           "Invalid UUID",
-          HttpStatus.BAD_REQUEST
+          HttpStatus.BAD_REQUEST,
         );
       }
       // Validate roleId format
@@ -209,7 +209,7 @@ export class PostgresAssignroleService {
             apiId,
             `Invalid roleId format. Please provide valid UUIDs`,
             "Invalid UUID",
-            HttpStatus.BAD_REQUEST
+            HttpStatus.BAD_REQUEST,
           );
         }
       }
@@ -223,7 +223,7 @@ export class PostgresAssignroleService {
           apiId,
           `User not found in userRoleMapping table`,
           "User not found",
-          HttpStatus.BAD_REQUEST
+          HttpStatus.BAD_REQUEST,
         );
       }
       // Check if all roleId(s) exist
@@ -240,7 +240,7 @@ export class PostgresAssignroleService {
           apiId,
           `Roles not found for the user`,
           "Roles not found",
-          HttpStatus.BAD_REQUEST
+          HttpStatus.BAD_REQUEST,
         );
       }
       // If all validations pass, proceed with deletion
@@ -253,7 +253,7 @@ export class PostgresAssignroleService {
         apiId,
         { rowCount: response.affected },
         HttpStatus.OK,
-        "Roles deleted successfully."
+        "Roles deleted successfully.",
       );
     } catch (e) {
       const errorMessage = e.message || "Internal server error";
@@ -262,7 +262,7 @@ export class PostgresAssignroleService {
         apiId,
         "Internal Server Error",
         errorMessage,
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }

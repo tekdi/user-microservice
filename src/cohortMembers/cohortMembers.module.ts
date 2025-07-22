@@ -23,7 +23,7 @@ import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
       Cohort,
       CohortAcademicYear,
       AcademicYear,
-      Tenants
+      Tenants,
     ]),
     HttpModule,
     PostgresModule,
@@ -34,6 +34,6 @@ import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
     PostgresCohortMembersService,
     PostgresAcademicYearService,
   ],
-  exports: [PostgresCohortMembersService]
+  exports: [PostgresCohortMembersService],
 })
-export class CohortMembersModule { }
+export class CohortMembersModule {}

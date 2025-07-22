@@ -32,9 +32,9 @@ export class Form {
   @Column({ type: "jsonb", nullable: true })
   fields: object;
 
-  @Column({ type: 'uuid'})
+  @Column({ type: "uuid" })
   createdBy: string;
 
-  @Column({ type: 'uuid'})
+  @Column({ type: "uuid" })
   updatedBy: string;
 }

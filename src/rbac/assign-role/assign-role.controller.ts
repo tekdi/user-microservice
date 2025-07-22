@@ -61,7 +61,7 @@ export class AssignRoleController {
     @Req() request: Request,
     @Body() createAssignRoleDto: CreateAssignRoleDto,
     @Res() response: Response,
-    @Headers() headers
+    @Headers() headers,
   ) {
     return await this.assignRoleAdpater
       .buildassignroleAdapter()
@@ -79,7 +79,7 @@ export class AssignRoleController {
   public async getRole(
     @Param("userId") userId: string,
     @Req() request: Request,
-    @Res() response: Response
+    @Res() response: Response,
   ) {
     return await this.assignRoleAdpater
       .buildassignroleAdapter()
@@ -96,7 +96,7 @@ export class AssignRoleController {
   @ApiBadRequestResponse({ description: "Bad request" })
   public async deleteRole(
     @Body() deleteAssignRoleDto: DeleteAssignRoleDto, // Modify this line to accept DeleteAssignRoleDto
-    @Res() response: Response
+    @Res() response: Response,
   ) {
     return await this.assignRoleAdpater
       .buildassignroleAdapter()

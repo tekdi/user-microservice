@@ -49,13 +49,12 @@ async function getKeycloakAdminToken() {
   } catch (error) {
     LoggerUtil.error(
       `${API_RESPONSES.SERVER_ERROR}`,
-      `Error: ${error.message},`
-    )
+      `Error: ${error.message},`,
+    );
   }
 
   return res;
 }
-
 
 async function createUserInKeyCloak(query, token, role: string) {
   if (!query.password) {
@@ -75,10 +74,10 @@ async function createUserInKeyCloak(query, token, role: string) {
         value: query.password,
       },
     ],
-    attributes : {
+    attributes: {
       // Multi tenant for roles is not currently supported in keycloak
-      user_roles: [role]  // Added in attribute and mappers
-    }
+      user_roles: [role], // Added in attribute and mappers
+    },
   });
 
   const config = {
@@ -97,13 +96,19 @@ async function createUserInKeyCloak(query, token, role: string) {
 
     // Log and return the created user's ID
     const userId = response.headers.location.split("/").pop(); // Extract user ID from the location header
-    return { statusCode: response.status, message: "User created successfully", userId : userId };
+    return {
+      statusCode: response.status,
+      message: "User created successfully",
+      userId: userId,
+    };
   } catch (error) {
     // Handle errors and log relevant details
     if (error.response) {
       return {
         statusCode: error.response.status,
-        message: error.response.data.errorMessage || "Error occurred during user creation",
+        message:
+          error.response.data.errorMessage ||
+          "Error occurred during user creation",
         email: query.email || "No email provided",
       };
     } else if (error.request) {
@@ -121,7 +126,6 @@ async function createUserInKeyCloak(query, token, role: string) {
     }
   }
 }
-
 
 // Define the structure of the input query
 interface UpdateUserQuery {
@@ -141,7 +145,7 @@ interface UpdateUserResponse {
 
 async function updateUserInKeyCloak(
   query: UpdateUserQuery,
-  token: string
+  token: string,
 ): Promise<UpdateUserResponse> {
   // Validate required parameters
   if (!query.userId) {
@@ -193,8 +197,11 @@ async function updateUserInKeyCloak(
   } catch (error: any) {
     // Extract error details
     const axiosError: AxiosError = error;
+    const errorData = axiosError.response?.data as any;
     const errorMessage =
-      axiosError.response?.data?.errorMessage || "Failed to update user in Keycloak";
+      errorData?.errorMessage ||
+      errorData?.error ||
+      "Failed to update user in Keycloak";
 
     return {
       success: false,
@@ -203,7 +210,6 @@ async function updateUserInKeyCloak(
     };
   }
 }
-
 
 async function checkIfEmailExistsInKeycloak(email, token) {
   const axios = require("axios");
@@ -222,8 +228,8 @@ async function checkIfEmailExistsInKeycloak(email, token) {
   } catch (e) {
     LoggerUtil.error(
       `${API_RESPONSES.SERVER_ERROR}`,
-      `Error: "Keycloak error - email" ${e.message},`
-    )
+      `Error: "Keycloak error - email" ${e.message},`,
+    );
     return e;
   }
 
@@ -250,8 +256,8 @@ async function checkIfUsernameExistsInKeycloak(username, token) {
   } catch (e) {
     LoggerUtil.error(
       `${API_RESPONSES.SERVER_ERROR}`,
-      `Error: "Keycloak error - username" ${e.message},`
-    )
+      `Error: "Keycloak error - username" ${e.message},`,
+    );
     return e;
   }
 

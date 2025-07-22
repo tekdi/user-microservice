@@ -57,7 +57,7 @@ export class PrivilegeController {
     @Query("tenantId") tenantId: string,
     @Query("roleId") roleId: string,
     @Req() request: Request,
-    @Res() response: Response
+    @Res() response: Response,
   ) {
     return await this.privilegeAdapter
       .buildPrivilegeAdapter()
@@ -75,7 +75,7 @@ export class PrivilegeController {
   public async getPrivilege(
     @Param("privilegeId") privilegeId: string,
     @Req() request: Request,
-    @Res() response: Response
+    @Res() response: Response,
   ) {
     return await this.privilegeAdapter
       .buildPrivilegeAdapter()
@@ -97,7 +97,7 @@ export class PrivilegeController {
   public async createPrivilege(
     @Req() request,
     @Body() createPrivilegesDto: CreatePrivilegesDto,
-    @Res() response: Response
+    @Res() response: Response,
   ) {
     return await this.privilegeAdapter
       .buildPrivilegeAdapter()
@@ -148,7 +148,7 @@ export class PrivilegeController {
   @ApiBadRequestResponse({ description: "Bad request" })
   public async deleteRole(
     @Param("privilegeId", ParseUUIDPipe) privilegeId: string,
-    @Res() response: Response
+    @Res() response: Response,
   ) {
     return await this.privilegeAdapter
       .buildPrivilegeAdapter()

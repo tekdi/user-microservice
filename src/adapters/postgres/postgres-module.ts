@@ -27,7 +27,6 @@ import { AutomaticMemberService } from "src/automatic-member/automatic-member.se
 import { AutomaticMember } from "src/automatic-member/entity/automatic-member.entity";
 import { KafkaModule } from "src/kafka/kafka.module";
 
-
 @Module({
   imports: [
     HttpModule,
@@ -72,4 +71,4 @@ import { KafkaModule } from "src/kafka/kafka.module";
     AutomaticMemberService,
   ],
 })
-export class PostgresModule { }
+export class PostgresModule {}

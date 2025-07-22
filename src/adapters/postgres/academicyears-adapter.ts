@@ -13,43 +13,46 @@ import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
 
 @Injectable()
 export class PostgresAcademicYearService
-  implements IServicelocatorAcademicyear {
+  implements IServicelocatorAcademicyear
+{
   constructor(
     @InjectRepository(AcademicYear)
     private readonly academicYearRespository: Repository<AcademicYear>,
     @InjectRepository(Tenants)
-    private readonly tenantRepository: Repository<Tenants>
-  ) { }
+    private readonly tenantRepository: Repository<Tenants>,
+  ) {}
 
   public async createAcademicYear(
     academicYearDto: AcademicYearDto,
     tenantId,
-    response: Response
+    response: Response,
   ): Promise<any> {
     const apiId = APIID.ACADEMICYEAR_CREATE;
     try {
       const startSessionYear = new Date(
-        academicYearDto.startDate
+        academicYearDto.startDate,
       ).getFullYear();
       const endSessionYear = new Date(academicYearDto.endDate).getFullYear();
       academicYearDto.session = `${startSessionYear}-${endSessionYear}`;
       academicYearDto.tenantId = tenantId;
 
-      const tenantExist = await this.tenantRepository.findOne({ where: { tenantId: tenantId } })
+      const tenantExist = await this.tenantRepository.findOne({
+        where: { tenantId: tenantId },
+      });
       if (!tenantExist) {
         return APIResponse.error(
           response,
           apiId,
           API_RESPONSES.TENANT_NOTFOUND,
           API_RESPONSES.NOT_FOUND,
-          HttpStatus.BAD_REQUEST
+          HttpStatus.BAD_REQUEST,
         );
       }
 
       // session session alread exist or not
       const checkResult = await this.isExistSessionWithTenant(
         academicYearDto,
-        tenantId
+        tenantId,
       );
       if (checkResult) {
         return APIResponse.error(
@@ -57,7 +60,7 @@ export class PostgresAcademicYearService
           apiId,
           API_RESPONSES.ACADEMICYEAR_YEAR,
           API_RESPONSES.ACADEMICYEAR_EXIST,
-          HttpStatus.BAD_REQUEST
+          HttpStatus.BAD_REQUEST,
         );
       }
 
@@ -68,19 +71,18 @@ export class PostgresAcademicYearService
       if (getCurrentActiveYear) {
         const updateStatus = await this.academicYearRespository.update(
           { id: getCurrentActiveYear.id },
-          { isActive: false }
+          { isActive: false },
         );
       }
       //save record
-      const saveAcademicYear = await this.academicYearRespository.save(
-        academicYearDto
-      );
+      const saveAcademicYear =
+        await this.academicYearRespository.save(academicYearDto);
       return APIResponse.success(
         response,
         apiId,
         saveAcademicYear,
         HttpStatus.CREATED,
-        API_RESPONSES.ACADEMICYEAR
+        API_RESPONSES.ACADEMICYEAR,
       );
     } catch (error) {
       const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
@@ -89,7 +91,7 @@ export class PostgresAcademicYearService
         apiId,
         API_RESPONSES.INTERNAL_SERVER_ERROR,
         errorMessage,
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
@@ -103,7 +105,7 @@ export class PostgresAcademicYearService
       .andWhere("academicYear.isActive = true")
       .andWhere(
         "(academicYear.startDate <= :endDate AND academicYear.endDate >= :startDate)",
-        { startDate, endDate }
+        { startDate, endDate },
       )
       .getOne();
     if (overlappingSession) {
@@ -114,7 +116,7 @@ export class PostgresAcademicYearService
 
   async getActiveAcademicYear(
     academicYearId: string,
-    tenantId: string
+    tenantId: string,
   ): Promise<AcademicYear> {
     return await this.academicYearRespository.findOne({
       where: { id: academicYearId, isActive: true, tenantId },
@@ -124,7 +126,7 @@ export class PostgresAcademicYearService
   async getAcademicYearList(
     academicYearSearchDto: AcademicYearSearchDto,
     tenantId,
-    response: Response
+    response: Response,
   ) {
     const apiId = APIID.ACADEMICYEAR_LIST;
     try {
@@ -144,7 +146,7 @@ export class PostgresAcademicYearService
           apiId,
           API_RESPONSES.ACADEMICYEAR_NOTFOUND,
           API_RESPONSES.NOT_FOUND,
-          HttpStatus.BAD_REQUEST
+          HttpStatus.BAD_REQUEST,
         );
       }
       return APIResponse.success(
@@ -152,7 +154,7 @@ export class PostgresAcademicYearService
         apiId,
         academicYearList,
         HttpStatus.OK,
-        API_RESPONSES.ACADEMICYEAR_GET_SUCCESS
+        API_RESPONSES.ACADEMICYEAR_GET_SUCCESS,
       );
     } catch (error) {
       const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
@@ -161,7 +163,7 @@ export class PostgresAcademicYearService
         apiId,
         API_RESPONSES.INTERNAL_SERVER_ERROR,
         errorMessage,
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
@@ -169,14 +171,16 @@ export class PostgresAcademicYearService
   async getAcademicYearById(id, response) {
     const apiId = APIID.ACADEMICYEAR_GET;
     try {
-      const academicYearResult = await this.academicYearRespository.findOne({ where: { id: id } });
+      const academicYearResult = await this.academicYearRespository.findOne({
+        where: { id: id },
+      });
       if (!academicYearResult) {
         return APIResponse.error(
           response,
           apiId,
           API_RESPONSES.ACADEMICYEAR_NOTFOUND,
           API_RESPONSES.NOT_FOUND,
-          HttpStatus.BAD_REQUEST
+          HttpStatus.BAD_REQUEST,
         );
       }
       return APIResponse.success(
@@ -184,7 +188,7 @@ export class PostgresAcademicYearService
         apiId,
         academicYearResult,
         HttpStatus.OK,
-        API_RESPONSES.ACADEMICYEAR_GET_SUCCESS
+        API_RESPONSES.ACADEMICYEAR_GET_SUCCESS,
       );
     } catch (error) {
       const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
@@ -193,9 +197,8 @@ export class PostgresAcademicYearService
         apiId,
         API_RESPONSES.INTERNAL_SERVER_ERROR,
         errorMessage,
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
 }
-

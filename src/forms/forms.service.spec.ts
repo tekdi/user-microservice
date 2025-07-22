@@ -46,7 +46,7 @@ describe("Formservice", () => {
         "getFormData",
         "NOT_FOUND",
         "Fields not found for the search term",
-        HttpStatus.NOT_FOUND
+        HttpStatus.NOT_FOUND,
       );
     });
 
@@ -59,7 +59,7 @@ describe("Formservice", () => {
         "getFormData",
         "NOT_FOUND",
         "No Data found for this context and Context Type",
-        HttpStatus.NOT_FOUND
+        HttpStatus.NOT_FOUND,
       );
     });
 
@@ -88,14 +88,14 @@ describe("Formservice", () => {
           expect.objectContaining({ fieldId: "2", someData: "test", order: 2 }),
         ]),
         HttpStatus.OK,
-        "Fields fetched successfully."
+        "Fields fetched successfully.",
       );
     });
 
     it("should handle errors and return internal server error", async () => {
       const requiredData = { context: "test", contextType: "test" };
       (service.getFormData as jest.Mock).mockRejectedValue(
-        new Error("Test error")
+        new Error("Test error"),
       );
 
       await service.getForm(requiredData, mockResponse);
@@ -105,7 +105,7 @@ describe("Formservice", () => {
         "getFormData",
         "Internal Server Error",
         "Test error",
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     });
   });

@@ -1,30 +1,38 @@
 import {
-  BadRequestException, Headers,Body, Controller,
+  BadRequestException,
+  Headers,
+  Body,
+  Controller,
   Get,
-  Post, Query,
+  Post,
+  Query,
   Req,
   Res,
   SerializeOptions,
-  UseFilters, UsePipes,
+  UseFilters,
+  UsePipes,
   ValidationPipe,
   ParseUUIDPipe,
 } from "@nestjs/common";
 import { FormsService } from "./forms.service";
 import {
-  ApiBadRequestResponse, ApiBasicAuth, ApiBody, ApiCreatedResponse,
+  ApiBadRequestResponse,
+  ApiBasicAuth,
+  ApiBody,
+  ApiCreatedResponse,
   ApiForbiddenResponse,
   ApiHeader,
-  ApiInternalServerErrorResponse, ApiQuery,
+  ApiInternalServerErrorResponse,
+  ApiQuery,
   ApiTags,
 } from "@nestjs/swagger";
-import { AllExceptionsFilter } from 'src/common/filters/exception.filter';
-import { FormCreateDto } from './dto/form-create.dto';
-import { APIID } from '@utils/api-id.config';
-import { isUUID } from 'class-validator';
-import { API_RESPONSES } from '@utils/response.messages';
+import { AllExceptionsFilter } from "src/common/filters/exception.filter";
+import { FormCreateDto } from "./dto/form-create.dto";
+import { APIID } from "@utils/api-id.config";
+import { isUUID } from "class-validator";
+import { API_RESPONSES } from "@utils/response.messages";
 import { GetUserId } from "src/common/decorators/getUserId.decorator";
 import { Request, Response } from "express";
-
 
 @Controller("form")
 @ApiTags("Forms")
@@ -44,7 +52,7 @@ export class FormsController {
   public async getFormData(
     @Req() request: Request,
     @Query() query: Record<string, any>,
-    @Res() response: Response
+    @Res() response: Response,
   ) {
     const tenantId = request.headers["tenantid"];
     const normalizedQuery = {
@@ -54,7 +62,7 @@ export class FormsController {
     };
 
     const requiredData = { ...normalizedQuery, tenantId: tenantId || null };
-    return await this.formsService.getForm(requiredData,response);
+    return await this.formsService.getForm(requiredData, response);
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.FORM_CREATE))
@@ -75,13 +83,13 @@ export class FormsController {
     @Res() response: Response,
     @GetUserId("userId", ParseUUIDPipe) userId: string,
   ) {
-    let tenantId = headers["tenantid"];
+    const tenantId = headers["tenantid"];
     formCreateDto.createdBy = userId;
-    
+
     if (tenantId && !isUUID(tenantId)) {
       throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
     }
     formCreateDto.tenantId = tenantId;
-    return await this.formsService.createForm(request,formCreateDto,response);
+    return await this.formsService.createForm(request, formCreateDto, response);
   }
 }

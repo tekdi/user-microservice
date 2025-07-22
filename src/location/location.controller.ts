@@ -19,7 +19,7 @@ export class LocationController {
   @Post()
   create(
     @Body() createLocationDto: CreateLocationDto,
-    @Res() response: Response
+    @Res() response: Response,
   ): Promise<Response> {
     return this.locationService.create(createLocationDto, response);
   }
@@ -27,7 +27,7 @@ export class LocationController {
   @Get(":id")
   findOne(
     @Param("id") id: string,
-    @Res() response: Response
+    @Res() response: Response,
   ): Promise<Response> {
     return this.locationService.findLocation(id, response);
   }
@@ -36,7 +36,7 @@ export class LocationController {
   update(
     @Param("id") id: string,
     @Body() updateLocationDto: any,
-    @Res() response: Response
+    @Res() response: Response,
   ): Promise<Response> {
     return this.locationService.update(id, updateLocationDto, response);
   }
@@ -44,7 +44,7 @@ export class LocationController {
   @Delete("/delete/:id")
   remove(
     @Param("id") id: string,
-    @Res() response: Response
+    @Res() response: Response,
   ): Promise<Response> {
     return this.locationService.remove(id, response);
   }
