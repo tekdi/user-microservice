@@ -25,13 +25,13 @@ export class PostgresAssignTenantService
     @InjectRepository(User)
     private userRepository: Repository<User>,
     @InjectRepository(Tenants)
-    private tenantsRepository: Repository<Tenants>
+    private tenantsRepository: Repository<Tenants>,
   ) {}
 
   public async validateUserTenantMapping(
     userId: string,
     tenantId: string,
-    errors: any[]
+    errors: any[],
   ) {
     // check if user tenant mapping exists.
     const existingMapping = await this.userTenantMappingRepository.findOne({
@@ -66,7 +66,7 @@ export class PostgresAssignTenantService
   public async userTenantMapping(
     request: any,
     assignTenantMappingDto: UserTenantMappingDto,
-    response: Response
+    response: Response,
   ) {
     const apiId = APIID.ASSIGN_TENANT_CREATE;
     try {
@@ -80,7 +80,7 @@ export class PostgresAssignTenantService
           apiId,
           "Bad Request",
           "Please provide at least one tenant Id",
-          HttpStatus.BAD_REQUEST
+          HttpStatus.BAD_REQUEST,
         );
       }
 
@@ -91,7 +91,7 @@ export class PostgresAssignTenantService
         const isValid = await this.validateUserTenantMapping(
           userId,
           tenantId,
-          errors
+          errors,
         );
 
         if (!isValid) {
@@ -108,8 +108,8 @@ export class PostgresAssignTenantService
         result.push(
           new ResponseAssignTenantDto(
             data,
-            `User is successfully added to the Tenants.`
-          )
+            `User is successfully added to the Tenants.`,
+          ),
         );
       }
 
@@ -119,7 +119,7 @@ export class PostgresAssignTenantService
           apiId,
           "Bad Request",
           `User not added to tenants ${JSON.stringify(errors)}`,
-          HttpStatus.BAD_REQUEST
+          HttpStatus.BAD_REQUEST,
         );
       }
       const res = {
@@ -134,7 +134,7 @@ export class PostgresAssignTenantService
         apiId,
         res,
         HttpStatus.OK,
-        "User added to tenants successfully."
+        "User added to tenants successfully.",
       );
     } catch (error) {
       const errorMessage = error?.message || "Something went wrong";
@@ -143,7 +143,7 @@ export class PostgresAssignTenantService
         apiId,
         "Internal Server Error",
         `Error : ${errorMessage}`,
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }

@@ -15,8 +15,7 @@ import { isUUID } from "class-validator";
 import APIResponse from "src/common/responses/response";
 import { Response } from "express";
 import { APIID } from "src/common/utils/api-id.config";
-import { validate as uuidValidate } from 'uuid';
-
+import { validate as uuidValidate } from "uuid";
 
 @Injectable()
 export class PostgresRoleService {
@@ -26,25 +25,28 @@ export class PostgresRoleService {
     @InjectRepository(UserRoleMapping)
     private readonly userRoleMappingRepository: Repository<UserRoleMapping>,
     @InjectRepository(RolePrivilegeMapping)
-    private readonly roleprivilegeMappingRepository: Repository<RolePrivilegeMapping>
-  ) { }
+    private readonly roleprivilegeMappingRepository: Repository<RolePrivilegeMapping>,
+  ) {}
   public async createRole(
     request: any,
     createRolesDto: CreateRolesDto,
-    response: Response
+    response: Response,
   ) {
     const apiId = APIID.ROLE_CREATE;
     const roles = [];
     const errors = [];
 
     try {
-      if (createRolesDto?.tenantId?.trim() !== '' && !uuidValidate(createRolesDto?.tenantId)) {
+      if (
+        createRolesDto?.tenantId?.trim() !== "" &&
+        !uuidValidate(createRolesDto?.tenantId)
+      ) {
         return APIResponse.error(
           response,
           apiId,
           `Please enter valid tenantId or keep blank`,
           "Invalid Tenant Id",
-          HttpStatus.BAD_REQUEST
+          HttpStatus.BAD_REQUEST,
         );
       } else if (uuidValidate(createRolesDto?.tenantId)) {
         const tenant = await this.checkTenantID(createRolesDto.tenantId);
@@ -54,7 +56,7 @@ export class PostgresRoleService {
             apiId,
             `Tenant Id not found`,
             "Tenant Id not found",
-            HttpStatus.NOT_FOUND
+            HttpStatus.NOT_FOUND,
           );
         }
       }
@@ -99,7 +101,7 @@ export class PostgresRoleService {
         apiId,
         "Internal Server Error",
         errorMessage,
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
     return APIResponse.success(
@@ -107,7 +109,7 @@ export class PostgresRoleService {
       apiId,
       { successCount: roles.length, errorCount: errors.length, roles, errors },
       HttpStatus.OK,
-      "Role successfully Created"
+      "Role successfully Created",
     );
   }
 
@@ -122,7 +124,7 @@ export class PostgresRoleService {
         apiId,
         { roles, totalCount },
         HttpStatus.OK,
-        "Roles fetched successfully"
+        "Roles fetched successfully",
       );
     } catch (e) {
       const errorMessage = e.message || "Internal server error";
@@ -131,7 +133,7 @@ export class PostgresRoleService {
         apiId,
         "Internal Server Error",
         errorMessage,
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
@@ -140,7 +142,7 @@ export class PostgresRoleService {
     roleId: string,
     request: any,
     roleDto: RoleDto,
-    response: Response
+    response: Response,
   ) {
     const apiId = APIID.ROLE_UPDATE;
     try {
@@ -152,7 +154,7 @@ export class PostgresRoleService {
         apiId,
         { rowCount: result.affected },
         HttpStatus.OK,
-        "Roles Updated successful"
+        "Roles Updated successful",
       );
     } catch (e) {
       const errorMessage = e.message || "Internal server error";
@@ -161,7 +163,7 @@ export class PostgresRoleService {
         apiId,
         "Internal Server Error",
         errorMessage,
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
@@ -193,7 +195,7 @@ export class PostgresRoleService {
           APIID.ROLE_SEARCH,
           `Please Enter Tenenat id or Valid Filter`,
           "Invalid Tenant Id or Valid Filter",
-          HttpStatus.BAD_REQUEST
+          HttpStatus.BAD_REQUEST,
         );
       }
       if (whereClause.field && !["Privilege"].includes(whereClause?.field)) {
@@ -202,7 +204,7 @@ export class PostgresRoleService {
           APIID.ROLE_SEARCH,
           `Please Enter valid field value.`,
           "Invalid field value.",
-          HttpStatus.BAD_REQUEST
+          HttpStatus.BAD_REQUEST,
         );
       }
       if (
@@ -212,7 +214,7 @@ export class PostgresRoleService {
       ) {
         const userRoleMappingData = await this.findUserRoleData(
           whereClause.userId,
-          whereClause.tenantId
+          whereClause.tenantId,
         );
         const roleIds = userRoleMappingData.map((data) => data.roleid);
 
@@ -220,7 +222,7 @@ export class PostgresRoleService {
 
         const roles = userRoleMappingData.map((data) => {
           const roleResult = result.find(
-            (privilegeData) => privilegeData.roleid === data.roleid
+            (privilegeData) => privilegeData.roleid === data.roleid,
           );
           return {
             roleId: data.roleid,
@@ -234,7 +236,7 @@ export class PostgresRoleService {
           apiId,
           roles,
           HttpStatus.OK,
-          "Role For User with Privileges fetched successfully."
+          "Role For User with Privileges fetched successfully.",
         );
       } else if (
         whereClause.userId &&
@@ -243,23 +245,23 @@ export class PostgresRoleService {
       ) {
         const data = await this.findUserRoleData(
           whereClause.userId,
-          whereClause.tenantId
+          whereClause.tenantId,
         );
         return APIResponse.success(
           response,
           apiId,
           data,
           HttpStatus.OK,
-          "Role For User Id fetched successfully."
+          "Role For User Id fetched successfully.",
         );
       } else if (whereClause.tenantId && whereClause.field === "Privilege") {
         const userRoleData = await this.findRoleData(whereClause.tenantId);
         const result = await this.findPrivilegeByRoleId(
-          userRoleData.map((data) => data.roleId)
+          userRoleData.map((data) => data.roleId),
         );
         const roles = userRoleData.map((data) => {
           const roleResult = result.find(
-            (privilegeData) => privilegeData.roleid === data.roleId
+            (privilegeData) => privilegeData.roleid === data.roleId,
           );
           return {
             roleId: data.roleId,
@@ -273,7 +275,7 @@ export class PostgresRoleService {
           apiId,
           roles,
           HttpStatus.OK,
-          "Role For Tenant with Privileges fetched successfully."
+          "Role For Tenant with Privileges fetched successfully.",
         );
       } else if (whereClause.tenantId && !whereClause.field) {
         const data = await this.findRoleData(whereClause.tenantId);
@@ -282,7 +284,7 @@ export class PostgresRoleService {
           apiId,
           data,
           HttpStatus.OK,
-          "Role For Tenant fetched successfully."
+          "Role For Tenant fetched successfully.",
         );
       } else {
         return APIResponse.error(
@@ -290,7 +292,7 @@ export class PostgresRoleService {
           APIID.ROLE_SEARCH,
           `Please Enter Valid Filter`,
           "Invalid Filter",
-          HttpStatus.BAD_REQUEST
+          HttpStatus.BAD_REQUEST,
         );
       }
     } catch (e) {
@@ -300,7 +302,7 @@ export class PostgresRoleService {
         apiId,
         "Internal Server Error",
         errorMessage,
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
@@ -314,7 +316,7 @@ export class PostgresRoleService {
           apiId,
           `Please Enter valid (UUID)`,
           "Invalid UUID",
-          HttpStatus.BAD_REQUEST
+          HttpStatus.BAD_REQUEST,
         );
       }
 
@@ -328,7 +330,7 @@ export class PostgresRoleService {
           apiId,
           `Role not found`,
           "Not found",
-          HttpStatus.NOT_FOUND
+          HttpStatus.NOT_FOUND,
         );
       }
       // Delete the role
@@ -349,7 +351,7 @@ export class PostgresRoleService {
         apiId,
         { rowCount: response.affected },
         HttpStatus.OK,
-        "Role deleted successfully."
+        "Role deleted successfully.",
       );
     } catch (e) {
       const errorMessage = e.message || "Internal server error";
@@ -358,7 +360,7 @@ export class PostgresRoleService {
         apiId,
         "Internal Server Error",
         errorMessage,
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }

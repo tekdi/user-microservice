@@ -48,9 +48,9 @@ export class Tenant {
   @Column({ type: "text", nullable: true })
   programHead: string | null; // UUID of the user who created the tenant
 
-  @Column({ type: 'varchar', length: 255, nullable: true })
+  @Column({ type: "varchar", length: 255, nullable: true })
   templateId: string;
-    
+
   @Column({ type: "text" })
   contentFramework: string;
 
@@ -66,6 +66,6 @@ export class Tenant {
   @Column({ type: "uuid", nullable: true })
   updatedBy: string | null; // UUID of the user who last updated the tenant
 
-  @Column({ type: 'json', nullable: true })
+  @Column({ type: "json", nullable: true })
   contentFilter: any;
 }

@@ -32,7 +32,7 @@ import { JwtAuthGuard } from "src/common/guards/keycloak.guard";
 @UseGuards(JwtAuthGuard)
 export class AssignPrivilegeController {
   constructor(
-    private readonly assignPrivilegeAdpater: AssignPrivilegeAdapter
+    private readonly assignPrivilegeAdpater: AssignPrivilegeAdapter,
   ) {}
 
   @Post()
@@ -47,7 +47,7 @@ export class AssignPrivilegeController {
   public async create(
     @Req() request: Request,
     @Body() createAssignPrivilegeDto: CreatePrivilegeRoleDto,
-    @Res() response: Response
+    @Res() response: Response,
   ) {
     return await this.assignPrivilegeAdpater
       .buildPrivilegeRoleAdapter()
@@ -63,7 +63,7 @@ export class AssignPrivilegeController {
   public async getRole(
     @Param("roleid") roleId: string,
     @Req() request: Request,
-    @Res() response: Response
+    @Res() response: Response,
   ) {
     return await this.assignPrivilegeAdpater
       .buildPrivilegeRoleAdapter()

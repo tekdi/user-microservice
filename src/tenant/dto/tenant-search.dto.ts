@@ -15,7 +15,10 @@ import {
 import { Expose } from "class-transformer";
 
 export class TenantFilters {
-  @ApiPropertyOptional({ type: () => String, description: 'Tenant Id must be a (UUID)' })
+  @ApiPropertyOptional({
+    type: () => String,
+    description: "Tenant Id must be a (UUID)",
+  })
   @IsString()
   @IsUUID()
   @IsOptional()
@@ -34,25 +37,31 @@ export class TenantFilters {
   @ApiPropertyOptional({
     type: [String],
     description: "Status of the tenant",
-    enum: ['published', 'draft', 'archived'],
+    enum: ["published", "draft", "archived"],
     isArray: true,
-    default: ['published'],
+    default: ["published"],
   })
   @IsArray()
   @IsOptional()
   @ArrayNotEmpty() // Ensures the array is not empty (if provided)
-  @IsIn(['published', 'draft', 'archived'], { each: true }) // Validates each array element
+  @IsIn(["published", "draft", "archived"], { each: true }) // Validates each array element
   @IsNotEmpty({ each: true }) // Ensures no empty strings in the array
   @Expose()
-  status?: ('published' | 'draft' | 'archived')[];
+  status?: ("published" | "draft" | "archived")[];
 
-  @ApiPropertyOptional({ type: () => String, description: 'The ID of the creator (UUID)' })
+  @ApiPropertyOptional({
+    type: () => String,
+    description: "The ID of the creator (UUID)",
+  })
   @IsString()
   @IsUUID()
   @IsOptional()
   createdBy?: string;
 
-  @ApiPropertyOptional({ type: () => String, description: 'The ID of the updater (UUID)' })
+  @ApiPropertyOptional({
+    type: () => String,
+    description: "The ID of the updater (UUID)",
+  })
   @IsString()
   @IsUUID()
   @IsOptional()

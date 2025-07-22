@@ -68,7 +68,7 @@ export class AuthController {
   @UsePipes(ValidationPipe)
   refreshToken(
     @Body() body: RefreshTokenRequestBody,
-    @Res() response: Response
+    @Res() response: Response,
   ) {
     const { refresh_token: refreshToken } = body;
 

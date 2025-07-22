@@ -11,4 +11,4 @@ import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
   providers: [AcademicYearAdapter, PostgresAcademicYearService],
   controllers: [AcademicyearsController],
 })
-export class AcademicyearsModule { }
+export class AcademicyearsModule {}

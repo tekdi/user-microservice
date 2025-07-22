@@ -4,6 +4,6 @@ export interface IServicelocatorAssignTenant {
   userTenantMapping(
     request: any,
     assignTenantMappingDto: UserTenantMappingDto,
-    response: Response
+    response: Response,
   );
 }

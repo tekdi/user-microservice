@@ -49,7 +49,7 @@ export class AcademicyearsController {
   async createAcademicYears(
     @Body() academicyearsService: AcademicYearDto,
     @Res() response: Response,
-    @Headers() headers
+    @Headers() headers,
   ) {
     const tenantId = headers["tenantid"];
     if (!tenantId || !isUUID(tenantId)) {
@@ -71,7 +71,7 @@ export class AcademicyearsController {
   async getAcademicYearList(
     @Body() academicYearSearchDto: AcademicYearSearchDto,
     @Res() response: Response,
-    @Headers() headers
+    @Headers() headers,
   ) {
     const tenantId = headers["tenantid"];
     if (!tenantId || !isUUID(tenantId)) {
@@ -95,7 +95,7 @@ export class AcademicyearsController {
   })
   async getAcademicYearById(
     @Param("id", new ParseUUIDPipe()) id: string,
-    @Res() response: Response
+    @Res() response: Response,
   ) {
     const result = await this.academicYearAdapter
       .buildAcademicYears()

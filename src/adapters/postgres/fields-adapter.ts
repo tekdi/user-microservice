@@ -32,8 +32,8 @@ export class PostgresFieldsService implements IServicelocatorfields {
     @InjectRepository(Fields)
     private fieldsRepository: Repository<Fields>,
     @InjectRepository(FieldValues)
-    private fieldsValuesRepository: Repository<FieldValues>
-  ) { }
+    private fieldsValuesRepository: Repository<FieldValues>,
+  ) {}
 
   async getFormCustomField(requiredData, response) {
     const apiId = "FormData";
@@ -41,7 +41,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
       let whereClause = '(context IS NULL AND "contextType" IS NULL)';
       const fileread = readFileSync(
         join(process.cwd(), "src/utils/corefield.json"),
-        "utf8"
+        "utf8",
       );
       const corefield = JSON.parse(fileread);
       if (!requiredData.context && !requiredData.contextType) {
@@ -54,7 +54,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
             apiId,
             "NOT_FOUND",
             `Fields not found for the search term`,
-            HttpStatus.NOT_FOUND
+            HttpStatus.NOT_FOUND,
           );
         }
         return APIResponse.success(
@@ -62,7 +62,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
           apiId,
           data,
           HttpStatus.OK,
-          "Fields fetched successfully."
+          "Fields fetched successfully.",
         );
       }
 
@@ -81,7 +81,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
           apiId,
           "NOT_FOUND",
           `Fields not found for the search term`,
-          HttpStatus.NOT_FOUND
+          HttpStatus.NOT_FOUND,
         );
       }
       if (
@@ -96,13 +96,13 @@ export class PostgresFieldsService implements IServicelocatorfields {
         apiId,
         data,
         HttpStatus.OK,
-        "Fields fetched successfully."
+        "Fields fetched successfully.",
       );
     } catch (error) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error: ${error.message}`,
-        apiId
+        apiId,
       );
 
       const errorMessage = error.message || API_RESPONSES.SERVER_ERROR;
@@ -111,7 +111,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         apiId,
         API_RESPONSES.SERVER_ERROR,
         errorMessage,
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
@@ -151,10 +151,10 @@ export class PostgresFieldsService implements IServicelocatorfields {
           getFieldDetails.type == "radio") &&
         getFieldDetails.sourceDetails.source == "table"
       ) {
-        let fieldValue = fieldsData["value"][0];
+        const fieldValue = fieldsData["value"][0];
         const getOption = await this.findDynamicOptions(
           getFieldDetails.sourceDetails.table,
-          `"${getFieldDetails?.sourceDetails?.table}_id"='${fieldValue}'`
+          `"${getFieldDetails?.sourceDetails?.table}_id"='${fieldValue}'`,
         );
         const transformedFieldParams = {
           options: getOption.flatMap((param) => {
@@ -175,11 +175,11 @@ export class PostgresFieldsService implements IServicelocatorfields {
       }
       const checkValidation = this.validateFieldValue(
         getFieldDetails,
-        fieldsData["value"]
+        fieldsData["value"],
       );
       if (typeof checkValidation === "object" && "error" in checkValidation) {
         invalidateFields.push(
-          `${fieldId}: ${getFieldDetails["name"]} - ${checkValidation?.error?.message}`
+          `${fieldId}: ${getFieldDetails["name"]} - ${checkValidation?.error?.message}`,
         );
       }
     }
@@ -210,7 +210,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
       return {
         isValid: false,
         error: `The following fields are not valid for this user: ${invalidFieldIds.join(
-          ", "
+          ", ",
         )}.`,
       };
     }
@@ -222,7 +222,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
   public async validateCustomFieldByContext(
     cohortCreateDto,
     context: string,
-    contextType: string
+    contextType: string,
   ) {
     const fieldValues = cohortCreateDto ? cohortCreateDto.customFields : [];
     const encounteredKeys = [];
@@ -254,7 +254,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         getFieldDetails.sourceDetails.source == "table"
       ) {
         const getOption = await this.findDynamicOptions(
-          getFieldDetails.sourceDetails.table
+          getFieldDetails.sourceDetails.table,
         );
         const transformedFieldParams = {
           options: getOption.map((param) => ({
@@ -269,12 +269,12 @@ export class PostgresFieldsService implements IServicelocatorfields {
 
       const checkValidation = this.validateFieldValue(
         getFieldDetails,
-        fieldsData["value"]
+        fieldsData["value"],
       );
 
       if (typeof checkValidation === "object" && "error" in checkValidation) {
         invalidateFields.push(
-          `${fieldId}: ${getFieldDetails["name"]} - ${checkValidation?.error?.message}`
+          `${fieldId}: ${getFieldDetails["name"]} - ${checkValidation?.error?.message}`,
         );
       }
     }
@@ -306,7 +306,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
       return {
         isValid: false,
         error: `The following fields are not valid for this user: ${invalidFieldIds.join(
-          ", "
+          ", ",
         )}.`,
       };
     }
@@ -374,7 +374,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
           apiId,
           `Fields already exist`,
           `CONFLICT`,
-          HttpStatus.CONFLICT
+          HttpStatus.CONFLICT,
         );
       }
 
@@ -399,9 +399,8 @@ export class PostgresFieldsService implements IServicelocatorfields {
           WHERE value = '${sourceFieldName["value"]}' 
           GROUP BY  "name", "value"`;
 
-          const checkSourceData = await this.fieldsValuesRepository.query(
-            query
-          );
+          const checkSourceData =
+            await this.fieldsValuesRepository.query(query);
 
           //If code is not exist in db
           if (checkSourceData.length === 0) {
@@ -412,7 +411,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
                 apiId,
                 "BAD_REQUEST",
                 `Error: This code '${sourceFieldName["value"]}' does not exist in the '${fieldsData.sourceDetails.table}' table.`,
-                HttpStatus.BAD_REQUEST
+                HttpStatus.BAD_REQUEST,
               );
             }
 
@@ -423,7 +422,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
               sourceFieldName["value"],
               createdBy,
               sourceFieldName["controllingfieldfk"],
-              fieldsData.dependsOn
+              fieldsData.dependsOn,
             );
           } else {
             //If code is exist in db and isCreate flag is true
@@ -433,7 +432,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
                 apiId,
                 "CONFLICT",
                 `Error: This code '${sourceFieldName["value"]}' already exists for '${checkSourceData[0].name}' in the '${fieldsData.sourceDetails.table}' table.`,
-                HttpStatus.CONFLICT
+                HttpStatus.CONFLICT,
               );
             }
 
@@ -443,7 +442,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
               sourceFieldName["name"],
               sourceFieldName["value"],
               updatedBy,
-              sourceFieldName["controllingfieldfk"]
+              sourceFieldName["controllingfieldfk"],
             );
           }
         }
@@ -462,13 +461,13 @@ export class PostgresFieldsService implements IServicelocatorfields {
         apiId,
         { result, error },
         HttpStatus.CREATED,
-        "Fields created successfully."
+        "Fields created successfully.",
       );
     } catch (e) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error: ${e.message}`,
-        apiId
+        apiId,
       );
       const errorMessage = e?.message || API_RESPONSES.SERVER_ERROR;
       return APIResponse.error(
@@ -476,7 +475,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         apiId,
         API_RESPONSES.SERVER_ERROR,
         `Error : ${errorMessage}`,
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
@@ -485,7 +484,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
     fieldId: any,
     request: any,
     fieldsUpdateDto: FieldsUpdateDto,
-    response: Response
+    response: Response,
   ) {
     const apiId = APIID.FIELDS_CREATE;
     try {
@@ -538,9 +537,8 @@ export class PostgresFieldsService implements IServicelocatorfields {
           WHERE value = '${sourceFieldName["value"]}' 
           GROUP BY  "name", "value"`;
 
-          const checkSourceData = await this.fieldsValuesRepository.query(
-            query
-          );
+          const checkSourceData =
+            await this.fieldsValuesRepository.query(query);
 
           //If code is not exist in db
           if (checkSourceData.length === 0) {
@@ -551,7 +549,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
                 apiId,
                 "BAD_REQUEST",
                 `Error: This code '${sourceFieldName["value"]}' does not exist in the '${getSourceDetails.sourceDetails.table}' table.`,
-                HttpStatus.BAD_REQUEST
+                HttpStatus.BAD_REQUEST,
               );
             }
 
@@ -562,7 +560,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
               sourceFieldName["value"],
               createdBy,
               sourceFieldName["controllingfieldfk"],
-              getSourceDetails.dependsOn
+              getSourceDetails.dependsOn,
             );
           } else {
             //If code is exist in db and isCreate flag is true
@@ -572,7 +570,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
                 apiId,
                 "CONFLICT",
                 `Error: This code '${sourceFieldName["value"]}' already exists for '${checkSourceData[0].name}' in the '${getSourceDetails.sourceDetails.table}' table.`,
-                HttpStatus.CONFLICT
+                HttpStatus.CONFLICT,
               );
             }
 
@@ -582,7 +580,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
               sourceFieldName["name"],
               sourceFieldName["value"],
               updatedBy,
-              sourceFieldName["controllingfieldfk"]
+              sourceFieldName["controllingfieldfk"],
             );
           }
         }
@@ -612,7 +610,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
           if (checkSourceData[0].count == 0) {
             const addFieldParamsValue = await this.addOptionsInFieldParams(
               fieldId,
-              sourceFieldName
+              sourceFieldName,
             );
             if (addFieldParamsValue !== true) {
               return APIResponse.error(
@@ -620,7 +618,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
                 apiId,
                 "Internal Server Error",
                 `Error : ${addFieldParamsValue}`,
-                HttpStatus.INTERNAL_SERVER_ERROR
+                HttpStatus.INTERNAL_SERVER_ERROR,
               );
             }
           }
@@ -639,13 +637,13 @@ export class PostgresFieldsService implements IServicelocatorfields {
         apiId,
         result,
         HttpStatus.CREATED,
-        "Fields updated successfully."
+        "Fields updated successfully.",
       );
     } catch (e) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error: ${e.message}`,
-        apiId
+        apiId,
       );
       const errorMessage = e?.message || API_RESPONSES.SERVER_ERROR;
       return APIResponse.error(
@@ -653,7 +651,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         apiId,
         API_RESPONSES.SERVER_ERROR,
         `Error : ${errorMessage}`,
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
@@ -693,7 +691,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
     value: string,
     createdBy: string,
     controllingfieldfk?: string,
-    dependsOn?: string
+    dependsOn?: string,
   ) {
     let createSourceFields = `INSERT INTO public.${tableName} ("name", "value", "createdBy"`;
 
@@ -716,9 +714,8 @@ export class PostgresFieldsService implements IServicelocatorfields {
     }
 
     //Insert data into source table
-    const checkSourceData = await this.fieldsValuesRepository.query(
-      createSourceFields
-    );
+    const checkSourceData =
+      await this.fieldsValuesRepository.query(createSourceFields);
     if (checkSourceData.length == 0) {
       return false;
     }
@@ -729,7 +726,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
     name: string,
     value: string,
     updatedBy: string,
-    controllingfieldfk?: string
+    controllingfieldfk?: string,
   ) {
     let updateSourceDetails = `UPDATE public.${tableName} SET "name"='${name}',"updatedBy"='${updatedBy}'`;
 
@@ -739,9 +736,8 @@ export class PostgresFieldsService implements IServicelocatorfields {
 
     updateSourceDetails += ` WHERE value='${value}';`;
 
-    const updateSourceData = await this.fieldsValuesRepository.query(
-      updateSourceDetails
-    );
+    const updateSourceData =
+      await this.fieldsValuesRepository.query(updateSourceDetails);
     if (updateSourceData.length == 0) {
       return false;
     }
@@ -786,7 +782,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
     tenantId: string,
     request: any,
     fieldsSearchDto: FieldsSearchDto,
-    response: Response
+    response: Response,
   ) {
     const apiId = APIID.FIELDS_SEARCH;
     try {
@@ -796,9 +792,9 @@ export class PostgresFieldsService implements IServicelocatorfields {
       offset = offset ? offset : 0;
 
       const fieldKeys = this.fieldsRepository.metadata.columns.map(
-        (column) => column.propertyName
+        (column) => column.propertyName,
       );
-      let tenantCond = tenantId
+      const tenantCond = tenantId
         ? `"tenantId" = '${tenantId}'`
         : `"tenantId" IS NULL`;
       let whereClause = tenantCond;
@@ -819,7 +815,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
               apiId,
               "BAD_REQUEST",
               `Invalid Filter Entered : ${key}`,
-              HttpStatus.BAD_REQUEST
+              HttpStatus.BAD_REQUEST,
             );
           }
         });
@@ -832,7 +828,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
           apiId,
           "NOT_FOUND",
           `Fields not found for the search term`,
-          HttpStatus.NOT_FOUND
+          HttpStatus.NOT_FOUND,
         );
       }
       return APIResponse.success(
@@ -840,13 +836,13 @@ export class PostgresFieldsService implements IServicelocatorfields {
         apiId,
         fieldData,
         HttpStatus.OK,
-        "Fields fetched successfully."
+        "Fields fetched successfully.",
       );
     } catch (error) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error: ${error.message}`,
-        apiId
+        apiId,
       );
       const errorMessage = error.message || API_RESPONSES.SERVER_ERROR;
       return APIResponse.error(
@@ -854,7 +850,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         apiId,
         API_RESPONSES.SERVER_ERROR,
         errorMessage,
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
@@ -872,9 +868,8 @@ export class PostgresFieldsService implements IServicelocatorfields {
       queryOptions.take = parseInt(limit);
     }
 
-    const [results, totalCount] = await this.fieldsRepository.findAndCount(
-      queryOptions
-    );
+    const [results, totalCount] =
+      await this.fieldsRepository.findAndCount(queryOptions);
 
     const mappedResponse = await this.mappedResponseField(results);
     return { mappedResponse, totalCount };
@@ -883,7 +878,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
   async createFieldValues(
     request: any,
     fieldValuesDto: FieldValuesDto,
-    res: Response
+    res: Response,
   ) {
     const apiId = APIID.FIELDVALUES_CREATE;
 
@@ -895,7 +890,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
           apiId,
           `Fields not found or already exist`,
           `Fields not found or already exist`,
-          HttpStatus.NOT_FOUND
+          HttpStatus.NOT_FOUND,
         );
       }
       return APIResponse.success(
@@ -903,13 +898,13 @@ export class PostgresFieldsService implements IServicelocatorfields {
         apiId,
         result,
         HttpStatus.CREATED,
-        "Field Values created successfully"
+        "Field Values created successfully",
       );
     } catch (error) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error: ${error.message}`,
-        apiId
+        apiId,
       );
       const errorMessage = error.message || API_RESPONSES.SERVER_ERROR;
       return APIResponse.error(
@@ -917,7 +912,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         apiId,
         API_RESPONSES.SERVER_ERROR,
         errorMessage,
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
@@ -925,7 +920,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
   async searchFieldValues(
     request: any,
     fieldValuesSearchDto: FieldValuesSearchDto,
-    response: Response
+    response: Response,
   ) {
     const apiId = APIID.FIELDVALUES_SEARCH;
     try {
@@ -937,7 +932,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
       const getFieldValue = await this.getSearchFieldValueData(
         offset,
         limit,
-        whereClause
+        whereClause,
       );
 
       const result = {
@@ -950,13 +945,13 @@ export class PostgresFieldsService implements IServicelocatorfields {
         apiId,
         result,
         HttpStatus.OK,
-        "Field Values fetched successfully."
+        "Field Values fetched successfully.",
       );
     } catch (e) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error: ${e.message}`,
-        apiId
+        apiId,
       );
       const errorMessage = e?.message || API_RESPONSES.SERVER_ERROR;
       return APIResponse.error(
@@ -964,7 +959,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         apiId,
         API_RESPONSES.SERVER_ERROR,
         `Error : ${errorMessage}`,
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
@@ -972,9 +967,8 @@ export class PostgresFieldsService implements IServicelocatorfields {
   async getSearchFieldValueData(
     offset: number,
     limit: string,
-    searchData: any
+    searchData: any,
   ) {
-
     // Assign user in multiple block
     // const results = await this.fieldsValuesRepository
     // .createQueryBuilder("fieldValues")
@@ -1007,7 +1001,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
   async getSearchFieldValueDataByIds(
     offset: number,
     limit: string,
-    searchData: any
+    searchData: any,
   ) {
     const queryOptions: any = {
       where: {
@@ -1047,7 +1041,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
 
   async updateFieldValues(
     id: string,
-    fieldValuesUpdateDto: FieldValuesUpdateDto
+    fieldValuesUpdateDto: FieldValuesUpdateDto,
   ) {
     try {
       const fieldsData: any = {};
@@ -1062,7 +1056,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
       });
       const response = await this.fieldsValuesRepository.update(
         id,
-        fieldValuesUpdateDto
+        fieldValuesUpdateDto,
       );
 
       return response;
@@ -1178,7 +1172,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
   //Get all fields options
   public async getFieldOptions(
     fieldsOptionsSearchDto: FieldsOptionsSearchDto,
-    response: Response
+    response: Response,
   ) {
     const apiId = APIID.FIELDVALUES_SEARCH;
     try {
@@ -1227,33 +1221,33 @@ export class PostgresFieldsService implements IServicelocatorfields {
               apiId,
               `No ControllingFields Found for this Field`,
               `NOT_FOUND`,
-              HttpStatus.NOT_FOUND
+              HttpStatus.NOT_FOUND,
             );
           }
-          let foreignKeys = controllingfieldfk.toString();
+          const foreignKeys = controllingfieldfk.toString();
           whereClause = `"${fetchFieldParams?.dependsOn}_id" IN(${foreignKeys})`;
         }
-        
+
         dynamicOptions = await this.findDynamicOptions(
           fieldName,
           whereClause,
           offset,
           limit,
           order,
-          optionName
+          optionName,
         );
       } else if (fetchFieldParams?.sourceDetails?.source === "jsonFile") {
         const filePath = path.join(
           process.cwd(),
-          `${fetchFieldParams.sourceDetails.filePath}`
+          `${fetchFieldParams.sourceDetails.filePath}`,
         );
         const getFieldValuesFromJson = JSON.parse(
-          readFileSync(filePath, "utf-8")
+          readFileSync(filePath, "utf-8"),
         );
 
         if (controllingfieldfk) {
           dynamicOptions = getFieldValuesFromJson.options.filter(
-            (option) => option?.controllingfieldfk === controllingfieldfk
+            (option) => option?.controllingfieldfk === controllingfieldfk,
           );
         } else {
           dynamicOptions = getFieldValuesFromJson;
@@ -1261,7 +1255,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
       } else {
         if (fetchFieldParams.fieldParams["options"] && controllingfieldfk) {
           dynamicOptions = fetchFieldParams?.fieldParams["options"].filter(
-            (option: any) => option?.controllingfieldfk === controllingfieldfk
+            (option: any) => option?.controllingfieldfk === controllingfieldfk,
           );
         } else {
           dynamicOptions = fetchFieldParams?.fieldParams["options"];
@@ -1274,7 +1268,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
           apiId,
           `No data found in ${fieldName} table`,
           `NOT_FOUND`,
-          HttpStatus.NOT_FOUND
+          HttpStatus.NOT_FOUND,
         );
       }
 
@@ -1299,8 +1293,8 @@ export class PostgresFieldsService implements IServicelocatorfields {
           label: item[labelField],
           ...Object.fromEntries(
             Object.entries(item).filter(
-              ([key]) => !["value", "label"].includes(key)
-            )
+              ([key]) => !["value", "label"].includes(key),
+            ),
           ),
         };
       });
@@ -1316,7 +1310,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         apiId,
         result,
         HttpStatus.OK,
-        "Field options fetched successfully."
+        "Field options fetched successfully.",
       );
     } catch (e) {
       LoggerUtil.error(`${API_RESPONSES.SERVER_ERROR}`, `Error: ${e.message}`);
@@ -1326,7 +1320,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         apiId,
         API_RESPONSES.SERVER_ERROR,
         `Error : ${errorMessage}`,
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
@@ -1361,7 +1355,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
           apiId,
           `Please select additional filters. The deletion cannot proceed because multiple fields have the same name.`,
           `BAD_REQUEST`,
-          HttpStatus.BAD_REQUEST
+          HttpStatus.BAD_REQUEST,
         );
       }
 
@@ -1375,7 +1369,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
           apiId,
           `Field not found.`,
           `NOT_FOUND`,
-          HttpStatus.NOT_FOUND
+          HttpStatus.NOT_FOUND,
         );
       }
 
@@ -1393,7 +1387,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
             apiId,
             `Fields option not found`,
             `NOT_FOUND`,
-            HttpStatus.NOT_FOUND
+            HttpStatus.NOT_FOUND,
           );
         }
         result = { affected: affectedRow };
@@ -1410,7 +1404,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
           let fieldParamsData: any = {};
           if (fieldParamsOptions) {
             fieldParamsOptions = fieldParamsOptions.filter(
-              (option) => option.name !== removeOption
+              (option) => option.name !== removeOption,
             );
           }
           fieldParamsData =
@@ -1420,7 +1414,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
 
           result = await this.fieldsRepository.update(
             { fieldId: getField.fieldId },
-            { fieldParams: fieldParamsData }
+            { fieldParams: fieldParamsData },
           );
         } else {
           return await APIResponse.error(
@@ -1428,7 +1422,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
             apiId,
             `Fields option not found`,
             `NOT_FOUND`,
-            HttpStatus.NOT_FOUND
+            HttpStatus.NOT_FOUND,
           );
         }
       }
@@ -1438,7 +1432,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
           apiId,
           result,
           HttpStatus.OK,
-          "Field Options deleted successfully."
+          "Field Options deleted successfully.",
         );
       }
     } catch (e) {
@@ -1449,7 +1443,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         apiId,
         API_RESPONSES.SERVER_ERROR,
         `Error : ${errorMessage}`,
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
@@ -1460,7 +1454,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
     offset?: any,
     limit?: any,
     order?: any,
-    optionSelected?: any
+    optionSelected?: any,
   ) {
     try {
       const orderCond = order || "";
@@ -1494,7 +1488,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
   async findCustomFields(
     context: string,
     contextType?: string[],
-    getFields?: string[]
+    getFields?: string[],
   ) {
     const condition: any = {
       context,
@@ -1515,8 +1509,10 @@ export class PostgresFieldsService implements IServicelocatorfields {
       condition.contextType = IsNull();
     }
 
-    const customFields = await this.fieldsRepository.find({ where: [condition, {context: IsNull(), contextType: IsNull()}] });
-    
+    const customFields = await this.fieldsRepository.find({
+      where: [condition, { context: IsNull(), contextType: IsNull() }],
+    });
+
     return customFields;
   }
 
@@ -1591,7 +1587,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
     context: string,
     contextType?: string,
     getFields?: string[],
-    requiredFieldOptions?: boolean
+    requiredFieldOptions?: boolean,
   ) {
     let customField;
     const fieldsArr = [];
@@ -1600,7 +1596,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
       this.findCustomFields(context, [contextType], getFields),
     ]);
     const filledValuesMap = new Map(
-      filledValues.map((item) => [item.fieldId, item.value])
+      filledValues.map((item) => [item.fieldId, item.value]),
     );
     if (customFields) {
       for (const data of customFields) {
@@ -1629,13 +1625,13 @@ export class PostgresFieldsService implements IServicelocatorfields {
         ) {
           if (data?.sourceDetails?.source === "table") {
             const dynamicOptions = await this.findDynamicOptions(
-              data?.sourceDetails?.table
+              data?.sourceDetails?.table,
             );
             customField.options = dynamicOptions;
           } else if (data?.sourceDetails?.source === "jsonFile") {
             const filePath = path.join(
               process.cwd(),
-              `${data?.sourceDetails?.filePath}`
+              `${data?.sourceDetails?.filePath}`,
             );
             customField = JSON.parse(readFileSync(filePath, "utf-8"));
           } else {
@@ -1652,16 +1648,16 @@ export class PostgresFieldsService implements IServicelocatorfields {
   }
 
   async getEditableFieldsAttributes(tenantId: string) {
-    let tenantData = tenantId ? tenantId : 'default'
+    const tenantData = tenantId ? tenantId : "default";
     const getFieldsAttributesQuery = `
           SELECT * 
           FROM "public"."Fields" 
           WHERE "fieldAttributes"->>'isEditable' = $1; 
-        `;        
+        `;
     const getFieldsAttributesParams = ["true"];
     return await this.fieldsRepository.query(
       getFieldsAttributesQuery,
-      getFieldsAttributesParams
+      getFieldsAttributesParams,
     );
   }
 
@@ -1673,7 +1669,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
 
     const result: any = await this.fieldsValuesRepository.update(
       { itemId, fieldId: data.fieldId },
-      { value: data.value }
+      { value: data.value },
     );
 
     let newResult;
@@ -1695,25 +1691,25 @@ export class PostgresFieldsService implements IServicelocatorfields {
     if (!Array.isArray(data.value)) {
       data.value = [data.value];
     }
-  
+
     const result = await this.fieldsValuesRepository.insert({
       itemId,
       fieldId: data.fieldId,
       value: data.value,
     });
-  
+
     return {
       ...result,
       correctValue: true,
     };
   }
-  
+
   validateFieldValue(field: any, value: any) {
     try {
       const fieldInstance = FieldFactory.createField(
         field.type,
         field.fieldAttributes,
-        field.fieldParams
+        field.fieldParams,
       );
       const isValid = fieldInstance.validate(value);
       return isValid;
@@ -1739,7 +1735,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         })) || [];
 
       // let fieldValidation = field.fieldAttributes[tenantId] || field.fieldAttributes["default"];
-      let fieldValidation = field.fieldAttributes;
+      const fieldValidation = field.fieldAttributes;
 
       return {
         label: field.label,
@@ -1776,7 +1772,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
   public async getCustomFieldDetails(
     itemId: string,
     tableName: string,
-    fieldOption?: boolean
+    fieldOption?: boolean,
   ) {
     let joinCond;
     if (tableName === "Users") {
@@ -1808,7 +1804,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         let optionValues;
 
         // let processedValue = data.value;
-        let selectedValues = data.value;
+        const selectedValues = data.value;
         const allFieldsOptions = data?.fieldParams?.options
           ? data.fieldParams.options
           : null;
@@ -1845,7 +1841,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
             const whereCond = `"${data.sourceDetails.table}_id" IN (${allIds})`;
             const labels = await this.findDynamicOptions(
               data.sourceDetails.table,
-              whereCond
+              whereCond,
             );
             const tableName = data.sourceDetails.table;
 
@@ -1858,7 +1854,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
               value: data[nameField],
             }));
           } else if (data.sourceDetails?.externalsource) {
-              processedValue = data?.value
+            processedValue = data?.value;
           }
         } else {
           processedValue = selectedValues;
@@ -1877,7 +1873,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
     } catch (error) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
-        `Error: ${error.message}`
+        `Error: ${error.message}`,
       );
     }
   }
@@ -1891,7 +1887,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
   }
   async deleteFieldValues(
     fieldValuesDeleteDto: FieldValuesDeleteDto,
-    response: Response
+    response: Response,
   ) {
     const apiId = APIID.FIELDVALUES_DELETE;
     try {
@@ -1912,14 +1908,14 @@ export class PostgresFieldsService implements IServicelocatorfields {
           conditions
             .map(
               (condition, index) =>
-                `(fieldId = :fieldId${index} AND itemId = :itemId${index})`
+                `(fieldId = :fieldId${index} AND itemId = :itemId${index})`,
             )
             .join(" OR "),
           conditions.reduce((acc, condition, index) => {
             acc[`fieldId${index}`] = condition.fieldId;
             acc[`itemId${index}`] = condition.itemId;
             return acc;
-          }, {})
+          }, {}),
         )
         .execute();
 
@@ -1928,13 +1924,13 @@ export class PostgresFieldsService implements IServicelocatorfields {
         apiId,
         result,
         HttpStatus.OK,
-        "Field Values deleted successfully."
+        "Field Values deleted successfully.",
       );
     } catch (e) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error: ${e.message}`,
-        apiId
+        apiId,
       );
       const errorMessage = e?.message || API_RESPONSES.SERVER_ERROR;
       return APIResponse.error(
@@ -1942,7 +1938,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         apiId,
         API_RESPONSES.SERVER_ERROR,
         `Error : ${errorMessage}`,
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }

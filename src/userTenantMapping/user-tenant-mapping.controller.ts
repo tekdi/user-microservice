@@ -58,7 +58,7 @@ export class AssignTenantController {
     @Headers() headers,
     @Req() request: Request,
     @Body() userTenantMappingDto: UserTenantMappingDto,
-    @Res() response: Response
+    @Res() response: Response,
   ) {
     return await this.assignTenantAdapter
       .buildAssignTenantAdapter()

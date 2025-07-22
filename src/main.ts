@@ -41,7 +41,7 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.use(
     process.env.IMAGEPATH,
-    express.static(join(__dirname, "..", "uploads"))
+    express.static(join(__dirname, "..", "uploads")),
   );
   app.setGlobalPrefix("user/v1", {
     exclude: [{ path: "health", method: RequestMethod.GET }],
@@ -54,7 +54,7 @@ async function bootstrap() {
   //     transform: true,
   //   }),
   // );
-  
+
   const config = new DocumentBuilder()
     .setTitle("Shiksha Platform")
     .setDescription("CRUD API")
@@ -62,7 +62,7 @@ async function bootstrap() {
     .addTag("V1")
     .addApiKey(
       { type: "apiKey", name: "Authorization", in: "header" },
-      "access-token"
+      "access-token",
     )
     .build();
   const document = SwaggerModule.createDocument(app, config);

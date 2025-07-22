@@ -5,7 +5,7 @@ export interface IServicelocatorprivilegeRole {
   createPrivilegeRole(
     request: any,
     createPrivilegeRole: CreatePrivilegeRoleDto,
-    response: Response
+    response: Response,
   );
   getPrivilegeRole(userId, request, response: Response);
 }

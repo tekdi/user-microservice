@@ -1,25 +1,40 @@
 import {
-  Controller, Headers, Post, UseFilters, UsePipes, Req,
-  Res, ValidationPipe,
+  Controller,
+  Headers,
+  Post,
+  UseFilters,
+  UsePipes,
+  Req,
+  Res,
+  ValidationPipe,
   BadRequestException,
   Body,
-  ParseUUIDPipe
-} from '@nestjs/common';
-import { ApiBadRequestResponse, ApiBasicAuth, ApiBody, ApiCreatedResponse, ApiHeader, ApiInternalServerErrorResponse, ApiTags } from '@nestjs/swagger';
-import { APIID } from '@utils/api-id.config';
-import { API_RESPONSES } from '@utils/response.messages';
-import { isUUID } from 'class-validator';
-import { Response, Request } from 'express';
-import { AllExceptionsFilter } from 'src/common/filters/exception.filter';
-import { CohortAcademicYearDto } from './dto/cohort-academicyear.dto';
-import { CohortAcademicYearAdapter } from './cohortacademicyearsadaptor';
-import { GetUserId } from 'src/common/decorators/getUserId.decorator';
+  ParseUUIDPipe,
+} from "@nestjs/common";
+import {
+  ApiBadRequestResponse,
+  ApiBasicAuth,
+  ApiBody,
+  ApiCreatedResponse,
+  ApiHeader,
+  ApiInternalServerErrorResponse,
+  ApiTags,
+} from "@nestjs/swagger";
+import { APIID } from "@utils/api-id.config";
+import { API_RESPONSES } from "@utils/response.messages";
+import { isUUID } from "class-validator";
+import { Response, Request } from "express";
+import { AllExceptionsFilter } from "src/common/filters/exception.filter";
+import { CohortAcademicYearDto } from "./dto/cohort-academicyear.dto";
+import { CohortAcademicYearAdapter } from "./cohortacademicyearsadaptor";
+import { GetUserId } from "src/common/decorators/getUserId.decorator";
 
 @ApiTags("CohortAcademicYear")
-@Controller('cohort-academic-year')
+@Controller("cohort-academic-year")
 export class CohortAcademicYearController {
-
-  constructor(private readonly cohortAcademicYearAdapter: CohortAcademicYearAdapter) { }
+  constructor(
+    private readonly cohortAcademicYearAdapter: CohortAcademicYearAdapter,
+  ) {}
 
   @UseFilters(new AllExceptionsFilter(APIID.ADD_COHORT_TO_ACADEMIC_YEAR))
   @Post("/create")
@@ -39,11 +54,18 @@ export class CohortAcademicYearController {
     @Res() response: Response,
     @GetUserId("userId", ParseUUIDPipe) userId: string,
   ) {
-    let tenantId = headers["tenantid"];
+    const tenantId = headers["tenantid"];
     if (tenantId && !isUUID(tenantId)) {
       throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
     }
     cohortAcademicYearDto.createdBy = userId;
-    return this.cohortAcademicYearAdapter.buildAcademicYears().createCohortAcademicYear(tenantId, request, cohortAcademicYearDto, response);
+    return this.cohortAcademicYearAdapter
+      .buildAcademicYears()
+      .createCohortAcademicYear(
+        tenantId,
+        request,
+        cohortAcademicYearDto,
+        response,
+      );
   }
 }

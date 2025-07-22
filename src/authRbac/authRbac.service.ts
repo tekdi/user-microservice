@@ -22,7 +22,7 @@ export class AuthRbacService {
     private jwtService: JwtService,
     private configService: ConfigService,
     private readonly userAdapter: UserAdapter,
-    private readonly postgresRoleService: PostgresRoleService
+    private readonly postgresRoleService: PostgresRoleService,
   ) {
     this.issuer = this.configService.get<string>("ISSUER");
     this.audience = this.configService.get<string>("AUDIENCE");
@@ -42,7 +42,7 @@ export class AuthRbacService {
   async signInRbac(
     username: string,
     tenantId: string,
-    response: Response
+    response: Response,
   ): Promise<any> {
     const apiId = APIID.RBAC_TOKEN;
     const userData = await this.userAdapter
@@ -55,13 +55,13 @@ export class AuthRbacService {
         apiId,
         "Bad Request",
         "User details or tenant not found for user",
-        HttpStatus.BAD_REQUEST
+        HttpStatus.BAD_REQUEST,
       );
     }
 
     const userRoles = await this.postgresRoleService.findUserRoleData(
       userData?.userId,
-      tenantId
+      tenantId,
     );
 
     if (!userRoles?.length) {
@@ -70,7 +70,7 @@ export class AuthRbacService {
         apiId,
         "Bad Request",
         "Roles not found for user",
-        HttpStatus.BAD_REQUEST
+        HttpStatus.BAD_REQUEST,
       );
     }
 
@@ -95,7 +95,7 @@ export class AuthRbacService {
       apiId,
       result,
       HttpStatus.OK,
-      "User and related entries deleted Successfully."
+      "User and related entries deleted Successfully.",
     );
   }
 
@@ -104,9 +104,8 @@ export class AuthRbacService {
     if (!roleIds.length) {
       return [];
     }
-    const privilegesData = await this.postgresRoleService.findPrivilegeByRoleId(
-      roleIds
-    );
+    const privilegesData =
+      await this.postgresRoleService.findPrivilegeByRoleId(roleIds);
 
     const privileges = privilegesData.map(({ code }) => code);
     return privileges;

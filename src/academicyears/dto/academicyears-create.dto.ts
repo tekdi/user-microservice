@@ -6,14 +6,14 @@ export class AcademicYearDto {
   @IsNotEmpty()
   @IsDateString(
     {},
-    { message: "startDate must be in ISO 8601 format (e.g., YYYY-MM-DD)" }
+    { message: "startDate must be in ISO 8601 format (e.g., YYYY-MM-DD)" },
   )
   startDate: string;
 
   @ApiProperty({ description: "endDate", example: "YYYY-MM-DD" })
   @IsDateString(
     {},
-    { message: "endDate must be in ISO 8601 format (e.g., YYYY-MM-DD)" }
+    { message: "endDate must be in ISO 8601 format (e.g., YYYY-MM-DD)" },
   )
   endDate: string;
 

@@ -1,7 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import { HttpStatus } from "@nestjs/common";
 
-
 // Response structure interface
 export interface ServerResponse<T = any> {
   id: string;
@@ -43,7 +42,11 @@ export default class APIResponse {
   }
   private static readonly API_VERSION = "1.0"; // Set version as a constant
 
-  public static success<T>(id: string, result: T, statusCode: HttpStatus = HttpStatus.OK): ServerResponse<T> {
+  public static success<T>(
+    id: string,
+    result: T,
+    statusCode: HttpStatus = HttpStatus.OK,
+  ): ServerResponse<T> {
     return {
       id,
       ver: APIResponse.API_VERSION,
@@ -59,7 +62,12 @@ export default class APIResponse {
     };
   }
 
-  public static error(id: string, errmsg: string, errorCode: string, statusCode: HttpStatus): ServerResponse {
+  public static error(
+    id: string,
+    errmsg: string,
+    errorCode: string,
+    statusCode: HttpStatus,
+  ): ServerResponse {
     return {
       id,
       ver: APIResponse.API_VERSION,

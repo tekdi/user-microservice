@@ -40,8 +40,8 @@ export class PostgresCohortMembersService {
     private readonly academicyearService: PostgresAcademicYearService,
     private readonly notificationRequest: NotificationRequest,
     private fieldsService: PostgresFieldsService,
-    private userService: PostgresUserService
-  ) { }
+    private userService: PostgresUserService,
+  ) {}
 
   //Get cohort member
   async getCohortMembers(
@@ -49,7 +49,7 @@ export class PostgresCohortMembersService {
     tenantId: any,
     fieldvalue: any,
     academicYearId: string,
-    res: Response
+    res: Response,
   ) {
     const apiId = APIID.COHORT_MEMBER_GET;
     try {
@@ -61,7 +61,7 @@ export class PostgresCohortMembersService {
           apiId,
           API_RESPONSES.BAD_REQUEST,
           API_RESPONSES.TANANT_ID_REQUIRED,
-          HttpStatus.BAD_REQUEST
+          HttpStatus.BAD_REQUEST,
         );
       }
 
@@ -71,13 +71,13 @@ export class PostgresCohortMembersService {
           apiId,
           API_RESPONSES.BAD_REQUEST,
           API_RESPONSES.COHORT_VALID_UUID,
-          HttpStatus.BAD_REQUEST
+          HttpStatus.BAD_REQUEST,
         );
       }
 
       const cohortAcademicYearMap = await this.isCohortExistForYear(
         academicYearId,
-        cohortId
+        cohortId,
       );
       if (cohortAcademicYearMap.length === 0) {
         return APIResponse.error(
@@ -85,14 +85,14 @@ export class PostgresCohortMembersService {
           apiId,
           API_RESPONSES.NOT_FOUND,
           API_RESPONSES.ACADEMICYEAR_COHORT_NOT_FOUND,
-          HttpStatus.NOT_FOUND
+          HttpStatus.NOT_FOUND,
         );
       }
       const cohortAcademicyearId =
         cohortAcademicYearMap[0].cohortAcademicYearId;
       const userDetails = await this.findcohortData(
         cohortId,
-        cohortAcademicyearId
+        cohortAcademicyearId,
       );
       if (userDetails === true) {
         const results = {
@@ -103,7 +103,7 @@ export class PostgresCohortMembersService {
           cohortId,
           "cohortId",
           fieldvalues,
-          cohortAcademicyearId
+          cohortAcademicyearId,
         );
         results.userDetails.push(cohortDetails);
 
@@ -112,7 +112,7 @@ export class PostgresCohortMembersService {
           apiId,
           results,
           HttpStatus.OK,
-          API_RESPONSES.COHORT_MEMBER_GET_SUCCESSFULLY
+          API_RESPONSES.COHORT_MEMBER_GET_SUCCESSFULLY,
         );
       } else {
         return APIResponse.error(
@@ -120,22 +120,22 @@ export class PostgresCohortMembersService {
           apiId,
           API_RESPONSES.NOT_FOUND,
           API_RESPONSES.COHORTMEMBER_NOTFOUND,
-          HttpStatus.NOT_FOUND
+          HttpStatus.NOT_FOUND,
         );
       }
     } catch (e) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error: ${e.message}`,
-        apiId
-      )
+        apiId,
+      );
       const errorMessage = e.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
       return APIResponse.error(
         res,
         apiId,
         API_RESPONSES.INTERNAL_SERVER_ERROR,
         errorMessage,
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
@@ -143,7 +143,7 @@ export class PostgresCohortMembersService {
     searchId: any,
     searchKey: any,
     fieldShowHide: any,
-    cohortAcademicyearId: string
+    cohortAcademicyearId: string,
   ) {
     const results = {
       userDetails: [],
@@ -152,7 +152,7 @@ export class PostgresCohortMembersService {
     const getUserDetails = await this.findUserName(
       searchId,
       searchKey,
-      cohortAcademicyearId
+      cohortAcademicyearId,
     );
 
     for (const data of getUserDetails) {
@@ -241,7 +241,7 @@ export class PostgresCohortMembersService {
     cohortMembersSearchDto: CohortMembersSearchDto,
     tenantId: string,
     academicyearId: string,
-    res: Response
+    res: Response,
   ) {
     const apiId = APIID.COHORT_MEMBER_SEARCH;
     try {
@@ -251,7 +251,7 @@ export class PostgresCohortMembersService {
           apiId,
           API_RESPONSES.BAD_REQUEST,
           API_RESPONSES.TENANT_ID_NOTFOUND,
-          HttpStatus.BAD_REQUEST
+          HttpStatus.BAD_REQUEST,
         );
       }
 
@@ -277,7 +277,7 @@ export class PostgresCohortMembersService {
       if (whereClause["cohortId"]) {
         const getYearExistRecord = await this.isCohortExistForYear(
           academicyearId,
-          cohortMembersSearchDto.filters.cohortId
+          cohortMembersSearchDto.filters.cohortId,
         );
         if (getYearExistRecord.length === 0) {
           return APIResponse.error(
@@ -285,11 +285,11 @@ export class PostgresCohortMembersService {
             apiId,
             API_RESPONSES.COHORT_NOTFOUND,
             API_RESPONSES.NOT_FOUND,
-            HttpStatus.NOT_FOUND
+            HttpStatus.NOT_FOUND,
           );
         }
         cohortYearExistInYear = getYearExistRecord.map(
-          (item) => item.cohortAcademicYearId
+          (item) => item.cohortAcademicYearId,
         );
         finalExistRecord = [...cohortYearExistInYear];
       }
@@ -298,7 +298,7 @@ export class PostgresCohortMembersService {
       if (whereClause["userId"]) {
         const getYearExitUser = await this.isUserExistForYear(
           academicyearId,
-          cohortMembersSearchDto.filters.userId
+          cohortMembersSearchDto.filters.userId,
         );
         if (getYearExitUser.length === 0) {
           return APIResponse.error(
@@ -306,11 +306,11 @@ export class PostgresCohortMembersService {
             apiId,
             API_RESPONSES.USER_NOTFOUND,
             API_RESPONSES.NOT_FOUND,
-            HttpStatus.NOT_FOUND
+            HttpStatus.NOT_FOUND,
           );
         }
         userYearExistInYear = getYearExitUser.map(
-          (item) => item.cohortAcademicYearId
+          (item) => item.cohortAcademicYearId,
         );
         finalExistRecord = [...userYearExistInYear];
       }
@@ -326,7 +326,7 @@ export class PostgresCohortMembersService {
           apiId,
           API_RESPONSES.COHORT_USER_NOTFOUND,
           API_RESPONSES.NOT_FOUND,
-          HttpStatus.NOT_FOUND
+          HttpStatus.NOT_FOUND,
         );
       }
       // Add cohortAcademicYearId filter if applicable
@@ -360,7 +360,7 @@ export class PostgresCohortMembersService {
         where,
         "true",
         options,
-        order
+        order,
       );
 
       if (results["userDetails"].length == 0) {
@@ -369,7 +369,7 @@ export class PostgresCohortMembersService {
           apiId,
           API_RESPONSES.NOT_FOUND,
           API_RESPONSES.USER_DETAIL_NOTFOUND,
-          HttpStatus.NOT_FOUND
+          HttpStatus.NOT_FOUND,
         );
       }
       return APIResponse.success(
@@ -377,21 +377,21 @@ export class PostgresCohortMembersService {
         apiId,
         results,
         HttpStatus.OK,
-        API_RESPONSES.COHORT_GET_SUCCESSFULLY
+        API_RESPONSES.COHORT_GET_SUCCESSFULLY,
       );
     } catch (e) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error: ${e.message}`,
-        apiId
-      )
+        apiId,
+      );
       const errorMessage = e.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
       return APIResponse.error(
         res,
         apiId,
         API_RESPONSES.INTERNAL_SERVER_ERROR,
         errorMessage,
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
@@ -434,7 +434,7 @@ export class PostgresCohortMembersService {
     where: any,
     fieldShowHide: any,
     options: any,
-    order: any
+    order: any,
   ) {
     const results = {
       totalCount: 0,
@@ -450,12 +450,14 @@ export class PostgresCohortMembersService {
         if (fieldShowHide === "false") {
           results.userDetails.push(data);
         } else {
-          const fieldValues =
-            await this.fieldsService.getCustomFieldDetails(data.userId, 'Users');
+          const fieldValues = await this.fieldsService.getCustomFieldDetails(
+            data.userId,
+            "Users",
+          );
           //get data by cohort membership Id
           let fieldValuesForCohort =
             await this.fieldsService.getFieldsAndFieldsValues(
-              data.cohortMembershipId
+              data.cohortMembershipId,
             );
           fieldValuesForCohort = fieldValuesForCohort.map((field) => {
             return {
@@ -481,7 +483,7 @@ export class PostgresCohortMembersService {
     res: Response,
     tenantId: string,
     deviceId: string,
-    academicyearId: string
+    academicyearId: string,
   ) {
     const apiId = APIID.COHORT_MEMBER_CREATE;
     try {
@@ -496,13 +498,13 @@ export class PostgresCohortMembersService {
           apiId,
           API_RESPONSES.BAD_REQUEST,
           API_RESPONSES.INVALID_USERID,
-          HttpStatus.BAD_REQUEST
+          HttpStatus.BAD_REQUEST,
         );
       }
       // check year is live or not
       const academicYear = await this.academicyearService.getActiveAcademicYear(
         academicyearId,
-        tenantId
+        tenantId,
       );
 
       if (!academicYear) {
@@ -511,13 +513,13 @@ export class PostgresCohortMembersService {
           apiId,
           HttpStatus.NOT_FOUND.toLocaleString(),
           API_RESPONSES.ACADEMICYEAR_NOT_FOUND,
-          HttpStatus.NOT_FOUND
+          HttpStatus.NOT_FOUND,
         );
       }
       //check this cohort exist this year or not
       const isExistAcademicYear = await this.findCohortAcademicYearId(
         academicyearId,
-        cohortMembers
+        cohortMembers,
       );
       if (!isExistAcademicYear) {
         return APIResponse.error(
@@ -525,7 +527,7 @@ export class PostgresCohortMembersService {
           apiId,
           HttpStatus.NOT_FOUND.toLocaleString(),
           API_RESPONSES.ACADEMICYEAR_COHORT_NOT_FOUND,
-          HttpStatus.NOT_FOUND
+          HttpStatus.NOT_FOUND,
         );
       }
       const cohortacAdemicyearId = isExistAcademicYear.cohortAcademicYearId;
@@ -543,7 +545,7 @@ export class PostgresCohortMembersService {
           apiId,
           API_RESPONSES.CONFLICT,
           `User '${cohortMembers.userId}' is already assigned to cohort '${cohortMembers.cohortId}'.`,
-          HttpStatus.CONFLICT
+          HttpStatus.CONFLICT,
         );
       }
 
@@ -551,30 +553,29 @@ export class PostgresCohortMembersService {
       cohortMembers.updatedBy = loginUser;
       cohortMembers.cohortAcademicYearId = cohortacAdemicyearId;
       // Create a new CohortMembers entity and populate it with cohortMembers data
-      const savedCohortMember = await this.cohortMembersRepository.save(
-        cohortMembers
-      );
+      const savedCohortMember =
+        await this.cohortMembersRepository.save(cohortMembers);
 
       return APIResponse.success(
         res,
         apiId,
         savedCohortMember,
         HttpStatus.OK,
-        API_RESPONSES.COHORTMEMBER_CREATED_SUCCESSFULLY
+        API_RESPONSES.COHORTMEMBER_CREATED_SUCCESSFULLY,
       );
     } catch (e) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error: ${e.message}`,
-        apiId
-      )
+        apiId,
+      );
       const errorMessage = e.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
       return APIResponse.error(
         res,
         apiId,
         API_RESPONSES.INTERNAL_SERVER_ERROR,
         errorMessage,
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
@@ -663,7 +664,7 @@ export class PostgresCohortMembersService {
     cohortMembershipId: string,
     loginUser: any,
     cohortMembersUpdateDto: CohortMembersUpdateDto,
-    res
+    res,
   ) {
     const apiId = APIID.COHORT_MEMBER_UPDATE;
     try {
@@ -674,7 +675,7 @@ export class PostgresCohortMembersService {
           apiId,
           "Bad Request",
           "Invalid input: Please Enter a valid UUID for cohortMembershipId.",
-          HttpStatus.BAD_REQUEST
+          HttpStatus.BAD_REQUEST,
         );
       }
       //validate custom fileds
@@ -687,7 +688,7 @@ export class PostgresCohortMembersService {
           await this.fieldsService.validateCustomFieldByContext(
             cohortMembersUpdateDto,
             "COHORTMEMBER",
-            "COHORTMEMBER"
+            "COHORTMEMBER",
           );
         if (!customFieldValidate || !isValid) {
           return APIResponse.error(
@@ -695,14 +696,15 @@ export class PostgresCohortMembersService {
             apiId,
             "BAD_REQUEST",
             `${customFieldValidate}`,
-            HttpStatus.BAD_REQUEST
+            HttpStatus.BAD_REQUEST,
           );
         }
       }
 
-      let cohortMembershipToUpdate = await this.cohortMembersRepository.findOne({
-        where: { cohortMembershipId: cohortMembershipId },
-      });
+      const cohortMembershipToUpdate =
+        await this.cohortMembersRepository.findOne({
+          where: { cohortMembershipId: cohortMembershipId },
+        });
 
       if (!cohortMembershipToUpdate) {
         return APIResponse.error(
@@ -710,12 +712,12 @@ export class PostgresCohortMembersService {
           apiId,
           "Not Found",
           "Invalid input: Cohort member not found.",
-          HttpStatus.NOT_FOUND
+          HttpStatus.NOT_FOUND,
         );
       }
       Object.assign(cohortMembershipToUpdate, cohortMembersUpdateDto);
-      let result = await this.cohortMembersRepository.save(
-        cohortMembershipToUpdate
+      const result = await this.cohortMembersRepository.save(
+        cohortMembershipToUpdate,
       );
       //update custom fields
       let responseForCustomField;
@@ -730,7 +732,7 @@ export class PostgresCohortMembersService {
         responseForCustomField = await this.processCustomFields(
           customFields,
           cohortMembershipId,
-          cohortMembersUpdateDto
+          cohortMembersUpdateDto,
         );
         if (result && responseForCustomField.success) {
           return APIResponse.success(
@@ -738,7 +740,7 @@ export class PostgresCohortMembersService {
             apiId,
             [],
             HttpStatus.CREATED,
-            API_RESPONSES.COHORTMEMBER_UPDATE_SUCCESSFULLY
+            API_RESPONSES.COHORTMEMBER_UPDATE_SUCCESSFULLY,
           );
         } else {
           const errorMessage =
@@ -748,7 +750,7 @@ export class PostgresCohortMembersService {
             apiId,
             "Internal Server Error",
             errorMessage,
-            HttpStatus.INTERNAL_SERVER_ERROR
+            HttpStatus.INTERNAL_SERVER_ERROR,
           );
         }
       }
@@ -758,32 +760,30 @@ export class PostgresCohortMembersService {
           apiId,
           [],
           HttpStatus.OK,
-          API_RESPONSES.COHORTMEMBER_UPDATE_SUCCESSFULLY
+          API_RESPONSES.COHORTMEMBER_UPDATE_SUCCESSFULLY,
         );
       }
     } catch (error) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error: ${error.message}`,
-        apiId
-      )
+        apiId,
+      );
 
       return APIResponse.error(
         response,
         apiId,
         API_RESPONSES.INTERNAL_SERVER_ERROR,
         `Error : ${error.message}`,
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
-
-
   }
 
   public async deleteCohortMemberById(
     tenantid: any,
     cohortMembershipId: any,
-    res: any
+    res: any,
   ) {
     const apiId = APIID.COHORT_MEMBER_DELETE;
 
@@ -800,34 +800,33 @@ export class PostgresCohortMembersService {
           apiId,
           "Not Found",
           "Invalid input: Cohort member not found.",
-          HttpStatus.NOT_FOUND
+          HttpStatus.NOT_FOUND,
         );
       }
 
-      const result = await this.cohortMembersRepository.delete(
-        cohortMembershipId
-      );
+      const result =
+        await this.cohortMembersRepository.delete(cohortMembershipId);
 
       return APIResponse.success(
         res,
         apiId,
         result,
         HttpStatus.OK,
-        "Cohort Member deleted Successfully."
+        "Cohort Member deleted Successfully.",
       );
     } catch (e) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error: ${e.message}`,
-        apiId
-      )
+        apiId,
+      );
       const errorMessage = e.message || API_RESPONSES.SERVER_ERROR;
       return APIResponse.error(
         res,
         apiId,
         API_RESPONSES.SERVER_ERROR,
         errorMessage,
-        HttpStatus.INTERNAL_SERVER_ERROR
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
@@ -875,7 +874,7 @@ export class PostgresCohortMembersService {
     },
     response: Response,
     tenantId: string,
-    academicyearId: string
+    academicyearId: string,
   ) {
     const apiId = APIID.COHORT_MEMBER_CREATE;
     const results = [];
@@ -889,7 +888,7 @@ export class PostgresCohortMembersService {
 
     const academicYear = await this.academicyearService.getActiveAcademicYear(
       academicyearId,
-      tenantId
+      tenantId,
     );
     if (!academicYear) {
       return APIResponse.error(
@@ -897,7 +896,7 @@ export class PostgresCohortMembersService {
         apiId,
         HttpStatus.NOT_FOUND.toLocaleString(),
         API_RESPONSES.ACADEMICYEAR_NOT_FOUND,
-        HttpStatus.NOT_FOUND
+        HttpStatus.NOT_FOUND,
       );
     }
 
@@ -918,11 +917,11 @@ export class PostgresCohortMembersService {
           try {
             const cohortExists = await this.isCohortExistForYear(
               academicyearId,
-              removeCohortId
+              removeCohortId,
             );
             if (cohortExists.length === 0) {
               errors.push(
-                API_RESPONSES.COHORTID_NOTFOUND_FOT_THIS_YEAR(removeCohortId)
+                API_RESPONSES.COHORTID_NOTFOUND_FOT_THIS_YEAR(removeCohortId),
               );
               continue;
             }
@@ -932,20 +931,20 @@ export class PostgresCohortMembersService {
                 cohortId: removeCohortId,
                 cohortAcademicYearId: cohortExists[0].cohortAcademicYearId,
               },
-              { status: MemberStatus.ARCHIVED }
+              { status: MemberStatus.ARCHIVED },
             );
             if (updateCohort.affected === 0) {
               results.push({
                 message: API_RESPONSES.COHORT_NOTMAPPED_WITH_USER(
                   removeCohortId,
-                  userId
+                  userId,
                 ),
               });
             } else {
               results.push({
                 message: API_RESPONSES.COHORT_STATUS_UPDATED_FOR_USER(
                   removeCohortId,
-                  userId
+                  userId,
                 ),
               });
             }
@@ -953,24 +952,21 @@ export class PostgresCohortMembersService {
             LoggerUtil.error(
               `${API_RESPONSES.SERVER_ERROR}`,
               `Error: ${error.message}`,
-              apiId
-            )
+              apiId,
+            );
             errors.push(
               API_RESPONSES.ERROR_UPDATE_COHORTMEMBER(
                 userId,
                 removeCohortId,
-                error.message
-              )
+                error.message,
+              ),
             );
           }
         }
       }
 
       // Handling of Addition of User in Cohort
-      if (
-        cohortMembersDto?.cohortId &&
-        cohortMembersDto?.cohortId.length > 0
-      ) {
+      if (cohortMembersDto?.cohortId && cohortMembersDto?.cohortId.length > 0) {
         for (const cohortId of cohortMembersDto.cohortId) {
           const cohortMembers = {
             ...cohortMembersBase,
@@ -980,11 +976,11 @@ export class PostgresCohortMembersService {
           try {
             const cohortExists = await this.isCohortExistForYear(
               academicyearId,
-              cohortId
+              cohortId,
             );
             if (cohortExists.length === 0) {
               errors.push(
-                API_RESPONSES.COHORTID_NOTFOUND_FOT_THIS_YEAR(cohortId)
+                API_RESPONSES.COHORTID_NOTFOUND_FOT_THIS_YEAR(cohortId),
               );
               continue;
             }
@@ -992,13 +988,16 @@ export class PostgresCohortMembersService {
             const mappingExists = await this.cohortUserMapping(
               userId,
               cohortId,
-              cohortExists[0].cohortAcademicYearId
+              cohortExists[0].cohortAcademicYearId,
             );
             if (mappingExists) {
               // if (mappingExists.status === MemberStatus.ACTIVE) {
               // errors.push(`Mapping already exists for userId ${userId} and cohortId ${cohortId} for this academic year`);
               errors.push(
-                API_RESPONSES.MAPPING_EXIST_BW_USER_AND_COHORT(userId, cohortId)
+                API_RESPONSES.MAPPING_EXIST_BW_USER_AND_COHORT(
+                  userId,
+                  cohortId,
+                ),
               );
               continue;
             }
@@ -1030,21 +1029,21 @@ export class PostgresCohortMembersService {
             };
             // Need to add User in cohort for Academic year
             const result = await this.cohortMembersRepository.save(
-              cohortMemberForAcademicYear
+              cohortMemberForAcademicYear,
             );
             results.push(result);
           } catch (error) {
             LoggerUtil.error(
               `${API_RESPONSES.SERVER_ERROR}`,
               `Error: ${error.message}`,
-              apiId
-            )
+              apiId,
+            );
             errors.push(
               API_RESPONSES.ERROR_SAVING_COHORTMEMBER(
                 userId,
                 cohortId,
-                error.message
-              )
+                error.message,
+              ),
             );
           }
         }
@@ -1057,7 +1056,7 @@ export class PostgresCohortMembersService {
         APIID.COHORT_MEMBER_CREATE,
         { results, errors },
         HttpStatus.CREATED,
-        API_RESPONSES.COHORTMEMBER_ERROR
+        API_RESPONSES.COHORTMEMBER_ERROR,
       );
     }
     return APIResponse.success(
@@ -1065,7 +1064,7 @@ export class PostgresCohortMembersService {
       APIID.COHORT_MEMBER_CREATE,
       results,
       HttpStatus.CREATED,
-      API_RESPONSES.COHORTMEMBER_SUCCESSFULLY
+      API_RESPONSES.COHORTMEMBER_SUCCESSFULLY,
     );
   }
 
@@ -1073,7 +1072,7 @@ export class PostgresCohortMembersService {
     fieldId: string,
     value: any,
     itemId: string,
-    loggedInUserId: string
+    loggedInUserId: string,
   ) {
     //create
     const registerResponse = await this.fieldsService.findAndSaveFieldValues({
@@ -1095,7 +1094,7 @@ export class PostgresCohortMembersService {
           fieldId: fieldId,
           updatedBy: loggedInUserId,
         },
-        {}
+        {},
       );
       if (updateResponse) {
         return true;
@@ -1107,7 +1106,7 @@ export class PostgresCohortMembersService {
   async processCustomFields(
     customFields: FieldValuesOptionDto[],
     cohortMembershipId: string,
-    cohortMembersUpdateDto: CohortMembersUpdateDto
+    cohortMembersUpdateDto: CohortMembersUpdateDto,
   ) {
     try {
       const promises = customFields.map((customField) =>
@@ -1115,8 +1114,8 @@ export class PostgresCohortMembersService {
           customField.fieldId,
           customField.value,
           cohortMembershipId,
-          cohortMembersUpdateDto.userId
-        )
+          cohortMembersUpdateDto.userId,
+        ),
       );
 
       const results = await Promise.all(promises);

@@ -6,7 +6,7 @@ import { RolePermissionService } from "src/permissionRbac/rolePermissionMapping/
 
 @Injectable()
 export class PermissionMiddleware implements NestMiddleware {
-  constructor(private readonly rolePermissionService: RolePermissionService) { }
+  constructor(private readonly rolePermissionService: RolePermissionService) {}
 
   async use(req: Request, res: Response, next: NextFunction) {
     try {
@@ -20,7 +20,7 @@ export class PermissionMiddleware implements NestMiddleware {
       const isPermissionValid = await this.checkPermissions(
         role,
         req.baseUrl,
-        req.method
+        req.method,
       );
 
       if (isPermissionValid) next();
@@ -30,17 +30,23 @@ export class PermissionMiddleware implements NestMiddleware {
           "",
           "You do not have permission to access this resource",
           "You do not have permission to access this resource",
-          HttpStatus.FORBIDDEN
+          HttpStatus.FORBIDDEN,
         );
       }
     } catch (e) {
-      return APIResponse.error(res, "Something went wrong", e, "Internal error", HttpStatus.INTERNAL_SERVER_ERROR)
+      return APIResponse.error(
+        res,
+        "Something went wrong",
+        e,
+        "Internal error",
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
   }
   async checkPermissions(
     roleTitle: string,
     requestPath: string,
-    requestMethod: string
+    requestMethod: string,
   ) {
     const parts = requestPath.match(/[^/]+/g);
     let apiPath = "";
@@ -51,7 +57,7 @@ export class PermissionMiddleware implements NestMiddleware {
     }
     const allowedPermissions = await this.fetchPermissions(roleTitle, apiPath);
     return allowedPermissions.some((permission) =>
-      permission.requestType.includes(requestMethod)
+      permission.requestType.includes(requestMethod),
     );
   }
   getApiPaths(parts: string[]) {
@@ -65,7 +71,7 @@ export class PermissionMiddleware implements NestMiddleware {
   async fetchPermissions(roleTitle: string, apiPath: string) {
     return await this.rolePermissionService.getPermissionForMiddleware(
       roleTitle,
-      apiPath
+      apiPath,
     );
   }
   getRole(token: string) {

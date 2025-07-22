@@ -2,10 +2,10 @@ import { CohortAcademicYearDto } from "src/cohortAcademicYear/dto/cohort-academi
 import { Request, Response } from "express";
 
 export interface IServiceLocatorCohortAcademicYear {
-    createCohortAcademicYear(
-        tenantId: string,
-        request: Request,
-        cohortAcademicYearDto: CohortAcademicYearDto,
-        response: Response
-    );
+  createCohortAcademicYear(
+    tenantId: string,
+    request: Request,
+    cohortAcademicYearDto: CohortAcademicYearDto,
+    response: Response,
+  );
 }
