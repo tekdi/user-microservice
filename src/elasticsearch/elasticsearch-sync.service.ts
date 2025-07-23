@@ -117,13 +117,12 @@ export class ElasticsearchSyncService {
   }
 
   /**
-   * Sync user application data in Elasticsearch for a specific cohort
-   * This method handles both creating new applications and updating existing ones
+   * Sync user application to Elasticsearch
    * 
    * @param userId - User ID
    * @param cohortId - Cohort ID
-   * @param updateData - Data to update in the application
-   * @param applicationDataProvider - Function to get application data (optional)
+   * @param updateData - Data to update
+   * @param applicationDataProvider - Function to get complete application data
    * @returns Promise<void>
    */
   async syncUserApplication(
@@ -161,7 +160,6 @@ export class ElasticsearchSyncService {
 
       if (!existingApplication) {
         // If application is missing, build and upsert the full user document
-        // If application is missing, build and upsert the full user document
         if (applicationDataProvider) {
           const fullUserDoc = await applicationDataProvider(userId, cohortId);
           if (fullUserDoc) {
@@ -193,8 +191,8 @@ export class ElasticsearchSyncService {
           }
         }
       } else {
-        // Use field-specific update to preserve existing data
-        await this.updateApplicationData(userId, cohortId, updateData, applicationDataProvider);
+        // Use the common method for field-specific update to preserve existing data
+        await this.handleApplicationUpdate(userId, cohortId, updateData, applicationDataProvider, 'sync');
       }
 
       this.logger.debug(`Successfully synced application for user: ${userId}, cohort: ${cohortId}`);
@@ -226,13 +224,40 @@ export class ElasticsearchSyncService {
     },
     applicationDataProvider?: (userId: string, cohortId: string) => Promise<IApplication>
   ): Promise<void> {
+    await this.handleApplicationUpdate(userId, cohortId, updateData, applicationDataProvider, 'update');
+  }
+
+  /**
+   * Common method to handle application updates and syncs
+   * 
+   * @param userId - User ID
+   * @param cohortId - Cohort ID
+   * @param updateData - Data to update
+   * @param applicationDataProvider - Function to get complete application data
+   * @param operationType - Type of operation ('sync' or 'update')
+   * @returns Promise<void>
+   */
+  private async handleApplicationUpdate(
+    userId: string,
+    cohortId: string,
+    updateData: {
+      cohortmemberstatus?: string;
+      statusReason?: string;
+      completionPercentage?: number;
+      formstatus?: string;
+      formData?: any;
+      progress?: any;
+    },
+    applicationDataProvider?: (userId: string, cohortId: string) => Promise<IApplication>,
+    operationType: 'sync' | 'update' = 'update'
+  ): Promise<void> {
     if (!isElasticsearchEnabled()) {
-      this.logger.debug(`Elasticsearch disabled, skipping application update for user: ${userId}, cohort: ${cohortId}`);
+      this.logger.debug(`Elasticsearch disabled, skipping application ${operationType} for user: ${userId}, cohort: ${cohortId}`);
       return;
     }
 
     try {
-      this.logger.debug(`Updating application data for user: ${userId}, cohort: ${cohortId}`);
+      this.logger.debug(`${operationType === 'update' ? 'Updating' : 'Starting'} application ${operationType} for user: ${userId}, cohort: ${cohortId}`);
 
       // Create Painless script for field-specific updates
       const script = this.buildApplicationUpdateScript(cohortId, updateData);
@@ -263,9 +288,9 @@ export class ElasticsearchSyncService {
         }
       }
 
-      this.logger.debug(`Successfully updated application data for user: ${userId}, cohort: ${cohortId}`);
+      this.logger.debug(`Successfully ${operationType === 'update' ? 'updated' : 'synced'} application ${operationType === 'update' ? 'data' : ''} for user: ${userId}, cohort: ${cohortId}`);
     } catch (error) {
-      LoggerUtil.error('Failed to update application data in Elasticsearch', error?.message || 'Unknown error', 'ElasticsearchSyncService', userId);
+      LoggerUtil.error(`Failed to ${operationType} application ${operationType === 'update' ? 'data' : ''} in Elasticsearch`, error?.message || 'Unknown error', 'ElasticsearchSyncService', userId);
       // Don't throw error to prevent affecting main flow
     }
   }
