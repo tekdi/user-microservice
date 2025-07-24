@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UserElasticsearchService } from './user-elasticsearch.service';
@@ -29,7 +29,6 @@ import { User } from '../user/entities/user-entity';
  */
 @Injectable()
 export class ElasticsearchSyncService {
-  private readonly logger = new Logger(ElasticsearchSyncService.name);
 
   constructor(
     private readonly userElasticsearchService: UserElasticsearchService,
@@ -62,12 +61,12 @@ export class ElasticsearchSyncService {
     applicationDataProvider?: (userId: string) => Promise<IApplication[]>
   ): Promise<void> {
     if (!isElasticsearchEnabled()) {
-      this.logger.debug(`Elasticsearch disabled, skipping sync for user: ${userId}`);
+      LoggerUtil.debug(`Elasticsearch disabled, skipping sync for user: ${userId}`, 'ElasticsearchSyncService');
       return;
     }
 
     try {
-      this.logger.debug(`Starting user profile sync for: ${userId}`);
+      LoggerUtil.debug(`Starting user profile sync for: ${userId}`, 'ElasticsearchSyncService');
 
       // Always build complete profile with custom fields
       const profile = await this.buildUserProfile(userId, customFieldsProvider);
@@ -87,7 +86,7 @@ export class ElasticsearchSyncService {
         ? await applicationDataProvider(userId)
         : [];
 
-      this.logger.debug(`Built ${applications.length} applications for user: ${userId}`);
+      LoggerUtil.debug(`Built ${applications.length} applications for user: ${userId}`, 'ElasticsearchSyncService');
 
       // Build complete user document
       const userDocument: IUser = {
@@ -109,7 +108,7 @@ export class ElasticsearchSyncService {
         }
       );
 
-      this.logger.debug(`Successfully synced user profile for: ${userId}`);
+      LoggerUtil.debug(`Successfully synced user profile for: ${userId}`, 'ElasticsearchSyncService');
     } catch (error) {
       LoggerUtil.error('Failed to sync user profile to Elasticsearch', error?.message || 'Unknown error', 'ElasticsearchSyncService', userId);
       // Don't throw error to prevent affecting main flow
@@ -139,54 +138,36 @@ export class ElasticsearchSyncService {
     applicationDataProvider?: (userId: string, cohortId: string) => Promise<IApplication>
   ): Promise<void> {
     if (!isElasticsearchEnabled()) {
-      this.logger.debug(`Elasticsearch disabled, skipping application sync for user: ${userId}, cohort: ${cohortId}`);
+      LoggerUtil.debug(`Elasticsearch disabled, skipping application sync for user: ${userId}, cohort: ${cohortId}`, 'ElasticsearchSyncService');
       return;
     }
 
     try {
-      this.logger.debug(`Starting application sync for user: ${userId}, cohort: ${cohortId}`);
+      LoggerUtil.debug(`Starting application sync for user: ${userId}, cohort: ${cohortId}`, 'ElasticsearchSyncService');
 
       // Get existing user document from Elasticsearch
       const userDoc = await this.userElasticsearchService.getUser(userId);
       
-      // Extract the application array if present
-      const source = userDoc && userDoc._source
-        ? (userDoc._source as { applications?: any[] })
-        : undefined;
+      // Extract the application array if present using optional chaining
+      const source = userDoc?._source as { applications?: any[] } | undefined;
       
-      const existingApplication = source && Array.isArray(source.applications)
-        ? source.applications.find(app => app.cohortId === cohortId)
-        : undefined;
+      const existingApplication = source?.applications?.find(app => app.cohortId === cohortId);
 
       if (!existingApplication) {
         // If application is missing, build and upsert the full user document
         if (applicationDataProvider) {
           const fullUserDoc = await applicationDataProvider(userId, cohortId);
           if (fullUserDoc) {
-            // Convert IApplication to IUser format for Elasticsearch update
-            const userDocument: IUser = {
+            const userDocument = await this.buildCompleteUserDocument(
               userId,
-              profile: await this.buildUserProfile(userId),
-              applications: [fullUserDoc],
-              courses: [],
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-            };
+              undefined,
+              async () => [fullUserDoc]
+            );
             
             await this.userElasticsearchService.updateUser(
               userId,
               { doc: userDocument },
-              async (userId: string) => {
-                const appData = await applicationDataProvider(userId, cohortId);
-                return {
-                  userId,
-                  profile: await this.buildUserProfile(userId),
-                  applications: [appData],
-                  courses: [],
-                  createdAt: new Date().toISOString(),
-                  updatedAt: new Date().toISOString(),
-                };
-              }
+              async () => userDocument
             );
           }
         }
@@ -195,7 +176,7 @@ export class ElasticsearchSyncService {
         await this.handleApplicationUpdate(userId, cohortId, updateData, applicationDataProvider, 'sync');
       }
 
-      this.logger.debug(`Successfully synced application for user: ${userId}, cohort: ${cohortId}`);
+      LoggerUtil.debug(`Successfully synced application for user: ${userId}, cohort: ${cohortId}`, 'ElasticsearchSyncService');
     } catch (error) {
       LoggerUtil.error('Failed to sync user application to Elasticsearch', error?.message || 'Unknown error', 'ElasticsearchSyncService', userId);
       // Don't throw error to prevent affecting main flow
@@ -252,12 +233,12 @@ export class ElasticsearchSyncService {
     operationType: 'sync' | 'update' = 'update'
   ): Promise<void> {
     if (!isElasticsearchEnabled()) {
-      this.logger.debug(`Elasticsearch disabled, skipping application ${operationType} for user: ${userId}, cohort: ${cohortId}`);
+      LoggerUtil.debug(`Elasticsearch disabled, skipping application ${operationType} for user: ${userId}, cohort: ${cohortId}`, 'ElasticsearchSyncService');
       return;
     }
 
     try {
-      this.logger.debug(`${operationType === 'update' ? 'Updating' : 'Starting'} application ${operationType} for user: ${userId}, cohort: ${cohortId}`);
+      LoggerUtil.debug(`${operationType === 'update' ? 'Updating' : 'Starting'} application ${operationType} for user: ${userId}, cohort: ${cohortId}`, 'ElasticsearchSyncService');
 
       // Create Painless script for field-specific updates
       const script = this.buildApplicationUpdateScript(cohortId, updateData);
@@ -288,7 +269,7 @@ export class ElasticsearchSyncService {
         }
       }
 
-      this.logger.debug(`Successfully ${operationType === 'update' ? 'updated' : 'synced'} application ${operationType === 'update' ? 'data' : ''} for user: ${userId}, cohort: ${cohortId}`);
+      LoggerUtil.debug(`Successfully ${operationType === 'update' ? 'updated' : 'synced'} application ${operationType === 'update' ? 'data' : ''} for user: ${userId}, cohort: ${cohortId}`, 'ElasticsearchSyncService');
     } catch (error) {
       LoggerUtil.error(`Failed to ${operationType} application ${operationType === 'update' ? 'data' : ''} in Elasticsearch`, error?.message || 'Unknown error', 'ElasticsearchSyncService', userId);
       // Don't throw error to prevent affecting main flow
@@ -299,8 +280,8 @@ export class ElasticsearchSyncService {
    * Sync form submission data to Elasticsearch
    * 
    * @param userId - User ID
-   * @param submissionData - Form submission data
-   * @param cohortDetailsProvider - Function to get cohort details
+   * @param submissionData - Form submission data including cohortId
+   * @param cohortDetailsProvider - Function to get cohort details (expects cohortId, not formId)
    * @returns Promise<void>
    */
   async syncFormSubmissionData(
@@ -308,6 +289,7 @@ export class ElasticsearchSyncService {
     submissionData: {
       formId: string;
       submissionId: string;
+      cohortId: string; // Added proper cohortId parameter
       formstatus: string;
       completionPercentage: number;
       formData: any;
@@ -318,36 +300,22 @@ export class ElasticsearchSyncService {
     cohortDetailsProvider?: (cohortId: string) => Promise<any>
   ): Promise<void> {
     if (!isElasticsearchEnabled()) {
-      this.logger.debug(`Elasticsearch disabled, skipping form submission sync for user: ${userId}`);
+      LoggerUtil.debug(`Elasticsearch disabled, skipping form submission sync for user: ${userId}`, 'ElasticsearchSyncService');
       return;
     }
 
     try {
-      this.logger.debug(`Syncing form submission data for user: ${userId}, form: ${submissionData.formId}`);
+      LoggerUtil.debug(`Syncing form submission data for user: ${userId}, form: ${submissionData.formId}, cohort: ${submissionData.cohortId}`, 'ElasticsearchSyncService');
 
-      // Get cohort details if provider is available
+      // Get cohort details if provider is available - now using proper cohortId
       const cohortDetails = cohortDetailsProvider 
-        ? await cohortDetailsProvider(submissionData.formId)
+        ? await cohortDetailsProvider(submissionData.cohortId)
         : { name: 'Unknown Cohort', status: 'active' };
 
-      // Build application data
-      const application: IApplication = {
-        cohortId: submissionData.formId, // Using formId as cohortId for now
-        formId: submissionData.formId,
-        submissionId: submissionData.submissionId,
-        formstatus: submissionData.formstatus,
-        completionPercentage: submissionData.completionPercentage,
-        lastSavedAt: submissionData.lastSavedAt,
-        submittedAt: submissionData.submittedAt,
-        formData: submissionData.formData,
-        cohortDetails,
-        progress: submissionData.progress,
-      };
-
-      // Update application in Elasticsearch
+      // Update application in Elasticsearch using proper cohortId
       await this.updateApplicationData(
         userId,
-        submissionData.formId,
+        submissionData.cohortId, // Use proper cohortId instead of formId
         {
           formstatus: submissionData.formstatus,
           completionPercentage: submissionData.completionPercentage,
@@ -356,7 +324,7 @@ export class ElasticsearchSyncService {
         }
       );
 
-      this.logger.debug(`Successfully synced form submission data for user: ${userId}, form: ${submissionData.formId}`);
+      LoggerUtil.debug(`Successfully synced form submission data for user: ${userId}, form: ${submissionData.formId}, cohort: ${submissionData.cohortId}`, 'ElasticsearchSyncService');
     } catch (error) {
       LoggerUtil.error('Failed to sync form submission data to Elasticsearch', error?.message || 'Unknown error', 'ElasticsearchSyncService', userId);
       // Don't throw error to prevent affecting main flow
@@ -386,7 +354,7 @@ export class ElasticsearchSyncService {
       const user = await this.userRepository.findOne({ where: { userId } });
 
       if (!user) {
-        this.logger.warn(`User not found in database: ${userId}`);
+        LoggerUtil.warn(`User not found in database: ${userId}`, 'ElasticsearchSyncService');
         // Return empty profile if user not found
         return {
           userId,
@@ -446,7 +414,7 @@ export class ElasticsearchSyncService {
         customFields: this.processCustomFieldsForElasticsearch(profileCustomFields),
       };
     } catch (error) {
-      this.logger.error(`Failed to build user profile for: ${userId}`, error);
+      LoggerUtil.error(`Failed to build user profile for: ${userId}`, error, 'ElasticsearchSyncService', userId);
       // Return empty profile on error
       return {
         userId,
@@ -498,7 +466,7 @@ export class ElasticsearchSyncService {
         updatedAt: new Date().toISOString(),
       };
     } catch (error) {
-      this.logger.error(`Failed to build complete user document for: ${userId}`, error);
+      LoggerUtil.error(`Failed to build complete user document for: ${userId}`, error, 'ElasticsearchSyncService', userId);
       return null;
     }
   }
@@ -694,17 +662,17 @@ export class ElasticsearchSyncService {
         const isProfileField = context === 'USER' || context === 'USERS';
         
         if (!isProfileField) {
-          this.logger.debug(`Excluding field ${field.fieldId} (${field.label}) with context: ${context} for user: ${userId}`);
+          LoggerUtil.debug(`Excluding field ${field.fieldId} (${field.label}) with context: ${context} for user: ${userId}`, 'ElasticsearchSyncService');
         }
         
         return isProfileField;
       });
 
-      this.logger.debug(`Filtered ${customFields.length} total fields to ${profileFields.length} profile fields for user: ${userId}`);
+      LoggerUtil.debug(`Filtered ${customFields.length} total fields to ${profileFields.length} profile fields for user: ${userId}`, 'ElasticsearchSyncService');
       
       return profileFields;
     } catch (error) {
-      this.logger.error(`Failed to filter profile custom fields for user: ${userId}`, error);
+      LoggerUtil.error(`Failed to filter profile custom fields for user: ${userId}`, error, 'ElasticsearchSyncService', userId);
       // Return empty array on error to avoid breaking the sync
       return [];
     }
@@ -724,20 +692,16 @@ export class ElasticsearchSyncService {
    */
   async getUserDocument(userId: string): Promise<IUser | null> {
     if (!isElasticsearchEnabled()) {
-      this.logger.debug(`Elasticsearch disabled, skipping get user document for: ${userId}`);
+      LoggerUtil.debug(`Elasticsearch disabled, skipping get user document for: ${userId}`, 'ElasticsearchSyncService');
       return null;
     }
 
     try {
-      this.logger.debug(`Getting user document for: ${userId}`);
+      LoggerUtil.debug(`Getting user document for: ${userId}`, 'ElasticsearchSyncService');
       const result = await this.userElasticsearchService.getUser(userId);
       
       // Convert Elasticsearch result to IUser format
-      if (result && result._source) {
-        return result._source as IUser;
-      }
-      
-      return null;
+      return result?._source as IUser ?? null;
     } catch (error) {
       LoggerUtil.error('Failed to get user document from Elasticsearch', error?.message || 'Unknown error', 'ElasticsearchSyncService', userId);
       return null;
@@ -757,7 +721,7 @@ export class ElasticsearchSyncService {
 
     try {
       await this.userElasticsearchService.deleteUser(userId);
-      this.logger.debug(`Successfully deleted user document: ${userId}`);
+      LoggerUtil.debug(`Successfully deleted user document: ${userId}`, 'ElasticsearchSyncService');
     } catch (error) {
       LoggerUtil.error('Failed to delete user document from Elasticsearch', error?.message || 'Unknown error', 'ElasticsearchSyncService', userId);
     }
@@ -784,7 +748,7 @@ export class ElasticsearchSyncService {
       // Call searchUsers with proper parameters based on the service interface
       return await this.userElasticsearchService.searchUsers(query);
     } catch (error) {
-      this.logger.error('Failed to search users in Elasticsearch', error);
+      LoggerUtil.error('Failed to search users in Elasticsearch', error, 'ElasticsearchSyncService');
       return { hits: { hits: [], total: { value: 0 } } };
     }
   }
