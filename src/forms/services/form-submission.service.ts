@@ -28,7 +28,7 @@ import { FieldValuesSearchDto } from '../../fields/dto/field-values-search.dto';
 import { FieldsSearchDto } from '../../fields/dto/fields-search.dto';
 import jwt_decode from 'jwt-decode';
 import { Form } from '../entities/form.entity';
-import { UserElasticsearchService } from '../../elasticsearch/user-elasticsearch.service';
+import { ElasticsearchSyncService } from '../../elasticsearch/elasticsearch-sync.service';
 import { FormsService } from '../../forms/forms.service';
 import { PostgresCohortService } from 'src/adapters/postgres/cohort-adapter';
 import { IUser } from '../../elasticsearch/interfaces/user.interface';
@@ -88,7 +88,7 @@ export class FormSubmissionService {
     @InjectRepository(Cohort)
     private cohortRepository: Repository<Cohort>,
     private readonly fieldsService: FieldsService,
-    private readonly userElasticsearchService: UserElasticsearchService,
+    private readonly elasticsearchSyncService: ElasticsearchSyncService,
     private readonly formsService: FormsService,
     @Inject(forwardRef(() => PostgresCohortService))
     private readonly postgresCohortService: PostgresCohortService
@@ -1170,13 +1170,13 @@ export class FormSubmissionService {
   ): Promise<void> {
     try {
       // Get the existing user document from Elasticsearch
-      const userDoc = await this.userElasticsearchService.getUser(userId);
+      const userDoc = await this.elasticsearchSyncService.getUserDocument(userId);
 
       // Prepare the applications array (existing or new)
       let applications: any[] = [];
-      if (userDoc && userDoc._source) {
-        const userSource = userDoc._source as IUser;
-        applications = userSource.applications || [];
+      if (userDoc) {
+        // userDoc is already in IUser format from getUserDocument
+        applications = userDoc.applications || [];
       }
 
       // Use the actual submissionId and formId from the updatedSubmission
@@ -1488,16 +1488,22 @@ export class FormSubmissionService {
         applications.push(newApp);
       }
 
-      // Upsert (update or create) the user document in Elasticsearch
+      // Sync user profile and application data to Elasticsearch
       if (isElasticsearchEnabled()) {
-        await this.userElasticsearchService.updateUser(
-          userId,
-          { doc: { applications: applications } },
-          async (userId: string) => {
-            // Build the full user document for Elasticsearch, including profile and all applications
-            return await this.buildUserDocumentForElasticsearch(userId);
-          }
-        );
+        try {
+          await this.elasticsearchSyncService.syncUserProfile(
+            userId,
+            undefined, // No specific profile data to update
+            undefined, // No custom fields provider needed (handled by existing filtering)
+            async (userId: string) => {
+              // Application data provider - fetch all applications for this user
+              const userDoc = await this.buildUserDocumentForElasticsearch(userId);
+              return userDoc ? userDoc.applications : [];
+            }
+          );
+        } catch (syncError) {
+          LoggerUtil.warn('Failed to sync user data to Elasticsearch:', syncError);
+        }
       }
     } catch (elasticError) {
       // Log Elasticsearch error but don't fail the request
@@ -1527,19 +1533,14 @@ export class FormSubmissionService {
       });
 
       if (cohort) {
-        // Get cohort custom fields using the same method as cohort members service
-        const cohortCustomFields =
-          await this.postgresCohortService.getCohortCustomFieldDetails(
-            cohortId
-          );
-
+        // Return cohort details without customFields as requested
         return {
           cohortId: cohort.cohortId,
           name: cohort.name,
           parentId: cohort.parentId,
           type: cohort.type,
           status: cohort.status,
-          customFields: cohortCustomFields,
+          // Note: customFields removed as per requirements
         };
       }
     } catch (e) {
@@ -1936,19 +1937,14 @@ export class FormSubmissionService {
         });
 
         if (cohortDetails) {
-          // Get cohort custom fields using the same method as cohort members service
-          const cohortCustomFields =
-            await this.postgresCohortService.getCohortCustomFieldDetails(
-              cohortId
-            );
-
+          // Return cohort details without customFields as requested
           detailedCohortDetails = {
             cohortId: cohortDetails.cohortId,
             name: cohortDetails.name,
             parentId: cohortDetails.parentId,
             type: cohortDetails.type,
             status: cohortDetails.status,
-            customFields: cohortCustomFields,
+            // Note: customFields removed as per requirements
           };
         }
       } catch (error) {
@@ -2635,19 +2631,14 @@ export class FormSubmissionService {
           });
 
           if (cohortDetails) {
-            // Get cohort custom fields using the same method as cohort members service
-            const cohortCustomFields =
-              await this.postgresCohortService.getCohortCustomFieldDetails(
-                cohortId
-              );
-
+            // Return cohort details without customFields as requested
             detailedCohortDetails = {
               cohortId: cohortDetails.cohortId,
               name: cohortDetails.name,
               parentId: cohortDetails.parentId,
               type: cohortDetails.type,
               status: cohortDetails.status,
-              customFields: cohortCustomFields,
+              // Note: customFields removed as per requirements
             };
           }
         } catch (e) {
@@ -2670,6 +2661,14 @@ export class FormSubmissionService {
         cohortDetails: detailedCohortDetails as any,
         formData,
       });
+    }
+
+    // Debug logging for applications building
+    LoggerUtil.warn(`Built ${applications.length} applications in buildUserDocumentForElasticsearch for user: ${userId}`);
+    LoggerUtil.warn(`CohortMembers found: ${cohortMemberships.length}, FormSubmissions found: ${submissions.length}`);
+    LoggerUtil.warn(`All cohort IDs: ${Array.from(allCohortIds).join(', ')}`);
+    if (applications.length > 0) {
+      LoggerUtil.warn(`Sample application: ${JSON.stringify(applications[0], null, 2)}`);
     }
     // Also, for any form submission that is not linked to a cohortId (contextId), add as a separate application
     for (const submission of submissions) {
@@ -3025,6 +3024,12 @@ export class FormSubmissionService {
         ? user.updatedAt.toISOString()
         : new Date().toISOString(),
     };
+
+    // Debug logging
+    LoggerUtil.warn(`buildUserDocumentForElasticsearch returning ${applications.length} applications for user: ${userId}`);
+    if (applications.length > 0) {
+      LoggerUtil.warn(`First application: ${JSON.stringify(applications[0], null, 2)}`);
+    }
   }
 
   /**

@@ -47,7 +47,7 @@ import { ActionType, UserUpdateDTO } from 'src/user/dto/user-update.dto';
 import config from '../../common/config';
 import { CalendarField } from 'src/fields/fieldValidators/fieldTypeClasses';
 import { UserCreateSsoDto } from 'src/user/dto/user-create-sso.dto';
-import { UserElasticsearchService } from '../../elasticsearch/user-elasticsearch.service';
+import { ElasticsearchSyncService } from '../../elasticsearch/elasticsearch-sync.service';
 import { IUser } from '../../elasticsearch/interfaces/user.interface';
 import { isElasticsearchEnabled } from 'src/common/utils/elasticsearch.util';
 
@@ -94,7 +94,7 @@ export class PostgresUserService implements IServicelocator {
     private postgresAcademicYearService: PostgresAcademicYearService,
     private readonly cohortAcademicYearService: CohortAcademicYearService,
     private readonly authUtils: AuthUtils,
-    private readonly userElasticsearchService: UserElasticsearchService
+    private readonly elasticsearchSyncService: ElasticsearchSyncService
   ) {
     this.jwt_secret = this.configService.get<string>('RBAC_JWT_SECRET');
     this.jwt_password_reset_expires_In = this.configService.get<string>(
@@ -1572,7 +1572,7 @@ export class PostgresUserService implements IServicelocator {
 
           // Use createUser to ensure new document creation
 
-          await this.userElasticsearchService.createUser(userForElastic);
+          await this.elasticsearchSyncService.syncUserProfile(userForElastic.userId, userForElastic.profile);
           LoggerUtil.log('User synced to Elasticsearch successfully', apiId);
         }
       } catch (elasticError) {
@@ -2771,21 +2771,19 @@ export class PostgresUserService implements IServicelocator {
   }
 
   /**
-   * Sync user profile to Elasticsearch.
-   * This will upsert (update or create) the user document in Elasticsearch.
-   * If the document is missing, it will fetch the user from the database and create it.
+   * Sync user profile to Elasticsearch using the optimized sync service.
+   * This method uses the consolidated ElasticsearchSyncService for better performance and maintainability.
    */
   private async syncUserToElasticsearch(user: User) {
     try {
-      const customFields = await this.getFilteredCustomFields(user.userId);
-
+      // Prepare profile data with proper formatting
       let formattedDob: string | null = null;
       if (user.dob instanceof Date) {
         formattedDob = user.dob.toISOString();
       } else if (typeof user.dob === 'string') {
         formattedDob = user.dob;
       }
-      // Prepare the profile data
+
       const profile = {
         userId: user.userId,
         username: user.username,
@@ -2803,62 +2801,19 @@ export class PostgresUserService implements IServicelocator {
         state: user.state || '',
         pincode: user.pincode || '',
         status: user.status,
-        customFields, // Now filtered to exclude form schema fields
       };
 
-      // Upsert (update or create) the user profile in Elasticsearch
-      if (isElasticsearchEnabled()) {
-        await this.userElasticsearchService.updateUserProfile(
-          user.userId,
-          profile,
-          async (userId: string) => {
-            // Fetch the latest user from the database for upsert
-            const dbUser = await this.usersRepository.findOne({
-              where: { userId },
-            });
-            if (!dbUser) return null;
-            const customFields = await this.getFilteredCustomFields(userId);
-            let formattedDob: string | null = null;
-            if (dbUser.dob instanceof Date) {
-              formattedDob = dbUser.dob.toISOString();
-            } else if (typeof dbUser.dob === 'string') {
-              formattedDob = dbUser.dob;
-            }
-            return {
-              userId: dbUser.userId,
-              profile: {
-                userId: dbUser.userId,
-                username: dbUser.username,
-                firstName: dbUser.firstName,
-                lastName: dbUser.lastName,
-                middleName: dbUser.middleName || '',
-                email: dbUser.email || '',
-                mobile: dbUser.mobile?.toString() || '',
-                mobile_country_code: dbUser.mobile_country_code || '',
-                dob: formattedDob,
-                gender: dbUser.gender,
-                country: dbUser.country || '',
-                address: dbUser.address || '',
-                district: dbUser.district || '',
-                state: dbUser.state || '',
-                pincode: dbUser.pincode || '',
-                status: dbUser.status,
-                customFields,
-              },
-              applications: [],
-              courses: [],
-              createdAt: dbUser.createdAt
-                ? dbUser.createdAt.toISOString()
-                : new Date().toISOString(),
-              updatedAt: dbUser.updatedAt
-                ? dbUser.updatedAt.toISOString()
-                : new Date().toISOString(),
-            };
-          }
-        );
-      }
+      // Use the optimized sync service
+      await this.elasticsearchSyncService.syncUserProfile(
+        user.userId,
+        profile,
+        async (userId: string) => {
+          // Custom fields provider function
+          return await this.getFilteredCustomFields(userId);
+        }
+      );
     } catch (error) {
-      LoggerUtil.error('Failed to update user profile in Elasticsearch', error);
+      LoggerUtil.error('Failed to sync user profile to Elasticsearch', error);
     }
   }
 }
