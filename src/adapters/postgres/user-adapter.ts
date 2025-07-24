@@ -48,6 +48,7 @@ import config from '../../common/config';
 import { CalendarField } from 'src/fields/fieldValidators/fieldTypeClasses';
 import { UserCreateSsoDto } from 'src/user/dto/user-create-sso.dto';
 import { UserElasticsearchService } from '../../elasticsearch/user-elasticsearch.service';
+import { ElasticsearchDataFetcherService } from '../../elasticsearch/elasticsearch-data-fetcher.service';
 import { IUser } from '../../elasticsearch/interfaces/user.interface';
 import { isElasticsearchEnabled } from 'src/common/utils/elasticsearch.util';
 
@@ -94,7 +95,8 @@ export class PostgresUserService implements IServicelocator {
     private postgresAcademicYearService: PostgresAcademicYearService,
     private readonly cohortAcademicYearService: CohortAcademicYearService,
     private readonly authUtils: AuthUtils,
-    private readonly userElasticsearchService: UserElasticsearchService
+    private readonly userElasticsearchService: UserElasticsearchService,
+    private readonly elasticsearchDataFetcherService: ElasticsearchDataFetcherService
   ) {
     this.jwt_secret = this.configService.get<string>('RBAC_JWT_SECRET');
     this.jwt_password_reset_expires_In = this.configService.get<string>(
@@ -1031,8 +1033,9 @@ export class PostgresUserService implements IServicelocator {
       const updatedUser = await this.updateBasicUserDetails(userId, userDto);
 
       // Sync to Elasticsearch
-      await this.syncUserToElasticsearch(updatedUser);
-
+      if (isElasticsearchEnabled()) {
+        await this.syncUserToElasticsearch(updatedUser);
+      }
       return await APIResponse.success(
         response,
         apiId,
@@ -2771,89 +2774,22 @@ export class PostgresUserService implements IServicelocator {
   }
 
   /**
-   * Sync user profile to Elasticsearch.
+   * Sync user profile to Elasticsearch using centralized data fetcher.
    * This will upsert (update or create) the user document in Elasticsearch.
    * If the document is missing, it will fetch the user from the database and create it.
    */
   private async syncUserToElasticsearch(user: User) {
     try {
-      const customFields = await this.getFilteredCustomFields(user.userId);
-
-      let formattedDob: string | null = null;
-      if (user.dob instanceof Date) {
-        formattedDob = user.dob.toISOString();
-      } else if (typeof user.dob === 'string') {
-        formattedDob = user.dob;
-      }
-      // Prepare the profile data
-      const profile = {
-        userId: user.userId,
-        username: user.username,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        middleName: user.middleName || '',
-        email: user.email || '',
-        mobile: user.mobile?.toString() || '',
-        mobile_country_code: user.mobile_country_code || '',
-        dob: formattedDob,
-        country: user.country,
-        gender: user.gender,
-        address: user.address || '',
-        district: user.district || '',
-        state: user.state || '',
-        pincode: user.pincode || '',
-        status: user.status,
-        customFields, // Now filtered to exclude form schema fields
-      };
-
-      // Upsert (update or create) the user profile in Elasticsearch
+      // Use centralized data fetcher to get complete user document
       if (isElasticsearchEnabled()) {
         await this.userElasticsearchService.updateUserProfile(
           user.userId,
-          profile,
+          { userId: user.userId }, // Minimal profile update
           async (userId: string) => {
-            // Fetch the latest user from the database for upsert
-            const dbUser = await this.usersRepository.findOne({
-              where: { userId },
-            });
-            if (!dbUser) return null;
-            const customFields = await this.getFilteredCustomFields(userId);
-            let formattedDob: string | null = null;
-            if (dbUser.dob instanceof Date) {
-              formattedDob = dbUser.dob.toISOString();
-            } else if (typeof dbUser.dob === 'string') {
-              formattedDob = dbUser.dob;
-            }
-            return {
-              userId: dbUser.userId,
-              profile: {
-                userId: dbUser.userId,
-                username: dbUser.username,
-                firstName: dbUser.firstName,
-                lastName: dbUser.lastName,
-                middleName: dbUser.middleName || '',
-                email: dbUser.email || '',
-                mobile: dbUser.mobile?.toString() || '',
-                mobile_country_code: dbUser.mobile_country_code || '',
-                dob: formattedDob,
-                gender: dbUser.gender,
-                country: dbUser.country || '',
-                address: dbUser.address || '',
-                district: dbUser.district || '',
-                state: dbUser.state || '',
-                pincode: dbUser.pincode || '',
-                status: dbUser.status,
-                customFields,
-              },
-              applications: [],
-              courses: [],
-              createdAt: dbUser.createdAt
-                ? dbUser.createdAt.toISOString()
-                : new Date().toISOString(),
-              updatedAt: dbUser.updatedAt
-                ? dbUser.updatedAt.toISOString()
-                : new Date().toISOString(),
-            };
+            // Use centralized service to fetch complete user document
+            return await this.elasticsearchDataFetcherService.fetchUserDocumentForElasticsearch(
+              userId
+            );
           }
         );
       }

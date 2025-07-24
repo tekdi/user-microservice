@@ -29,6 +29,7 @@ import { FieldsSearchDto } from '../../fields/dto/fields-search.dto';
 import jwt_decode from 'jwt-decode';
 import { Form } from '../entities/form.entity';
 import { UserElasticsearchService } from '../../elasticsearch/user-elasticsearch.service';
+import { ElasticsearchDataFetcherService } from '../../elasticsearch/elasticsearch-data-fetcher.service';
 import { FormsService } from '../../forms/forms.service';
 import { PostgresCohortService } from 'src/adapters/postgres/cohort-adapter';
 import { IUser } from '../../elasticsearch/interfaces/user.interface';
@@ -76,6 +77,8 @@ interface FieldSearchResponse {
 
 @Injectable()
 export class FormSubmissionService {
+  private readonly logger = new Logger(FormSubmissionService.name);
+  
   constructor(
     @InjectRepository(FormSubmission)
     private formSubmissionRepository: Repository<FormSubmission>,
@@ -89,6 +92,7 @@ export class FormSubmissionService {
     private cohortRepository: Repository<Cohort>,
     private readonly fieldsService: FieldsService,
     private readonly userElasticsearchService: UserElasticsearchService,
+    private readonly elasticsearchDataFetcherService: ElasticsearchDataFetcherService,
     private readonly formsService: FormsService,
     @Inject(forwardRef(() => PostgresCohortService))
     private readonly postgresCohortService: PostgresCohortService
@@ -1162,6 +1166,7 @@ export class FormSubmissionService {
    * Update the user's applications array in Elasticsearch after a form submission update.
    * This will upsert (update or create) the user document in Elasticsearch if missing.
    * If the document is missing, it will fetch the user from the database and create it.
+   * Uses centralized data fetcher for consistent data structure.
    */
   private async updateApplicationInElasticsearch(
     userId: string,
@@ -1169,6 +1174,14 @@ export class FormSubmissionService {
     updatedFieldValues: any[]
   ): Promise<void> {
     try {
+      // Use centralized service to get complete user document
+      const userDocument = await this.elasticsearchDataFetcherService.fetchUserDocumentForElasticsearch(userId);
+      
+      if (!userDocument) {
+        this.logger.warn(`User document not found for ${userId}, skipping Elasticsearch update`);
+        return;
+      }
+
       // Get the existing user document from Elasticsearch
       const userDoc = await this.userElasticsearchService.getUser(userId);
 
@@ -1948,7 +1961,7 @@ export class FormSubmissionService {
             parentId: cohortDetails.parentId,
             type: cohortDetails.type,
             status: cohortDetails.status,
-            customFields: cohortCustomFields,
+            // Removed customFields from cohortDetails as per requirement
           };
         }
       } catch (error) {
@@ -1980,7 +1993,25 @@ export class FormSubmissionService {
    *
    * Made public so it can be used as an upsert callback from other services (e.g., cohortMembers-adapter).
    */
+  /**
+   * Build user document for Elasticsearch using centralized data fetcher.
+   * This method provides a centralized way to fetch user data for Elasticsearch.
+   * 
+   * @param userId - User ID to fetch data for
+   * @returns Promise<IUser | null> - Complete user document or null if user not found
+   */
   public async buildUserDocumentForElasticsearch(
+    userId: string
+  ): Promise<IUser | null> {
+    // Use centralized data fetcher service for consistent data structure
+    return await this.elasticsearchDataFetcherService.fetchUserDocumentForElasticsearch(userId);
+  }
+
+  /**
+   * Legacy method - kept for backward compatibility.
+   * @deprecated Use buildUserDocumentForElasticsearch instead
+   */
+  public async buildUserDocumentForElasticsearchLegacy(
     userId: string
   ): Promise<IUser | null> {
     // Fetch user profile from Users table

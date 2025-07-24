@@ -34,6 +34,7 @@ import { FormSubmissionSearchDto } from 'src/forms/dto/form-submission-search.dt
 import { FormsService } from 'src/forms/forms.service';
 import { isElasticsearchEnabled } from 'src/common/utils/elasticsearch.util';
 import { UserElasticsearchService } from 'src/elasticsearch/user-elasticsearch.service';
+import { ElasticsearchDataFetcherService } from 'src/elasticsearch/elasticsearch-data-fetcher.service';
 @Injectable()
 export class PostgresCohortMembersService {
   constructor(
@@ -55,7 +56,8 @@ export class PostgresCohortMembersService {
     private readonly userService: PostgresUserService,
     private readonly formsService: FormsService,
     private readonly formSubmissionService: FormSubmissionService,
-    private readonly userElasticsearchService: UserElasticsearchService
+    private readonly userElasticsearchService: UserElasticsearchService,
+    private readonly elasticsearchDataFetcherService: ElasticsearchDataFetcherService
   ) {}
 
   //Get cohort member
@@ -760,7 +762,8 @@ export class PostgresCohortMembersService {
             cohortMembers.userId,
             { doc: { ...baseDoc, applications } },
             async (userId: string) => {
-              return await this.formSubmissionService.buildUserDocumentForElasticsearch(
+              // Use centralized service to fetch complete user document
+              return await this.elasticsearchDataFetcherService.fetchUserDocumentForElasticsearch(
                 userId
               );
             }
