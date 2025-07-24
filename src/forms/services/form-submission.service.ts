@@ -2994,13 +2994,6 @@ export class FormSubmissionService {
       }
     }
     // Build the IUser object
-    
-    // Debug logging - moved before return statement to make it reachable
-    LoggerUtil.warn(`buildUserDocumentForElasticsearch returning ${applications.length} applications for user: ${userId}`);
-    if (applications.length > 0) {
-      LoggerUtil.warn(`First application: ${JSON.stringify(applications[0], null, 2)}`);
-    }
-    
     return {
       userId: user.userId,
       profile: {
@@ -3031,6 +3024,12 @@ export class FormSubmissionService {
         ? user.updatedAt.toISOString()
         : new Date().toISOString(),
     };
+
+    // Debug logging
+    LoggerUtil.warn(`buildUserDocumentForElasticsearch returning ${applications.length} applications for user: ${userId}`);
+    if (applications.length > 0) {
+      LoggerUtil.warn(`First application: ${JSON.stringify(applications[0], null, 2)}`);
+    }
   }
 
   /**
