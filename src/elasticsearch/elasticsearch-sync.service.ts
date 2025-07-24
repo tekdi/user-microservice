@@ -91,7 +91,7 @@ export class ElasticsearchSyncService {
       // Build complete user document
       const userDocument: IUser = {
         userId,
-        profile, // Remove unnecessary type assertion
+        profile: profile as IProfile, // Cast to ensure required properties
         applications,
         courses: [], // Default empty courses array
         createdAt: new Date().toISOString(),
@@ -306,6 +306,11 @@ export class ElasticsearchSyncService {
 
     try {
       LoggerUtil.debug(`Syncing form submission data for user: ${userId}, form: ${submissionData.formId}, cohort: ${submissionData.cohortId}`, 'ElasticsearchSyncService');
+
+      // Get cohort details if provider is available - now using proper cohortId
+      const cohortDetails = cohortDetailsProvider 
+        ? await cohortDetailsProvider(submissionData.cohortId)
+        : { name: 'Unknown Cohort', status: 'active' };
 
       // Update application in Elasticsearch using proper cohortId
       await this.updateApplicationData(
@@ -726,14 +731,21 @@ export class ElasticsearchSyncService {
    * Search users in Elasticsearch
    * 
    * @param query - Search query
+   * @param filters - Search filters
+   * @param pagination - Pagination options
    * @returns Promise<Search results>
    */
-  async searchUsers(query: string): Promise<any> {
+  async searchUsers(
+    query: string,
+    filters?: Record<string, any>,
+    pagination?: { page: number; limit: number }
+  ): Promise<any> {
     if (!isElasticsearchEnabled()) {
       return { hits: { hits: [], total: { value: 0 } } };
     }
 
     try {
+      // Call searchUsers with proper parameters based on the service interface
       return await this.userElasticsearchService.searchUsers(query);
     } catch (error) {
       LoggerUtil.error('Failed to search users in Elasticsearch', error, 'ElasticsearchSyncService');
