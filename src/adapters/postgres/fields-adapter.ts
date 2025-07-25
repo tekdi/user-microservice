@@ -1791,7 +1791,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
 
         // let processedValue = data.value;
         let selectedValues = data.value;
-        const allFieldsOptions = data?.fieldParams?.options
+        /*const allFieldsOptions = data?.fieldParams?.options
           ? data.fieldParams.options
           : null;
         let processedValue = [];
@@ -1848,10 +1848,10 @@ export class PostgresFieldsService implements IServicelocatorfields {
         delete data.fieldParams;
         delete data.sourceDetails;
         delete data.value;
-
+*/
         return {
           ...data,
-          selectedValues: processedValue,
+          selectedValues,
         };
       });
       result = await Promise.all(result);

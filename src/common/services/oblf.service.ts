@@ -151,7 +151,7 @@ constructor(
             
             return await APIResponse.success(
                 response,
-                'api.add.tempUsers',
+                'api.add.cohortMembers',
                 result,
                 HttpStatus.OK,
                 API_RESPONSES.RESET_PASSWORD_LINK_SUCCESS

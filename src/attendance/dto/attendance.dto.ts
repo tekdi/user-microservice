@@ -151,6 +151,9 @@ export class AttendanceDto {
   lateMark: boolean;
 
   @Expose()
+  validLocation: boolean;
+
+  @Expose()
   absentReason: string;
 
   @ApiPropertyOptional()

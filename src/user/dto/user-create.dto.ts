@@ -110,11 +110,12 @@ export class UserCreateDto {
   @Length(1, 50)
   lastName: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     type: String,
     description: 'Gender of the user',
     enum: ['male', 'female', 'transgender']
   })
+  @IsOptional()
   @Expose()
   @IsEnum(['male', 'female', 'transgender'])
   gender: string;
