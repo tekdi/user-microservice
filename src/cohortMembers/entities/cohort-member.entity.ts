@@ -53,5 +53,5 @@ export class CohortMembers {
   status: MemberStatus;
 
   @Column({ type: "jsonb" })
-  params: string;
+  params: any;
 }

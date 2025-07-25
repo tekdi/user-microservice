@@ -69,6 +69,9 @@ export class AttendanceEntity {
   lateMark: boolean;
 
   @Column()
+  validLocation: boolean;
+
+  @Column()
   absentReason: string;
 
   constructor(obj: Partial<AttendanceEntity>) {

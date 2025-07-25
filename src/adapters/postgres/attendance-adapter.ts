@@ -17,6 +17,29 @@ import { format, differenceInCalendarDays, subDays } from 'date-fns';
 import { UserRoleMapping } from "src/rbac/assign-role/entities/assign-role.entity";
 const moment = require('moment');
 const facetedSearch = require("in-memory-faceted-search");
+const attendanceSettings =  {
+  "self": {
+    "allowed": 1,
+    "can_be_updated": 0,
+    "allow_late_marking": 1,
+    "attendance_ends_at": "10:35",
+    "capture_geoLocation": 1,
+    "attendance_starts_at": "10:25",
+    "back_dated_attendance": 0,
+    "restrict_attendance_timings": 1,
+    "back_dated_attendance_allowed_days": 0
+  },
+  "student": {
+    "allowed": 1,
+    "can_be_updated": 1,
+    "allow_late_marking": 1,
+    "capture_geoLocation": 0,
+    "back_dated_attendance": 1,
+    "restrict_attendance_timings": 0,
+    "back_dated_attendance_allowed_days": 180
+  }
+}
+
 
 @Injectable()
 export class PostgresAttendanceService {
@@ -615,7 +638,7 @@ export class PostgresAttendanceService {
 
             this.attendanceRepository.merge(attendanceRecord, attendanceDto);
 
-            let getCohortDetails = await this.cohortRepository.findOne({
+            /*let getCohortDetails = await this.cohortRepository.findOne({
                 where: { "cohortId": attendanceDto.contextId }
             });
 
@@ -635,7 +658,7 @@ export class PostgresAttendanceService {
 
             if (attendanceValidation?.status === true && attendanceValidation?.markLate === true) {
                 attendanceRecord.lateMark = true;
-            }
+            }*/
 
             let updatedAttendanceRecord = await this.attendanceRepository.save(
                 attendanceRecord
@@ -670,14 +693,18 @@ export class PostgresAttendanceService {
     @body object containing details related to attendance details (AttendanceDto)
     @return attendance record for newly added user in Attendance table 
     */
-    public async createAttendance(request: any, attendanceDto: AttendanceDto) {
+    public async createAttendance(request: any, attendanceDto: AttendanceDto, academicYearId?: string) {
 
         try {
-            let getCohortDetails = await this.cohortRepository.findOne({
+            /*let cohortDetails = await this.cohortRepository.findOne({
                 where: {
                     "cohortId": attendanceDto.contextId
                 }
             });
+
+            if (attendanceDto.scope === 'self') { 
+                cohortDetails['teacherSlot'] = await this.getTeacherSlot(attendanceDto, academicYearId);
+            }
 
             // Set validation on mark attendance
             let attendanceValidation: any = {};
@@ -694,7 +721,7 @@ export class PostgresAttendanceService {
 
             if (attendanceValidation?.status === true && attendanceValidation?.markLate === true) {
                 attendanceDto['lateMark'] = true;
-            }
+            }*/
 
 
             const attendance = this.attendanceRepository.create(attendanceDto);
@@ -721,6 +748,25 @@ export class PostgresAttendanceService {
         }
     }
 
+    public async getTeacherSlot(attendanceDto: AttendanceDto, academicYearId?: string) {
+        const memberRecord = await this.cohortMembersRepository
+            .createQueryBuilder('cm')
+            .innerJoin('CohortAcademicYear', 'cay', 'cm.cohortId = cay.cohortId AND cm.cohortAcademicYearId = cay.cohortAcademicYearId')
+            .where('cm.userId = :userId', { userId: attendanceDto.userId })
+            .andWhere('cm.cohortId = :cohortId', { cohortId: attendanceDto.contextId })
+            .andWhere('cay.academicYearId = :academicYearId', { academicYearId: academicYearId })
+            .getOne();
+            
+                let paramsObj = memberRecord?.params;
+                if (typeof paramsObj === 'string') {
+                    try {
+                        paramsObj = JSON.parse(paramsObj);
+                    } catch (e) {
+                        paramsObj = {};
+                    }
+                }
+        return paramsObj?.slot || null;
+    }
     public formatTime(hours: number, minutes: number) {
         return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
     };
@@ -734,7 +780,8 @@ export class PostgresAttendanceService {
         // If a scope is provided in the request body, retrieve the credentials associated with that scope for marking attendance.
         // Otherwise, default to retrieving credentials for students.
         const scope = attendanceDto.scope || 'student';
-        const attendanceValidation = getCohortDetails.params[scope];
+        const attendanceValidation = attendanceSettings[scope]//getCohortDetails.params[scope];
+
 
         //set flag for mark attendance
         let result = {

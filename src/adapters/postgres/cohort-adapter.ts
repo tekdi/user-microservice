@@ -564,12 +564,12 @@ export class PostgresCohortService {
       let cohortsByAcademicYear: CohortAcademicYear[];
 
       offset = offset || 0;
-      limit = limit || 200;
+      limit = limit || 300;
 
       const emptyValueKeys = {};
       let emptyKeysString = "";
 
-      const MAX_LIMIT = 200;
+      const MAX_LIMIT = 300;
 
       // Validate the limit parameter
       if (limit > MAX_LIMIT) {
