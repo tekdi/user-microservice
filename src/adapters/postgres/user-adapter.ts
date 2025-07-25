@@ -1622,7 +1622,7 @@ export class PostgresUserService implements IServicelocator {
     user.lastName = userDto?.lastName;
     user.gender = userDto?.gender;
     user.status = userDto?.status as User['status'];
-    user.email = userDto?.email;
+    user.email = userDto?.email?.toLowerCase();
     user.mobile = Number(userDto?.mobile) || null;
     user.mobile_country_code = userDto?.mobile_country_code;
     user.createdBy = userDto?.createdBy ?? null;
