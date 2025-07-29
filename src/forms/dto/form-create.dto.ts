@@ -12,8 +12,8 @@ export class FormCreateDto {
 
   @ApiProperty({
     type: String,
-    description: 'title',
-    example: 'Sample Form',
+    description: "title",
+    example: "Sample Form",
   })
   @IsString()
   @IsNotEmpty()
@@ -21,8 +21,8 @@ export class FormCreateDto {
 
   @ApiProperty({
     type: String,
-    description: 'context',
-    example: 'Context',
+    description: "context",
+    example: "Context",
   })
   @IsString()
   @IsNotEmpty()
@@ -30,15 +30,15 @@ export class FormCreateDto {
 
   @ApiProperty({
     type: String,
-    description: 'context',
-    example: 'Context',
+    description: "context",
+    example: "Context",
   })
   @IsString()
   @IsNotEmpty()
   contextType: string;
 
   @ApiProperty({
-    description: 'fields',
+    description: "fields",
   })
   @IsOptional()
   @IsObject()
@@ -48,5 +48,4 @@ export class FormCreateDto {
   createdBy: string;
 
   updatedBy: string;
-
 }

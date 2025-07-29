@@ -54,7 +54,7 @@ async function bootstrap() {
   //     transform: true,
   //   }),
   // );
-  
+
   const config = new DocumentBuilder()
     .setTitle("Shiksha Platform")
     .setDescription("CRUD API")

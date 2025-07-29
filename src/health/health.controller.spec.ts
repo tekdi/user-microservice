@@ -1,9 +1,9 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { HealthController } from './health.controller';
-import { DataSource } from 'typeorm';
-import { Response } from 'express';
+import { Test, TestingModule } from "@nestjs/testing";
+import { HealthController } from "./health.controller";
+import { DataSource } from "typeorm";
+import { Response } from "express";
 
-describe('HealthController', () => {
+describe("HealthController", () => {
   let controller: HealthController;
   let dataSource: DataSource;
   let mockResponse: Partial<Response>;
@@ -32,70 +32,76 @@ describe('HealthController', () => {
     dataSource = module.get<DataSource>(DataSource);
   });
 
-  it('should be defined', () => {
+  it("should be defined", () => {
     expect(controller).toBeDefined();
   });
 
-  it('should return healthy status when database is accessible', async () => {
+  it("should return healthy status when database is accessible", async () => {
     // Mock successful database query
-    jest.spyOn(dataSource, 'query').mockResolvedValue([{}]);
+    jest.spyOn(dataSource, "query").mockResolvedValue([{}]);
 
     await controller.checkHealth(mockResponse as Response);
 
     expect(mockResponse.status).toHaveBeenCalledWith(200);
     expect(mockResponse.json).toHaveBeenCalledWith(
       expect.objectContaining({
-        id: 'api.content.health',
-        ver: '3.0',
+        id: "api.content.health",
+        ver: "3.0",
         params: expect.objectContaining({
-          status: 'successful',
+          status: "successful",
           err: null,
           errmsg: null,
         }),
-        responseCode: 'OK',
+        responseCode: "OK",
         result: expect.objectContaining({
           healthy: true,
-          checks: [{ name: 'postgres db', healthy: true }],
+          checks: [{ name: "postgres db", healthy: true }],
         }),
       })
     );
   });
 
-  it('should return unhealthy status when database is not accessible', async () => {
+  it("should return unhealthy status when database is not accessible", async () => {
     // Mock failed database query
-    jest.spyOn(dataSource, 'query').mockRejectedValue(new Error('Connection failed'));
+    jest
+      .spyOn(dataSource, "query")
+      .mockRejectedValue(new Error("Connection failed"));
 
     await controller.checkHealth(mockResponse as Response);
 
     expect(mockResponse.status).toHaveBeenCalledWith(503);
     expect(mockResponse.json).toHaveBeenCalledWith(
       expect.objectContaining({
-        id: 'api.content.health',
-        ver: '3.0',
+        id: "api.content.health",
+        ver: "3.0",
         params: expect.objectContaining({
-          status: 'failed',
-          err: 'DATABASE_CONNECTION_ERROR',
-          errmsg: 'Connection failed',
+          status: "failed",
+          err: "DATABASE_CONNECTION_ERROR",
+          errmsg: "Connection failed",
         }),
-        responseCode: 'SERVICE_UNAVAILABLE',
+        responseCode: "SERVICE_UNAVAILABLE",
         result: expect.objectContaining({
           healthy: false,
-          checks: [{ name: 'postgres db', healthy: false }],
+          checks: [{ name: "postgres db", healthy: false }],
         }),
       })
     );
   });
 
-  it('should include timestamp and resmsgid in response', async () => {
-    jest.spyOn(dataSource, 'query').mockResolvedValue([{}]);
+  it("should include timestamp and resmsgid in response", async () => {
+    jest.spyOn(dataSource, "query").mockResolvedValue([{}]);
 
     await controller.checkHealth(mockResponse as Response);
 
     expect(mockResponse.json).toHaveBeenCalledWith(
       expect.objectContaining({
-        ts: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/),
+        ts: expect.stringMatching(
+          /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/
+        ),
         params: expect.objectContaining({
-          resmsgid: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i),
+          resmsgid: expect.stringMatching(
+            /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+          ),
         }),
       })
     );

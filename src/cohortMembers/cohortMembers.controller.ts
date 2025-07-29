@@ -48,7 +48,7 @@ import { GetUserId } from "src/common/decorators/getUserId.decorator";
 @Controller("cohortmember")
 @UseGuards(JwtAuthGuard)
 export class CohortMembersController {
-  constructor(private readonly cohortMemberAdapter: CohortMembersAdapter) { }
+  constructor(private readonly cohortMemberAdapter: CohortMembersAdapter) {}
 
   //create cohort members
   @UseFilters(new AllExceptionsFilter(APIID.COHORT_MEMBER_CREATE))
@@ -194,7 +194,7 @@ export class CohortMembersController {
   @ApiNotFoundResponse({ description: "Data not found" })
   @ApiBadRequestResponse({ description: "Bad request" })
   @ApiBody({ type: CohortMembersUpdateDto })
-  @UsePipes(new ValidationPipe()) 
+  @UsePipes(new ValidationPipe())
   public async updateCohortMembers(
     @Param("cohortmembershipid") cohortMembersId: string,
     @Req() request,
@@ -205,9 +205,7 @@ export class CohortMembersController {
   ) {
     const loginUser = userId;
     if (!loginUser || !isUUID(loginUser)) {
-      throw new BadRequestException(
-        "unauthorized!"
-      );
+      throw new BadRequestException("unauthorized!");
     }
     const result = await this.cohortMemberAdapter
       .buildCohortMembersAdapter()
@@ -250,14 +248,19 @@ export class CohortMembersController {
   @UsePipes(new ValidationPipe())
   // @ApiBasicAuth("access-token")
   @ApiHeader({
-    name: "tenantid", required: true
+    name: "tenantid",
+    required: true,
   })
   @ApiHeader({
-    name: "academicyearid", required: true
+    name: "academicyearid",
+    required: true,
   })
   @ApiQuery({
-    name: 'userId', required: true, type: 'string', description: 'userId required',
-    example: '123e4567-e89b-12d3-a456-426614174000',
+    name: "userId",
+    required: true,
+    type: "string",
+    description: "userId required",
+    example: "123e4567-e89b-12d3-a456-426614174000",
   })
   @ApiCreatedResponse({
     description: "Cohort Member has been created successfully.",
@@ -273,9 +276,7 @@ export class CohortMembersController {
     const tenantId = headers["tenantid"];
     const academicyearId = headers["academicyearid"];
     if (!loginUser || !isUUID(loginUser)) {
-      throw new BadRequestException(
-        "unauthorized!"
-      );
+      throw new BadRequestException("unauthorized!");
     }
     if (!tenantId || !isUUID(tenantId)) {
       throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);

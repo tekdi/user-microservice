@@ -60,7 +60,6 @@ export class setFilters {
   @IsArray()
   username: string[];
 
-
   @ApiProperty({
     type: [String],
     description: " User IDs",
@@ -87,17 +86,29 @@ export class setFilters {
   })
   @IsOptional()
   @IsArray()
-  @IsEnum(['active', 'inactive'], { each: true })
+  @IsEnum(["active", "inactive"], { each: true })
   status: string[];
 
-  @ApiPropertyOptional({ type: String, description: 'Start date in YYYY-MM-DD format' })
+  @ApiPropertyOptional({
+    type: String,
+    description: "Start date in YYYY-MM-DD format",
+  })
   @IsOptional()
-  @IsDateString({}, { message: 'fromDate must be a valid date string (YYYY-MM-DD)' })
+  @IsDateString(
+    {},
+    { message: "fromDate must be a valid date string (YYYY-MM-DD)" }
+  )
   fromDate?: string;
 
-  @ApiPropertyOptional({ type: String, description: 'End date in YYYY-MM-DD format' })
+  @ApiPropertyOptional({
+    type: String,
+    description: "End date in YYYY-MM-DD format",
+  })
   @IsOptional()
-  @IsDateString({}, { message: 'toDate must be a valid date string (YYYY-MM-DD)' })
+  @IsDateString(
+    {},
+    { message: "toDate must be a valid date string (YYYY-MM-DD)" }
+  )
   toDate?: string;
 
   @ApiPropertyOptional({
@@ -169,61 +180,93 @@ export class tenantCohortRoleMappingDto {
   roleId: string;
 }
 
-export class SuggestUserDto{
-  @ApiProperty({ type: String, description: 'First name of the user', maxLength: 50 })
+export class SuggestUserDto {
+  @ApiProperty({
+    type: String,
+    description: "First name of the user",
+    maxLength: 50,
+  })
   @Expose()
   @IsNotEmpty()
   @Length(1, 50)
   firstName: string;
 
-  @ApiProperty({ type: String, description: 'Middle name of the user (optional)', maxLength: 50, required: false })
+  @ApiProperty({
+    type: String,
+    description: "Middle name of the user (optional)",
+    maxLength: 50,
+    required: false,
+  })
   @Expose()
   @IsOptional()
   @Length(0, 50)
   middleName?: string;
 
-  @ApiProperty({ type: String, description: 'Last name of the user', maxLength: 50 })
+  @ApiProperty({
+    type: String,
+    description: "Last name of the user",
+    maxLength: 50,
+  })
   @Expose()
   @IsNotEmpty()
   @Length(1, 50)
   lastName: string;
-  
+
   @ApiPropertyOptional({ type: String, description: "User Name" })
   @Expose()
   @IsNotEmpty()
   username: string;
 }
 
-export class ExistUserDto {  
-    @ApiProperty({ type: String, description: 'First name of the user', maxLength: 50 })
-    @Expose()
-    @IsOptional()
-    @Length(1, 50)
-    firstName?: string;
-  
-    @ApiProperty({ type: String, description: 'Middle name of the user (optional)', maxLength: 50, required: false })
-    @Expose()
-    @IsOptional()
-    @Length(0, 50)
-    middleName?: string;
+export class ExistUserDto {
+  @ApiProperty({
+    type: String,
+    description: "First name of the user",
+    maxLength: 50,
+  })
+  @Expose()
+  @IsOptional()
+  @Length(1, 50)
+  firstName?: string;
 
-    @ApiProperty({ type: String, description: 'Middle name of the user (optional)', maxLength: 50, required: false })
-    @Expose()
-    @IsOptional()
-    @Length(0, 50)
-    lastName?: string;
+  @ApiProperty({
+    type: String,
+    description: "Middle name of the user (optional)",
+    maxLength: 50,
+    required: false,
+  })
+  @Expose()
+  @IsOptional()
+  @Length(0, 50)
+  middleName?: string;
 
-    @ApiProperty({ type: () => String })
-    @IsOptional()
-    @IsEmail()
-    email?: string;
+  @ApiProperty({
+    type: String,
+    description: "Middle name of the user (optional)",
+    maxLength: 50,
+    required: false,
+  })
+  @Expose()
+  @IsOptional()
+  @Length(0, 50)
+  lastName?: string;
 
-    @ApiProperty({ type: () => String, description: 'Mobile number of the user (optional)' })
-    @Expose()
-    @IsOptional()
-    @IsString({ message: 'Mobile number must be a string' })
-    @Matches(/^[0-9]{10}$/, { message: 'Mobile number must be between 10 digits and contain only numbers' })
-    mobile?: string;
+  @ApiProperty({ type: () => String })
+  @IsOptional()
+  @IsEmail()
+  email?: string;
+
+  @ApiProperty({
+    type: () => String,
+    description: "Mobile number of the user (optional)",
+  })
+  @Expose()
+  @IsOptional()
+  @IsString({ message: "Mobile number must be a string" })
+  @Matches(/^[0-9]{10}$/, {
+    message: "Mobile number must be between 10 digits and contain only numbers",
+  })
+  mobile?: string;
 }
 
 export class UserSearchDto {

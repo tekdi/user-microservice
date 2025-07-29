@@ -6,7 +6,7 @@ import { RolePermissionService } from "src/permissionRbac/rolePermissionMapping/
 
 @Injectable()
 export class PermissionMiddleware implements NestMiddleware {
-  constructor(private readonly rolePermissionService: RolePermissionService) { }
+  constructor(private readonly rolePermissionService: RolePermissionService) {}
 
   async use(req: Request, res: Response, next: NextFunction) {
     try {
@@ -34,7 +34,13 @@ export class PermissionMiddleware implements NestMiddleware {
         );
       }
     } catch (e) {
-      return APIResponse.error(res, "Something went wrong", e, "Internal error", HttpStatus.INTERNAL_SERVER_ERROR)
+      return APIResponse.error(
+        res,
+        "Something went wrong",
+        e,
+        "Internal error",
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
     }
   }
   async checkPermissions(

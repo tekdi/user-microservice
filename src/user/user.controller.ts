@@ -33,7 +33,11 @@ import {
   ApiConflictResponse,
 } from "@nestjs/swagger";
 
-import { ExistUserDto, SuggestUserDto, UserSearchDto } from "./dto/user-search.dto";
+import {
+  ExistUserDto,
+  SuggestUserDto,
+  UserSearchDto,
+} from "./dto/user-search.dto";
 import { UserAdapter } from "./useradapter";
 import { UserCreateDto } from "./dto/user-create.dto";
 import { UserUpdateDTO } from "./dto/user-update.dto";
@@ -274,7 +278,6 @@ export class UserController {
     return response.status(result.statusCode).json(result);
   }
 
-
   // required for FTL
   @UseFilters(new AllExceptionsFilter(APIID.SUGGEST_USERNAME))
   @Post("/suggestUsername")
@@ -292,7 +295,6 @@ export class UserController {
       .suggestUsername(request, response, suggestUserDto);
     return response.status(result.statusCode).json(result);
   }
-
 
   //delete
   @UseFilters(new AllExceptionsFilter(APIID.USER_DELETE))

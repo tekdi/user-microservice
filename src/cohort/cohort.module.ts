@@ -24,7 +24,6 @@ import { AutomaticMember } from "src/automatic-member/entity/automatic-member.en
 import { AutomaticMemberService } from "src/automatic-member/automatic-member.service";
 import { KafkaService } from "../kafka/kafka.service";
 
-
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -38,7 +37,7 @@ import { KafkaService } from "../kafka/kafka.service";
       AcademicYear,
       User,
       Tenants,
-      AutomaticMember
+      AutomaticMember,
     ]),
     HttpModule,
     PostgresModule,
@@ -53,7 +52,7 @@ import { KafkaService } from "../kafka/kafka.service";
     PostgresAcademicYearService,
     PostgresCohortMembersService,
     AutomaticMemberService,
-    KafkaService
+    KafkaService,
   ],
 })
-export class CohortModule { }
+export class CohortModule {}

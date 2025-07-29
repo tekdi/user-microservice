@@ -19,7 +19,7 @@ export class RolePermissionService {
     apiPath: string
   ): Promise<any> {
     try {
-      let result = await this.rolePermissionRepository.find({
+      const result = await this.rolePermissionRepository.find({
         where: { roleTitle: roleTitle, apiPath: apiPath },
       });
       LoggerUtil.log("Permission from DB: " + JSON.stringify(result));
@@ -35,7 +35,7 @@ export class RolePermissionService {
   ): Promise<any> {
     const apiId = "api.get.permission";
     try {
-      let result = await this.rolePermissionRepository.find({
+      const result = await this.rolePermissionRepository.find({
         where: { roleTitle: roleTitle, apiPath: apiPath },
       });
       return APIResponse.success(
@@ -63,7 +63,7 @@ export class RolePermissionService {
   ): Promise<any> {
     const apiId = "api.create.permission";
     try {
-      let result = await this.rolePermissionRepository.save({
+      const result = await this.rolePermissionRepository.save({
         roleTitle: permissionCreateDto.roleTitle,
         apiPath: permissionCreateDto.apiPath,
         requestType: permissionCreateDto.requestType,
@@ -94,7 +94,7 @@ export class RolePermissionService {
   ): Promise<any> {
     const apiId = "api.update.permission";
     try {
-      let result = await this.rolePermissionRepository.update(
+      const result = await this.rolePermissionRepository.update(
         rolePermissionCreateDto.rolePermissionId,
         {
           roleTitle: rolePermissionCreateDto.roleTitle,
@@ -128,7 +128,9 @@ export class RolePermissionService {
   ): Promise<any> {
     const apiId = "api.delete.permission";
     try {
-      let result = await this.rolePermissionRepository.delete(rolePermissionId);
+      const result = await this.rolePermissionRepository.delete(
+        rolePermissionId
+      );
       return APIResponse.success(
         response,
         apiId,

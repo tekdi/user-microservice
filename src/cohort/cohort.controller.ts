@@ -106,9 +106,8 @@ export class CohortController {
     @Body() cohortCreateDto: CohortCreateDto,
     @UploadedFile() image,
     @Res() response: Response,
-    @GetUserId("userId", ParseUUIDPipe) userId: string  
+    @GetUserId("userId", ParseUUIDPipe) userId: string
   ) {
-      
     const tenantId = headers["tenantid"];
     const academicYearId = headers["academicyearid"];
     if (!tenantId || !isUUID(tenantId)) {

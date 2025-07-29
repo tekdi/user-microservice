@@ -33,7 +33,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
     private fieldsRepository: Repository<Fields>,
     @InjectRepository(FieldValues)
     private fieldsValuesRepository: Repository<FieldValues>
-  ) { }
+  ) {}
 
   async getFormCustomField(requiredData, response) {
     const apiId = "FormData";
@@ -151,7 +151,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
           getFieldDetails.type == "radio") &&
         getFieldDetails.sourceDetails.source == "table"
       ) {
-        let fieldValue = fieldsData["value"][0];
+        const fieldValue = fieldsData["value"][0];
         const getOption = await this.findDynamicOptions(
           getFieldDetails.sourceDetails.table,
           `"${getFieldDetails?.sourceDetails?.table}_id"='${fieldValue}'`
@@ -798,7 +798,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
       const fieldKeys = this.fieldsRepository.metadata.columns.map(
         (column) => column.propertyName
       );
-      let tenantCond = tenantId
+      const tenantCond = tenantId
         ? `"tenantId" = '${tenantId}'`
         : `"tenantId" IS NULL`;
       let whereClause = tenantCond;
@@ -974,7 +974,6 @@ export class PostgresFieldsService implements IServicelocatorfields {
     limit: string,
     searchData: any
   ) {
-
     // Assign user in multiple block
     // const results = await this.fieldsValuesRepository
     // .createQueryBuilder("fieldValues")
@@ -1230,10 +1229,10 @@ export class PostgresFieldsService implements IServicelocatorfields {
               HttpStatus.NOT_FOUND
             );
           }
-          let foreignKeys = controllingfieldfk.toString();
+          const foreignKeys = controllingfieldfk.toString();
           whereClause = `"${fetchFieldParams?.dependsOn}_id" IN(${foreignKeys})`;
         }
-        
+
         dynamicOptions = await this.findDynamicOptions(
           fieldName,
           whereClause,
@@ -1504,8 +1503,8 @@ export class PostgresFieldsService implements IServicelocatorfields {
       ...(getFields?.includes("All")
         ? {}
         : getFields?.length
-          ? { name: In(getFields.filter(Boolean)) }
-          : {}),
+        ? { name: In(getFields.filter(Boolean)) }
+        : {}),
     };
 
     const validContextTypes = contextType?.filter(Boolean);
@@ -1515,8 +1514,10 @@ export class PostgresFieldsService implements IServicelocatorfields {
       condition.contextType = IsNull();
     }
 
-    const customFields = await this.fieldsRepository.find({ where: [condition, {context: IsNull(), contextType: IsNull()}] });
-    
+    const customFields = await this.fieldsRepository.find({
+      where: [condition, { context: IsNull(), contextType: IsNull() }],
+    });
+
     return customFields;
   }
 
@@ -1652,12 +1653,12 @@ export class PostgresFieldsService implements IServicelocatorfields {
   }
 
   async getEditableFieldsAttributes(tenantId: string) {
-    let tenantData = tenantId ? tenantId : 'default'
+    const tenantData = tenantId ? tenantId : "default";
     const getFieldsAttributesQuery = `
           SELECT * 
           FROM "public"."Fields" 
           WHERE "fieldAttributes"->>'isEditable' = $1; 
-        `;        
+        `;
     const getFieldsAttributesParams = ["true"];
     return await this.fieldsRepository.query(
       getFieldsAttributesQuery,
@@ -1695,19 +1696,19 @@ export class PostgresFieldsService implements IServicelocatorfields {
     if (!Array.isArray(data.value)) {
       data.value = [data.value];
     }
-  
+
     const result = await this.fieldsValuesRepository.insert({
       itemId,
       fieldId: data.fieldId,
       value: data.value,
     });
-  
+
     return {
       ...result,
       correctValue: true,
     };
   }
-  
+
   validateFieldValue(field: any, value: any) {
     try {
       const fieldInstance = FieldFactory.createField(
@@ -1739,7 +1740,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         })) || [];
 
       // let fieldValidation = field.fieldAttributes[tenantId] || field.fieldAttributes["default"];
-      let fieldValidation = field.fieldAttributes;
+      const fieldValidation = field.fieldAttributes;
 
       return {
         label: field.label,
@@ -1808,7 +1809,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         let optionValues;
 
         // let processedValue = data.value;
-        let selectedValues = data.value;
+        const selectedValues = data.value;
         const allFieldsOptions = data?.fieldParams?.options
           ? data.fieldParams.options
           : null;
@@ -1858,7 +1859,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
               value: data[nameField],
             }));
           } else if (data.sourceDetails?.externalsource) {
-              processedValue = data?.value
+            processedValue = data?.value;
           }
         } else {
           processedValue = selectedValues;

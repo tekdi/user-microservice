@@ -1,17 +1,16 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString } from 'class-validator';
+import { ApiProperty } from "@nestjs/swagger";
+import { IsNotEmpty, IsString } from "class-validator";
 
 export class SendPasswordResetLinkDto {
-
-  @ApiProperty({ type: () => String, example: 'John' })
+  @ApiProperty({ type: () => String, example: "John" })
   @IsString()
   @IsNotEmpty()
   username: string;
 
-  @ApiProperty({ type: () => String, example: 'https://example.com' })
+  @ApiProperty({ type: () => String, example: "https://example.com" })
   @IsString()
   @IsNotEmpty()
-  redirectUrl: string
+  redirectUrl: string;
 }
 
 export class ResetUserPasswordDto {
@@ -25,7 +24,6 @@ export class ResetUserPasswordDto {
 }
 
 export class ForgotPasswordDto {
-
   @ApiProperty()
   @IsString()
   @IsNotEmpty()
@@ -37,10 +35,8 @@ export class ForgotPasswordDto {
   token: string;
 }
 
-
 export class SendPasswordResetOTPDto {
-
-  @ApiProperty({ type: () => String, example: 'John' })
+  @ApiProperty({ type: () => String, example: "John" })
   @IsString()
   @IsNotEmpty()
   username: string;

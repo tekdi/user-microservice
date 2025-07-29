@@ -3,7 +3,10 @@ import { User } from "../../user/entities/user-entity";
 import { FieldValues } from "src/fields/entities/fields-values.entity";
 import { InjectRepository } from "@nestjs/typeorm";
 import { DataSource, ILike, In, Repository } from "typeorm";
-import { tenantRoleMappingDto, UserCreateDto } from "../../user/dto/user-create.dto";
+import {
+  tenantRoleMappingDto,
+  UserCreateDto,
+} from "../../user/dto/user-create.dto";
 import jwt_decode from "jwt-decode";
 import {
   getKeycloakAdminToken,
@@ -16,7 +19,11 @@ import { ErrorResponse } from "src/error-response";
 import { SuccessResponse } from "src/success-response";
 import { CohortMembers } from "src/cohortMembers/entities/cohort-member.entity";
 import { isUUID } from "class-validator";
-import { ExistUserDto, SuggestUserDto, UserSearchDto } from "src/user/dto/user-search.dto";
+import {
+  ExistUserDto,
+  SuggestUserDto,
+  UserSearchDto,
+} from "src/user/dto/user-search.dto";
 import { UserTenantMapping } from "src/userTenantMapping/entities/user-tenant-mapping.entity";
 import { UserRoleMapping } from "src/rbac/assign-role/entities/assign-role.entity";
 import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
@@ -44,7 +51,7 @@ import { OtpSendDTO } from "src/user/dto/otpSend.dto";
 import { OtpVerifyDTO } from "src/user/dto/otpVerify.dto";
 import { SendPasswordResetOTPDto } from "src/user/dto/passwordReset.dto";
 import { ActionType, UserUpdateDTO } from "src/user/dto/user-update.dto";
-import { randomInt } from 'crypto';
+import { randomInt } from "crypto";
 import { UUID } from "aws-sdk/clients/cloudtrail";
 import { AutomaticMemberService } from "src/automatic-member/automatic-member.service";
 import { KafkaService } from "src/kafka/kafka.service";
@@ -103,20 +110,21 @@ export class PostgresUserService implements IServicelocator {
     );
     this.reset_frontEnd_url =
       this.configService.get<string>("RESET_FRONTEND_URL");
-    this.otpExpiry = this.configService.get<number>('OTP_EXPIRY') || 10; // default: 10 minutes
-    this.otpDigits = this.configService.get<number>('OTP_DIGITS') || 6;
-    this.smsKey = this.configService.get<string>('SMS_KEY');
-    this.msg91TemplateKey = this.configService.get<string>('MSG91_TEMPLATE_KEY');
+    this.otpExpiry = this.configService.get<number>("OTP_EXPIRY") || 10; // default: 10 minutes
+    this.otpDigits = this.configService.get<number>("OTP_DIGITS") || 6;
+    this.smsKey = this.configService.get<string>("SMS_KEY");
+    this.msg91TemplateKey =
+      this.configService.get<string>("MSG91_TEMPLATE_KEY");
     this.dataSource = dataSource; // Store dataSource in class property
   }
 
-
   public async getCoreColumnNames() {
     const userMetadata = this.dataSource.getMetadata(User);
-    const columnNames = userMetadata.columns.map((column) => column.propertyName);
+    const columnNames = userMetadata.columns.map(
+      (column) => column.propertyName
+    );
     return columnNames;
   }
-
 
   public async sendPasswordResetLink(
     request: any,
@@ -400,7 +408,6 @@ export class PostgresUserService implements IServicelocator {
     }
   }
 
-
   async findAllUserDetails(userSearchDto) {
     let { limit, offset, filters, exclude, sort } = userSearchDto;
     let excludeCohortIdes;
@@ -426,8 +433,14 @@ export class PostgresUserService implements IServicelocator {
 
     if (filters && Object.keys(filters).length > 0) {
       //Fwtch all core fields
-      let coreFields = await this.getCoreColumnNames();
-      const allCoreField = [...coreFields, 'fromDate', 'toDate', 'role', 'tenantId'];
+      const coreFields = await this.getCoreColumnNames();
+      const allCoreField = [
+        ...coreFields,
+        "fromDate",
+        "toDate",
+        "role",
+        "tenantId",
+      ];
 
       for (const [key, value] of Object.entries(filters)) {
         //Check request filter are proesent on core file or cutom fields
@@ -445,8 +458,13 @@ export class PostgresUserService implements IServicelocator {
             case "email":
             case "username":
             case "userId":
-              if (Array.isArray(value) && value.every((item) => typeof item === "string")) {
-                const status = value.map((item) => `'${item.trim().toLowerCase()}'`).join(",");
+              if (
+                Array.isArray(value) &&
+                value.every((item) => typeof item === "string")
+              ) {
+                const status = value
+                  .map((item) => `'${item.trim().toLowerCase()}'`)
+                  .join(",");
                 whereCondition += ` U."${key}" IN(${status})`;
               } else {
                 whereCondition += ` U."${key}" = '${value}'`;
@@ -510,7 +528,6 @@ export class PostgresUserService implements IServicelocator {
 
     //If source config in source details from fields table is not exist then return false
     if (Object.keys(searchCustomFields).length > 0) {
-
       const context = "USERS";
       getUserIdUsingCustomFields =
         await this.fieldsService.filterUserUsingCustomFields(
@@ -527,7 +544,9 @@ export class PostgresUserService implements IServicelocator {
       const userIdsDependsOnCustomFields = getUserIdUsingCustomFields
         .map((userId) => `'${userId}'`)
         .join(",");
-      whereCondition += `${index > 0 ? " AND " : ""} U."userId" IN (${userIdsDependsOnCustomFields})`;
+      whereCondition += `${
+        index > 0 ? " AND " : ""
+      } U."userId" IN (${userIdsDependsOnCustomFields})`;
       index++;
     }
 
@@ -573,16 +592,17 @@ export class PostgresUserService implements IServicelocator {
       // Get user custom field data
       for (const userData of userDetails) {
         const customFields = await this.fieldsService.getCustomFieldDetails(
-          userData.userId, 'Users'
+          userData.userId,
+          "Users"
         );
 
         userData["customFields"] = Array.isArray(customFields)
           ? customFields.map((data) => ({
-            fieldId: data?.fieldId,
-            label: data?.label,
-            selectedValues: data?.selectedValues,
-            type: data?.type,
-          }))
+              fieldId: data?.fieldId,
+              label: data?.label,
+              selectedValues: data?.selectedValues,
+              type: data?.type,
+            }))
           : [];
 
         result.getUserDetails.push(userData);
@@ -610,7 +630,7 @@ export class PostgresUserService implements IServicelocator {
           userId: userData.userId,
         },
       });
-      
+
       if (checkExistUser.length == 0) {
         return APIResponse.error(
           response,
@@ -665,7 +685,8 @@ export class PostgresUserService implements IServicelocator {
         const contextType = roleInUpper;
         // customFields = await this.fieldsService.getFieldValuesData(userData.userId, context, contextType, ['All'], true);
         customFields = await this.fieldsService.getCustomFieldDetails(
-          userData.userId, 'Users'
+          userData.userId,
+          "Users"
         );
       }
 
@@ -774,7 +795,7 @@ export class PostgresUserService implements IServicelocator {
     }
     const tenantData = tenantId
       ? tenentDetails.filter((item) => item.tenantId === tenantId)
-      : tenentDetails;    
+      : tenentDetails;
     userDetails["tenantData"] = tenantData;
 
     return userDetails;
@@ -802,7 +823,7 @@ export class PostgresUserService implements IServicelocator {
     UTM."userId" = $1
   ORDER BY 
     T."tenantId", UTM."Id";`;
-    
+
     const result = await this.usersRepository.query(query, [userId]);
     const combinedResult = [];
     const roleArray = [];
@@ -811,7 +832,7 @@ export class PostgresUserService implements IServicelocator {
         userId,
         data.tenantId
       );
-      
+
       if (roleData.length > 0) {
         roleArray.push(roleData[0].roleid);
         const roleId = roleData[0].roleid;
@@ -846,7 +867,9 @@ export class PostgresUserService implements IServicelocator {
       const updatedData = {};
       const editIssues = {};
 
-      const user = await this.usersRepository.findOne({ where: { userId: userDto.userId } });
+      const user = await this.usersRepository.findOne({
+        where: { userId: userDto.userId },
+      });
       if (!user) {
         return APIResponse.error(
           response,
@@ -862,16 +885,22 @@ export class PostgresUserService implements IServicelocator {
         let deviceIds: any;
         if (userDto.userData.action === ActionType.ADD) {
           // add deviceId
-          deviceIds = await this.loginDeviceIdAction(userDto.userData.deviceId, userDto.userId, user.deviceId)
+          deviceIds = await this.loginDeviceIdAction(
+            userDto.userData.deviceId,
+            userDto.userId,
+            user.deviceId
+          );
           userDto.userData.deviceId = deviceIds;
-
         } else if (userDto.userData.action === ActionType.REMOVE) {
           //remove deviceId
-          deviceIds = await this.onLogoutDeviceId(userDto.userData.deviceId, userDto.userId, user.deviceId)
+          deviceIds = await this.onLogoutDeviceId(
+            userDto.userData.deviceId,
+            userDto.userId,
+            user.deviceId
+          );
           userDto.userData.deviceId = deviceIds;
         }
       }
-
 
       const { username, firstName, lastName, email } = userDto.userData;
       const userId = userDto.userId;
@@ -880,9 +909,11 @@ export class PostgresUserService implements IServicelocator {
       //Update userdetails on keycloak
       if (username || firstName || lastName || email) {
         try {
-          const keycloakUpdateResult = await this.updateUsernameInKeycloak(keycloakReqBody);
+          const keycloakUpdateResult = await this.updateUsernameInKeycloak(
+            keycloakReqBody
+          );
 
-          if (keycloakUpdateResult === 'exists') {
+          if (keycloakUpdateResult === "exists") {
             return APIResponse.error(
               response,
               apiId,
@@ -930,7 +961,9 @@ export class PostgresUserService implements IServicelocator {
 
       if (userDto?.customFields?.length > 0) {
         const getFieldsAttributes =
-          await this.fieldsService.getEditableFieldsAttributes(userDto.userData.tenantId);
+          await this.fieldsService.getEditableFieldsAttributes(
+            userDto.userData.tenantId
+          );
 
         const isEditableFieldId = [];
         const fieldIdAndAttributes = {};
@@ -970,18 +1003,27 @@ export class PostgresUserService implements IServicelocator {
       }
 
       if (userDto.automaticMember && userDto?.automaticMember?.value === true) {
-
         let assignTo;
         //Find Assign field value from custom fields
-        let foundField = userDto.customFields.find(field => field.fieldId === userDto.automaticMember.fieldId);
+        const foundField = userDto.customFields.find(
+          (field) => field.fieldId === userDto.automaticMember.fieldId
+        );
         if (foundField) {
           assignTo = foundField.value;
         }
 
         // Check if an active automated member exists for the given userId, tenantId, and assigned ID.
-        const checkAutomaticMemberExists = await this.automaticMemberService.checkAutomaticMemberExists(userId, userDto.userData.tenantId, foundField.value[0]);
+        const checkAutomaticMemberExists =
+          await this.automaticMemberService.checkAutomaticMemberExists(
+            userId,
+            userDto.userData.tenantId,
+            foundField.value[0]
+          );
 
-        if (checkAutomaticMemberExists.length > 0 && checkAutomaticMemberExists[0].isActive === true) {
+        if (
+          checkAutomaticMemberExists.length > 0 &&
+          checkAutomaticMemberExists[0].isActive === true
+        ) {
           return APIResponse.error(
             response,
             apiId,
@@ -991,17 +1033,33 @@ export class PostgresUserService implements IServicelocator {
           );
         }
 
-
-        if (checkAutomaticMemberExists.length > 0 && checkAutomaticMemberExists[0].isActive === false) {
+        if (
+          checkAutomaticMemberExists.length > 0 &&
+          checkAutomaticMemberExists[0].isActive === false
+        ) {
           // deactivate the current active automatic membership for the user in tenantId.
-          const getActiveAutomaticMembershipId = await this.automaticMemberService.getUserbyUserIdAndTenantId(userId, userDto.userData.tenantId, true);
+          const getActiveAutomaticMembershipId =
+            await this.automaticMemberService.getUserbyUserIdAndTenantId(
+              userId,
+              userDto.userData.tenantId,
+              true
+            );
 
-          if (getActiveAutomaticMembershipId && getActiveAutomaticMembershipId.isActive === true) {
-            await this.automaticMemberService.update(getActiveAutomaticMembershipId.id, { isActive: false })
+          if (
+            getActiveAutomaticMembershipId &&
+            getActiveAutomaticMembershipId.isActive === true
+          ) {
+            await this.automaticMemberService.update(
+              getActiveAutomaticMembershipId.id,
+              { isActive: false }
+            );
           }
 
           // Activate the old inactive automatic membership for the user in tenantId and assigned ID.
-          await this.automaticMemberService.update(checkAutomaticMemberExists[0].id, { isActive: true })
+          await this.automaticMemberService.update(
+            checkAutomaticMemberExists[0].id,
+            { isActive: true }
+          );
           return await APIResponse.success(
             response,
             apiId,
@@ -1011,7 +1069,12 @@ export class PostgresUserService implements IServicelocator {
           );
         }
 
-        await this.updateAutomaticMemberMapping(userDto.automaticMember, assignTo, userId, userDto.userData.tenantId)
+        await this.updateAutomaticMemberMapping(
+          userDto.automaticMember,
+          assignTo,
+          userId,
+          userDto.userData.tenantId
+        );
       }
 
       LoggerUtil.log(
@@ -1030,13 +1093,14 @@ export class PostgresUserService implements IServicelocator {
       );
 
       // Produce user updated event to Kafka asynchronously - after response is sent to client
-      this.publishUserEvent('updated', userDto.userId, apiId)
-        .catch(error => LoggerUtil.error(
+      this.publishUserEvent("updated", userDto.userId, apiId).catch((error) =>
+        LoggerUtil.error(
           `Failed to publish user updated event to Kafka`,
           `Error: ${error.message}`,
           apiId
-        ));
-      
+        )
+      );
+
       return apiResponse;
     } catch (e) {
       LoggerUtil.error(
@@ -1058,17 +1122,32 @@ export class PostgresUserService implements IServicelocator {
     throw new Error("Method not implemented.");
   }
 
-  async updateAutomaticMemberMapping(automaticMember: any, fieldValue: any, userId: UUID, tenantId: UUID) {
-
+  async updateAutomaticMemberMapping(
+    automaticMember: any,
+    fieldValue: any,
+    userId: UUID,
+    tenantId: UUID
+  ) {
     try {
       // deactivate the current active automatic membership for the user in tenantId.
-      const getActiveAutomaticMembershipId = await this.automaticMemberService.getUserbyUserIdAndTenantId(userId, tenantId, true);
+      const getActiveAutomaticMembershipId =
+        await this.automaticMemberService.getUserbyUserIdAndTenantId(
+          userId,
+          tenantId,
+          true
+        );
 
-      if (getActiveAutomaticMembershipId && getActiveAutomaticMembershipId.isActive === true) {
-        await this.automaticMemberService.update(getActiveAutomaticMembershipId.id, { isActive: false })
+      if (
+        getActiveAutomaticMembershipId &&
+        getActiveAutomaticMembershipId.isActive === true
+      ) {
+        await this.automaticMemberService.update(
+          getActiveAutomaticMembershipId.id,
+          { isActive: false }
+        );
       }
 
-      let createAutomaticMember = {
+      const createAutomaticMember = {
         userId: userId,
         rules: {
           condition: {
@@ -1083,12 +1162,11 @@ export class PostgresUserService implements IServicelocator {
           // }
         },
         tenantId: tenantId,
-        isActive: true
-      }
+        isActive: true,
+      };
 
       //Assgn member to sdb
-      await this.automaticMemberService.create(createAutomaticMember)
-
+      await this.automaticMemberService.create(createAutomaticMember);
     } catch (error) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
@@ -1098,36 +1176,42 @@ export class PostgresUserService implements IServicelocator {
     }
   }
 
-  async updateUsernameInKeycloak(updateField: UpdateField): Promise<'exists' | false | true> {
+  async updateUsernameInKeycloak(
+    updateField: UpdateField
+  ): Promise<"exists" | false | true> {
     try {
-
       const keycloakResponse = await getKeycloakAdminToken();
       const token = keycloakResponse.data.access_token;
 
       //Check user is exist in keycloakDB or not
-      const checkUserinKeyCloakandDb = await this.checkUserinKeyCloakandDb(updateField);
+      const checkUserinKeyCloakandDb = await this.checkUserinKeyCloakandDb(
+        updateField
+      );
       if (checkUserinKeyCloakandDb) {
-        return 'exists';
+        return "exists";
       }
 
       //Update user in keyCloakService
-      let updateResult = await updateUserInKeyCloak(updateField, token)
+      const updateResult = await updateUserInKeyCloak(updateField, token);
       if (updateResult.success === false) {
         return false;
       }
       return true;
-
     } catch (error) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
-        `KeyCloak Error: ${error.message}`,
+        `KeyCloak Error: ${error.message}`
       );
       return false;
     }
   }
 
-  async loginDeviceIdAction(userDeviceId: string, userId: string, existingDeviceId: string[]): Promise<string[]> {
-    let deviceIds = existingDeviceId || [];
+  async loginDeviceIdAction(
+    userDeviceId: string,
+    userId: string,
+    existingDeviceId: string[]
+  ): Promise<string[]> {
+    const deviceIds = existingDeviceId || [];
     // Check if the device ID already exists
     if (deviceIds.includes(userDeviceId)) {
       return deviceIds; // No action if device ID already exists
@@ -1141,18 +1225,25 @@ export class PostgresUserService implements IServicelocator {
     return deviceIds; // Return the updated device list
   }
 
-  async onLogoutDeviceId(deviceIdforRemove: string, userId: string, existingDeviceId: string[]) {
+  async onLogoutDeviceId(
+    deviceIdforRemove: string,
+    userId: string,
+    existingDeviceId: string[]
+  ) {
     let deviceIds = existingDeviceId || [];
     // Check if the device ID exists
     if (!deviceIds.includes(deviceIdforRemove)) {
       return deviceIds; // No action if device ID does not exist
     }
     // Remove the device ID
-    deviceIds = deviceIds.filter(id => id !== deviceIdforRemove);
+    deviceIds = deviceIds.filter((id) => id !== deviceIdforRemove);
     return deviceIds;
   }
 
-  async updateBasicUserDetails(userId: string, userData: Partial<User>): Promise<User | null> {
+  async updateBasicUserDetails(
+    userId: string,
+    userData: Partial<User>
+  ): Promise<User | null> {
     try {
       // Fetch the user by ID
       const user = await this.usersRepository.findOne({ where: { userId } });
@@ -1163,13 +1254,11 @@ export class PostgresUserService implements IServicelocator {
 
       await Object.assign(user, userData);
       return this.usersRepository.save(user);
-
     } catch (error) {
       // Re-throw or handle the error as needed
-      throw new Error('An error occurred while updating user details');
+      throw new Error("An error occurred while updating user details");
     }
   }
-
 
   async createUser(
     request: any,
@@ -1180,12 +1269,12 @@ export class PostgresUserService implements IServicelocator {
     const apiId = APIID.USER_CREATE;
     const startTime = Date.now();
     const stepTimings = {};
-    
+
     const userContext = {
       username: userCreateDto?.username,
       email: userCreateDto?.email,
       firstName: userCreateDto?.firstName,
-      lastName: userCreateDto?.lastName
+      lastName: userCreateDto?.lastName,
     };
 
     // Log user creation attempt with context
@@ -1203,7 +1292,7 @@ export class PostgresUserService implements IServicelocator {
         userCreateDto.createdBy = decoded?.sub;
         userCreateDto.updatedBy = decoded?.sub;
       }
-      stepTimings['jwt_extraction'] = Date.now() - jwtStartTime;
+      stepTimings["jwt_extraction"] = Date.now() - jwtStartTime;
 
       // Step 2: Validate custom fields
       const customFieldStartTime = Date.now();
@@ -1225,7 +1314,8 @@ export class PostgresUserService implements IServicelocator {
           );
         }
       }
-      stepTimings['custom_field_validation'] = Date.now() - customFieldStartTime;
+      stepTimings["custom_field_validation"] =
+        Date.now() - customFieldStartTime;
 
       // Step 3: Validate request body and roles
       const validationStartTime = Date.now();
@@ -1253,11 +1343,14 @@ export class PostgresUserService implements IServicelocator {
           HttpStatus.BAD_REQUEST
         );
       }
-      stepTimings['request_validation'] = Date.now() - validationStartTime;
+      stepTimings["request_validation"] = Date.now() - validationStartTime;
 
       // Step 4: Validate automatic member vs cohort assignment
       const businessLogicStartTime = Date.now();
-      if (userCreateDto.automaticMember?.value === true && userCreateDto.tenantCohortRoleMapping?.[0]?.cohortIds?.length > 0) {
+      if (
+        userCreateDto.automaticMember?.value === true &&
+        userCreateDto.tenantCohortRoleMapping?.[0]?.cohortIds?.length > 0
+      ) {
         LoggerUtil.error(
           `Invalid operation for ${userContext.username}: Cannot assign automatic member with cohort`,
           `User cannot be assigned as automatic member while also being assigned to a center`,
@@ -1272,7 +1365,8 @@ export class PostgresUserService implements IServicelocator {
           HttpStatus.BAD_REQUEST
         );
       }
-      stepTimings['business_logic_validation'] = Date.now() - businessLogicStartTime;
+      stepTimings["business_logic_validation"] =
+        Date.now() - businessLogicStartTime;
 
       // Step 5: Prepare username and check Keycloak
       const keycloakCheckStartTime = Date.now();
@@ -1284,7 +1378,7 @@ export class PostgresUserService implements IServicelocator {
       const checkUserinKeyCloakandDb = await this.checkUserinKeyCloakandDb(
         userCreateDto
       );
-      
+
       if (checkUserinKeyCloakandDb) {
         LoggerUtil.error(
           `User ${userContext.username} already exists`,
@@ -1300,7 +1394,7 @@ export class PostgresUserService implements IServicelocator {
           HttpStatus.BAD_REQUEST
         );
       }
-      stepTimings['keycloak_user_check'] = Date.now() - keycloakCheckStartTime;
+      stepTimings["keycloak_user_check"] = Date.now() - keycloakCheckStartTime;
 
       // Step 6: Create user in Keycloak
       const keycloakCreateStartTime = Date.now();
@@ -1310,13 +1404,18 @@ export class PostgresUserService implements IServicelocator {
         userContext.username
       );
 
-      const resKeycloak = await createUserInKeyCloak(userSchema, token, validatedRoles[0]?.title)
+      const resKeycloak = await createUserInKeyCloak(
+        userSchema,
+        token,
+        validatedRoles[0]?.title
+      );
 
       // Capture Keycloak creation timing immediately after the call
-      stepTimings['keycloak_user_creation'] = Date.now() - keycloakCreateStartTime;
+      stepTimings["keycloak_user_creation"] =
+        Date.now() - keycloakCreateStartTime;
 
       // Handle the case where createUserInKeyCloak returns a string (error)
-      if (typeof resKeycloak === 'string') {
+      if (typeof resKeycloak === "string") {
         LoggerUtil.error(
           `Keycloak user creation failed for ${userContext.username}`,
           resKeycloak,
@@ -1387,7 +1486,7 @@ export class PostgresUserService implements IServicelocator {
         academicYearId,
         response
       );
-      stepTimings['database_user_creation'] = Date.now() - dbCreateStartTime;
+      stepTimings["database_user_creation"] = Date.now() - dbCreateStartTime;
 
       LoggerUtil.log(
         `User ${userContext.username} created successfully in database`,
@@ -1421,9 +1520,9 @@ export class PostgresUserService implements IServicelocator {
               fieldDetail[`${fieldId}`]
                 ? fieldDetail
                 : {
-                  ...fieldDetail,
-                  [`${fieldId}`]: { fieldAttributes, fieldParams, name },
-                },
+                    ...fieldDetail,
+                    [`${fieldId}`]: { fieldAttributes, fieldParams, name },
+                  },
             {}
           );
 
@@ -1450,7 +1549,8 @@ export class PostgresUserService implements IServicelocator {
           }
         }
       }
-      stepTimings['custom_fields_processing'] = Date.now() - customFieldsStartTime;
+      stepTimings["custom_fields_processing"] =
+        Date.now() - customFieldsStartTime;
 
       // Step 9: Log performance metrics
       const totalTime = Date.now() - startTime;
@@ -1459,14 +1559,14 @@ export class PostgresUserService implements IServicelocator {
         apiId,
         userContext.username
       );
-      
+
       // Log performance breakdown
       LoggerUtil.log(
-        `Performance breakdown for user creation (${userContext.username}): Total: ${totalTime}ms | JWT: ${stepTimings['jwt_extraction']}ms | Custom Fields Validation: ${stepTimings['custom_field_validation']}ms | Request Validation: ${stepTimings['request_validation']}ms | Business Logic: ${stepTimings['business_logic_validation']}ms | Keycloak Check: ${stepTimings['keycloak_user_check']}ms | Keycloak Creation: ${stepTimings['keycloak_user_creation']}ms | Database Creation: ${stepTimings['database_user_creation']}ms | Custom Fields Processing: ${stepTimings['custom_fields_processing']}ms`,
+        `Performance breakdown for user creation (${userContext.username}): Total: ${totalTime}ms | JWT: ${stepTimings["jwt_extraction"]}ms | Custom Fields Validation: ${stepTimings["custom_field_validation"]}ms | Request Validation: ${stepTimings["request_validation"]}ms | Business Logic: ${stepTimings["business_logic_validation"]}ms | Keycloak Check: ${stepTimings["keycloak_user_check"]}ms | Keycloak Creation: ${stepTimings["keycloak_user_creation"]}ms | Database Creation: ${stepTimings["database_user_creation"]}ms | Custom Fields Processing: ${stepTimings["custom_fields_processing"]}ms`,
         apiId,
         userContext.username
       );
-      
+
       // Send response to the client
       APIResponse.success(
         response,
@@ -1475,17 +1575,17 @@ export class PostgresUserService implements IServicelocator {
         HttpStatus.CREATED,
         API_RESPONSES.USER_CREATE_SUCCESSFULLY
       );
-      
+
       // Produce user created event to Kafka asynchronously - after response is sent to client
-      this.publishUserEvent('created', result.userId, apiId)
-        .catch(error => LoggerUtil.error(
+      this.publishUserEvent("created", result.userId, apiId).catch((error) =>
+        LoggerUtil.error(
           `Failed to publish user created event to Kafka for ${userContext.username}`,
           `Error: ${error.message}`,
           apiId,
           userContext.username
-        ));
+        )
+      );
     } catch (e) {
-
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
         `Error: ${e.message}`,
@@ -1613,14 +1713,13 @@ export class PostgresUserService implements IServicelocator {
           );
         }
 
-
-
         if (roleExists && roleExists?.length === 0) {
-          errorCollector.addError(
-            `Role Id '${roleId}' does not exist.`
-          );
+          errorCollector.addError(`Role Id '${roleId}' does not exist.`);
         } else if (roleExists) {
-          if ((roleExists[0].tenantId || roleExists[0].tenantId !== null) && roleExists[0].tenantId !== tenantId) {
+          if (
+            (roleExists[0].tenantId || roleExists[0].tenantId !== null) &&
+            roleExists[0].tenantId !== tenantId
+          ) {
             errorCollector.addError(
               `Role Id '${roleId}' does not exist for this tenant '${tenantId}'.`
             );
@@ -1656,7 +1755,6 @@ export class PostgresUserService implements IServicelocator {
     return notExistCohort.length > 0 ? notExistCohort : [];
   }
 
-
   // Can be Implemented after we know what are the unique entities
   async checkUserinKeyCloakandDb(userDto) {
     const keycloakResponse = await getKeycloakAdminToken();
@@ -1690,15 +1788,15 @@ export class PostgresUserService implements IServicelocator {
     response: Response
   ): Promise<User> {
     const user = new User();
-    user.userId = userCreateDto?.userId,
-      user.username = userCreateDto?.username,
-      user.firstName = userCreateDto?.firstName,
-      user.middleName = userCreateDto?.middleName,
-      user.lastName = userCreateDto?.lastName,
-      user.gender = userCreateDto?.gender,
-      user.email = userCreateDto?.email,
-      user.mobile = Number(userCreateDto?.mobile) || null,
-      user.createdBy = userCreateDto?.createdBy || userCreateDto?.createdBy;
+    (user.userId = userCreateDto?.userId),
+      (user.username = userCreateDto?.username),
+      (user.firstName = userCreateDto?.firstName),
+      (user.middleName = userCreateDto?.middleName),
+      (user.lastName = userCreateDto?.lastName),
+      (user.gender = userCreateDto?.gender),
+      (user.email = userCreateDto?.email),
+      (user.mobile = Number(userCreateDto?.mobile) || null),
+      (user.createdBy = userCreateDto?.createdBy || userCreateDto?.createdBy);
 
     if (userCreateDto?.dob) {
       user.dob = new Date(userCreateDto.dob);
@@ -1707,28 +1805,47 @@ export class PostgresUserService implements IServicelocator {
     const createdBy = request.user?.userId || result.userId;
 
     if (userCreateDto.tenantCohortRoleMapping) {
-      if (userCreateDto.automaticMember && userCreateDto?.automaticMember?.value === true) {
-        await this.automaticMemberMapping(userCreateDto.automaticMember, userCreateDto.customFields, userCreateDto.tenantCohortRoleMapping, result.userId, createdBy)
+      if (
+        userCreateDto.automaticMember &&
+        userCreateDto?.automaticMember?.value === true
+      ) {
+        await this.automaticMemberMapping(
+          userCreateDto.automaticMember,
+          userCreateDto.customFields,
+          userCreateDto.tenantCohortRoleMapping,
+          result.userId,
+          createdBy
+        );
       } else {
-        await this.tenantCohortRollMapping(userCreateDto.tenantCohortRoleMapping, academicYearId, result.userId, createdBy);
+        await this.tenantCohortRollMapping(
+          userCreateDto.tenantCohortRoleMapping,
+          academicYearId,
+          result.userId,
+          createdBy
+        );
       }
     }
     return result;
   }
 
-  async tenantCohortRollMapping(tenantCohortRoleMapping: tenantRoleMappingDto[], academicYearId: UUID, userId: UUID, createdBy: UUID): Promise<void> {
+  async tenantCohortRollMapping(
+    tenantCohortRoleMapping: tenantRoleMappingDto[],
+    academicYearId: UUID,
+    userId: UUID,
+    createdBy: UUID
+  ): Promise<void> {
     try {
       for (const mapData of tenantCohortRoleMapping) {
         if (mapData.cohortIds) {
           for (const cohortIds of mapData.cohortIds) {
-            let query = `SELECT * FROM public."CohortAcademicYear" WHERE "cohortId"= '${cohortIds}' AND "academicYearId" = '${academicYearId}'`;
+            const query = `SELECT * FROM public."CohortAcademicYear" WHERE "cohortId"= '${cohortIds}' AND "academicYearId" = '${academicYearId}'`;
 
-            let getCohortAcademicYearId = await this.usersRepository.query(
+            const getCohortAcademicYearId = await this.usersRepository.query(
               query
             );
 
             // will add data only if cohort is found with academic year
-            let cohortData = {
+            const cohortData = {
               userId: userId,
               cohortId: cohortIds,
               cohortAcademicYearId:
@@ -1754,9 +1871,13 @@ export class PostgresUserService implements IServicelocator {
     }
   }
 
-
-  async automaticMemberMapping(automaticMember: any, customFields: any, tenantCohortRoleMapping: tenantRoleMappingDto[], userId: UUID, createdBy: UUID): Promise<void> {
-
+  async automaticMemberMapping(
+    automaticMember: any,
+    customFields: any,
+    tenantCohortRoleMapping: tenantRoleMappingDto[],
+    userId: UUID,
+    createdBy: UUID
+  ): Promise<void> {
     try {
       // Tenant and role mapping
       for (const mapData of tenantCohortRoleMapping) {
@@ -1767,12 +1888,14 @@ export class PostgresUserService implements IServicelocator {
         await this.assignUserToTenantAndRoll(tenantRoleMappingData, createdBy);
       }
       let fieldValue;
-      let foundField = customFields.find(field => field.fieldId === automaticMember.fieldId);
+      const foundField = customFields.find(
+        (field) => field.fieldId === automaticMember.fieldId
+      );
       if (foundField) {
         fieldValue = foundField.value;
       }
 
-      let createAutomaticMember = {
+      const createAutomaticMember = {
         userId: userId,
         rules: {
           condition: {
@@ -1787,11 +1910,11 @@ export class PostgresUserService implements IServicelocator {
           // }
         },
         tenantId: tenantCohortRoleMapping[0].tenantId,
-        isActive: true
-      }
+        isActive: true,
+      };
 
       //Assgn member to sdb
-      await this.automaticMemberService.create(createAutomaticMember)
+      await this.automaticMemberService.create(createAutomaticMember);
     } catch (error) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
@@ -1800,7 +1923,6 @@ export class PostgresUserService implements IServicelocator {
       throw new Error(error);
     }
   }
-
 
   async assignUserToTenantAndRoll(tenantsData, createdBy) {
     try {
@@ -2008,7 +2130,7 @@ export class PostgresUserService implements IServicelocator {
             "{username}": userData?.name,
             "{programName}": userData?.tenantData?.[0]?.tenantName
               ? userData.tenantData[0].tenantName.charAt(0).toUpperCase() +
-              userData.tenantData[0].tenantName.slice(1)
+                userData.tenantData[0].tenantName.slice(1)
               : "",
           },
           email: {
@@ -2067,7 +2189,7 @@ export class PostgresUserService implements IServicelocator {
       }
       const fieldAttributes = getFieldDetails?.fieldAttributes || {};
       // getFieldDetails["fieldAttributes"] = fieldAttributes[tenantId] || fieldAttributes["default"];
-      getFieldDetails["fieldAttributes"] = fieldAttributes;      
+      getFieldDetails["fieldAttributes"] = fieldAttributes;
 
       if (
         (getFieldDetails.type == "checkbox" ||
@@ -2075,10 +2197,10 @@ export class PostgresUserService implements IServicelocator {
           getFieldDetails.type == "radio") &&
         getFieldDetails?.sourceDetails?.source == "table"
       ) {
-        let fieldValue = fieldsData["value"][0];
+        const fieldValue = fieldsData["value"][0];
         const getOption = await this.fieldsService.findDynamicOptions(
           getFieldDetails.sourceDetails.table,
-          `"${getFieldDetails?.sourceDetails?.table}_id"='${fieldValue}'`,
+          `"${getFieldDetails?.sourceDetails?.table}_id"='${fieldValue}'`
         );
         if (!getOption?.length) {
           return APIResponse.error(
@@ -2136,8 +2258,8 @@ export class PostgresUserService implements IServicelocator {
     const roleIds =
       userCreateDto && userCreateDto.tenantCohortRoleMapping
         ? userCreateDto.tenantCohortRoleMapping.map(
-          (userRole) => userRole.roleId
-        )
+            (userRole) => userRole.roleId
+          )
         : [];
 
     let contextType;
@@ -2167,7 +2289,11 @@ export class PostgresUserService implements IServicelocator {
       // Log the invalid field validation error with role context
       LoggerUtil.error(
         `Invalid custom fields provided for role`,
-        `Role: ${contextType || 'Unknown'}, Invalid Field IDs: ${invalidFieldIds.join(", ")}, User: ${userCreateDto.username || 'Unknown'}`,
+        `Role: ${
+          contextType || "Unknown"
+        }, Invalid Field IDs: ${invalidFieldIds.join(", ")}, User: ${
+          userCreateDto.username || "Unknown"
+        }`,
         apiId,
         userCreateDto.username
       );
@@ -2240,7 +2366,7 @@ export class PostgresUserService implements IServicelocator {
       // Prepare and format user data for Kafka event
       const kafkaUserData = {
         userId: userId,
-        deletedAt: new Date().toISOString()
+        deletedAt: new Date().toISOString(),
       };
 
       // Send response to the client
@@ -2253,12 +2379,13 @@ export class PostgresUserService implements IServicelocator {
       );
 
       // Produce user deleted event to Kafka asynchronously - after response is sent to client
-      this.publishUserEvent('deleted', userId, apiId)
-        .catch(error => LoggerUtil.error(
+      this.publishUserEvent("deleted", userId, apiId).catch((error) =>
+        LoggerUtil.error(
           `Failed to publish user deleted event to Kafka`,
           `Error: ${error.message}`,
           apiId
-        ));
+        )
+      );
       return apiResponse;
     } catch (e) {
       LoggerUtil.error(
@@ -2280,7 +2407,11 @@ export class PostgresUserService implements IServicelocator {
   }
 
   //Generate Has code as per username or mobile Number
-  private generateOtpHash(mobileOrUsername: string, otp: string, reason: string) {
+  private generateOtpHash(
+    mobileOrUsername: string,
+    otp: string,
+    reason: string
+  ) {
     const ttl = this.otpExpiry * 60 * 1000; // Expiration in milliseconds
     const expires = Date.now() + ttl;
     const expiresInMinutes = ttl / (60 * 1000);
@@ -2304,15 +2435,18 @@ export class PostgresUserService implements IServicelocator {
         );
       }
       // Step 1: Prepare data for OTP generation and send on Mobile
-      const { notificationPayload, hash, expires } = await this.sendOTPOnMobile(mobile, reason);
+      const { notificationPayload, hash, expires } = await this.sendOTPOnMobile(
+        mobile,
+        reason
+      );
       // Step 2: Send success response
       const result = {
         data: {
           message: `OTP sent to ${mobile}`,
           hash: `${hash}.${expires}`,
-          sendStatus: notificationPayload.result?.sms?.data[0]
+          sendStatus: notificationPayload.result?.sms?.data[0],
           // sid: message.sid, // Twilio Message SID
-        }
+        },
       };
       return await APIResponse.success(
         response,
@@ -2321,8 +2455,7 @@ export class PostgresUserService implements IServicelocator {
         HttpStatus.OK,
         API_RESPONSES.OTP_SEND_SUCCESSFULLY
       );
-    }
-    catch (e) {
+    } catch (e) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error: ${e.message}`,
@@ -2343,16 +2476,24 @@ export class PostgresUserService implements IServicelocator {
       // Step 1: Format mobile number and generate OTP
       const mobileWithCode = this.formatMobileNumber(mobile);
       const otp = this.authUtils.generateOtp(this.otpDigits).toString();
-      const { hash, expires, expiresInMinutes } = this.generateOtpHash(mobileWithCode, otp, reason);
+      const { hash, expires, expiresInMinutes } = this.generateOtpHash(
+        mobileWithCode,
+        otp,
+        reason
+      );
       const replacements = {
         "{OTP}": otp,
-        "{otpExpiry}": expiresInMinutes
+        "{otpExpiry}": expiresInMinutes,
       };
       // Step 2:send SMS notification
-      const notificationPayload = await this.smsNotification("OTP", "SEND_OTP", replacements, [mobile]);
+      const notificationPayload = await this.smsNotification(
+        "OTP",
+        "SEND_OTP",
+        replacements,
+        [mobile]
+      );
       return { notificationPayload, hash, expires, expiresInMinutes };
-    }
-    catch (error) {
+    } catch (error) {
       throw new Error(`Failed to send OTP: ${error.message}`);
     }
   }
@@ -2361,7 +2502,7 @@ export class PostgresUserService implements IServicelocator {
     const apiId = APIID.VERIFY_OTP;
     try {
       const { mobile, otp, hash, reason, username } = body;
-      
+
       // Validate required fields for all requests
       if (!otp || !hash || !reason) {
         return APIResponse.error(
@@ -2372,9 +2513,9 @@ export class PostgresUserService implements IServicelocator {
           HttpStatus.BAD_REQUEST
         );
       }
-  
+
       // Validate hash format
-      const [hashValue, expires] = hash.split('.');
+      const [hashValue, expires] = hash.split(".");
       if (!hashValue || !expires || isNaN(parseInt(expires))) {
         return APIResponse.error(
           response,
@@ -2384,7 +2525,7 @@ export class PostgresUserService implements IServicelocator {
           HttpStatus.BAD_REQUEST
         );
       }
-  
+
       // Check for OTP expiration
       if (Date.now() > parseInt(expires)) {
         return APIResponse.error(
@@ -2395,12 +2536,12 @@ export class PostgresUserService implements IServicelocator {
           HttpStatus.BAD_REQUEST
         );
       }
-  
+
       let identifier: string;
       let resetToken: string | null = null;
-      
+
       // Process based on reason
-      if (reason === 'signup') {
+      if (reason === "signup") {
         if (!mobile) {
           return APIResponse.error(
             response,
@@ -2411,8 +2552,7 @@ export class PostgresUserService implements IServicelocator {
           );
         }
         identifier = this.formatMobileNumber(mobile);
-      } 
-      else if (reason === 'forgot') {
+      } else if (reason === "forgot") {
         if (!username) {
           return APIResponse.error(
             response,
@@ -2422,10 +2562,10 @@ export class PostgresUserService implements IServicelocator {
             HttpStatus.BAD_REQUEST
           );
         }
-        
+
         identifier = this.formatMobileNumber(mobile);
         const userData = await this.findUserDetails(null, username);
-        
+
         if (!userData) {
           return APIResponse.error(
             response,
@@ -2435,20 +2575,19 @@ export class PostgresUserService implements IServicelocator {
             HttpStatus.NOT_FOUND
           );
         }
-        
+
         // Generate reset token for forgot password flow
         const tokenPayload = {
           sub: userData.userId,
           email: userData.email,
         };
-        
+
         resetToken = await this.jwtUtil.generateTokenForForgotPassword(
           tokenPayload,
           this.jwt_password_reset_expires_In,
           this.jwt_secret
         );
-      } 
-      else {
+      } else {
         return APIResponse.error(
           response,
           apiId,
@@ -2457,17 +2596,17 @@ export class PostgresUserService implements IServicelocator {
           HttpStatus.BAD_REQUEST
         );
       }
-  
+
       // Verify OTP hash
       const data = `${identifier}.${otp}.${reason}.${expires}`;
       const calculatedHash = this.authUtils.calculateHash(data, this.smsKey);
       if (calculatedHash === hashValue) {
         // For forgot password flow, include the reset token in response
         const responseData = { success: true };
-        if (reason === 'forgot' && resetToken) {
-          responseData['token'] = resetToken;
+        if (reason === "forgot" && resetToken) {
+          responseData["token"] = resetToken;
         }
-        
+
         return APIResponse.success(
           response,
           apiId,
@@ -2490,7 +2629,7 @@ export class PostgresUserService implements IServicelocator {
         `Error during OTP verification: ${error.message}`,
         apiId
       );
-      
+
       return APIResponse.error(
         response,
         apiId,
@@ -2501,9 +2640,13 @@ export class PostgresUserService implements IServicelocator {
     }
   }
 
-
   // send Mobile Notification
-  async smsNotification(context: string, key: string, replacements: object, receipients: string[]) {
+  async smsNotification(
+    context: string,
+    key: string,
+    replacements: object,
+    receipients: string[]
+  ) {
     try {
       //sms notification Body
       const notificationPayload = {
@@ -2520,26 +2663,35 @@ export class PostgresUserService implements IServicelocator {
         notificationPayload
       );
       // Check for errors in the response
-      if (mailSend?.result?.sms?.errors && mailSend.result.sms.errors.length > 0) {
-        const errorMessages = mailSend.result.sms.errors.map((error: { error: string; }) => error.error);
+      if (
+        mailSend?.result?.sms?.errors &&
+        mailSend.result.sms.errors.length > 0
+      ) {
+        const errorMessages = mailSend.result.sms.errors.map(
+          (error: { error: string }) => error.error
+        );
         const combinedErrorMessage = errorMessages.join(", "); // Combine all error messages into one string
         throw new Error(`${API_RESPONSES.SMS_ERROR} :${combinedErrorMessage}`);
       }
       return mailSend;
-    }
-    catch (error) {
+    } catch (error) {
       LoggerUtil.error(API_RESPONSES.SMS_ERROR, error.message);
-      throw new Error(`${API_RESPONSES.SMS_NOTIFICATION_ERROR}:  ${error.message}`);
+      throw new Error(
+        `${API_RESPONSES.SMS_NOTIFICATION_ERROR}:  ${error.message}`
+      );
     }
   }
 
   //send OTP on mobile and email for forgot password reset
-  async sendPasswordResetOTP(body: SendPasswordResetOTPDto, response: Response): Promise<any> {
+  async sendPasswordResetOTP(
+    body: SendPasswordResetOTPDto,
+    response: Response
+  ): Promise<any> {
     const apiId = APIID.SEND_RESET_OTP;
     try {
       const username = body.username;
-      let error = [];
-      let success = [];
+      const error = [];
+      const success = [];
       const userData: any = await this.findUserDetails(null, username);
       if (!userData) {
         return APIResponse.error(
@@ -2561,20 +2713,29 @@ export class PostgresUserService implements IServicelocator {
         );
       }
 
-      const programName = userData?.tenantData[0]?.tenantName ?? '';
+      const programName = userData?.tenantData[0]?.tenantName ?? "";
       const reason = "forgot";
       const otp = this.authUtils.generateOtp(this.otpDigits).toString();
-      const { hash, expires, expiresInMinutes } = this.generateOtpHash(username, otp, reason);
+      const { hash, expires, expiresInMinutes } = this.generateOtpHash(
+        username,
+        otp,
+        reason
+      );
       if (userData.mobile) {
         const replacements = {
           "{OTP}": otp,
-          "{otpExpiry}": expiresInMinutes
+          "{otpExpiry}": expiresInMinutes,
         };
         try {
-          await this.smsNotification("OTP", "Reset_OTP", replacements, [userData.mobile]);
-          success.push({ type: 'SMS', message: API_RESPONSES.MOBILE_SENT_OTP });
+          await this.smsNotification("OTP", "Reset_OTP", replacements, [
+            userData.mobile,
+          ]);
+          success.push({ type: "SMS", message: API_RESPONSES.MOBILE_SENT_OTP });
         } catch (e) {
-          error.push({ type: 'SMS', message: `${API_RESPONSES.MOBILE_OTP_SEND_FAILED} ${e.message}` })
+          error.push({
+            type: "SMS",
+            message: `${API_RESPONSES.MOBILE_OTP_SEND_FAILED} ${e.message}`,
+          });
         }
       }
 
@@ -2583,23 +2744,38 @@ export class PostgresUserService implements IServicelocator {
           "{OTP}": otp,
           "{otpExpiry}": expiresInMinutes,
           "{programName}": programName,
-          "{username}": username
+          "{username}": username,
         };
         try {
-          await this.sendEmailNotification("OTP", "Reset_OTP", replacements, [userData.email]);
-          success.push({ type: 'Email', message: API_RESPONSES.EMAIL_SENT_OTP })
+          await this.sendEmailNotification("OTP", "Reset_OTP", replacements, [
+            userData.email,
+          ]);
+          success.push({
+            type: "Email",
+            message: API_RESPONSES.EMAIL_SENT_OTP,
+          });
         } catch (e) {
-          error.push({ type: 'Email', message: `${API_RESPONSES.EMAIL_OTP_SEND_FAILED}: ${e.message}` })
+          error.push({
+            type: "Email",
+            message: `${API_RESPONSES.EMAIL_OTP_SEND_FAILED}: ${e.message}`,
+          });
         }
       }
-      // Error 
-      if (error.length === 2) { // if both SMS and Email notification fail to sent
-        let errorMessage = '';
-        if (error.some(e => e.type === 'SMS')) {
-          errorMessage += `SMS Error: ${error.filter(e => e.type === 'SMS').map(e => e.message).join(", ")}. `;
+      // Error
+      if (error.length === 2) {
+        // if both SMS and Email notification fail to sent
+        let errorMessage = "";
+        if (error.some((e) => e.type === "SMS")) {
+          errorMessage += `SMS Error: ${error
+            .filter((e) => e.type === "SMS")
+            .map((e) => e.message)
+            .join(", ")}. `;
         }
-        if (error.some(e => e.type === 'Email')) {
-          errorMessage += `Email Error: ${error.filter(e => e.type === 'Email').map(e => e.message).join(", ")}.`;
+        if (error.some((e) => e.type === "Email")) {
+          errorMessage += `Email Error: ${error
+            .filter((e) => e.type === "Email")
+            .map((e) => e.message)
+            .join(", ")}.`;
         }
 
         return APIResponse.error(
@@ -2613,8 +2789,8 @@ export class PostgresUserService implements IServicelocator {
       const result = {
         hash: `${hash}.${expires}`,
         success: success,
-        Error: error
-      }
+        Error: error,
+      };
       return await APIResponse.success(
         response,
         apiId,
@@ -2622,8 +2798,7 @@ export class PostgresUserService implements IServicelocator {
         HttpStatus.OK,
         API_RESPONSES.SEND_OTP
       );
-    }
-    catch (e) {
+    } catch (e) {
       return APIResponse.error(
         response,
         apiId,
@@ -2632,11 +2807,15 @@ export class PostgresUserService implements IServicelocator {
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
-
   }
 
   //send Email Notification
-  async sendEmailNotification(context: string, key: string, replacements: object, emailReceipt) {
+  async sendEmailNotification(
+    context: string,
+    key: string,
+    replacements: object,
+    emailReceipt
+  ) {
     try {
       //Send Notification
       const notificationPayload = {
@@ -2649,20 +2828,26 @@ export class PostgresUserService implements IServicelocator {
         },
       };
       // console.log("notificationPayload",notificationPayload);
-      
+
       const mailSend = await this.notificationRequest.sendNotification(
         notificationPayload
       );
-      if (mailSend?.result?.email?.errors && mailSend.result.email.errors.length > 0) {
-        const errorMessages = mailSend.result.email.errors.map((error: { error: string; }) => error.error);
+      if (
+        mailSend?.result?.email?.errors &&
+        mailSend.result.email.errors.length > 0
+      ) {
+        const errorMessages = mailSend.result.email.errors.map(
+          (error: { error: string }) => error.error
+        );
         const combinedErrorMessage = errorMessages.join(", "); // Combine all error messages into one string
         throw new Error(`error :${combinedErrorMessage}`);
       }
       return mailSend;
-    }
-    catch (e) {
+    } catch (e) {
       LoggerUtil.error(API_RESPONSES.EMAIL_ERROR, e.message);
-      throw new Error(`${API_RESPONSES.EMAIL_NOTIFICATION_ERROR}:  ${e.message}`);
+      throw new Error(
+        `${API_RESPONSES.EMAIL_NOTIFICATION_ERROR}:  ${e.message}`
+      );
     }
   }
 
@@ -2670,11 +2855,16 @@ export class PostgresUserService implements IServicelocator {
     try {
       // Step 1: Generate OTP and hash
       const otp = this.authUtils.generateOtp(this.otpDigits).toString();
-      const { hash, expires, expiresInMinutes } = this.generateOtpHash(email, otp, reason);
+      const { hash, expires, expiresInMinutes } = this.generateOtpHash(
+        email,
+        otp,
+        reason
+      );
 
       // Step 2: Get program name from user's tenant data
       const userData: any = await this.findUserDetails(null, username);
-      const programName = userData?.tenantData?.[0]?.tenantName ?? 'Shiksha Graha';
+      const programName =
+        userData?.tenantData?.[0]?.tenantName ?? "Shiksha Graha";
 
       // Step 3: Prepare email replacements
       const replacements = {
@@ -2683,25 +2873,25 @@ export class PostgresUserService implements IServicelocator {
         "{programName}": programName,
         "{username}": username,
         "{eventName}": "Shiksha Graha OTP",
-        "{action}": "register"
+        "{action}": "register",
       };
       // console.log("hii",replacements,email)
 
       // Step 4: Send email notification
-      const notificationPayload = await this.sendEmailNotification("OTP", "SendOtpOnMail", replacements, [email]);
+      const notificationPayload = await this.sendEmailNotification(
+        "OTP",
+        "SendOtpOnMail",
+        replacements,
+        [email]
+      );
 
       return { notificationPayload, hash, expires, expiresInMinutes };
-    }
-    catch (error) {
+    } catch (error) {
       throw new Error(`Failed to send OTP via email: ${error.message}`);
     }
   }
 
-  async checkUser(
-    request: any,
-    response: any,
-    filters: ExistUserDto
-  ) {
+  async checkUser(request: any, response: any, filters: ExistUserDto) {
     const apiId = APIID.USER_LIST;
     try {
       const whereClause: any = {};
@@ -2709,7 +2899,11 @@ export class PostgresUserService implements IServicelocator {
       if (filters && Object.keys(filters).length > 0) {
         Object.entries(filters).forEach(([key, value]) => {
           if (value !== undefined && value !== null) {
-            if (key === 'firstName' || key === 'middleName' || key === 'lastName') {
+            if (
+              key === "firstName" ||
+              key === "middleName" ||
+              key === "lastName"
+            ) {
               const sanitizedValue = this.sanitizeInput(value);
               whereClause[key] = ILike(`%${sanitizedValue}%`);
             } else {
@@ -2721,7 +2915,7 @@ export class PostgresUserService implements IServicelocator {
       // Use the dynamic where clause to fetch matching data
       const findData = await this.usersRepository.find({
         where: whereClause,
-        select: ['username', 'firstName', 'middleName', 'lastName','mobile'], // Select only these fields
+        select: ["username", "firstName", "middleName", "lastName", "mobile"], // Select only these fields
       });
 
       if (findData.length === 0) {
@@ -2759,16 +2953,19 @@ export class PostgresUserService implements IServicelocator {
     }
   }
   sanitizeInput(value) {
-    if (typeof value === 'string') {
+    if (typeof value === "string") {
       // Escape special characters for SQL
-      return value.replace(/[%_\\]/g, '\\$&');
+      return value.replace(/[%_\\]/g, "\\$&");
     }
     // For other types, return the value as is or implement specific sanitization logic
     return value;
   }
 
-
-  async suggestUsername(request: Request, response: Response, suggestUserDto: SuggestUserDto) {
+  async suggestUsername(
+    request: Request,
+    response: Response,
+    suggestUserDto: SuggestUserDto
+  ) {
     const apiId = APIID.USER_LIST;
     try {
       // Fetch user data from the database to check if the username already exists
@@ -2777,7 +2974,7 @@ export class PostgresUserService implements IServicelocator {
       });
 
       if (findData) {
-        // Define a function to generate a username  
+        // Define a function to generate a username
         const generateUsername = (): string => {
           const randomNum = randomInt(100, 1000); // Secure random 3-digit number
           return `${suggestUserDto.firstName}${suggestUserDto.lastName}${randomNum}`;
@@ -2818,7 +3015,6 @@ export class PostgresUserService implements IServicelocator {
         API_RESPONSES.NOT_FOUND,
         HttpStatus.NOT_FOUND
       );
-
     } catch (error) {
       // Handle errors gracefully
       const errorMessage = error.message || API_RESPONSES.SERVER_ERROR;
@@ -2839,18 +3035,18 @@ export class PostgresUserService implements IServicelocator {
    * @param apiId API ID for logging
    */
   private async publishUserEvent(
-    eventType: 'created' | 'updated' | 'deleted',
+    eventType: "created" | "updated" | "deleted",
     userId: string,
     apiId: string
   ): Promise<void> {
     try {
       // For delete events, we may want to include just basic information since the user might already be removed
       let userData: any;
-      
-      if (eventType === 'deleted') {
+
+      if (eventType === "deleted") {
         userData = {
           userId: userId,
-          deletedAt: new Date().toISOString()
+          deletedAt: new Date().toISOString(),
         };
       } else {
         // For create and update, fetch complete data from DB
@@ -2870,19 +3066,25 @@ export class PostgresUserService implements IServicelocator {
               "email",
               "createdAt",
               "updatedAt",
-              "status"
-            ]
+              "status",
+            ],
           });
 
           if (!user) {
-            LoggerUtil.error(`Failed to fetch user data for Kafka event`, `User with ID ${userId} not found`);
+            LoggerUtil.error(
+              `Failed to fetch user data for Kafka event`,
+              `User with ID ${userId} not found`
+            );
             userData = { userId };
           } else {
             // Get tenant and role information
             const tenantRoleData = await this.userTenantRoleData(userId);
-            
+
             // Get custom fields if any
-            const customFields = await this.fieldsService.getCustomFieldDetails(userId, 'Users');
+            const customFields = await this.fieldsService.getCustomFieldDetails(
+              userId,
+              "Users"
+            );
 
             // Get cohort information for the user
             let cohorts = [];
@@ -2914,10 +3116,13 @@ export class PostgresUserService implements IServicelocator {
                 LEFT JOIN public."CohortAcademicYear" cay ON bd."cohortId":: UUID = cay."cohortId"
                 LEFT JOIN public."AcademicYears" ay ON cay."academicYearId" = ay."id"
               `;
-              
-              const cohortResults = await this.usersRepository.query(cohortQuery, [userId]);
+
+              const cohortResults = await this.usersRepository.query(
+                cohortQuery,
+                [userId]
+              );
               if (cohortResults && cohortResults.length > 0) {
-                cohorts = cohortResults.map(result => ({
+                cohorts = cohortResults.map((result) => ({
                   // Batch details
                   batchId: result.batchId,
                   batchName: result.batchName,
@@ -2925,15 +3130,15 @@ export class PostgresUserService implements IServicelocator {
                   joinedAt: result.joinedAt,
                   cohortMemberStatus: result.cohortMemberStatus,
                   tenantId: result.tenantId,
-                  
+
                   // Parent Cohort details
                   cohortId: result.cohortId,
                   cohortName: result.cohortName,
                   cohortType: result.cohortType,
-                  
+
                   // Academic Year details
                   academicYearId: result.academicYearId,
-                  academicYearSession: result.academicYearSession
+                  academicYearSession: result.academicYearSession,
                 }));
               }
             } catch (cohortError) {
@@ -2952,7 +3157,7 @@ export class PostgresUserService implements IServicelocator {
               tenantData: tenantRoleData,
               customFields: customFields || [],
               cohorts: cohorts,
-              eventTimestamp: new Date().toISOString()
+              eventTimestamp: new Date().toISOString(),
             };
           }
         } catch (error) {
@@ -2965,7 +3170,10 @@ export class PostgresUserService implements IServicelocator {
         }
       }
       await this.kafkaService.publishUserEvent(eventType, userData, userId);
-      LoggerUtil.log(`User ${eventType} event published to Kafka for user ${userId}`, apiId);
+      LoggerUtil.log(
+        `User ${eventType} event published to Kafka for user ${userId}`,
+        apiId
+      );
     } catch (error) {
       LoggerUtil.error(
         `Failed to publish user ${eventType} event to Kafka`,

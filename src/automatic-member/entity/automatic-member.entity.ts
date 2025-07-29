@@ -1,17 +1,22 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+} from "typeorm";
 
-@Entity({ name: 'AutomaticMember' })
+@Entity({ name: "AutomaticMember" })
 export class AutomaticMember {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryGeneratedColumn("uuid")
   id: string;
 
-  @Column('uuid')
+  @Column("uuid")
   userId: string;
 
-  @Column('jsonb')
+  @Column("jsonb")
   rules: any;
 
-  @Column('uuid')
+  @Column("uuid")
   tenantId: string;
 
   @Column({ default: true })

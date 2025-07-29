@@ -12,21 +12,27 @@ import { PostgresAcademicYearService } from "./academicyears-adapter";
 import { Cohort } from "src/cohort/entities/cohort.entity";
 
 @Injectable()
-export class CohortAcademicYearService implements IServiceLocatorCohortAcademicYear {
-
+export class CohortAcademicYearService
+  implements IServiceLocatorCohortAcademicYear
+{
   constructor(
     private readonly postgresAcademicYearService: PostgresAcademicYearService,
     @InjectRepository(Cohort)
     private readonly cohortRepository: Repository<Cohort>,
     @InjectRepository(CohortAcademicYear)
-    private readonly cohortAcademicYearRepository: Repository<CohortAcademicYear>,
-  ) { }
+    private readonly cohortAcademicYearRepository: Repository<CohortAcademicYear>
+  ) {}
 
-  async createCohortAcademicYear(tenantId: string, request: Request, cohortAcademicYearDto: CohortAcademicYearDto, response: Response) {
+  async createCohortAcademicYear(
+    tenantId: string,
+    request: Request,
+    cohortAcademicYearDto: CohortAcademicYearDto,
+    response: Response
+  ) {
     const apiId = APIID.ADD_COHORT_TO_ACADEMIC_YEAR;
     try {
       const existingCohort = await this.cohortRepository.findOne({
-        where: { cohortId: cohortAcademicYearDto.cohortId, status: 'active' },
+        where: { cohortId: cohortAcademicYearDto.cohortId, status: "active" },
       });
 
       if (!existingCohort) {
@@ -66,7 +72,12 @@ export class CohortAcademicYearService implements IServiceLocatorCohortAcademicY
         );
       }
 
-      const createdAcademicYear = await this.insertCohortAcademicYear(cohortAcademicYearDto.cohortId, cohortAcademicYearDto.academicYearId, cohortAcademicYearDto.createdBy, cohortAcademicYearDto.updatedBy);
+      const createdAcademicYear = await this.insertCohortAcademicYear(
+        cohortAcademicYearDto.cohortId,
+        cohortAcademicYearDto.academicYearId,
+        cohortAcademicYearDto.createdBy,
+        cohortAcademicYearDto.updatedBy
+      );
 
       if (createdAcademicYear) {
         return APIResponse.success(
@@ -77,7 +88,6 @@ export class CohortAcademicYearService implements IServiceLocatorCohortAcademicY
           API_RESPONSES.ADD_COHORT_TO_ACADEMIC_YEAR
         );
       }
-
     } catch (error) {
       const errorMessage = error.message || "Internal server error";
       return APIResponse.error(
@@ -127,5 +137,4 @@ export class CohortAcademicYearService implements IServiceLocatorCohortAcademicY
       where: { academicYearId: yearId, cohortId: cohortId },
     });
   }
-
 }
