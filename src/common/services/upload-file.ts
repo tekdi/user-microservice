@@ -23,11 +23,31 @@ export class FilesUploadService {
     }
 
     async saveFile(file: Express.Multer.File): Promise<{ filePath: string; fileSize: number }> {
-        const allowedExtensions: string[] = ['.jpg', '.jpeg', '.png', '.gif', '.ico', '.webp'];
+        const allowedExtensions: string[] = [
+          ".jpg",
+          ".jpeg",
+          ".png",
+          ".gif",
+          ".ico",
+          ".webp",
+          ".mp4",
+          ".mp3",
+          ".pdf",
+          ".doc"
+        ];
         const fileExtension = extname(file.originalname).toLowerCase();
 
         if (!allowedExtensions.includes(fileExtension)) {
-            throw new BadRequestException(`Invalid file type: '${fileExtension}'. Allowed file types are: '.jpg', '.jpeg', '.png', '.gif', '.ico', '.webp'.`
+            throw new BadRequestException(`Invalid file type: '${fileExtension}'. Allowed file types are:           ".jpg",
+          ".jpeg",
+          ".png",
+          ".gif",
+          ".ico",
+          ".webp",
+          ".mp4",
+          ".mp3",
+          ".pdf",
+          ".doc"`
             );
         }
 
