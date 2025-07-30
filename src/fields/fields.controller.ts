@@ -42,11 +42,16 @@ import { JwtAuthGuard } from "src/common/guards/keycloak.guard";
 import { AllExceptionsFilter } from "src/common/filters/exception.filter";
 import { APIID } from "src/common/utils/api-id.config";
 import { FieldValuesDeleteDto } from "./dto/field-values-delete.dto";
+import { CacheService } from "src/cache/cache.service";
+import { createHash } from "crypto";
 
 @ApiTags("Fields")
 @Controller("fields")
 export class FieldsController {
-  constructor(private fieldsAdapter: FieldsAdapter) {}
+  constructor(
+    private fieldsAdapter: FieldsAdapter,
+    private readonly cacheService: CacheService,
+  ) {}
 
   //fields
   //create fields
@@ -107,9 +112,25 @@ export class FieldsController {
     @Res() response: Response,
   ) {
     const tenantid = headers["tenantid"];
-    return await this.fieldsAdapter
+    const hash = createHash("md5")
+      .update(JSON.stringify(fieldsSearchDto))
+      .digest("hex");
+    const cacheKey = `fields:search:${hash}:${tenantid}`;
+
+    const cached = await this.cacheService.get<any>(cacheKey);
+    if (cached) {
+      return response.status(cached.statusCode || 200).json(cached);
+    }
+
+    const result = await this.fieldsAdapter
       .buildFieldsAdapter()
       .searchFields(tenantid, request, fieldsSearchDto, response);
+
+    if (result && result.statusCode && result.statusCode >= 200 && result.statusCode < 300) {
+      await this.cacheService.set(cacheKey, result, 2 * 60 * 60); // 2 hours TTL
+    }
+
+    return response.status(result.statusCode).json(result);
   }
 
   //field values
@@ -171,9 +192,23 @@ export class FieldsController {
     @Body() fieldsOptionsSearchDto: FieldsOptionsSearchDto,
     @Res() response: Response,
   ) {
-    return await this.fieldsAdapter
+    const { fieldName, controllingfieldfk, context } = fieldsOptionsSearchDto as any;
+    const cacheKey = `field:options:${fieldName}:${controllingfieldfk}:${context}`;
+
+    const cached = await this.cacheService.get<any>(cacheKey);
+    if (cached) {
+      return response.status(cached.statusCode || 200).json(cached);
+    }
+
+    const result = await this.fieldsAdapter
       .buildFieldsAdapter()
       .getFieldOptions(fieldsOptionsSearchDto, response);
+
+    if (result && result.statusCode && result.statusCode >= 200 && result.statusCode < 300) {
+      await this.cacheService.set(cacheKey, result, 2 * 60 * 60); // 2 hours TTL
+    }
+
+    return response.status(result.statusCode).json(result);
   }
 
   //Delete Field Option
@@ -227,9 +262,24 @@ export class FieldsController {
       context: context || false,
       contextType: contextType || false,
     };
-    return await this.fieldsAdapter
+    const tenantid = headers["tenantid"];
+    const cacheKey = `form:fields:${context}:${contextType}:${tenantid}`;
+
+    const cached = await this.cacheService.get<any>(cacheKey);
+    if (cached) {
+      return response.status(cached.statusCode || 200).json(cached);
+    }
+
+    const result = await this.fieldsAdapter
       .buildFieldsAdapter()
       .getFormCustomField(requiredData, response);
+
+    if (result && result.statusCode && result.statusCode >= 200 && result.statusCode < 300) {
+      // 4 hours TTL
+      await this.cacheService.set(cacheKey, result, 4 * 60 * 60);
+    }
+
+    return response.status(result.statusCode).json(result);
   }
   //delete field values
   @Delete("/values/delete")

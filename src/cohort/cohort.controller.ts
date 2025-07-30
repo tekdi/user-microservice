@@ -47,13 +47,17 @@ import { APIID } from "src/common/utils/api-id.config";
 import { isUUID } from "class-validator";
 import { API_RESPONSES } from "@utils/response.messages";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
+import { CacheService } from "src/cache/cache.service";
 import { GetUserId } from "src/common/decorators/getUserId.decorator";
 
 @ApiTags("Cohort")
 @Controller("cohort")
 @UseGuards(JwtAuthGuard)
 export class CohortController {
-  constructor(private readonly cohortAdapter: CohortAdapter) {}
+  constructor(
+    private readonly cohortAdapter: CohortAdapter,
+    private readonly cacheService: CacheService,
+  ) {}
 
   @UseFilters(new AllExceptionsFilter(APIID.COHORT_READ))
   @Get("/cohortHierarchy/:cohortId")
@@ -80,9 +84,21 @@ export class CohortController {
       getChildData: getChildDataValueBoolean,
       customField: fieldValueBooelan,
     };
-    return await this.cohortAdapter
+    const cacheKey = `cohort:hierarchy:${cohortId}:${academicYearId}`;
+    const cached = await this.cacheService.get<any>(cacheKey);
+    if (cached) {
+      return response.status(cached.statusCode || 200).json(cached);
+    }
+    const result = await this.cohortAdapter
       .buildCohortAdapter()
       .getCohortsDetails(requiredData, response);
+
+    if (result && result.statusCode && result.statusCode >= 200 && result.statusCode < 300) {
+      // 30 minutes TTL
+      await this.cacheService.set(cacheKey, result, 30 * 60);
+    }
+
+    return response.status(result.statusCode).json(result);
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.COHORT_CREATE))
@@ -243,8 +259,19 @@ export class CohortController {
       getChildData: getChildDataValueBoolean,
       customField: fieldValueBooelan,
     };
-    return await this.cohortAdapter
+    const cacheKey = `user:cohorts:${userId}:${tenantId}:${academicYearId}`;
+    const cached = await this.cacheService.get<any>(cacheKey);
+    if (cached) {
+      return response.status(cached.statusCode || 200).json(cached);
+    }
+    const result = await this.cohortAdapter
       .buildCohortAdapter()
       .getCohortHierarchyData(requiredData, response);
+
+    if (result && result.statusCode && result.statusCode >= 200 && result.statusCode < 300) {
+      await this.cacheService.set(cacheKey, result, 30 * 60);
+    }
+
+    return response.status(result.statusCode).json(result);
   }
 }
