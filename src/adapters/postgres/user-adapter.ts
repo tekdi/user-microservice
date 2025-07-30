@@ -55,6 +55,8 @@ import { randomInt } from "crypto";
 import { UUID } from "aws-sdk/clients/cloudtrail";
 import { AutomaticMemberService } from "src/automatic-member/automatic-member.service";
 import { KafkaService } from "src/kafka/kafka.service";
+import { CacheService } from "src/cache/cache.service";
+import { createHash } from "crypto";
 
 interface UpdateField {
   userId: string; // Required
@@ -102,6 +104,7 @@ export class PostgresUserService implements IServicelocator {
     private readonly authUtils: AuthUtils,
     private readonly automaticMemberService: AutomaticMemberService,
     private readonly kafkaService: KafkaService,
+    private readonly cacheService: CacheService,
     dataSource: DataSource,
   ) {
     this.jwt_secret = this.configService.get<string>("RBAC_JWT_SECRET");
@@ -364,7 +367,22 @@ export class PostgresUserService implements IServicelocator {
     userSearchDto: UserSearchDto,
   ) {
     const apiId = APIID.USER_LIST;
+    // Build cache key from tenantId + hash of search DTO
+    const searchHash = createHash("md5")
+      .update(JSON.stringify(userSearchDto))
+      .digest("hex");
+    const cacheKey = `users:search:${searchHash}:${tenantId}`;
     try {
+      const cached = await this.cacheService.get<any>(cacheKey);
+      if (cached) {
+        return APIResponse.success(
+          response,
+          apiId,
+          cached,
+          HttpStatus.OK,
+          API_RESPONSES.USER_GET_SUCCESSFULLY,
+        );
+      }
       const findData = await this.findAllUserDetails(userSearchDto);
 
       if (findData === false) {
@@ -382,13 +400,18 @@ export class PostgresUserService implements IServicelocator {
         );
       }
       LoggerUtil.log(API_RESPONSES.USER_GET_SUCCESSFULLY, apiId);
-      return await APIResponse.success(
+      const successResp = await APIResponse.success(
         response,
         apiId,
         findData,
         HttpStatus.OK,
         API_RESPONSES.USER_GET_SUCCESSFULLY,
       );
+
+      // Cache for 10 minutes
+      await this.cacheService.set(cacheKey, findData, 10 * 60);
+
+      return successResp;
     } catch (e) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
@@ -612,7 +635,22 @@ export class PostgresUserService implements IServicelocator {
 
   async getUsersDetailsById(userData: UserData, response: any) {
     const apiId = APIID.USER_GET;
+    // Generate cache key based on userId and tenantId (if any)
+    const cacheKey = `user:profile:${userData.userId}:${userData?.tenantId || "global"}`;
     try {
+      // Check cache only when custom field data is not requested, because that can be large and dynamic
+      if (!userData.fieldValue) {
+        const cached = await this.cacheService.get<any>(cacheKey);
+        if (cached) {
+          return APIResponse.success(
+            response,
+            apiId,
+            { userData: cached },
+            HttpStatus.OK,
+            API_RESPONSES.USER_GET_SUCCESSFULLY,
+          );
+        }
+      }
       if (!isUUID(userData.userId)) {
         return APIResponse.error(
           response,
@@ -665,14 +703,27 @@ export class PostgresUserService implements IServicelocator {
         );
       }
       if (!userData.fieldValue) {
-        LoggerUtil.log(API_RESPONSES.USER_GET_SUCCESSFULLY, apiId);
-        return await APIResponse.success(
+        // Populate result object for uniformity
+        result.userData = userDetails;
+
+        LoggerUtil.log(
+          API_RESPONSES.USER_GET_SUCCESSFULLY,
+          apiId,
+          userData?.userId,
+        );
+
+        const successResponse = await APIResponse.success(
           response,
           apiId,
-          { userData: userDetails },
+          { ...result },
           HttpStatus.OK,
           API_RESPONSES.USER_GET_SUCCESSFULLY,
         );
+
+        // Cache the user profile (without custom fields to keep payload lean)
+        await this.cacheService.set(cacheKey, result.userData, 30 * 60); // 30-minute TTL
+
+        return successResponse;
       }
 
       let customFields;

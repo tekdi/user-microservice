@@ -9,6 +9,7 @@ import { CohortContextType } from "./utils/form-class";
 import { FormCreateDto } from "./dto/form-create.dto";
 import { APIID } from "@utils/api-id.config";
 import { API_RESPONSES } from "@utils/response.messages";
+import { CacheService } from "src/cache/cache.service";
 
 @Injectable()
 export class FormsService {
@@ -16,11 +17,27 @@ export class FormsService {
     private readonly fieldsService: PostgresFieldsService,
     @InjectRepository(Form)
     private readonly formRepository: Repository<Form>,
+    private readonly cacheService: CacheService,
   ) {}
 
   async getForm(requiredData, response) {
     const apiId = APIID.FORM_GET;
     try {
+      const { context, contextType, tenantId } = requiredData;
+
+      // Generate cache key based on request params
+      const cacheKey = `form:data:${context}:${contextType || "null"}:${tenantId || "null"}`;
+      const cached = await this.cacheService.get<any>(cacheKey);
+      if (cached) {
+        return APIResponse.success(
+          response,
+          apiId,
+          cached,
+          HttpStatus.OK,
+          "Fields fetched successfully.",
+        );
+      }
+
       if (!requiredData.context && !requiredData.contextType) {
         return APIResponse.error(
           response,
@@ -31,7 +48,6 @@ export class FormsService {
         );
       }
 
-      const { context, contextType, tenantId } = requiredData;
       const validationResult = await this.validateFormInput(requiredData);
 
       if (validationResult.error) {
@@ -90,13 +106,18 @@ export class FormsService {
         fields: mappedResponse,
       };
 
-      return APIResponse.success(
+      const successResp = APIResponse.success(
         response,
         apiId,
         result,
         HttpStatus.OK,
         "Fields fetched successfully.",
       );
+
+      // Cache for 2 hours (7200 seconds)
+      await this.cacheService.set(cacheKey, result, 2 * 60 * 60);
+
+      return successResp;
     } catch (error) {
       const errorMessage = error.message || "Internal server error";
       return APIResponse.error(

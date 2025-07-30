@@ -1,4 +1,6 @@
 import { HttpStatus, Injectable } from "@nestjs/common";
+import { CacheService } from "src/cache/cache.service";
+import { createHash } from "crypto";
 import { Tenant } from "./entities/tenent.entity";
 import { ILike, In, Repository } from "typeorm";
 import APIResponse from "src/common/responses/response";
@@ -16,6 +18,7 @@ export class TenantService {
   constructor(
     @InjectRepository(Tenant)
     private tenantRepository: Repository<Tenant>,
+    private readonly cacheService: CacheService,
   ) {}
 
   public async getTenants(
@@ -24,7 +27,21 @@ export class TenantService {
   ): Promise<Response> {
     const apiId = APIID.TENANT_LIST;
     try {
-      const result = await this.tenantRepository.find({
+
+      // Try cache first
+      const cacheKey = "tenants:all";
+      const cachedResult = await this.cacheService.get<any[]>(cacheKey);
+      if (cachedResult) {
+        return APIResponse.success(
+          response,
+          apiId,
+          cachedResult,
+          HttpStatus.OK,
+          API_RESPONSES.TENANT_GET,
+        );
+      }
+
+      let result = await this.tenantRepository.find({
         where: { status: "published" },
       });
 
@@ -38,6 +55,7 @@ export class TenantService {
         );
       }
 
+      // Add role details (only when we fetched from DB)
       for (const tenantData of result) {
         const query = `SELECT * FROM public."Roles" WHERE "tenantId" = '${tenantData.tenantId}'`;
         let getRole = await this.tenantRepository.query(query);
@@ -62,6 +80,9 @@ export class TenantService {
           tenantData["role"] = roleDetails;
         }
       }
+
+      // Cache the result
+      await this.cacheService.set(cacheKey, result, 3 * 60 * 60); // 3 hours TTL
 
       return APIResponse.success(
         response,
@@ -95,6 +116,23 @@ export class TenantService {
     const apiId = APIID.TENANT_SEARCH;
     try {
       const { limit, offset, filters } = tenantSearchDTO;
+
+      // Generate cache key based on search DTO
+      const hash = createHash("md5")
+        .update(JSON.stringify({ limit, offset, filters }))
+        .digest("hex");
+      const cacheKey = `tenants:search:${hash}`;
+
+      let cached = await this.cacheService.get<{ getTenantDetails: any[]; totalCount: number }>(cacheKey);
+      if (cached) {
+        return APIResponse.success(
+          response,
+          apiId,
+          cached,
+          HttpStatus.OK,
+          API_RESPONSES.TENANT_SEARCH_SUCCESS,
+        );
+      }
 
       const whereClause: Record<string, any> = {};
       if (filters && Object.keys(filters).length > 0) {
@@ -141,13 +179,18 @@ export class TenantService {
         );
       }
 
-      return APIResponse.success(
+      const successResponse = APIResponse.success(
         response,
         apiId,
         { getTenantDetails, totalCount },
         HttpStatus.OK,
         API_RESPONSES.TENANT_SEARCH_SUCCESS,
       );
+
+      // Cache for 60 minutes
+      await this.cacheService.set(cacheKey, { getTenantDetails, totalCount }, 60 * 60);
+
+      return successResponse;
     } catch (error) {
       const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
       LoggerUtil.error(
@@ -218,6 +261,9 @@ export class TenantService {
       }
 
       const result = await this.tenantRepository.save(tenantCreateDto);
+      // Invalidate caches
+      await this.cacheService.del("tenants:all");
+      await this.cacheService.reset();
       if (result) {
         return APIResponse.success(
           response,
@@ -267,6 +313,12 @@ export class TenantService {
       }
 
       const result = await this.tenantRepository.delete(tenantId);
+
+      // Invalidate caches
+      if (result && result.affected && result.affected > 0) {
+        await this.cacheService.del("tenants:all");
+        await this.cacheService.reset();
+      }
 
       if (result && result.affected && result.affected > 0) {
         return APIResponse.success(
@@ -368,6 +420,8 @@ export class TenantService {
         tenantUpdateDto,
       );
       if (result && result.affected && result.affected > 0) {
+        await this.cacheService.del("tenants:all");
+        await this.cacheService.reset();
         return APIResponse.success(
           response,
           apiId,

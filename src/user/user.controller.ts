@@ -57,6 +57,8 @@ import { LoggerUtil } from "src/common/logger/LoggerUtil";
 import { OtpSendDTO } from "./dto/otpSend.dto";
 import { OtpVerifyDTO } from "./dto/otpVerify.dto";
 import { UploadS3Service } from "src/common/services/upload-S3.service";
+import { CacheService } from "src/cache/cache.service";
+import { createHash } from "crypto";
 import { GetUserId } from "src/common/decorators/getUserId.decorator";
 export interface UserData {
   context: string;
@@ -71,6 +73,7 @@ export class UserController {
   constructor(
     private userAdapter: UserAdapter,
     private readonly uploadS3Service: UploadS3Service,
+    private readonly cacheService: CacheService,
   ) {}
 
   @UseFilters(new AllExceptionsFilter(APIID.USER_GET))
@@ -115,9 +118,24 @@ export class UserController {
       userId: userId,
       fieldValue: fieldValueBoolean,
     };
+
+    // -------------------- CACHE START --------------------
+    const cacheKey = `user:profile:${userId}:${tenantId}:${fieldValueBoolean}`;
+    const cached = await this.cacheService.get<any>(cacheKey);
+    if (cached) {
+      // assumption: cached object already contains statusCode & payload
+      return response.status(cached.statusCode || 200).json(cached);
+    }
+    // -------------------- CACHE END --------------------
     const result = await this.userAdapter
       .buildUserAdapter()
       .getUsersDetailsById(userData, response);
+
+    // Cache only on successful fetch (2xx)
+    if (result && result.statusCode && result.statusCode >= 200 && result.statusCode < 300) {
+      // 15 minutes TTL (900 seconds)
+      await this.cacheService.set(cacheKey, result, 15 * 60);
+    }
 
     return response.status(result.statusCode).json(result);
   }
@@ -201,9 +219,28 @@ export class UserController {
     @Body() userSearchDto: UserSearchDto,
   ) {
     const tenantId = headers["tenantid"];
-    return await this.userAdapter
+
+    // Generate a hash of the search DTO for cache key uniqueness
+    const hash = createHash("md5")
+      .update(JSON.stringify(userSearchDto))
+      .digest("hex");
+    const cacheKey = `users:search:${hash}:${tenantId}`;
+
+    const cached = await this.cacheService.get<any>(cacheKey);
+    if (cached) {
+      return response.status(cached.statusCode || 200).json(cached);
+    }
+
+    const result = await this.userAdapter
       .buildUserAdapter()
       .searchUser(tenantId, request, response, userSearchDto);
+
+    if (result && result.statusCode && result.statusCode >= 200 && result.statusCode < 300) {
+      // 10 minutes TTL
+      await this.cacheService.set(cacheKey, result, 10 * 60);
+    }
+
+    return response.status(result.statusCode).json(result);
   }
 
   @Post("/password-reset-link")
@@ -355,12 +392,22 @@ export class UserController {
     @Query("fileType") fileType: string,
     @Res() response,
   ) {
+    const cacheKey = `presigned:${filename}:${foldername}:${fileType}`;
+    const cached = await this.cacheService.get<string>(cacheKey);
+    if (cached) {
+      return { url: cached };
+    }
+
     const url = await this.uploadS3Service.getPresignedUrl(
       filename,
       fileType,
       response,
       foldername,
     );
+
+    // Cache for 10 minutes
+    await this.cacheService.set(cacheKey, url, 10 * 60);
+
     return { url };
   }
 }

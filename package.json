@@ -18,7 +18,8 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json"
+    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "benchmark:cache": "ts-node scripts/cache-benchmark.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.688.0",
@@ -64,7 +65,8 @@
     "templates.js": "^0.3.11",
     "typeorm": "^0.3.20",
     "winston": "^3.11.0",
-    "kafkajs": "^2.2.4"
+    "kafkajs": "^2.2.4",
+    "redis": "^4.6.7"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.0.0",
