@@ -39,9 +39,11 @@ export class ElasticsearchService {
         if (err) {
            // Don't log document_missing_exception as an error since it's expected behavior
            if ((err as any)?.meta?.body?.error?.type === 'document_missing_exception') {
-            this.logger.debug(`Document not found - this is expected for new documents`);
+            this.logger.debug(`Elasticsearch: Document not found (this is expected for new users or missing records).`);
+          } else if ((err as any)?.meta && (err as any).meta.statusCode === 404) {
+            this.logger.debug(`Elasticsearch: Document not found (404, expected for new users).`);
           } else {
-            this.logger.error('Elasticsearch connection error:', err);
+            this.logger.error('Elasticsearch connection or query error:', err.message || err);
           }
         } else if (result && result.meta && result.meta.connection) {
           this.logger.log(
@@ -133,6 +135,7 @@ export class ElasticsearchService {
       return response;
     } catch (error) {
       if (error.meta?.statusCode === 404) {
+        // Don't log 404 as error since it's expected for missing documents
         return null;
       }
       this.logger.error(`Failed to get document from ${indexName}:`, error);
@@ -194,9 +197,9 @@ export class ElasticsearchService {
                 cohortId: app.cohortId || "",
                 formId: app.formId || "",
                 submissionId: app.submissionId || "",
-                status: app.status || "",
                 cohortmemberstatus: app.cohortmemberstatus || "",
                 formstatus: app.formstatus || "",
+                completionPercentage: app.completionPercentage || 0,
                 progress: app.progress || {},
                 lastSavedAt: app.lastSavedAt || null,
                 submittedAt: app.submittedAt || null,

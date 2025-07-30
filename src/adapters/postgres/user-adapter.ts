@@ -613,7 +613,7 @@ export class PostgresUserService implements IServicelocator {
     }
 
     //Get user core fields data
-    const query = `SELECT U."userId", U."username",U."email", U."firstName", U."middleName", U."lastName", U."gender", U."dob", R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", U.status, COUNT(*) OVER() AS total_count 
+    const query = `SELECT U."userId", U."username",U."email", U."firstName", U."middleName", U."lastName", U."gender", U."dob", R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", U.status,U.country, COUNT(*) OVER() AS total_count 
       FROM  public."Users" U
       LEFT JOIN public."CohortMembers" CM 
       ON CM."userId" = U."userId"
@@ -1622,7 +1622,7 @@ export class PostgresUserService implements IServicelocator {
     user.lastName = userDto?.lastName;
     user.gender = userDto?.gender;
     user.status = userDto?.status as User['status'];
-    user.email = userDto?.email;
+    user.email = userDto?.email?.toLowerCase();
     user.mobile = Number(userDto?.mobile) || null;
     user.mobile_country_code = userDto?.mobile_country_code;
     user.createdBy = userDto?.createdBy ?? null;
@@ -1717,7 +1717,7 @@ export class PostgresUserService implements IServicelocator {
           userCreateDto.mobile
         );
         if (!checkValidMobile) {
-          errorCollector.addError(`Mobile number must be 7 to 9 digits long`);
+          errorCollector.addError(`Mobile number must be 7 to 12 digits long`);
         }
       }
 

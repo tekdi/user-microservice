@@ -156,10 +156,14 @@ export class FormSubmissionService {
         FormSubmissionStatus.ACTIVE;
       formSubmission.createdBy = userId;
       formSubmission.updatedBy = userId;
-      
+
       // Add completionPercentage if provided
-      if (createFormSubmissionDto.formSubmission.completionPercentage !== undefined) {
-        formSubmission.completionPercentage = createFormSubmissionDto.formSubmission.completionPercentage;
+      if (
+        createFormSubmissionDto.formSubmission.completionPercentage !==
+        undefined
+      ) {
+        formSubmission.completionPercentage =
+          createFormSubmissionDto.formSubmission.completionPercentage;
       }
 
       const savedSubmission = await this.formSubmissionRepository.save(
@@ -187,15 +191,19 @@ export class FormSubmissionService {
 
       // Get the complete field values with field information
       const customFields = await this.fieldsService.getFieldsAndFieldsValues(
-        savedSubmission.itemId
+        savedSubmission.itemId,
+        createFormSubmissionDto.formSubmission.formId // Pass formId for checkbox processing
       );
 
-      // Update Elasticsearch
-      await this.updateApplicationInElasticsearch(
-        userId,
-        savedSubmission,
-        createFormSubmissionDto.customFields
-      );
+      // Update Elasticsearch with complete field values from database (includes dependencies)
+      // Only update if Elasticsearch is enabled
+      if (isElasticsearchEnabled()) {
+        await this.updateApplicationInElasticsearch(
+          userId,
+          savedSubmission,
+          customFields // Fixed: now passes all fields from DB
+        );
+      }
 
       // Create response object
       const responseData = {
@@ -344,7 +352,11 @@ export class FormSubmissionService {
     });
 
     // Handle completion percentage ranges (only if present in whereClause)
-    if (completionPercentage && Array.isArray(completionPercentage) && completionPercentage.length > 0) {
+    if (
+      completionPercentage &&
+      Array.isArray(completionPercentage) &&
+      completionPercentage.length > 0
+    ) {
       // Multiple ranges - use OR conditions (union)
       const rangeConditions = completionPercentage.map((range, index) => {
         const [min, max] = range.split('-').map(Number);
@@ -363,7 +375,10 @@ export class FormSubmissionService {
 
     // Apply sorting and pagination
     if (sort?.length === 2) {
-      queryBuilder.orderBy(`fs.${sort[0]}`, sort[1].toUpperCase() as 'ASC' | 'DESC');
+      queryBuilder.orderBy(
+        `fs.${sort[0]}`,
+        sort[1].toUpperCase() as 'ASC' | 'DESC'
+      );
     } else {
       queryBuilder.orderBy('fs.createdAt', 'DESC');
     }
@@ -618,7 +633,8 @@ export class FormSubmissionService {
         if (includeDisplayValues) {
           result.customFields =
             await this.fieldsService.getFieldsAndFieldsValues(
-              submission.itemId
+              submission.itemId,
+              submission.formId // Pass formId for checkbox processing
             );
         }
 
@@ -762,7 +778,8 @@ export class FormSubmissionService {
 
       // Get field values using the existing FieldsService
       const customFields = await this.fieldsService.getFieldsAndFieldsValues(
-        submission.itemId
+        submission.itemId,
+        submission.formId // Pass formId for checkbox processing
       );
 
       // Create response object
@@ -921,8 +938,12 @@ export class FormSubmissionService {
             submission.status = updateFormSubmissionDto.formSubmission.status;
           }
           // Add completionPercentage if provided
-          if (updateFormSubmissionDto.formSubmission.completionPercentage !== undefined) {
-            submission.completionPercentage = updateFormSubmissionDto.formSubmission.completionPercentage;
+          if (
+            updateFormSubmissionDto.formSubmission.completionPercentage !==
+            undefined
+          ) {
+            submission.completionPercentage =
+              updateFormSubmissionDto.formSubmission.completionPercentage;
           }
           submission.updatedBy = userId;
           updatedSubmission = await this.formSubmissionRepository.save(
@@ -963,16 +984,31 @@ export class FormSubmissionService {
 
           const results = await Promise.all(fieldValuePromises);
           updatedFieldValues = results.filter((result) => result !== null);
+
+          // Ensure all field value updates are committed to database before proceeding
+          // This prevents race conditions where getFieldsAndFieldsValues might fetch stale data
+          await this.fieldValuesRepository.query('SELECT 1'); // Force a database round trip to ensure commits
         } catch (error) {
           LoggerUtil.warn(`Failed to update field values`, error);
         }
       }
+      // Get the complete field values with field information (includes dependencies)
+      // This call now happens AFTER all field updates are committed
+      const completeFieldValues =
+        await this.fieldsService.getFieldsAndFieldsValues(
+          userId,
+          updatedSubmission.formId // Pass formId for checkbox processing
+        );
+
       // Update Elasticsearch after successful form submission update
-      await this.updateApplicationInElasticsearch(
-        userId,
-        updatedSubmission,
-        updatedFieldValues
-      );
+      // Only update if Elasticsearch is enabled
+      if (isElasticsearchEnabled()) {
+        await this.updateApplicationInElasticsearch(
+          userId,
+          updatedSubmission,
+          completeFieldValues // Fixed: now passes all fields from DB
+        );
+      }
       const successResponse = {
         id: 'api.form.submission.update',
         ver: '1.0',
@@ -987,7 +1023,7 @@ export class FormSubmissionService {
         responseCode: HttpStatus.OK,
         result: {
           formSubmission: updatedSubmission,
-          customFields: updatedFieldValues,
+          customFields: completeFieldValues,
         },
       };
 
@@ -1147,32 +1183,178 @@ export class FormSubmissionService {
       const formIdToMatch = updatedSubmission.formId;
       const submissionIdToMatch = updatedSubmission.submissionId;
 
-      // --- NEW LOGIC: Fetch form schema and build fieldId -> pageName map ---
+      // --- NEW LOGIC: Use the robust getFieldIdToPageNameMap utility function ---
       let fieldIdToPageName: Record<string, string> = {};
+      let fieldIdToFieldName: Record<string, string> = {};
+      let formFieldsOnly: any[] = [];
       try {
         const form = await this.formsService.getFormById(formIdToMatch);
         const fieldsObj = form && form.fields ? (form.fields as any) : null;
-        if (
-          Array.isArray(fieldsObj?.result) &&
-          fieldsObj.result[0]?.schema?.properties
-        ) {
-          const schema = fieldsObj.result[0].schema.properties;
-          for (const [pageKey, pageSchema] of Object.entries(schema)) {
-            const pageName = pageKey === 'default' ? 'eligibility' : pageKey;
-            const fieldProps = (pageSchema as any).properties ?? {};
-            for (const [fieldKey, fieldSchema] of Object.entries(fieldProps)) {
-              const fieldId = (fieldSchema as any).fieldId;
-              if (fieldId) {
-                fieldIdToPageName[fieldId] = pageName;
+
+        // Handle different schema structures
+        let schema: any = {};
+        if (fieldsObj) {
+          // Try different possible schema structures
+          if (
+            Array.isArray(fieldsObj?.result) &&
+            fieldsObj.result[0]?.schema?.properties
+          ) {
+            // Structure: { result: [{ schema: { properties: {...} } }] }
+            schema = fieldsObj.result[0].schema.properties;
+          } else if (fieldsObj?.schema?.properties) {
+            // Structure: { schema: { properties: {...} } }
+            schema = fieldsObj.schema.properties;
+          } else if (fieldsObj?.properties) {
+            // Structure: { properties: {...} }
+            schema = fieldsObj.properties;
+          } else if (typeof fieldsObj === 'object' && fieldsObj !== null) {
+            // Try to find schema in nested structure
+            const findSchema = (obj: any): any => {
+              if (obj?.schema?.properties) return obj.schema.properties;
+              if (obj?.properties) return obj.properties;
+              if (Array.isArray(obj)) {
+                for (const item of obj) {
+                  const found = findSchema(item);
+                  if (found) return found;
+                }
+              } else if (typeof obj === 'object') {
+                for (const key in obj) {
+                  const found = findSchema(obj[key]);
+                  if (found) return found;
+                }
               }
-            }
+              return null;
+            };
+            schema = findSchema(fieldsObj) || {};
           }
         }
+
+        // Use the robust utility function to get field mappings
+        fieldIdToPageName = getFieldIdToPageNameMap(schema);
+
+        // Also build fieldIdToFieldName mapping for logging
+        for (const [pageKey, pageSchema] of Object.entries(schema)) {
+          const pageName = pageKey === 'default' ? 'eligibilityCheck' : pageKey;
+          const fieldProps = (pageSchema as any).properties || {};
+
+          const extractFieldNames = (properties: any) => {
+            for (const [fieldKey, fieldSchema] of Object.entries(properties)) {
+              const fieldId = (fieldSchema as any).fieldId;
+              const fieldTitle = (fieldSchema as any).title || fieldKey;
+              if (fieldId) {
+                fieldIdToFieldName[fieldId] = fieldTitle;
+              }
+
+              // Handle dependencies
+              if ((fieldSchema as any).dependencies) {
+                const dependencies = (fieldSchema as any).dependencies;
+                for (const depSchema of Object.values(dependencies)) {
+                  if (!depSchema || typeof depSchema !== 'object') continue;
+                  const dep = depSchema as any;
+                  if (dep.oneOf)
+                    dep.oneOf.forEach(
+                      (item: any) =>
+                        item?.properties && extractFieldNames(item.properties)
+                    );
+                  if (dep.allOf)
+                    dep.allOf.forEach(
+                      (item: any) =>
+                        item?.properties && extractFieldNames(item.properties)
+                    );
+                  if (dep.anyOf)
+                    dep.anyOf.forEach(
+                      (item: any) =>
+                        item?.properties && extractFieldNames(item.properties)
+                    );
+                  if (dep.properties) extractFieldNames(dep.properties);
+                }
+              }
+            }
+          };
+
+          extractFieldNames(fieldProps);
+
+          // Handle page-level dependencies
+          const pageDependencies = (pageSchema as any).dependencies || {};
+          for (const depSchema of Object.values(pageDependencies)) {
+            if (!depSchema || typeof depSchema !== 'object') continue;
+            const dep = depSchema as any;
+            if (dep.oneOf)
+              dep.oneOf.forEach(
+                (item: any) =>
+                  item?.properties && extractFieldNames(item.properties)
+              );
+            if (dep.allOf)
+              dep.allOf.forEach(
+                (item: any) =>
+                  item?.properties && extractFieldNames(item.properties)
+              );
+            if (dep.anyOf)
+              dep.anyOf.forEach(
+                (item: any) =>
+                  item?.properties && extractFieldNames(item.properties)
+              );
+            if (dep.properties) extractFieldNames(dep.properties);
+          }
+        }
+
+        for (const [fieldId, pageName] of Object.entries(fieldIdToPageName)) {
+          const fieldName = fieldIdToFieldName[fieldId] || fieldId;
+        }
+
+        // Filter updatedFieldValues to only include form fields (not custom fields)
+        const formFieldIds = new Set<string>();
+        for (const [pageKey, pageSchema] of Object.entries(schema)) {
+          const fieldProps = (pageSchema as any).properties || {};
+
+          const extractFormFieldIds = (properties: any) => {
+            for (const [fieldKey, fieldSchema] of Object.entries(properties)) {
+              const fieldId = (fieldSchema as any).fieldId;
+              if (fieldId) {
+                formFieldIds.add(fieldId);
+              }
+
+              // Handle nested dependencies structure - ensure dependency fields are included
+              if ((fieldSchema as any).dependencies) {
+                const dependencies = (fieldSchema as any).dependencies;
+                // Check if dependencies is an object
+                for (const [depKey, depSchema] of Object.entries(
+                  dependencies
+                )) {
+                  if ((depSchema as any).oneOf) {
+                    // Handle oneOf dependencies
+                    for (const oneOfItem of (depSchema as any).oneOf) {
+                      if (oneOfItem.properties) {
+                        extractFormFieldIds(oneOfItem.properties);
+                      }
+                    }
+                  } else if ((depSchema as any).properties) {
+                    // Handle direct properties dependencies
+                    extractFormFieldIds((depSchema as any).properties);
+                  }
+                }
+              }
+            }
+          };
+
+          extractFormFieldIds(fieldProps);
+        }
+                // Filter updatedFieldValues to only include form fields
+        // TEMPORARY FIX: If a field is not in formFieldIds but exists in fieldIdToPageName, include it
+        formFieldsOnly = updatedFieldValues.filter((field) => {
+          const isInFormFieldIds = formFieldIds.has(field.fieldId);
+          const isInFieldMapping = fieldIdToPageName[field.fieldId];
+          
+          return isInFormFieldIds || isInFieldMapping;
+        });
       } catch (err) {
         const logger = new Logger('FormSubmissionService');
         logger.error('Schema fetch failed, cannot proceed', err);
         // If schema fetch fails, fallback to empty map (all fields go to 'default')
         fieldIdToPageName = {};
+        fieldIdToFieldName = {};
+        // If schema fetch fails, don't filter fields (use all updatedFieldValues)
+        formFieldsOnly = updatedFieldValues;
       }
       // --- END NEW LOGIC ---
 
@@ -1182,9 +1364,6 @@ export class FormSubmissionService {
       try {
         const form = await this.formsService.getFormById(formIdToMatch);
         cohortId = form?.contextId || '';
-        LoggerUtil.debug(
-          `Fetched cohortId: ${cohortId} for formId: ${formIdToMatch}`
-        );
       } catch (error) {
         LoggerUtil.warn(
           `Failed to fetch cohortId for formId ${formIdToMatch}:`,
@@ -1200,9 +1379,6 @@ export class FormSubmissionService {
         // If not found by cohortId, don't fallback to avoid inconsistencies
         // Log this scenario for investigation
         if (existingAppIndex === -1) {
-          LoggerUtil.warn(
-            `No application found for cohortId: ${cohortId}, will create new application`
-          );
         }
       } else {
         // Use formId/submissionId only when cohortId is not available
@@ -1213,72 +1389,40 @@ export class FormSubmissionService {
         );
       }
 
-      // Prepare the updated fields data
+      // Prepare the updated fields data using the robust mapping
       const updatedFields = {};
-      updatedFieldValues.forEach((field) => {
-        // Improved logic: Try schema, then existing pages, then fallback
-        let pageKey = fieldIdToPageName[field.fieldId];
-        if (!pageKey && existingAppIndex !== -1) {
-          // Try to find the field in existing pages
-          const existingPages =
-            applications[existingAppIndex]?.progress?.pages || {};
-          for (const [existingPage, pageData] of Object.entries(
-            existingPages
-          )) {
-            // Fix: add type assertion for pageData
-            const pageDataTyped = pageData as { fields?: any };
-            if (
-              pageDataTyped.fields &&
-              (field.fieldname in pageDataTyped.fields ||
-                field.fieldId in pageDataTyped.fields)
-            ) {
-              pageKey = existingPage;
-              break;
-            }
-          }
-        }
+      formFieldsOnly.forEach((field) => {
+        const pageKey = fieldIdToPageName[field.fieldId];
         if (!pageKey) {
-          console.warn(
-            `FieldId ${field.fieldId} not found in schema mapping or existing pages, using 'default'`
+          // Log warning for unmapped fields instead of fallback
+          LoggerUtil.warn(
+            `FieldId ${field.fieldId} not found in schema mapping! Skipping field.`
           );
-          pageKey = 'default';
+          return; // Skip this field instead of assigning to wrong page
         }
-
         updatedFields[pageKey] ??= {
           completed: true,
           fields: {},
         };
-        updatedFields[pageKey].fields[field.fieldname ?? field.fieldId] =
-          field.value;
+        // Process field value for Elasticsearch - convert arrays to comma-separated strings
+        updatedFields[pageKey].fields[field.fieldId] = this.processFieldValueForElasticsearch(field.value);
       });
 
+
+
       if (existingAppIndex !== -1) {
-        // Deep merge for each page's fields
-        const mergedPages = {
-          ...(applications[existingAppIndex]?.progress?.pages || {}),
-        };
+        // COMPLETELY REPLACE old pages structure instead of merging
+        const mergedPages = {};
+
+        // Only use the new schema-based mapping, don't merge with old data
         for (const [pageKey, pageValue] of Object.entries(updatedFields)) {
           const newPage = pageValue as {
             completed: boolean;
             fields: { [key: string]: any };
           };
-          if (mergedPages[pageKey]) {
-            const existingPage = mergedPages[pageKey] as {
-              completed: boolean;
-              fields: { [key: string]: any };
-            };
-            mergedPages[pageKey] = {
-              ...existingPage,
-              fields: {
-                ...existingPage.fields,
-                ...newPage.fields,
-              },
-              completed: newPage.completed, // update completed status if needed
-            };
-          } else {
-            mergedPages[pageKey] = newPage;
-          }
+          mergedPages[pageKey] = newPage;
         }
+
         // Merge overall progress
         const mergedOverall = applications[existingAppIndex]?.progress?.overall
           ? { ...applications[existingAppIndex].progress.overall }
@@ -1286,6 +1430,10 @@ export class FormSubmissionService {
               completed: updatedFieldValues.length,
               total: updatedFieldValues.length,
             };
+
+        // Use completionPercentage from the updatedSubmission (payload value) instead of calculating
+        const completionPercentage =
+          updatedSubmission.completionPercentage ?? 0;
 
         // --- Update cohortmemberstatus and cohortDetails logic ---
         // cohortmemberstatus is not a property of FormSubmission; set as empty string or fetch from CohortMembers if needed
@@ -1308,6 +1456,8 @@ export class FormSubmissionService {
           formstatus:
             updatedSubmission.status ??
             applications[existingAppIndex].formstatus,
+          // Use completionPercentage from payload (updatedSubmission)
+          completionPercentage: completionPercentage,
           progress: {
             pages: mergedPages,
             overall: mergedOverall,
@@ -1315,6 +1465,23 @@ export class FormSubmissionService {
           lastSavedAt: new Date().toISOString(),
           submittedAt: new Date().toISOString(),
         };
+
+        // Also update the FormSubmission entity in the database
+        try {
+          const submissionToUpdate =
+            await this.formSubmissionRepository.findOne({
+              where: { submissionId: submissionIdToMatch },
+            });
+          if (submissionToUpdate) {
+            submissionToUpdate.completionPercentage = completionPercentage;
+            await this.formSubmissionRepository.save(submissionToUpdate);
+          }
+        } catch (error) {
+          LoggerUtil.warn(
+            'Failed to update FormSubmission completionPercentage:',
+            error
+          );
+        }
       } else {
         // If no existing application found, build from DB with correct cohortDetails
         const newApp = await this.buildApplicationFromDB(updatedSubmission);
@@ -1334,7 +1501,7 @@ export class FormSubmissionService {
       }
     } catch (elasticError) {
       // Log Elasticsearch error but don't fail the request
-      console.error('Failed to update Elasticsearch:', elasticError);
+      LoggerUtil.warn('Failed to update Elasticsearch:', elasticError);
     }
   }
 
@@ -1351,26 +1518,33 @@ export class FormSubmissionService {
       const form = await this.formsService.getFormById(submission.formId);
       const cohortId = form?.contextId || '';
       if (!cohortId) return { name: '', status: '' };
-      const mockResponse = {
-        status: (code: number) => ({ json: (data: any) => data }),
-      };
-      const cohortDetails = await this.postgresCohortService.getCohortsDetails(
-        { cohortId, getChildData: false },
-        mockResponse
-      );
-      if (cohortDetails?.result?.cohortData?.[0]) {
-        const cohortData = cohortDetails.result.cohortData[0];
-        const cohortFieldValues = cohortData.customField ?? [];
+
+      // Use the same approach as cohort members service for consistency
+      // Get basic cohort information directly from database
+      const cohort = await this.cohortRepository.findOne({
+        where: { cohortId: cohortId },
+        select: ['cohortId', 'name', 'parentId', 'type', 'status'],
+      });
+
+      if (cohort) {
+        // Get cohort custom fields using the same method as cohort members service
+        const cohortCustomFields =
+          await this.postgresCohortService.getCohortCustomFieldDetails(
+            cohortId
+          );
+
         return {
-          name: cohortData.name ?? '',
-          status: cohortData.status ?? '',
-          ...cohortFieldValues.reduce((acc, field) => {
-            acc[field.label] = field.value ?? '';
-            return acc;
-          }, {} as Record<string, any>),
+          cohortId: cohort.cohortId,
+          name: cohort.name,
+          parentId: cohort.parentId,
+          type: cohort.type,
+          status: cohort.status,
+          customFields: cohortCustomFields,
         };
       }
-    } catch (e) {}
+    } catch (e) {
+      LoggerUtil.warn('Failed to fetch cohort details:', e);
+    }
     return { name: '', status: '' };
   }
 
@@ -1383,103 +1557,419 @@ export class FormSubmissionService {
   private async buildApplicationFromDB(
     submission: FormSubmission
   ): Promise<any> {
-    // Fetch form schema and custom fields
-    let schema: any = {};
+    let progress: any = {};
+    let formData: any = {};
     let cohortId = '';
-    let cohortmemberstatus = '';
-    let cohortDetails = {};
+    let formIdToMatch = submission.formId;
+    let submissionIdToMatch = submission.submissionId;
+
     try {
-      const form = await this.formsService.getFormById(submission.formId);
-      const fieldsObj = form && form.fields ? (form.fields as any) : null;
-      if (
-        Array.isArray(fieldsObj?.result) &&
-        fieldsObj.result[0]?.schema?.properties
-      ) {
-        schema = fieldsObj.result[0].schema.properties;
-      }
-      cohortId = form?.contextId || '';
-      // Fetch cohortmemberstatus and cohortDetails if cohortId exists
-      if (cohortId) {
-        // Fetch CohortMembers record for this user and cohort
-        const cohortMember = await this.cohortMembersRepository.findOne({
-          where: {
-            userId: submission.itemId,
-            cohortId: cohortId,
-          },
-        });
-        if (cohortMember) {
-          cohortmemberstatus = cohortMember.status;
-        }
-        // Always fetch detailed cohortDetails (including custom fields) from fetchCohortDetailsFromDB
-        // This ensures cohortDetails includes dynamic fields from Cohort, FieldValue, and Fields tables
-        cohortDetails = await this.fetchCohortDetailsFromDB(submission);
-      }
-    } catch (e) {
-      schema = {};
-    }
-    const submissionCustomFields =
-      await this.fieldsService.getFieldsAndFieldsValues(submission.itemId);
-    const fieldIdToValue: Record<string, any> = {};
-    const fieldIdToFieldName: Record<string, string> = {};
-    for (const field of submissionCustomFields) {
-      fieldIdToValue[field.fieldId] = field.value;
-      fieldIdToFieldName[field.fieldId] = field.fieldname || field.fieldId;
-    }
-    const pages: Record<string, any> = {};
-    const formData: Record<string, any> = {};
-    for (const [pageKey, pageSchema] of Object.entries(schema)) {
-      const pageName = pageKey === 'default' ? 'eligibility' : pageKey;
-      pages[pageName] = { completed: true, fields: {} };
-      formData[pageName] = {};
-      const fieldProps = (pageSchema as any).properties || {};
-      for (const [fieldKey, fieldSchema] of Object.entries(fieldProps)) {
-        const fieldId = (fieldSchema as any).fieldId;
-        if (fieldId && fieldIdToValue[fieldId] !== undefined) {
-          let fieldName = fieldId;
-          if ((fieldSchema as any) && (fieldSchema as any).name) {
-            fieldName = (fieldSchema as any).name;
-          } else if (fieldIdToFieldName[fieldId]) {
-            fieldName = fieldIdToFieldName[fieldId];
+      // Get form schema to understand field structure
+      let schema: any = {};
+      try {
+        const form = await this.formsService.getFormById(submission.formId);
+        const fieldsObj = form && form.fields ? (form.fields as any) : null;
+
+        // Get cohortId from form context
+        cohortId = form?.contextId || '';
+
+        // Handle different schema structures
+        if (fieldsObj) {
+          // Try different possible schema structures
+          if (
+            Array.isArray(fieldsObj?.result) &&
+            fieldsObj.result[0]?.schema?.properties
+          ) {
+            // Structure: { result: [{ schema: { properties: {...} } }] }
+            schema = fieldsObj.result[0].schema.properties;
+          } else if (fieldsObj?.schema?.properties) {
+            // Structure: { schema: { properties: {...} } }
+            schema = fieldsObj.schema.properties;
+          } else if (fieldsObj?.properties) {
+            // Structure: { properties: {...} }
+            schema = fieldsObj.properties;
+          } else if (typeof fieldsObj === 'object' && fieldsObj !== null) {
+            // Try to find schema in nested structure
+            const findSchema = (obj: any): any => {
+              if (obj?.schema?.properties) return obj.schema.properties;
+              if (obj?.properties) return obj.properties;
+              if (Array.isArray(obj)) {
+                for (const item of obj) {
+                  const found = findSchema(item);
+                  if (found) return found;
+                }
+              } else if (typeof obj === 'object') {
+                for (const key in obj) {
+                  const found = findSchema(obj[key]);
+                  if (found) return found;
+                }
+              }
+              return null;
+            };
+            schema = findSchema(fieldsObj) || {};
           }
-          const value = fieldIdToValue[fieldId];
-          pages[pageName].fields[fieldName] = value;
-          formData[pageName][fieldName] = value;
+        }
+      } catch (e) {
+        schema = {};
+      }
+
+      const updatedFieldValues =
+        await this.fieldsService.getFieldsAndFieldsValues(submission.itemId);
+
+      // Filter updatedFieldValues to only include form fields (not custom fields)
+      // Get all field IDs that are part of the current form schema
+      const formFieldIds = new Set<string>();
+      const fieldIdToPageName: Record<string, string> = {};
+      const fieldIdToSchemaFieldName: Record<string, string> = {};
+
+      // Debug: Log the schema structure to understand the dependencies
+      LoggerUtil.warn(
+        `Schema structure (buildApplicationFromDB): ${JSON.stringify(
+          schema,
+          null,
+          2
+        )}`
+      );
+
+      for (const [pageKey, pageSchema] of Object.entries(schema)) {
+        LoggerUtil.warn(`Processing page: ${pageKey}`);
+        const fieldProps = (pageSchema as any).properties || {};
+        LoggerUtil.warn(
+          `Page properties: ${JSON.stringify(Object.keys(fieldProps))}`
+        );
+
+        const extractFormFieldIds = (properties: any) => {
+          for (const [fieldKey, fieldSchema] of Object.entries(properties)) {
+            const fieldId = (fieldSchema as any).fieldId;
+            if (fieldId) {
+              formFieldIds.add(fieldId);
+              LoggerUtil.warn(
+                `Found fieldId: ${fieldId} in ${fieldKey} (buildApplicationFromDB)`
+              );
+            }
+
+            // Handle nested dependencies structure - ensure dependency fields are included
+            if ((fieldSchema as any).dependencies) {
+              LoggerUtil.warn(
+                `Found dependencies for field: ${fieldKey} (buildApplicationFromDB)`
+              );
+              const dependencies = (fieldSchema as any).dependencies;
+              LoggerUtil.warn(
+                `Dependencies object: ${JSON.stringify(
+                  Object.keys(dependencies)
+                )}`
+              );
+              for (const [depKey, depSchema] of Object.entries(dependencies)) {
+                LoggerUtil.warn(
+                  `Processing dependency: ${depKey} (buildApplicationFromDB)`
+                );
+                LoggerUtil.warn(
+                  `Dependency schema: ${JSON.stringify(depSchema)}`
+                );
+                if ((depSchema as any).oneOf) {
+                  // Handle oneOf dependencies
+                  LoggerUtil.warn(
+                    `Found oneOf dependency in ${depKey} (buildApplicationFromDB)`
+                  );
+                  LoggerUtil.warn(
+                    `OneOf items count: ${(depSchema as any).oneOf.length}`
+                  );
+                  for (const oneOfItem of (depSchema as any).oneOf) {
+                    LoggerUtil.warn(`OneOf item: ${JSON.stringify(oneOfItem)}`);
+                    if (oneOfItem.properties) {
+                      LoggerUtil.warn(
+                        `Extracting from oneOf properties: ${JSON.stringify(
+                          oneOfItem.properties
+                        )} (buildApplicationFromDB)`
+                      );
+                      extractFormFieldIds(oneOfItem.properties);
+                    }
+                  }
+                } else if ((depSchema as any).properties) {
+                  // Handle direct properties dependencies
+                  LoggerUtil.warn(
+                    `Extracting from direct properties: ${JSON.stringify(
+                      (depSchema as any).properties
+                    )} (buildApplicationFromDB)`
+                  );
+                  extractFormFieldIds((depSchema as any).properties);
+                }
+              }
+            }
+          }
+        };
+
+        // Use the robust utility function to get field mappings
+        const fieldMappings = getFieldIdToPageNameMap(schema);
+        Object.assign(fieldIdToPageName, fieldMappings);
+
+        // Also build fieldIdToSchemaFieldName mapping
+        for (const [pageKey, pageSchema] of Object.entries(schema)) {
+          const pageName = pageKey === 'default' ? 'eligibilityCheck' : pageKey;
+          const fieldProps = (pageSchema as any).properties || {};
+
+          const extractFieldNames = (properties: any) => {
+            for (const [fieldKey, fieldSchema] of Object.entries(properties)) {
+              const fieldId = (fieldSchema as any).fieldId;
+              const fieldTitle = (fieldSchema as any).title || fieldKey;
+              if (fieldId) {
+                fieldIdToSchemaFieldName[fieldId] = fieldTitle;
+              }
+
+              // Handle dependencies
+              if ((fieldSchema as any).dependencies) {
+                const dependencies = (fieldSchema as any).dependencies;
+                for (const depSchema of Object.values(dependencies)) {
+                  if (!depSchema || typeof depSchema !== 'object') continue;
+                  const dep = depSchema as any;
+                  if (dep.oneOf)
+                    dep.oneOf.forEach(
+                      (item: any) =>
+                        item?.properties && extractFieldNames(item.properties)
+                    );
+                  if (dep.allOf)
+                    dep.allOf.forEach(
+                      (item: any) =>
+                        item?.properties && extractFieldNames(item.properties)
+                    );
+                  if (dep.anyOf)
+                    dep.anyOf.forEach(
+                      (item: any) =>
+                        item?.properties && extractFieldNames(item.properties)
+                    );
+                  if (dep.properties) extractFieldNames(dep.properties);
+                }
+              }
+            }
+          };
+
+          extractFieldNames(fieldProps);
+
+          // Handle page-level dependencies
+          const pageDependencies = (pageSchema as any).dependencies || {};
+          for (const depSchema of Object.values(pageDependencies)) {
+            if (!depSchema || typeof depSchema !== 'object') continue;
+            const dep = depSchema as any;
+            if (dep.oneOf)
+              dep.oneOf.forEach(
+                (item: any) =>
+                  item?.properties && extractFieldNames(item.properties)
+              );
+            if (dep.allOf)
+              dep.allOf.forEach(
+                (item: any) =>
+                  item?.properties && extractFieldNames(item.properties)
+              );
+            if (dep.anyOf)
+              dep.anyOf.forEach(
+                (item: any) =>
+                  item?.properties && extractFieldNames(item.properties)
+              );
+            if (dep.properties) extractFieldNames(dep.properties);
+          }
+        }
+
+        extractFormFieldIds(fieldProps);
+
+        // Extract dependency fields from page-level dependencies
+        const pageDependencies = (pageSchema as any).dependencies || {};
+        LoggerUtil.warn(
+          `Page dependencies: ${JSON.stringify(
+            Object.keys(pageDependencies)
+          )} (buildApplicationFromDB)`
+        );
+
+        for (const [depKey, depSchema] of Object.entries(pageDependencies)) {
+          LoggerUtil.warn(
+            `Processing page dependency: ${depKey} (buildApplicationFromDB)`
+          );
+
+          // Handle oneOf dependencies
+          if ((depSchema as any).oneOf) {
+            LoggerUtil.warn(
+              `Found oneOf in page dependency: ${depKey} (buildApplicationFromDB)`
+            );
+            for (const oneOfItem of (depSchema as any).oneOf) {
+              if (oneOfItem.properties) {
+                LoggerUtil.warn(
+                  `Processing oneOf properties for page dependency ${depKey} (buildApplicationFromDB)`
+                );
+                // Extract field IDs from dependency properties
+                for (const [propKey, propSchema] of Object.entries(
+                  oneOfItem.properties
+                )) {
+                  const propFieldId = (propSchema as any).fieldId;
+                  if (propFieldId) {
+                    formFieldIds.add(propFieldId);
+                    LoggerUtil.warn(
+                      `Found page dependency fieldId: ${propFieldId} in ${propKey} (buildApplicationFromDB)`
+                    );
+                  }
+                }
+              }
+            }
+          }
+
+          // Handle direct properties in page dependencies
+          if ((depSchema as any).properties) {
+            LoggerUtil.warn(
+              `Processing direct properties in page dependency: ${depKey} (buildApplicationFromDB)`
+            );
+            // Extract field IDs from dependency properties
+            for (const [propKey, propSchema] of Object.entries(
+              (depSchema as any).properties
+            )) {
+              const propFieldId = (propSchema as any).fieldId;
+              if (propFieldId) {
+                formFieldIds.add(propFieldId);
+                LoggerUtil.warn(
+                  `Found page dependency fieldId: ${propFieldId} in ${propKey} (buildApplicationFromDB)`
+                );
+              }
+            }
+          }
         }
       }
-    }
-    if (Object.keys(pages).length === 0) {
-      pages['default'] = {
-        completed: true,
-        fields: submissionCustomFields.reduce((acc, field) => {
-          acc[field.fieldname || field.fieldId] = field.value;
-          return acc;
-        }, {}),
-      };
-      formData['default'] = { ...pages['default'].fields };
-    }
-    // Fetch cohortDetails (already fetched above)
-    return {
-      formId: submission.formId,
-      submissionId: submission.submissionId,
-      cohortId, // Fetched from Form entity
-      status: submission.status,
-      cohortmemberstatus, // Now fetched from CohortMembers
-      formstatus: submission.status,
-      progress: {
+
+      // Temporary check for dependency field
+      if (formFieldIds.has('1b92932d-648b-4b26-9f12-f43cec5416ef')) {
+        LoggerUtil.warn(
+          ' Dependency field fieldsOfStudy found in formFieldIds'
+        );
+      } else {
+        LoggerUtil.warn(
+          'Dependency field fieldsOfStudy NOT found in formFieldIds'
+        );
+      }
+
+      // Filter updatedFieldValues to only include form fields
+      const formFieldsOnly = updatedFieldValues.filter((field) =>
+        formFieldIds.has(field.fieldId)
+      );
+
+      const pages: Record<string, any> = {};
+      formData = {};
+
+      // Now build pages using the mappings
+      for (const [pageKey, pageSchema] of Object.entries(schema)) {
+        const pageName = pageKey === 'default' ? 'eligibilityCheck' : pageKey;
+        pages[pageName] = { completed: true, fields: {} };
+        formData[pageName] = {};
+      }
+
+      // Map field values to correct pages using the schema mappings
+      for (const field of formFieldsOnly) {
+        const pageName = fieldIdToPageName[field.fieldId];
+        if (!pageName) {
+          // Log warning for unmapped fields instead of fallback
+          LoggerUtil.warn(
+            `FieldId ${field.fieldId} not found in schema mapping! Skipping field.`
+          );
+          continue; // Skip this field instead of assigning to wrong page
+        }
+        const fieldName =
+          fieldIdToSchemaFieldName[field.fieldId] ||
+          field.fieldname ||
+          field.fieldId;
+
+        if (!pages[pageName]) {
+          pages[pageName] = { completed: true, fields: {} };
+          formData[pageName] = {};
+        }
+
+        // Process field value for Elasticsearch - convert arrays to comma-separated strings
+        pages[pageName].fields[field.fieldId] = this.processFieldValueForElasticsearch(field.value);
+        formData[pageName][field.fieldId] = this.processFieldValueForElasticsearch(field.value);
+      }
+
+      if (Object.keys(pages).length === 0) {
+        pages['eligibilityCheck'] = {
+          completed: true,
+          fields: formFieldsOnly.reduce((acc, field) => {
+            // Process field value for Elasticsearch - convert arrays to comma-separated strings
+            acc[field.fieldId] = this.processFieldValueForElasticsearch(field.value);
+            return acc;
+          }, {}),
+        };
+        formData['eligibilityCheck'] = {
+          ...pages['eligibilityCheck'].fields,
+        };
+      }
+
+      progress = {
         pages,
         overall: {
-          completed: submissionCustomFields.length,
-          total: submissionCustomFields.length,
+          completed: formFieldsOnly.length,
+          total: formFieldsOnly.length,
         },
-      },
-      lastSavedAt: submission.updatedAt
-        ? submission.updatedAt.toISOString()
-        : new Date().toISOString(),
-      submittedAt: submission.createdAt
-        ? submission.createdAt.toISOString()
-        : new Date().toISOString(),
-      cohortDetails, // Now fetched from Cohort
+      };
+    } catch (error) {
+      LoggerUtil.warn('Error building application from DB:', error);
+      // Fallback to basic structure
+      progress = {
+        pages: {
+          eligibilityCheck: {
+            completed: true,
+            fields: {},
+          },
+        },
+        overall: {
+          completed: 0,
+          total: 0,
+        },
+      };
+      formData = {};
+    }
+
+    // Get detailed cohortDetails using the same method as fetchCohortDetailsFromDB
+    let detailedCohortDetails: any = {
+      name: '',
+      status: '',
+    };
+
+    if (cohortId) {
+      try {
+        // Get basic cohort information directly from database
+        const cohortDetails = await this.cohortRepository.findOne({
+          where: { cohortId: cohortId },
+          select: ['cohortId', 'name', 'parentId', 'type', 'status'],
+        });
+
+        if (cohortDetails) {
+          // Get cohort custom fields using the same method as cohort members service
+          const cohortCustomFields =
+            await this.postgresCohortService.getCohortCustomFieldDetails(
+              cohortId
+            );
+
+          detailedCohortDetails = {
+            cohortId: cohortDetails.cohortId,
+            name: cohortDetails.name,
+            parentId: cohortDetails.parentId,
+            type: cohortDetails.type,
+            status: cohortDetails.status,
+            customFields: cohortCustomFields,
+          };
+        }
+      } catch (error) {
+        LoggerUtil.warn('Error fetching cohort details:', error);
+      }
+    }
+
+    return {
+      cohortId,
+      formId: formIdToMatch,
+      submissionId: submissionIdToMatch,
+      cohortmemberstatus: submission.status || 'active',
+      formstatus: submission.status || 'active',
+      completionPercentage: submission.completionPercentage || 0,
+      progress,
       formData,
+      lastSavedAt:
+        submission.updatedAt?.toISOString() || new Date().toISOString(),
+      submittedAt:
+        submission.createdAt?.toISOString() || new Date().toISOString(),
+      cohortDetails: detailedCohortDetails,
     };
   }
 
@@ -1518,21 +2008,198 @@ export class FormSubmissionService {
       try {
         const form = await this.formsService.getFormById(submission.formId);
         const fieldsObj = form && form.fields ? (form.fields as any) : null;
-        if (
-          Array.isArray(fieldsObj?.result) &&
-          fieldsObj.result[0]?.schema?.properties
-        ) {
-          const schema = fieldsObj.result[0].schema.properties;
-          for (const pageSchema of Object.values(schema)) {
-            const fieldProps = (pageSchema as any).properties || {};
-            for (const fieldSchema of Object.values(fieldProps)) {
-              const fieldId = (fieldSchema as any).fieldId;
-              if (fieldId) allFormFieldIds.add(fieldId);
+
+        // Handle different schema structures
+        if (fieldsObj) {
+          // Try different possible schema structures
+          if (
+            Array.isArray(fieldsObj?.result) &&
+            fieldsObj.result[0]?.schema?.properties
+          ) {
+            // Structure: { result: [{ schema: { properties: {...} } }] }
+            const schema = fieldsObj.result[0].schema.properties;
+            for (const pageSchema of Object.values(schema)) {
+              const fieldProps = (pageSchema as any).properties || {};
+              for (const fieldSchema of Object.values(fieldProps)) {
+                const fieldId = (fieldSchema as any).fieldId;
+                if (fieldId) allFormFieldIds.add(fieldId);
+
+                // Handle nested dependencies structure - ensure dependency fields are included
+                if ((fieldSchema as any).dependencies) {
+                  const dependencies = (fieldSchema as any).dependencies;
+                  for (const [depKey, depSchema] of Object.entries(
+                    dependencies
+                  )) {
+                    if ((depSchema as any).oneOf) {
+                      // Handle oneOf dependencies
+                      for (const oneOfItem of (depSchema as any).oneOf) {
+                        if (oneOfItem.properties) {
+                          for (const depFieldSchema of Object.values(
+                            oneOfItem.properties
+                          )) {
+                            const depFieldId = (depFieldSchema as any).fieldId;
+                            if (depFieldId) allFormFieldIds.add(depFieldId);
+                          }
+                        }
+                      }
+                    } else if ((depSchema as any).properties) {
+                      // Handle direct properties dependencies
+                      for (const depFieldSchema of Object.values(
+                        (depSchema as any).properties
+                      )) {
+                        const depFieldId = (depFieldSchema as any).fieldId;
+                        if (depFieldId) allFormFieldIds.add(depFieldId);
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          } else if (fieldsObj?.schema?.properties) {
+            // Structure: { schema: { properties: {...} } }
+            const schema = fieldsObj.schema.properties;
+            for (const pageSchema of Object.values(schema)) {
+              const fieldProps = (pageSchema as any).properties || {};
+              for (const fieldSchema of Object.values(fieldProps)) {
+                const fieldId = (fieldSchema as any).fieldId;
+                if (fieldId) allFormFieldIds.add(fieldId);
+
+                // Handle nested dependencies structure - ensure dependency fields are included
+                if ((fieldSchema as any).dependencies) {
+                  const dependencies = (fieldSchema as any).dependencies;
+                  for (const [depKey, depSchema] of Object.entries(
+                    dependencies
+                  )) {
+                    if ((depSchema as any).oneOf) {
+                      // Handle oneOf dependencies
+                      for (const oneOfItem of (depSchema as any).oneOf) {
+                        if (oneOfItem.properties) {
+                          for (const depFieldSchema of Object.values(
+                            oneOfItem.properties
+                          )) {
+                            const depFieldId = (depFieldSchema as any).fieldId;
+                            if (depFieldId) allFormFieldIds.add(depFieldId);
+                          }
+                        }
+                      }
+                    } else if ((depSchema as any).properties) {
+                      // Handle direct properties dependencies
+                      for (const depFieldSchema of Object.values(
+                        (depSchema as any).properties
+                      )) {
+                        const depFieldId = (depFieldSchema as any).fieldId;
+                        if (depFieldId) allFormFieldIds.add(depFieldId);
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          } else if (fieldsObj?.properties) {
+            // Structure: { properties: {...} }
+            const schema = fieldsObj.properties;
+            for (const pageSchema of Object.values(schema)) {
+              const fieldProps = (pageSchema as any).properties || {};
+              for (const fieldSchema of Object.values(fieldProps)) {
+                const fieldId = (fieldSchema as any).fieldId;
+                if (fieldId) allFormFieldIds.add(fieldId);
+
+                // Handle nested dependencies structure - ensure dependency fields are included
+                if ((fieldSchema as any).dependencies) {
+                  const dependencies = (fieldSchema as any).dependencies;
+                  for (const [depKey, depSchema] of Object.entries(
+                    dependencies
+                  )) {
+                    if ((depSchema as any).oneOf) {
+                      // Handle oneOf dependencies
+                      for (const oneOfItem of (depSchema as any).oneOf) {
+                        if (oneOfItem.properties) {
+                          for (const depFieldSchema of Object.values(
+                            oneOfItem.properties
+                          )) {
+                            const depFieldId = (depFieldSchema as any).fieldId;
+                            if (depFieldId) allFormFieldIds.add(depFieldId);
+                          }
+                        }
+                      }
+                    } else if ((depSchema as any).properties) {
+                      // Handle direct properties dependencies
+                      for (const depFieldSchema of Object.values(
+                        (depSchema as any).properties
+                      )) {
+                        const depFieldId = (depFieldSchema as any).fieldId;
+                        if (depFieldId) allFormFieldIds.add(depFieldId);
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          } else if (typeof fieldsObj === 'object' && fieldsObj !== null) {
+            // Try to find schema in nested structure
+            const findSchema = (obj: any): any => {
+              if (obj?.schema?.properties) return obj.schema.properties;
+              if (obj?.properties) return obj.properties;
+              if (Array.isArray(obj)) {
+                for (const item of obj) {
+                  const found = findSchema(item);
+                  if (found) return found;
+                }
+              } else if (typeof obj === 'object') {
+                for (const key in obj) {
+                  const found = findSchema(obj[key]);
+                  if (found) return found;
+                }
+              }
+              return null;
+            };
+            const schema = findSchema(fieldsObj);
+            if (schema) {
+              for (const pageSchema of Object.values(schema)) {
+                const fieldProps = (pageSchema as any).properties || {};
+                for (const fieldSchema of Object.values(fieldProps)) {
+                  const fieldId = (fieldSchema as any).fieldId;
+                  if (fieldId) allFormFieldIds.add(fieldId);
+
+                  // Handle nested dependencies structure - ensure dependency fields are included
+                  if ((fieldSchema as any).dependencies) {
+                    const dependencies = (fieldSchema as any).dependencies;
+                    for (const [depKey, depSchema] of Object.entries(
+                      dependencies
+                    )) {
+                      if ((depSchema as any).oneOf) {
+                        // Handle oneOf dependencies
+                        for (const oneOfItem of (depSchema as any).oneOf) {
+                          if (oneOfItem.properties) {
+                            for (const depFieldSchema of Object.values(
+                              oneOfItem.properties
+                            )) {
+                              const depFieldId = (depFieldSchema as any)
+                                .fieldId;
+                              if (depFieldId) allFormFieldIds.add(depFieldId);
+                            }
+                          }
+                        }
+                      } else if ((depSchema as any).properties) {
+                        // Handle direct properties dependencies
+                        for (const depFieldSchema of Object.values(
+                          (depSchema as any).properties
+                        )) {
+                          const depFieldId = (depFieldSchema as any).fieldId;
+                          if (depFieldId) allFormFieldIds.add(depFieldId);
+                        }
+                      }
+                    }
+                  }
+                }
+              }
             }
           }
         }
       } catch (e) {}
     }
+
+    // Filter out form-related fields from profile custom fields
     profileCustomFields = profileCustomFields.filter(
       (f) => !allFormFieldIds.has(f.fieldId)
     );
@@ -1587,63 +2254,407 @@ export class FormSubmissionService {
         try {
           const form = await this.formsService.getFormById(submission.formId);
           const fieldsObj = form && form.fields ? (form.fields as any) : null;
-          if (
-            Array.isArray(fieldsObj?.result) &&
-            fieldsObj.result[0]?.schema?.properties
-          ) {
-            schema = fieldsObj.result[0].schema.properties;
+
+          // Handle different schema structures
+          if (fieldsObj) {
+            // Try different possible schema structures
+            if (
+              Array.isArray(fieldsObj?.result) &&
+              fieldsObj.result[0]?.schema?.properties
+            ) {
+              // Structure: { result: [{ schema: { properties: {...} } }] }
+              schema = fieldsObj.result[0].schema.properties;
+            } else if (fieldsObj?.schema?.properties) {
+              // Structure: { schema: { properties: {...} } }
+              schema = fieldsObj.schema.properties;
+            } else if (fieldsObj?.properties) {
+              // Structure: { properties: {...} }
+              schema = fieldsObj.properties;
+            } else if (typeof fieldsObj === 'object' && fieldsObj !== null) {
+              // Try to find schema in nested structure
+              const findSchema = (obj: any): any => {
+                if (obj?.schema?.properties) return obj.schema.properties;
+                if (obj?.properties) return obj.properties;
+                if (Array.isArray(obj)) {
+                  for (const item of obj) {
+                    const found = findSchema(item);
+                    if (found) return found;
+                  }
+                } else if (typeof obj === 'object') {
+                  for (const key in obj) {
+                    const found = findSchema(obj[key]);
+                    if (found) return found;
+                  }
+                }
+                return null;
+              };
+              schema = findSchema(fieldsObj) || {};
+            }
           }
         } catch (e) {
           schema = {};
         }
         const submissionCustomFields =
           await this.fieldsService.getFieldsAndFieldsValues(submission.itemId);
+
+        // Filter submissionCustomFields to only include form fields (not custom fields)
+        // Get all field IDs that are part of the current form schema
+        const formFieldIds = new Set<string>();
+
+        // Debug: Log the schema structure to understand the dependencies
+        LoggerUtil.warn(`Schema structure: ${JSON.stringify(schema, null, 2)}`);
+
+        for (const [pageKey, pageSchema] of Object.entries(schema)) {
+          LoggerUtil.warn(`Processing page: ${pageKey} (buildUserDocument)`);
+          const fieldProps = (pageSchema as any).properties || {};
+          LoggerUtil.warn(
+            `Page properties: ${JSON.stringify(
+              Object.keys(fieldProps)
+            )} (buildUserDocument)`
+          );
+
+          const extractFormFieldIds = (properties: any) => {
+            for (const [fieldKey, fieldSchema] of Object.entries(properties)) {
+              const fieldId = (fieldSchema as any).fieldId;
+              if (fieldId) {
+                formFieldIds.add(fieldId);
+                LoggerUtil.warn(
+                  `Found fieldId: ${fieldId} in ${fieldKey} (buildUserDocument)`
+                );
+              }
+
+              // Handle nested dependencies structure - ensure dependency fields are included
+              if ((fieldSchema as any).dependencies) {
+                LoggerUtil.warn(
+                  `Found dependencies for field: ${fieldKey} (buildUserDocument)`
+                );
+                const dependencies = (fieldSchema as any).dependencies;
+                LoggerUtil.warn(
+                  `Dependencies object: ${JSON.stringify(
+                    Object.keys(dependencies)
+                  )} (buildUserDocument)`
+                );
+                for (const [depKey, depSchema] of Object.entries(
+                  dependencies
+                )) {
+                  LoggerUtil.warn(
+                    `Processing dependency: ${depKey} (buildUserDocument)`
+                  );
+                  LoggerUtil.warn(
+                    `Dependency schema: ${JSON.stringify(
+                      depSchema
+                    )} (buildUserDocument)`
+                  );
+                  if ((depSchema as any).oneOf) {
+                    // Handle oneOf dependencies
+                    LoggerUtil.warn(
+                      `Found oneOf dependency in ${depKey} (buildUserDocument)`
+                    );
+                    LoggerUtil.warn(
+                      `OneOf items count: ${
+                        (depSchema as any).oneOf.length
+                      } (buildUserDocument)`
+                    );
+                    for (const oneOfItem of (depSchema as any).oneOf) {
+                      LoggerUtil.warn(
+                        `OneOf item: ${JSON.stringify(
+                          oneOfItem
+                        )} (buildUserDocument)`
+                      );
+                      if (oneOfItem.properties) {
+                        LoggerUtil.warn(
+                          `Extracting from oneOf properties: ${JSON.stringify(
+                            oneOfItem.properties
+                          )} (buildUserDocument)`
+                        );
+                        extractFormFieldIds(oneOfItem.properties);
+                      }
+                    }
+                  } else if ((depSchema as any).properties) {
+                    // Handle direct properties dependencies
+                    LoggerUtil.warn(
+                      `Extracting from direct properties: ${JSON.stringify(
+                        (depSchema as any).properties
+                      )} (buildUserDocument)`
+                    );
+                    extractFormFieldIds((depSchema as any).properties);
+                  }
+                }
+              }
+            }
+          };
+
+          extractFormFieldIds(fieldProps);
+        }
+
+        // Extract dependency fields from page-level dependencies
+        for (const [pageKey, pageSchema] of Object.entries(schema)) {
+          const pageDependencies = (pageSchema as any).dependencies || {};
+          LoggerUtil.warn(
+            `Page dependencies: ${JSON.stringify(
+              Object.keys(pageDependencies)
+            )} (buildUserDocument)`
+          );
+
+          for (const [depKey, depSchema] of Object.entries(pageDependencies)) {
+            LoggerUtil.warn(
+              `Processing page dependency: ${depKey} (buildUserDocument)`
+            );
+
+            // Handle oneOf dependencies
+            if ((depSchema as any).oneOf) {
+              LoggerUtil.warn(
+                `Found oneOf in page dependency: ${depKey} (buildUserDocument)`
+              );
+              for (const oneOfItem of (depSchema as any).oneOf) {
+                if (oneOfItem.properties) {
+                  LoggerUtil.warn(
+                    `Processing oneOf properties for page dependency ${depKey} (buildUserDocument)`
+                  );
+                  // Map dependency fields to the current page
+                  // extractFieldMappings(oneOfItem.properties, pageKey); // REMOVED - out of scope
+                  for (const [propKey, propSchema] of Object.entries(
+                    oneOfItem.properties
+                  )) {
+                    const propFieldId = (propSchema as any).fieldId;
+                    if (propFieldId) {
+                      formFieldIds.add(propFieldId);
+                      LoggerUtil.warn(
+                        `Found page dependency fieldId: ${propFieldId} in ${propKey} (buildUserDocument)`
+                      );
+                    }
+                  }
+                }
+              }
+            }
+
+            // Handle direct properties in page dependencies
+            if ((depSchema as any).properties) {
+              LoggerUtil.warn(
+                `Processing direct properties in page dependency: ${depKey} (buildUserDocument)`
+              );
+              // Map dependency fields to the current page
+              // extractFieldMappings((depSchema as any).properties, pageKey); // REMOVED - out of scope
+              for (const [propKey, propSchema] of Object.entries(
+                (depSchema as any).properties
+              )) {
+                const propFieldId = (propSchema as any).fieldId;
+                if (propFieldId) {
+                  formFieldIds.add(propFieldId);
+                  LoggerUtil.warn(
+                    `Found page dependency fieldId: ${propFieldId} in ${propKey} (buildUserDocument)`
+                  );
+                }
+              }
+            }
+          }
+        }
+
+        LoggerUtil.warn(
+          `Schema field IDs including dependencies: ${Array.from(
+            formFieldIds
+          ).join(', ')}`
+        );
+
+        // Temporary check for dependency field
+        if (formFieldIds.has('1b92932d-648b-4b26-9f12-f43cec5416ef')) {
+          LoggerUtil.warn(
+            'Dependency field fieldsOfStudy found in formFieldIds (buildUserDocument)'
+          );
+        } else {
+          LoggerUtil.warn(
+            'Dependency field fieldsOfStudy NOT found in formFieldIds (buildUserDocument)'
+          );
+        }
+
+        // Filter updatedFieldValues to only include form fields
+        const formFieldsOnly = submissionCustomFields.filter((field) =>
+          formFieldIds.has(field.fieldId)
+        );
+
         const fieldIdToValue: Record<string, any> = {};
         const fieldIdToFieldName: Record<string, string> = {};
-        for (const field of submissionCustomFields) {
+        for (const field of formFieldsOnly) {
           fieldIdToValue[field.fieldId] = field.value;
           fieldIdToFieldName[field.fieldId] = field.fieldname || field.fieldId;
         }
         const pages: Record<string, any> = {};
         formData = {};
+
+        // Build fieldId to pageName and fieldName mappings from schema
+        const fieldIdToPageName: Record<string, string> = {};
+        const fieldIdToSchemaFieldName: Record<string, string> = {};
+
         for (const [pageKey, pageSchema] of Object.entries(schema)) {
-          const pageName = pageKey === 'default' ? 'eligibility' : pageKey;
-          pages[pageName] = { completed: true, fields: {} };
-          formData[pageName] = {};
+          const pageName = pageKey === 'default' ? 'eligibilityCheck' : pageKey;
           const fieldProps = (pageSchema as any).properties || {};
-          for (const [fieldKey, fieldSchema] of Object.entries(fieldProps)) {
-            const fieldId = (fieldSchema as any).fieldId;
-            if (fieldId && fieldIdToValue[fieldId] !== undefined) {
-              let fieldName = fieldId;
-              if ((fieldSchema as any) && (fieldSchema as any).name) {
-                fieldName = (fieldSchema as any).name;
-              } else if (fieldIdToFieldName[fieldId]) {
-                fieldName = fieldIdToFieldName[fieldId];
+
+          // Use the robust utility function to get field mappings
+          const fieldMappings = getFieldIdToPageNameMap(schema);
+          Object.assign(fieldIdToPageName, fieldMappings);
+
+          // Also build fieldIdToSchemaFieldName mapping
+          for (const [pageKey, pageSchema] of Object.entries(schema)) {
+            const pageName =
+              pageKey === 'default' ? 'eligibilityCheck' : pageKey;
+            const fieldProps = (pageSchema as any).properties || {};
+
+            const extractFieldNames = (properties: any) => {
+              for (const [fieldKey, fieldSchema] of Object.entries(
+                properties
+              )) {
+                const fieldId = (fieldSchema as any).fieldId;
+                const fieldTitle = (fieldSchema as any).title || fieldKey;
+                if (fieldId) {
+                  fieldIdToSchemaFieldName[fieldId] = fieldTitle;
+                }
+
+                // Handle dependencies
+                if ((fieldSchema as any).dependencies) {
+                  const dependencies = (fieldSchema as any).dependencies;
+                  for (const depSchema of Object.values(dependencies)) {
+                    if (!depSchema || typeof depSchema !== 'object') continue;
+                    const dep = depSchema as any;
+                    if (dep.oneOf)
+                      dep.oneOf.forEach(
+                        (item: any) =>
+                          item?.properties && extractFieldNames(item.properties)
+                      );
+                    if (dep.allOf)
+                      dep.allOf.forEach(
+                        (item: any) =>
+                          item?.properties && extractFieldNames(item.properties)
+                      );
+                    if (dep.anyOf)
+                      dep.anyOf.forEach(
+                        (item: any) =>
+                          item?.properties && extractFieldNames(item.properties)
+                      );
+                    if (dep.properties) extractFieldNames(dep.properties);
+                  }
+                }
               }
-              const value = fieldIdToValue[fieldId];
-              pages[pageName].fields[fieldName] = value;
-              formData[pageName][fieldName] = value;
+            };
+
+            extractFieldNames(fieldProps);
+
+            // Handle page-level dependencies
+            const pageDependencies = (pageSchema as any).dependencies || {};
+            for (const depSchema of Object.values(pageDependencies)) {
+              if (!depSchema || typeof depSchema !== 'object') continue;
+              const dep = depSchema as any;
+              if (dep.oneOf)
+                dep.oneOf.forEach(
+                  (item: any) =>
+                    item?.properties && extractFieldNames(item.properties)
+                );
+              if (dep.allOf)
+                dep.allOf.forEach(
+                  (item: any) =>
+                    item?.properties && extractFieldNames(item.properties)
+                );
+              if (dep.anyOf)
+                dep.anyOf.forEach(
+                  (item: any) =>
+                    item?.properties && extractFieldNames(item.properties)
+                );
+              if (dep.properties) extractFieldNames(dep.properties);
             }
           }
         }
+
+        // Log final mappings for verification
+
+        for (const [fieldId, pageName] of Object.entries(fieldIdToPageName)) {
+          const fieldName = fieldIdToSchemaFieldName[fieldId] || fieldId;
+        }
+
+        // Now build pages using the mappings
+        for (const [pageKey, pageSchema] of Object.entries(schema)) {
+          const pageName = pageKey === 'default' ? 'eligibilityCheck' : pageKey;
+          pages[pageName] = { completed: true, fields: {} };
+          formData[pageName] = {};
+        }
+
+        // Map field values to correct pages using the schema mappings
+        for (const field of formFieldsOnly) {
+          const pageName = fieldIdToPageName[field.fieldId];
+          if (!pageName) {
+            // Log warning for unmapped fields instead of fallback
+            LoggerUtil.warn(
+              `FieldId ${field.fieldId} not found in schema mapping! Skipping field.`
+            );
+            continue; // Skip this field instead of assigning to wrong page
+          }
+          const fieldName =
+            fieldIdToSchemaFieldName[field.fieldId] ||
+            field.fieldname ||
+            field.fieldId;
+
+          if (!pages[pageName]) {
+            pages[pageName] = { completed: true, fields: {} };
+            formData[pageName] = {};
+          }
+
+          // Process field value for Elasticsearch - convert arrays to comma-separated strings
+          pages[pageName].fields[field.fieldId] = this.processFieldValueForElasticsearch(field.value);
+          formData[pageName][field.fieldId] = this.processFieldValueForElasticsearch(field.value);
+        }
         if (Object.keys(pages).length === 0) {
-          pages['default'] = {
+          pages['eligibilityCheck'] = {
             completed: true,
-            fields: submissionCustomFields.reduce((acc, field) => {
-              acc[field.fieldname || field.fieldId] = field.value;
+            fields: formFieldsOnly.reduce((acc, field) => {
+              // Process field value for Elasticsearch - convert arrays to comma-separated strings
+              acc[field.fieldId] = this.processFieldValueForElasticsearch(field.value);
               return acc;
             }, {}),
           };
-          formData['default'] = { ...pages['default'].fields };
+          formData['eligibilityCheck'] = {
+            ...pages['eligibilityCheck'].fields,
+          };
         }
         progress = {
           pages,
           overall: {
-            completed: submissionCustomFields.length,
-            total: submissionCustomFields.length,
+            completed: formFieldsOnly.length,
+            total: formFieldsOnly.length,
           },
         };
       }
+      // Get detailed cohortDetails using the same method as fetchCohortDetailsFromDB
+      let detailedCohortDetails: any = {
+        name: cohort?.name ?? '',
+        status: cohort?.status ?? '',
+      };
+      if (cohortId) {
+        try {
+          // Get basic cohort information directly from database
+          const cohortDetails = await this.cohortRepository.findOne({
+            where: { cohortId: cohortId },
+            select: ['cohortId', 'name', 'parentId', 'type', 'status'],
+          });
+
+          if (cohortDetails) {
+            // Get cohort custom fields using the same method as cohort members service
+            const cohortCustomFields =
+              await this.postgresCohortService.getCohortCustomFieldDetails(
+                cohortId
+              );
+
+            detailedCohortDetails = {
+              cohortId: cohortDetails.cohortId,
+              name: cohortDetails.name,
+              parentId: cohortDetails.parentId,
+              type: cohortDetails.type,
+              status: cohortDetails.status,
+              customFields: cohortCustomFields,
+            };
+          }
+        } catch (e) {
+          LoggerUtil.warn('Failed to fetch detailed cohort details:', e);
+        }
+      }
+
       applications.push({
         formId,
         submissionId,
@@ -1651,13 +2662,12 @@ export class FormSubmissionService {
         status,
         cohortmemberstatus: membership?.status || '',
         formstatus,
+        // FIXED: Add completionPercentage from form submission
+        completionPercentage: submission?.completionPercentage ?? 0,
         progress,
         lastSavedAt,
         submittedAt,
-        cohortDetails: {
-          name: cohort?.name ?? '',
-          status: cohort?.status ?? '',
-        },
+        cohortDetails: detailedCohortDetails as any,
         formData,
       });
     }
@@ -1674,81 +2684,314 @@ export class FormSubmissionService {
         try {
           const form = await this.formsService.getFormById(submission.formId);
           const fieldsObj = form && form.fields ? (form.fields as any) : null;
-          if (
-            Array.isArray(fieldsObj?.result) &&
-            fieldsObj.result[0]?.schema?.properties
-          ) {
-            schema = fieldsObj.result[0].schema.properties;
+
+          // Handle different schema structures
+          if (fieldsObj) {
+            // Try different possible schema structures
+            if (
+              Array.isArray(fieldsObj?.result) &&
+              fieldsObj.result[0]?.schema?.properties
+            ) {
+              // Structure: { result: [{ schema: { properties: {...} } }] }
+              schema = fieldsObj.result[0].schema.properties;
+            } else if (fieldsObj?.schema?.properties) {
+              // Structure: { schema: { properties: {...} } }
+              schema = fieldsObj.schema.properties;
+            } else if (fieldsObj?.properties) {
+              // Structure: { properties: {...} }
+              schema = fieldsObj.properties;
+            } else if (typeof fieldsObj === 'object' && fieldsObj !== null) {
+              // Try to find schema in nested structure
+              const findSchema = (obj: any): any => {
+                if (obj?.schema?.properties) return obj.schema.properties;
+                if (obj?.properties) return obj.properties;
+                if (Array.isArray(obj)) {
+                  for (const item of obj) {
+                    const found = findSchema(item);
+                    if (found) return found;
+                  }
+                } else if (typeof obj === 'object') {
+                  for (const key in obj) {
+                    const found = findSchema(obj[key]);
+                    if (found) return found;
+                  }
+                }
+                return null;
+              };
+              schema = findSchema(fieldsObj) || {};
+            }
           }
         } catch (e) {
           schema = {};
         }
         const submissionCustomFields =
           await this.fieldsService.getFieldsAndFieldsValues(submission.itemId);
+
+        // Filter submissionCustomFields to only include form fields (not custom fields)
+        // Get all field IDs that are part of the current form schema
+        const formFieldIds = new Set<string>();
+
+        // Debug: Log the schema structure to understand the dependencies
+        LoggerUtil.warn(`Schema structure: ${JSON.stringify(schema, null, 2)}`);
+
+        for (const [pageKey, pageSchema] of Object.entries(schema)) {
+          LoggerUtil.warn(`Processing page: ${pageKey} (buildUserDocument)`);
+          const fieldProps = (pageSchema as any).properties || {};
+          LoggerUtil.warn(
+            `Page properties: ${JSON.stringify(
+              Object.keys(fieldProps)
+            )} (buildUserDocument)`
+          );
+
+          const extractFormFieldIds = (properties: any) => {
+            for (const [fieldKey, fieldSchema] of Object.entries(properties)) {
+              const fieldId = (fieldSchema as any).fieldId;
+              if (fieldId) {
+                formFieldIds.add(fieldId);
+                LoggerUtil.warn(
+                  `Found fieldId: ${fieldId} in ${fieldKey} (buildUserDocument)`
+                );
+              }
+
+              // Handle nested dependencies structure - ensure dependency fields are included
+              if ((fieldSchema as any).dependencies) {
+                LoggerUtil.warn(
+                  `Found dependencies for field: ${fieldKey} (buildUserDocument)`
+                );
+                const dependencies = (fieldSchema as any).dependencies;
+                LoggerUtil.warn(
+                  `Dependencies object: ${JSON.stringify(
+                    Object.keys(dependencies)
+                  )} (buildUserDocument)`
+                );
+                for (const [depKey, depSchema] of Object.entries(
+                  dependencies
+                )) {
+                  LoggerUtil.warn(
+                    `Processing dependency: ${depKey} (buildUserDocument)`
+                  );
+                  LoggerUtil.warn(
+                    `Dependency schema: ${JSON.stringify(
+                      depSchema
+                    )} (buildUserDocument)`
+                  );
+                  if ((depSchema as any).oneOf) {
+                    // Handle oneOf dependencies
+                    LoggerUtil.warn(
+                      `Found oneOf dependency in ${depKey} (buildUserDocument)`
+                    );
+                    LoggerUtil.warn(
+                      `OneOf items count: ${
+                        (depSchema as any).oneOf.length
+                      } (buildUserDocument)`
+                    );
+                    for (const oneOfItem of (depSchema as any).oneOf) {
+                      LoggerUtil.warn(
+                        `OneOf item: ${JSON.stringify(
+                          oneOfItem
+                        )} (buildUserDocument)`
+                      );
+                      if (oneOfItem.properties) {
+                        LoggerUtil.warn(
+                          `Extracting from oneOf properties: ${JSON.stringify(
+                            oneOfItem.properties
+                          )} (buildUserDocument)`
+                        );
+                        extractFormFieldIds(oneOfItem.properties);
+                      }
+                    }
+                  } else if ((depSchema as any).properties) {
+                    // Handle direct properties dependencies
+                    LoggerUtil.warn(
+                      `Extracting from direct properties: ${JSON.stringify(
+                        (depSchema as any).properties
+                      )} (buildUserDocument)`
+                    );
+                    extractFormFieldIds((depSchema as any).properties);
+                  }
+                }
+              }
+            }
+          };
+
+          extractFormFieldIds(fieldProps);
+        }
+
+        // Extract dependency fields from page-level dependencies
+        for (const [pageKey, pageSchema] of Object.entries(schema)) {
+          const pageDependencies = (pageSchema as any).dependencies || {};
+          LoggerUtil.warn(
+            `Page dependencies: ${JSON.stringify(
+              Object.keys(pageDependencies)
+            )} (buildUserDocument)`
+          );
+
+          for (const [depKey, depSchema] of Object.entries(pageDependencies)) {
+            LoggerUtil.warn(
+              `Processing page dependency: ${depKey} (buildUserDocument)`
+            );
+
+            // Handle oneOf dependencies
+            if ((depSchema as any).oneOf) {
+              LoggerUtil.warn(
+                `Found oneOf in page dependency: ${depKey} (buildUserDocument)`
+              );
+              for (const oneOfItem of (depSchema as any).oneOf) {
+                if (oneOfItem.properties) {
+                  LoggerUtil.warn(
+                    `Processing oneOf properties for page dependency ${depKey} (buildUserDocument)`
+                  );
+                  // Map dependency fields to the current page
+                  // extractFieldMappings(oneOfItem.properties, pageKey); // REMOVED - out of scope
+                  for (const [propKey, propSchema] of Object.entries(
+                    oneOfItem.properties
+                  )) {
+                    const propFieldId = (propSchema as any).fieldId;
+                    if (propFieldId) {
+                      formFieldIds.add(propFieldId);
+                      LoggerUtil.warn(
+                        `Found page dependency fieldId: ${propFieldId} in ${propKey} (buildUserDocument)`
+                      );
+                    }
+                  }
+                }
+              }
+            }
+
+            // Handle direct properties in page dependencies
+            if ((depSchema as any).properties) {
+              LoggerUtil.warn(
+                `Processing direct properties in page dependency: ${depKey} (buildUserDocument)`
+              );
+              // Map dependency fields to the current page
+              // extractFieldMappings((depSchema as any).properties, pageKey); // REMOVED - out of scope
+              for (const [propKey, propSchema] of Object.entries(
+                (depSchema as any).properties
+              )) {
+                const propFieldId = (propSchema as any).fieldId;
+                if (propFieldId) {
+                  formFieldIds.add(propFieldId);
+                  LoggerUtil.warn(
+                    `Found page dependency fieldId: ${propFieldId} in ${propKey} (buildUserDocument)`
+                  );
+                }
+              }
+            }
+          }
+        }
+
+        LoggerUtil.warn(
+          `Schema field IDs including dependencies: ${Array.from(
+            formFieldIds
+          ).join(', ')}`
+        );
+
+        // Temporary check for dependency field
+        if (formFieldIds.has('1b92932d-648b-4b26-9f12-f43cec5416ef')) {
+          LoggerUtil.warn(
+            'Dependency field fieldsOfStudy found in formFieldIds (buildUserDocument)'
+          );
+        } else {
+          LoggerUtil.warn(
+            'Dependency field fieldsOfStudy NOT found in formFieldIds (buildUserDocument)'
+          );
+        }
+
+        // Filter updatedFieldValues to only include form fields
+        const formFieldsOnly = submissionCustomFields.filter((field) =>
+          formFieldIds.has(field.fieldId)
+        );
+
         const fieldIdToValue: Record<string, any> = {};
         const fieldIdToFieldName: Record<string, string> = {};
-        for (const field of submissionCustomFields) {
+        for (const field of formFieldsOnly) {
           fieldIdToValue[field.fieldId] = field.value;
           fieldIdToFieldName[field.fieldId] = field.fieldname || field.fieldId;
         }
         const pages: Record<string, any> = {};
         const formData: Record<string, any> = {};
+
+        // Build fieldId to pageName and fieldName mappings from schema
+        const fieldIdToPageName: Record<string, string> = {};
+        const fieldIdToSchemaFieldName: Record<string, string> = {};
+
         for (const [pageKey, pageSchema] of Object.entries(schema)) {
-          const pageName = pageKey === 'default' ? 'eligibility' : pageKey;
-          pages[pageName] = { completed: true, fields: {} };
-          formData[pageName] = {};
+          const pageName = pageKey === 'default' ? 'eligibilityCheck' : pageKey;
           const fieldProps = (pageSchema as any).properties || {};
-          for (const [fieldKey, fieldSchema] of Object.entries(fieldProps)) {
-            const fieldId = (fieldSchema as any).fieldId;
-            if (fieldId && fieldIdToValue[fieldId] !== undefined) {
-              let fieldName = fieldId;
-              if ((fieldSchema as any) && (fieldSchema as any).name) {
-                fieldName = (fieldSchema as any).name;
-              } else if (fieldIdToFieldName[fieldId]) {
-                fieldName = fieldIdToFieldName[fieldId];
+
+          // Use the robust utility function to get field mappings
+          const fieldMappings = getFieldIdToPageNameMap(schema);
+          Object.assign(fieldIdToPageName, fieldMappings);
+
+          // Also build fieldIdToSchemaFieldName mapping
+          for (const [pageKey, pageSchema] of Object.entries(schema)) {
+            const pageName =
+              pageKey === 'default' ? 'eligibilityCheck' : pageKey;
+            const fieldProps = (pageSchema as any).properties || {};
+
+            const extractFieldNames = (properties: any) => {
+              for (const [fieldKey, fieldSchema] of Object.entries(
+                properties
+              )) {
+                const fieldId = (fieldSchema as any).fieldId;
+                const fieldTitle = (fieldSchema as any).title || fieldKey;
+                if (fieldId) {
+                  fieldIdToSchemaFieldName[fieldId] = fieldTitle;
+                }
+
+                // Handle dependencies
+                if ((fieldSchema as any).dependencies) {
+                  const dependencies = (fieldSchema as any).dependencies;
+                  for (const depSchema of Object.values(dependencies)) {
+                    if (!depSchema || typeof depSchema !== 'object') continue;
+                    const dep = depSchema as any;
+                    if (dep.oneOf)
+                      dep.oneOf.forEach(
+                        (item: any) =>
+                          item?.properties && extractFieldNames(item.properties)
+                      );
+                    if (dep.allOf)
+                      dep.allOf.forEach(
+                        (item: any) =>
+                          item?.properties && extractFieldNames(item.properties)
+                      );
+                    if (dep.anyOf)
+                      dep.anyOf.forEach(
+                        (item: any) =>
+                          item?.properties && extractFieldNames(item.properties)
+                      );
+                    if (dep.properties) extractFieldNames(dep.properties);
+                  }
+                }
               }
-              const value = fieldIdToValue[fieldId];
-              pages[pageName].fields[fieldName] = value;
-              formData[pageName][fieldName] = value;
+            };
+
+            extractFieldNames(fieldProps);
+
+            // Handle page-level dependencies
+            const pageDependencies = (pageSchema as any).dependencies || {};
+            for (const depSchema of Object.values(pageDependencies)) {
+              if (!depSchema || typeof depSchema !== 'object') continue;
+              const dep = depSchema as any;
+              if (dep.oneOf)
+                dep.oneOf.forEach(
+                  (item: any) =>
+                    item?.properties && extractFieldNames(item.properties)
+                );
+              if (dep.allOf)
+                dep.allOf.forEach(
+                  (item: any) =>
+                    item?.properties && extractFieldNames(item.properties)
+                );
+              if (dep.anyOf)
+                dep.anyOf.forEach(
+                  (item: any) =>
+                    item?.properties && extractFieldNames(item.properties)
+                );
+              if (dep.properties) extractFieldNames(dep.properties);
             }
           }
         }
-        if (Object.keys(pages).length === 0) {
-          pages['default'] = {
-            completed: true,
-            fields: submissionCustomFields.reduce((acc, field) => {
-              acc[field.fieldname || field.fieldId] = field.value;
-              return acc;
-            }, {}),
-          };
-          formData['default'] = { ...pages['default'].fields };
-        }
-        applications.push({
-          formId: submission.formId,
-          submissionId: submission.submissionId,
-          cohortId: '',
-          status: submission.status,
-          cohortmemberstatus: '',
-          formstatus: submission.status,
-          progress: {
-            pages,
-            overall: {
-              completed: submissionCustomFields.length,
-              total: submissionCustomFields.length,
-            },
-          },
-          lastSavedAt: submission.updatedAt
-            ? submission.updatedAt.toISOString()
-            : new Date().toISOString(),
-          submittedAt: submission.createdAt
-            ? submission.createdAt.toISOString()
-            : new Date().toISOString(),
-          cohortDetails: {
-            name: '',
-            status: '',
-          },
-          formData,
-        });
       }
     }
     // Build the IUser object
@@ -1783,4 +3026,93 @@ export class FormSubmissionService {
         : new Date().toISOString(),
     };
   }
+
+  /**
+   * Helper function to process field values for Elasticsearch storage.
+   * Converts array values to comma-separated strings for multiselect fields.
+   * @param value - The field value to process
+   * @returns Processed value (array becomes comma-separated string, other types unchanged)
+   */
+  private processFieldValueForElasticsearch(value: any): any {
+    // If value is an array, convert to comma-separated string
+    if (Array.isArray(value)) {
+      return value.join(', ');
+    }
+    // Return value as-is for non-array values
+    return value;
+  }
+}
+
+/**
+ * Recursively extract a mapping from fieldId to pageName for all fields in the schema,
+ * including all nested dependencies (oneOf, allOf, anyOf, properties).
+ */
+function getFieldIdToPageNameMap(schema: any): Record<string, string> {
+  const fieldIdToPageName: Record<string, string> = {};
+
+  function extract(properties: any, currentPage: string) {
+    if (!properties || typeof properties !== 'object') return;
+    for (const [fieldKey, fieldSchema] of Object.entries(properties)) {
+      if (!fieldSchema || typeof fieldSchema !== 'object') continue;
+      const fieldId = (fieldSchema as any).fieldId;
+      if (fieldId) fieldIdToPageName[fieldId] = currentPage;
+
+      // Traverse dependencies
+      if ((fieldSchema as any).dependencies) {
+        for (const depSchema of Object.values(
+          (fieldSchema as any).dependencies
+        )) {
+          if (!depSchema || typeof depSchema !== 'object') continue;
+          const dep = depSchema as any;
+          if (dep.oneOf)
+            dep.oneOf.forEach(
+              (item: any) =>
+                item?.properties && extract(item.properties, currentPage)
+            );
+          if (dep.allOf)
+            dep.allOf.forEach(
+              (item: any) =>
+                item?.properties && extract(item.properties, currentPage)
+            );
+          if (dep.anyOf)
+            dep.anyOf.forEach(
+              (item: any) =>
+                item?.properties && extract(item.properties, currentPage)
+            );
+          if (dep.properties) extract(dep.properties, currentPage);
+        }
+      }
+    }
+  }
+
+  for (const [pageKey, pageSchema] of Object.entries(schema)) {
+    const pageName = pageKey === 'default' ? 'eligibilityCheck' : pageKey;
+    extract((pageSchema as any).properties, pageName);
+
+    // Also check for page-level dependencies
+    if ((pageSchema as any).dependencies) {
+      for (const depSchema of Object.values((pageSchema as any).dependencies)) {
+        if (!depSchema || typeof depSchema !== 'object') continue;
+        const dep = depSchema as any;
+        if (dep.oneOf)
+          dep.oneOf.forEach(
+            (item: any) =>
+              item?.properties && extract(item.properties, pageName)
+          );
+        if (dep.allOf)
+          dep.allOf.forEach(
+            (item: any) =>
+              item?.properties && extract(item.properties, pageName)
+          );
+        if (dep.anyOf)
+          dep.anyOf.forEach(
+            (item: any) =>
+              item?.properties && extract(item.properties, pageName)
+          );
+        if (dep.properties) extract(dep.properties, pageName);
+      }
+    }
+  }
+
+  return fieldIdToPageName;
 }

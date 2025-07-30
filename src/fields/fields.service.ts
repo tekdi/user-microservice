@@ -15,6 +15,7 @@ import APIResponse from 'src/utils/response';
 import { log } from 'util';
 import { ErrorResponseTypeOrm } from 'src/error-response-typeorm';
 import { FieldValueConverter } from 'src/utils/field-value-converter';
+import { FormsService } from 'src/forms/forms.service';
 
 @Injectable()
 export class FieldsService {
@@ -22,12 +23,13 @@ export class FieldsService {
     @InjectRepository(Fields)
     private fieldsRepository: Repository<Fields>,
     @InjectRepository(FieldValues)
-    private fieldsValuesRepository: Repository<FieldValues>
+    private fieldsValuesRepository: Repository<FieldValues>,
+    private readonly formsService: FormsService
   ) {}
 
   async getFieldById(fieldId: string): Promise<Fields | null> {
     return await this.fieldsRepository.findOne({
-      where: { fieldId }
+      where: { fieldId },
     });
   }
 
@@ -303,7 +305,114 @@ export class FieldsService {
     }
   }
 
-  public async getFieldsAndFieldsValues(itemId: string) {
+  /**
+   * Process checkbox values based on form schema field type
+   * @param fieldId - The field ID to process
+   * @param checkboxValue - The checkbox value from database
+   * @param formId - The form ID to get schema from
+   * @returns Processed value based on field type in schema
+   */
+  private async processCheckboxValue(
+    fieldId: string,
+    checkboxValue: string,
+    formId: string
+  ): Promise<any> {
+    try {
+      // Step 1: Check if the field type is 'checkbox' in the Fields table
+      const fieldFromDB = await this.fieldsRepository.findOne({
+        where: { fieldId },
+      });
+
+      // Only process if the field type is 'checkbox' in the Fields table
+      if (!fieldFromDB || fieldFromDB.type !== 'checkbox') {
+        return checkboxValue;
+      }
+
+      // Step 2: Get the form schema from database using formId
+      const form = await this.formsService.getFormById(formId);
+      const formFields = form?.fields || {};
+
+      // Step 3: Find the field metadata in the form schema
+      const fieldMetadata = this.findFieldMetadata(fieldId, formFields);
+
+      // If field not found in schema, return original value
+      if (!fieldMetadata) {
+        return checkboxValue;
+      }
+
+      // Step 4: Handle comma-separated values (current workflow)
+      if (checkboxValue.includes(',')) {
+        return checkboxValue.split(',').map((v) => v.trim());
+      }
+
+      // Step 5: Handle single value based on field type in schema
+      const fieldType = fieldMetadata.type; // Type from schema: "boolean", "string", "array"
+
+      switch (fieldType) {
+        case 'boolean': {
+          const booleanResult =
+            checkboxValue === 'true' || checkboxValue === '1';
+          return booleanResult;
+        }
+        case 'string':
+          return checkboxValue; // Current workflow - return as string
+
+        case 'array':
+          return [checkboxValue]; // Even single value as array
+
+        default:
+          return checkboxValue; // Current workflow fallback
+      }
+    } catch (error) {
+      return checkboxValue;
+    }
+  }
+
+  /**
+   * Helper function to find field metadata in form schema
+   * @param fieldId - The field ID to find
+   * @param formFields - The form fields object (jsonb)
+   * @returns Field metadata or null if not found
+   */
+  private findFieldMetadata(fieldId: string, formFields: any): any {
+    // Recursively search through the form fields object
+    const searchFields = (obj: any): any => {
+      if (!obj || typeof obj !== 'object') {
+        return null;
+      }
+
+      // If this object has a fieldId that matches, return it
+      if (obj.fieldId === fieldId) {
+        return obj;
+      }
+
+      // Recursively search through all object values
+      for (const key in obj) {
+        if (obj.hasOwnProperty(key)) {
+          const value = obj[key];
+          if (typeof value === 'object' && value !== null) {
+            const result = searchFields(value);
+            if (result) {
+              return result;
+            }
+          }
+        }
+      }
+
+      return null;
+    };
+
+    const result = searchFields(formFields);
+    return result;
+  }
+
+  /**
+   * Get fields and field values with optional formId for checkbox processing
+   * @param itemId - The item ID to get field values for
+   * @param formId - Optional form ID for checkbox processing
+   * @returns Array of field values with processed checkbox values
+   */
+  public async getFieldsAndFieldsValues(itemId: string, formId?: string) {
     const query = `
       SELECT 
         FV."fieldValuesId",
@@ -331,47 +440,61 @@ export class FieldsService {
     const results = await this.fieldsValuesRepository.query(query, [itemId]);
 
     // Transform results to use typed values with fallback to generic value
-    return results.map((result) => {
-      let typedValue;
-      switch (result.type) {
-        case 'text':
-          typedValue = result.textValue || result.value;
-          break;
-        case 'numeric':
-          typedValue = result.numberValue || result.value;
-          break;
-        case 'calendar':
-          typedValue = result.calendarValue || result.value;
-          break;
-        case 'drop_down':
-          typedValue = result.dropdownValue || result.value;
-          break;
-        case 'radio':
-          typedValue = result.radioValue || result.value;
-          break;
-        case 'checkbox':
-          typedValue = result.checkboxValue || result.value;
-          break;
-        case 'textarea':
-          typedValue = result.textareaValue || result.value;
-          break;
-        default:
-          typedValue = result.value;
-      }
+    const processedResults = await Promise.all(
+      results.map(async (result) => {
+        let typedValue;
+        switch (result.type) {
+          case 'text':
+            typedValue = result.textValue || result.value;
+            break;
+          case 'numeric':
+            typedValue = result.numberValue || result.value;
+            break;
+          case 'calendar':
+            typedValue = result.calendarValue || result.value;
+            break;
+          case 'drop_down':
+            typedValue = result.dropdownValue || result.value;
+            break;
+          case 'radio':
+            typedValue = result.radioValue || result.value;
+            break;
+          case 'checkbox':
+            if (formId) {
+              // Use new checkbox processing with form schema
+              typedValue = await this.processCheckboxValue(
+                result.fieldId,
+                result.checkboxValue || result.value,
+                formId
+              );
+            } else {
+              // Use existing workflow - NO CHANGE to current behavior
+              typedValue = result.checkboxValue || result.value;
+            }
+            break;
+          case 'textarea':
+            typedValue = result.textareaValue || result.value;
+            break;
+          default:
+            typedValue = result.value;
+        }
 
-      return {
-        fieldValuesId: result.fieldValuesId,
-        fieldId: result.fieldId,
-        fieldname: result.fieldname,
-        label: result.label,
-        type: result.type,
-        value: typedValue,
-        context: result.context,
-        state: result.state,
-        contextType: result.contextType,
-        fieldParams: result.fieldParams,
-      };
-    });
+        const processedResult = {
+          fieldValuesId: result.fieldValuesId,
+          fieldId: result.fieldId,
+          fieldname: result.fieldname,
+          label: result.label,
+          type: result.type,
+          value: typedValue,
+          context: result.context,
+          state: result.state,
+          contextType: result.contextType,
+          fieldParams: result.fieldParams,
+        };
+        return processedResult;
+      })
+    );
+    return processedResults;
   }
 
   public async mappedResponse(result: any) {
@@ -447,8 +570,8 @@ export class FieldsService {
   }
 
   async getFieldValue(fieldId: string, itemId: string): Promise<FieldValues> {
-    return this.fieldsValuesRepository.findOne({ 
-      where: { fieldId: fieldId, itemId: itemId } 
+    return this.fieldsValuesRepository.findOne({
+      where: { fieldId: fieldId, itemId: itemId },
     });
   }
 
@@ -467,7 +590,7 @@ export class FieldsService {
   async deleteFieldValue(fieldId: string, itemId: string): Promise<void> {
     await this.fieldsValuesRepository.delete({
       fieldId: fieldId,
-      itemId: itemId
+      itemId: itemId,
     });
   }
 }

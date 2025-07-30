@@ -36,7 +36,6 @@ export class UserElasticsearchController {
   ) {
     const fullApplication: IApplication = {
       cohortId,
-      status: application.status || 'SUBMITTED',
       cohortmemberstatus: application.cohortmemberstatus || 'SUBMITTED',
       formstatus: application.formstatus || 'SUBMITTED',
       lastSavedAt: application.lastSavedAt || new Date().toISOString(),
@@ -72,7 +71,11 @@ export class UserElasticsearchController {
     @Body() course: Partial<ICourse>
   ) {
     if (isElasticsearchEnabled()) {
-      return this.userElasticsearchService.updateCourse(userId, courseId, course);
+      return this.userElasticsearchService.updateCourse(
+        userId,
+        courseId,
+        course
+      );
     }
     return null;
   }
@@ -102,5 +105,4 @@ export class UserElasticsearchController {
     }
     return null;
   }
-
 }

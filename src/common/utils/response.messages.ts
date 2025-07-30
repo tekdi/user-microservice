@@ -231,4 +231,6 @@ export const API_RESPONSES = {
   CONFIGURATION_NOT_FOUND_FOR_CONTEXT: 'Configuration not found for context:',
   TENANT_CONFIG_RETRIEVED_SUCCESSFULLY: 'Tenant configuration retrieved successfully',
   CONFIGURATION_ALREADY_EXISTS_FOR_CONTEXT: 'Configuration already exists for context:',
+  BULK_IMPORT_SUCCESS: 'Users imported successfully',
+  BULK_IMPORT_FAILURE: 'Failed to import users',
 };

@@ -2,9 +2,9 @@ export interface IApplication {
   cohortId: string;
   formId?: string;
   submissionId?: string;
-  status?: string;
   cohortmemberstatus?: string;
   formstatus: string;
+  completionPercentage?: number; // FIXED: Add completionPercentage from form submission
   lastSavedAt: string;
   submittedAt: string;
   formData?: {

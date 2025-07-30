@@ -28,16 +28,7 @@ spec:
         - configMapRef:
             name: backend-service-config
         resources: {}
-      - name: cloudwatch-logs-agent
-        image: amazon/aws-for-fluent-bit:latest
-        imagePullPolicy: Always
-        env:
-          - name: REGION
-            value: ap-south-1
-          - name: LOG_GROUP
-            value: /aws/ecs/user-service
-        resources: {}
-      restartPolicy: Always
+      
 status: {}
 
 ---

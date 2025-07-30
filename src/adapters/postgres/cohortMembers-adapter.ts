@@ -6,7 +6,7 @@ import {
   MemberStatus,
 } from 'src/cohortMembers/entities/cohort-member.entity';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { PostgresFieldsService } from './fields-adapter';
 import { HttpStatus } from '@nestjs/common';
 import { User } from 'src/user/entities/user-entity';
@@ -27,7 +27,6 @@ import { ShortlistingLogger } from 'src/common/logger/ShortlistingLogger';
 import { PostgresUserService } from './user-adapter';
 import { isValid } from 'date-fns';
 import { FieldValuesOptionDto } from 'src/user/dto/user-create.dto';
-import { In } from 'typeorm';
 import { ElasticsearchService } from 'src/elasticsearch/elasticsearch.service';
 import { FormSubmissionService } from 'src/forms/services/form-submission.service';
 import { FormSubmissionStatus } from 'src/forms/entities/form-submission.entity';
@@ -382,6 +381,7 @@ export class PostgresCohortMembersService {
         'firstName',
         'lastName',
         'email',
+        'country',
       ];
       whereKeys.forEach((key) => {
         if (whereClause[key]) {
@@ -425,6 +425,56 @@ export class PostgresCohortMembersService {
           API_RESPONSES.USER_DETAIL_NOTFOUND,
           HttpStatus.NOT_FOUND
         );
+      }
+
+      // NEW: Add cohort details to each user
+      if (results['userDetails'] && results['userDetails'].length > 0) {
+        // Get unique cohort IDs from the results
+        const cohortIds = [
+          ...new Set(results['userDetails'].map((user) => user.cohortId)),
+        ].filter((id) => id) as string[];
+
+        // Fetch cohort details for all unique cohort IDs
+        const cohortDetailsMap = new Map<string, any>();
+
+        for (const cohortId of cohortIds) {
+          try {
+            // Get basic cohort information
+            const cohort = await this.cohortRepository.findOne({
+              where: { cohortId: cohortId },
+              select: ['cohortId', 'name', 'parentId', 'type', 'status'],
+            });
+
+            if (cohort) {
+              // Get cohort custom fields using local method
+              const cohortCustomFields = await this.getCohortCustomFieldDetails(
+                cohortId
+              );
+
+              cohortDetailsMap.set(cohortId, {
+                cohortId: cohort.cohortId,
+                name: cohort.name,
+                parentId: cohort.parentId,
+                type: cohort.type,
+                status: cohort.status,
+                customFields: cohortCustomFields,
+              });
+            }
+          } catch (error) {
+            LoggerUtil.error(
+              `Failed to fetch cohort details for cohortId: ${cohortId}`,
+              `Error: ${error.message}`,
+              apiId
+            );
+            // Continue with other cohorts even if one fails
+          }
+        }
+
+        // Add cohort details to each user
+        results['userDetails'] = results['userDetails'].map((user) => ({
+          ...user,
+          cohort: cohortDetailsMap.get(user.cohortId) || null,
+        }));
       }
 
       // Check if CSV export is requested
@@ -777,6 +827,15 @@ export class PostgresCohortMembersService {
           case 'firstName': {
             return `U."firstName" ILIKE '%${value}%'`;
           }
+          case 'email': {
+            return `U."email" ILIKE '%${value}%'`;
+          }
+          case 'country': {
+            const countryValues = Array.isArray(value)
+              ? value.map((country) => `'${country}'`).join(', ')
+              : `'${value}'`;
+            return `U."country" IN (${countryValues})`;
+          }
           case 'cohortAcademicYearId': {
             const cohortIdAcademicYear = Array.isArray(value)
               ? value.map((id) => `'${id}'`).join(', ')
@@ -798,8 +857,8 @@ export class PostgresCohortMembersService {
       whereCase += where.map(processCondition).join(' AND ');
     }
 
-    let query = `SELECT U."userId", U."username",U."email", U."firstName", U."middleName", U."lastName", R."name" AS role, U."district", U."state",U."mobile",U."deviceId",U."gender",U."dob",
-      CM."status", CM."statusReason",CM."cohortMembershipId",CM."status",CM."createdAt", CM."updatedAt",U."createdBy",U."updatedBy", COUNT(*) OVER() AS total_count  FROM public."CohortMembers" CM
+    let query = `SELECT U."userId", U."username",U."email", U."firstName", U."middleName", U."lastName", R."name" AS role, U."district", U."state",U."mobile",U."deviceId",U."gender",U."dob",U."country",
+      CM."status", CM."statusReason",CM."cohortMembershipId",CM."cohortId",CM."status",CM."createdAt", CM."updatedAt",U."createdBy",U."updatedBy", COUNT(*) OVER() AS total_count  FROM public."CohortMembers" CM
       INNER JOIN public."Users" U
       ON CM."userId" = U."userId"
       INNER JOIN public."UserRolesMapping" UR
@@ -833,6 +892,166 @@ export class PostgresCohortMembersService {
 
     const result = await this.usersRepository.query(query);
 
+    return result;
+  }
+
+  // Generic helper method to build base query with common logic
+  private buildBaseQuery(
+    where: any,
+    options: any,
+    order: any,
+    additionalJoins: string = '',
+    additionalWhereConditions: string = ''
+  ): { query: string; parameters: any[]; limit: number; offset: number } {
+    let whereCase = ``;
+    let limit, offset;
+    let parameters: any[] = [];
+    let parameterIndex = 1;
+
+    if (where.length > 0) {
+      whereCase = 'WHERE ';
+
+      const processCondition = ([key, value]) => {
+        switch (key) {
+          case 'role':
+            parameters.push(value);
+            return `R."name"=$${parameterIndex++}`;
+          case 'status': {
+            const statusValues = Array.isArray(value)
+              ? value.map((status) => `'${status}'`).join(', ')
+              : `'${value}'`;
+            return `CM."status" IN (${statusValues})`;
+          }
+          case 'firstName': {
+            parameters.push(`%${value}%`);
+            return `U."firstName" ILIKE $${parameterIndex++}`;
+          }
+          case 'email': {
+            parameters.push(`%${value}%`);
+            return `U."email" ILIKE $${parameterIndex++}`;
+          }
+          case 'country': {
+            const countryValues = Array.isArray(value)
+              ? value.map((country) => `'${country}'`).join(', ')
+              : `'${value}'`;
+            return `U."country" IN (${countryValues})`;
+          }
+          case 'cohortAcademicYearId': {
+            const cohortIdAcademicYear = Array.isArray(value)
+              ? value.map((id) => `'${id}'`).join(', ')
+              : `'${value}'`;
+            return `CM."cohortAcademicYearId" IN (${cohortIdAcademicYear})`;
+          }
+          case 'cohortId': {
+            //Handles UUID array properly
+            const formattedIds = Array.isArray(value)
+              ? value.map((id) => `'${id}'`).join(', ')
+              : `'${value}'`;
+            return `CM."${key}" IN (${formattedIds})`;
+          }
+          default: {
+            parameters.push(value);
+            return `CM."${key}"=$${parameterIndex++}`;
+          }
+        }
+      };
+      whereCase += where.map(processCondition).join(' AND ');
+    }
+
+    // Add additional where conditions if provided
+    if (additionalWhereConditions) {
+      if (whereCase) {
+        whereCase += ` AND ${additionalWhereConditions}`;
+      } else {
+        whereCase = `WHERE ${additionalWhereConditions}`;
+      }
+    }
+
+    let query = `SELECT U."userId", U."username",U."email", U."firstName", U."middleName", U."lastName", R."name" AS role, U."district", U."state",U."mobile",U."deviceId",U."gender",U."dob",U."country",
+      CM."status", CM."statusReason",CM."cohortMembershipId",CM."cohortId",CM."status",CM."createdAt", CM."updatedAt",U."createdBy",U."updatedBy", COUNT(*) OVER() AS total_count  
+      FROM public."CohortMembers" CM
+      INNER JOIN public."Users" U
+      ON CM."userId" = U."userId"
+      INNER JOIN public."UserRolesMapping" UR
+      ON UR."userId" = U."userId"
+      INNER JOIN public."Roles" R
+      ON R."roleId" = UR."roleId"${additionalJoins} ${whereCase}`;
+
+    options.forEach((option) => {
+      if (option[0] === 'limit') {
+        limit = option[1];
+      }
+      if (option[0] === 'offset') {
+        offset = option[1];
+      }
+    });
+
+    if (order && Object.keys(order).length > 0) {
+      const orderField = Object.keys(order)[0];
+      const orderDirection =
+        order[orderField].toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+      query += ` ORDER BY U."${orderField}" ${orderDirection}`;
+    }
+
+    if (limit !== undefined) {
+      query += ` LIMIT ${limit}`;
+    }
+
+    if (offset !== undefined) {
+      query += ` OFFSET ${offset}`;
+    }
+
+    return { query, parameters, limit, offset };
+  }
+
+  // Helper method to build query with completion filter
+  private buildQueryWithCompletionFilter(
+    where: any,
+    options: any,
+    order: any,
+    completionPercentageRanges: { min: number; max: number }[],
+    formId: string
+  ): { query: string; parameters: any[]; limit: number; offset: number } {
+    // Build completion percentage filter conditions
+    const completionConditions = completionPercentageRanges
+      .map(
+        (range) =>
+          `(FS."completionPercentage" >= ${range.min} AND FS."completionPercentage" <= ${range.max})`
+      )
+      .join(' OR ');
+
+    // Add completion percentage filter to WHERE clause
+    const completionFilter = `(FS."formId" = '${formId}' AND FS."status" = 'active' AND (${completionConditions}))`;
+
+    const additionalJoins = `
+      INNER JOIN public."formSubmissions" FS
+      ON FS."itemId" = U."userId"`;
+
+    return this.buildBaseQuery(
+      where,
+      options,
+      order,
+      additionalJoins,
+      completionFilter
+    );
+  }
+
+  async getUsersWithCompletionFilter(
+    where: any,
+    options: any,
+    order: any,
+    completionPercentageRanges: { min: number; max: number }[],
+    formId: string
+  ) {
+    const { query, parameters } = this.buildQueryWithCompletionFilter(
+      where,
+      options,
+      order,
+      completionPercentageRanges,
+      formId
+    );
+
+    const result = await this.usersRepository.query(query, parameters);
     return result;
   }
 
@@ -907,6 +1126,7 @@ export class PostgresCohortMembersService {
           const userDoc = await this.userElasticsearchService.getUser(
             cohortMembershipToUpdate.userId
           );
+
           // Extract the application array if present
           const source =
             userDoc && userDoc._source
@@ -937,20 +1157,18 @@ export class PostgresCohortMembersService {
               );
             }
           } else {
-            // Prepare the updated application data (minimal update)
-            const updatedApplication = {
-              ...(existingApplication ?? {}),
-              cohortId: cohortMembershipToUpdate.cohortId,
-              cohortmemberstatus: result.status ?? 'active',
-            };
-            await this.userElasticsearchService.updateApplication(
+            // SOLUTION 3: Use field-specific update to preserve existing data
+            // This prevents the deletion of application data (progress, formData, etc.)
+            // by only updating specific fields instead of replacing the entire application object
+            await this.updateElasticsearchWithFieldSpecificChanges(
               cohortMembershipToUpdate.userId,
-              updatedApplication,
-              async (userId: string) => {
-                return await this.formSubmissionService.buildUserDocumentForElasticsearch(
-                  userId
-                );
-              }
+              cohortMembershipToUpdate.cohortId,
+              {
+                cohortmemberstatus: result.status ?? 'active',
+                statusReason: cohortMembersUpdateDto.statusReason,
+                status: cohortMembersUpdateDto.status,
+              },
+              existingApplication
             );
           }
         } catch (elasticError) {
@@ -970,9 +1188,7 @@ export class PostgresCohortMembersService {
       // Send notification if applicable for this status only
       if (previousStatus === 'applied' && status === 'submitted') {
         notifyStatuses = ['submitted'];
-      }
-      else
-      {
+      } else {
         notifyStatuses = ['dropout', 'shortlisted', 'rejected'];
       }
 
@@ -1039,6 +1255,14 @@ export class PostgresCohortMembersService {
               shortlistedStatus: status as 'shortlisted' | 'rejected',
               cohortId: cohortMembershipToUpdate.cohortId,
             });
+
+            // Update rejection_email_sent to true if status is rejected and email was sent successfully
+            if (status === 'rejected') {
+              await this.cohortMembersRepository.update(
+                { cohortMembershipId: cohortMembershipId },
+                { rejectionEmailSent: true }
+              );
+            }
           }
         } else {
           // Log email failure for missing email
@@ -1174,6 +1398,149 @@ export class PostgresCohortMembersService {
     return existUser;
   }
 
+  /**
+   * SOLUTION 3: Field-specific Elasticsearch update method
+   *
+   * PROBLEM: The previous updateApplication method was completely replacing the application object,
+   * which caused deletion of all existing data like progress, formData, etc.
+   *
+   * SOLUTION: Use Elasticsearch Painless scripts to update only specific fields while preserving
+   * all existing data that's not being updated.
+   *
+   * @param userId - User ID to update
+   * @param cohortId - Cohort ID for the application
+   * @param updateData - Object containing only the fields to update
+   * @param existingApplication - Existing application data (for reference)
+   */
+  private async updateElasticsearchWithFieldSpecificChanges(
+    userId: string,
+    cohortId: string,
+    updateData: any,
+    existingApplication: any
+  ): Promise<void> {
+    try {
+      // Create a Painless script that only updates specific fields that have changed
+      // This prevents data loss by preserving all existing fields not being updated
+      const script = {
+        source: `
+          // Initialize applications array if it doesn't exist
+          if (ctx._source.applications == null) {
+            ctx._source.applications = [];
+          }
+          
+          boolean found = false;
+          // Search for existing application with matching cohortId
+          for (int i = 0; i < ctx._source.applications.length; i++) {
+            if (ctx._source.applications[i].cohortId == params.cohortId) {
+              // CRITICAL: Only update specific fields that are provided in updateData
+              // This prevents deletion of existing data like progress, formData, etc.
+              if (params.updateData.cohortmemberstatus != null) {
+                ctx._source.applications[i].cohortmemberstatus = params.updateData.cohortmemberstatus;
+              }
+              if (params.updateData.statusReason != null) {
+                ctx._source.applications[i].statusReason = params.updateData.statusReason;
+              }
+
+              if (params.updateData.completionPercentage != null) {
+                ctx._source.applications[i].completionPercentage = params.updateData.completionPercentage;
+              }
+              if (params.updateData.updatedAt != null) {
+                ctx._source.applications[i].updatedAt = params.updateData.updatedAt;
+              }
+              
+              // KEY IMPROVEMENT: Preserve all existing fields that are not being updated
+              // This ensures we don't lose any existing data like progress, formData, etc.
+              // The previous method was replacing the entire application object, causing data loss
+              
+              found = true;
+              break;
+            }
+          }
+          
+          if (!found) {
+            // If application doesn't exist, create a new one with minimal data
+            // This maintains backward compatibility for new applications
+            Map newApplication = new HashMap();
+            newApplication.cohortId = params.cohortId;
+            newApplication.cohortmemberstatus = params.updateData.cohortmemberstatus;
+            newApplication.statusReason = params.updateData.statusReason;
+            newApplication.updatedAt = params.updateData.updatedAt;
+            newApplication.createdAt = params.updateData.updatedAt;
+            
+            // Initialize empty structures to preserve existing pattern
+            // This ensures new applications have the expected structure
+            newApplication.progress = [:];
+            newApplication.progress.pages = [:];
+            newApplication.progress.overall = [:];
+            newApplication.progress.overall.completed = 0;
+            newApplication.progress.overall.total = 0;
+            newApplication.formData = [:];
+            
+            ctx._source.applications.add(newApplication);
+          }
+          
+          // Update the document's updatedAt timestamp to reflect the change
+          ctx._source.updatedAt = params.updateData.updatedAt;
+        `,
+        lang: 'painless',
+        params: {
+          cohortId,
+          updateData: {
+            cohortmemberstatus: updateData.cohortmemberstatus,
+            statusReason: updateData.statusReason,
+            completionPercentage: updateData.completionPercentage,
+            updatedAt: new Date().toISOString(),
+          },
+        },
+      };
+
+      // Check if user document exists by trying to get it
+      // This is safer than using private methods and provides the same functionality
+      const userDoc = await this.userElasticsearchService.getUser(userId);
+
+      if (userDoc) {
+        // Update existing document with field-specific changes using the script
+        // This ensures only specific fields are updated while preserving existing data
+        await this.userElasticsearchService.updateUser(
+          userId,
+          { script },
+          async (userId: string) => {
+            return await this.formSubmissionService.buildUserDocumentForElasticsearch(
+              userId
+            );
+          }
+        );
+      } else {
+        // If user document doesn't exist, create it with the new application
+        // This maintains backward compatibility for new users
+        const fullUserDoc =
+          await this.formSubmissionService.buildUserDocumentForElasticsearch(
+            userId
+          );
+        if (fullUserDoc) {
+          await this.userElasticsearchService.updateUser(
+            userId,
+            { doc: fullUserDoc },
+            async (userId: string) => {
+              return await this.formSubmissionService.buildUserDocumentForElasticsearch(
+                userId
+              );
+            }
+          );
+        }
+      }
+    } catch (error) {
+      // Log the error but don't fail the entire request
+      // This ensures that database updates succeed even if Elasticsearch fails
+      LoggerUtil.error(
+        'Failed to update Elasticsearch with field-specific changes',
+        `Error: ${error.message}`,
+        'COHORT_MEMBER_UPDATE'
+      );
+      throw error;
+    }
+  }
+
   public async checkCohortExist(cohortId) {
     const existCohort = await this.cohortRepository.findOne({
       where: {
@@ -1184,6 +1551,24 @@ export class PostgresCohortMembersService {
       return false;
     }
     return existCohort;
+  }
+
+  /**
+   * Get cohort custom field details using the existing fields service
+   * This avoids code duplication by leveraging the existing PostgresFieldsService
+   */
+  public async getCohortCustomFieldDetails(cohortId: string) {
+    if (!cohortId || typeof cohortId !== 'string') {
+      throw new Error('Invalid cohortId parameter');
+    }
+    // Use the existing fields service to get cohort custom field details
+    return await this.fieldsService.getFieldValuesData(
+      cohortId,
+      'COHORT',
+      'COHORT',
+      null,
+      true
+    );
   }
 
   public async cohortUserMapping(userId, cohortId, cohortAcademicYearId) {
@@ -1205,6 +1590,8 @@ export class PostgresCohortMembersService {
       userId: string[];
       cohortId: string[];
       removeCohortId?: string[];
+      status?: string; // Allow status for bulk import
+      statusReason?: string; // Allow statusReason for bulk import
     },
     response: Response,
     tenantId: string,
@@ -1357,6 +1744,17 @@ export class PostgresCohortMembersService {
             const cohortMemberForAcademicYear = {
               ...cohortMembers,
               cohortAcademicYearId: cohortExists[0].cohortAcademicYearId,
+              // Use status from DTO if provided (e.g., for bulk import), otherwise default to ACTIVE
+              // status: cohortMembersDto.status ? cohortMembersDto.status as MemberStatus : MemberStatus.ACTIVE, // Cast to MemberStatus
+              status: cohortMembersDto.status
+                ? Object.values(MemberStatus).includes(
+                    cohortMembersDto.status as MemberStatus
+                  )
+                  ? (cohortMembersDto.status as MemberStatus)
+                  : MemberStatus.ACTIVE
+                : MemberStatus.ACTIVE,
+              // Use statusReason from DTO if provided, otherwise default to empty string
+              statusReason: cohortMembersDto.statusReason || '',
             };
             // Need to add User in cohort for Academic year
             const result = await this.cohortMembersRepository.save(
@@ -1480,24 +1878,17 @@ export class PostgresCohortMembersService {
       const cohortId = filters?.cohortId;
       const userId = filters?.userId;
 
-      if (!cohortId || !userId) {
-        return APIResponse.error(
-          res,
-          apiId,
-          API_RESPONSES.BAD_REQUEST,
-          `Both cohortId and userId are required.`,
-          HttpStatus.BAD_REQUEST
-        );
-      }
       //get the cohort userDetails same as searchcohortmembers
       const results = await this.getCohortMembersData(
         cohortMembersSearchDto,
         tenantId,
         academicyearId
       );
-      const userDetails = results.userDetails || [];
+      const initialUserDetails = results.userDetails || [];
+      // FIXED: Store the original total count from database query
+      const originalTotalCount = results.totalCount || 0;
 
-      if (!userDetails.length) {
+      if (!initialUserDetails.length) {
         return APIResponse.success(
           res,
           apiId,
@@ -1534,31 +1925,30 @@ export class PostgresCohortMembersService {
 
       // Step 3: For each userId, fetch their submissions and enrich
       const enrichedResults = await Promise.all(
-        userDetails.map(async (user) => {
+        initialUserDetails.map(async (user) => {
           let formInfo = null;
           if (form?.formid && form.status === 'active') {
-            // Fetch form submission for this user
-            const dto = new FormSubmissionSearchDto({
-              filters: {
+            // Fetch form submission for this user - directly query to avoid TypeORM In() operator issues
+            const submission = await this.formSubmissionService[
+              'formSubmissionRepository'
+            ].findOne({
+              where: {
                 formId: form.formid,
                 itemId: user.userId,
-                status: [FormSubmissionStatus.ACTIVE],
+                // status: FormSubmissionStatus.ACTIVE,
               },
-              limit: 1,
-              offset: 0,
-              sort: ['createdAt', 'desc'],
+              order: {
+                createdAt: 'DESC',
+              },
             });
-            const submissionResult = await this.formSubmissionService.findAll(
-              dto
-            );
 
             let formSubmissionId = null;
             let formSubmissionStatus = null;
             let formSubmissionCreatedAt = null;
             let formSubmissionUpdatedAt = null;
+            let completionPercentage = null; // Default to 0 if not available
 
-            if (submissionResult?.result?.formSubmissions?.length > 0) {
-              const submission = submissionResult.result.formSubmissions[0];
+            if (submission) {
               formSubmissionId = submission.submissionId;
               formSubmissionStatus = submission.status;
               formSubmissionCreatedAt = submission.createdAt
@@ -1567,6 +1957,7 @@ export class PostgresCohortMembersService {
               formSubmissionUpdatedAt = submission.updatedAt
                 ? new Date(submission.updatedAt).toISOString().slice(0, 10)
                 : null;
+              completionPercentage = submission.completionPercentage ?? 0; // Default to 0 if not available
             }
             formInfo = {
               title: form.title, //form title
@@ -1576,6 +1967,7 @@ export class PostgresCohortMembersService {
               formSubmissionStatus,
               formSubmissionCreatedAt,
               formSubmissionUpdatedAt,
+              completionPercentage, // This is the field used for filtering
             };
           }
           return {
@@ -1585,10 +1977,250 @@ export class PostgresCohortMembersService {
         })
       );
 
+      // Validate and extract formSubmissionCompletionPercentage filter from filters
+      let completionPercentageRanges: { min: number; max: number }[] = [];
+
+      // Check for both field names - prioritize formSubmissionCompletionPercentage
+      const completionPercentageFilter =
+        cohortMembersSearchDto.filters?.completionPercentage;
+
+      if (completionPercentageFilter?.length) {
+        try {
+          completionPercentageRanges = completionPercentageFilter.map(
+            (range: string, index: number) => {
+              // Check for empty or invalid input
+              if (!range || typeof range !== 'string') {
+                throw new Error(
+                  `Range at index ${index} must be a non-empty string. Received: ${typeof range}`
+                );
+              }
+
+              // Trim whitespace and check for empty string after trimming
+              const trimmedRange = range.trim();
+              if (!trimmedRange) {
+                throw new Error(
+                  `Range at index ${index} cannot be empty or contain only whitespace`
+                );
+              }
+
+              // Check for proper format with exactly one hyphen
+              const parts = trimmedRange.split('-');
+              if (parts.length !== 2) {
+                throw new Error(
+                  `Range at index ${index}: "${range}" must contain exactly one hyphen in format "min-max" (e.g., "0-50", "25-75", "80-100")`
+                );
+              }
+
+              // Validate and parse numeric values
+              const [minStr, maxStr] = parts;
+              const min = Number(minStr.trim());
+              const max = Number(maxStr.trim());
+
+              // Check for non-numeric values
+              if (isNaN(min)) {
+                throw new Error(
+                  `Invalid minimum value at index ${index}: "${minStr}". Must be a valid number between 0 and 100`
+                );
+              }
+
+              if (isNaN(max)) {
+                throw new Error(
+                  `Invalid maximum value at index ${index}: "${maxStr}". Must be a valid number between 0 and 100`
+                );
+              }
+
+              // Validate range constraints
+              if (min < 0) {
+                throw new Error(
+                  `Minimum value at index ${index}: ${min} must be greater than or equal to 0`
+                );
+              }
+
+              if (max > 100) {
+                throw new Error(
+                  `Maximum value at index ${index}: ${max} must be less than or equal to 100`
+                );
+              }
+
+              if (min > max) {
+                throw new Error(
+                  `Invalid range at index ${index}: ${min}-${max}. Minimum value (${min}) cannot be greater than maximum value (${max})`
+                );
+              }
+
+              return { min, max };
+            }
+          );
+        } catch (validationError) {
+          LoggerUtil.error(
+            `Completion percentage filter validation failed`,
+            `Error: ${validationError.message}`,
+            apiId
+          );
+          return APIResponse.error(
+            res,
+            apiId,
+            API_RESPONSES.BAD_REQUEST,
+            `Completion percentage filter validation failed: ${validationError.message}. Expected format: "min-max" where 0 <= min <= max <= 100 (e.g., "0-50", "25-75", "80-100")`,
+            HttpStatus.BAD_REQUEST
+          );
+        }
+      }
+
+      // Use optimized database query if completion percentage filtering is needed
+      let finalUserDetails = [];
+      let totalCount = 0;
+
+      if (completionPercentageRanges.length > 0 && form?.formid) {
+        // Use optimized database query with JOIN to formSubmissions table
+        const { limit, offset } = cohortMembersSearchDto;
+        const { sort, filters } = cohortMembersSearchDto;
+
+        let where: any[] = [];
+        const whereClause = {};
+        if (filters && Object.keys(filters).length > 0) {
+          Object.entries(filters).forEach(([key, value]) => {
+            if (key === 'cohortId') {
+              if (Array.isArray(value)) {
+                whereClause[key] = value;
+              } else if (typeof value === 'string') {
+                whereClause[key] = value.split(',').map((id) => id.trim());
+              }
+            } else {
+              whereClause[key] = value;
+            }
+          });
+        }
+
+        // Build where conditions for optimized query
+        const whereKeys = [
+          'cohortId',
+          'userId',
+          'role',
+          'name',
+          'status',
+          'cohortAcademicYearId',
+          'firstName',
+          'lastName',
+          'email',
+          'country',
+        ];
+        const uniqueWhere = new Map();
+        whereKeys.forEach((key) => {
+          if (whereClause[key]) {
+            const value = Array.isArray(whereClause[key])
+              ? whereClause[key]
+              : [whereClause[key]];
+            if (!uniqueWhere.has(key)) {
+              uniqueWhere.set(key, value);
+            }
+          }
+        });
+        where = Array.from(uniqueWhere.entries());
+
+        const options = [];
+        if (limit) options.push(['limit', limit]);
+        if (offset) options.push(['offset', offset]);
+
+        const order = {};
+        if (sort) {
+          const [sortField, sortOrder] = sort;
+          order[sortField] = sortOrder;
+        }
+
+        // Use optimized query with completion percentage filtering
+        const optimizedResults = await this.getUsersWithCompletionFilter(
+          where,
+          options,
+          order,
+          completionPercentageRanges,
+          form.formid
+        );
+
+        if (optimizedResults.length > 0) {
+          totalCount = parseInt(optimizedResults[0].total_count, 10);
+
+          // Enrich the results with form data and custom fields
+          finalUserDetails = await Promise.all(
+            optimizedResults.map(async (user) => {
+              let formInfo = {
+                title: form.title,
+                formId: form.formid,
+                formStatus: form.status,
+                formSubmissionId: null,
+                formSubmissionStatus: null,
+                formSubmissionCreatedAt: null,
+                formSubmissionUpdatedAt: null,
+                completionPercentage: null,
+              };
+
+              // Get form submission details for this user - directly query to avoid TypeORM In() operator issues
+              const submission = await this.formSubmissionService[
+                'formSubmissionRepository'
+              ].findOne({
+                where: {
+                  formId: form.formid,
+                  itemId: user.userId,
+                  // status: FormSubmissionStatus.ACTIVE,
+                },
+                order: {
+                  createdAt: 'DESC',
+                },
+              });
+
+              if (submission) {
+                formInfo.formSubmissionId = submission.submissionId;
+                formInfo.formSubmissionStatus = submission.status;
+                formInfo.formSubmissionCreatedAt = submission.createdAt
+                  ? new Date(submission.createdAt).toISOString().slice(0, 10)
+                  : null;
+                formInfo.formSubmissionUpdatedAt = submission.updatedAt
+                  ? new Date(submission.updatedAt).toISOString().slice(0, 10)
+                  : null;
+                formInfo.completionPercentage =
+                  submission.completionPercentage ?? 0;
+              }
+
+              // Get custom fields
+              const fieldValues =
+                await this.fieldsService.getUserCustomFieldDetails(user.userId);
+              let fieldValuesForCohort =
+                await this.fieldsService.getFieldsAndFieldsValues(
+                  user.cohortMembershipId
+                );
+              fieldValuesForCohort = fieldValuesForCohort.map((field) => ({
+                fieldId: field.fieldId,
+                label: field.label,
+                value: field.value,
+                type: field.type,
+                code: field.code,
+              }));
+
+              return {
+                ...user,
+                customField: fieldValues.concat(fieldValuesForCohort),
+                form: formInfo,
+              };
+            })
+          );
+        }
+      } else {
+        // Use existing flow for cases without completion percentage filtering
+        finalUserDetails = enrichedResults;
+        // FIXED: Use the original total count from database query instead of limited results length
+        totalCount = originalTotalCount;
+      }
+
+      // Create the new response structure with totalCount inside result and userDetails array
+      const resultWithTotalCount = {
+        totalCount: totalCount,
+        userDetails: finalUserDetails,
+      };
+
       return APIResponse.success(
         res,
         apiId,
-        enrichedResults,
+        resultWithTotalCount,
         HttpStatus.OK,
         API_RESPONSES.COHORT_GET_SUCCESSFULLY
       );
@@ -1682,6 +2314,10 @@ export class PostgresCohortMembersService {
       'name',
       'status',
       'cohortAcademicYearId',
+      'firstName',
+      'lastName',
+      'email',
+      'country',
     ];
     const uniqueWhere = new Map();
     whereKeys.forEach((key) => {
@@ -1743,7 +2379,11 @@ export class PostgresCohortMembersService {
         }
       }
     }
-    return results;
+    // FIXED: Return both totalCount and userDetails from getCohortMemberUserDetails
+    return {
+      totalCount: (results as any).totalCount || 0,
+      userDetails: results.userDetails || [],
+    };
   }
 
   /**
@@ -2056,7 +2696,6 @@ export class PostgresCohortMembersService {
     let failures = 0;
 
     const batchStartTime = Date.now();
-    const fieldFetchStartTime = Date.now();
     // Pre-fetch all user field values for this batch to reduce database calls
     // This optimization significantly improves performance for large batches
     // Skip field value fetching if no rules exist (automatic shortlisting)
@@ -2064,13 +2703,10 @@ export class PostgresCohortMembersService {
     if (formFieldsAndRules && formFieldsAndRules.length > 0) {
       const userIds = members.map((m) => m.userId);
       userFieldValuesMap = await this.getBatchUserFieldValues(userIds);
-      const fieldFetchTime = Date.now() - fieldFetchStartTime;
     }
 
     // Process each member in the batch
-    const evaluationStartTime = Date.now();
     for (const member of members) {
-      const memberStartTime = Date.now();
       try {
         // Get pre-fetched field values for this user (empty array if no rules exist)
         const userFieldValues = userFieldValuesMap.get(member.userId) || [];
@@ -2098,8 +2734,6 @@ export class PostgresCohortMembersService {
         } else {
           rejected++;
         }
-
-        const memberTime = Date.now() - memberStartTime;
       } catch (error) {
         // Handle individual member failures gracefully
         failures++;
@@ -2120,8 +2754,6 @@ export class PostgresCohortMembersService {
         });
       }
     }
-
-    const evaluationTime = Date.now() - evaluationStartTime;
 
     // Performance monitoring - log slow batches for optimization
     const batchTime = Date.now() - batchStartTime;
@@ -2173,20 +2805,56 @@ export class PostgresCohortMembersService {
         );
       }
 
-      // Send email notification if enabled and status requires notification
+      // CRON JOB ELASTICSEARCH UPDATE: Update Elasticsearch when cron job changes status
+      // This ensures data consistency between database and Elasticsearch for automated status changes
+      // Only updates the status fields without affecting other application data (progress, formData, etc.)
+      if (isElasticsearchEnabled()) {
+        try {
+          // Get the cohort member details to get userId and cohortId for Elasticsearch update
+          const cohortMemberDetails =
+            await this.cohortMembersRepository.findOne({
+              where: { cohortMembershipId: cohortMembershipId },
+              select: ['userId', 'cohortId'],
+            });
+
+          if (cohortMemberDetails) {
+            // Use the existing field-specific update method to preserve all existing data
+            // FIXED: Update cohortmemberstatus instead of status to match Elasticsearch structure
+            await this.updateElasticsearchWithFieldSpecificChanges(
+              cohortMemberDetails.userId,
+              cohortMemberDetails.cohortId,
+              {
+                cohortmemberstatus: evaluationResult.status, // FIXED: Use cohortmemberstatus instead of status
+                statusReason: evaluationResult.statusReason,
+              },
+              null // existingApplication is null since we're doing a minimal update
+            );
+          }
+        } catch (elasticsearchError) {
+          // Log the error but don't fail the entire cron job
+          // This ensures that database updates and email notifications succeed even if Elasticsearch fails
+          LoggerUtil.error(
+            'Failed to update Elasticsearch during cron job status update',
+            `CohortMembershipId: ${cohortMembershipId}, Error: ${elasticsearchError.message}`,
+            'CRON_JOB_ELASTICSEARCH_UPDATE'
+          );
+        }
+      }
+
+      // NEW REQUIREMENT: Only send email notifications for 'shortlisted' status
       const enableEmailNotifications =
         process.env.ENABLE_SHORTLISTING_EMAILS !== 'false';
-      const notifyStatuses = ['shortlisted', 'rejected'];
 
       if (
         enableEmailNotifications &&
-        notifyStatuses.includes(evaluationResult.status)
+        evaluationResult.status === 'shortlisted'
       ) {
         try {
           // Get user and cohort data for email
           const [userData, cohortData] = await Promise.all([
             this.usersRepository.findOne({
               where: { userId: evaluationResult.userId || cohortMembershipId },
+              select: ['userId', 'email', 'firstName', 'lastName'], // force select email field
             }),
             this.cohortRepository.findOne({
               where: { cohortId: evaluationResult.cohortId },
@@ -2194,15 +2862,10 @@ export class PostgresCohortMembersService {
           ]);
 
           if (userData?.email) {
-            const validStatusKeys = {
-              shortlisted: 'onStudentShortlisted',
-              rejected: 'onStudentRejected',
-            };
-
             const notificationPayload = {
               isQueue: false,
               context: 'USER',
-              key: validStatusKeys[evaluationResult.status],
+              key: 'onStudentShortlisted', // Only shortlisted template
               replacements: {
                 '{username}': `${userData.firstName ?? ''} ${
                   userData.lastName ?? ''
@@ -2229,9 +2892,7 @@ export class PostgresCohortMembersService {
                 dateTime: new Date().toISOString(),
                 userId: userData.userId,
                 email: userData.email,
-                shortlistedStatus: evaluationResult.status as
-                  | 'shortlisted'
-                  | 'rejected',
+                shortlistedStatus: 'shortlisted', // Only shortlisted status
                 failureReason: mailSend.result.email.errors.join(', '),
                 cohortId: evaluationResult.cohortId,
               });
@@ -2241,9 +2902,7 @@ export class PostgresCohortMembersService {
                 dateTime: new Date().toISOString(),
                 userId: userData.userId,
                 email: userData.email,
-                shortlistedStatus: evaluationResult.status as
-                  | 'shortlisted'
-                  | 'rejected',
+                shortlistedStatus: 'shortlisted', // Only shortlisted status
                 cohortId: evaluationResult.cohortId,
               });
             }
@@ -2253,9 +2912,7 @@ export class PostgresCohortMembersService {
               dateTime: new Date().toISOString(),
               userId: evaluationResult.userId || cohortMembershipId,
               email: 'No email found',
-              shortlistedStatus: evaluationResult.status as
-                | 'shortlisted'
-                | 'rejected',
+              shortlistedStatus: 'shortlisted', // Only shortlisted status
               failureReason: `No email found for user ${
                 evaluationResult.userId || cohortMembershipId
               }`,
@@ -2268,9 +2925,7 @@ export class PostgresCohortMembersService {
             dateTime: new Date().toISOString(),
             userId: evaluationResult.userId || cohortMembershipId,
             email: 'Unknown',
-            shortlistedStatus: evaluationResult.status as
-              | 'shortlisted'
-              | 'rejected',
+            shortlistedStatus: 'shortlisted', // Only shortlisted status
             failureReason: emailError.message,
             cohortId: evaluationResult.cohortId,
           });
@@ -2278,7 +2933,6 @@ export class PostgresCohortMembersService {
       }
     } catch (error) {
       // Log the error and re-throw for batch processing error handling
-
       ShortlistingLogger.logShortlistingError(
         `Failed to batch update member status for ${cohortMembershipId}`,
         error.message,
@@ -2309,8 +2963,6 @@ export class PostgresCohortMembersService {
   private async getBatchUserFieldValues(userIds: string[]) {
     if (userIds.length === 0) return new Map();
 
-    const queryStartTime = Date.now();
-
     // Optimized query with better indexing and reduced data transfer
     const query = `
       SELECT 
@@ -2333,7 +2985,6 @@ export class PostgresCohortMembersService {
     `;
 
     const results = await this.fieldValuesRepository.query(query, [userIds]);
-    const queryTime = Date.now() - queryStartTime;
 
     // Optimized grouping with Map for better performance
     const userFieldValuesMap = new Map();
@@ -2344,8 +2995,6 @@ export class PostgresCohortMembersService {
       }
       userFieldValuesMap.get(userId).push(fv);
     }
-
-    const processingTime = Date.now() - queryStartTime;
 
     return userFieldValuesMap;
   }
@@ -3173,6 +3822,686 @@ export class PostgresCohortMembersService {
       estimatedDailyCapacity: Math.round(estimatedDailyCapacity),
       batchSize,
       maxConcurrentBatches,
+    };
+  }
+
+  /**
+   * Main method for sending rejection email notifications
+   * Processes all active cohorts with rejection notification dates matching today's date or earlier
+   *
+   * This method implements a high-performance, parallel processing system that can handle
+   * 100,000+ records per cohort with optimized batching and concurrent processing.
+   *
+   * Process Flow:
+   * 1. Fetch active cohorts with rejection notification date = today or earlier
+   * 2. For each cohort, get rejected members who haven't received emails yet
+   * 3. Process members in parallel batches for optimal performance
+   * 4. Send personalized rejection email notifications
+   * 5. Update rejection_email_sent flag to prevent duplicate emails
+   * 6. Log failures for manual review
+   *
+   * Performance Features:
+   * - Configurable batch size (default: 1000 records per batch)
+   * - Parallel processing with configurable concurrency (default: 5 batches)
+   * - Optimized database queries with batch fetching
+   * - Real-time performance monitoring and metrics
+   * - Graceful error handling with detailed failure logging
+   * - Optional email notifications for performance optimization
+   *
+   * @param tenantId - The tenant ID for the evaluation context
+   * @param academicyearId - The academic year ID for the evaluation context
+   * @param userId - The user ID from the authenticated request
+   * @param res - Express response object for API response
+   * @returns Promise with processing results and performance metrics
+   */
+  public async sendRejectionEmailNotifications(
+    tenantId: string,
+    academicyearId: string,
+    userId: string,
+    res: Response
+  ) {
+    try {
+      const result = await this.sendRejectionEmailNotificationsInternal(
+        tenantId,
+        academicyearId,
+        userId
+      );
+
+      return APIResponse.success(
+        res,
+        APIID.COHORT_MEMBER_SEND_REJECTION_EMAILS,
+        result,
+        HttpStatus.OK,
+        'Rejection email notifications completed successfully'
+      );
+    } catch (error) {
+      return APIResponse.error(
+        res,
+        APIID.COHORT_MEMBER_SEND_REJECTION_EMAILS,
+        API_RESPONSES.INTERNAL_SERVER_ERROR,
+        `Error: ${error.message}`,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  /**
+   * Internal method for sending rejection email notifications
+   * Returns data directly without requiring a Response object
+   * Used by both API endpoints and cron jobs
+   *
+   * @param tenantId - The tenant ID for the evaluation context
+   * @param academicyearId - The academic year ID for the evaluation context
+   * @param userId - The user ID from the authenticated request
+   * @returns Promise with processing results and performance metrics
+   */
+  public async sendRejectionEmailNotificationsInternal(
+    tenantId: string,
+    academicyearId: string,
+    userId: string
+  ) {
+    const apiId = APIID.COHORT_MEMBER_SEND_REJECTION_EMAILS;
+    // Configurable performance parameters with environment variable fallbacks
+    const batchSize = parseInt(process.env.BATCH_SIZE) || 5000;
+    const maxConcurrentBatches =
+      parseInt(process.env.MAX_CONCURRENT_BATCHES) || 10;
+    const enableEmailNotifications =
+      process.env.ENABLE_SHORTLISTING_EMAILS !== 'false';
+
+    // Field ID for rejection notification date - should be configured based on your field structure
+    const rejectionNotificationDateFieldId =
+      process.env.REJECTION_NOTIFICATION_DATE_FIELD_ID;
+
+    if (!rejectionNotificationDateFieldId) {
+      throw new Error(
+        'REJECTION_NOTIFICATION_DATE_FIELD_ID environment variable is required for rejection email notifications'
+      );
+    }
+
+    const startTime = Date.now();
+
+    try {
+      ShortlistingLogger.logShortlisting(
+        `Starting rejection email notifications with batch size: ${batchSize}, max concurrent batches: ${maxConcurrentBatches}`,
+        'RejectionEmailNotification'
+      );
+
+      // Step 1: Process Active Cohorts with Rejection Notification Date
+      const currentDateUTC = new Date().toISOString().split('T')[0]; // Use UTC date for timezone consistency
+      const activeCohorts = await this.processActiveCohortsForRejectionEmails(
+        tenantId,
+        academicyearId,
+        userId,
+        rejectionNotificationDateFieldId,
+        currentDateUTC
+      );
+
+      if (activeCohorts.length === 0) {
+        ShortlistingLogger.logShortlisting(
+          'No active cohorts found with rejection notification date today or earlier',
+          'RejectionEmailNotification'
+        );
+        return [];
+      }
+
+      ShortlistingLogger.logShortlisting(
+        `Found ${activeCohorts.length} active cohorts with rejection notification date today or earlier`,
+        'RejectionEmailNotification'
+      );
+
+      // Step 2: Process Each Cohort for Rejection Emails
+      const cohortResults = [];
+      for (const cohort of activeCohorts) {
+        const cohortResult = await this.processCohortForRejectionEmails(
+          cohort,
+          tenantId,
+          batchSize,
+          maxConcurrentBatches,
+          apiId,
+          userId
+        );
+        cohortResults.push(cohortResult);
+      }
+
+      // Step 3: Aggregate Results
+      const aggregatedResults =
+        this.aggregateRejectionEmailResults(cohortResults);
+
+      // Step 4: Calculate Performance Metrics
+      const totalTime = Date.now() - startTime;
+      const performanceMetrics = this.calculatePerformanceMetrics(
+        aggregatedResults.totalProcessed,
+        totalTime,
+        batchSize,
+        maxConcurrentBatches
+      );
+
+      // Return comprehensive results with performance metrics
+      return {
+        ...aggregatedResults,
+        ...performanceMetrics,
+        message: 'Rejection email notifications completed successfully',
+      };
+    } catch (error) {
+      const totalTime = Date.now() - startTime;
+
+      ShortlistingLogger.logShortlistingError(
+        `Error in rejection email notifications after ${totalTime}ms`,
+        error.message,
+        'RejectionEmailNotification'
+      );
+
+      throw error;
+    }
+  }
+
+  /**
+   * Processes active cohorts for rejection email notifications
+   * Handles the high-level flow of rejection email processing
+   *
+   * This method processes cohorts with rejection notification dates less than or equal to today's UTC date,
+   * ensuring timezone consistency and recovery from missed cron executions.
+   *
+   * @param tenantId - The tenant ID for the evaluation context
+   * @param academicyearId - The academic year ID for the evaluation context
+   * @param userId - The user ID from the authenticated request
+   * @param rejectionNotificationDateFieldId - The field ID for rejection notification date
+   * @param currentDateUTC - Current UTC date in YYYY-MM-DD format
+   * @returns Promise with active cohorts to process
+   */
+  private async processActiveCohortsForRejectionEmails(
+    tenantId: string,
+    academicyearId: string,
+    userId: string,
+    rejectionNotificationDateFieldId: string,
+    currentDateUTC: string
+  ) {
+    // Step 1: Fetch Active Cohorts with Rejection Notification Date = Today or Earlier
+    const activeCohorts =
+      await this.getActiveCohortsWithRejectionNotificationDate(
+        rejectionNotificationDateFieldId,
+        currentDateUTC
+      );
+
+    if (activeCohorts.length === 0) {
+      ShortlistingLogger.logShortlisting(
+        'No active cohorts found with rejection notification date today or earlier',
+        'RejectionEmailNotification'
+      );
+      return [];
+    }
+
+    ShortlistingLogger.logShortlisting(
+      `Found ${activeCohorts.length} active cohorts with rejection notification date today or earlier`,
+      'RejectionEmailNotification'
+    );
+
+    return activeCohorts;
+  }
+
+  /**
+   * Fetches active cohorts that have a rejection notification date less than or equal to today's UTC date
+   * Uses the configured rejection notification date field to identify cohorts for processing
+   *
+   * This method handles timezone consistency and missed cron executions by including
+   * cohorts with rejection notification dates from previous days that may have been missed
+   *
+   * @param rejectionNotificationDateFieldId - The field ID for the rejection notification date field
+   * @param currentDateUTC - Current UTC date in YYYY-MM-DD format
+   * @returns Promise with array of active cohorts for processing
+   */
+  private async getActiveCohortsWithRejectionNotificationDate(
+    rejectionNotificationDateFieldId: string,
+    currentDateUTC: string
+  ) {
+    // Optimized query with better indexing and reduced data transfer
+    const query = `
+      SELECT DISTINCT 
+        c."cohortId", 
+        c."name", 
+        c."status"
+      FROM public."Cohort" c
+      INNER JOIN public."FieldValues" fv ON c."cohortId" = fv."itemId"
+      WHERE c."status" = 'active'
+      AND fv."fieldId" = $1
+      AND fv."calendarValue"::date <= $2::date
+      AND fv."itemId" IS NOT NULL
+      ORDER BY c."cohortId"
+    `;
+
+    const results = await this.cohortRepository.query(query, [
+      rejectionNotificationDateFieldId,
+      currentDateUTC,
+    ]);
+
+    return results;
+  }
+
+  /**
+   * Processes a single cohort for rejection email notifications
+   * Handles member processing, email sending, and result aggregation for one cohort
+   *
+   * @param cohort - The cohort to process
+   * @param tenantId - The tenant ID for the evaluation context
+   * @param batchSize - Number of records per batch
+   * @param maxConcurrentBatches - Maximum number of batches to process concurrently
+   * @param apiId - API ID for logging context
+   * @param userId - The user ID for updates
+   * @returns Promise with cohort processing results
+   */
+  private async processCohortForRejectionEmails(
+    cohort: any,
+    tenantId: string,
+    batchSize: number,
+    maxConcurrentBatches: number,
+    apiId: string,
+    userId: string
+  ) {
+    const processingStartTime = Date.now();
+    const cohortId = cohort.cohortId;
+
+    try {
+      // Get rejected members that need email notifications
+      const members = await this.getRejectedMembersForEmailNotification(
+        cohortId
+      );
+
+      if (members.length === 0) {
+        return {
+          processed: 0,
+          emailsSent: 0,
+          failures: 0,
+          processingTime: Date.now() - processingStartTime,
+        };
+      }
+
+      // Process members in parallel batches
+      const result = await this.processRejectionEmailBatchesInParallel(
+        members,
+        cohortId,
+        batchSize,
+        maxConcurrentBatches,
+        apiId,
+        userId
+      );
+
+      const processingTime = Date.now() - processingStartTime;
+
+      return {
+        ...result,
+        processingTime,
+      };
+    } catch (error) {
+      ShortlistingLogger.logShortlistingError(
+        `Failed to process rejection emails for cohort ${cohortId}`,
+        error.message,
+        'RejectionEmailNotification'
+      );
+
+      return {
+        processed: 0,
+        emailsSent: 0,
+        failures: 0,
+        processingTime: Date.now() - processingStartTime,
+      };
+    }
+  }
+
+  /**
+   * Fetches rejected cohort members who haven't received email notifications yet
+   * These are the members that need to receive rejection email notifications
+   *
+   * @param cohortId - The cohort ID to fetch members for
+   * @returns Promise with array of rejected cohort members
+   */
+  private async getRejectedMembersForEmailNotification(cohortId: string) {
+    // Optimized query with proper indexing and LIMIT for batch processing
+    const query = `
+      SELECT 
+        cm."cohortMembershipId",
+        cm."cohortId",
+        cm."userId",
+        cm."status",
+        cm."statusReason",
+        cm."rejection_email_sent",
+        cm."createdAt",
+        cm."updatedAt"
+      FROM public."CohortMembers" cm
+      WHERE cm."cohortId" = $1 
+      AND cm."status" = 'rejected'
+      AND (cm."rejection_email_sent" IS NULL OR cm."rejection_email_sent" = false)
+      ORDER BY cm."createdAt" ASC
+      LIMIT $2
+    `;
+
+    const batchSize = parseInt(process.env.BATCH_SIZE) || 5000;
+    const members = await this.cohortMembersRepository.query(query, [
+      cohortId,
+      batchSize,
+    ]);
+
+    return members;
+  }
+
+  /**
+   * Processes rejection email batches in parallel for optimal performance
+   * Implements controlled concurrency to balance performance with system resources
+   *
+   * This method:
+   * 1. Divides members into batches of specified size
+   * 2. Processes multiple batches concurrently (controlled by maxConcurrentBatches)
+   * 3. Provides real-time progress updates
+   * 4. Aggregates results from all batches
+   *
+   * Performance optimization:
+   * - Pre-fetches user data for entire batches to reduce database calls
+   * - Processes batches in parallel for I/O bound operations
+   * - Provides progress logging for long-running operations
+   * - Handles individual batch failures gracefully
+   *
+   * @param members - Array of rejected cohort members to process
+   * @param cohortId - The cohort ID being processed
+   * @param batchSize - Number of records per batch
+   * @param maxConcurrentBatches - Maximum number of batches to process concurrently
+   * @param apiId - API ID for logging context
+   * @param userId - The user ID for updates
+   * @returns Promise with aggregated processing results
+   */
+  private async processRejectionEmailBatchesInParallel(
+    members: any[],
+    cohortId: string,
+    batchSize: number,
+    maxConcurrentBatches: number,
+    apiId: string,
+    userId: string
+  ) {
+    let totalProcessed = 0;
+    let totalEmailsSent = 0;
+    let totalFailures = 0;
+
+    // Create batches of specified size
+    const batches = [];
+    for (let i = 0; i < members.length; i += batchSize) {
+      batches.push(members.slice(i, i + batchSize));
+    }
+
+    ShortlistingLogger.logShortlisting(
+      `Processing ${batches.length} batches for rejection emails in cohort ${cohortId} with max ${maxConcurrentBatches} concurrent batches`,
+      'RejectionEmailNotification'
+    );
+
+    // Process batches with controlled concurrency to avoid overwhelming the system
+    for (let i = 0; i < batches.length; i += maxConcurrentBatches) {
+      const currentBatches = batches.slice(i, i + maxConcurrentBatches);
+
+      // Process current batch group in parallel
+      const batchPromises = currentBatches.map((batch, batchIndex) =>
+        this.processRejectionEmailBatch(
+          batch,
+          cohortId,
+          apiId,
+          i + batchIndex + 1,
+          batches.length,
+          userId
+        )
+      );
+
+      const batchResults = await Promise.all(batchPromises);
+
+      // Aggregate results from all batches in this group
+      batchResults.forEach((result, index) => {
+        totalProcessed += result.processed;
+        totalEmailsSent += result.emailsSent;
+        totalFailures += result.failures;
+      });
+
+      // Log progress every 10 batch groups to provide visibility into long-running operations
+      if ((i / maxConcurrentBatches + 1) % 10 === 0) {
+        ShortlistingLogger.logShortlisting(
+          `Cohort ${cohortId} rejection emails: Completed ${Math.min(
+            i + maxConcurrentBatches,
+            batches.length
+          )}/${
+            batches.length
+          } batches. Progress: ${totalProcessed} records processed`,
+          'RejectionEmailNotification'
+        );
+      }
+    }
+
+    return {
+      processed: totalProcessed,
+      emailsSent: totalEmailsSent,
+      failures: totalFailures,
+    };
+  }
+
+  /**
+   * Processes a single batch of rejected cohort members for email notifications
+   * Handles individual member email sending and status updates
+   *
+   * This method:
+   * 1. Pre-fetches user data for all members in the batch (optimization)
+   * 2. Sends personalized rejection email notifications
+   * 3. Updates rejection_email_sent flag to prevent duplicate emails
+   * 4. Logs failures for manual review
+   * 5. Tracks performance metrics for monitoring
+   *
+   * Performance optimizations:
+   * - Batch user data fetching reduces database calls
+   * - Individual error handling prevents batch failures
+   * - Performance monitoring for slow batches
+   * - Detailed failure logging for troubleshooting
+   *
+   * @param members - Array of rejected cohort members in this batch
+   * @param cohortId - The cohort ID being processed
+   * @param apiId - API ID for logging context
+   * @param batchNumber - Current batch number for logging
+   * @param totalBatches - Total number of batches for progress tracking
+   * @param userId - The user ID for updates
+   * @returns Promise with batch processing results
+   */
+  private async processRejectionEmailBatch(
+    members: any[],
+    cohortId: string,
+    apiId: string,
+    batchNumber: number,
+    totalBatches: number,
+    userId: string
+  ) {
+    let processed = 0;
+    let emailsSent = 0;
+    let failures = 0;
+
+    const batchStartTime = Date.now();
+
+    // Pre-fetch all user data for this batch to reduce database calls
+    const userIds = members.map((m) => m.userId);
+    const userDataMap = new Map();
+
+    if (userIds.length > 0) {
+      const users = await this.usersRepository.find({
+        where: { userId: In(userIds) },
+        select: ['userId', 'email', 'firstName', 'lastName'],
+      });
+
+      users.forEach((user) => {
+        userDataMap.set(user.userId, user);
+      });
+    }
+
+    // Process each member in the batch
+
+    for (const member of members) {
+      try {
+        // Get user data for this member
+        const userData = userDataMap.get(member.userId);
+
+        if (!userData?.email) {
+          // Log failure for missing email
+          ShortlistingLogger.logRejectionEmailFailure({
+            dateTime: new Date().toISOString(),
+            userId: member.userId,
+            email: 'No email found',
+            shortlistedStatus: 'rejected',
+            failureReason: `No email found for user ${member.userId}`,
+            cohortId: member.cohortId,
+          });
+          failures++;
+          processed++; // Count as processed even if failed
+          continue;
+        }
+
+        // Send rejection email notification
+        await this.sendRejectionEmailNotification(
+          member,
+          userData,
+          cohortId,
+          userId
+        );
+
+        // Update rejection_email_sent flag
+        await this.cohortMembersRepository.update(
+          { cohortMembershipId: member.cohortMembershipId },
+          { rejectionEmailSent: true }
+        );
+
+        // Update counters
+        processed++;
+        emailsSent++;
+      } catch (error) {
+        // Handle individual member failures gracefully
+        failures++;
+        processed++; // Count as processed even if failed
+
+        ShortlistingLogger.logShortlistingError(
+          `Failed to process rejection email for member ${member.userId} in batch ${batchNumber}/${totalBatches}`,
+          error.message,
+          'RejectionEmailNotification'
+        );
+
+        // Log failure to CSV for manual review and analysis
+        ShortlistingLogger.logRejectionEmailFailure({
+          dateTime: new Date().toISOString(),
+          userId: member.userId,
+          email: 'Unknown',
+          shortlistedStatus: 'rejected',
+          failureReason: error.message,
+          cohortId: member.cohortId,
+        });
+      }
+    }
+
+    // Performance monitoring - log slow batches for optimization
+    const batchTime = Date.now() - batchStartTime;
+
+    if (batchTime > 5000) {
+      // Log slow batches (>5 seconds)
+      ShortlistingLogger.logShortlisting(
+        `Slow rejection email batch detected: Batch ${batchNumber}/${totalBatches} took ${batchTime}ms for ${processed} records`,
+        'RejectionEmailNotification',
+        undefined,
+        'warn'
+      );
+    }
+
+    return { processed, emailsSent, failures };
+  }
+
+  /**
+   * Sends a rejection email notification for a specific member
+   * Handles email sending and logging for individual members
+   *
+   * @param member - The cohort member to send email to
+   * @param userData - The user data for personalization
+   * @param cohortId - The cohort ID for context
+   * @param userId - The user ID for updates
+   * @returns Promise that resolves when email is sent
+   */
+  private async sendRejectionEmailNotification(
+    member: any,
+    userData: any,
+    cohortId: string,
+    userId: string
+  ) {
+    // Get cohort data for email personalization
+    const cohortData = await this.cohortRepository.findOne({
+      where: { cohortId: cohortId },
+    });
+
+    const notificationPayload = {
+      isQueue: false,
+      context: 'USER',
+      key: 'onStudentRejected', // Rejection template
+      replacements: {
+        '{username}': `${userData.firstName ?? ''} ${
+          userData.lastName ?? ''
+        }`.trim(),
+        '{firstName}': userData.firstName ?? '',
+        '{lastName}': userData.lastName ?? '',
+        '{programName}': cohortData?.name ?? 'the program',
+        '{status}': 'rejected',
+        '{statusReason}': member.statusReason ?? 'Not specified',
+      },
+      email: {
+        receipients: [userData.email],
+      },
+    };
+
+    const mailSend = await this.notificationRequest.sendNotification(
+      notificationPayload
+    );
+
+    if (mailSend?.result?.email?.errors?.length > 0) {
+      // Log email failure
+      ShortlistingLogger.logRejectionEmailFailure({
+        dateTime: new Date().toISOString(),
+        userId: userData.userId,
+        email: userData.email,
+        shortlistedStatus: 'rejected',
+        failureReason: mailSend.result.email.errors.join(', '),
+        cohortId: cohortId,
+      });
+      throw new Error(
+        `Email sending failed: ${mailSend.result.email.errors.join(', ')}`
+      );
+    } else {
+      // Log email success
+      ShortlistingLogger.logRejectionEmailSuccess({
+        dateTime: new Date().toISOString(),
+        userId: userData.userId,
+        email: userData.email,
+        shortlistedStatus: 'rejected',
+        cohortId: cohortId,
+      });
+    }
+  }
+
+  /**
+   * Aggregates results from multiple cohort rejection email processing operations
+   * Combines individual cohort results into overall performance metrics
+   *
+   * @param cohortResults - Array of results from individual cohort processing
+   * @returns Aggregated results with total counts and processing time
+   */
+  private aggregateRejectionEmailResults(cohortResults: any[]) {
+    let totalProcessed = 0;
+    let totalEmailsSent = 0;
+    let totalFailures = 0;
+    let totalProcessingTime = 0;
+
+    cohortResults.forEach((result) => {
+      totalProcessed += result.processed;
+      totalEmailsSent += result.emailsSent;
+      totalFailures += result.failures;
+      totalProcessingTime += result.processingTime;
+    });
+
+    return {
+      totalProcessed,
+      totalEmailsSent,
+      totalFailures,
+      totalProcessingTime,
     };
   }
 }

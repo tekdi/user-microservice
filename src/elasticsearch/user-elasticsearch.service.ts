@@ -29,7 +29,7 @@ export class UserElasticsearchService implements OnModuleInit {
         this.logger.log(`Index ${this.indexName} deleted successfully`);
       }
     } catch (error) {
-      console.error(`Failed to delete index ${this.indexName}:`, error);
+      this.logger.error(`Failed to delete index ${this.indexName}:`, error);
       throw error;
     }
   }
@@ -66,10 +66,16 @@ export class UserElasticsearchService implements OnModuleInit {
                   type: 'nested',
                   properties: {
                     fieldId: { type: 'keyword' },
+                    fieldValuesId: { type: 'keyword' },
+                    fieldname: { type: 'text' },
                     code: { type: 'keyword' }, // Always treat as string
                     label: { type: 'text' },
                     type: { type: 'keyword' },
                     value: { type: 'text' }, // Always treat as string for flexibility
+                    context: { type: 'keyword' },
+                    contextType: { type: 'keyword' },
+                    state: { type: 'keyword' },
+                    fieldParams: { type: 'object', dynamic: true },
                   },
                 },
               },
@@ -78,9 +84,9 @@ export class UserElasticsearchService implements OnModuleInit {
               type: 'nested',
               properties: {
                 cohortId: { type: 'keyword' },
-                status: { type: 'keyword' },
                 cohortmemberstatus: { type: 'keyword' },
                 formstatus: { type: 'keyword' },
+                completionPercentage: { type: 'float' }, // FIXED: Add completionPercentage field
                 progress: {
                   properties: {
                     pages: {
@@ -135,9 +141,11 @@ export class UserElasticsearchService implements OnModuleInit {
       };
 
       await this.elasticsearchService.createIndex(this.indexName, mapping);
-      console.log(`Index ${this.indexName} created successfully with mappings`);
+      this.logger.log(
+        `Index ${this.indexName} created successfully with mappings`
+      );
     } catch (error) {
-      console.error('Failed to initialize Elasticsearch index:', error);
+      this.logger.error('Failed to initialize Elasticsearch index:', error);
       throw new Error(
         `Failed to initialize Elasticsearch index: ${error.message}`
       );
@@ -192,7 +200,7 @@ export class UserElasticsearchService implements OnModuleInit {
       );
       return result;
     } catch (error) {
-      console.error('Failed to create user in Elasticsearch:', error);
+      this.logger.error('Failed to create user in Elasticsearch:', error);
       throw new Error(
         `Failed to create user in Elasticsearch: ${error.message}`
       );
@@ -276,7 +284,7 @@ export class UserElasticsearchService implements OnModuleInit {
       );
       return result;
     } catch (error) {
-      console.error('Failed to delete user from Elasticsearch:', error);
+      this.logger.error('Failed to delete user from Elasticsearch:', error);
       throw new Error(
         `Failed to delete user from Elasticsearch: ${error.message}`
       );
@@ -294,7 +302,7 @@ export class UserElasticsearchService implements OnModuleInit {
       if (error.meta?.statusCode === 404) {
         return null;
       }
-      console.error('Failed to get user from Elasticsearch:', error);
+      this.logger.error('Failed to get user from Elasticsearch:', error);
       throw new Error(
         `Failed to get user from Elasticsearch: ${error.message}`
       );
@@ -445,6 +453,36 @@ export class UserElasticsearchService implements OnModuleInit {
                     },
                   },
                 },
+                // Search in custom fields
+                {
+                  nested: {
+                    path: 'profile.customFields',
+                    query: {
+                      bool: {
+                        should: [
+                          {
+                            match: {
+                              'profile.customFields.value': {
+                                query: searchTerm,
+                                boost: 2.0,
+                              },
+                            },
+                          },
+                          {
+                            match: {
+                              'profile.customFields.fieldname': {
+                                query: searchTerm,
+                                boost: 2.0,
+                              },
+                            },
+                          },
+                        ],
+                        minimum_should_match: 1,
+                      },
+                    },
+                    score_mode: 'max',
+                  },
+                },
               ],
               minimum_should_match: 1,
             },
@@ -457,11 +495,69 @@ export class UserElasticsearchService implements OnModuleInit {
         const appFilters: any = {};
         Object.entries(query.filters).forEach(([field, value]) => {
           if (value !== undefined && value !== null && value !== '') {
-            // Handle cohortId and cohortmemberstatus as nested application filters
-            if (field === 'cohortId' || field === 'cohortmemberstatus') {
+            // Handle cohortId, cohortmemberstatus, and completionPercentage as nested application filters
+            if (
+              field === 'cohortId' ||
+              field === 'cohortmemberstatus' ||
+              field === 'completionPercentage'
+            ) {
               appFilters[field] = value;
               return;
             }
+
+            // Handle custom fields filtering
+            if (field.startsWith('customFields.')) {
+              const customFieldName = field.replace('customFields.', '');
+
+              searchQuery.bool.filter.push({
+                nested: {
+                  path: 'profile.customFields',
+                  query: {
+                    bool: {
+                      must: [
+                        // Match by fieldId
+                        {
+                          term: {
+                            'profile.customFields.fieldId': customFieldName,
+                          },
+                        },
+                        // Match by value (flexible match)
+                        {
+                          bool: {
+                            should: [
+                              {
+                                term: {
+                                  'profile.customFields.value': String(value),
+                                },
+                              },
+                              {
+                                wildcard: {
+                                  'profile.customFields.value': `*${String(
+                                    value
+                                  ).toLowerCase()}*`,
+                                },
+                              },
+                              {
+                                match: {
+                                  'profile.customFields.value': {
+                                    query: String(value),
+                                    operator: 'or',
+                                    fuzziness: 'AUTO',
+                                  },
+                                },
+                              },
+                            ],
+                            minimum_should_match: 1,
+                          },
+                        },
+                      ],
+                    },
+                  },
+                },
+              });
+              return;
+            }
+
             // For name fields, use wildcard for partial/case-insensitive match
             if (
               [
@@ -481,7 +577,7 @@ export class UserElasticsearchService implements OnModuleInit {
             ) {
               // Special handling for country to be more flexible
               if (field === 'country') {
-                console.log(
+                this.logger.log(
                   `Country filter - original value: "${value}", lowercase: "${String(
                     value
                   ).toLowerCase()}"`
@@ -549,8 +645,12 @@ export class UserElasticsearchService implements OnModuleInit {
             }
           }
         });
-        // If cohortId or cohortmemberstatus filters are present, add nested application filter
-        if (appFilters.cohortId || appFilters.cohortmemberstatus) {
+        // If cohortId, cohortmemberstatus, or completionPercentage filters are present, add nested application filter
+        if (
+          appFilters.cohortId ||
+          appFilters.cohortmemberstatus ||
+          appFilters.completionPercentage
+        ) {
           const appMust: any[] = [];
           if (appFilters.cohortId) {
             appMust.push({
@@ -597,6 +697,19 @@ export class UserElasticsearchService implements OnModuleInit {
               });
             }
           }
+          if (appFilters.completionPercentage !== undefined) {
+            const completionValue = Number(appFilters.completionPercentage);
+            if (!isNaN(completionValue)) {
+              appMust.push({
+                range: {
+                  'applications.completionPercentage': {
+                    gte: completionValue,
+                    lte: completionValue,
+                  },
+                },
+              });
+            }
+          }
           searchQuery.bool.filter.push({
             nested: {
               path: 'applications',
@@ -615,7 +728,7 @@ export class UserElasticsearchService implements OnModuleInit {
       }
       const size = limit ? Math.min(Number(limit), 10000) : 100;
       const from = offset ? Math.max(Number(offset), 0) : 0;
-      logger.debug(`Elasticsearch query: ${JSON.stringify(searchQuery)}`);
+
       const esResult = await this.elasticsearchService.search(
         this.indexName,
         searchQuery,
@@ -628,6 +741,7 @@ export class UserElasticsearchService implements OnModuleInit {
               'userId',
               'profile.*',
               'applications.*',
+              'applications.completionPercentage',
               'courses.*',
               'createdAt',
               'updatedAt',
@@ -670,32 +784,6 @@ export class UserElasticsearchService implements OnModuleInit {
       const message = `Failed to search users in Elasticsearch: ${error.message}`;
       logger.error(message, error.stack);
       throw new Error(message);
-    }
-  }
-
-  /**
-   * Debug method to check what countries are stored in the index
-   */
-  async debugCountries() {
-    try {
-      const result = await this.elasticsearchService.search(
-        this.indexName,
-        {
-          match_all: {},
-        },
-        {
-          size: 1000,
-          _source: ['profile.country'],
-        }
-      );
-
-      const countries = result.hits
-        .map((hit) => hit._source?.profile?.country)
-        .filter(Boolean);
-      return countries;
-    } catch (error) {
-      console.error('Error debugging countries:', error);
-      throw error;
     }
   }
 
@@ -785,7 +873,8 @@ export class UserElasticsearchService implements OnModuleInit {
           Object.entries(pageData).forEach(([fieldId, value]) => {
             if (value !== null && value !== undefined && value !== '') {
               // Use fieldId directly without schema or name
-              fields[fieldId] = value;
+              // Process field value for Elasticsearch - convert arrays to comma-separated strings
+              fields[fieldId] = this.processFieldValueForElasticsearch(value);
               completedCount++;
             } else {
               pageCompleted = false;
@@ -809,8 +898,20 @@ export class UserElasticsearchService implements OnModuleInit {
           },
         };
 
+        // Calculate completion percentage
+        const completionPercentage =
+          totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+        mappedApplication.completionPercentage = completionPercentage;
+
         // Also update formData with the same structure
         mappedApplication.formData = application.formData;
+      } else if (application.completionPercentage !== undefined) {
+        // If completionPercentage is provided directly, use it
+        mappedApplication.completionPercentage =
+          application.completionPercentage;
+      } else {
+        // Default to 0 if no form data and no completion percentage provided
+        mappedApplication.completionPercentage = 0;
       }
 
       // Update existing document with new application
@@ -865,7 +966,10 @@ export class UserElasticsearchService implements OnModuleInit {
         );
       }
     } catch (error) {
-      console.error('Failed to update application in Elasticsearch:', error);
+      this.logger.error(
+        'Failed to update application in Elasticsearch:',
+        error
+      );
       throw error;
     }
   }
@@ -920,7 +1024,7 @@ export class UserElasticsearchService implements OnModuleInit {
       );
       return result;
     } catch (error) {
-      console.error('Error updating course in Elasticsearch:', error);
+      this.logger.error('Error updating course in Elasticsearch:', error);
       throw new Error(
         `Failed to update course in Elasticsearch: ${error.message}`
       );
@@ -976,6 +1080,32 @@ export class UserElasticsearchService implements OnModuleInit {
               ctx._source.applications[i].progress.pages[params.pageId] = params.pageData;
               ctx._source.applications[i].formData[params.pageId] = params.pageData.fields;
               ctx._source.applications[i].lastSavedAt = params.lastSavedAt;
+              
+              // Recalculate completion percentage
+              int totalFields = 0;
+              int completedFields = 0;
+              
+              // Count total and completed fields across all pages
+              for (String pageKey : ctx._source.applications[i].progress.pages.keySet()) {
+                Map page = ctx._source.applications[i].progress.pages[pageKey];
+                if (page != null && page.fields != null) {
+                  for (String fieldKey : page.fields.keySet()) {
+                    totalFields++;
+                    Object fieldValue = page.fields[fieldKey];
+                    if (fieldValue != null && fieldValue.toString().trim().length() > 0) {
+                      completedFields++;
+                    }
+                  }
+                }
+              }
+              
+              // Calculate completion percentage
+              if (totalFields > 0) {
+                ctx._source.applications[i].completionPercentage = Math.round((completedFields * 100.0) / totalFields);
+              } else {
+                ctx._source.applications[i].completionPercentage = 0;
+              }
+              
               found = true;
               break;
             }
@@ -992,6 +1122,29 @@ export class UserElasticsearchService implements OnModuleInit {
             application.progress = progress;
             application.formData = formData;
             application.lastSavedAt = params.lastSavedAt;
+            
+            // Calculate completion percentage for new application
+            int totalFields = 0;
+            int completedFields = 0;
+            
+            // Count fields in the current page
+            if (params.pageData.fields != null) {
+              for (String fieldKey : params.pageData.fields.keySet()) {
+                totalFields++;
+                Object fieldValue = params.pageData.fields[fieldKey];
+                if (fieldValue != null && fieldValue.toString().trim().length() > 0) {
+                  completedFields++;
+                }
+              }
+            }
+            
+            // Calculate completion percentage
+            if (totalFields > 0) {
+              application.completionPercentage = Math.round((completedFields * 100.0) / totalFields);
+            } else {
+              application.completionPercentage = 0;
+            }
+            
             ctx._source.applications.add(application);
           }
         `,
@@ -1012,7 +1165,10 @@ export class UserElasticsearchService implements OnModuleInit {
       );
       return result;
     } catch (error) {
-      console.error('Error updating application page in Elasticsearch:', error);
+      this.logger.error(
+        'Error updating application page in Elasticsearch:',
+        error
+      );
       throw new Error(
         `Failed to update application page in Elasticsearch: ${error.message}`
       );
@@ -1023,5 +1179,20 @@ export class UserElasticsearchService implements OnModuleInit {
     if (isElasticsearchEnabled()) {
       await this.initialize();
     }
+  }
+
+  /**
+   * Helper function to process field values for Elasticsearch storage.
+   * Converts array values to comma-separated strings for multiselect fields.
+   * @param value - The field value to process
+   * @returns Processed value (array becomes comma-separated string, other types unchanged)
+   */
+  private processFieldValueForElasticsearch(value: any): any {
+    // If value is an array, convert to comma-separated string
+    if (Array.isArray(value)) {
+      return value.join(', ');
+    }
+    // Return value as-is for non-array values
+    return value;
   }
 }

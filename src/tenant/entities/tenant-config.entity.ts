@@ -5,7 +5,10 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   Index,
+  ManyToOne,
+  JoinColumn,
 } from 'typeorm';
+import { Tenant } from './tenent.entity';
 
 @Entity('TenantConfigs')
 @Index(['tenantId', 'context'], { unique: true })
@@ -13,8 +16,12 @@ export class TenantConfig {
   @PrimaryGeneratedColumn('uuid')
   tenantConfigId: string;
 
-  @Column({ type: 'text', nullable: false })
+  @Column({ type: 'uuid', nullable: false })
   tenantId: string;
+
+  @ManyToOne(() => Tenant, { nullable: false })
+  @JoinColumn({ name: 'tenantId' })
+  tenant: Tenant;
 
   @Column({ type: 'text', nullable: false })
   context: string;

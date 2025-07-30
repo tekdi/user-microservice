@@ -28,6 +28,7 @@ export const APIID = {
   USER_RESET_PASSWORD_LINK: 'api.user.sendLinkForResetPassword',
   USER_FORGOT_PASSWORD: 'api.user.forgotPassword',
   USER_DELETE: 'api.user.delete',
+  USER_BULK_IMPORT: 'api.user.bulkImport',
 
   // Role Management APIs
   ROLE_GET: 'api.role.get',
@@ -54,6 +55,7 @@ export const APIID = {
   COHORT_MEMBER_SEARCH: 'api.cohortmember.list',
   COHORT_MEMBER_DELETE: 'api.cohortmember.delete',
   COHORT_MEMBER_EVALUATE_SHORTLISTING: 'api.cohortmember.evaluateShortlisting',
+  COHORT_MEMBER_SEND_REJECTION_EMAILS: 'api.cohortmember.sendRejectionEmails',
 
   // Privilege Assignment APIs
   ASSIGNPRIVILEGE_CREATE: 'api.assignprivilege.create',

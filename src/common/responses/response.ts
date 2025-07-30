@@ -57,4 +57,35 @@ export default class APIResponse {
       return e;
     }
   }
+
+  public static successWithTotal<Type>(
+    response: Response,
+    id: string,
+    result: Type,
+    totalCount: number,
+    statusCode: number,
+    successmessage: string
+  ) {
+    try {
+      const params: Params = {
+        resmsgid: v4(),
+        status: 'successful',
+        err: null,
+        errmsg: null,
+        successmessage: successmessage,
+      };
+      const resObj = {
+        id,
+        ver: '1.0',
+        ts: new Date().toISOString(),
+        params,
+        responseCode: statusCode,
+        result,
+        total_count: totalCount,
+      };
+      return response.status(statusCode).json(resObj);
+    } catch (e) {
+      return e;
+    }
+  }
 }
