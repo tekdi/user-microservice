@@ -106,6 +106,11 @@ export const APIID = {
   TENANT_DELETE: 'api.tenant.delete',
   TENANT_SEARCH: 'api.tenant.search',
   TENANT_LIST: 'api.tenant.list',
+  TENANT_CONFIG_LIST: 'api.tenantConfig.list',
+  TENANT_CONFIG_GET: 'api.tenantConfig.get',
+  TENANT_CONFIG_CREATE: 'api.tenantConfig.create',
+  TENANT_CONFIG_UPDATE: 'api.tenantConfig.update',
+  TENANT_CONFIG_DELETE: 'api.tenantConfig.delete',
 
   // OTP and Verification APIs
   SEND_OTP: 'api.send.OTP',
