@@ -289,10 +289,6 @@ export class ShortlistingLogger {
           csvLine +
           "\n"
       );
-
-      console.log(
-        `📧 [EMAIL_FAILURE] Logged email failure for user ${emailFailureData.userId} in cohort ${emailFailureData.cohortId}: ${emailFailureData.failureReason}`
-      );
     } catch (error) {
       console.error("Error logging email failure:", error);
     }
@@ -393,10 +389,6 @@ export class ShortlistingLogger {
           csvLine +
           "\n"
       );
-
-      console.log(
-        `📧 [REJECTION_EMAIL_FAILURE] Logged rejection email failure for user ${emailFailureData.userId} in cohort ${emailFailureData.cohortId}: ${emailFailureData.failureReason}`
-      );
     } catch (error) {
       console.error("Error logging rejection email failure:", error);
     }
@@ -448,6 +440,406 @@ export class ShortlistingLogger {
       );
     } catch (error) {
       console.error("Error logging rejection email success:", error);
+    }
+  }
+
+  /**
+   * Logs LMS enrollment start information
+   * Creates a separate log file with LMS enrollment start details
+   *
+   * @param enrollmentStartData - Object containing LMS enrollment start details
+   */
+  static logLMSEnrollmentStart(enrollmentStartData: {
+    dateTime: string;
+    userId: string;
+    cohortId: string;
+    courseCount?: number;
+  }) {
+    try {
+      const today = new Date().toISOString().split("T")[0];
+      const logFileName = `lms-enrollment-start-${today}.csv`;
+      const logFilePath = path.join(ShortlistingLogger.LOG_DIR, logFileName);
+
+      // Create logs directory if it doesn't exist
+      if (!fs.existsSync(ShortlistingLogger.LOG_DIR)) {
+        fs.mkdirSync(ShortlistingLogger.LOG_DIR, { recursive: true });
+      }
+
+      // Check if file exists to determine if we need to write headers
+      const fileExists = fs.existsSync(logFilePath);
+
+      // Prepare CSV line with proper comma delimiters
+      const csvLine = [
+        ShortlistingLogger.escapeCSV(enrollmentStartData.dateTime),
+        ShortlistingLogger.escapeCSV(enrollmentStartData.userId),
+        ShortlistingLogger.escapeCSV(enrollmentStartData.cohortId),
+        ShortlistingLogger.escapeCSV(enrollmentStartData.courseCount?.toString() || "0")
+      ].join(",");
+
+      // Write to file (append mode)
+      fs.appendFileSync(
+        logFilePath,
+        (fileExists
+          ? ""
+          : "Date and time,userId,cohortId,courseCount\n") +
+          csvLine +
+          "\n"
+      );
+    } catch (error) {
+      console.error("Error logging LMS enrollment start:", error);
+    }
+  }
+
+  /**
+   * Logs LMS enrollment success information
+   * Creates a separate log file with successful LMS enrollment details
+   *
+   * @param enrollmentSuccessData - Object containing LMS enrollment success details
+   */
+  static logLMSEnrollmentSuccess(enrollmentSuccessData: {
+    dateTime: string;
+    userId: string;
+    cohortId: string;
+    courseId: string;
+    enrollmentId?: string;
+  }) {
+    try {
+      const today = new Date().toISOString().split("T")[0];
+      const logFileName = `lms-enrollment-success-${today}.csv`;
+      const logFilePath = path.join(ShortlistingLogger.LOG_DIR, logFileName);
+
+      // Create logs directory if it doesn't exist
+      if (!fs.existsSync(ShortlistingLogger.LOG_DIR)) {
+        fs.mkdirSync(ShortlistingLogger.LOG_DIR, { recursive: true });
+      }
+
+      // Check if file exists to determine if we need to write headers
+      const fileExists = fs.existsSync(logFilePath);
+
+      // Prepare CSV line with proper comma delimiters
+      const csvLine = [
+        ShortlistingLogger.escapeCSV(enrollmentSuccessData.dateTime),
+        ShortlistingLogger.escapeCSV(enrollmentSuccessData.userId),
+        ShortlistingLogger.escapeCSV(enrollmentSuccessData.cohortId),
+        ShortlistingLogger.escapeCSV(enrollmentSuccessData.courseId),
+        ShortlistingLogger.escapeCSV(enrollmentSuccessData.enrollmentId || "")
+      ].join(",");
+
+      // Write to file (append mode)
+      fs.appendFileSync(
+        logFilePath,
+        (fileExists
+          ? ""
+          : "Date and time,userId,cohortId,courseId,enrollmentId\n") +
+          csvLine +
+          "\n"
+      );
+    } catch (error) {
+      console.error("Error logging LMS enrollment success:", error);
+    }
+  }
+
+  /**
+   * Logs LMS enrollment failure information
+   * Creates a separate log file with failed LMS enrollment details
+   *
+   * @param enrollmentFailureData - Object containing LMS enrollment failure details
+   */
+  static logLMSEnrollmentFailure(enrollmentFailureData: {
+    dateTime: string;
+    userId: string;
+    cohortId: string;
+    courseId: string;
+    failureReason: string;
+    errorCode?: string;
+  }) {
+    try {
+      const today = new Date().toISOString().split("T")[0];
+      const logFileName = `lms-enrollment-failed-${today}.csv`;
+      const logFilePath = path.join(ShortlistingLogger.LOG_DIR, logFileName);
+
+      // Create logs directory if it doesn't exist
+      if (!fs.existsSync(ShortlistingLogger.LOG_DIR)) {
+        fs.mkdirSync(ShortlistingLogger.LOG_DIR, { recursive: true });
+      }
+
+      // Check if file exists to determine if we need to write headers
+      const fileExists = fs.existsSync(logFilePath);
+
+      // Prepare CSV line with proper comma delimiters
+      const csvLine = [
+        ShortlistingLogger.escapeCSV(enrollmentFailureData.dateTime),
+        ShortlistingLogger.escapeCSV(enrollmentFailureData.userId),
+        ShortlistingLogger.escapeCSV(enrollmentFailureData.cohortId),
+        ShortlistingLogger.escapeCSV(enrollmentFailureData.courseId),
+        ShortlistingLogger.escapeCSV(enrollmentFailureData.failureReason),
+        ShortlistingLogger.escapeCSV(enrollmentFailureData.errorCode || "")
+      ].join(",");
+
+      // Write to file (append mode)
+      fs.appendFileSync(
+        logFilePath,
+        (fileExists
+          ? ""
+          : "Date and time,userId,cohortId,courseId,failureReason,errorCode\n") +
+          csvLine +
+          "\n"
+      );
+    } catch (error) {
+      console.error("Error logging LMS enrollment failure:", error);
+    }
+  }
+
+  /**
+   * Logs LMS enrollment completion summary
+   * Creates a separate log file with LMS enrollment completion details
+   *
+   * @param enrollmentCompletionData - Object containing LMS enrollment completion details
+   */
+  static logLMSEnrollmentCompletion(enrollmentCompletionData: {
+    dateTime: string;
+    userId: string;
+    cohortId: string;
+    totalCourses: number;
+    successfulEnrollments: number;
+    failedEnrollments: number;
+    processingTime?: number;
+  }) {
+    try {
+      const today = new Date().toISOString().split("T")[0];
+      const logFileName = `lms-enrollment-completion-${today}.csv`;
+      const logFilePath = path.join(ShortlistingLogger.LOG_DIR, logFileName);
+
+      // Create logs directory if it doesn't exist
+      if (!fs.existsSync(ShortlistingLogger.LOG_DIR)) {
+        fs.mkdirSync(ShortlistingLogger.LOG_DIR, { recursive: true });
+      }
+
+      // Check if file exists to determine if we need to write headers
+      const fileExists = fs.existsSync(logFilePath);
+
+      // Prepare CSV line with proper comma delimiters
+      const csvLine = [
+        ShortlistingLogger.escapeCSV(enrollmentCompletionData.dateTime),
+        ShortlistingLogger.escapeCSV(enrollmentCompletionData.userId),
+        ShortlistingLogger.escapeCSV(enrollmentCompletionData.cohortId),
+        ShortlistingLogger.escapeCSV(enrollmentCompletionData.totalCourses.toString()),
+        ShortlistingLogger.escapeCSV(enrollmentCompletionData.successfulEnrollments.toString()),
+        ShortlistingLogger.escapeCSV(enrollmentCompletionData.failedEnrollments.toString()),
+        ShortlistingLogger.escapeCSV(enrollmentCompletionData.processingTime?.toString() || "0")
+      ].join(",");
+
+      // Write to file (append mode)
+      fs.appendFileSync(
+        logFilePath,
+        (fileExists
+          ? ""
+          : "Date and time,userId,cohortId,totalCourses,successfulEnrollments,failedEnrollments,processingTime(ms)\n") +
+          csvLine +
+          "\n"
+      );
+    } catch (error) {
+      console.error("Error logging LMS enrollment completion:", error);
+    }
+  }
+
+  /**
+   * Logs LMS de-enrollment start
+   * Creates a separate log file with LMS de-enrollment start details
+   *
+   * @param deenrollmentStartData - Object containing LMS de-enrollment start details
+   */
+  static logLMSDeenrollmentStart(deenrollmentStartData: {
+    dateTime: string;
+    userId: string;
+    cohortId: string;
+    courseCount?: number;
+  }) {
+    try {
+      const today = new Date().toISOString().split("T")[0];
+      const logFileName = `lms-deenrollment-start-${today}.csv`;
+      const logFilePath = path.join(ShortlistingLogger.LOG_DIR, logFileName);
+
+      // Create logs directory if it doesn't exist
+      if (!fs.existsSync(ShortlistingLogger.LOG_DIR)) {
+        fs.mkdirSync(ShortlistingLogger.LOG_DIR, { recursive: true });
+      }
+
+      // Check if file exists to determine if we need to write headers
+      const fileExists = fs.existsSync(logFilePath);
+
+      // Prepare CSV line with proper comma delimiters
+      const csvLine = [
+        ShortlistingLogger.escapeCSV(deenrollmentStartData.dateTime),
+        ShortlistingLogger.escapeCSV(deenrollmentStartData.userId),
+        ShortlistingLogger.escapeCSV(deenrollmentStartData.cohortId),
+        ShortlistingLogger.escapeCSV(deenrollmentStartData.courseCount?.toString() || "0")
+      ].join(",");
+
+      // Write to file (append mode)
+      fs.appendFileSync(
+        logFilePath,
+        (fileExists
+          ? ""
+          : "Date and time,userId,cohortId,courseCount\n") +
+          csvLine +
+          "\n"
+      );
+    } catch (error) {
+      console.error("Error logging LMS de-enrollment start:", error);
+    }
+  }
+
+  /**
+   * Logs LMS de-enrollment success
+   * Creates a separate log file with LMS de-enrollment success details
+   *
+   * @param deenrollmentSuccessData - Object containing LMS de-enrollment success details
+   */
+  static logLMSDeenrollmentSuccess(deenrollmentSuccessData: {
+    dateTime: string;
+    userId: string;
+    cohortId: string;
+    courseId: string;
+    deenrollmentId?: string;
+  }) {
+    try {
+      const today = new Date().toISOString().split("T")[0];
+      const logFileName = `lms-deenrollment-success-${today}.csv`;
+      const logFilePath = path.join(ShortlistingLogger.LOG_DIR, logFileName);
+
+      // Create logs directory if it doesn't exist
+      if (!fs.existsSync(ShortlistingLogger.LOG_DIR)) {
+        fs.mkdirSync(ShortlistingLogger.LOG_DIR, { recursive: true });
+      }
+
+      // Check if file exists to determine if we need to write headers
+      const fileExists = fs.existsSync(logFilePath);
+
+      // Prepare CSV line with proper comma delimiters
+      const csvLine = [
+        ShortlistingLogger.escapeCSV(deenrollmentSuccessData.dateTime),
+        ShortlistingLogger.escapeCSV(deenrollmentSuccessData.userId),
+        ShortlistingLogger.escapeCSV(deenrollmentSuccessData.cohortId),
+        ShortlistingLogger.escapeCSV(deenrollmentSuccessData.courseId),
+        ShortlistingLogger.escapeCSV(deenrollmentSuccessData.deenrollmentId || "")
+      ].join(",");
+
+      // Write to file (append mode)
+      fs.appendFileSync(
+        logFilePath,
+        (fileExists
+          ? ""
+          : "Date and time,userId,cohortId,courseId,deenrollmentId\n") +
+          csvLine +
+          "\n"
+      );
+    } catch (error) {
+      console.error("Error logging LMS de-enrollment success:", error);
+    }
+  }
+
+  /**
+   * Logs LMS de-enrollment failure
+   * Creates a separate log file with LMS de-enrollment failure details
+   *
+   * @param deenrollmentFailureData - Object containing LMS de-enrollment failure details
+   */
+  static logLMSDeenrollmentFailure(deenrollmentFailureData: {
+    dateTime: string;
+    userId: string;
+    cohortId: string;
+    courseId: string;
+    failureReason: string;
+    errorCode?: string;
+  }) {
+    try {
+      const today = new Date().toISOString().split("T")[0];
+      const logFileName = `lms-deenrollment-failed-${today}.csv`;
+      const logFilePath = path.join(ShortlistingLogger.LOG_DIR, logFileName);
+
+      // Create logs directory if it doesn't exist
+      if (!fs.existsSync(ShortlistingLogger.LOG_DIR)) {
+        fs.mkdirSync(ShortlistingLogger.LOG_DIR, { recursive: true });
+      }
+
+      // Check if file exists to determine if we need to write headers
+      const fileExists = fs.existsSync(logFilePath);
+
+      // Prepare CSV line with proper comma delimiters
+      const csvLine = [
+        ShortlistingLogger.escapeCSV(deenrollmentFailureData.dateTime),
+        ShortlistingLogger.escapeCSV(deenrollmentFailureData.userId),
+        ShortlistingLogger.escapeCSV(deenrollmentFailureData.cohortId),
+        ShortlistingLogger.escapeCSV(deenrollmentFailureData.courseId),
+        ShortlistingLogger.escapeCSV(deenrollmentFailureData.failureReason),
+        ShortlistingLogger.escapeCSV(deenrollmentFailureData.errorCode || "")
+      ].join(",");
+
+      // Write to file (append mode)
+      fs.appendFileSync(
+        logFilePath,
+        (fileExists
+          ? ""
+          : "Date and time,userId,cohortId,courseId,failureReason,errorCode\n") +
+          csvLine +
+          "\n"
+      );
+    } catch (error) {
+      console.error("Error logging LMS de-enrollment failure:", error);
+    }
+  }
+
+  /**
+   * Logs LMS de-enrollment completion summary
+   * Creates a separate log file with LMS de-enrollment completion details
+   *
+   * @param deenrollmentCompletionData - Object containing LMS de-enrollment completion details
+   */
+  static logLMSDeenrollmentCompletion(deenrollmentCompletionData: {
+    dateTime: string;
+    userId: string;
+    cohortId: string;
+    totalCourses: number;
+    successfulDeenrollments: number;
+    failedDeenrollments: number;
+    processingTime?: number;
+  }) {
+    try {
+      const today = new Date().toISOString().split("T")[0];
+      const logFileName = `lms-deenrollment-completion-${today}.csv`;
+      const logFilePath = path.join(ShortlistingLogger.LOG_DIR, logFileName);
+
+      // Create logs directory if it doesn't exist
+      if (!fs.existsSync(ShortlistingLogger.LOG_DIR)) {
+        fs.mkdirSync(ShortlistingLogger.LOG_DIR, { recursive: true });
+      }
+
+      // Check if file exists to determine if we need to write headers
+      const fileExists = fs.existsSync(logFilePath);
+
+      // Prepare CSV line with proper comma delimiters
+      const csvLine = [
+        ShortlistingLogger.escapeCSV(deenrollmentCompletionData.dateTime),
+        ShortlistingLogger.escapeCSV(deenrollmentCompletionData.userId),
+        ShortlistingLogger.escapeCSV(deenrollmentCompletionData.cohortId),
+        ShortlistingLogger.escapeCSV(deenrollmentCompletionData.totalCourses.toString()),
+        ShortlistingLogger.escapeCSV(deenrollmentCompletionData.successfulDeenrollments.toString()),
+        ShortlistingLogger.escapeCSV(deenrollmentCompletionData.failedDeenrollments.toString()),
+        ShortlistingLogger.escapeCSV(deenrollmentCompletionData.processingTime?.toString() || "0")
+      ].join(",");
+
+      // Write to file (append mode)
+      fs.appendFileSync(
+        logFilePath,
+        (fileExists
+          ? ""
+          : "Date and time,userId,cohortId,totalCourses,successfulDeenrollments,failedDeenrollments,processingTime(ms)\n") +
+          csvLine +
+          "\n"
+      );
+    } catch (error) {
+      console.error("Error logging LMS de-enrollment completion:", error);
     }
   }
 }
