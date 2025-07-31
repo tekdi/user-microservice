@@ -289,10 +289,6 @@ export class ShortlistingLogger {
           csvLine +
           "\n"
       );
-
-      console.log(
-        `[EMAIL_FAILURE] Logged email failure for user ${emailFailureData.userId} in cohort ${emailFailureData.cohortId}: ${emailFailureData.failureReason}`
-      );
     } catch (error) {
       console.error("Error logging email failure:", error);
     }
@@ -393,10 +389,6 @@ export class ShortlistingLogger {
           csvLine +
           "\n"
       );
-
-      console.log(
-        `[REJECTION_EMAIL_FAILURE] Logged rejection email failure for user ${emailFailureData.userId} in cohort ${emailFailureData.cohortId}: ${emailFailureData.failureReason}`
-      );
     } catch (error) {
       console.error("Error logging rejection email failure:", error);
     }
@@ -493,10 +485,6 @@ export class ShortlistingLogger {
           csvLine +
           "\n"
       );
-
-      console.log(
-        `[LMS_ENROLLMENT_START] Started LMS enrollment for user ${enrollmentStartData.userId} in cohort ${enrollmentStartData.cohortId} with ${enrollmentStartData.courseCount || 0} courses`
-      );
     } catch (error) {
       console.error("Error logging LMS enrollment start:", error);
     }
@@ -545,10 +533,6 @@ export class ShortlistingLogger {
           : "Date and time,userId,cohortId,courseId,enrollmentId\n") +
           csvLine +
           "\n"
-      );
-
-      console.log(
-        `[LMS_ENROLLMENT_SUCCESS] Successfully enrolled user ${enrollmentSuccessData.userId} to course ${enrollmentSuccessData.courseId} in cohort ${enrollmentSuccessData.cohortId}`
       );
     } catch (error) {
       console.error("Error logging LMS enrollment success:", error);
@@ -600,10 +584,6 @@ export class ShortlistingLogger {
           : "Date and time,userId,cohortId,courseId,failureReason,errorCode\n") +
           csvLine +
           "\n"
-      );
-
-      console.log(
-        `[LMS_ENROLLMENT_FAILURE] Failed to enroll user ${enrollmentFailureData.userId} to course ${enrollmentFailureData.courseId} in cohort ${enrollmentFailureData.cohortId}: ${enrollmentFailureData.failureReason}`
       );
     } catch (error) {
       console.error("Error logging LMS enrollment failure:", error);
@@ -658,10 +638,6 @@ export class ShortlistingLogger {
           csvLine +
           "\n"
       );
-
-      console.log(
-        `[LMS_ENROLLMENT_COMPLETION] Completed LMS enrollment for user ${enrollmentCompletionData.userId} in cohort ${enrollmentCompletionData.cohortId}. Success: ${enrollmentCompletionData.successfulEnrollments}/${enrollmentCompletionData.totalCourses}, Failed: ${enrollmentCompletionData.failedEnrollments}`
-      );
     } catch (error) {
       console.error("Error logging LMS enrollment completion:", error);
     }
@@ -708,10 +684,6 @@ export class ShortlistingLogger {
           : "Date and time,userId,cohortId,courseCount\n") +
           csvLine +
           "\n"
-      );
-
-      console.log(
-        `[LMS_DEENROLLMENT_START] Starting LMS de-enrollment for user ${deenrollmentStartData.userId} in cohort ${deenrollmentStartData.cohortId}`
       );
     } catch (error) {
       console.error("Error logging LMS de-enrollment start:", error);
@@ -761,10 +733,6 @@ export class ShortlistingLogger {
           : "Date and time,userId,cohortId,courseId,deenrollmentId\n") +
           csvLine +
           "\n"
-      );
-
-      console.log(
-        `[LMS_DEENROLLMENT_SUCCESS] Successfully de-enrolled user ${deenrollmentSuccessData.userId} from course ${deenrollmentSuccessData.courseId} in cohort ${deenrollmentSuccessData.cohortId}`
       );
     } catch (error) {
       console.error("Error logging LMS de-enrollment success:", error);
@@ -816,10 +784,6 @@ export class ShortlistingLogger {
           : "Date and time,userId,cohortId,courseId,failureReason,errorCode\n") +
           csvLine +
           "\n"
-      );
-
-      console.log(
-        `[LMS_DEENROLLMENT_FAILURE] Failed to de-enroll user ${deenrollmentFailureData.userId} from course ${deenrollmentFailureData.courseId} in cohort ${deenrollmentFailureData.cohortId}: ${deenrollmentFailureData.failureReason}`
       );
     } catch (error) {
       console.error("Error logging LMS de-enrollment failure:", error);
@@ -873,10 +837,6 @@ export class ShortlistingLogger {
           : "Date and time,userId,cohortId,totalCourses,successfulDeenrollments,failedDeenrollments,processingTime(ms)\n") +
           csvLine +
           "\n"
-      );
-
-      console.log(
-        `[LMS_DEENROLLMENT_COMPLETION] Completed LMS de-enrollment for user ${deenrollmentCompletionData.userId} in cohort ${deenrollmentCompletionData.cohortId}. Success: ${deenrollmentCompletionData.successfulDeenrollments}/${deenrollmentCompletionData.totalCourses}, Failed: ${deenrollmentCompletionData.failedDeenrollments}`
       );
     } catch (error) {
       console.error("Error logging LMS de-enrollment completion:", error);
