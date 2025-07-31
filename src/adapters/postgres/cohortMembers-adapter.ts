@@ -4629,9 +4629,6 @@ export class PostgresCohortMembersService {
       const lmsBaseUrl = process.env.LMS_SERVICE_URL;
       const tenantId = process.env.DEFAULT_TENANT_ID;
       const organisationId = process.env.DEFAULT_ORGANISATION_ID;
-      console.log(`[DEBUG_LMS_DEENROLLMENT] LMS Base URL: ${lmsBaseUrl}`);
-      console.log(`[DEBUG_LMS_DEENROLLMENT] Tenant ID: ${tenantId}`);
-      console.log(`[DEBUG_LMS_DEENROLLMENT] Organisation ID: ${organisationId}`);
 
       if (!lmsBaseUrl || !tenantId || !organisationId) {
         throw new Error('LMS service configuration missing');
@@ -4654,7 +4651,6 @@ export class PostgresCohortMembersService {
         url.searchParams.append(key, requestParams[key]);
       });
       const fullUrl = url.toString();
-      console.log(`[DEBUG_LMS_DEENROLLMENT] Full URL: ${fullUrl}`);
 
       const response = await axios.get(requestUrl, {
         params: requestParams,
