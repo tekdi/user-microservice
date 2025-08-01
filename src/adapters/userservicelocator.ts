@@ -17,7 +17,7 @@ export interface IServicelocator {
   //   accessRole?: string,
   //   request?: any,
   // );
-  getUsersDetailsById(userData: UserData, response: any);
+  getUsersDetailsById(userData: UserData, response: any, includeCustomFields?: boolean);
   updateUser(userDto?: UserUpdateDTO, response?: Response): Promise<void>;
   createUser(
     request: any,

@@ -393,7 +393,10 @@ export class PostgresUserService implements IServicelocator {
   ) {
     const apiId = APIID.USER_LIST;
     try {
-      const findData = await this.findAllUserDetails(userSearchDto);
+      // Extract includeCustomFields from the main DTO, default to true if not specified
+      const includeCustomFields = userSearchDto.includeCustomFields !== false;
+
+      const findData = await this.findAllUserDetails(userSearchDto, includeCustomFields);
 
       if (findData === false) {
         LoggerUtil.error(
@@ -489,7 +492,7 @@ export class PostgresUserService implements IServicelocator {
     }, {} as Record<string, string>);
   }
 
-  async findAllUserDetails(userSearchDto) {
+  async findAllUserDetails(userSearchDto, includeCustomFields: boolean = true) {
     let { limit, offset, filters, exclude, sort } = userSearchDto;
     let excludeCohortIdes;
     let excludeUserIdes;
@@ -521,7 +524,7 @@ export class PostgresUserService implements IServicelocator {
           if (key === 'firstName') {
             whereCondition += ` U."${key}" ILIKE '%${value}%'`;
           } else {
-            if (key === 'status' || key === 'email') {
+            if (key === 'status' || key === 'email' || key === 'userId') {
               if (
                 Array.isArray(value) &&
                 value.every((item) => typeof item === 'string')
@@ -626,18 +629,23 @@ export class PostgresUserService implements IServicelocator {
     if (userDetails.length > 0) {
       result.totalCount = parseInt(userDetails[0].total_count, 10);
 
-      // Get user custom field data
+      // Get user custom field data only if includeCustomFields is true
       for (const userData of userDetails) {
-        const customFields = await this.fieldsService.getUserCustomFieldDetails(
-          userData.userId
-        );
-        userData['customFields'] = customFields.map((data) => ({
-          fieldId: data?.fieldId,
-          label: data?.label,
-          value: data?.value,
-          code: data?.code,
-          type: data?.type,
-        }));
+        if (includeCustomFields) {
+          const customFields = await this.fieldsService.getUserCustomFieldDetails(
+            userData.userId
+          );
+          userData['customFields'] = customFields.map((data) => ({
+            fieldId: data?.fieldId,
+            label: data?.label,
+            value: data?.value,
+            code: data?.code,
+            type: data?.type,
+          }));
+        } else {
+          // Set empty array when customFields should be excluded
+          userData['customFields'] = [];
+        }
         result.getUserDetails.push(userData);
       }
     } else {
@@ -646,7 +654,7 @@ export class PostgresUserService implements IServicelocator {
     return result;
   }
 
-  async getUsersDetailsById(userData: UserData, response: any) {
+  async getUsersDetailsById(userData: UserData, response: any, includeCustomFields: boolean = true) {
     const apiId = APIID.USER_GET;
     try {
       if (!isUUID(userData.userId)) {
@@ -713,13 +721,17 @@ export class PostgresUserService implements IServicelocator {
 
       let customFields;
 
-      if (userData && userData?.fieldValue) {
+      // Only fetch custom fields if includeCustomFields is true
+      if (userData && userData?.fieldValue && includeCustomFields) {
         const context = 'USERS';
         const contextType = roleInUpper;
         // customFields = await this.fieldsService.getFieldValuesData(userData.userId, context, contextType, ['All'], true);
         customFields = await this.fieldsService.getUserCustomFieldDetails(
           userData.userId
         );
+      } else {
+        // Set empty array when customFields should be excluded
+        customFields = [];
       }
 
       result.userData = userDetails;
