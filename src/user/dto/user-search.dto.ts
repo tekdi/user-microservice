@@ -195,6 +195,15 @@ export class UserSearchDto {
   @ArrayMaxSize(2, { message: 'Sort array must contain exactly two elements' })
   sort: [string, string];
 
+  @ApiPropertyOptional({
+    type: Boolean,
+    description: 'Include custom fields in response (default: true)',
+    default: true,
+  })
+  @IsOptional()
+  @IsBoolean()
+  includeCustomFields?: boolean;
+
   @ValidateIf((o) => o.sort !== undefined)
   @IsEnum(SortDirection, {
     each: true,
