@@ -524,13 +524,13 @@ export class PostgresUserService implements IServicelocator {
           if (key === 'firstName') {
             whereCondition += ` U."${key}" ILIKE '%${value}%'`;
           } else {
-            if (key === 'status' || key === 'email' || key === 'userId') {
+            if (key === 'status' || key === 'email' || key === 'userId' || key === 'country') {
               if (
                 Array.isArray(value) &&
                 value.every((item) => typeof item === 'string')
               ) {
                 const status = value
-                  .map((item) => `'${item.trim().toLowerCase()}'`)
+                  .map((item) => `'${key === 'country' ? item.trim() : item.trim().toLowerCase()}'`)
                   .join(',');
                 whereCondition += ` U."${key}" IN(${status})`;
               }
