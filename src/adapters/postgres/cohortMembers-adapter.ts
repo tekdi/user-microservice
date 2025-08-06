@@ -1013,16 +1013,16 @@ export class PostgresCohortMembersService {
     completionPercentageRanges: { min: number; max: number }[],
     formId: string
   ): { query: string; parameters: any[]; limit: number; offset: number } {
-    // Build completion percentage filter conditions
+    // Build completion percentage filter conditions with proper casting
     const completionConditions = completionPercentageRanges
       .map(
         (range) =>
-          `(FS."completionPercentage" >= ${range.min} AND FS."completionPercentage" <= ${range.max})`
+          `(CAST(FS."completionPercentage" AS DECIMAL(5,2)) >= ${range.min} AND CAST(FS."completionPercentage" AS DECIMAL(5,2)) <= ${range.max})`
       )
       .join(' OR ');
 
-    // Add completion percentage filter to WHERE clause
-    const completionFilter = `(FS."formId" = '${formId}' AND FS."status" = 'active' AND (${completionConditions}))`;
+    // Add completion percentage filter to WHERE clause (removed status filter to match original behavior)
+    const completionFilter = `(FS."formId" = '${formId}' AND (${completionConditions}))`;
 
     const additionalJoins = `
       INNER JOIN public."formSubmissions" FS
@@ -1121,22 +1121,22 @@ export class PostgresCohortMembersService {
       );
 
       // NEW: Handle LMS enrollment for shortlisted and rejected users
-       if (cohortMembershipToUpdate.status === 'shortlisted') {
+      if (cohortMembershipToUpdate.status === 'shortlisted') {
         // Enroll user to LMS courses when status is updated to shortlisted
         // This ensures users who are shortlisted have access to cohort-specific courses
         try {
-            await this.enrollShortlistedUserToLMSCourses(
-              cohortMembershipToUpdate.userId,
-              cohortMembershipToUpdate.cohortId
-            );
-          } catch (error) {
-            ShortlistingLogger.logShortlistingError(
-              `Failed to enroll user ${cohortMembershipToUpdate.userId} to LMS courses for cohort ${cohortMembershipToUpdate.cohortId}`,
-              error.message,
-              'LMSEnrollment'
-            );
-          }
-       }
+          await this.enrollShortlistedUserToLMSCourses(
+            cohortMembershipToUpdate.userId,
+            cohortMembershipToUpdate.cohortId
+          );
+        } catch (error) {
+          ShortlistingLogger.logShortlistingError(
+            `Failed to enroll user ${cohortMembershipToUpdate.userId} to LMS courses for cohort ${cohortMembershipToUpdate.cohortId}`,
+            error.message,
+            'LMSEnrollment'
+          );
+        }
+      }
 
       if (cohortMembershipToUpdate.status === 'rejected') {
         // De-enroll user from LMS courses when status is updated to rejected
@@ -2842,8 +2842,7 @@ export class PostgresCohortMembersService {
       }
 
       // Get the cohort member details to get userId and cohortId for Elasticsearch update
-      let cohortMemberDetails =
-      await this.cohortMembersRepository.findOne({
+      let cohortMemberDetails = await this.cohortMembersRepository.findOne({
         where: { cohortMembershipId: cohortMembershipId },
         select: ['userId', 'cohortId'],
       });
@@ -4568,12 +4567,12 @@ export class PostgresCohortMembersService {
       ShortlistingLogger.logLMSEnrollmentStart({
         dateTime: new Date().toISOString(),
         userId: userId,
-        cohortId: cohortId
+        cohortId: cohortId,
       });
 
       // Step 1: Fetch courses for the cohort
       const courses = await this.fetchLMSCoursesForCohort(cohortId);
-      
+
       if (!courses || courses.length === 0) {
         ShortlistingLogger.logShortlisting(
           `No courses found for cohort ${cohortId}. Skipping LMS enrollment for user ${userId}`,
@@ -4586,16 +4585,24 @@ export class PostgresCohortMembersService {
         dateTime: new Date().toISOString(),
         userId: userId,
         cohortId: cohortId,
-        courseCount: courses.length
+        courseCount: courses.length,
       });
 
       // Step 2: Enroll user to all courses
-      const enrollmentResults = await this.enrollUserToCourses(userId, courses, cohortId);
+      const enrollmentResults = await this.enrollUserToCourses(
+        userId,
+        courses,
+        cohortId
+      );
 
       // Log enrollment completion
       const processingTime = Date.now() - startTime;
-      const successCount = enrollmentResults.filter(r => r.status === 'success').length;
-      const failureCount = enrollmentResults.filter(r => r.status === 'failed').length;
+      const successCount = enrollmentResults.filter(
+        (r) => r.status === 'success'
+      ).length;
+      const failureCount = enrollmentResults.filter(
+        (r) => r.status === 'failed'
+      ).length;
 
       ShortlistingLogger.logLMSEnrollmentCompletion({
         dateTime: new Date().toISOString(),
@@ -4604,9 +4611,8 @@ export class PostgresCohortMembersService {
         totalCourses: courses.length,
         successfulEnrollments: successCount,
         failedEnrollments: failureCount,
-        processingTime: processingTime
+        processingTime: processingTime,
       });
-
     } catch (error) {
       ShortlistingLogger.logShortlistingError(
         `Failed to enroll user ${userId} to LMS courses for cohort ${cohortId}`,
@@ -4637,27 +4643,25 @@ export class PostgresCohortMembersService {
       const requestUrl = `${lmsBaseUrl}/lms-service/v1/courses/search`;
       const requestParams = {
         status: 'published',
-        cohortId: cohortId
+        cohortId: cohortId,
       };
       const requestHeaders = {
-        'tenantid': tenantId,
-        'organisationid': organisationId
+        tenantid: tenantId,
+        organisationid: organisationId,
       };
-
 
       // Build the full URL with query parameters for logging
       const url = new URL(requestUrl);
-      Object.keys(requestParams).forEach(key => {
+      Object.keys(requestParams).forEach((key) => {
         url.searchParams.append(key, requestParams[key]);
       });
       const fullUrl = url.toString();
 
       const response = await axios.get(requestUrl, {
         params: requestParams,
-        headers: requestHeaders
+        headers: requestHeaders,
       });
 
-      
       // FIXED: Access the correct path for courses data
       const courses = response.data?.result?.courses || [];
       return courses;
@@ -4680,7 +4684,11 @@ export class PostgresCohortMembersService {
    * @param courses - Array of courses to enroll the user in
    * @returns Promise with enrollment results for each course
    */
-  private async enrollUserToCourses(userId: string, courses: any[], cohortId: string) {
+  private async enrollUserToCourses(
+    userId: string,
+    courses: any[],
+    cohortId: string
+  ) {
     const enrollmentResults = [];
 
     // Use for...of loop for proper async handling
@@ -4688,18 +4696,22 @@ export class PostgresCohortMembersService {
       const course = courses[i];
 
       try {
-        const enrollmentResult = await this.enrollUserToSingleCourse(userId, course.courseId, cohortId);
+        const enrollmentResult = await this.enrollUserToSingleCourse(
+          userId,
+          course.courseId,
+          cohortId
+        );
 
         enrollmentResults.push({
           courseId: course.courseId,
           status: 'success',
-          result: enrollmentResult
+          result: enrollmentResult,
         });
       } catch (error) {
         enrollmentResults.push({
           courseId: course.courseId,
           status: 'failed',
-          error: error.message
+          error: error.message,
         });
       }
     }
@@ -4715,7 +4727,11 @@ export class PostgresCohortMembersService {
    * @param courseId - The course ID to enroll in
    * @returns Promise with enrollment result
    */
-  private async enrollUserToSingleCourse(userId: string, courseId: string, cohortId: string) {
+  private async enrollUserToSingleCourse(
+    userId: string,
+    courseId: string,
+    cohortId: string
+  ) {
     const lmsBaseUrl = process.env.LMS_SERVICE_URL;
     const tenantId = process.env.DEFAULT_TENANT_ID;
     const organisationId = process.env.DEFAULT_ORGANISATION_ID;
@@ -4725,21 +4741,19 @@ export class PostgresCohortMembersService {
       const requestBody = {
         courseId: courseId,
         learnerId: userId,
-        status: 'published'
+        status: 'published',
       };
       const requestHeaders = {
-        'tenantid': tenantId,
-        'organisationid': organisationId,
-        'Content-Type': 'application/json'
+        tenantid: tenantId,
+        organisationid: organisationId,
+        'Content-Type': 'application/json',
       };
-
-
 
       const response = await axios.post(requestUrl, requestBody, {
         headers: requestHeaders,
         params: {
-          userId: userId // Add userId as query parameter as required by LMS service
-        }
+          userId: userId, // Add userId as query parameter as required by LMS service
+        },
       });
 
       // Log successful enrollment
@@ -4748,7 +4762,7 @@ export class PostgresCohortMembersService {
         userId: userId,
         cohortId: cohortId,
         courseId: courseId,
-        enrollmentId: response.data?.enrollmentId || response.data?.id
+        enrollmentId: response.data?.enrollmentId || response.data?.id,
       });
 
       return response.data;
@@ -4760,7 +4774,7 @@ export class PostgresCohortMembersService {
         cohortId: cohortId,
         courseId: courseId,
         failureReason: error.message,
-        errorCode: error.response?.status?.toString() || 'UNKNOWN'
+        errorCode: error.response?.status?.toString() || 'UNKNOWN',
       });
 
       throw error;
@@ -4786,7 +4800,7 @@ export class PostgresCohortMembersService {
       ShortlistingLogger.logLMSDeenrollmentStart({
         dateTime: new Date().toISOString(),
         userId: userId,
-        cohortId: cohortId
+        cohortId: cohortId,
       });
 
       // Step 1: Fetch courses for the cohort
@@ -4801,14 +4815,22 @@ export class PostgresCohortMembersService {
       }
 
       // Step 2: De-enroll user from each course
-      const deenrollmentResults = await this.deenrollUserFromCourses(userId, courses, cohortId);
+      const deenrollmentResults = await this.deenrollUserFromCourses(
+        userId,
+        courses,
+        cohortId
+      );
 
       // Step 3: Log completion
       const endTime = Date.now();
       const processingTime = endTime - startTime;
 
-      const successCount = deenrollmentResults.filter(result => result.status === 'success').length;
-      const failureCount = deenrollmentResults.filter(result => result.status === 'error').length;
+      const successCount = deenrollmentResults.filter(
+        (result) => result.status === 'success'
+      ).length;
+      const failureCount = deenrollmentResults.filter(
+        (result) => result.status === 'error'
+      ).length;
 
       ShortlistingLogger.logLMSDeenrollmentCompletion({
         dateTime: new Date().toISOString(),
@@ -4817,9 +4839,8 @@ export class PostgresCohortMembersService {
         totalCourses: courses.length,
         successfulDeenrollments: successCount,
         failedDeenrollments: failureCount,
-        processingTime: processingTime
+        processingTime: processingTime,
       });
-
     } catch (error) {
       throw error;
     }
@@ -4834,7 +4855,11 @@ export class PostgresCohortMembersService {
    * @param cohortId - The cohort ID for logging purposes
    * @returns Promise with de-enrollment results for each course
    */
-  private async deenrollUserFromCourses(userId: string, courses: any[], cohortId: string) {
+  private async deenrollUserFromCourses(
+    userId: string,
+    courses: any[],
+    cohortId: string
+  ) {
     const deenrollmentResults = [];
 
     // Use for...of loop for proper async handling
@@ -4842,19 +4867,22 @@ export class PostgresCohortMembersService {
       const course = courses[i];
 
       try {
-        const deenrollmentResult = await this.deenrollUserFromSingleCourse(userId, course.courseId, cohortId);
+        const deenrollmentResult = await this.deenrollUserFromSingleCourse(
+          userId,
+          course.courseId,
+          cohortId
+        );
 
         deenrollmentResults.push({
           courseId: course.courseId,
           status: 'success',
-          result: deenrollmentResult
+          result: deenrollmentResult,
         });
-
       } catch (error) {
         deenrollmentResults.push({
           courseId: course.courseId,
           status: 'error',
-          error: error.message
+          error: error.message,
         });
 
         // Log the error but continue with other courses
@@ -4878,7 +4906,11 @@ export class PostgresCohortMembersService {
    * @param cohortId - The cohort ID for logging purposes
    * @returns Promise with de-enrollment result
    */
-  private async deenrollUserFromSingleCourse(userId: string, courseId: string, cohortId: string) {
+  private async deenrollUserFromSingleCourse(
+    userId: string,
+    courseId: string,
+    cohortId: string
+  ) {
     const lmsBaseUrl = process.env.LMS_SERVICE_URL;
     const tenantId = process.env.DEFAULT_TENANT_ID;
     const organisationId = process.env.DEFAULT_ORGANISATION_ID;
@@ -4887,25 +4919,22 @@ export class PostgresCohortMembersService {
       const requestUrl = `${lmsBaseUrl}/lms-service/v1/enrollments`;
       const requestBody = {
         courseId: courseId,
-        userId: userId
+        userId: userId,
       };
       const requestHeaders = {
-        'tenantid': tenantId,
-        'organisationid': organisationId,
-        'Content-Type': 'application/json'
+        tenantid: tenantId,
+        organisationid: organisationId,
+        'Content-Type': 'application/json',
       };
 
       const response = await axios.delete(requestUrl, {
         headers: requestHeaders,
-        data: requestBody
+        data: requestBody,
       });
 
       return response.data;
-
     } catch (error) {
       throw error;
     }
   }
-
-
 }
