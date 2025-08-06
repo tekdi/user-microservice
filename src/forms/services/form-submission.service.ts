@@ -361,10 +361,10 @@ export class FormSubmissionService {
       Array.isArray(completionPercentage) &&
       completionPercentage.length > 0
     ) {
-      // Multiple ranges - use OR conditions (union)
+      // Multiple ranges - use OR conditions (union) with proper casting
       const rangeConditions = completionPercentage.map((range, index) => {
         const [min, max] = range.split('-').map(Number);
-        return `(fs.completionPercentage >= :min${index} AND fs.completionPercentage <= :max${index})`;
+        return `(CAST(fs.completionPercentage AS DECIMAL(5,2)) >= :min${index} AND CAST(fs.completionPercentage AS DECIMAL(5,2)) <= :max${index})`;
       });
 
       const parameters = {};
