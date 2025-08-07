@@ -65,61 +65,96 @@ export class UploadS3Service {
 
   async getPresignedUrl(filename: string, fileType: string, response, foldername?: string): Promise<string> {
     try {
-      const allowedFileTypes = [
-        '.jpg', '.jpeg', '.png', '.webp', // Images
-        '.pdf', '.doc', '.docx',          // Documents
-        '.mp4', '.mov',                   // Videos
-        '.txt', '.csv'                    // Text files
-      ];
-  
-      const mimeTypeMap = {
-        '.jpg': 'image/jpeg',
-        '.jpeg': 'image/jpeg',
-        '.png': 'image/png',
-        '.webp': 'image/webp',
-        '.pdf': 'application/pdf',
-        '.doc': 'application/msword',
-        '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        '.mp4': 'video/mp4',
-        '.mov': 'video/quicktime',
-        '.txt': 'text/plain',
-        '.csv': 'text/csv',
+      // Dynamic MIME type detection based on file extension
+      const getMimeType = (extension: string): string => {
+        const mimeTypes: { [key: string]: string } = {
+          // Images
+          '.jpg': 'image/jpeg',
+          '.jpeg': 'image/jpeg',
+          '.png': 'image/png',
+          '.gif': 'image/gif',
+          '.bmp': 'image/bmp',
+          '.webp': 'image/webp',
+          '.svg': 'image/svg+xml',
+          '.tiff': 'image/tiff',
+          '.ico': 'image/x-icon',
+          
+          // Documents
+          '.pdf': 'application/pdf',
+          '.doc': 'application/msword',
+          '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          '.xls': 'application/vnd.ms-excel',
+          '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          '.ppt': 'application/vnd.ms-powerpoint',
+          '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+          '.rtf': 'application/rtf',
+          
+          // Text files
+          '.txt': 'text/plain',
+          '.csv': 'text/csv',
+          '.xml': 'text/xml',
+          '.html': 'text/html',
+          '.css': 'text/css',
+          '.js': 'text/javascript',
+          '.json': 'application/json',
+          
+          // Videos
+          '.mp4': 'video/mp4',
+          '.avi': 'video/x-msvideo',
+          '.mov': 'video/quicktime',
+          '.wmv': 'video/x-ms-wmv',
+          '.flv': 'video/x-flv',
+          '.webm': 'video/webm',
+          '.mkv': 'video/x-matroska',
+          
+          // Audio
+          '.mp3': 'audio/mpeg',
+          '.wav': 'audio/wav',
+          '.ogg': 'audio/ogg',
+          '.m4a': 'audio/mp4',
+          '.flac': 'audio/flac',
+          
+          // Archives
+          '.zip': 'application/zip',
+          '.rar': 'application/vnd.rar',
+          '.7z': 'application/x-7z-compressed',
+          '.tar': 'application/x-tar',
+          '.gz': 'application/gzip',
+          
+          // Other common formats
+          '.apk': 'application/vnd.android.package-archive',
+          '.exe': 'application/octet-stream',
+          '.dmg': 'application/octet-stream',
+          '.iso': 'application/octet-stream',
+        };
+        
+        return mimeTypes[extension.toLowerCase()] || 'application/octet-stream';
       };
 
-      // Validate file extension
-      if (!allowedFileTypes.includes(fileType)) {
-        return APIResponse.error(
-          response,
-          APIID.SIGNED_URL,
-          API_RESPONSES.BAD_REQUEST,
-          API_RESPONSES.INVALID_FILE_TYPE,
-          HttpStatus.BAD_REQUEST,
-        );
-      }
-
-      const contentType = mimeTypeMap[fileType];
+      // Get MIME type dynamically
+      const contentType = getMimeType(fileType);
 
       // Construct unique file key
-      // const newKey = `${filename}-${uuidv4()}${fileType}`;
       const extension = fileType;
       const folderPath = foldername ? `${foldername}/` : '';
       const newKey = `${folderPath}${filename}-${uuidv4()}${extension}`;
 
-
+      // Create presigned POST with minimal restrictions
       const result = await createPresignedPost(this.s3Client, {
         Bucket: this.bucketName,
         Key: newKey,
         Conditions: [
-          ['starts-with', '$Content-Type', 'image/'],
-          ["eq", "$Content-Type", contentType], // ✅ this enforces exact match
-          ["eq", "$key", newKey], // ✅ makes sure they don't change key
-          ["content-length-range", 0, 5 * 1024 * 1024], // max 5MB
-        ]as any[],
+          // Only enforce the key to prevent tampering
+          ["eq", "$key", newKey],
+          // Allow any content type
+          ["starts-with", "$Content-Type", ""],
+          // No file size limit (remove content-length-range)
+        ] as any[],
         Fields: {
           key: newKey,
           "Content-Type": contentType
         },
-        Expires: 300 // 5 minutes
+        Expires: 24 * 60 * 60 // 24 hours instead of 5 minutes
       });
 
       return APIResponse.success(

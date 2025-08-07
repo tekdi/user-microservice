@@ -1,4 +1,4 @@
-import { CacheModule, Module } from "@nestjs/common";
+import { Module } from "@nestjs/common";
 import { FieldsController } from "./fields.controller";
 import { HttpModule } from "@nestjs/axios";
 import { FieldsAdapter } from "./fieldsadapter";
