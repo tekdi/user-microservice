@@ -2741,45 +2741,32 @@ export class PostgresUserService implements IServicelocator {
             }
           } else if (whatsapp) {
             // Search by WhatsApp number using custom fields
-            try {
-              // First try: Search by custom fields
-              let userIds = null;
-              try {
-                userIds = await this.fieldsService.filterUserUsingCustomFields(
-                  "USERS",
-                  {
-                    whatsapp: whatsapp,
-                  }
-                );
-              } catch (customFieldError) {
-                // Custom field search failed, continue with fallback
+            // First try: Search by custom fields
+            let userIds = await this.fieldsService.filterUserUsingCustomFields(
+              "USERS",
+              {
+                whatsapp: whatsapp,
               }
+            );
 
-              if (userIds && userIds.length > 0) {
-                const user = await this.usersRepository.findOne({
-                  where: { userId: userIds[0] },
-                });
-                if (user) {
-                  userData = user;
-                }
-              } else {
-                // Fallback: Try to find user by mobile number (since WhatsApp numbers are often the same as mobile)
-                try {
-                  const fallbackUsers = await this.usersRepository.find({
-                    where: {
-                      mobile: parseInt(this.formatMobileNumber(whatsapp)),
-                    },
-                  });
-
-                  if (fallbackUsers.length > 0) {
-                    userData = fallbackUsers[0];
-                  }
-                } catch (fallbackError) {
-                  // Fallback search failed, continue without user data
-                }
+            if (userIds && userIds.length > 0) {
+              const user = await this.usersRepository.findOne({
+                where: { userId: userIds[0] },
+              });
+              if (user) {
+                userData = user;
               }
-            } catch (error) {
-              // WhatsApp user search failed, continue without user data
+            } else {
+              // Fallback: Try to find user by mobile number (since WhatsApp numbers are often the same as mobile)
+              const fallbackUsers = await this.usersRepository.find({
+                where: {
+                  mobile: parseInt(this.formatMobileNumber(whatsapp)),
+                },
+              });
+
+              if (fallbackUsers.length > 0) {
+                userData = fallbackUsers[0];
+              }
             }
           }
 
@@ -3309,9 +3296,6 @@ export class PostgresUserService implements IServicelocator {
   //send WhatsApp Notification
   async whatsappNotification(whatsapp: string, otp: string, reason: string) {
     try {
-      // Format mobile number with country code for gupshupSource
-      const formattedWhatsapp = this.formatMobileNumber(whatsapp);
-
       // Get environment variables
       const templateId = this.configService.get<string>("WHATSAPP_TEMPLATE_ID");
       const apiKey = this.configService.get<string>("WHATSAPP_GUPSHUP_API_KEY");
@@ -3369,7 +3353,7 @@ export class PostgresUserService implements IServicelocator {
       }
 
       // Check if the response indicates success
-      if (!mailSend || !mailSend.result || !mailSend.result.whatsapp) {
+      if (!mailSend?.result?.whatsapp) {
         throw new Error("Invalid response from notification service");
       }
 
