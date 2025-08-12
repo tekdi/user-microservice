@@ -23,6 +23,48 @@ export class ElasticsearchController {
     return this.userElasticsearchService.getUser(userId);
   }
 
+  @Get(':userId/profile-applications')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Fetch user profile and applications data',
+    description: 'Fetches complete user profile and applications data from database without syncing to Elasticsearch. Used by external services like LMS.'
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'User profile and applications fetched successfully'
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'User not found'
+  })
+  async fetchUserProfileAndApplications(@Param('userId') userId: string) {
+    try {
+      // Use comprehensive sync to fetch all data but don't save to Elasticsearch
+      const userData = await this.dataFetcherService.comprehensiveUserSync(userId);
+
+      if (!userData) {
+        return {
+          status: 'error',
+          message: `User ${userId} not found in database`,
+        };
+      }
+
+      this.logger.log(`Successfully fetched profile and applications for userId: ${userId}`);
+      
+      return {
+        status: 'success',
+        message: `User ${userId} profile and applications fetched successfully`,
+        data: userData,
+      };
+    } catch (error) {
+      this.logger.error(`Failed to fetch profile and applications for userId: ${userId}:`, error);
+      return {
+        status: 'error',
+        message: `Failed to fetch user data: ${error.message}`,
+      };
+    }
+  }
+
   @Post(':userId/sync')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -192,11 +234,22 @@ export class ElasticsearchController {
 
         // Extract cohortId from course params if available
         const cohortId = webhookData.courseHierarchy.params?.cohortId ||
-                        webhookData.courseHierarchy.courseId ||
-                        webhookData.courseId;
+                        webhookData.courseId ||
+                        webhookData.courseHierarchy.courseId;
 
         // Find or create application for this cohort
         let application = userData.applications?.find((app: any) => app.cohortId === cohortId);
+
+        // If no application found with this cohortId, check if any existing application has this course
+        if (!application) {
+          application = userData.applications?.find((app: any) => 
+            app.courses?.values?.some((course: any) => course.courseId === webhookData.courseHierarchy.courseId)
+          );
+          
+          if (application) {
+            this.logger.log(`Found existing application with course ${webhookData.courseHierarchy.courseId}, will merge course data`);
+          }
+        }
 
         if (!application) {
           // Create new application if it doesn't exist
@@ -218,7 +271,7 @@ export class ElasticsearchController {
             submittedAt: null,
             cohortDetails: {
               cohortId: cohortId,
-              name: webhookData.courseHierarchy.name || 'Unknown Cohort',
+              name: webhookData.courseHierarchy.title || webhookData.courseHierarchy.name || 'Unknown Cohort',
               type: 'COHORT',
               status: 'active',
             },
@@ -245,13 +298,13 @@ export class ElasticsearchController {
         // Build course data from hierarchy
         const courseData = {
           courseId: webhookData.courseHierarchy.courseId,
-          courseTitle: webhookData.courseHierarchy.name,
+          courseTitle: webhookData.courseHierarchy.title || webhookData.courseHierarchy.name,
           progress: 0,
           units: {
             type: 'nested' as const,
             values: webhookData.courseHierarchy.modules?.map((module: any) => ({
               unitId: module.moduleId,
-              unitTitle: module.name,
+              unitTitle: module.title,
               progress: 0,
               contents: {
                 type: 'nested' as const,
@@ -259,7 +312,7 @@ export class ElasticsearchController {
                   contentId: lesson.lessonId,
                   lessonId: lesson.lessonId, // Add lessonId for proper mapping
                   type: lesson.format || 'video',
-                  title: lesson.name,
+                  title: lesson.title,
                   status: 'incomplete',
                   tracking: {
                     timeSpent: 0,
@@ -452,6 +505,33 @@ export class ElasticsearchController {
   @Delete(':userId')
   async deleteUser(@Param('userId') userId: string) {
     return this.userElasticsearchService.deleteUser(userId);
+  }
+
+  @Get(':userId/check-profile')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Check and fix empty profile data',
+    description: 'Checks if user profile data is empty and fixes it by re-syncing from database'
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Profile check completed'
+  })
+  async checkAndFixProfile(@Param('userId') userId: string) {
+    try {
+      await this.dataFetcherService.checkAndFixEmptyProfile(userId);
+      
+      return {
+        status: 'success',
+        message: `Profile check and fix completed for user ${userId}`,
+      };
+    } catch (error) {
+      this.logger.error(`Failed to check and fix profile for userId: ${userId}:`, error);
+      return {
+        status: 'error',
+        message: `Failed to check and fix profile: ${error.message}`,
+      };
+    }
   }
 
   private cleanupDuplicateLessonTrackIds(userData: any) {

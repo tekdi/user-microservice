@@ -51,6 +51,7 @@ import { UserElasticsearchService } from '../../elasticsearch/user-elasticsearch
 import { ElasticsearchDataFetcherService } from '../../elasticsearch/elasticsearch-data-fetcher.service';
 import { IUser } from '../../elasticsearch/interfaces/user.interface';
 import { isElasticsearchEnabled } from 'src/common/utils/elasticsearch.util';
+import { ElasticsearchSyncService, SyncSection } from '../../elasticsearch/elasticsearch-sync.service';
 
 interface UpdateField {
   userId: string; // Required
@@ -96,7 +97,8 @@ export class PostgresUserService implements IServicelocator {
     private readonly cohortAcademicYearService: CohortAcademicYearService,
     private readonly authUtils: AuthUtils,
     private readonly userElasticsearchService: UserElasticsearchService,
-    private readonly elasticsearchDataFetcherService: ElasticsearchDataFetcherService
+    private readonly elasticsearchDataFetcherService: ElasticsearchDataFetcherService,
+    private readonly elasticsearchSyncService: ElasticsearchSyncService,
   ) {
     this.jwt_secret = this.configService.get<string>('RBAC_JWT_SECRET');
     this.jwt_password_reset_expires_In = this.configService.get<string>(
@@ -1044,10 +1046,28 @@ export class PostgresUserService implements IServicelocator {
 
       const updatedUser = await this.updateBasicUserDetails(userId, userDto);
 
-      // Sync to Elasticsearch
+      // Sync to Elasticsearch using centralized service
       if (isElasticsearchEnabled()) {
-        await this.syncUserToElasticsearch(updatedUser);
+        // Check if user exists in Elasticsearch
+        const existingUser = await this.userElasticsearchService.getUser(userId);
+        
+        if (!existingUser) {
+          // User doesn't exist in Elasticsearch, fetch all data
+          LoggerUtil.log(`User ${userId} not found in Elasticsearch, fetching all data from database`, apiId);
+          await this.elasticsearchSyncService.syncUserToElasticsearch(
+            updatedUser.userId, 
+            { section: SyncSection.ALL }
+          );
+        } else {
+          // User exists, only update profile section
+          LoggerUtil.log(`User ${userId} exists in Elasticsearch, updating profile section only`, apiId);
+          await this.elasticsearchSyncService.syncUserToElasticsearch(
+            updatedUser.userId, 
+            { section: SyncSection.PROFILE }
+          );
+        }
       }
+
       return await APIResponse.success(
         response,
         apiId,
@@ -1576,7 +1596,7 @@ export class PostgresUserService implements IServicelocator {
               customFields: elasticCustomFields,
             },
             applications: [],
-            courses: [],
+            // Removed root-level courses field as requested
             createdAt: result.createdAt
               ? result.createdAt.toISOString()
               : new Date().toISOString(),
@@ -2786,23 +2806,16 @@ export class PostgresUserService implements IServicelocator {
   }
 
   /**
-   * Sync user profile to Elasticsearch using centralized data fetcher.
-   * This will upsert (update or create) the user document in Elasticsearch.
-   * If the document is missing, it will fetch the user from the database and create it.
+   * Sync user profile to Elasticsearch using centralized service.
+   * This method is now deprecated in favor of the centralized service.
+   * @deprecated Use elasticsearchSyncService.syncUserToElasticsearch instead
    */
   private async syncUserToElasticsearch(user: User) {
     try {
-      // Use centralized data fetcher to get complete user document
       if (isElasticsearchEnabled()) {
-        await this.userElasticsearchService.updateUserProfile(
-          user.userId,
-          { userId: user.userId }, // Minimal profile update
-          async (userId: string) => {
-            // Use centralized service to fetch complete user document
-            return await this.elasticsearchDataFetcherService.fetchUserDocumentForElasticsearch(
-              userId
-            );
-          }
+        await this.elasticsearchSyncService.syncUserToElasticsearch(
+          user.userId, 
+          { section: SyncSection.ALL }
         );
       }
     } catch (error) {

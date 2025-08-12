@@ -204,8 +204,9 @@ export class ElasticsearchService {
                 lastSavedAt: app.lastSavedAt || null,
                 submittedAt: app.submittedAt || null,
                 cohortDetails: app.cohortDetails || {},
+                courses: app.courses || null,
               })) || [],
-            courses: source?.courses || [],
+            // Removed root-level courses field as requested
             createdAt: source?.createdAt || null,
             updatedAt: source?.updatedAt || null,
           },
@@ -278,7 +279,7 @@ export class ElasticsearchService {
           userId,
           profile: defaultProfile,
           applications: [application],
-          courses: [],
+          // Removed root-level courses field as requested
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         },

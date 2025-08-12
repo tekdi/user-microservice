@@ -41,11 +41,10 @@ export class UserElasticsearchController {
       lastSavedAt: application.lastSavedAt || new Date().toISOString(),
       submittedAt: application.submittedAt || new Date().toISOString(),
       cohortDetails: {
+        cohortId: application.cohortDetails?.cohortId || cohortId,
         name: application.cohortDetails?.name || '',
-        description: application.cohortDetails?.description ?? '',
-        startDate: application.cohortDetails?.startDate ?? '',
-        endDate: application.cohortDetails?.endDate ?? '',
-        status: application.cohortDetails?.status || '',
+        type: application.cohortDetails?.type || 'COHORT',
+        status: application.cohortDetails?.status || 'active',
       },
       progress: application.progress || {
         pages: {},

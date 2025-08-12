@@ -25,6 +25,7 @@ export class ElasticsearchSyncService {
     private readonly elasticsearchDataFetcherService: ElasticsearchDataFetcherService,
   ) {}
 
+
   /**
    * Centralized function to sync user data to Elasticsearch
    * 
