@@ -412,11 +412,13 @@ export class PostgresCohortMembersService {
       });
       // Convert Map to an array for `where`
       where = Array.from(uniqueWhere.entries());
+
       results = await this.getCohortMemberUserDetails(
         where,
         'true',
         options,
-        order
+        order,
+        cohortMembersSearchDto.filters?.searchtext
       );
       if (results['userDetails'].length == 0) {
         return APIResponse.error(
@@ -596,13 +598,14 @@ export class PostgresCohortMembersService {
     where: any,
     fieldShowHide: any,
     options: any,
-    order: any
+    order: any,
+    searchtext?: string
   ) {
     const results = {
       totalCount: 0,
       userDetails: [],
     };
-    const getUserDetails = await this.getUsers(where, options, order);
+    const getUserDetails = await this.getUsers(where, options, order, searchtext);
 
     if (getUserDetails.length > 0) {
       results.totalCount = parseInt(getUserDetails[0].total_count, 10);
@@ -808,7 +811,7 @@ export class PostgresCohortMembersService {
     });
   }
 
-  async getUsers(where: any, options: any, order: any) {
+  async getUsers(where: any, options: any, order: any, searchtext?: string) {
     let whereCase = ``;
     let limit, offset;
 
@@ -856,6 +859,24 @@ export class PostgresCohortMembersService {
         }
       };
       whereCase += where.map(processCondition).join(' AND ');
+    }
+
+    // Add searchtext filter if provided
+    if (searchtext && searchtext.trim().length >= 2) {
+      try {
+        const searchWhereClause = this.buildSearchTextWhereClause(searchtext);
+        if (searchWhereClause) {
+          const searchCondition = searchWhereClause.replace(/^AND\s+/, "");
+          if (whereCase === "WHERE ") {
+            whereCase += searchCondition;
+          } else {
+            whereCase += ` AND ${searchCondition}`;
+          }
+        }
+      } catch (error) {
+        console.error('Error building search text where clause:', error);
+        // Continue without search filter if there's an error
+      }
     }
 
     let query = `SELECT U."userId", U."username",U."email", U."firstName", U."middleName", U."lastName", R."name" AS role, U."district", U."state",U."mobile",U."deviceId",U."gender",U."dob",U."country",
@@ -1899,6 +1920,7 @@ export class PostgresCohortMembersService {
     res: Response
   ) {
     const apiId = APIID.COHORT_MEMBER_SEARCH;
+
     try {
       if (!isUUID(tenantId)) {
         return APIResponse.error(
@@ -2374,11 +2396,13 @@ export class PostgresCohortMembersService {
       const [sortField, sortOrder] = sort;
       order[sortField] = sortOrder;
     }
+
     results = await this.getCohortMemberUserDetails(
       where,
       'true',
       options,
-      order
+      order,
+      cohortMembersSearchDto.filters?.searchtext
     );
     if (includeDisplayValues == true && results['userDetails']?.length) {
       const userIds: string[] = Array.from(
@@ -4935,6 +4959,68 @@ export class PostgresCohortMembersService {
       return response.data;
     } catch (error) {
       throw error;
+    }
+  }
+
+  /**
+   * Builds WHERE clause for searchtext filtering across multiple columns
+   * @param searchtext - The search text to filter by
+   * @returns SQL WHERE clause string for searchtext filtering
+   */
+  private buildSearchTextWhereClause(searchtext: string): string {
+    try {
+      if (!searchtext || typeof searchtext !== 'string' || searchtext.trim().length < 2) {
+        return "";
+      }
+
+      // Split searchtext by spaces and process all words
+      const searchTerms = searchtext
+        .trim()
+        .split(/\s+/)
+        .filter((term) => term && term.length > 0);
+
+      if (searchTerms.length === 0) {
+        return "";
+      }
+
+      // Build ILIKE conditions for each search term with smart column prioritization
+      const searchConditions = searchTerms.map((term) => {
+        if (!term || typeof term !== 'string') {
+          return "";
+        }
+
+        const escapedTerm = term.replace(/%/g, "\\%").replace(/_/g, "\\_");
+
+        // Check if this looks like an email
+        const isEmail = term.includes('@');
+
+        if (isEmail) {
+          // For email-like terms, prioritize email and username columns only
+          return `(
+            U."email" ILIKE '%${escapedTerm}%' OR
+            U."username" ILIKE '%${escapedTerm}%'
+          )`;
+        } else {
+          // For non-email terms, search across all columns
+          return `(
+            U."username" ILIKE '%${escapedTerm}%' OR
+            U."email" ILIKE '%${escapedTerm}%' OR
+            U."firstName" ILIKE '%${escapedTerm}%' OR
+            U."middleName" ILIKE '%${escapedTerm}%' OR
+            U."lastName" ILIKE '%${escapedTerm}%'
+          )`;
+        }
+      }).filter(condition => condition !== ""); // Filter out empty conditions
+
+      if (searchConditions.length === 0) {
+        return "";
+      }
+
+      // All terms must be found (AND logic between terms)
+      return `AND (${searchConditions.join(" AND ")})`;
+    } catch (error) {
+      console.error('Error in buildSearchTextWhereClause:', error);
+      return "";
     }
   }
 }
