@@ -1466,18 +1466,20 @@ export class PostgresFieldsService implements IServicelocatorfields {
       const orderCond = order || "";
       const offsetCond = offset ? `offset ${offset}` : "";
       const limitCond = limit ? `limit ${limit}` : "";
-      let whereCond = `WHERE `;
-      whereCond = whereClause ? (whereCond += `${whereClause}`) : "";
+      const conditions = [];
+
+      if (whereClause) {
+        conditions.push(`${whereClause}`);
+      }
+
+      // Apply default filter to fetch only active records
+      conditions.push(`is_active=1`);
 
       if (optionSelected) {
-        if (whereCond) {
-          whereCond += `AND "${tableName}_name" ILike '%${optionSelected}%'`;
-        } else {
-          whereCond += `WHERE "${tableName}_name" ILike '%${optionSelected}%'`;
-        }
-      } else {
-        whereCond += "";
+        conditions.push(`"${tableName}_name" ILike '%${optionSelected}%'`);
       }
+
+      const whereCond = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
 
       const query = `SELECT *,COUNT(*) OVER() AS total_count FROM public."${tableName}" ${whereCond} ${orderCond} ${offsetCond} ${limitCond}`;
 
