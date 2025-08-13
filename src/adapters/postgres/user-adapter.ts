@@ -878,7 +878,7 @@ export class PostgresUserService implements IServicelocator {
     if (username && userId === null) {
       delete whereClause.userId;
       whereClause.username = username;
-    }    
+    }
     const userDetails = await this.usersRepository.findOne({
       where: whereClause,
       select: [
@@ -910,9 +910,9 @@ export class PostgresUserService implements IServicelocator {
     userDetails["tenantData"] = tenantData;
 
     return userDetails;
-  }  
+  }
 
-  async userTenantRoleData(userId: string) {    
+  async userTenantRoleData(userId: string) {
     const query = `
   SELECT 
     DISTINCT ON (T."tenantId") 
@@ -932,7 +932,7 @@ export class PostgresUserService implements IServicelocator {
   WHERE 
     UTM."userId" = $1
   ORDER BY 
-    T."tenantId", UTM."Id";`;    
+    T."tenantId", UTM."Id";`;
 
     const result = await this.usersRepository.query(query, [userId]);
     const combinedResult = [];
@@ -1932,7 +1932,7 @@ export class PostgresUserService implements IServicelocator {
   }
 
   async assignUserToTenantAndRoll(tenantsData, createdBy) {
-    try {      
+    try {
       const orgId = tenantsData?.tenantRoleMapping?.orgnizationId;
       const userId = tenantsData?.userId;
       const roleId = tenantsData?.tenantRoleMapping?.roleId;
@@ -1947,13 +1947,13 @@ export class PostgresUserService implements IServicelocator {
         });
       }
 
-      if (orgId) {        
-          const data = await this.userOrgMappingRepository.save({
-            userId: userId,
-            orgId: orgId,
-            createdBy: createdBy,
-            updatedBy: createdBy,
-          });
+      if (orgId) {
+        const data = await this.userOrgMappingRepository.save({
+          userId: userId,
+          orgId: orgId,
+          createdBy: createdBy,
+          updatedBy: createdBy,
+        });
       }
 
       LoggerUtil.log(API_RESPONSES.USER_TENANT);
@@ -2422,9 +2422,10 @@ export class PostgresUserService implements IServicelocator {
   async sendOtp(body: OtpSendDTO, response: Response) {
     const apiId = APIID.SEND_OTP;
     try {
-      const { mobile, reason, email, firstName, replacements, key } = body;
+      const { mobile, reason, email, firstName, replacements, key, whatsapp } =
+        body;
       let notificationPayload, hash, expires, sentTo, otp;
-      if (mobile || email) {
+      if (mobile || email || whatsapp) {
         otp = this.authUtils.generateOtp(this.otpDigits).toString();
       }
       if (mobile) {
@@ -2459,13 +2460,36 @@ export class PostgresUserService implements IServicelocator {
         hash = result.hash;
         expires = result.expires;
         sentTo = email;
+      } else if (whatsapp) {
+        // Send OTP on WhatsApp with SMS fallback
+        try {
+          const result = await this.sendOtpOnWhatsApp(whatsapp, otp, reason);
+          notificationPayload = result.notificationPayload;
+          hash = result.hash;
+          expires = result.expires;
+          sentTo = whatsapp;
+        } catch (error) {
+          // If WhatsApp fails, try SMS as fallback
+          LoggerUtil.error(
+            "WhatsApp OTP failed, falling back to SMS",
+            error.message,
+            apiId
+          );
+
+          // Use the same number for SMS
+          const result = await this.sendOTPOnMobile(whatsapp, otp, reason);
+          notificationPayload = result.notificationPayload;
+          hash = result.hash;
+          expires = result.expires;
+          sentTo = whatsapp; // Still show as sent to WhatsApp
+        }
       } else {
-        // Neither mobile nor email provided
+        // Neither mobile nor email nor whatsapp provided
         return APIResponse.error(
           response,
           apiId,
           API_RESPONSES.BAD_REQUEST,
-          "Either mobile or email must be provided",
+          "Either mobile, email, or whatsapp must be provided",
           HttpStatus.BAD_REQUEST
         );
       }
@@ -2476,7 +2500,9 @@ export class PostgresUserService implements IServicelocator {
           message: `OTP sent to ${sentTo}`,
           hash: `${hash}.${expires}`,
           sendStatus:
-            notificationPayload?.result?.sms?.data?.[0] || notificationPayload,
+            notificationPayload?.result?.sms?.data?.[0] ||
+            notificationPayload?.result?.whatsapp?.data?.[0] ||
+            notificationPayload,
         },
       };
 
@@ -2574,7 +2600,7 @@ export class PostgresUserService implements IServicelocator {
   async verifyOtp(body: OtpVerifyDTO, response: Response) {
     const apiId = APIID.VERIFY_OTP;
     try {
-      const { mobile, email, otp, hash, reason, username } = body;
+      const { mobile, email, whatsapp, otp, hash, reason, username } = body;
 
       // Validate required fields for all requests
       if (!otp || !hash || !reason) {
@@ -2614,8 +2640,8 @@ export class PostgresUserService implements IServicelocator {
       let resetToken: string | null = null;
 
       // Process based on reason
-      if (reason === "signup") {
-        if (!mobile && !email) {
+      if (reason === "signup" || reason === "login") {
+        if (!mobile && !email && !whatsapp) {
           return APIResponse.error(
             response,
             apiId,
@@ -2628,6 +2654,8 @@ export class PostgresUserService implements IServicelocator {
           identifier = this.formatMobileNumber(mobile);
         } else if (email) {
           identifier = email;
+        } else if (whatsapp) {
+          identifier = this.formatMobileNumber(whatsapp);
         }
       } else if (reason === "forgot") {
         if (!username) {
@@ -2644,6 +2672,8 @@ export class PostgresUserService implements IServicelocator {
           identifier = this.formatMobileNumber(mobile);
         } else if (email) {
           identifier = email;
+        } else if (whatsapp) {
+          identifier = this.formatMobileNumber(whatsapp);
         }
 
         // identifier = this.formatMobileNumber(mobile);
@@ -3158,6 +3188,103 @@ export class PostgresUserService implements IServicelocator {
         apiId
       );
       // Don't throw the error to avoid affecting the main operation
+    }
+  }
+
+  //send WhatsApp Notification
+  async sendOtpOnWhatsApp(whatsapp: string, otp: string, reason: string) {
+    try {
+      // Step 1: Generate OTP hash with formatted number (consistent with verification)
+      const whatsappWithCode = this.formatMobileNumber(whatsapp);
+      const { hash, expires, expiresInMinutes } = this.generateOtpHash(
+        whatsappWithCode,
+        otp,
+        reason
+      );
+
+      // Step 2: Prepare WhatsApp notification payload
+      const notificationPayload = await this.whatsappNotification(
+        whatsapp,
+        otp,
+        reason
+      );
+
+      return { notificationPayload, hash, expires, expiresInMinutes };
+    } catch (error) {
+      throw new Error(`Failed to send OTP via WhatsApp: ${error.message}`);
+    }
+  }
+
+  //send WhatsApp Notification
+  async whatsappNotification(whatsapp: string, otp: string, reason: string) {
+    try {
+      // Get environment variables
+      const templateId = this.configService.get<string>("WHATSAPP_TEMPLATE_ID");
+      const apiKey = this.configService.get<string>("WHATSAPP_GUPSHUP_API_KEY");
+      const gupshupSource = this.configService.get<string>(
+        "WHATSAPP_GUPSHUP_SOURCE"
+      );
+
+      // Check if environment variables are set
+      if (!templateId || !apiKey || !gupshupSource) {
+        // Log warning instead of throwing error
+        LoggerUtil.error(
+          "WhatsApp environment variables not configured",
+          "WhatsApp OTP sending is disabled. Please configure WHATSAPP_TEMPLATE_ID, WHATSAPP_GUPSHUP_API_KEY, and WHATSAPP_GUPSHUP_SOURCE",
+          "WHATSAPP_CONFIG"
+        );
+
+        // Return a mock response for testing
+        return {
+          result: {
+            whatsapp: {
+              data: [{ status: "skipped", message: "WhatsApp not configured" }],
+            },
+          },
+        };
+      }
+
+      // WhatsApp notification Body
+      const notificationPayload = {
+        whatsapp: {
+          to: [whatsapp],
+          templateId: templateId,
+          templateParams: [otp],
+          gupshupSource: gupshupSource, // Use environment variable for sender number
+          gupshupApiKey: apiKey,
+        },
+      };
+
+      // Send Axios request to raw notification endpoint
+      const mailSend = await this.notificationRequest.sendRawNotification(
+        notificationPayload
+      );
+
+      // Check for errors in the response
+      if (
+        mailSend?.result?.whatsapp?.errors &&
+        mailSend.result.whatsapp.errors.length > 0
+      ) {
+        const errorMessages = mailSend.result.whatsapp.errors.map(
+          (error: { error: string }) => error.error
+        );
+        const combinedErrorMessage = errorMessages.join(", ");
+        throw new Error(
+          `${API_RESPONSES.WHATSAPP_ERROR} :${combinedErrorMessage}`
+        );
+      }
+
+      // Check if the response indicates success
+      if (!mailSend?.result?.whatsapp) {
+        throw new Error("Invalid response from notification service");
+      }
+
+      return mailSend;
+    } catch (error) {
+      LoggerUtil.error(API_RESPONSES.WHATSAPP_ERROR, error.message);
+      throw new Error(
+        `${API_RESPONSES.WHATSAPP_NOTIFICATION_ERROR}:  ${error.message}`
+      );
     }
   }
 }
