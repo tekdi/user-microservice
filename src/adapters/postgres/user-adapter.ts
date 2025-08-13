@@ -517,10 +517,10 @@ export class PostgresUserService implements IServicelocator {
 
     if (filters && Object.keys(filters).length > 0) {
       for (const [key, value] of Object.entries(filters)) {
-        if (index > 0) {
-          whereCondition += ` AND `;
-        }
         if (userKeys.includes(key)) {
+          if (index > 0) {
+            whereCondition += ` AND `;
+          }
           if (key === 'firstName') {
             whereCondition += ` U."${key}" ILIKE '%${value}%'`;
           } else {
@@ -541,8 +541,13 @@ export class PostgresUserService implements IServicelocator {
           index++;
         } else {
           if (key == 'role') {
+            if (index > 0) {
+              whereCondition += ` AND `;
+            }
             whereCondition += ` R."name" = '${value}'`;
             index++;
+          } else if (key == 'searchtext') {
+            // searchtext will be processed separately after the filters loop
           } else {
             searchCustomFields[key] = value;
           }
@@ -592,6 +597,26 @@ export class PostgresUserService implements IServicelocator {
       index++;
     }
 
+    // Add searchtext filter if provided
+    if (filters?.searchtext && filters.searchtext.trim().length >= 2) {
+      try {
+        const searchWhereClause = this.buildSearchTextWhereClause(filters.searchtext);
+
+        if (searchWhereClause) {
+          const searchCondition = searchWhereClause.replace(/^AND\s+/, "");
+
+          if (whereCondition === "WHERE") {
+            whereCondition += ` ${searchCondition}`;
+          } else {
+            whereCondition += ` AND ${searchCondition}`;
+          }
+        }
+      } catch (error) {
+        console.error('Error building search text where clause:', error);
+        // Continue without search filter if there's an error
+      }
+    }
+
     const userIds =
       excludeUserIdes?.length > 0
         ? excludeUserIdes.map((userId) => `'${userId}'`).join(',')
@@ -618,12 +643,11 @@ export class PostgresUserService implements IServicelocator {
     //Get user core fields data
     const query = `SELECT U."userId", U."username",U."email", U."firstName", U."middleName", U."lastName", U."gender", U."dob", R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", U.status,U.country, COUNT(*) OVER() AS total_count 
       FROM  public."Users" U
-      LEFT JOIN public."CohortMembers" CM 
-      ON CM."userId" = U."userId"
       LEFT JOIN public."UserRolesMapping" UR
       ON UR."userId" = U."userId"
       LEFT JOIN public."Roles" R
       ON R."roleId" = UR."roleId" ${whereCondition} GROUP BY U."userId", R."name" ${orderingCondition} ${offset} ${limit}`;
+
     const userDetails = await this.usersRepository.query(query);
 
     if (userDetails.length > 0) {
@@ -2871,6 +2895,72 @@ export class PostgresUserService implements IServicelocator {
       }
     } catch (error) {
       LoggerUtil.error('Failed to update user profile in Elasticsearch', error);
+    }
+  }
+
+  /**
+   * Builds WHERE clause for searchtext filtering across multiple columns
+   * @param searchtext - The search text to filter by
+   * @returns SQL WHERE clause string for searchtext filtering
+   */
+  private buildSearchTextWhereClause(searchtext: string): string {
+    try {
+      if (!searchtext || typeof searchtext !== 'string' || searchtext.trim().length < 2) {
+        return "";
+      }
+
+      // Split searchtext by spaces and process all words
+      const searchTerms = searchtext
+        .trim()
+        .split(/\s+/)
+        .filter((term) => term && term.length > 0);
+
+      if (searchTerms.length === 0) {
+        return "";
+      }
+
+      // Build ILIKE conditions for each search term with smart column prioritization
+      const searchConditions = searchTerms.map((term) => {
+        if (!term || typeof term !== 'string') {
+          return "";
+        }
+
+        // Properly escape the term to prevent SQL injection
+        const escapedTerm = term
+          .replace(/'/g, "''")  // Escape single quotes
+          .replace(/%/g, "\\%") // Escape % for ILIKE
+          .replace(/_/g, "\\_"); // Escape _ for ILIKE
+
+        // Check if this looks like an email
+        const isEmail = term.includes('@');
+
+        if (isEmail) {
+          // For email-like terms, prioritize email and username columns only
+          return `(
+            U."email" ILIKE '%${escapedTerm}%' OR
+            U."username" ILIKE '%${escapedTerm}%'
+          )`;
+        } else {
+          // For non-email terms, search across all columns
+          return `(
+            U."username" ILIKE '%${escapedTerm}%' OR
+            U."email" ILIKE '%${escapedTerm}%' OR
+            U."firstName" ILIKE '%${escapedTerm}%' OR
+            U."middleName" ILIKE '%${escapedTerm}%' OR
+            U."lastName" ILIKE '%${escapedTerm}%'
+          )`;
+        }
+      }).filter(condition => condition !== ""); // Filter out empty conditions
+
+      if (searchConditions.length === 0) {
+        return "";
+      }
+
+      // All terms must be found (AND logic between terms)
+      return `AND (${searchConditions.join(" AND ")})`;
+    } catch (error) {
+      console.error('Error in buildSearchTextWhereClause:', error);
+      return "";
     }
   }
 }
