@@ -391,6 +391,19 @@
 		]
 	  },
 	  {
+		"sourceRoute": "/interface/v1/academicyears/create",
+		"type": "POST",
+		"priority": "MUST_HAVE",
+		"inSequence": false,
+		"orchestrated": false,
+		"targetPackages": [
+		  {
+			"basePackageName": "user",
+			"packageName": "shiksha-user"
+		  }
+		]
+	  },
+	  {
 		"sourceRoute": "/interface/v1/cohortmember/bulkCreate",
 		"type": "POST",
 		"priority": "MUST_HAVE",
