@@ -791,6 +791,7 @@ export class PostgresUserService implements IServicelocator {
     T."channelId",
     T.name AS tenantName, 
     T.params,
+    T."type",
     UTM."Id" AS userTenantMappingId
   FROM 
     public."UserTenantMapping" UTM
@@ -832,6 +833,7 @@ export class PostgresUserService implements IServicelocator {
           params: data.params,
           roleId: roleId,
           roleName: roleName,
+          tenantType: data.type,
           // privileges: privileges,
         });
       }
