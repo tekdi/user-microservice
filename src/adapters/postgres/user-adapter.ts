@@ -2401,7 +2401,7 @@ export class PostgresUserService implements IServicelocator {
     }
   }
   private formatMobileNumber(mobile: string): string {
-    return `91${mobile}`;
+    return `+91${mobile}`;
   }
 
   //Generate Has code as per username or mobile Number
@@ -2640,7 +2640,7 @@ export class PostgresUserService implements IServicelocator {
       let resetToken: string | null = null;
 
       // Process based on reason
-      if (reason === "signup") {
+      if (reason === "signup" || reason === "login") {
         if (!mobile && !email && !whatsapp) {
           return APIResponse.error(
             response,
@@ -2655,7 +2655,7 @@ export class PostgresUserService implements IServicelocator {
         } else if (email) {
           identifier = email;
         } else if (whatsapp) {
-          identifier = whatsapp;
+          identifier = this.formatMobileNumber(whatsapp);
         }
       } else if (reason === "forgot") {
         if (!username) {
@@ -2673,7 +2673,7 @@ export class PostgresUserService implements IServicelocator {
         } else if (email) {
           identifier = email;
         } else if (whatsapp) {
-          identifier = whatsapp;
+          identifier = this.formatMobileNumber(whatsapp);
         }
 
         // identifier = this.formatMobileNumber(mobile);
@@ -2718,85 +2718,6 @@ export class PostgresUserService implements IServicelocator {
         const responseData = { success: true };
         if (reason === "forgot" && resetToken) {
           responseData["token"] = resetToken;
-        }
-
-        // For signup flow, generate access token for the username
-        if (reason === "signup") {
-          // Find user by the identifier (mobile, email, or whatsapp)
-          let userData = null;
-          if (mobile) {
-            // Search by mobile number
-            const users = await this.usersRepository.find({
-              where: { mobile: parseInt(this.formatMobileNumber(mobile)) },
-            });
-            if (users.length > 0) {
-              userData = users[0];
-            }
-          } else if (email) {
-            const users = await this.usersRepository.find({
-              where: { email: email },
-            });
-            if (users.length > 0) {
-              userData = users[0];
-            }
-          } else if (whatsapp) {
-            // Search by WhatsApp number using custom fields
-            // First try: Search by custom fields
-            let userIds = await this.fieldsService.filterUserUsingCustomFields(
-              "USERS",
-              {
-                whatsapp: whatsapp,
-              }
-            );
-
-            if (userIds && userIds.length > 0) {
-              const user = await this.usersRepository.findOne({
-                where: { userId: userIds[0] },
-              });
-              if (user) {
-                userData = user;
-              }
-            } else {
-              // Fallback: Try to find user by mobile number (since WhatsApp numbers are often the same as mobile)
-              const fallbackUsers = await this.usersRepository.find({
-                where: {
-                  mobile: parseInt(this.formatMobileNumber(whatsapp)),
-                },
-              });
-
-              if (fallbackUsers.length > 0) {
-                userData = fallbackUsers[0];
-              }
-            }
-          }
-
-          if (userData) {
-            // Generate access token for the user
-            const accessTokenPayload = {
-              sub: userData.userId,
-              email: userData.email,
-              username: userData.username,
-              name: `${userData.firstName || ""} ${
-                userData.lastName || ""
-              }`.trim(),
-            };
-
-            const accessToken =
-              await this.jwtUtil.generateTokenForForgotPassword(
-                accessTokenPayload,
-                this.configService.get<string>("RBAC_JWT_EXPIRES_IN") || "24h",
-                this.jwt_secret
-              );
-
-            responseData["accessToken"] = accessToken;
-            responseData["user"] = {
-              userId: userData.userId,
-              username: userData.username,
-              email: userData.email,
-              firstName: userData.firstName,
-              lastName: userData.lastName,
-            };
-          }
         }
 
         return APIResponse.success(
@@ -3273,9 +3194,10 @@ export class PostgresUserService implements IServicelocator {
   //send WhatsApp Notification
   async sendOtpOnWhatsApp(whatsapp: string, otp: string, reason: string) {
     try {
-      // Step 1: Generate OTP hash
+      // Step 1: Generate OTP hash with formatted number (consistent with verification)
+      const whatsappWithCode = this.formatMobileNumber(whatsapp);
       const { hash, expires, expiresInMinutes } = this.generateOtpHash(
-        whatsapp,
+        whatsappWithCode,
         otp,
         reason
       );

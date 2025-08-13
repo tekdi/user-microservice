@@ -78,8 +78,8 @@ export class OtpVerifyDTO {
 
  @ApiProperty()
  @IsString({ message: "Reason must be a string." })
- @IsIn(["signup", "forgot"], {
-   message: 'Reason must be either "signup" or "forgot".',
+ @IsIn(["signup", "login", "forgot"], {
+   message: 'Reason must be either "signup", "login" or "forgot".',
  })
  reason: string;
 
