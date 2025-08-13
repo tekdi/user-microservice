@@ -11,6 +11,8 @@ import {
   ArrayMaxSize,
   IsEmail,
   IsBoolean,
+  IsString,
+  MinLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -68,6 +70,23 @@ export class setFilters {
   @IsArray()
   @IsEnum(['active', 'inactive'], { each: true })
   status: string[];
+
+  /**
+   * Search text to search across username, email, firstName, middleName, and lastName columns.
+   * Supports space-separated terms (e.g., "john doe" will search for both "john" and "doe").
+   * The entire searchtext must be at least 2 characters long.
+   */
+  @ApiPropertyOptional({
+    type: String,
+    description: 'Search text for username, email, firstName, middleName, lastName',
+    example: 'john doe',
+    minLength: 2
+  })
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MinLength(2, { message: 'Search text must be at least 2 characters long' })
+  searchtext?: string;
 }
 export class excludeFields {
   @ApiProperty({
