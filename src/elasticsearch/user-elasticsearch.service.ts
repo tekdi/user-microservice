@@ -84,9 +84,11 @@ export class UserElasticsearchService implements OnModuleInit {
               type: 'nested',
               properties: {
                 cohortId: { type: 'keyword' },
+                formId: { type: 'keyword' },
+                submissionId: { type: 'keyword' },
                 cohortmemberstatus: { type: 'keyword' },
                 formstatus: { type: 'keyword' },
-                completionPercentage: { type: 'float' }, // FIXED: Add completionPercentage field
+                completionPercentage: { type: 'float' },
                 progress: {
                   properties: {
                     pages: {
@@ -108,32 +110,72 @@ export class UserElasticsearchService implements OnModuleInit {
                 submittedAt: { type: 'date', null_value: null },
                 cohortDetails: {
                   properties: {
+                    cohortId: { type: 'keyword' },
                     name: { type: 'text' },
-                    description: { type: 'text' },
-                    startDate: { type: 'date', null_value: null },
-                    endDate: { type: 'date', null_value: null },
+                    type: { type: 'keyword' },
                     status: { type: 'keyword' },
                   },
                 },
-              },
-            },
-            courses: {
-              type: 'nested',
-              properties: {
-                courseId: { type: 'keyword' },
-                progress: { type: 'float' },
-                lessonsCompleted: { type: 'keyword' },
-                lastLessonAt: { type: 'date', null_value: null },
-                courseDetails: {
+                courses: {
+                  type: 'nested',
                   properties: {
-                    name: { type: 'text' },
-                    description: { type: 'text' },
-                    duration: { type: 'integer' },
-                    status: { type: 'keyword' },
+                    courseId: { type: 'keyword' },
+                    courseTitle: { type: 'text' },
+                    progress: { type: 'float' },
+                    units: {
+                      type: 'nested',
+                      properties: {
+                        unitId: { type: 'keyword' },
+                        unitTitle: { type: 'text' },
+                        progress: { type: 'float' },
+                        contents: {
+                          type: 'nested',
+                          properties: {
+                            contentId: { type: 'keyword' },
+                            type: { type: 'keyword' },
+                            title: { type: 'text' },
+                            status: { type: 'keyword' },
+                            tracking: {
+                              properties: {
+                                percentComplete: { type: 'float' },
+                                lastPosition: { type: 'float' },
+                                currentPosition: { type: 'float' },
+                                timeSpent: { type: 'integer' },
+                                visitedPages: { type: 'integer' },
+                                totalPages: { type: 'integer' },
+                                lastPage: { type: 'integer' },
+                                currentPage: { type: 'integer' },
+                                questionsAttempted: { type: 'integer' },
+                                totalQuestions: { type: 'integer' },
+                                score: { type: 'float' },
+                                answers: {
+                                  type: 'nested',
+                                  properties: {
+                                    questionId: { type: 'keyword' },
+                                    type: { type: 'keyword' },
+                                    submittedAnswer: { type: 'text' },
+                                    answer: {
+                                      properties: {
+                                        answer: { type: 'keyword' },
+                                        text: { type: 'text' },
+                                      },
+                                    },
+                                    text: { type: 'text' },
+                                    score: { type: 'float' },
+                                    reviewStatus: { type: 'keyword' },
+                                  },
+                                },
+                              },
+                            },
+                          },
+                        },
+                      },
+                    },
                   },
                 },
               },
             },
+            // Removed root-level courses mapping as requested - courses now only in applications
             createdAt: { type: 'date', null_value: null },
             updatedAt: { type: 'date', null_value: null },
           },
@@ -188,7 +230,7 @@ export class UserElasticsearchService implements OnModuleInit {
           customFields: user.profile.customFields || {},
         },
         applications: user.applications || [],
-        courses: user.courses || [],
+        // Removed root-level courses field as requested
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
       };
@@ -352,6 +394,16 @@ export class UserElasticsearchService implements OnModuleInit {
           filter: [],
         },
       };
+
+      // Add userId filter if provided
+      if (query.userId) {
+        searchQuery.bool.filter.push({
+          term: {
+            userId: query.userId,
+          },
+        });
+      }
+
       // Add text search with partial matching support
       if (query.q) {
         if (typeof query.q !== 'string') {
@@ -491,10 +543,21 @@ export class UserElasticsearchService implements OnModuleInit {
         }
       }
       if (query.filters && typeof query.filters === 'object') {
-        // Special handling for cohortId and cohortmemberstatus in applications
+        // Special handling for cohortId, cohortmemberstatus, completionPercentage, and courses in applications
         const appFilters: any = {};
+        const courseFilters: any = {};
         Object.entries(query.filters).forEach(([field, value]) => {
           if (value !== undefined && value !== null && value !== '') {
+            // Handle userId filter
+            if (field === 'userId') {
+              searchQuery.bool.filter.push({
+                term: {
+                  userId: value,
+                },
+              });
+              return;
+            }
+
             // Handle cohortId, cohortmemberstatus, and completionPercentage as nested application filters
             if (
               field === 'cohortId' ||
@@ -502,6 +565,13 @@ export class UserElasticsearchService implements OnModuleInit {
               field === 'completionPercentage'
             ) {
               appFilters[field] = value;
+              return;
+            }
+
+            // Handle courses fields as nested course filters
+            if (field.startsWith('courses.')) {
+              const courseField = field.replace('courses.', '');
+              courseFilters[courseField] = value;
               return;
             }
 
@@ -717,6 +787,323 @@ export class UserElasticsearchService implements OnModuleInit {
             },
           });
         }
+
+        // Handle course filters if present
+        if (Object.keys(courseFilters).length > 0) {
+          const courseMust: any[] = [];
+
+          Object.entries(courseFilters).forEach(([field, value]) => {
+            if (value !== undefined && value !== null && value !== '') {
+              // Handle different course field types
+              if (field === 'courseId') {
+                courseMust.push({
+                  term: {
+                    'applications.courses.courseId': value,
+                  },
+                });
+              } else if (field === 'courseTitle') {
+                courseMust.push({
+                  wildcard: {
+                    'applications.courses.courseTitle': `*${String(
+                      value
+                    ).toLowerCase()}*`,
+                  },
+                });
+              } else if (field === 'progress') {
+                const progressValue = Number(value);
+                if (!isNaN(progressValue)) {
+                  courseMust.push({
+                    range: {
+                      'applications.courses.progress': {
+                        gte: progressValue,
+                        lte: progressValue,
+                      },
+                    },
+                  });
+                }
+              } else if (field.startsWith('units.')) {
+                // Handle nested unit fields
+                const unitField = field.replace('units.', '');
+                if (unitField === 'unitId') {
+                  courseMust.push({
+                    nested: {
+                      path: 'applications.courses.units',
+                      query: {
+                        term: {
+                          'applications.courses.units.unitId': value,
+                        },
+                      },
+                    },
+                  });
+                } else if (unitField === 'unitTitle') {
+                  courseMust.push({
+                    nested: {
+                      path: 'applications.courses.units',
+                      query: {
+                        wildcard: {
+                          'applications.courses.units.unitTitle': `*${String(
+                            value
+                          ).toLowerCase()}*`,
+                        },
+                      },
+                    },
+                  });
+                } else if (unitField === 'progress') {
+                  const unitProgressValue = Number(value);
+                  if (!isNaN(unitProgressValue)) {
+                    courseMust.push({
+                      nested: {
+                        path: 'applications.courses.units',
+                        query: {
+                          range: {
+                            'applications.courses.units.progress': {
+                              gte: unitProgressValue,
+                              lte: unitProgressValue,
+                            },
+                          },
+                        },
+                      },
+                    });
+                  }
+                } else if (unitField.startsWith('contents.')) {
+                  // Handle nested content fields within units
+                  const contentField = unitField.replace('contents.', '');
+                  if (contentField === 'contentId') {
+                    courseMust.push({
+                      nested: {
+                        path: 'applications.courses.units.contents',
+                        query: {
+                          term: {
+                            'applications.courses.units.contents.contentId':
+                              value,
+                          },
+                        },
+                      },
+                    });
+                  } else if (contentField === 'lessonId') {
+                    courseMust.push({
+                      nested: {
+                        path: 'applications.courses.units.contents',
+                        query: {
+                          term: {
+                            'applications.courses.units.contents.lessonId':
+                              value,
+                          },
+                        },
+                      },
+                    });
+                  } else if (contentField === 'title') {
+                    courseMust.push({
+                      nested: {
+                        path: 'applications.courses.units.contents',
+                        query: {
+                          wildcard: {
+                            'applications.courses.units.contents.title': `*${String(
+                              value
+                            ).toLowerCase()}*`,
+                          },
+                        },
+                      },
+                    });
+                  } else if (contentField === 'type') {
+                    courseMust.push({
+                      nested: {
+                        path: 'applications.courses.units.contents',
+                        query: {
+                          term: {
+                            'applications.courses.units.contents.type': value,
+                          },
+                        },
+                      },
+                    });
+                  } else if (contentField === 'status') {
+                    courseMust.push({
+                      nested: {
+                        path: 'applications.courses.units.contents',
+                        query: {
+                          term: {
+                            'applications.courses.units.contents.status': value,
+                          },
+                        },
+                      },
+                    });
+                  } else if (contentField.startsWith('tracking.')) {
+                    // Handle nested tracking fields within contents
+                    const trackingField = contentField.replace('tracking.', '');
+                    if (trackingField === 'percentComplete') {
+                      const trackingValue = Number(value);
+                      if (!isNaN(trackingValue)) {
+                        courseMust.push({
+                          nested: {
+                            path: 'applications.courses.units.contents',
+                            query: {
+                              range: {
+                                'applications.courses.units.contents.tracking.percentComplete':
+                                  {
+                                    gte: trackingValue,
+                                    lte: trackingValue,
+                                  },
+                              },
+                            },
+                          },
+                        });
+                      }
+                    } else if (trackingField === 'score') {
+                      const trackingValue = Number(value);
+                      if (!isNaN(trackingValue)) {
+                        courseMust.push({
+                          nested: {
+                            path: 'applications.courses.units.contents',
+                            query: {
+                              range: {
+                                'applications.courses.units.contents.tracking.score':
+                                  {
+                                    gte: trackingValue,
+                                    lte: trackingValue,
+                                  },
+                              },
+                            },
+                          },
+                        });
+                      }
+                    } else if (trackingField === 'timeSpent') {
+                      const trackingValue = Number(value);
+                      if (!isNaN(trackingValue)) {
+                        courseMust.push({
+                          nested: {
+                            path: 'applications.courses.units.contents',
+                            query: {
+                              range: {
+                                'applications.courses.units.contents.tracking.timeSpent':
+                                  {
+                                    gte: trackingValue,
+                                    lte: trackingValue,
+                                  },
+                              },
+                            },
+                          },
+                        });
+                      }
+                    } else if (trackingField === 'questionsAttempted') {
+                      const trackingValue = Number(value);
+                      if (!isNaN(trackingValue)) {
+                        courseMust.push({
+                          nested: {
+                            path: 'applications.courses.units.contents',
+                            query: {
+                              range: {
+                                'applications.courses.units.contents.tracking.questionsAttempted':
+                                  {
+                                    gte: trackingValue,
+                                    lte: trackingValue,
+                                  },
+                              },
+                            },
+                          },
+                        });
+                      }
+                    } else if (trackingField === 'totalQuestions') {
+                      const trackingValue = Number(value);
+                      if (!isNaN(trackingValue)) {
+                        courseMust.push({
+                          nested: {
+                            path: 'applications.courses.units.contents',
+                            query: {
+                              range: {
+                                'applications.courses.units.contents.tracking.totalQuestions':
+                                  {
+                                    gte: trackingValue,
+                                    lte: trackingValue,
+                                  },
+                              },
+                            },
+                          },
+                        });
+                      }
+                    } else if (trackingField.startsWith('answers.')) {
+                      // Handle nested answers fields within tracking
+                      const answerField = trackingField.replace('answers.', '');
+                      if (answerField === 'questionId') {
+                        courseMust.push({
+                          nested: {
+                            path: 'applications.courses.units.contents.tracking.answers',
+                            query: {
+                              term: {
+                                'applications.courses.units.contents.tracking.answers.questionId':
+                                  value,
+                              },
+                            },
+                          },
+                        });
+                      } else if (answerField === 'answer') {
+                        courseMust.push({
+                          nested: {
+                            path: 'applications.courses.units.contents.tracking.answers',
+                            query: {
+                              wildcard: {
+                                'applications.courses.units.contents.tracking.answers.answer': `*${String(
+                                  value
+                                ).toLowerCase()}*`,
+                              },
+                            },
+                          },
+                        });
+                      } else if (answerField === 'score') {
+                        const answerScoreValue = Number(value);
+                        if (!isNaN(answerScoreValue)) {
+                          courseMust.push({
+                            nested: {
+                              path: 'applications.courses.units.contents.tracking.answers',
+                              query: {
+                                range: {
+                                  'applications.courses.units.contents.tracking.answers.score':
+                                    {
+                                      gte: answerScoreValue,
+                                      lte: answerScoreValue,
+                                    },
+                                },
+                              },
+                            },
+                          });
+                        }
+                      } else if (answerField === 'reviewStatus') {
+                        courseMust.push({
+                          nested: {
+                            path: 'applications.courses.units.contents.tracking.answers',
+                            query: {
+                              term: {
+                                'applications.courses.units.contents.tracking.answers.reviewStatus':
+                                  value,
+                              },
+                            },
+                          },
+                        });
+                      }
+                    }
+                  }
+                }
+              } else {
+                // Default to wildcard for other course fields
+                courseMust.push({
+                  wildcard: {
+                    [`applications.courses.${field}`]: `*${String(
+                      value
+                    ).toLowerCase()}*`,
+                  },
+                });
+              }
+            }
+          });
+
+          if (courseMust.length > 0) {
+            searchQuery.bool.filter.push({
+              nested: {
+                path: 'applications.courses',
+                query: { bool: { must: courseMust } },
+              },
+            });
+          }
+        }
       }
       if (query.cohortId && typeof query.cohortId === 'string') {
         searchQuery.bool.filter.push({
@@ -853,10 +1240,17 @@ export class UserElasticsearchService implements OnModuleInit {
         lastSavedAt: application.lastSavedAt || new Date().toISOString(),
         submittedAt: application.submittedAt || new Date().toISOString(),
         cohortDetails: application.cohortDetails || {
+          cohortId: '',
           name: '',
+          type: 'COHORT',
           status: 'active',
         },
         formData: {},
+        // Preserve existing courses data or initialize empty courses structure
+        courses: application.courses || {
+          type: 'nested',
+          values: [],
+        },
       };
 
       // If application has formData, map it to pages structure
@@ -992,41 +1386,51 @@ export class UserElasticsearchService implements OnModuleInit {
     course: Partial<ICourse>
   ): Promise<any> {
     try {
-      const script = {
-        source: `
-          if (ctx._source.courses == null) {
-            ctx._source.courses = [];
-          }
-          boolean found = false;
-          for (int i = 0; i < ctx._source.courses.length; i++) {
-            if (ctx._source.courses[i].courseId == params.courseId) {
-              ctx._source.courses[i] = params.course;
-              found = true;
-              break;
-            }
-          }
-          if (!found) {
-            ctx._source.courses.add(params.course);
-          }
-        `,
-        lang: 'painless',
-        params: {
-          courseId,
-          course,
-        },
-      };
-
-      const result = await this.elasticsearchService.update(
-        this.indexName,
-        userId,
-        { script },
-        { retry_on_conflict: 3 }
+      // For now, courses will be null as per requirements
+      // This method is kept for backward compatibility
+      this.logger.log(
+        `Course update requested for user ${userId}, course ${courseId} - currently disabled as courses are null`
       );
-      return result;
+
+      // Return success without actually updating anything
+      return { acknowledged: true };
     } catch (error) {
       this.logger.error('Error updating course in Elasticsearch:', error);
       throw new Error(
         `Failed to update course in Elasticsearch: ${error.message}`
+      );
+    }
+  }
+
+  async updateApplicationCourse(
+    userId: string,
+    cohortId: string,
+    courseData: {
+      courseId: string;
+      courseTitle: string;
+      progress: number;
+      units?: {
+        type: 'nested';
+        values: any[];
+      };
+    }
+  ): Promise<any> {
+    try {
+      // For now, courses will be null as per requirements
+      // This method is prepared for future implementation
+      this.logger.log(
+        `Application course update requested for user ${userId}, cohort ${cohortId}, course ${courseData.courseId} - currently disabled as courses are null`
+      );
+
+      // Return success without actually updating anything
+      return { acknowledged: true };
+    } catch (error) {
+      this.logger.error(
+        'Error updating application course in Elasticsearch:',
+        error
+      );
+      throw new Error(
+        `Failed to update application course in Elasticsearch: ${error.message}`
       );
     }
   }

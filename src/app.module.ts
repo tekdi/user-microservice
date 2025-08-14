@@ -21,6 +21,7 @@ import { RbacModule } from './rbac/rbac.module';
 import { AssignTenantModule } from './userTenantMapping/user-tenant-mapping.module';
 import { FormsModule } from './forms/forms.module';
 import { HttpService } from '@utils/http-service';
+import { LMSService } from './common/services/lms.service';
 import { TenantModule } from './tenant/tenant.module';
 import { AcademicyearsModule } from './academicyears/academicyears.module';
 import { CohortAcademicYearModule } from './cohortAcademicYear/cohortAcademicYear.module';
@@ -84,6 +85,7 @@ import { BulkImportModule } from './bulk-import/bulk-import.module';
   providers: [
     AppService,
     HttpService,
+    LMSService,
     {
       provide: 'STORAGE_CONFIG',
       useValue: storageConfig,
