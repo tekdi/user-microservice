@@ -40,5 +40,6 @@ import { KafkaModule } from "src/kafka/kafka.module";
   ],
   controllers: [UserController],
   providers: [UserAdapter, UploadS3Service, AutomaticMemberService],
+  exports: [UserAdapter],
 })
 export class UserModule {}
