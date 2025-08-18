@@ -5,6 +5,7 @@ import { PostgresUserService } from "src/adapters/postgres/user-adapter";
 @Injectable()
 export class UserAdapter {
   constructor(private postgresProvider: PostgresUserService) {}
+  
   buildUserAdapter(): IServicelocator {
     let adapter: IServicelocator;
 
@@ -13,5 +14,10 @@ export class UserAdapter {
         adapter = this.postgresProvider;
     }
     return adapter;
+  }
+
+  async findUserByIdentifier(identifier: string): Promise<any> {
+    const adapter = this.buildUserAdapter();
+    return adapter.findUserByIdentifier(identifier);
   }
 }
