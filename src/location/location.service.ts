@@ -480,22 +480,4 @@ export class LocationService {
       }
     };
   }
-
-  /**
-   * Security: Validate column name against whitelist
-   */
-  private validateColumnName(columnName: string): void {
-    if (!this.allowedColumns.has(columnName)) {
-      throw new BadRequestException(`Security error: Invalid column name`);
-    }
-  }
-
-  /**
-   * Security: Validate table name against whitelist
-   */
-  private validateTableName(tableName: string): void {
-    if (!this.allowedTables.has(tableName)) {
-      throw new BadRequestException(`Security error: Invalid table name`);
-    }
-  }
 }
