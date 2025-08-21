@@ -366,12 +366,11 @@ export class FieldsService {
         }
 
         // Otherwise, split by comma
-        const result = checkboxValue.split(',').map((v) => v.trim());
-        return result;
+        return checkboxValue.split(',').map((v) => v.trim());
       }
 
       // Step 6: Handle single value based on field type in schema
-      let result;
+
       switch (fieldType) {
         case 'boolean': {
           const booleanResult =
@@ -387,8 +386,6 @@ export class FieldsService {
         default:
           return checkboxValue; // Current workflow fallback
       }
-
-      return result;
     } catch (error) {
       return checkboxValue;
     }
