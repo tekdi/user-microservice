@@ -287,7 +287,7 @@ export class BulkImportService {
           const fieldHeaderMap: {
             [header: string]: { fieldId: string; label: string };
           } = {};
-          const fieldIdRegex = /^([^\(]+?)\s*\(([^()]+)\)$/;
+          const fieldIdRegex = /^(.+?)\s*\(([^()]+)\)$/;
           for (const header of xlsxHeaders) {
             const match = fieldIdRegex.exec(header);
             if (match) {

@@ -340,13 +340,36 @@ export class FieldsService {
         return checkboxValue;
       }
 
-      // Step 4: Handle comma-separated values (current workflow)
-      if (checkboxValue.includes(',')) {
+      // Step 4: Get field type from schema - check both direct type and schema.type
+      const fieldType = fieldMetadata.schema?.type || fieldMetadata.type; // Type from schema: "boolean", "string", "array"
+      // Step 5: Handle comma-separated values (current workflow)
+      // Only split if the field type in schema is 'array' and contains comma
+      // Also check if this is actually a multi-select field by looking at fieldParams
+      const isMultiSelect =
+        fieldMetadata.fieldParams?.options?.enum &&
+        Array.isArray(fieldMetadata.fieldParams.options.enum);
+
+      if (
+        fieldType === 'array' &&
+        checkboxValue.includes(',') &&
+        isMultiSelect
+      ) {
+        // Check if the entire value matches one of the enum options exactly
+        const enumOptions = fieldMetadata.fieldParams?.options?.enum || [];
+        const exactMatch = enumOptions.find(
+          (option) => option === checkboxValue
+        );
+
+        if (exactMatch) {
+          // If it's an exact match to an enum option, return as single value
+          return checkboxValue;
+        }
+
+        // Otherwise, split by comma
         return checkboxValue.split(',').map((v) => v.trim());
       }
 
-      // Step 5: Handle single value based on field type in schema
-      const fieldType = fieldMetadata.type; // Type from schema: "boolean", "string", "array"
+      // Step 6: Handle single value based on field type in schema
 
       switch (fieldType) {
         case 'boolean': {
