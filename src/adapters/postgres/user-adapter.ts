@@ -803,6 +803,7 @@ export class PostgresUserService implements IServicelocator {
     T."channelId",
     T.name AS tenantName, 
     T.params,
+    T."type",
     UTM."Id" AS userTenantMappingId
   FROM 
     public."UserTenantMapping" UTM
@@ -844,6 +845,7 @@ export class PostgresUserService implements IServicelocator {
           params: data.params,
           roleId: roleId,
           roleName: roleName,
+          tenantType: data.type,
           // privileges: privileges,
         });
       }
@@ -2894,16 +2896,7 @@ export class PostgresUserService implements IServicelocator {
             const tenantRoleData = await this.userTenantRoleData(userId);
             
             // Get custom fields if any
-            const customFieldsRows = await this.usersRepository.query(`
-              SELECT fv."fieldId", f.name, f.type, fv.value
-              FROM public."FieldValues" fv
-              JOIN public."Fields" f ON fv."fieldId" = f."fieldId"
-              WHERE fv."itemId" = $1
-            `, [userId]);
-            const customFields = customFieldsRows.reduce((acc, row) => {
-              acc[row.name] = { type: row.type, value: row.value };
-              return acc;
-            }, {});
+            const customFields = await this.fieldsService.getCustomFieldDetails(userId, 'Users');
           
 
             // Get cohort information for the user
