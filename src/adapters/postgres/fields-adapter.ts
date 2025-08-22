@@ -1538,6 +1538,71 @@ export class PostgresFieldsService implements IServicelocatorfields {
     return result;
   }
 
+  // OPTIMIZED VERSION - Much faster alternative to avoid JSON aggregation
+  async filterUserUsingCustomFieldsOptimized(context: string, stateDistBlockData: any) {
+    let joinCond = "";
+    let targetTable = "";
+    
+    if (context === "COHORT") {
+      joinCond = `JOIN "Cohort" u ON fv."itemId" = u."cohortId"`;
+      targetTable = "Cohort";
+    } else if (context === "USERS") {
+      joinCond = `JOIN "Users" u ON fv."itemId" = u."userId"`;
+      targetTable = "Users";
+    } else {
+      // Generic case - no specific table join
+      targetTable = "FieldValues";
+    }
+
+    // Build EXISTS conditions for each field filter
+    const conditions = [];
+    let paramIndex = 1;
+    const queryParams = [];
+
+    for (const [fieldName, fieldValues] of Object.entries(stateDistBlockData)) {
+      const values = Array.isArray(fieldValues) ? fieldValues : [fieldValues];
+      
+      // Create placeholders for parameterized query
+      const valuePlaceholders = values.map(() => `$${paramIndex++}`);
+      queryParams.push(...values);
+      
+      const condition = `
+        EXISTS (
+          SELECT 1 
+          FROM "FieldValues" fv_inner
+          JOIN "Fields" f_inner ON fv_inner."fieldId" = f_inner."fieldId"
+          WHERE fv_inner."itemId" = ${context === 'COHORT' ? 'c."cohortId"' : 'u."userId"'}
+            AND f_inner."name" = $${paramIndex}
+            AND (f_inner.context IN($${paramIndex + 1}, 'NULL', 'null', '') OR f_inner.context IS NULL)
+            AND fv_inner."value" && ARRAY[${valuePlaceholders.join(',')}]
+        )`;
+      
+      queryParams.push(fieldName, context);
+      paramIndex += 2;
+      conditions.push(condition);
+    }
+
+    let query;
+    if (context === "COHORT") {
+      query = `
+        SELECT DISTINCT c."cohortId" as "itemId"
+        FROM "Cohort" c
+        WHERE ${conditions.join(' AND ')}`;
+    } else if (context === "USERS") {
+      query = `
+        SELECT DISTINCT u."userId" as "itemId"
+        FROM "Users" u
+        WHERE ${conditions.join(' AND ')}`;
+    } else {
+      // Fallback to original logic for unknown context
+      return this.filterUserUsingCustomFields(context, stateDistBlockData);
+    }
+
+    const queryData = await this.fieldsValuesRepository.query(query, queryParams);
+    const result = queryData.length > 0 ? queryData.map((item) => item.itemId) : null;
+    return result;
+  }
+
   async filterUserUsingCustomFields(context: string, stateDistBlockData: any) {
     const searchKey = [];
     let whereCondition = ` WHERE `;
