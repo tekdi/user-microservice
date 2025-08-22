@@ -858,7 +858,7 @@ export class PostgresCohortService {
         if (Object.keys(searchCustomFields).length > 0) {
           const context = "COHORT";
           getCohortIdUsingCustomFields =
-            await this.fieldsService.filterUserUsingCustomFields(
+            await this.fieldsService.filterUserUsingCustomFieldsOptimized(
               context,
               searchCustomFields
             );

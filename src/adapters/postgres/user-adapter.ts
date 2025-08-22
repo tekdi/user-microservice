@@ -513,7 +513,7 @@ export class PostgresUserService implements IServicelocator {
 
       const context = "USERS";
       getUserIdUsingCustomFields =
-        await this.fieldsService.filterUserUsingCustomFields(
+        await this.fieldsService.filterUserUsingCustomFieldsOptimized(
           context,
           searchCustomFields
         );
