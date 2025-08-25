@@ -358,7 +358,7 @@ export class PostgresUserService implements IServicelocator {
   ) {
     const apiId = APIID.USER_LIST;
     try {
-      const findData = await this.findAllUserDetails(userSearchDto);
+      const findData = await this.findAllUserDetails(userSearchDto, tenantId);
 
       if (findData === false) {
         LoggerUtil.error(
@@ -401,7 +401,7 @@ export class PostgresUserService implements IServicelocator {
   }
 
 
-  async findAllUserDetails(userSearchDto) {
+  async findAllUserDetails(userSearchDto, tenantId?: string) {
     let { limit, offset, filters, exclude, sort } = userSearchDto;
     let excludeCohortIdes;
     let excludeUserIdes;
@@ -513,7 +513,7 @@ export class PostgresUserService implements IServicelocator {
 
       const context = "USERS";
       getUserIdUsingCustomFields =
-        await this.fieldsService.filterUserUsingCustomFields(
+        await this.fieldsService.filterUserUsingCustomFieldsOptimized(
           context,
           searchCustomFields
         );
@@ -552,6 +552,18 @@ export class PostgresUserService implements IServicelocator {
       whereCondition += (index > 0 ? " AND " : "") + combinedCondition;
     } else if (index === 0) {
       whereCondition = "";
+    }
+
+    // Apply tenant filtering conditionally if tenantId is provided from headers
+    if (tenantId && tenantId.trim() !== '') {
+      if (index === 0 && whereCondition === "") {
+        whereCondition = `WHERE UTM."tenantId" = '${tenantId}'`;
+      } else {
+        whereCondition += ` AND UTM."tenantId" = '${tenantId}'`;
+      }
+      LoggerUtil.log(`Applying tenant filter for tenantId: ${tenantId}`, APIID.USER_LIST);
+    } else {
+      LoggerUtil.warn(`No tenantId provided - returning users from all tenants`, APIID.USER_LIST);
     }
 
     //Get user core fields data
@@ -791,6 +803,7 @@ export class PostgresUserService implements IServicelocator {
     T."channelId",
     T.name AS tenantName, 
     T.params,
+    T."type",
     UTM."Id" AS userTenantMappingId
   FROM 
     public."UserTenantMapping" UTM
@@ -832,6 +845,7 @@ export class PostgresUserService implements IServicelocator {
           params: data.params,
           roleId: roleId,
           roleName: roleName,
+          tenantType: data.type,
           // privileges: privileges,
         });
       }
