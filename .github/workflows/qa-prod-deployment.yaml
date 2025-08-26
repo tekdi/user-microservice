@@ -1,0 +1,74 @@
+name: BACKEND-TAG-BASED-DEPLOYMENT
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment (qa or prod)"
+        required: true
+        default: "qa"
+      tag:
+        description: "Image tag to deploy"
+        required: true
+
+jobs:
+  deploy:
+    name: Deploy backend Service
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+
+    steps:
+      # Step 1: Checkout code
+      - name: Check out repository
+        uses: actions/checkout@v2
+
+      # Step 2: Set TAG environment variable
+      - name: Set TAG environment variable
+        run: |
+          TAG="${{ github.event.inputs.tag }}"
+          echo "TAG=$TAG" >> $GITHUB_ENV
+
+      # Step 3: Debug TAG value
+      - name: Debug TAG value
+        run: echo "TAG value:${{ env.TAG }}"
+
+      # Step 4: Configure AWS credentials (from environment-specific secrets)
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      # Step 5: Generate ConfigMap YAML safely
+      - name: Generate ConfigMap YAML
+        run: |
+          mkdir -p manifest
+          cat <<EOF > manifest/configmap.yaml
+          ${{ secrets.ENV_FILE_CONTENT }}
+          EOF
+
+      # Step 6: Update Deployment Manifest
+      - name: Update Deployment Manifest
+        env:
+          IMAGE_TAG: ${{ env.TAG }}
+          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+        run: |
+          mkdir -p manifest
+          envsubst < manifest/backend-service.yaml > manifest/backend-service-updated.yaml
+          echo "Updated deployment manifest:"
+          cat manifest/backend-service-updated.yaml
+
+      # Step 7: Deploy to AWS EKS
+      - name: Deploy to AWS EKS
+        env:
+          EKS_CLUSTER_NAME: ${{ secrets.EKS_CLUSTER_NAME }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          NAMESPACE: ${{ github.event.inputs.environment == 'prod' && 'default' || 'microservices-qa' }}
+        run: |
+          aws eks update-kubeconfig --name $EKS_CLUSTER_NAME --region $AWS_REGION
+          kubectl apply -f manifest/backend-service-updated.yaml -n $NAMESPACE
+          kubectl apply -f manifest/configmap.yaml -n $NAMESPACE
+          sleep 10
+          echo "Pods status:"
+          kubectl get pods -n $NAMESPACE | grep backend
