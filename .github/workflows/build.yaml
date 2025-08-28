@@ -18,7 +18,10 @@ jobs:
   build:
     name: Build and Push Docker Image to AWS ECR
     runs-on: ubuntu-latest
-    environment: ${{ github.event.inputs.environment || 'qa' }}
+
+    env:
+      ENVIRONMENT: ${{ github.event.inputs.environment || 'qa' }}
+      TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
 
     steps:
       - name: Check out code
@@ -33,7 +36,7 @@ jobs:
 
       - name: Extract ECR Registry from Repository
         run: |
-          FULL_REPO="${{ secrets.ECR_REPOSITORY }}" 
+          FULL_REPO="${{ secrets.ECR_REPOSITORY }}"
           REGISTRY="$(echo $FULL_REPO | cut -d'/' -f1)"
           echo "ECR_REGISTRY=$REGISTRY" >> $GITHUB_ENV
           echo "ECR_REPOSITORY=$FULL_REPO" >> $GITHUB_ENV
@@ -45,8 +48,7 @@ jobs:
 
       - name: Build, Tag, and Push Docker Image
         run: |
-          TAG="${{ github.event.inputs.tag || github.ref_name }}" # Use input tag or pushed tag
-          IMAGE_URI="${{ env.ECR_REPOSITORY }}:$TAG"
+          IMAGE_URI="${{ env.ECR_REPOSITORY }}:${{ env.TAG }}"
           echo "Building image: $IMAGE_URI"
           docker build -t $IMAGE_URI .
           docker push $IMAGE_URI
