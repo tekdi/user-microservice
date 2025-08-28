@@ -18,9 +18,10 @@ jobs:
   build:
     name: Build and Push Docker Image to AWS ECR
     runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
 
     env:
-      ENVIRONMENT: ${{ github.event.inputs.environment || 'qa' }}
+      ENVIRONMENT: ${{ github.event.inputs.environment }}
       TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
 
     steps:
