@@ -427,7 +427,7 @@ export class PostgresUserService implements IServicelocator {
     if (filters && Object.keys(filters).length > 0) {
       //Fwtch all core fields
       let coreFields = await this.getCoreColumnNames();
-      const allCoreField = [...coreFields, 'fromDate', 'toDate', 'role', 'tenantId'];
+      const allCoreField = [...coreFields, 'fromDate', 'toDate', 'role', 'tenantId', 'name'];
 
       for (const [key, value] of Object.entries(filters)) {
         //Check request filter are proesent on core file or cutom fields
@@ -437,6 +437,7 @@ export class PostgresUserService implements IServicelocator {
           }
           switch (key) {
             case "firstName":
+            case "name":
               whereCondition += ` U."${key}" ILIKE '%${value}%'`;
               index++;
               break;
@@ -567,7 +568,7 @@ export class PostgresUserService implements IServicelocator {
     }
 
     //Get user core fields data
-    const query = `SELECT U."userId",U."enrollmentId", U."username",U."email", U."firstName",UTM."tenantId", U."middleName", U."lastName", U."gender", U."dob", R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", U."status", COUNT(*) OVER() AS total_count 
+    const query = `SELECT U."userId",U."enrollmentId", U."username",U."email", U."firstName", U."name",UTM."tenantId", U."middleName", U."lastName", U."gender", U."dob", R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", U."status", COUNT(*) OVER() AS total_count 
       FROM  public."Users" U
       LEFT JOIN public."CohortMembers" CM 
       ON CM."userId" = U."userId"
@@ -763,6 +764,7 @@ export class PostgresUserService implements IServicelocator {
         "enrollmentId",
         "username",
         "firstName",
+        "name",
         "middleName",
         "lastName",
         "gender",
@@ -2723,7 +2725,7 @@ export class PostgresUserService implements IServicelocator {
       if (filters && Object.keys(filters).length > 0) {
         Object.entries(filters).forEach(([key, value]) => {
           if (value !== undefined && value !== null) {
-            if (key === 'firstName' || key === 'middleName' || key === 'lastName') {
+            if (key === 'firstName' || key === 'name' || key === 'middleName' || key === 'lastName') {
               const sanitizedValue = this.sanitizeInput(value);
               whereClause[key] = ILike(`%${sanitizedValue}%`);
             } else {
@@ -2735,7 +2737,7 @@ export class PostgresUserService implements IServicelocator {
       // Use the dynamic where clause to fetch matching data
       const findData = await this.usersRepository.find({
         where: whereClause,
-        select: ['username', 'firstName', 'middleName', 'lastName','mobile'], // Select only these fields
+        select: ['username', 'firstName', 'name', 'middleName', 'lastName','mobile'], // Select only these fields
       });
 
       if (findData.length === 0) {
@@ -2876,6 +2878,7 @@ export class PostgresUserService implements IServicelocator {
               "userId",
               "username",
               "firstName",
+              "name",
               "middleName",
               "lastName",
               "gender",
