@@ -55,7 +55,7 @@ jobs:
           ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
         run: |
           mkdir -p manifest
-          envsubst < manifest/backend-service.yaml > manifest/backend-service-updated.yaml
+          envsubst < manifest/backend.yaml > manifest/backend-service-updated.yaml
           echo "Updated deployment manifest:"
           cat manifest/backend-service-updated.yaml
 
