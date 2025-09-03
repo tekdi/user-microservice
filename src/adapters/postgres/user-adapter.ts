@@ -1156,12 +1156,7 @@ export class PostgresUserService implements IServicelocator {
     }
   }
 
-  /**
-   * Synchronizes user status with Keycloak
-   * @param userId - User ID to update
-   * @param isActive - Whether user should be active (true) or inactive (false) in Keycloak
-   * @param apiId - API identifier for logging
-   */
+
   private async syncUserStatusWithKeycloak(userId: string, isActive: boolean, apiId: string): Promise<void> {
     try {
       const keycloakResponse = await getKeycloakAdminToken();
