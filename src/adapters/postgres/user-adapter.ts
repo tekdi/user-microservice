@@ -9,6 +9,7 @@ import {
   getKeycloakAdminToken,
   createUserInKeyCloak,
   updateUserInKeyCloak,
+  updateUserEnabledStatusInKeycloak,
   checkIfUsernameExistsInKeycloak,
   checkIfEmailExistsInKeycloak,
 } from "../../common/utils/keycloak.adapter.util";
@@ -929,6 +930,44 @@ export class PostgresUserService implements IServicelocator {
         apiId,
         userDto?.userId
       );
+
+      // Synchronize user status with Keycloak
+      if (userDto.userData?.status) {
+        const shouldEnable = !['archived', 'inactive'].includes(
+          userDto.userData.status.toLowerCase()
+        );
+
+        try {
+          const keycloakResponse = await getKeycloakAdminToken();
+          const token = keycloakResponse.data.access_token;
+
+          const keycloakStatusUpdateResult = await updateUserEnabledStatusInKeycloak(
+            { userId: userDto.userId, enabled: shouldEnable },
+            token
+          );
+
+          if (keycloakStatusUpdateResult.success) {
+            LoggerUtil.log(
+              `User status synchronized with Keycloak: ${shouldEnable ? 'enabled' : 'disabled'}`,
+              apiId,
+              userDto.userId
+            );
+          } else {
+            LoggerUtil.error(
+              `Keycloak user status sync failed`,
+              `Status: ${keycloakStatusUpdateResult.statusCode}, Message: ${keycloakStatusUpdateResult.message}`,
+              apiId
+            );
+          }
+        } catch (error) {
+          LoggerUtil.error(
+            `Keycloak user status sync error`,
+            `Error: ${error.message}`,
+            apiId
+          );
+          // Continue with the main flow even if Keycloak sync fails
+        }
+      }
 
       if (userDto?.customFields?.length > 0) {
         const getFieldsAttributes =

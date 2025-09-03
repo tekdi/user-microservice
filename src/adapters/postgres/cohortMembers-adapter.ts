@@ -1051,6 +1051,9 @@ export class PostgresCohortMembersService {
       }
     }
 
+    // Publish Kafka events for all successfully processed users
+    await this.publishBulkUserEvents(cohortMembersDto.userId, apiId);
+
     if (errors.length > 0) {
       return APIResponse.success(
         response,
@@ -1067,6 +1070,38 @@ export class PostgresCohortMembersService {
       HttpStatus.CREATED,
       API_RESPONSES.COHORTMEMBER_SUCCESSFULLY
     );
+  }
+
+  /**
+   * Publish Kafka events for bulk cohort member operations
+   * @param userIds - Array of user IDs that were processed
+   * @param apiId - API identifier for logging
+   */
+  private async publishBulkUserEvents(userIds: string[], apiId: string): Promise<void> {
+    try {
+      // Use the user service's publishUserEvent method for each user
+      for (const userId of userIds) {
+        try {
+          // Call the user service's private publishUserEvent method
+          await (this.userService as any).publishUserEvent('updated', userId, apiId);
+        } catch (error) {
+          LoggerUtil.error(
+            `Failed to publish Kafka event for user ${userId}`,
+            `Error: ${error.message}`,
+            apiId
+          );
+          // Continue with other users even if one fails
+        }
+      }
+      LoggerUtil.log(`Bulk user update events published to Kafka for ${userIds.length} users`, apiId);
+    } catch (error) {
+      LoggerUtil.error(
+        `Failed to publish bulk user events to Kafka`,
+        `Error: ${error.message}`,
+        apiId
+      );
+      // Don't throw the error to avoid affecting the main operation
+    }
   }
 
   public async registerFieldValue(
