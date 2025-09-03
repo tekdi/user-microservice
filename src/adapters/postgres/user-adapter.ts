@@ -1340,7 +1340,7 @@ export class PostgresUserService implements IServicelocator {
 
       // Step 5: Prepare username and check Keycloak
       const keycloakCheckStartTime = Date.now();
-      userCreateDto.username = userCreateDto.username.toLocaleLowerCase();
+      userCreateDto.username = userCreateDto.username;
       const userSchema = new UserCreateDto(userCreateDto);
 
       const keycloakResponse = await getKeycloakAdminToken();
