@@ -10,6 +10,7 @@ import {
   createUserInKeyCloak,
   updateUserInKeyCloak,
   checkIfUsernameExistsInKeycloak,
+  updateUserEnabledStatusInKeycloak,
   checkIfEmailExistsInKeycloak,
 } from "../../common/utils/keycloak.adapter.util";
 import { ErrorResponse } from "src/error-response";
@@ -427,7 +428,7 @@ export class PostgresUserService implements IServicelocator {
     if (filters && Object.keys(filters).length > 0) {
       //Fwtch all core fields
       let coreFields = await this.getCoreColumnNames();
-      const allCoreField = [...coreFields, 'fromDate', 'toDate', 'role', 'tenantId'];
+      const allCoreField = [...coreFields, 'fromDate', 'toDate', 'role', 'tenantId', 'name'];
 
       for (const [key, value] of Object.entries(filters)) {
         //Check request filter are proesent on core file or cutom fields
@@ -437,6 +438,7 @@ export class PostgresUserService implements IServicelocator {
           }
           switch (key) {
             case "firstName":
+            case "name":
               whereCondition += ` U."${key}" ILIKE '%${value}%'`;
               index++;
               break;
@@ -567,7 +569,7 @@ export class PostgresUserService implements IServicelocator {
     }
 
     //Get user core fields data
-    const query = `SELECT U."userId",U."enrollmentId", U."username",U."email", U."firstName",UTM."tenantId", U."middleName", U."lastName", U."gender", U."dob", R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", U."status", COUNT(*) OVER() AS total_count 
+    const query = `SELECT U."userId",U."enrollmentId", U."username",U."email", U."firstName", U."name",UTM."tenantId", U."middleName", U."lastName", U."gender", U."dob", R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", U."status", COUNT(*) OVER() AS total_count 
       FROM  public."Users" U
       LEFT JOIN public."CohortMembers" CM 
       ON CM."userId" = U."userId"
@@ -622,7 +624,7 @@ export class PostgresUserService implements IServicelocator {
           userId: userData.userId,
         },
       });
-      
+
       if (checkExistUser.length == 0) {
         return APIResponse.error(
           response,
@@ -763,6 +765,7 @@ export class PostgresUserService implements IServicelocator {
         "enrollmentId",
         "username",
         "firstName",
+        "name",
         "middleName",
         "lastName",
         "gender",
@@ -786,7 +789,7 @@ export class PostgresUserService implements IServicelocator {
     }
     const tenantData = tenantId
       ? tenentDetails.filter((item) => item.tenantId === tenantId)
-      : tenentDetails;    
+      : tenentDetails;
     userDetails["tenantData"] = tenantData;
 
     return userDetails;
@@ -815,7 +818,7 @@ export class PostgresUserService implements IServicelocator {
     UTM."userId" = $1
   ORDER BY 
     T."tenantId", UTM."Id";`;
-    
+
     const result = await this.usersRepository.query(query, [userId]);
     const combinedResult = [];
     const roleArray = [];
@@ -824,7 +827,7 @@ export class PostgresUserService implements IServicelocator {
         userId,
         data.tenantId
       );
-      
+
       if (roleData.length > 0) {
         roleArray.push(roleData[0].roleid);
         const roleId = roleData[0].roleid;
@@ -886,7 +889,6 @@ export class PostgresUserService implements IServicelocator {
         }
       }
 
-
       const { username, firstName, lastName, email } = userDto.userData;
       const userId = userDto.userId;
       const keycloakReqBody = { username, firstName, lastName, userId, email };
@@ -941,6 +943,20 @@ export class PostgresUserService implements IServicelocator {
         apiId,
         userDto?.userId
       );
+
+
+      // Synchronize user status with Keycloak
+      if (userDto.userData?.status) {
+        const isUserActive = userDto.userData.status === 'active';
+        
+        // Async Keycloak status synchronization - non-blocking
+        this.syncUserStatusWithKeycloak(userDto.userId, isUserActive, apiId)
+          .catch(error => LoggerUtil.error(
+            'Keycloak user status sync failed',
+            `Error: ${error.message}`,
+            apiId
+          ));
+      }
 
       if (userDto?.customFields?.length > 0) {
         const getFieldsAttributes =
@@ -1050,7 +1066,7 @@ export class PostgresUserService implements IServicelocator {
           `Error: ${error.message}`,
           apiId
         ));
-      
+
       return apiResponse;
     } catch (e) {
       LoggerUtil.error(
@@ -1140,6 +1156,40 @@ export class PostgresUserService implements IServicelocator {
     }
   }
 
+
+  private async syncUserStatusWithKeycloak(userId: string, isActive: boolean, apiId: string): Promise<void> {
+    try {
+      const keycloakResponse = await getKeycloakAdminToken();
+      const token = keycloakResponse.data.access_token;
+
+      const result = await updateUserEnabledStatusInKeycloak(
+        { userId, enabled: isActive },
+        token
+      );
+
+      if (result.success) {
+        LoggerUtil.log(
+          `Keycloak user status synchronized successfully: ${isActive ? 'enabled' : 'disabled'}`,
+          apiId,
+          userId
+        );
+      } else {
+        LoggerUtil.error(
+          'Keycloak user status synchronization failed',
+          `Status: ${result.statusCode}, Message: ${result.message}`,
+          apiId
+        );
+      }
+    } catch (error) {
+      LoggerUtil.error(
+        'Keycloak user status synchronization error',
+        `Failed to sync user status: ${error.message}`,
+        apiId
+      );
+      throw error;
+    }
+  }
+
   async loginDeviceIdAction(userDeviceId: string, userId: string, existingDeviceId: string[]): Promise<string[]> {
     let deviceIds = existingDeviceId || [];
     // Check if the device ID already exists
@@ -1194,7 +1244,7 @@ export class PostgresUserService implements IServicelocator {
     const apiId = APIID.USER_CREATE;
     const startTime = Date.now();
     const stepTimings = {};
-    
+
     const userContext = {
       username: userCreateDto?.username,
       email: userCreateDto?.email,
@@ -1298,7 +1348,7 @@ export class PostgresUserService implements IServicelocator {
       const checkUserinKeyCloakandDb = await this.checkUserinKeyCloakandDb(
         userCreateDto
       );
-      
+
       if (checkUserinKeyCloakandDb) {
         LoggerUtil.error(
           `User ${userContext.username} already exists`,
@@ -1473,14 +1523,14 @@ export class PostgresUserService implements IServicelocator {
         apiId,
         userContext.username
       );
-      
+
       // Log performance breakdown
       LoggerUtil.log(
         `Performance breakdown for user creation (${userContext.username}): Total: ${totalTime}ms | JWT: ${stepTimings['jwt_extraction']}ms | Custom Fields Validation: ${stepTimings['custom_field_validation']}ms | Request Validation: ${stepTimings['request_validation']}ms | Business Logic: ${stepTimings['business_logic_validation']}ms | Keycloak Check: ${stepTimings['keycloak_user_check']}ms | Keycloak Creation: ${stepTimings['keycloak_user_creation']}ms | Database Creation: ${stepTimings['database_user_creation']}ms | Custom Fields Processing: ${stepTimings['custom_fields_processing']}ms`,
         apiId,
         userContext.username
       );
-      
+
       // Send response to the client
       APIResponse.success(
         response,
@@ -1489,7 +1539,7 @@ export class PostgresUserService implements IServicelocator {
         HttpStatus.CREATED,
         API_RESPONSES.USER_CREATE_SUCCESSFULLY
       );
-      
+
       // Produce user created event to Kafka asynchronously - after response is sent to client
       this.publishUserEvent('created', result.userId, apiId)
         .catch(error => LoggerUtil.error(
@@ -2081,7 +2131,7 @@ export class PostgresUserService implements IServicelocator {
       }
       const fieldAttributes = getFieldDetails?.fieldAttributes || {};
       // getFieldDetails["fieldAttributes"] = fieldAttributes[tenantId] || fieldAttributes["default"];
-      getFieldDetails["fieldAttributes"] = fieldAttributes;      
+      getFieldDetails["fieldAttributes"] = fieldAttributes;
 
       if (
         (getFieldDetails.type == "checkbox" ||
@@ -2375,7 +2425,7 @@ export class PostgresUserService implements IServicelocator {
     const apiId = APIID.VERIFY_OTP;
     try {
       const { mobile, otp, hash, reason, username } = body;
-      
+
       // Validate required fields for all requests
       if (!otp || !hash || !reason) {
         return APIResponse.error(
@@ -2386,7 +2436,7 @@ export class PostgresUserService implements IServicelocator {
           HttpStatus.BAD_REQUEST
         );
       }
-  
+
       // Validate hash format
       const [hashValue, expires] = hash.split('.');
       if (!hashValue || !expires || isNaN(parseInt(expires))) {
@@ -2398,7 +2448,7 @@ export class PostgresUserService implements IServicelocator {
           HttpStatus.BAD_REQUEST
         );
       }
-  
+
       // Check for OTP expiration
       if (Date.now() > parseInt(expires)) {
         return APIResponse.error(
@@ -2409,10 +2459,10 @@ export class PostgresUserService implements IServicelocator {
           HttpStatus.BAD_REQUEST
         );
       }
-  
+
       let identifier: string;
       let resetToken: string | null = null;
-      
+
       // Process based on reason
       if (reason === 'signup') {
         if (!mobile) {
@@ -2425,7 +2475,7 @@ export class PostgresUserService implements IServicelocator {
           );
         }
         identifier = this.formatMobileNumber(mobile);
-      } 
+      }
       else if (reason === 'forgot') {
         if (!username) {
           return APIResponse.error(
@@ -2436,10 +2486,10 @@ export class PostgresUserService implements IServicelocator {
             HttpStatus.BAD_REQUEST
           );
         }
-        
+
         identifier = this.formatMobileNumber(mobile);
         const userData = await this.findUserDetails(null, username);
-        
+
         if (!userData) {
           return APIResponse.error(
             response,
@@ -2449,19 +2499,19 @@ export class PostgresUserService implements IServicelocator {
             HttpStatus.NOT_FOUND
           );
         }
-        
+
         // Generate reset token for forgot password flow
         const tokenPayload = {
           sub: userData.userId,
           email: userData.email,
         };
-        
+
         resetToken = await this.jwtUtil.generateTokenForForgotPassword(
           tokenPayload,
           this.jwt_password_reset_expires_In,
           this.jwt_secret
         );
-      } 
+      }
       else {
         return APIResponse.error(
           response,
@@ -2471,7 +2521,7 @@ export class PostgresUserService implements IServicelocator {
           HttpStatus.BAD_REQUEST
         );
       }
-  
+
       // Verify OTP hash
       const data = `${identifier}.${otp}.${reason}.${expires}`;
       const calculatedHash = this.authUtils.calculateHash(data, this.smsKey);
@@ -2481,7 +2531,7 @@ export class PostgresUserService implements IServicelocator {
         if (reason === 'forgot' && resetToken) {
           responseData['token'] = resetToken;
         }
-        
+
         return APIResponse.success(
           response,
           apiId,
@@ -2504,7 +2554,7 @@ export class PostgresUserService implements IServicelocator {
         `Error during OTP verification: ${error.message}`,
         apiId
       );
-      
+
       return APIResponse.error(
         response,
         apiId,
@@ -2663,7 +2713,7 @@ export class PostgresUserService implements IServicelocator {
         },
       };
       // console.log("notificationPayload",notificationPayload);
-      
+
       const mailSend = await this.notificationRequest.sendNotification(
         notificationPayload
       );
@@ -2723,7 +2773,7 @@ export class PostgresUserService implements IServicelocator {
       if (filters && Object.keys(filters).length > 0) {
         Object.entries(filters).forEach(([key, value]) => {
           if (value !== undefined && value !== null) {
-            if (key === 'firstName' || key === 'middleName' || key === 'lastName') {
+            if (key === 'firstName' || key === 'name' || key === 'middleName' || key === 'lastName') {
               const sanitizedValue = this.sanitizeInput(value);
               whereClause[key] = ILike(`%${sanitizedValue}%`);
             } else {
@@ -2735,7 +2785,7 @@ export class PostgresUserService implements IServicelocator {
       // Use the dynamic where clause to fetch matching data
       const findData = await this.usersRepository.find({
         where: whereClause,
-        select: ['username', 'firstName', 'middleName', 'lastName','mobile'], // Select only these fields
+        select: ['username', 'firstName', 'name', 'middleName', 'lastName', 'mobile'], // Select only these fields
       });
 
       if (findData.length === 0) {
@@ -2860,7 +2910,7 @@ export class PostgresUserService implements IServicelocator {
     try {
       // For delete events, we may want to include just basic information since the user might already be removed
       let userData: any;
-      
+
       if (eventType === 'deleted') {
         userData = {
           userId: userId,
@@ -2876,6 +2926,7 @@ export class PostgresUserService implements IServicelocator {
               "userId",
               "username",
               "firstName",
+              "name",
               "middleName",
               "lastName",
               "gender",
@@ -2894,10 +2945,10 @@ export class PostgresUserService implements IServicelocator {
           } else {
             // Get tenant and role information
             const tenantRoleData = await this.userTenantRoleData(userId);
-            
+
             // Get custom fields if any
             const customFields = await this.fieldsService.getCustomFieldDetails(userId, 'Users');
-          
+
 
             // Get cohort information for the user
             let cohorts = [];
@@ -2929,7 +2980,7 @@ export class PostgresUserService implements IServicelocator {
                 LEFT JOIN public."CohortAcademicYear" cay ON bd."cohortId":: UUID = cay."cohortId"
                 LEFT JOIN public."AcademicYears" ay ON cay."academicYearId" = ay."id"
               `;
-              
+
               const cohortResults = await this.usersRepository.query(cohortQuery, [userId]);
               if (cohortResults && cohortResults.length > 0) {
                 cohorts = cohortResults.map(result => ({
@@ -2940,12 +2991,12 @@ export class PostgresUserService implements IServicelocator {
                   joinedAt: result.joinedAt,
                   cohortMemberStatus: result.cohortMemberStatus,
                   tenantId: result.tenantId,
-                  
+
                   // Parent Cohort details
                   cohortId: result.cohortId,
                   cohortName: result.cohortName,
                   cohortType: result.cohortType,
-                  
+
                   // Academic Year details
                   academicYearId: result.academicYearId,
                   academicYearSession: result.academicYearSession
