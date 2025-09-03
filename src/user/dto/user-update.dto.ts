@@ -122,7 +122,7 @@ class UserDataDTO {
   @ApiProperty({ type: () => String })
   @IsString()
   @IsOptional()
-  @IsEnum(UserStatus)
+  @IsEnum(UserStatus, { message: 'Invalid status value. Allowed values are: active, inactive, archived.' })
   status: UserStatus;
 
   @ApiProperty({ type: () => String })
