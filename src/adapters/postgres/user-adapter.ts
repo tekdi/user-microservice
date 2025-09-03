@@ -169,11 +169,29 @@ export class PostgresUserService implements IServicelocator {
         ? programName.charAt(0).toUpperCase() + programName.slice(1)
         : 'Learner Account';
 
+      // Check if role is sent from request body
+      const requestBody = request?.body || {};
+      const roleFromBody = requestBody.role;
+
+      let notificationKey;
+
+      if (roleFromBody) {
+        // If role is sent from body, use role-specific notification key
+        if (roleFromBody === 'Regional Admin') {
+          notificationKey =
+            userData?.status === 'inactive'
+              ? 'onRegionalAdminCreated'
+              : 'OnForgotPasswordReset';
+        }
+      } else {
+        // Use existing logic if no role is sent from body
+        notificationKey =
+          userData?.status === 'inactive'
+            ? 'onStudentCreated'
+            : 'OnForgotPasswordReset';
+      }
+
       // Use key accordingly to send notification (For account verification or password reset)
-      const notificationKey =
-        userData?.status === 'inactive'
-          ? 'onStudentCreated'
-          : 'OnForgotPasswordReset';
 
       // Determine redirect URL for reset password based on user role
       const userRole = userData?.tenantData?.[0]?.roleName;
@@ -396,7 +414,10 @@ export class PostgresUserService implements IServicelocator {
       // Extract includeCustomFields from the main DTO, default to true if not specified
       const includeCustomFields = userSearchDto.includeCustomFields !== false;
 
-      const findData = await this.findAllUserDetails(userSearchDto, includeCustomFields);
+      const findData = await this.findAllUserDetails(
+        userSearchDto,
+        includeCustomFields
+      );
 
       if (findData === false) {
         LoggerUtil.error(
@@ -524,13 +545,25 @@ export class PostgresUserService implements IServicelocator {
           if (key === 'firstName') {
             whereCondition += ` U."${key}" ILIKE '%${value}%'`;
           } else {
-            if (key === 'status' || key === 'email' || key === 'userId' || key === 'country') {
+            if (
+              key === 'status' ||
+              key === 'email' ||
+              key === 'userId' ||
+              key === 'country'
+            ) {
               if (
                 Array.isArray(value) &&
                 value.every((item) => typeof item === 'string')
               ) {
                 const status = value
-                  .map((item) => `'${key === 'country' ? item.trim() : item.trim().toLowerCase()}'`)
+                  .map(
+                    (item) =>
+                      `'${
+                        key === 'country'
+                          ? item.trim()
+                          : item.trim().toLowerCase()
+                      }'`
+                  )
                   .join(',');
                 whereCondition += ` U."${key}" IN(${status})`;
               }
@@ -600,12 +633,14 @@ export class PostgresUserService implements IServicelocator {
     // Add searchtext filter if provided
     if (filters?.searchtext && filters.searchtext.trim().length >= 2) {
       try {
-        const searchWhereClause = this.buildSearchTextWhereClause(filters.searchtext);
+        const searchWhereClause = this.buildSearchTextWhereClause(
+          filters.searchtext
+        );
 
         if (searchWhereClause) {
-          const searchCondition = searchWhereClause.replace(/^AND\s+/, "");
+          const searchCondition = searchWhereClause.replace(/^AND\s+/, '');
 
-          if (whereCondition === "WHERE") {
+          if (whereCondition === 'WHERE') {
             whereCondition += ` ${searchCondition}`;
           } else {
             whereCondition += ` AND ${searchCondition}`;
@@ -656,9 +691,8 @@ export class PostgresUserService implements IServicelocator {
       // Get user custom field data only if includeCustomFields is true
       for (const userData of userDetails) {
         if (includeCustomFields) {
-          const customFields = await this.fieldsService.getUserCustomFieldDetails(
-            userData.userId
-          );
+          const customFields =
+            await this.fieldsService.getUserCustomFieldDetails(userData.userId);
           userData['customFields'] = customFields.map((data) => ({
             fieldId: data?.fieldId,
             label: data?.label,
@@ -678,7 +712,11 @@ export class PostgresUserService implements IServicelocator {
     return result;
   }
 
-  async getUsersDetailsById(userData: UserData, response: any, includeCustomFields: boolean = true) {
+  async getUsersDetailsById(
+    userData: UserData,
+    response: any,
+    includeCustomFields: boolean = true
+  ) {
     const apiId = APIID.USER_GET;
     try {
       if (!isUUID(userData.userId)) {
@@ -2905,8 +2943,12 @@ export class PostgresUserService implements IServicelocator {
    */
   private buildSearchTextWhereClause(searchtext: string): string {
     try {
-      if (!searchtext || typeof searchtext !== 'string' || searchtext.trim().length < 2) {
-        return "";
+      if (
+        !searchtext ||
+        typeof searchtext !== 'string' ||
+        searchtext.trim().length < 2
+      ) {
+        return '';
       }
 
       // Split searchtext by spaces and process all words
@@ -2916,51 +2958,53 @@ export class PostgresUserService implements IServicelocator {
         .filter((term) => term && term.length > 0);
 
       if (searchTerms.length === 0) {
-        return "";
+        return '';
       }
 
       // Build ILIKE conditions for each search term with smart column prioritization
-      const searchConditions = searchTerms.map((term) => {
-        if (!term || typeof term !== 'string') {
-          return "";
-        }
+      const searchConditions = searchTerms
+        .map((term) => {
+          if (!term || typeof term !== 'string') {
+            return '';
+          }
 
-        // Properly escape the term to prevent SQL injection
-        const escapedTerm = term
-          .replace(/'/g, "''")  // Escape single quotes
-          .replace(/%/g, "\\%") // Escape % for ILIKE
-          .replace(/_/g, "\\_"); // Escape _ for ILIKE
+          // Properly escape the term to prevent SQL injection
+          const escapedTerm = term
+            .replace(/'/g, "''") // Escape single quotes
+            .replace(/%/g, '\\%') // Escape % for ILIKE
+            .replace(/_/g, '\\_'); // Escape _ for ILIKE
 
-        // Check if this looks like an email
-        const isEmail = term.includes('@');
+          // Check if this looks like an email
+          const isEmail = term.includes('@');
 
-        if (isEmail) {
-          // For email-like terms, prioritize email and username columns only
-          return `(
+          if (isEmail) {
+            // For email-like terms, prioritize email and username columns only
+            return `(
             U."email" ILIKE '%${escapedTerm}%' OR
             U."username" ILIKE '%${escapedTerm}%'
           )`;
-        } else {
-          // For non-email terms, search across all columns
-          return `(
+          } else {
+            // For non-email terms, search across all columns
+            return `(
             U."username" ILIKE '%${escapedTerm}%' OR
             U."email" ILIKE '%${escapedTerm}%' OR
             U."firstName" ILIKE '%${escapedTerm}%' OR
             U."middleName" ILIKE '%${escapedTerm}%' OR
             U."lastName" ILIKE '%${escapedTerm}%'
           )`;
-        }
-      }).filter(condition => condition !== ""); // Filter out empty conditions
+          }
+        })
+        .filter((condition) => condition !== ''); // Filter out empty conditions
 
       if (searchConditions.length === 0) {
-        return "";
+        return '';
       }
 
       // All terms must be found (AND logic between terms)
-      return `AND (${searchConditions.join(" AND ")})`;
+      return `AND (${searchConditions.join(' AND ')})`;
     } catch (error) {
       console.error('Error in buildSearchTextWhereClause:', error);
-      return "";
+      return '';
     }
   }
 }
