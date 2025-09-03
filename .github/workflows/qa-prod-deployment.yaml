@@ -30,7 +30,7 @@ jobs:
 
       # Step 3: Debug TAG value
       - name: Debug TAG value
-        run: echo "TAG value: ${{ env.TAG }}"
+        run: echo "TAG value:${{ env.TAG }}"
 
       # Step 4: Configure AWS credentials
       - name: Configure AWS credentials
