@@ -75,7 +75,7 @@ async function createUserInKeyCloak(query, token, role: string) {
         value: query.password,
       },
     ],
-    attributes : {
+    attributes: {
       // Multi tenant for roles is not currently supported in keycloak
       user_roles: [role]  // Added in attribute and mappers
     }
@@ -97,7 +97,7 @@ async function createUserInKeyCloak(query, token, role: string) {
 
     // Log and return the created user's ID
     const userId = response.headers.location.split("/").pop(); // Extract user ID from the location header
-    return { statusCode: response.status, message: "User created successfully", userId : userId };
+    return { statusCode: response.status, message: "User created successfully", userId: userId };
   } catch (error) {
     // Handle errors and log relevant details
     if (error.response) {
@@ -303,21 +303,11 @@ async function updateUserEnabledStatusInKeycloak(
   try {
     // Perform the Axios request
     const response: AxiosResponse = await axios(config);
-
-    // Handle response status codes
-    if (response.status === 204) {
-      return {
-        success: true,
-        statusCode: response.status,
-        message: `User ${query.enabled ? 'enabled' : 'disabled'} successfully in Keycloak`,
-      };
-    } else {
-      return {
-        success: false,
-        statusCode: response.status,
-        message: `Unexpected response status: ${response.status}`,
-      };
-    }
+    return {
+      success: true,
+      statusCode: response.status,
+      message: `User ${query.enabled ? 'enabled' : 'disabled'} successfully in Keycloak`,
+    };
   } catch (error: any) {
     // Extract error details
     const axiosError: AxiosError = error;
