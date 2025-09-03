@@ -13,7 +13,7 @@ on:
 
 jobs:
   deploy:
-    name: Deploy backend Service
+    name: Deploy Backend Service
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.environment }}
 
@@ -30,9 +30,9 @@ jobs:
 
       # Step 3: Debug TAG value
       - name: Debug TAG value
-        run: echo "TAG value:${{ env.TAG }}"
+        run: echo "TAG value: ${{ env.TAG }}"
 
-      # Step 4: Configure AWS credentials (from environment-specific secrets)
+      # Step 4: Configure AWS credentials
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -40,13 +40,13 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      # Step 5: Generate ConfigMap YAML safely
-      - name: Generate ConfigMap YAML
+      # Step 5: Decode ConfigMap manifest from secret
+      - name: Write ConfigMap manifest
         run: |
           mkdir -p manifest
-          cat <<EOF > manifest/configmap.yaml
-          ${{ secrets.ENV_FILE_CONTENT }}
-          EOF
+          echo "${{ secrets.ENV_FILE_CONTENT_BACKEND }}" | base64 -d > manifest/configmap.yaml
+          echo "Generated ConfigMap:"
+          cat manifest/configmap.yaml
 
       # Step 6: Update Deployment Manifest
       - name: Update Deployment Manifest
@@ -67,8 +67,10 @@ jobs:
           NAMESPACE: ${{ github.event.inputs.environment == 'prod' && 'default' || 'microservices-qa' }}
         run: |
           aws eks update-kubeconfig --name $EKS_CLUSTER_NAME --region $AWS_REGION
-          kubectl apply -f manifest/backend-service-updated.yaml -n $NAMESPACE
           kubectl apply -f manifest/configmap.yaml -n $NAMESPACE
+          kubectl apply -f manifest/backend-service-updated.yaml -n $NAMESPACE
+          # Restart pods to pick up new config
+          kubectl rollout restart deployment backend -n $NAMESPACE
           sleep 10
           echo "Pods status:"
           kubectl get pods -n $NAMESPACE | grep backend
