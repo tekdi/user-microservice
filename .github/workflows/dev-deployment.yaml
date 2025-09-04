@@ -1,4 +1,4 @@
-name: Deploy to Tekdi-QA-Server
+name: Deploy to DEV Pratham
 on:
   push:
     branches:
@@ -21,7 +21,7 @@ jobs:
                if [ -f .env ]; then
                rm .env
                fi
-               echo '${{ secrets.QA_ENV }}"' > .env
+               echo '${{ secrets.DEV_ENV }}"' > .env
                ls -ltra
                ./deploy.sh
 #Testing
