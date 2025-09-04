@@ -1,4 +1,4 @@
-name: Tag-based Build Image
+name: Tag-based Image Build for QA and PROD
 
 on:
   push:
@@ -18,10 +18,12 @@ jobs:
   build:
     name: Build and Push Docker Image to AWS ECR
     runs-on: ubuntu-latest
-    environment: ${{ github.event.inputs.environment }}
+
+    # Use qa for tag pushes, or the chosen input for workflow_dispatch
+    environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'qa' }}
 
     env:
-      ENVIRONMENT: ${{ github.event.inputs.environment }}
+      ENVIRONMENT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'qa' }}
       TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
 
     steps:

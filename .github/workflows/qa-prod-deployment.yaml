@@ -1,4 +1,4 @@
-name: BACKEND-TAG-BASED-DEPLOYMENT
+name: BACKEND-TAG-BASED-DEPLOYMENT-AWS-EKS
 
 on:
   workflow_dispatch:

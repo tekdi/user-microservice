@@ -1,8 +1,8 @@
-name: Deploy to Tekdi-QA-Server
+name: Deploy to Dev Server Dockerised
 on:
   push:
     branches:
-      - sdbv_rbac_changes
+      - main
 jobs:
    deploy:
     runs-on: ubuntu-latest
@@ -16,12 +16,12 @@ jobs:
           username: ${{ secrets.USERNAME_TEKDI_QA }}
           key: ${{ secrets.EC2_SSH_KEY_TEKDI_QA }}
           port: ${{ secrets.PORT_TEKDI_QA }}
-          script: |    
+          script: |
                cd ${{ secrets.TARGET_DIR_TEKDI_QA }}
                if [ -f .env ]; then
                rm .env
                fi
-               echo '${{ secrets.QA_ENV }}"' > .env
+               echo '${{ secrets.DEV_ENV }}"' > .env
                ls -ltra
                ./deploy.sh
 #Testing
