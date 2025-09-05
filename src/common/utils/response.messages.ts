@@ -81,7 +81,8 @@ export const API_RESPONSES = {
   UNAUTHORIZED: "Unauthorized",
   INVALID_TOKEN: "Token Invalid",
   INVALID_OPTION: 'Invalid Option Selected',
-
+ 
+ 
   //User Api messages
   USER_UPDATED_SUCCESSFULLY: "User updated successfully.",
   USER_NOT_EXISTS: "User does not exist.",
@@ -90,10 +91,12 @@ export const API_RESPONSES = {
   USER_ALREADY_EXISTS: "User already exists.",
   SERVER_ERROR: "Internal server error",
   SERVICE_NAME: "User service",
-
+ 
+ 
   USER_NOT_FOUND_FOR_DELETE: "User not found for delete.",
   USER_NOT_FOUND_FOR_PASSWORD_RESET: "User not found for password reset.",
-
+ 
+ 
   //get User Details
   USER_GET_SUCCESSFULLY: "User details fetched successfully.",
   USER_GET_BY_EMAIL_SUCCESSFULLY: "User details fetched successfully by email",
@@ -112,7 +115,8 @@ export const API_RESPONSES = {
   USERNAME_EXISTS_KEYCLOAK: 'Username is already exists in keycloak',
   UPDATE_USER_KEYCLOAK_ERROR:'Failed to update username details in Keycloak.',
   USERNAME_SUGGEST_SUCCESSFULLY:'Username is already taken. Suggested a new unique username.',
-
+ 
+ 
   //Create user
   USER_CREATE_SUCCESSFULLY: `User created successfully`,
   USER_CREATE_IN_DB: "User created in user table successfully",
@@ -127,7 +131,8 @@ export const API_RESPONSES = {
     `User creation failed with error: ${error}. Username: ${username}`,
   USERID_NOT_FOUND: (userId) => `User Id '${userId}' does not exist.`,
   TENANTID_NOT_FOUND: (tenantId) => `Tenant Id '${tenantId}' does not exist.`,
-
+ 
+ 
   //UUID constants
   UUID_VALIDATION: "Please enter valid UUID",
   INVALID_EMAIL: (emailId) => `Invalid email address: ${emailId}`,
@@ -136,7 +141,8 @@ export const API_RESPONSES = {
   DOB_FORMAT: (dob) => `Date of birth must be in the format yyyy-mm-dd: ${dob}`,
   INVALID_USERNAME_EMAIL: `Invalid Username Or Email`,
   USER_RELATEDENTITY_DELETE: `User and related entries deleted Successfully.`,
-
+ 
+ 
   ACADEMIC_YEAR_NOT_FOUND: "Academic year not found for tenant",
   DUPLICAT_TENANTID:
     "Duplicate tenantId detected. Please ensure each tenantId is unique and correct your data.",
@@ -144,7 +150,8 @@ export const API_RESPONSES = {
     "Invalid parameters provided. Please ensure that tenantId, roleId, and cohortId (if applicable) are correctly provided.",
   COHORT_NOT_FOUND_IN_TENANT_ID: (cohortId, TenantId) =>
     `Cohort Id '${cohortId}' does not exist for this tenant '${TenantId}'.`,
-
+ 
+ 
   ROLE_NOT_FOUND_IN_TENANT: (roleId, tenantId) =>
     `Role Id '${roleId}' does not exist for this tenant '${tenantId}'.`,
   USER_EXISTS_SEND_MAIL: "User Exists. Proceed with Sending Email.",
@@ -154,14 +161,16 @@ export const API_RESPONSES = {
     `Duplicate fieldId detected: ${duplicateFieldKeys}`,
   FIELD_NOT_FOUND: "Field not found",
   PASSWORD_RESET: "Password reset successful!",
-
+ 
+ 
   SOMETHING_WRONG: "Something went wrong",
   USER_PASSWORD_UPDATE: "User Password Updated Successfully",
   USER_BASIC_DETAILS_UPDATE: "User basic details updated successfully",
   USER_TENANT: "User tenant mapping successfully",
   USER_COHORT: "User cohort mapping successfully",
   COHORT_NAME_EXIST: "Cohort name already exist.Please provide another name.",
-
+ 
+ 
   COHORT_LIST: "Cohort list fetched successfully",
   COHORT_HIERARCHY: "Cohort hierarchy fetched successfully",
   COHORT_EXISTS: "Cohort already exists",
@@ -172,7 +181,8 @@ export const API_RESPONSES = {
   COHORT_UPDATED_SUCCESSFULLY: "Cohort updated successfully.",
   TENANT_NOTFOUND: "Tenant not found",
   COHORTMEMBER_UPDATE_SUCCESSFULLY: "Cohort Member updated Successfully",
-
+ 
+ 
   //Tenant
   TENANT_GET: "Tenant fetched successfully.",
   TENANT_NOT_FOUND: "No tenants found matching the specified criteria.",
@@ -183,7 +193,8 @@ export const API_RESPONSES = {
   TENANT_SEARCH_SUCCESS: "Tenant search successfully",
   TENANT_CREATE_FAILED: "Failed to create tenant, please try again.",
   REQUIRED_AND_UUID: "tenantId is required and it's must be a valid UUID.",
-
+ 
+ 
   //OTP
   NOTIFICATION_FAIL_DURING_OTP_SEND:
     "Send SMS notification failed duing OTP send",
@@ -211,9 +222,10 @@ export const API_RESPONSES = {
   SEND_OTP: "OTP sent successfully",
   EMAIL_NOTIFICATION_ERROR: "Failed to send Email notification:",
   EMAIL_ERROR: "Email notification failed",
+  WHATSAPP_ERROR: "WhatsApp notification failed",
+  WHATSAPP_NOTIFICATION_ERROR: "Failed to send WhatsApp notification:",
   SIGNED_URL_SUCCESS: "Signed URL generated successfully",
   SIGNED_URL_FAILED: "Error while generating signed URL",
   INVALID_FILE_TYPE: "Invalid file type. Allowed file types are: '.jpg','.jpeg','.png','.webp','.pdf','.doc','.docx','.mp4','.mov','.txt','.csv'",
   FILE_SIZE_ERROR: "File too large. Maximum allowed file size is 10MB."
-};
-
+ }; 
