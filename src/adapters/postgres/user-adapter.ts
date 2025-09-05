@@ -451,7 +451,11 @@ export class PostgresUserService implements IServicelocator {
                 const status = value.map((item) => `'${item.trim().toLowerCase()}'`).join(",");
                 whereCondition += ` U."${key}" IN(${status})`;
               } else {
-                whereCondition += ` U."${key}" = '${value}'`;
+                if (key === "username") {
+                  whereCondition += ` U."${key}" ILIKE '${value}'`;
+                } else {
+                  whereCondition += ` U."${key}" = '${value}'`;
+                }
               }
               index++;
               break;
@@ -756,7 +760,7 @@ export class PostgresUserService implements IServicelocator {
     const whereClause: any = { userId: userId };
     if (username && userId === null) {
       delete whereClause.userId;
-      whereClause.username = username;
+      whereClause.username = ILike(username);
     }
     const userDetails = await this.usersRepository.findOne({
       where: whereClause,
@@ -1340,7 +1344,7 @@ export class PostgresUserService implements IServicelocator {
 
       // Step 5: Prepare username and check Keycloak
       const keycloakCheckStartTime = Date.now();
-      userCreateDto.username = userCreateDto.username.toLocaleLowerCase();
+      userCreateDto.username = userCreateDto.username;
       const userSchema = new UserCreateDto(userCreateDto);
 
       const keycloakResponse = await getKeycloakAdminToken();
@@ -2374,7 +2378,7 @@ export class PostgresUserService implements IServicelocator {
         data: {
           message: `OTP sent to ${mobile}`,
           hash: `${hash}.${expires}`,
-          sendStatus: notificationPayload.result?.sms?.data[0]
+          // sendStatus: notificationPayload.result?.sms?.data[0]
           // sid: message.sid, // Twilio Message SID
         }
       };
@@ -2408,12 +2412,14 @@ export class PostgresUserService implements IServicelocator {
       const mobileWithCode = this.formatMobileNumber(mobile);
       const otp = this.authUtils.generateOtp(this.otpDigits).toString();
       const { hash, expires, expiresInMinutes } = this.generateOtpHash(mobileWithCode, otp, reason);
+      console.log("hash", otp, hash, expires, expiresInMinutes);
       const replacements = {
         "{OTP}": otp,
         "{otpExpiry}": expiresInMinutes
       };
       // Step 2:send SMS notification
-      const notificationPayload = await this.smsNotification("OTP", "SEND_OTP", replacements, [mobile]);
+      // const notificationPayload = await this.smsNotification("OTP", "SEND_OTP", replacements, [mobile]);
+      const notificationPayload = "test"
       return { notificationPayload, hash, expires, expiresInMinutes };
     }
     catch (error) {
@@ -2477,6 +2483,7 @@ export class PostgresUserService implements IServicelocator {
         identifier = this.formatMobileNumber(mobile);
       }
       else if (reason === 'forgot') {
+        console.log("hii")
         if (!username) {
           return APIResponse.error(
             response,
@@ -2837,7 +2844,7 @@ export class PostgresUserService implements IServicelocator {
     try {
       // Fetch user data from the database to check if the username already exists
       const findData = await this.usersRepository.findOne({
-        where: { username: suggestUserDto?.username },
+        where: { username: ILike(suggestUserDto?.username) },
       });
 
       if (findData) {
@@ -2853,7 +2860,7 @@ export class PostgresUserService implements IServicelocator {
 
         while (!isUnique) {
           const existingUser = await this.usersRepository.findOne({
-            where: { username: newUsername },
+            where: { username: ILike(newUsername) },
           });
 
           if (!existingUser) {
