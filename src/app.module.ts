@@ -28,6 +28,7 @@ import { PermissionMiddleware } from "./middleware/permission.middleware";
 import { RolePermissionModule } from "./permissionRbac/rolePermissionMapping/role-permission.module";
 import { LocationModule } from "./location/location.module";
 import { KafkaModule } from "./kafka/kafka.module";
+import { SsoModule } from "./sso/sso.module";
 import kafkaConfig from "./kafka/kafka.config";
 import { HealthController } from "./health.controller";
 @Module({
@@ -56,6 +57,7 @@ import { HealthController } from "./health.controller";
     RolePermissionModule,
     LocationModule,
     KafkaModule,
+    SsoModule,
   ],
   controllers: [AppController, HealthController],
   providers: [AppService, HttpService],
