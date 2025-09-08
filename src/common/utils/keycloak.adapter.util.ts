@@ -75,7 +75,7 @@ async function createUserInKeyCloak(query, token, role: string) {
         value: query.password,
       },
     ],
-    attributes : {
+    attributes: {
       // Multi tenant for roles is not currently supported in keycloak
       user_roles: [role]  // Added in attribute and mappers
     }
@@ -97,7 +97,7 @@ async function createUserInKeyCloak(query, token, role: string) {
 
     // Log and return the created user's ID
     const userId = response.headers.location.split("/").pop(); // Extract user ID from the location header
-    return { statusCode: response.status, message: "User created successfully", userId : userId };
+    return { statusCode: response.status, message: "User created successfully", userId: userId };
   } catch (error) {
     // Handle errors and log relevant details
     if (error.response) {
@@ -258,12 +258,77 @@ async function checkIfUsernameExistsInKeycloak(username, token) {
   return userResponse;
 }
 
+// Define the structure for user enable/disable operation
+interface UpdateUserEnabledQuery {
+  userId: string;
+  enabled: boolean;
+}
+
+// Define the structure of the function response
+interface UpdateUserEnabledResponse {
+  success: boolean;
+  statusCode: number;
+  message: string;
+}
+
+async function updateUserEnabledStatusInKeycloak(
+  query: UpdateUserEnabledQuery,
+  token: string
+): Promise<UpdateUserEnabledResponse> {
+  // Validate required parameters
+  if (!query.userId) {
+    return {
+      success: false,
+      statusCode: 400,
+      message: "User status cannot be updated, userId missing",
+    };
+  }
+
+  // Prepare the payload for the update
+  const data = JSON.stringify({
+    enabled: query.enabled,
+  });
+
+  // Axios request configuration
+  const config: AxiosRequestConfig = {
+    method: "put",
+    url: `${process.env.KEYCLOAK}${process.env.KEYCLOAK_ADMIN}/${query.userId}`,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    data: data,
+  };
+
+  try {
+    // Perform the Axios request
+    const response: AxiosResponse = await axios(config);
+    return {
+      success: true,
+      statusCode: response.status,
+      message: `User ${query.enabled ? 'enabled' : 'disabled'} successfully in Keycloak`,
+    };
+  } catch (error: any) {
+    // Extract error details
+    const axiosError: AxiosError = error;
+    const errorMessage =
+      axiosError.response?.data?.errorMessage || `Failed to ${query.enabled ? 'enable' : 'disable'} user in Keycloak`;
+
+    return {
+      success: false,
+      statusCode: axiosError.response?.status || 500,
+      message: errorMessage,
+    };
+  }
+}
+
 export {
   getUserGroup,
   getUserRole,
   getKeycloakAdminToken,
   createUserInKeyCloak,
   updateUserInKeyCloak,
+  updateUserEnabledStatusInKeycloak,
   checkIfEmailExistsInKeycloak,
   checkIfUsernameExistsInKeycloak,
 };
