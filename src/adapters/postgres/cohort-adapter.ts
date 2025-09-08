@@ -1174,14 +1174,13 @@ export class PostgresCohortService {
    * @param cohortId Cohort ID for whom the event is published
    * @param apiId API ID for logging
    */
-  public async publishCohortEvent(
+  private async publishCohortEvent(
     eventType: 'created' | 'updated' | 'deleted',
     cohortId: string,
     academicYearId: string | null,
     apiId: string
   ): Promise<void> {
     try {
-      console.log("update event")
       // For delete events, we may want to include just basic information since the cohort might already be removed
       let cohortData: any;
       
