@@ -1754,8 +1754,8 @@ export class PostgresUserService implements IServicelocator {
   async createUserInDatabase(
     request: any,
     userCreateDto: UserCreateDto,
-    academicYearId: string,
-    response: Response
+    academicYearId?: string,
+    response?: Response
   ): Promise<User> {
     const user = new User();
     user.userId = userCreateDto?.userId,
