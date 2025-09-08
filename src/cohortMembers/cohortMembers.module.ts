@@ -15,6 +15,12 @@ import { AcademicYear } from "src/academicyears/entities/academicyears-entity";
 import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
 import { FieldValues } from "src/fields/entities/fields-values.entity";
 import { KafkaModule } from "src/kafka/kafka.module";
+import { PostgresCohortService } from "src/adapters/postgres/cohort-adapter";
+import { UserTenantMapping } from "src/userTenantMapping/entities/user-tenant-mapping.entity";
+import { PostgresFieldsService } from "src/adapters/postgres/fields-adapter";
+import { CohortAcademicYearService } from "src/adapters/postgres/cohortAcademicYear-adapter";
+import { AutomaticMemberService } from "src/automatic-member/automatic-member.service";
+import { AutomaticMember } from "src/automatic-member/entity/automatic-member.entity";
 
 @Module({
   imports: [
@@ -26,7 +32,9 @@ import { KafkaModule } from "src/kafka/kafka.module";
       CohortAcademicYear,
       AcademicYear,
       Tenants,
-      FieldValues
+      FieldValues,
+      UserTenantMapping,
+      AutomaticMember
     ]),
     HttpModule,
     PostgresModule,
@@ -37,6 +45,10 @@ import { KafkaModule } from "src/kafka/kafka.module";
     CohortMembersAdapter,
     PostgresCohortMembersService,
     PostgresAcademicYearService,
+    PostgresFieldsService,
+    CohortAcademicYearService,
+    AutomaticMemberService,
+    PostgresCohortService,
   ],
   exports: [PostgresCohortMembersService]
 })

@@ -23,7 +23,7 @@ import { LoggerUtil } from "src/common/logger/LoggerUtil";
 import { PostgresUserService } from "./user-adapter";
 import { isValid } from "date-fns";
 import { FieldValuesOptionDto } from "src/user/dto/user-create.dto";
-import { KafkaService } from "src/kafka/kafka.service";
+import { PostgresCohortService } from "./cohort-adapter";
 
 @Injectable()
 export class PostgresCohortMembersService {
@@ -42,7 +42,7 @@ export class PostgresCohortMembersService {
     private readonly notificationRequest: NotificationRequest,
     private fieldsService: PostgresFieldsService,
     private userService: PostgresUserService,
-    private kafkaService: KafkaService
+    private cohortService: PostgresCohortService
   ) { }
 
   //Get cohort member
@@ -1060,7 +1060,30 @@ export class PostgresCohortMembersService {
     }
 
     // Publish Kafka events for affected cohorts after successful bulk operations
-    await this.publishCohortMemberEvents(affectedCohorts, academicyearId, apiId);
+    // Use Promise.allSettled to ensure one failed event doesn't stop others
+    if (affectedCohorts.size > 0) {
+      LoggerUtil.log(
+        `Publishing cohort events for ${affectedCohorts.size} cohorts`,
+        apiId
+      );
+
+      const publishPromises = Array.from(affectedCohorts).map(async (cohortId) => {
+        try {
+          // Directly call publishCohortEvent with 'updated' type since members were added
+          await this.cohortService.publishCohortEvent('updated', cohortId, academicyearId, apiId);
+          LoggerUtil.log(`Cohort event published for cohort: ${cohortId}`, apiId);
+        } catch (error) {
+          LoggerUtil.error(
+            `Failed to publish cohort event for cohort: ${cohortId}`,
+            `Error: ${error.message}`,
+            apiId
+          );
+          // Don't throw - we don't want Kafka failures to affect the main operation
+        }
+      });
+
+      await Promise.allSettled(publishPromises);
+    }
 
     if (errors.length > 0) {
       return APIResponse.success(
@@ -1078,100 +1101,6 @@ export class PostgresCohortMembersService {
       HttpStatus.CREATED,
       API_RESPONSES.COHORTMEMBER_SUCCESSFULLY
     );
-  }
-
-  /**
-   * Publishes cohort events using the existing Kafka infrastructure
-   * This maintains separation of concerns by reusing the same event structure
-   * as the original publishCohortEvent but avoids circular dependencies
-   */
-  private async publishCohortMemberEvents(
-    affectedCohorts: Set<string>,
-    academicYearId: string,
-    apiId: string
-  ): Promise<void> {
-    if (affectedCohorts.size === 0) {
-      return;
-    }
-
-    LoggerUtil.log(
-      `Publishing cohort member events for ${affectedCohorts.size} cohorts`,
-      apiId
-    );
-
-    // Use Promise.allSettled to ensure one failed event doesn't stop others
-    const publishPromises = Array.from(affectedCohorts).map(async (cohortId) => {
-      try {
-        // Fetch cohort data to maintain consistency with original publishCohortEvent
-        let cohortData: any;
-        
-        try {
-          // Get basic cohort information (same as original publishCohortEvent)
-          const cohort = await this.cohortRepository.findOne({
-            where: { cohortId: cohortId },
-            select: [
-              "cohortId",
-              "name", 
-              "type",
-              "status",
-              "parentId",
-              "tenantId",
-              "createdAt",
-              "updatedAt",
-              "createdBy",
-              "updatedBy"
-            ]
-          });
-
-          if (!cohort) {
-            LoggerUtil.error(`Failed to fetch cohort data for Kafka event`, `Cohort with ID ${cohortId} not found`);
-            cohortData = { cohortId };
-          } else {
-            // Get custom fields for the cohort (consistent with original implementation)
-            let customFields = [];
-            try {
-              customFields = await this.fieldsService.getCustomFieldDetails(cohortId, 'Cohort');
-            } catch (customFieldError) {
-              LoggerUtil.error(
-                `Failed to fetch custom fields for Kafka event`,
-                `Error: ${customFieldError.message}`,
-                apiId
-              );
-              customFields = [];
-            }
-
-            // Build the cohort data object (consistent with original)
-            cohortData = {
-              ...cohort,
-              ...(academicYearId && { academicYearId }),
-              customFields: customFields || [],
-              eventTimestamp: new Date().toISOString(),
-              // Add context that this was triggered by member addition
-              eventContext: 'cohort_members_added'
-            };
-          }
-        } catch (error) {
-          LoggerUtil.error(
-            `Failed to fetch cohort data for Kafka event`,
-            `Error: ${error.message}`
-          );
-          cohortData = { cohortId };
-        }
-
-        // Publish using the same structure as original publishCohortEvent
-        await this.kafkaService.publishCohortEvent('updated', cohortData, cohortId);
-        LoggerUtil.log(`Cohort member event published for cohort: ${cohortId}`, apiId);
-      } catch (error) {
-        LoggerUtil.error(
-          `Failed to publish cohort member event for cohort: ${cohortId}`,
-          `Error: ${error.message}`,
-          apiId
-        );
-        // Don't throw - we don't want Kafka failures to affect the main operation
-      }
-    });
-
-    await Promise.allSettled(publishPromises);
   }
 
   public async registerFieldValue(
