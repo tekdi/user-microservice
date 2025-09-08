@@ -23,7 +23,6 @@ import { LoggerUtil } from "src/common/logger/LoggerUtil";
 import { PostgresUserService } from "./user-adapter";
 import { isValid } from "date-fns";
 import { FieldValuesOptionDto } from "src/user/dto/user-create.dto";
-import { PostgresCohortService } from "./cohort-adapter";
 
 @Injectable()
 export class PostgresCohortMembersService {
@@ -41,8 +40,7 @@ export class PostgresCohortMembersService {
     private readonly academicyearService: PostgresAcademicYearService,
     private readonly notificationRequest: NotificationRequest,
     private fieldsService: PostgresFieldsService,
-    private userService: PostgresUserService,
-    private cohortService: PostgresCohortService
+    private userService: PostgresUserService
   ) { }
 
   //Get cohort member
@@ -889,8 +887,8 @@ export class PostgresCohortMembersService {
       // cohortAcademicYearId: academicyearId
     };
 
-    // Track cohorts that had members successfully added for Kafka event publishing
-    const affectedCohorts = new Set<string>();
+    // Track users that were successfully added to cohorts for Kafka event publishing
+    const affectedUsers = new Set<string>();
 
     const academicYear = await this.academicyearService.getActiveAcademicYear(
       academicyearId,
@@ -1039,8 +1037,8 @@ export class PostgresCohortMembersService {
             );
             results.push(result);
             
-            // Track cohort for Kafka event publishing
-            affectedCohorts.add(cohortId);
+            // Track user for Kafka event publishing
+            affectedUsers.add(userId);
           } catch (error) {
             LoggerUtil.error(
               `${API_RESPONSES.SERVER_ERROR}`,
@@ -1059,22 +1057,22 @@ export class PostgresCohortMembersService {
       }
     }
 
-    // Publish Kafka events for affected cohorts after successful bulk operations
+    // Publish Kafka events for affected users after successful bulk operations
     // Use Promise.allSettled to ensure one failed event doesn't stop others
-    if (affectedCohorts.size > 0) {
+    if (affectedUsers.size > 0) {
       LoggerUtil.log(
-        `Publishing cohort events for ${affectedCohorts.size} cohorts`,
+        `Publishing user events for ${affectedUsers.size} users`,
         apiId
       );
 
-      const publishPromises = Array.from(affectedCohorts).map(async (cohortId) => {
+      const publishPromises = Array.from(affectedUsers).map(async (userId) => {
         try {
-          // Directly call publishCohortEvent with 'updated' type since members were added
-          await this.cohortService.publishCohortEvent('updated', cohortId, academicyearId, apiId);
-          LoggerUtil.log(`Cohort event published for cohort: ${cohortId}`, apiId);
+          // Directly call publishUserEvent with 'updated' type since users joined new cohorts
+          await this.userService.publishUserEvent('updated', userId, apiId);
+          LoggerUtil.log(`User event published for user: ${userId}`, apiId);
         } catch (error) {
           LoggerUtil.error(
-            `Failed to publish cohort event for cohort: ${cohortId}`,
+            `Failed to publish user event for user: ${userId}`,
             `Error: ${error.message}`,
             apiId
           );

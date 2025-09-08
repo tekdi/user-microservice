@@ -2906,7 +2906,7 @@ export class PostgresUserService implements IServicelocator {
    * @param userId User ID for whom the event is published
    * @param apiId API ID for logging
    */
-  private async publishUserEvent(
+  public async publishUserEvent(
     eventType: 'created' | 'updated' | 'deleted',
     userId: string,
     apiId: string

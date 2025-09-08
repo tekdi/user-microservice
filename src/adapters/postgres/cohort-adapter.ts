@@ -1181,6 +1181,7 @@ export class PostgresCohortService {
     apiId: string
   ): Promise<void> {
     try {
+      console.log("update event")
       // For delete events, we may want to include just basic information since the cohort might already be removed
       let cohortData: any;
       
