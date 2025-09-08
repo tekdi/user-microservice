@@ -1174,7 +1174,7 @@ export class PostgresCohortService {
    * @param cohortId Cohort ID for whom the event is published
    * @param apiId API ID for logging
    */
-  private async publishCohortEvent(
+  public async publishCohortEvent(
     eventType: 'created' | 'updated' | 'deleted',
     cohortId: string,
     academicYearId: string | null,

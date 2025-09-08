@@ -23,6 +23,7 @@ import { LoggerUtil } from "src/common/logger/LoggerUtil";
 import { PostgresUserService } from "./user-adapter";
 import { isValid } from "date-fns";
 import { FieldValuesOptionDto } from "src/user/dto/user-create.dto";
+import { KafkaService } from "src/kafka/kafka.service";
 
 @Injectable()
 export class PostgresCohortMembersService {
@@ -40,7 +41,8 @@ export class PostgresCohortMembersService {
     private readonly academicyearService: PostgresAcademicYearService,
     private readonly notificationRequest: NotificationRequest,
     private fieldsService: PostgresFieldsService,
-    private userService: PostgresUserService
+    private userService: PostgresUserService,
+    private kafkaService: KafkaService
   ) { }
 
   //Get cohort member
@@ -887,6 +889,9 @@ export class PostgresCohortMembersService {
       // cohortAcademicYearId: academicyearId
     };
 
+    // Track cohorts that had members successfully added for Kafka event publishing
+    const affectedCohorts = new Set<string>();
+
     const academicYear = await this.academicyearService.getActiveAcademicYear(
       academicyearId,
       tenantId
@@ -1033,6 +1038,9 @@ export class PostgresCohortMembersService {
               cohortMemberForAcademicYear
             );
             results.push(result);
+            
+            // Track cohort for Kafka event publishing
+            affectedCohorts.add(cohortId);
           } catch (error) {
             LoggerUtil.error(
               `${API_RESPONSES.SERVER_ERROR}`,
@@ -1051,6 +1059,9 @@ export class PostgresCohortMembersService {
       }
     }
 
+    // Publish Kafka events for affected cohorts after successful bulk operations
+    await this.publishCohortMemberEvents(affectedCohorts, academicyearId, apiId);
+
     if (errors.length > 0) {
       return APIResponse.success(
         response,
@@ -1067,6 +1078,100 @@ export class PostgresCohortMembersService {
       HttpStatus.CREATED,
       API_RESPONSES.COHORTMEMBER_SUCCESSFULLY
     );
+  }
+
+  /**
+   * Publishes cohort events using the existing Kafka infrastructure
+   * This maintains separation of concerns by reusing the same event structure
+   * as the original publishCohortEvent but avoids circular dependencies
+   */
+  private async publishCohortMemberEvents(
+    affectedCohorts: Set<string>,
+    academicYearId: string,
+    apiId: string
+  ): Promise<void> {
+    if (affectedCohorts.size === 0) {
+      return;
+    }
+
+    LoggerUtil.log(
+      `Publishing cohort member events for ${affectedCohorts.size} cohorts`,
+      apiId
+    );
+
+    // Use Promise.allSettled to ensure one failed event doesn't stop others
+    const publishPromises = Array.from(affectedCohorts).map(async (cohortId) => {
+      try {
+        // Fetch cohort data to maintain consistency with original publishCohortEvent
+        let cohortData: any;
+        
+        try {
+          // Get basic cohort information (same as original publishCohortEvent)
+          const cohort = await this.cohortRepository.findOne({
+            where: { cohortId: cohortId },
+            select: [
+              "cohortId",
+              "name", 
+              "type",
+              "status",
+              "parentId",
+              "tenantId",
+              "createdAt",
+              "updatedAt",
+              "createdBy",
+              "updatedBy"
+            ]
+          });
+
+          if (!cohort) {
+            LoggerUtil.error(`Failed to fetch cohort data for Kafka event`, `Cohort with ID ${cohortId} not found`);
+            cohortData = { cohortId };
+          } else {
+            // Get custom fields for the cohort (consistent with original implementation)
+            let customFields = [];
+            try {
+              customFields = await this.fieldsService.getCustomFieldDetails(cohortId, 'Cohort');
+            } catch (customFieldError) {
+              LoggerUtil.error(
+                `Failed to fetch custom fields for Kafka event`,
+                `Error: ${customFieldError.message}`,
+                apiId
+              );
+              customFields = [];
+            }
+
+            // Build the cohort data object (consistent with original)
+            cohortData = {
+              ...cohort,
+              ...(academicYearId && { academicYearId }),
+              customFields: customFields || [],
+              eventTimestamp: new Date().toISOString(),
+              // Add context that this was triggered by member addition
+              eventContext: 'cohort_members_added'
+            };
+          }
+        } catch (error) {
+          LoggerUtil.error(
+            `Failed to fetch cohort data for Kafka event`,
+            `Error: ${error.message}`
+          );
+          cohortData = { cohortId };
+        }
+
+        // Publish using the same structure as original publishCohortEvent
+        await this.kafkaService.publishCohortEvent('updated', cohortData, cohortId);
+        LoggerUtil.log(`Cohort member event published for cohort: ${cohortId}`, apiId);
+      } catch (error) {
+        LoggerUtil.error(
+          `Failed to publish cohort member event for cohort: ${cohortId}`,
+          `Error: ${error.message}`,
+          apiId
+        );
+        // Don't throw - we don't want Kafka failures to affect the main operation
+      }
+    });
+
+    await Promise.allSettled(publishPromises);
   }
 
   public async registerFieldValue(
