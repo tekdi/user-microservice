@@ -2367,14 +2367,47 @@ export class PostgresUserService implements IServicelocator {
           HttpStatus.BAD_REQUEST
         );
       }
-      // Step 1: Prepare data for OTP generation and send on Mobile
-      const { notificationPayload, hash, expires } = await this.sendOTPOnMobile(mobile, reason);
+      // Step 1: Prepare data for OTP generation and send based on channel
+      let notificationPayload: any;
+      let hash: string;
+      let expires: number;
+
+      if (reason === 'signup' || reason === 'login') {
+        const channelOverride = ((body as any)?.channel || '').toLowerCase();
+        if (channelOverride === 'sms') {
+          // Send via SMS ONLY for signup/login without triggering WhatsApp
+          const mobileWithCode = this.formatMobileNumber(mobile);
+          const otp = this.authUtils.generateOtp(this.otpDigits).toString();
+          const generated = this.generateOtpHash(mobileWithCode, otp, reason);
+          hash = generated.hash;
+          expires = generated.expires;
+          const replacements = {
+            "{OTP}": otp,
+            "{otpExpiry}": generated.expiresInMinutes
+          };
+          notificationPayload = await this.smsNotification("OTP", "SEND_OTP", replacements, [mobile]);
+        } else {
+          // Default: WhatsApp ONLY for signup/login
+          const otp = this.authUtils.generateOtp(this.otpDigits).toString();
+          const waResult = await this.sendOtpOnWhatsApp(mobile, otp, reason);
+          notificationPayload = waResult.notificationPayload;
+          hash = waResult.hash;
+          expires = waResult.expires;
+        }
+      } else {
+        // Default (e.g., forgot) uses existing SMS path
+        const smsResult = await this.sendOTPOnMobile(mobile, reason);
+        notificationPayload = smsResult.notificationPayload;
+        hash = smsResult.hash;
+        expires = smsResult.expires;
+      }
+
       // Step 2: Send success response
       const result = {
         data: {
           message: `OTP sent to ${mobile}`,
           hash: `${hash}.${expires}`,
-          sendStatus: notificationPayload.result?.sms?.data[0]
+          sendStatus: notificationPayload?.result?.whatsapp?.data?.[0] || notificationPayload?.result?.sms?.data?.[0]
           // sid: message.sid, // Twilio Message SID
         }
       };
@@ -2414,12 +2447,109 @@ export class PostgresUserService implements IServicelocator {
       };
       // Step 2:send SMS notification
       const notificationPayload = await this.smsNotification("OTP", "SEND_OTP", replacements, [mobile]);
+      // Step 3: For signup/login, also send via WhatsApp only (do not trigger other channels)
+      if (reason === 'signup' || reason === 'login') {
+        try {
+          await this.sendOtpOnWhatsApp(mobile, otp, reason);
+        } catch (waErr: any) {
+          LoggerUtil.warn(`WhatsApp OTP send failed: ${waErr?.message || waErr}`, APIID.SEND_OTP);
+        }
+      }
       return { notificationPayload, hash, expires, expiresInMinutes };
     }
     catch (error) {
       throw new Error(`Failed to send OTP: ${error.message}`);
     }
   }
+
+  async sendOtpOnWhatsApp(whatsapp: string, otp: string, reason: string) {
+    try {
+      const formattedWhatsapp = this.formatMobileNumber(whatsapp);
+      const { hash, expires, expiresInMinutes } = this.generateOtpHash(formattedWhatsapp, otp, reason);
+      const notificationPayload = await this.whatsappNotificationRaw(whatsapp, otp, reason);
+      return { notificationPayload, hash, expires, expiresInMinutes };
+    }
+    catch (error) {
+      throw new Error(`Failed to send OTP via WhatsApp: ${error.message}`);
+    }
+  }
+
+  async whatsappNotificationRaw(whatsapp: string, otp: string, reason: string) {
+    try {
+      const formattedWhatsapp = this.formatMobileNumber(whatsapp);
+      const templateId = this.configService.get("WHATSAPP_TEMPLATE_ID");
+      const apiKey = this.configService.get("WHATSAPP_GUPSHUP_API_KEY");
+      const gupshupSource = this.configService.get("WHATSAPP_GUPSHUP_SOURCE");
+
+      if (!templateId || !apiKey || !gupshupSource) {
+        LoggerUtil.error(
+          "WhatsApp environment variables not configured",
+          "WhatsApp OTP sending is disabled. Please configure WHATSAPP_TEMPLATE_ID, WHATSAPP_GUPSHUP_API_KEY, and WHATSAPP_GUPSHUP_SOURCE",
+          "WHATSAPP_CONFIG"
+        );
+        return {
+          result: {
+            whatsapp: {
+              data: [{ status: "skipped", message: "WhatsApp not configured" }],
+            },
+          },
+        };
+      }
+
+      const payload = {
+        whatsapp: {
+          to: [formattedWhatsapp],
+          templateId: templateId,
+          templateParams: [otp],
+          gupshupSource: gupshupSource,
+          gupshupApiKey: apiKey,
+        },
+      };
+
+      const mailSend = await this.notificationRequest.sendRawNotification(payload);
+      if (mailSend?.result?.whatsapp?.errors && mailSend.result.whatsapp.errors.length > 0) {
+        const errorMessages = mailSend.result.whatsapp.errors.map((error: { error: string; }) => error.error);
+        const combinedErrorMessage = errorMessages.join(", ");
+        throw new Error(`${API_RESPONSES.WHATSAPP_ERROR} :${combinedErrorMessage}`);
+      }
+      if (!mailSend || !mailSend.result || !mailSend.result.whatsapp) {
+        throw new Error("Invalid response from notification service");
+      }
+      return mailSend;
+    }
+    catch (error) {
+      LoggerUtil.error(API_RESPONSES.WHATSAPP_ERROR, error.message);
+      throw new Error(`${API_RESPONSES.WHATSAPP_NOTIFICATION_ERROR}:  ${error.message}`);
+    }
+  }
+
+  async whatsappNotification(context: string, key: string, replacements: object, receipients: string[]) {
+    try {
+      const notificationPayload = {
+        isQueue: false,
+        context: context,
+        key: key,
+        replacements: replacements,
+        whatsapp: {
+          receipients: receipients.map((recipient) => recipient.toString()),
+        },
+      };
+      const result = await this.notificationRequest.sendNotification(
+        notificationPayload
+      );
+      if (result?.result?.whatsapp?.errors && result.result.whatsapp.errors.length > 0) {
+        const errorMessages = result.result.whatsapp.errors.map((error: { error: string; }) => error.error);
+        const combinedErrorMessage = errorMessages.join(", ");
+        throw new Error(`${API_RESPONSES.WHATSAPP_ERROR} :${combinedErrorMessage}`);
+      }
+      return result;
+    }
+    catch (error) {
+      LoggerUtil.error(API_RESPONSES.WHATSAPP_ERROR, error.message);
+      throw new Error(`${API_RESPONSES.WHATSAPP_NOTIFICATION_ERROR}:  ${error.message}`);
+    }
+  }
+
   //verify OTP based on reason [signup , forgot]
   async verifyOtp(body: OtpVerifyDTO, response: Response) {
     const apiId = APIID.VERIFY_OTP;
@@ -2464,7 +2594,7 @@ export class PostgresUserService implements IServicelocator {
       let resetToken: string | null = null;
 
       // Process based on reason
-      if (reason === 'signup') {
+      if (reason === 'signup' || reason === 'login') {
         if (!mobile) {
           return APIResponse.error(
             response,
@@ -2474,6 +2604,7 @@ export class PostgresUserService implements IServicelocator {
             HttpStatus.BAD_REQUEST
           );
         }
+        // Always use 10-digit mobile from body and format to +91 internally for hash match
         identifier = this.formatMobileNumber(mobile);
       }
       else if (reason === 'forgot') {
