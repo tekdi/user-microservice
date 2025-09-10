@@ -342,12 +342,27 @@ export class FieldsService {
 
       // Step 4: Get field type from schema - check both direct type and schema.type
       const fieldType = fieldMetadata.schema?.type || fieldMetadata.type; // Type from schema: "boolean", "string", "array"
+      
       // Step 5: Handle comma-separated values (current workflow)
       // Only split if the field type in schema is 'array' and contains comma
       // Also check if this is actually a multi-select field by looking at fieldParams
       const isMultiSelect =
-        fieldMetadata.fieldParams?.options?.enum &&
-        Array.isArray(fieldMetadata.fieldParams.options.enum);
+        (fieldMetadata.fieldParams?.options?.enum && Array.isArray(fieldMetadata.fieldParams.options.enum)) ||
+        (fieldMetadata.fieldParams?.options && Array.isArray(fieldMetadata.fieldParams.options));
+
+      // For checkbox fields with comma-separated values, always try to split them
+      if (checkboxValue.includes(',')) {
+        // Split by comma and filter out empty values
+        const splitValues = checkboxValue.split(',').map((v) => v.trim()).filter(v => v.length > 0);
+        
+        // If we have multiple values, return as array
+        if (splitValues.length > 1) {
+          return splitValues;
+        }
+        
+        // If only one value after splitting, return as single value
+        return splitValues[0] || checkboxValue;
+      }
 
       if (
         fieldType === 'array' &&
@@ -355,7 +370,7 @@ export class FieldsService {
         isMultiSelect
       ) {
         // Check if the entire value matches one of the enum options exactly
-        const enumOptions = fieldMetadata.fieldParams?.options?.enum || [];
+        const enumOptions = fieldMetadata.fieldParams?.options?.enum || fieldMetadata.fieldParams?.options || [];
         const exactMatch = enumOptions.find(
           (option) => option === checkboxValue
         );
@@ -365,8 +380,16 @@ export class FieldsService {
           return checkboxValue;
         }
 
-        // Otherwise, split by comma
-        return checkboxValue.split(',').map((v) => v.trim());
+        // Split by comma and filter out empty values
+        const splitValues = checkboxValue.split(',').map((v) => v.trim()).filter(v => v.length > 0);
+        
+        // If we have multiple values, return as array
+        if (splitValues.length > 1) {
+          return splitValues;
+        }
+        
+        // If only one value after splitting, return as single value
+        return splitValues[0] || checkboxValue;
       }
 
       // Step 6: Handle single value based on field type in schema
