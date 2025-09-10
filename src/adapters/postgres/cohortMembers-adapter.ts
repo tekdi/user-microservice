@@ -1057,32 +1057,39 @@ export class PostgresCohortMembersService {
       }
     }
 
+    APIResponse.success(
+      response,
+      APIID.COHORT_MEMBER_CREATE,
+      results,
+      HttpStatus.CREATED,
+      API_RESPONSES.COHORTMEMBER_SUCCESSFULLY
+    );
+
     // Publish Kafka events for affected users after successful bulk operations
     // Use Promise.allSettled to ensure one failed event doesn't stop others
-    if (affectedUsers.size > 0) {
-      LoggerUtil.log(
-        `Publishing user events for ${affectedUsers.size} users`,
-        apiId
-      );
 
-      const publishPromises = Array.from(affectedUsers).map(async (userId) => {
-        try {
-          // Directly call publishUserEvent with 'updated' type since users joined new cohorts
-          await this.userService.publishUserEvent('updated', userId, apiId);
-          LoggerUtil.log(`User event published for user: ${userId}`, apiId);
-        } catch (error) {
-          LoggerUtil.error(
-            `Failed to publish user event for user: ${userId}`,
-            `Error: ${error.message}`,
-            apiId
-          );
-          // Don't throw - we don't want Kafka failures to affect the main operation
-        }
-      });
+    LoggerUtil.log(
+      `Publishing user events for ${affectedUsers.size} users`,
+      apiId
+    );
 
-      await Promise.allSettled(publishPromises);
-    }
+    const publishPromises = Array.from(affectedUsers).map(async (userId) => {
+      try {
+        // Directly call publishUserEvent with 'updated' type since users joined new cohorts
+        this.userService.publishUserEvent('updated', userId, apiId);
+        LoggerUtil.log(`User event published for user: ${userId}`, apiId);
+      } catch (error) {
+        LoggerUtil.error(
+          `Failed to publish user event for user: ${userId}`,
+          `Error: ${error.message}`,
+          apiId
+        );
+        // Don't throw - we don't want Kafka failures to affect the main operation
+      }
+    });
 
+    await Promise.allSettled(publishPromises);
+    
     if (errors.length > 0) {
       return APIResponse.success(
         response,
@@ -1092,13 +1099,7 @@ export class PostgresCohortMembersService {
         API_RESPONSES.COHORTMEMBER_ERROR
       );
     }
-    return APIResponse.success(
-      response,
-      APIID.COHORT_MEMBER_CREATE,
-      results,
-      HttpStatus.CREATED,
-      API_RESPONSES.COHORTMEMBER_SUCCESSFULLY
-    );
+
   }
 
   public async registerFieldValue(
