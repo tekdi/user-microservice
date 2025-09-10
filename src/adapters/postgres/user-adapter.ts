@@ -802,7 +802,6 @@ export class PostgresUserService implements IServicelocator {
   async userTenantRoleData(userId: string) {
     const query = `
   SELECT 
-    DISTINCT ON (T."tenantId") 
     T."tenantId", 
     T."templateId",
     T."contentFramework",
@@ -824,8 +823,8 @@ export class PostgresUserService implements IServicelocator {
     T."tenantId", UTM."Id";`;
 
     const result = await this.usersRepository.query(query, [userId]);
-    const combinedResult = [];
-    const roleArray = [];
+    const tenantMap = new Map();
+
     for (const data of result) {
       const roleData = await this.postgresRoleService.findUserRoleData(
         userId,
@@ -833,32 +832,47 @@ export class PostgresUserService implements IServicelocator {
       );
 
       if (roleData.length > 0) {
-        roleArray.push(roleData[0].roleid);
-        const roleId = roleData[0].roleid;
-        const roleName = roleData[0].title;
+        const tenantId = data.tenantId;
+        
+        // If tenant already exists in map, just add roles to existing entry
+        if (tenantMap.has(tenantId)) {
+          const existingTenant = tenantMap.get(tenantId);
+          roleData.forEach(role => {
+            // Avoid duplicate roles
+            const roleExists = existingTenant.roles.some(existingRole => 
+              existingRole.roleId === role.roleid
+            );
+            if (!roleExists) {
+              existingTenant.roles.push({
+                roleId: role.roleid,
+                roleName: role.title,
+              });
+            }
+          });
+        } else {
+          // Create new tenant entry with all roles
+          const roles = roleData.map(role => ({
+            roleId: role.roleid,
+            roleName: role.title,
+          }));
 
-        // const privilegeData =
-        //   await this.postgresRoleService.findPrivilegeByRoleId(roleArray);
-        // const privileges = privilegeData.map((priv) => priv.name);
-
-        combinedResult.push({
-          tenantName: data.tenantname,
-          tenantId: data.tenantId,
-          templateId: data.templateId,
-          contentFramework: data.contentFramework,
-          collectionFramework: data.collectionFramework,
-          channelId: data.channelId,
-          userTenantMappingId: data.usertenantmappingid,
-          params: data.params,
-          roleId: roleId,
-          roleName: roleName,
-          tenantType: data.type,
-          // privileges: privileges,
-        });
+          tenantMap.set(tenantId, {
+            tenantName: data.tenantname,
+            tenantId: tenantId,
+            templateId: data.templateId,
+            contentFramework: data.contentFramework,
+            collectionFramework: data.collectionFramework,
+            channelId: data.channelId,
+            userTenantMappingId: data.usertenantmappingid,
+            params: data.params,
+            roles: roles,
+            tenantType: data.type,
+          });
+        }
       }
     }
 
-    return combinedResult;
+    return Array.from(tenantMap.values());
   }
 
   async updateUser(userDto, response: Response) {
@@ -2906,7 +2920,7 @@ export class PostgresUserService implements IServicelocator {
    * @param userId User ID for whom the event is published
    * @param apiId API ID for logging
    */
-  private async publishUserEvent(
+  public async publishUserEvent(
     eventType: 'created' | 'updated' | 'deleted',
     userId: string,
     apiId: string
