@@ -2780,6 +2780,9 @@ export class PostgresUserService implements IServicelocator {
             if (key === 'firstName' || key === 'name' || key === 'middleName' || key === 'lastName') {
               const sanitizedValue = this.sanitizeInput(value);
               whereClause[key] = ILike(`%${sanitizedValue}%`);
+            } else if (key === 'username') {
+              const sanitizedValue = this.sanitizeInput(value);
+              whereClause[key] = ILike(sanitizedValue);
             } else {
               whereClause[key] = this.sanitizeInput(value);
             }
