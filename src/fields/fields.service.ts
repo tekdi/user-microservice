@@ -15,6 +15,7 @@ import APIResponse from 'src/utils/response';
 import { log } from 'util';
 import { ErrorResponseTypeOrm } from 'src/error-response-typeorm';
 import { FieldValueConverter } from 'src/utils/field-value-converter';
+
 import { FormsService } from 'src/forms/forms.service';
 
 @Injectable()
@@ -345,18 +346,20 @@ export class FieldsService {
 
       // Normalize enum/options into a single list of strings
       const rawOptions = fieldMetadata.fieldParams?.options;
+
       const enumOptions: string[] = Array.isArray(rawOptions?.enum)
         ? rawOptions.enum
         : Array.isArray(rawOptions)
         ? rawOptions
         : [];
+
       const isMultiSelect = enumOptions.length > 0;
 
-      // Guard against null/undefined
+      // // Guard against null/undefined
       if (checkboxValue == null) {
         return checkboxValue;
       }
-
+      // Step 5: Normalize the checkbox value
       const normalized =
         typeof checkboxValue === 'string'
           ? checkboxValue.trim()
@@ -368,33 +371,29 @@ export class FieldsService {
       }
 
       // For checkbox fields with comma-separated values, use the enhanced processor
-      // if (typeof normalized === "string" && normalized.includes(",")) {
-      //   const processedValue = CustomFieldProcessor.processCustomFieldValue(normalized, fieldMetadata.fieldParams);
-
-      //   // If processed value contains commas, return as array
-      //   if (processedValue.includes(',')) {
-      //     return processedValue.split(',').map(v => v.trim());
-      //   }
-
-      //   return processedValue;
-      // }
       // For checkbox fields with comma-separated values
       if (typeof normalized === 'string' && normalized.includes(',')) {
-        // Split on ".,", because each option ends with a dot in your stored string
-        const parts = normalized
-          .split('.,')
-          // .split(/\s*,\s*/g) // handles ",", ", ", " , "
-          .map((v) => v.trim())
-          .filter((v) => v.length > 0)
-          .map((v) => (v.endsWith('.') ? v : v + '.'));
+        let parts: string[] = [];
+
+        // First try splitting on ".," pattern (for options that end with dots)
+        if (normalized.includes('.,')) {
+          parts = normalized
+            .split('.,')
+            .map((v) => v.trim())
+            .filter((v) => v.length > 0)
+            .map((v) => (v.endsWith('.') ? v : v + '.'));
+        } else {
+          // Fallback to regular comma splitting for other patterns
+          parts = normalized
+            .split(/\s*,\s*/g) // handles ",", ", ", " , "
+            .map((v) => v.trim())
+            .filter((v) => v.length > 0);
+        }
 
         // Match only those parts that exist in enumOptions
         const matchedValues = parts.filter((p) =>
           enumOptions.some((opt) => opt.trim() === p.trim())
         );
-        // const matchedValues = splitParts.filter((part) =>
-        //   enumOptions.some((opt) => opt.trim() === part.trim())
-        // );
 
         if (matchedValues.length > 0) {
           return matchedValues;
