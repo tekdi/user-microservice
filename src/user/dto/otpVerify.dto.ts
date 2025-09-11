@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsIn, IsString, Length, Matches, ValidateIf, registerDecorator, ValidationOptions, ValidationArguments } from 'class-validator';
+import { Transform } from 'class-transformer';
 
 // Custom validator function
 function IsValidOtp(validationOptions?: ValidationOptions) {
@@ -26,8 +27,14 @@ function IsValidOtp(validationOptions?: ValidationOptions) {
 
 export class OtpVerifyDTO {
     @ApiProperty()
-    @ValidateIf(o => o.reason === 'signup')
-    @IsString({ message: 'Mobile number must be a string.' })
+    @ValidateIf(o => o.reason === 'signup' || o.reason === 'login')
+    @Transform(({ value }) => {
+      if (value === undefined || value === null) return value;
+      const digits = String(value).replace(/\D/g, '');
+      if (digits.length === 12 && digits.startsWith('91')) return digits.slice(2); // handle +91xxxxxxxxxx
+      if (digits.length === 11 && digits.startsWith('0')) return digits.slice(1); // handle 0-prefixed
+      return digits;
+    })    @IsString({ message: 'Mobile number must be a string.' })
     @Matches(/^\d{10}$/, { message: 'Mobile number must be exactly 10 digits.' })
     mobile: string;
     
@@ -43,7 +50,7 @@ export class OtpVerifyDTO {
     
     @ApiProperty()
     @IsString({ message: 'Reason must be a string.' })
-    @IsIn(['signup', 'forgot'], { message: 'Reason must be either "signup" or "forgot".' })
+    @IsIn(['signup', 'login', 'forgot'], { message: 'Reason must be either "signup", "login" or "forgot".' })
     reason: string;
     
     @ApiProperty()
