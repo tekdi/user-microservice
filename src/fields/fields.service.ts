@@ -15,6 +15,7 @@ import APIResponse from 'src/utils/response';
 import { log } from 'util';
 import { ErrorResponseTypeOrm } from 'src/error-response-typeorm';
 import { FieldValueConverter } from 'src/utils/field-value-converter';
+import { CustomFieldProcessor } from 'src/utils/custom-field-processor';
 import { FormsService } from 'src/forms/forms.service';
 
 @Injectable()
@@ -342,54 +343,65 @@ export class FieldsService {
 
       // Step 4: Get field type from schema - check both direct type and schema.type
       const fieldType = fieldMetadata.schema?.type || fieldMetadata.type; // Type from schema: "boolean", "string", "array"
-      
-      // Step 5: Handle comma-separated values (current workflow)
-      // Only split if the field type in schema is 'array' and contains comma
-      // Also check if this is actually a multi-select field by looking at fieldParams
-      const isMultiSelect =
-        (fieldMetadata.fieldParams?.options?.enum && Array.isArray(fieldMetadata.fieldParams.options.enum)) ||
-        (fieldMetadata.fieldParams?.options && Array.isArray(fieldMetadata.fieldParams.options));
 
-      // For checkbox fields with comma-separated values, always try to split them
-      if (checkboxValue.includes(',')) {
-        // Split by comma and filter out empty values
-        const splitValues = checkboxValue.split(',').map((v) => v.trim()).filter(v => v.length > 0);
-        
-        // If we have multiple values, return as array
-        if (splitValues.length > 1) {
-          return splitValues;
-        }
-        
-        // If only one value after splitting, return as single value
-        return splitValues[0] || checkboxValue;
+      // Normalize enum/options into a single list of strings
+      const rawOptions = fieldMetadata.fieldParams?.options;
+      const enumOptions: string[] = Array.isArray(rawOptions?.enum)
+        ? rawOptions.enum
+        : Array.isArray(rawOptions)
+        ? rawOptions
+        : [];
+      const isMultiSelect = enumOptions.length > 0;
+
+      // Guard against null/undefined
+      if (checkboxValue == null) {
+        return checkboxValue;
       }
 
-      if (
-        fieldType === 'array' &&
-        checkboxValue.includes(',') &&
-        isMultiSelect
-      ) {
-        // Check if the entire value matches one of the enum options exactly
-        const enumOptions = fieldMetadata.fieldParams?.options?.enum || fieldMetadata.fieldParams?.options || [];
-        const exactMatch = enumOptions.find(
-          (option) => option === checkboxValue
+      const normalized =
+        typeof checkboxValue === 'string'
+          ? checkboxValue.trim()
+          : checkboxValue;
+
+      // Preserve exact matches even when they contain commas
+      if (typeof normalized === 'string' && enumOptions.includes(normalized)) {
+        return normalized;
+      }
+
+      // For checkbox fields with comma-separated values, use the enhanced processor
+      // if (typeof normalized === "string" && normalized.includes(",")) {
+      //   const processedValue = CustomFieldProcessor.processCustomFieldValue(normalized, fieldMetadata.fieldParams);
+
+      //   // If processed value contains commas, return as array
+      //   if (processedValue.includes(',')) {
+      //     return processedValue.split(',').map(v => v.trim());
+      //   }
+
+      //   return processedValue;
+      // }
+      // For checkbox fields with comma-separated values
+      if (typeof normalized === 'string' && normalized.includes(',')) {
+        // Split on ".,", because each option ends with a dot in your stored string
+        const parts = normalized
+          .split('.,')
+          // .split(/\s*,\s*/g) // handles ",", ", ", " , "
+          .map((v) => v.trim())
+          .filter((v) => v.length > 0)
+          .map((v) => (v.endsWith('.') ? v : v + '.'));
+
+        // Match only those parts that exist in enumOptions
+        const matchedValues = parts.filter((p) =>
+          enumOptions.some((opt) => opt.trim() === p.trim())
         );
+        // const matchedValues = splitParts.filter((part) =>
+        //   enumOptions.some((opt) => opt.trim() === part.trim())
+        // );
 
-        if (exactMatch) {
-          // If it's an exact match to an enum option, return as single value
-          return checkboxValue;
+        if (matchedValues.length > 0) {
+          return matchedValues;
         }
 
-        // Split by comma and filter out empty values
-        const splitValues = checkboxValue.split(',').map((v) => v.trim()).filter(v => v.length > 0);
-        
-        // If we have multiple values, return as array
-        if (splitValues.length > 1) {
-          return splitValues;
-        }
-        
-        // If only one value after splitting, return as single value
-        return splitValues[0] || checkboxValue;
+        return parts; // fallback
       }
 
       // Step 6: Handle single value based on field type in schema
