@@ -214,6 +214,8 @@ export const API_RESPONSES = {
   SIGNED_URL_SUCCESS: "Signed URL generated successfully",
   SIGNED_URL_FAILED: "Error while generating signed URL",
   INVALID_FILE_TYPE: "Invalid file type. Allowed file types are: '.jpg','.jpeg','.png','.webp','.pdf','.doc','.docx','.mp4','.mov','.txt','.csv','.mp3'",
-  FILE_SIZE_ERROR: "File too large. Maximum allowed file size is 10MB."
+  FILE_SIZE_ERROR: "File too large. Maximum allowed file size is 10MB.",
+  WHATSAPP_ERROR: "WhatsApp notification failed",
+  WHATSAPP_NOTIFICATION_ERROR: "Failed to send WhatsApp notification:"
 };
 
