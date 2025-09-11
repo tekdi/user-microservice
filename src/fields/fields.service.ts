@@ -15,7 +15,6 @@ import APIResponse from 'src/utils/response';
 import { log } from 'util';
 import { ErrorResponseTypeOrm } from 'src/error-response-typeorm';
 import { FieldValueConverter } from 'src/utils/field-value-converter';
-import { CustomFieldProcessor } from 'src/utils/custom-field-processor';
 import { FormsService } from 'src/forms/forms.service';
 
 @Injectable()
