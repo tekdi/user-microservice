@@ -326,26 +326,12 @@ export class FieldsService {
 
       // Only process if the field type is 'checkbox' in the Fields table
       if (!fieldFromDB || fieldFromDB.type !== 'checkbox') {
-        return checkboxValue;
+        return [checkboxValue];
       }
 
-      // Step 2: Get the form schema from database using formId
-      const form = await this.formsService.getFormById(formId);
-      const formFields = form?.fields || {};
-
-      // Step 3: Find the field metadata in the form schema
-      const fieldMetadata = this.findFieldMetadata(fieldId, formFields);
-
-      // If field not found in schema, return original value
-      if (!fieldMetadata) {
-        return checkboxValue;
-      }
-
-      // Step 4: Get field type from schema - check both direct type and schema.type
-      const fieldType = fieldMetadata.schema?.type || fieldMetadata.type; // Type from schema: "boolean", "string", "array"
-
-      // Normalize enum/options into a single list of strings
-      const rawOptions = fieldMetadata.fieldParams?.options;
+      // Step 2: Get enum options from the field's fieldParams in the database
+      // This is more reliable than getting from form schema
+      const rawOptions = (fieldFromDB.fieldParams as any)?.options;
 
       const enumOptions: string[] = Array.isArray(rawOptions?.enum)
         ? rawOptions.enum
@@ -353,26 +339,57 @@ export class FieldsService {
         ? rawOptions
         : [];
 
+      // console.log('Field from DB:', fieldFromDB.fieldParams);
+      // console.log('Raw options:', rawOptions);
+      // console.log('Enum options:', enumOptions);
+
       const isMultiSelect = enumOptions.length > 0;
 
       // // Guard against null/undefined
       if (checkboxValue == null) {
-        return checkboxValue;
+        return [checkboxValue];
       }
       // Step 5: Normalize the checkbox value
-      const normalized =
-        typeof checkboxValue === 'string'
-          ? checkboxValue.trim()
-          : checkboxValue;
+      // console.log('Input checkboxValue:', checkboxValue, 'Type:', typeof checkboxValue, 'IsArray:', Array.isArray(checkboxValue));
+
+      let normalized;
+      if (Array.isArray(checkboxValue)) {
+        // If it's an array, check if it contains a single string that needs splitting
+        if (
+          checkboxValue.length === 1 &&
+          typeof checkboxValue[0] === 'string' &&
+          checkboxValue[0].includes(',')
+        ) {
+          // Single string in array that contains commas - treat as string for processing
+          // console.log('Array with single comma-separated string, processing:', checkboxValue[0]);
+          normalized = checkboxValue[0].trim();
+        } else {
+          // Multiple elements or single element without commas - return as is
+          // console.log('Array without comma-separated string, returning as is:', checkboxValue);
+          return checkboxValue;
+        }
+      } else if (typeof checkboxValue === 'string') {
+        // console.log('String input, processing:', checkboxValue);
+        normalized = checkboxValue.trim();
+      } else {
+        // console.log('Other type input, processing:', checkboxValue);
+        normalized = checkboxValue;
+      }
 
       // Preserve exact matches even when they contain commas
       if (typeof normalized === 'string' && enumOptions.includes(normalized)) {
-        return normalized;
+        return [normalized];
       }
 
       // For checkbox fields with comma-separated values, use the enhanced processor
       // For checkbox fields with comma-separated values
       if (typeof normalized === 'string' && normalized.includes(',')) {
+        // First, check if the original value exactly matches any enum option
+        // This handles single values that contain commas (like "SAT, TOEFL")
+        if (enumOptions.some((opt) => opt.trim() === normalized.trim())) {
+          return [normalized]; // Return as array for consistency
+        }
+
         let parts: string[] = [];
 
         // First try splitting on ".," pattern (for options that end with dots)
@@ -391,34 +408,75 @@ export class FieldsService {
         }
 
         // Match only those parts that exist in enumOptions
-        const matchedValues = parts.filter((p) =>
-          enumOptions.some((opt) => opt.trim() === p.trim())
-        );
+        const matchedValues = parts.filter((p) => {
+          const partTrimmed = p.trim();
+          // console.log(`Checking part: "${partTrimmed}"`);
+          const found = enumOptions.some((opt) => {
+            const optTrimmed = opt.trim();
+            const isMatch = optTrimmed === partTrimmed;
+            // console.log(`  Comparing with: "${optTrimmed}" -> ${isMatch}`);
+            return isMatch;
+          });
 
+          return found;
+        });
+
+        // If we found valid matches, return them as an array
         if (matchedValues.length > 0) {
           return matchedValues;
         }
 
-        return parts; // fallback
-      }
+        // If we have multiple parts but no exact matches, try a more flexible matching approach
+        if (parts.length > 1) {
+          // Try to find partial matches or similar matches
+          const flexibleMatches = parts.filter((p) => {
+            return enumOptions.some((opt) => {
+              const optTrimmed = opt.trim();
+              const partTrimmed = p.trim();
+              // Check for exact match or if the part is contained in the option
+              return (
+                optTrimmed === partTrimmed ||
+                optTrimmed.includes(partTrimmed) ||
+                partTrimmed.includes(optTrimmed)
+              );
+            });
+          });
 
-      // Step 6: Handle single value based on field type in schema
-
-      switch (fieldType) {
-        case 'boolean': {
-          const booleanResult =
-            checkboxValue === 'true' || checkboxValue === '1';
-          return booleanResult;
+          if (flexibleMatches.length > 0) {
+            return flexibleMatches;
+          }
         }
-        case 'string':
-          return checkboxValue; // Current workflow - return as string
 
-        case 'array':
-          return [checkboxValue]; // Even single value as array
+        // If we have multiple parts but no matches, it might be a case where
+        // the string contains multiple valid enum options that need to be split differently
+        if (parts.length > 1) {
+          // Try to find if any combination of parts forms valid enum options
+          // This handles cases like "First year / Freshman,Second year / Sophomore"
+          const allValidParts = [];
+          for (const part of parts) {
+            const partTrimmed = part.trim();
+            const foundMatch = enumOptions.find((opt) => {
+              const optTrimmed = opt.trim();
+              const isMatch = optTrimmed === partTrimmed;
+              return isMatch;
+            });
+            if (foundMatch) {
+              allValidParts.push(foundMatch);
+            }
+          }
 
-        default:
-          return checkboxValue; // Current workflow fallback
+          if (allValidParts.length > 0) {
+            return allValidParts;
+          }
+        }
+
+        // If still no match, return the original value as-is
+        return [normalized]; // Return as array for consistency
       }
+
+      // Step 6: Handle single value based on field type
+      // For ALL checkbox fields, always return arrays for consistency
+      return [checkboxValue];
     } catch (error) {
       return checkboxValue;
     }
