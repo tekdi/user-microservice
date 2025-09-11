@@ -380,8 +380,8 @@ export class PostgresFieldsService implements IServicelocatorfields {
         return APIResponse.error(
           response,
           apiId,
-          `Fields already exist`,
           `CONFLICT`,
+          `Fields already exist`,
           HttpStatus.CONFLICT
         );
       }
