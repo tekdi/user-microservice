@@ -364,7 +364,6 @@ export class FieldsService {
         typeof checkboxValue === 'string'
           ? checkboxValue.trim()
           : checkboxValue;
-      console.log('normalized:', normalized);
 
       // Preserve exact matches even when they contain commas
       if (typeof normalized === 'string' && enumOptions.includes(normalized)) {
