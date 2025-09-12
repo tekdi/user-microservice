@@ -451,7 +451,11 @@ export class PostgresUserService implements IServicelocator {
                 const status = value.map((item) => `'${item.trim().toLowerCase()}'`).join(",");
                 whereCondition += ` U."${key}" IN(${status})`;
               } else {
-                whereCondition += ` U."${key}" = '${value}'`;
+                if (key === "username") {
+                  whereCondition += ` U."${key}" ILIKE '${value}'`;
+                } else {
+                  whereCondition += ` U."${key}" = '${value}'`;
+                }
               }
               index++;
               break;
@@ -756,7 +760,7 @@ export class PostgresUserService implements IServicelocator {
     const whereClause: any = { userId: userId };
     if (username && userId === null) {
       delete whereClause.userId;
-      whereClause.username = username;
+      whereClause.username = ILike(username);
     }
     const userDetails = await this.usersRepository.findOne({
       where: whereClause,
@@ -798,7 +802,6 @@ export class PostgresUserService implements IServicelocator {
   async userTenantRoleData(userId: string) {
     const query = `
   SELECT 
-    DISTINCT ON (T."tenantId") 
     T."tenantId", 
     T."templateId",
     T."contentFramework",
@@ -820,8 +823,8 @@ export class PostgresUserService implements IServicelocator {
     T."tenantId", UTM."Id";`;
 
     const result = await this.usersRepository.query(query, [userId]);
-    const combinedResult = [];
-    const roleArray = [];
+    const tenantMap = new Map();
+
     for (const data of result) {
       const roleData = await this.postgresRoleService.findUserRoleData(
         userId,
@@ -829,32 +832,47 @@ export class PostgresUserService implements IServicelocator {
       );
 
       if (roleData.length > 0) {
-        roleArray.push(roleData[0].roleid);
-        const roleId = roleData[0].roleid;
-        const roleName = roleData[0].title;
+        const tenantId = data.tenantId;
+        
+        // If tenant already exists in map, just add roles to existing entry
+        if (tenantMap.has(tenantId)) {
+          const existingTenant = tenantMap.get(tenantId);
+          roleData.forEach(role => {
+            // Avoid duplicate roles
+            const roleExists = existingTenant.roles.some(existingRole => 
+              existingRole.roleId === role.roleid
+            );
+            if (!roleExists) {
+              existingTenant.roles.push({
+                roleId: role.roleid,
+                roleName: role.title,
+              });
+            }
+          });
+        } else {
+          // Create new tenant entry with all roles
+          const roles = roleData.map(role => ({
+            roleId: role.roleid,
+            roleName: role.title,
+          }));
 
-        // const privilegeData =
-        //   await this.postgresRoleService.findPrivilegeByRoleId(roleArray);
-        // const privileges = privilegeData.map((priv) => priv.name);
-
-        combinedResult.push({
-          tenantName: data.tenantname,
-          tenantId: data.tenantId,
-          templateId: data.templateId,
-          contentFramework: data.contentFramework,
-          collectionFramework: data.collectionFramework,
-          channelId: data.channelId,
-          userTenantMappingId: data.usertenantmappingid,
-          params: data.params,
-          roleId: roleId,
-          roleName: roleName,
-          tenantType: data.type,
-          // privileges: privileges,
-        });
+          tenantMap.set(tenantId, {
+            tenantName: data.tenantname,
+            tenantId: tenantId,
+            templateId: data.templateId,
+            contentFramework: data.contentFramework,
+            collectionFramework: data.collectionFramework,
+            channelId: data.channelId,
+            userTenantMappingId: data.usertenantmappingid,
+            params: data.params,
+            roles: roles,
+            tenantType: data.type,
+          });
+        }
       }
     }
 
-    return combinedResult;
+    return Array.from(tenantMap.values());
   }
 
   async updateUser(userDto, response: Response) {
@@ -1340,7 +1358,7 @@ export class PostgresUserService implements IServicelocator {
 
       // Step 5: Prepare username and check Keycloak
       const keycloakCheckStartTime = Date.now();
-      userCreateDto.username = userCreateDto.username.toLocaleLowerCase();
+      userCreateDto.username = userCreateDto.username;
       const userSchema = new UserCreateDto(userCreateDto);
 
       const keycloakResponse = await getKeycloakAdminToken();
@@ -1750,8 +1768,8 @@ export class PostgresUserService implements IServicelocator {
   async createUserInDatabase(
     request: any,
     userCreateDto: UserCreateDto,
-    academicYearId: string,
-    response: Response
+    academicYearId?: string,
+    response?: Response
   ): Promise<User> {
     const user = new User();
     user.userId = userCreateDto?.userId,
@@ -2776,6 +2794,9 @@ export class PostgresUserService implements IServicelocator {
             if (key === 'firstName' || key === 'name' || key === 'middleName' || key === 'lastName') {
               const sanitizedValue = this.sanitizeInput(value);
               whereClause[key] = ILike(`%${sanitizedValue}%`);
+            } else if (key === 'username') {
+              const sanitizedValue = this.sanitizeInput(value);
+              whereClause[key] = ILike(sanitizedValue);
             } else {
               whereClause[key] = this.sanitizeInput(value);
             }
@@ -2837,7 +2858,7 @@ export class PostgresUserService implements IServicelocator {
     try {
       // Fetch user data from the database to check if the username already exists
       const findData = await this.usersRepository.findOne({
-        where: { username: suggestUserDto?.username },
+        where: { username: ILike(suggestUserDto?.username) },
       });
 
       if (findData) {
@@ -2853,7 +2874,7 @@ export class PostgresUserService implements IServicelocator {
 
         while (!isUnique) {
           const existingUser = await this.usersRepository.findOne({
-            where: { username: newUsername },
+            where: { username: ILike(newUsername) },
           });
 
           if (!existingUser) {
@@ -2902,7 +2923,7 @@ export class PostgresUserService implements IServicelocator {
    * @param userId User ID for whom the event is published
    * @param apiId API ID for logging
    */
-  private async publishUserEvent(
+  public async publishUserEvent(
     eventType: 'created' | 'updated' | 'deleted',
     userId: string,
     apiId: string
