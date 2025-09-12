@@ -328,7 +328,18 @@ export class FieldsService {
       if (!fieldFromDB || fieldFromDB.type !== 'checkbox') {
         return [checkboxValue];
       }
+      // Step 2: Get the form schema from database using formId
+      const form = await this.formsService.getFormById(formId);
+      const formFields = form?.fields || {};
+      // Step 3: Find the field metadata in the form schema
+      const fieldMetadata = this.findFieldMetadata(fieldId, formFields);
 
+      // If field not found in schema, return original value
+      if (!fieldMetadata) {
+        return checkboxValue;
+      }
+// Step 4: Get field type from schema - check both direct type and schema.type
+const fieldType = fieldMetadata.schema?.type || fieldMetadata.type; // Type from schema: "boolean", "string", "array"
       // Step 2: Get enum options from the field's fieldParams in the database
       // This is more reliable than getting from form schema
       const rawOptions = (fieldFromDB.fieldParams as any)?.options;
@@ -474,9 +485,19 @@ export class FieldsService {
         return [normalized]; // Return as array for consistency
       }
 
-      // Step 6: Handle single value based on field type
-      // For ALL checkbox fields, always return arrays for consistency
-      return [checkboxValue];
+      // Step 6: Handle single value based on field type in schema
+      switch (fieldType) {
+        case 'boolean': {
+          const booleanResult = checkboxValue === 'true' || checkboxValue === '1';
+          return booleanResult;
+        }
+        case 'string':
+          return checkboxValue; // Current workflow - return as string
+        case 'array':
+          return [checkboxValue]; // Even single value as array
+        default:
+          return checkboxValue; // Current workflow fallback
+      }
     } catch (error) {
       return checkboxValue;
     }
