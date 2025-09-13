@@ -3287,4 +3287,82 @@ export class PostgresUserService implements IServicelocator {
       );
     }
   }
+
+    async findUserByIdentifier(identifier: string): Promise<any> {
+    try {
+      console.log(`[DEBUG] Searching for user with identifier: ${identifier}`);
+      
+      // Try to find user by email
+      let user = await this.usersRepository.findOne({
+        where: { email: identifier }
+      });
+      console.log(`[DEBUG] Email search result:`, user ? 'User found' : 'No user found');
+
+      if (!user) {
+        // Try to find user by username
+        user = await this.usersRepository.findOne({
+          where: { username: identifier }
+        });
+        console.log(`[DEBUG] Username search result:`, user ? 'User found' : 'No user found');
+      }
+
+      if (!user) {
+        // Try to find user by mobile (if identifier is numeric)
+        if (/^\d+$/.test(identifier)) {
+          user = await this.usersRepository.findOne({
+            where: { mobile: parseInt(identifier) }
+          });
+          console.log(`[DEBUG] Mobile search result:`, user ? 'User found' : 'No user found');
+        }
+      }
+
+      // If still no user found, try case-insensitive search
+      if (!user) {
+        console.log(`[DEBUG] Trying case-insensitive search...`);
+        const caseInsensitiveUser = await this.usersRepository
+          .createQueryBuilder('user')
+          .where('LOWER(user.email) = LOWER(:email)', { email: identifier })
+          .getOne();
+        
+        if (caseInsensitiveUser) {
+          console.log(`[DEBUG] Found user with case-insensitive search:`, caseInsensitiveUser);
+          user = caseInsensitiveUser;
+        }
+      }
+
+      // Final fallback: direct database query
+      if (!user) {
+        console.log(`[DEBUG] Trying direct database query...`);
+        try {
+          const rawUser = await this.dataSource.query(
+            'SELECT * FROM public."Users" WHERE "email" = $1 OR "username" = $1',
+            [identifier]
+          );
+          console.log(`[DEBUG] Raw query result:`, rawUser);
+          
+          if (rawUser && rawUser.length > 0) {
+            const rawUserData = rawUser[0];
+            user = {
+              userId: rawUserData.userId || rawUserData.id,
+              email: rawUserData.email,
+              username: rawUserData.username,
+              mobile: rawUserData.mobile,
+              firstName: rawUserData.firstName,
+              lastName: rawUserData.lastName
+            } as any;
+            console.log(`[DEBUG] Converted raw user:`, user);
+          }
+        } catch (rawError) {
+          console.error(`[DEBUG] Raw query error:`, rawError);
+        }
+      }
+
+      console.log(`[DEBUG] Final result:`, user ? `User found: ${user.userId}` : 'No user found');
+      return user;
+    } catch (error) {
+      console.error('[DEBUG] Error in findUserByIdentifier:', error);
+      LoggerUtil.error('Error finding user by identifier', error.message);
+      return null;
+    }
+  }
 }

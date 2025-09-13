@@ -62,4 +62,5 @@ export interface IServicelocator {
     body: SendPasswordResetOTPDto,
     response: Response
   ): Promise<any>;
+  findUserByIdentifier(identifier: string): Promise<any>;
 }

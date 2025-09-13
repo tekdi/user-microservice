@@ -96,6 +96,7 @@ export class NotificationRequest {
      data: data,
    };
    try {
+    console.log(`[DEBUG] WhatsApp payload being sent:`, JSON.stringify(body, null, 2));
      const response = await axios.request(config);
      return response.data;
    } catch (error) {
@@ -146,6 +147,60 @@ export class NotificationRequest {
        API_RESPONSES.INTERNAL_SERVER_ERROR,
        HttpStatus.INTERNAL_SERVER_ERROR
      );
+   }
+ }
+
+ async sendEmail(to: string, subject: string, message: string): Promise<any> {
+   const emailPayload = {
+     email: {
+       to: [to],
+       subject: subject,
+       body: message,
+     },
+   };
+   return this.sendRawNotification(emailPayload);
+ }
+
+ async sendSMS(to: string, message: string): Promise<any> {
+   try {
+     // Use the existing sendRawNotification method with correct SMS format
+     const smsPayload = {
+       sms: {
+         to: [to],
+         body: message,
+       },
+     };
+     return this.sendRawNotification(smsPayload);
+   } catch (error) {
+     console.error(`[DEBUG] SMS notification error:`, error);
+     throw error;
+   }
+ }
+
+ async sendWhatsApp(to: string, message: string): Promise<any> {
+   try {
+     // Use the existing sendRawNotification method with correct WhatsApp format
+     const whatsappPayload = {
+       whatsapp: {
+         to: [to],
+         templateId: this.configService.get<string>("WHATSAPP_TEMPLATE_ID") || "magic_link_template",
+         templateParams: [message],
+         gupshupSource: this.configService.get<string>("WHATSAPP_GUPSHUP_SOURCE"),
+         gupshupApiKey: this.configService.get<string>("WHATSAPP_GUPSHUP_API_KEY"),
+       },
+     };
+     
+     console.log(`[DEBUG] WhatsApp payload being sent:`, JSON.stringify(whatsappPayload, null, 2));
+     console.log(`[DEBUG] WhatsApp template ID:`, this.configService.get<string>("WHATSAPP_TEMPLATE_ID"));
+     console.log(`[DEBUG] WhatsApp source:`, this.configService.get<string>("WHATSAPP_GUPSHUP_SOURCE"));
+     
+     const result = await this.sendRawNotification(whatsappPayload);
+     console.log(`[DEBUG] WhatsApp API response:`, JSON.stringify(result, null, 2));
+     
+     return result;
+   } catch (error) {
+     console.error(`[DEBUG] WhatsApp notification error:`, error);
+     throw error;
    }
  }
 }
