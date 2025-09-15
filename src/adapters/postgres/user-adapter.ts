@@ -3073,87 +3073,65 @@ export class PostgresUserService implements IServicelocator {
     const apiId = APIID.USER_LIST;
     
     try {
-      const { limit, offset, sort: [sortField, sortDirection] } = hierarchicalFiltersDto;
+      const { limit, offset, sort: [sortField, sortDirection], role, filters, customfields } = hierarchicalFiltersDto;
       
-      // Validate sort parameters
+      // Step 1: Validate sort parameters
       const sortValidation = this.validateSortParameters(sortField, sortDirection);
       if (sortValidation.error) {
         return APIResponse.error(response, apiId, sortValidation.error.message, sortValidation.error.detail, HttpStatus.BAD_REQUEST);
       }
       
-      // Get user IDs from location filters (if provided)
-      let locationUserIds: string[] = [];
-      const filterResult = this.findDeepestFilter(hierarchicalFiltersDto.filters);
-      if (filterResult.level) {
-        locationUserIds = await this.getUserIdsByFilter(filterResult.level, filterResult.ids, tenantId);
-      }
-
-      // Get user IDs from role filters (if provided)
-      let roleUserIds: string[] = [];
-      if (hierarchicalFiltersDto.role && hierarchicalFiltersDto.role.length > 0) {
-        roleUserIds = await this.getUserIdsByRoles(hierarchicalFiltersDto.role, tenantId);
-      }
-
-      // Determine final user IDs based on available filters
-      let userIds: string[] = [];
-      if (locationUserIds.length > 0 && roleUserIds.length > 0) {
-        // Both filters provided - find intersection
-        userIds = locationUserIds.filter(id => roleUserIds.includes(id));
-      } else if (locationUserIds.length > 0) {
-        // Only location filters provided
-        userIds = locationUserIds;
-      } else if (roleUserIds.length > 0) {
-        // Only role filters provided  
-        userIds = roleUserIds;
-      } else {
-        return APIResponse.error(response, apiId, "No valid filters provided", "Please provide at least one location or role filter", HttpStatus.BAD_REQUEST);
-      }
-
+      // Step 2: Get user IDs from all filters
+      const userIds = await this.getAllFilteredUserIds(filters, role, tenantId);
+      
+      // Step 3: Check if any users found
       if (userIds.length === 0) {
         return APIResponse.success(response, apiId, [], HttpStatus.OK, "No users found matching the given filters");
       }
       
-      // Get paginated user data
-      const userData = await this.getPaginatedUsers(userIds, tenantId, limit, offset, sortValidation.sortField, sortValidation.sortDirection, hierarchicalFiltersDto.customfields);
+      // Step 4: Get user data with pagination
+      const userData = await this.getPaginatedUsers(userIds, tenantId, limit, offset, sortValidation.sortField, sortValidation.sortDirection, customfields);
       
-      // Prepare filter details for response
-      const filterDetails: any = {};
-      let message = "Users retrieved successfully";
-      
-      if (filterResult.level) {
-        filterDetails.locationFilter = {
-          level: filterResult.level,
-          values: filterResult.ids
-        };
-        message += ` using ${filterResult.level} filter`;
-      }
-      
-      if (hierarchicalFiltersDto.role && hierarchicalFiltersDto.role.length > 0) {
-        filterDetails.roleFilter = {
-          roles: hierarchicalFiltersDto.role
-        };
-        message += filterResult.level ? " and role filter" : " using role filter";
-      }
+      // Step 5: Prepare response
+      const responseData = {
+        users: userData.users,
+        totalCount: userData.totalCount,
+        currentPageCount: userData.users.length,
+        limit,
+        offset,
+        sort: { field: sortValidation.sortField, direction: sortValidation.sortDirection.toLowerCase() }
+      };
 
-      return APIResponse.success(
-        response,
-        apiId,
-        {
-          users: userData.users,
-          totalCount: userData.totalCount,
-          currentPageCount: userData.users.length,
-          limit,
-          offset,
-          filters: filterDetails,
-          sort: { field: sortValidation.sortField, direction: sortValidation.sortDirection.toLowerCase() }
-        },
-        HttpStatus.OK,
-        message
-      );
+      return APIResponse.success(response, apiId, responseData, HttpStatus.OK, "Users retrieved successfully");
+      
     } catch (error) {
       LoggerUtil.error(`Error in getUsersByHierarchicalLocation: ${error.message}`, error.stack, apiId);
-      return APIResponse.error(response, apiId, error.message || "Failed to retrieve users by hierarchical location", "An error occurred while processing the hierarchical location filters", HttpStatus.INTERNAL_SERVER_ERROR);
+      return APIResponse.error(response, apiId, error.message || "Failed to retrieve users", "An error occurred while processing the filters", HttpStatus.INTERNAL_SERVER_ERROR);
     }
+  }
+
+  /**
+   * Get all filtered user IDs from location and role filters
+   */
+  private async getAllFilteredUserIds(filters: any, roles: string[], tenantId: string): Promise<string[]> {
+    // Get user IDs from location filters
+    let locationUserIds: string[] = [];
+    const filterResult = this.findDeepestFilter(filters);
+    if (filterResult.level) {
+      locationUserIds = await this.getUserIdsByFilter(filterResult.level, filterResult.ids, tenantId);
+    }
+    
+    // Get user IDs from role filters
+    let roleUserIds: string[] = [];
+    if (roles && roles.length > 0) {
+      roleUserIds = await this.getUserIdsByRoles(roles, tenantId);
+    }
+    
+    // Combine results: if both exist, return intersection; otherwise return whichever exists
+    if (locationUserIds.length > 0 && roleUserIds.length > 0) {
+      return locationUserIds.filter(id => roleUserIds.includes(id));
+    }
+    return locationUserIds.length > 0 ? locationUserIds : roleUserIds;
   }
 
   private validateSortParameters(sortField: string, sortDirection: string) {
@@ -3175,12 +3153,13 @@ export class PostgresUserService implements IServicelocator {
   }
 
   private findDeepestFilter(filters: any) {
-    const hierarchyOrder = ['batch', 'center', 'village', 'block', 'district', 'state'];
+    // Check filters in order from most specific to least specific
+    const filterLevels = ['batch', 'center', 'village', 'block', 'district', 'state'];
     
-    for (const level of hierarchyOrder) {
-      const filterValue = filters[level];
-      if (filterValue && Array.isArray(filterValue) && filterValue.length > 0) {
-        return { level, ids: filterValue };
+    for (const level of filterLevels) {
+      const filterIds = filters?.[level];
+      if (filterIds && Array.isArray(filterIds) && filterIds.length > 0) {
+        return { level, ids: filterIds };
       }
     }
     
@@ -3188,82 +3167,77 @@ export class PostgresUserService implements IServicelocator {
   }
 
   private async getUserIdsByFilter(filterLevel: string, filterIds: string[], tenantId: string): Promise<string[]> {
+    // Handle batch filter differently (uses cohort membership)
     if (filterLevel === 'batch') {
-      return this.getUserIdsByBatch(filterIds);
+      const query = `
+        SELECT DISTINCT cm."userId" 
+        FROM "CohortMembers" cm
+        WHERE cm."cohortId" = ANY($1) AND cm."status" = 'active'
+      `;
+      const result = await this.usersRepository.query(query, [filterIds]);
+      return result.map(row => row.userId);
     }
+    
+    // Handle location fields (uses custom fields)
     return this.getUserIdsByLocationField(filterLevel, filterIds, tenantId);
   }
 
-  private async getUserIdsByBatch(batchIds: string[]): Promise<string[]> {
-    const query = `
-      SELECT DISTINCT cm."userId" 
-      FROM "CohortMembers" cm
-      WHERE cm."cohortId" = ANY($1) AND cm."status" = 'active'
-    `;
-    
-    const result = await this.usersRepository.query(query, [batchIds]);
-    return result.map(row => row.userId);
-  }
 
   private async getUserIdsByLocationField(fieldName: string, fieldValues: string[], tenantId: string): Promise<string[]> {
-    // Get field ID (search only by name, not by tenantId)
+    // Step 1: Get field ID by field name
     const fieldQuery = `SELECT "fieldId" FROM "Fields" WHERE "name" = $1 LIMIT 1`;
     const fieldResult = await this.usersRepository.query(fieldQuery, [fieldName]);
     
     if (fieldResult.length === 0) {
-      throw new Error(`Field configuration for ${fieldName} not found`);
+      throw new Error(`Field '${fieldName}' not found in configuration`);
     }
     
-    // Get user IDs from field values (search with tenantId)
-    // Using && (overlap) operator for array comparison since value column is text[]
+    // Step 2: Get user IDs that have matching field values
     const valuesQuery = `
       SELECT DISTINCT "itemId" 
       FROM "FieldValues" 
-      WHERE "fieldId" = $1 AND "value" && $2 AND "tenantId" = $3
+      WHERE "fieldId" = $1 
+        AND "value" && $2 
+        AND "tenantId" = $3
     `;
     
-    const valuesResult = await this.usersRepository.query(valuesQuery, [fieldResult[0].fieldId, fieldValues, tenantId]);
-    return valuesResult.map(row => row.itemId);
+    const result = await this.usersRepository.query(valuesQuery, [fieldResult[0].fieldId, fieldValues, tenantId]);
+    return result.map(row => row.itemId);
   }
 
   private async getUserIdsByRoles(roleNames: string[], tenantId: string): Promise<string[]> {
-    // Get roleIds from Roles table using role names
-    const rolesQuery = `
-      SELECT "roleId" 
-      FROM "Roles" 
-      WHERE "name" = ANY($1)
-    `;
-    
-    const rolesResult = await this.usersRepository.query(rolesQuery, [roleNames]);
-    
-    if (rolesResult.length === 0) {
-      return []; // No matching roles found
-    }
-
-    const roleIds = rolesResult.map(role => role.roleId);
-
-    // Get userIds from UserRolesMapping using roleIds and tenantId
-    const userRoleMappingQuery = `
-      SELECT DISTINCT "userId" 
-      FROM "UserRolesMapping" 
-      WHERE "roleId" = ANY($1) AND "tenantId" = $2
+    // Single query to get user IDs by role names and tenant
+    const query = `
+      SELECT DISTINCT urm."userId" 
+      FROM "UserRolesMapping" urm
+      JOIN "Roles" r ON urm."roleId" = r."roleId"
+      WHERE r."name" = ANY($1) AND urm."tenantId" = $2
     `;
 
-    const userRoleMappingResult = await this.usersRepository.query(userRoleMappingQuery, [roleIds, tenantId]);
-    return userRoleMappingResult.map(row => row.userId);
+    const result = await this.usersRepository.query(query, [roleNames, tenantId]);
+    return result.map(row => row.userId);
   }
 
    private async getPaginatedUsers(userIds: string[], tenantId: string, limit: number, offset: number, sortField: string, sortDirection: string, customFieldNames?: string[]) {
-     const [totalCount, users, customFieldsData, batchCenterData] = await Promise.all([
-       this.getUserCount(userIds, tenantId),
-       this.getUserDetails(userIds, tenantId, limit, offset, sortField, sortDirection),
-       customFieldNames && customFieldNames.length > 0 
-         ? this.getCustomFieldsData(userIds, customFieldNames, tenantId)
-         : Promise.resolve({}),
-       this.getBatchAndCenterNames(userIds)
-     ]);
+     // Step 1: Get total count of users
+     const totalCount = await this.getUserCount(userIds, tenantId);
      
-     return { totalCount, users: this.aggregateUserRoles(users, customFieldsData, customFieldNames || [], batchCenterData) };
+     // Step 2: Get basic user details with pagination and sorting
+     const users = await this.getUserDetails(userIds, tenantId, limit, offset, sortField, sortDirection);
+     
+     // Step 3: Get custom fields data (if requested)
+     let customFieldsData = {};
+     if (customFieldNames && customFieldNames.length > 0) {
+       customFieldsData = await this.getCustomFieldsData(userIds, customFieldNames, tenantId);
+     }
+     
+     // Step 4: Get batch and center names from cohort memberships
+     const batchCenterData = await this.getBatchAndCenterNames(userIds);
+     
+     // Step 5: Combine all data together
+     const finalUsers = this.aggregateUserRoles(users, customFieldsData, customFieldNames || [], batchCenterData);
+     
+     return { totalCount, users: finalUsers };
    }
 
    /**
