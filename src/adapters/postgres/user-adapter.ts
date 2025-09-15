@@ -3064,35 +3064,52 @@ export class PostgresUserService implements IServicelocator {
     }
   }
 
+  /**
+   * Get users by hierarchical location filters with comprehensive validation and error handling
+   */
   async getUsersByHierarchicalLocation(
     tenantId: string,
     request: Request,
     response: Response,
     hierarchicalFiltersDto: HierarchicalLocationFiltersDto
-  ) {
+  ): Promise<any> {
     const apiId = APIID.USER_LIST;
     
     try {
+      // Step 1: Validate basic inputs
+      const inputValidation = this.validateHierarchicalInputs(tenantId, hierarchicalFiltersDto);
+      if (inputValidation.error) {
+        return APIResponse.error(response, apiId, inputValidation.error.message, inputValidation.error.detail, HttpStatus.BAD_REQUEST);
+      }
+
       const { limit, offset, sort: [sortField, sortDirection], role, filters, customfields } = hierarchicalFiltersDto;
       
-      // Step 1: Validate sort parameters
+      // Step 2: Validate sort parameters
       const sortValidation = this.validateSortParameters(sortField, sortDirection);
       if (sortValidation.error) {
         return APIResponse.error(response, apiId, sortValidation.error.message, sortValidation.error.detail, HttpStatus.BAD_REQUEST);
       }
       
-      // Step 2: Get user IDs from all filters
+      // Step 3: Get user IDs from all filters with detailed error context
       const userIds = await this.getAllFilteredUserIds(filters, role, tenantId);
       
-      // Step 3: Check if any users found
+      // Step 4: Check if any users found
       if (userIds.length === 0) {
-        return APIResponse.success(response, apiId, [], HttpStatus.OK, "No users found matching the given filters");
+        const noUsersMessage = this.getNoUsersFoundMessage(filters, role);
+        return APIResponse.success(response, apiId, {
+          users: [],
+          totalCount: 0,
+          currentPageCount: 0,
+          limit,
+          offset,
+          sort: { field: sortValidation.sortField, direction: sortValidation.sortDirection.toLowerCase() }
+        }, HttpStatus.OK, noUsersMessage);
       }
       
-      // Step 4: Get user data with pagination
+      // Step 5: Get user data with pagination
       const userData = await this.getPaginatedUsers(userIds, tenantId, limit, offset, sortValidation.sortField, sortValidation.sortDirection, customfields);
       
-      // Step 5: Prepare response
+      // Step 6: Prepare response with detailed logging
       const responseData = {
         users: userData.users,
         totalCount: userData.totalCount,
@@ -3102,48 +3119,142 @@ export class PostgresUserService implements IServicelocator {
         sort: { field: sortValidation.sortField, direction: sortValidation.sortDirection.toLowerCase() }
       };
 
+      LoggerUtil.log(`Successfully retrieved ${userData.users.length}/${userData.totalCount} users with filters applied`, apiId);
       return APIResponse.success(response, apiId, responseData, HttpStatus.OK, "Users retrieved successfully");
       
     } catch (error) {
-      LoggerUtil.error(`Error in getUsersByHierarchicalLocation: ${error.message}`, error.stack, apiId);
-      return APIResponse.error(response, apiId, error.message || "Failed to retrieve users", "An error occurred while processing the filters", HttpStatus.INTERNAL_SERVER_ERROR);
+      LoggerUtil.error(`Critical error in getUsersByHierarchicalLocation: ${error.message}`, error.stack, apiId);
+      return APIResponse.error(
+        response, 
+        apiId, 
+        "Failed to retrieve users", 
+        `An error occurred while processing the hierarchical filters: ${error.message}`, 
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
     }
   }
 
   /**
-   * Get all filtered user IDs from location and role filters
+   * Get all filtered user IDs from location and role filters with comprehensive error handling
    */
   private async getAllFilteredUserIds(filters: any, roles: string[], tenantId: string): Promise<string[]> {
-    // Get user IDs from location filters
-    let locationUserIds: string[] = [];
-    const filterResult = this.findDeepestFilter(filters);
-    if (filterResult.level) {
-      locationUserIds = await this.getUserIdsByFilter(filterResult.level, filterResult.ids, tenantId);
-    }
+    const apiId = APIID.USER_LIST;
     
-    // Get user IDs from role filters
-    let roleUserIds: string[] = [];
-    if (roles && roles.length > 0) {
-      roleUserIds = await this.getUserIdsByRoles(roles, tenantId);
+    try {
+      // Get user IDs from location filters
+      let locationUserIds: string[] = [];
+      const filterResult = this.findDeepestFilter(filters);
+      
+      if (filterResult.level) {
+        LoggerUtil.log(`Applying location filter: ${filterResult.level} with ${filterResult.ids.length} values`, apiId);
+        locationUserIds = await this.getUserIdsByFilter(filterResult.level, filterResult.ids, tenantId);
+        LoggerUtil.log(`Location filter returned ${locationUserIds.length} user IDs`, apiId);
+      }
+      
+      // Get user IDs from role filters
+      let roleUserIds: string[] = [];
+      if (roles && roles.length > 0) {
+        LoggerUtil.log(`Applying role filter with ${roles.length} roles: ${roles.join(', ')}`, apiId);
+        roleUserIds = await this.getUserIdsByRoles(roles, tenantId);
+        LoggerUtil.log(`Role filter returned ${roleUserIds.length} user IDs`, apiId);
+      }
+      
+      // Validate that at least one filter is provided
+      if (locationUserIds.length === 0 && roleUserIds.length === 0) {
+        throw new Error('No valid filters provided. Please provide at least one location or role filter');
+      }
+      
+      // Combine results: if both exist, return intersection; otherwise return whichever exists
+      let finalUserIds: string[];
+      if (locationUserIds.length > 0 && roleUserIds.length > 0) {
+        finalUserIds = locationUserIds.filter(id => roleUserIds.includes(id));
+        LoggerUtil.log(`Combined filters returned ${finalUserIds.length} user IDs (intersection)`, apiId);
+      } else {
+        finalUserIds = locationUserIds.length > 0 ? locationUserIds : roleUserIds;
+        LoggerUtil.log(`Single filter returned ${finalUserIds.length} user IDs`, apiId);
+      }
+      
+      return finalUserIds;
+    } catch (error) {
+      LoggerUtil.error(`Error in getAllFilteredUserIds: ${error.message}`, error.stack, apiId);
+      throw error;
     }
-    
-    // Combine results: if both exist, return intersection; otherwise return whichever exists
-    if (locationUserIds.length > 0 && roleUserIds.length > 0) {
-      return locationUserIds.filter(id => roleUserIds.includes(id));
-    }
-    return locationUserIds.length > 0 ? locationUserIds : roleUserIds;
   }
 
-  private validateSortParameters(sortField: string, sortDirection: string) {
+  /**
+   * Validate hierarchical input parameters comprehensively
+   */
+  private validateHierarchicalInputs(tenantId: string, dto: HierarchicalLocationFiltersDto): { error?: { message: string, detail: string } } {
+    // Validate tenantId
+    if (!tenantId || typeof tenantId !== 'string' || tenantId.trim().length === 0) {
+      return { error: { message: 'Invalid tenant ID', detail: 'Tenant ID is required and must be a non-empty string' } };
+    }
+
+    // Validate UUID format for tenantId
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(tenantId)) {
+      return { error: { message: 'Invalid tenant ID format', detail: 'Tenant ID must be a valid UUID' } };
+    }
+
+    // Validate sort array length
+    if (!dto.sort || !Array.isArray(dto.sort) || dto.sort.length !== 2) {
+      return { error: { message: 'Invalid sort parameter', detail: 'Sort must be an array with exactly 2 elements: [field, direction]' } };
+    }
+
+    // Validate limit and offset
+    if (dto.limit <= 0 || dto.limit > 100) {
+      return { error: { message: 'Invalid limit', detail: 'Limit must be between 1 and 100' } };
+    }
+
+    if (dto.offset < 0) {
+      return { error: { message: 'Invalid offset', detail: 'Offset must be 0 or greater' } };
+    }
+
+    // Validate that at least one filter is provided
+    const hasLocationFilter = dto.filters && Object.keys(dto.filters).some(key => {
+      const value = dto.filters[key];
+      return Array.isArray(value) && value.length > 0;
+    });
+    
+    const hasRoleFilter = dto.role && Array.isArray(dto.role) && dto.role.length > 0;
+    
+    if (!hasLocationFilter && !hasRoleFilter) {
+      return { error: { message: 'No valid filters provided', detail: 'Please provide at least one location filter or role filter' } };
+    }
+
+    // Validate batch UUIDs if provided
+    if (dto.filters?.batch && Array.isArray(dto.filters.batch)) {
+      for (const batchId of dto.filters.batch) {
+        if (!uuidRegex.test(batchId)) {
+          return { error: { message: 'Invalid batch ID format', detail: `Batch ID '${batchId}' must be a valid UUID` } };
+        }
+      }
+    }
+
+    return {}; // No errors
+  }
+
+  /**
+   * Validate sort parameters with enhanced error messages
+   */
+  private validateSortParameters(sortField: string, sortDirection: string): { error?: { message: string, detail: string }, sortField?: string, sortDirection?: string } {
     const allowedSortFields = ['name', 'firstName', 'lastName', 'username', 'email', 'createdAt'];
     const allowedSortDirections = ['asc', 'desc'];
     
+    if (!sortField || typeof sortField !== 'string') {
+      return { error: { message: 'Missing sort field', detail: 'Sort field is required and must be a string' } };
+    }
+    
     if (!allowedSortFields.includes(sortField)) {
-      return { error: { message: "Invalid sort field", detail: `Sort field must be one of: ${allowedSortFields.join(', ')}` } };
+      return { error: { message: 'Invalid sort field', detail: `Sort field '${sortField}' is not allowed. Must be one of: ${allowedSortFields.join(', ')}` } };
+    }
+    
+    if (!sortDirection || typeof sortDirection !== 'string') {
+      return { error: { message: 'Missing sort direction', detail: 'Sort direction is required and must be a string' } };
     }
     
     if (!allowedSortDirections.includes(sortDirection.toLowerCase())) {
-      return { error: { message: "Invalid sort direction", detail: "Sort direction must be 'asc' or 'desc'" } };
+      return { error: { message: 'Invalid sort direction', detail: `Sort direction '${sortDirection}' is not allowed. Must be 'asc' or 'desc'` } };
     }
     
     return { 
@@ -3152,98 +3263,335 @@ export class PostgresUserService implements IServicelocator {
     };
   }
 
-  private findDeepestFilter(filters: any) {
-    // Check filters in order from most specific to least specific
-    const filterLevels = ['batch', 'center', 'village', 'block', 'district', 'state'];
+  /**
+   * Generate contextual message when no users are found
+   */
+  private getNoUsersFoundMessage(filters: any, roles: string[]): string {
+    const appliedFilters: string[] = [];
     
-    for (const level of filterLevels) {
-      const filterIds = filters?.[level];
+    if (filters) {
+      Object.keys(filters).forEach(key => {
+        const value = filters[key];
+        if (Array.isArray(value) && value.length > 0) {
+          appliedFilters.push(`${key}: ${value.length} value(s)`);
+        }
+      });
+    }
+    
+    if (roles && roles.length > 0) {
+      appliedFilters.push(`roles: ${roles.join(', ')}`);
+    }
+    
+    return appliedFilters.length > 0 
+      ? `No users found matching the applied filters: ${appliedFilters.join(', ')}`
+      : 'No users found matching the given criteria';
+  }
+
+  /**
+   * Constants for hierarchical filter levels
+   */
+  private readonly HIERARCHICAL_FILTER_LEVELS = [
+    'batch',    // Most specific - educational cohort membership
+    'center',   // Learning center level
+    'village',  // Village administrative level
+    'block',    // Block administrative level  
+    'district', // District administrative level
+    'state'     // State administrative level (least specific)
+  ] as const;
+
+  /**
+   * Find the most specific (deepest) filter provided in the hierarchy
+   */
+  private findDeepestFilter(filters: Record<string, any>): { level: string | null, ids: string[] } {
+    if (!filters || typeof filters !== 'object') {
+      return { level: null, ids: [] };
+    }
+    
+    // Check filters in order from most specific to least specific
+    for (const level of this.HIERARCHICAL_FILTER_LEVELS) {
+      const filterIds = filters[level];
       if (filterIds && Array.isArray(filterIds) && filterIds.length > 0) {
-        return { level, ids: filterIds };
+        // Filter out empty strings and null values
+        const validIds = filterIds.filter(id => id && typeof id === 'string' && id.trim().length > 0);
+        if (validIds.length > 0) {
+          return { level, ids: validIds };
+        }
       }
     }
     
     return { level: null, ids: [] };
   }
 
-  private async getUserIdsByFilter(filterLevel: string, filterIds: string[], tenantId: string): Promise<string[]> {
-    // Handle batch filter differently (uses cohort membership)
-    if (filterLevel === 'batch') {
-      const query = `
-        SELECT DISTINCT cm."userId" 
-        FROM "CohortMembers" cm
-        WHERE cm."cohortId" = ANY($1) AND cm."status" = 'active'
-      `;
-      const result = await this.usersRepository.query(query, [filterIds]);
-      return result.map(row => row.userId);
-    }
+  /**
+   * SQL Query constants for better maintainability
+   */
+  private readonly SQL_QUERIES = {
+    BATCH_USERS: `
+      SELECT DISTINCT cm."userId" 
+      FROM "CohortMembers" cm
+      JOIN "Users" u ON cm."userId" = u."userId"
+      WHERE cm."cohortId" = ANY($1) 
+        AND cm."status" = 'active'
+        AND u."status" != 'archived'
+    `,
     
-    // Handle location fields (uses custom fields)
-    return this.getUserIdsByLocationField(filterLevel, filterIds, tenantId);
-  }
-
-
-  private async getUserIdsByLocationField(fieldName: string, fieldValues: string[], tenantId: string): Promise<string[]> {
-    // Step 1: Get field ID by field name
-    const fieldQuery = `SELECT "fieldId" FROM "Fields" WHERE "name" = $1 LIMIT 1`;
-    const fieldResult = await this.usersRepository.query(fieldQuery, [fieldName]);
+    FIELD_BY_NAME: `
+      SELECT "fieldId" 
+      FROM "Fields" 
+      WHERE "name" = $1 
+      LIMIT 1
+    `,
     
-    if (fieldResult.length === 0) {
-      throw new Error(`Field '${fieldName}' not found in configuration`);
-    }
+    USERS_BY_FIELD_VALUES: `
+      SELECT DISTINCT fv."itemId" 
+      FROM "FieldValues" fv
+      JOIN "Users" u ON fv."itemId" = u."userId"
+      WHERE fv."fieldId" = $1 
+        AND fv."value" && $2 
+        AND fv."tenantId" = $3
+        AND u."status" != 'archived'
+    `,
     
-    // Step 2: Get user IDs that have matching field values
-    const valuesQuery = `
-      SELECT DISTINCT "itemId" 
-      FROM "FieldValues" 
-      WHERE "fieldId" = $1 
-        AND "value" && $2 
-        AND "tenantId" = $3
-    `;
-    
-    const result = await this.usersRepository.query(valuesQuery, [fieldResult[0].fieldId, fieldValues, tenantId]);
-    return result.map(row => row.itemId);
-  }
-
-  private async getUserIdsByRoles(roleNames: string[], tenantId: string): Promise<string[]> {
-    // Single query to get user IDs by role names and tenant
-    const query = `
+    USERS_BY_ROLES: `
       SELECT DISTINCT urm."userId" 
       FROM "UserRolesMapping" urm
       JOIN "Roles" r ON urm."roleId" = r."roleId"
-      WHERE r."name" = ANY($1) AND urm."tenantId" = $2
-    `;
+      JOIN "Users" u ON urm."userId" = u."userId"
+      WHERE r."name" = ANY($1) 
+        AND urm."tenantId" = $2
+        AND u."status" != 'archived'
+    `
+  } as const;
 
-    const result = await this.usersRepository.query(query, [roleNames, tenantId]);
-    return result.map(row => row.userId);
+  /**
+   * Get user IDs by filter level with enhanced error handling and logging
+   */
+  private async getUserIdsByFilter(filterLevel: string, filterIds: string[], tenantId: string): Promise<string[]> {
+    const apiId = APIID.USER_LIST;
+    
+    try {
+      // Validate inputs
+      if (!filterLevel || !filterIds || filterIds.length === 0 || !tenantId) {
+        throw new Error('Invalid parameters: filterLevel, filterIds, and tenantId are required');
+      }
+
+      // Handle batch filter differently (uses cohort membership)
+      if (filterLevel === 'batch') {
+        LoggerUtil.log(`Executing batch filter query for ${filterIds.length} batch IDs`, apiId);
+        const result = await this.usersRepository.query(this.SQL_QUERIES.BATCH_USERS, [filterIds]);
+        const userIds = result.map(row => row.userId);
+        LoggerUtil.log(`Batch filter returned ${userIds.length} active users`, apiId);
+        return userIds;
+      }
+      
+      // Handle location fields (uses custom fields)
+      return this.getUserIdsByLocationField(filterLevel, filterIds, tenantId);
+    } catch (error) {
+      LoggerUtil.error(
+        `Error in getUserIdsByFilter for level '${filterLevel}': ${error.message}`,
+        error.stack,
+        apiId
+      );
+      throw new Error(`Failed to filter users by ${filterLevel}: ${error.message}`);
+    }
   }
 
-   private async getPaginatedUsers(userIds: string[], tenantId: string, limit: number, offset: number, sortField: string, sortDirection: string, customFieldNames?: string[]) {
-     // Step 1: Get total count of users
-     const totalCount = await this.getUserCount(userIds, tenantId);
+
+  /**
+   * Get user IDs by location field with comprehensive validation and error handling
+   */
+  private async getUserIdsByLocationField(fieldName: string, fieldValues: string[], tenantId: string): Promise<string[]> {
+    const apiId = APIID.USER_LIST;
+    
+    try {
+      // Validate inputs
+      if (!fieldName || typeof fieldName !== 'string') {
+        throw new Error('Field name is required and must be a string');
+      }
+      
+      if (!fieldValues || !Array.isArray(fieldValues) || fieldValues.length === 0) {
+        throw new Error('Field values are required and must be a non-empty array');
+      }
+      
+      if (!tenantId || typeof tenantId !== 'string') {
+        throw new Error('Tenant ID is required and must be a string');
+      }
+
+      // Step 1: Get field ID by field name with better error handling
+      LoggerUtil.log(`Looking up field ID for field '${fieldName}'`, apiId);
+      const fieldResult = await this.usersRepository.query(this.SQL_QUERIES.FIELD_BY_NAME, [fieldName]);
+      
+      if (fieldResult.length === 0) {
+        throw new Error(`Configuration error: Field '${fieldName}' not found or not active. Please check field configuration.`);
+      }
+      
+      const fieldId = fieldResult[0].fieldId;
+      LoggerUtil.log(`Found field ID '${fieldId}' for field '${fieldName}'`, apiId);
+      
+      // Step 2: Get user IDs that have matching field values (excluding archived users)
+      LoggerUtil.log(`Searching for users with ${fieldName} values: ${fieldValues.join(', ')}`, apiId);
+      const result = await this.usersRepository.query(
+        this.SQL_QUERIES.USERS_BY_FIELD_VALUES, 
+        [fieldId, fieldValues, tenantId]
+      );
+      
+      const userIds = result.map(row => row.itemId);
+      LoggerUtil.log(`Location field '${fieldName}' filter returned ${userIds.length} active users`, apiId);
+      
+      return userIds;
+    } catch (error) {
+      LoggerUtil.error(
+        `Error in getUserIdsByLocationField for field '${fieldName}': ${error.message}`,
+        error.stack,
+        apiId
+      );
+      throw error; // Re-throw to be handled by caller with context
+    }
+  }
+
+  /**
+   * Get user IDs by roles with enhanced validation and error handling
+   */
+  private async getUserIdsByRoles(roleNames: string[], tenantId: string): Promise<string[]> {
+    const apiId = APIID.USER_LIST;
+    
+    try {
+      // Validate inputs
+      if (!roleNames || !Array.isArray(roleNames) || roleNames.length === 0) {
+        throw new Error('Role names are required and must be a non-empty array');
+      }
+      
+      if (!tenantId || typeof tenantId !== 'string') {
+        throw new Error('Tenant ID is required and must be a string');
+      }
+
+      // Filter out invalid role names
+      const validRoleNames = roleNames.filter(role => role && typeof role === 'string' && role.trim().length > 0);
+      
+      if (validRoleNames.length === 0) {
+        throw new Error('No valid role names provided');
+      }
+
+      if (validRoleNames.length !== roleNames.length) {
+        LoggerUtil.warn(`Filtered out ${roleNames.length - validRoleNames.length} invalid role names`, apiId);
+      }
+
+      LoggerUtil.log(`Searching for users with roles: ${validRoleNames.join(', ')}`, apiId);
+      
+      // Execute query to get user IDs by role names and tenant (excluding archived users)
+      const result = await this.usersRepository.query(this.SQL_QUERIES.USERS_BY_ROLES, [validRoleNames, tenantId]);
+      
+      const userIds = result.map(row => row.userId);
+      LoggerUtil.log(`Role filter returned ${userIds.length} active users for roles: ${validRoleNames.join(', ')}`, apiId);
+      
+      return userIds;
+    } catch (error) {
+      LoggerUtil.error(
+        `Error in getUserIdsByRoles: ${error.message}`,
+        error.stack,
+        apiId
+      );
+      throw new Error(`Failed to filter users by roles: ${error.message}`);
+    }
+  }
+
+   /**
+    * Get paginated users with all related data in optimized manner
+    */
+   private async getPaginatedUsers(
+     userIds: string[], 
+     tenantId: string, 
+     limit: number, 
+     offset: number, 
+     sortField: string, 
+     sortDirection: string, 
+     customFieldNames?: string[]
+   ): Promise<{ totalCount: number; users: any[] }> {
+     const apiId = APIID.USER_LIST;
      
-     // Step 2: Get basic user details with pagination and sorting
-     const users = await this.getUserDetails(userIds, tenantId, limit, offset, sortField, sortDirection);
-     
-     // Step 3: Get custom fields data (if requested)
-     let customFieldsData = {};
-     if (customFieldNames && customFieldNames.length > 0) {
-       customFieldsData = await this.getCustomFieldsData(userIds, customFieldNames, tenantId);
+     try {
+       // Validate inputs
+       if (!userIds || userIds.length === 0) {
+         return { totalCount: 0, users: [] };
+       }
+
+       if (limit <= 0 || limit > 100) {
+         throw new Error('Limit must be between 1 and 100');
+       }
+
+       if (offset < 0) {
+         throw new Error('Offset must be 0 or greater');
+       }
+
+       LoggerUtil.log(`Processing ${userIds.length} user IDs with pagination: limit=${limit}, offset=${offset}`, apiId);
+       
+       // Execute all database queries in parallel for better performance
+       const [totalCount, users, customFieldsData, batchCenterData] = await Promise.allSettled([
+         // Step 1: Get total count of users
+         this.getUserCount(userIds, tenantId),
+         
+         // Step 2: Get basic user details with pagination and sorting
+         this.getUserDetails(userIds, tenantId, limit, offset, sortField, sortDirection),
+         
+         // Step 3: Get custom fields data (if requested)
+         customFieldNames && customFieldNames.length > 0 
+           ? this.getCustomFieldsData(userIds, customFieldNames, tenantId)
+           : Promise.resolve({}),
+         
+         // Step 4: Get batch and center names from cohort memberships
+         this.getBatchAndCenterNames(userIds)
+       ]);
+
+       // Handle any failed promises
+       if (totalCount.status === 'rejected') {
+         throw new Error(`Failed to get user count: ${totalCount.reason?.message || 'Unknown error'}`);
+       }
+       
+       if (users.status === 'rejected') {
+         throw new Error(`Failed to get user details: ${users.reason?.message || 'Unknown error'}`);
+       }
+
+       // Custom fields and batch center data are optional - log warnings if they fail
+       let finalCustomFieldsData = {};
+       if (customFieldsData.status === 'rejected') {
+         LoggerUtil.warn(`Failed to fetch custom fields data: ${customFieldsData.reason?.message}`, apiId);
+       } else {
+         finalCustomFieldsData = customFieldsData.value;
+       }
+
+       let finalBatchCenterData = {};
+       if (batchCenterData.status === 'rejected') {
+         LoggerUtil.warn(`Failed to fetch batch and center data: ${batchCenterData.reason?.message}`, apiId);
+       } else {
+         finalBatchCenterData = batchCenterData.value;
+       }
+       
+       // Step 5: Combine all data together
+       const finalUsers = this.aggregateUserRoles(
+         users.value, 
+         finalCustomFieldsData, 
+         customFieldNames || [], 
+         finalBatchCenterData
+       );
+       
+       LoggerUtil.log(`Successfully processed ${finalUsers.length} users with ${Object.keys(finalCustomFieldsData).length} custom field entries`, apiId);
+       
+       return { totalCount: totalCount.value, users: finalUsers };
+     } catch (error) {
+       LoggerUtil.error(`Error in getPaginatedUsers: ${error.message}`, error.stack, apiId);
+       throw error;
      }
-     
-     // Step 4: Get batch and center names from cohort memberships
-     const batchCenterData = await this.getBatchAndCenterNames(userIds);
-     
-     // Step 5: Combine all data together
-     const finalUsers = this.aggregateUserRoles(users, customFieldsData, customFieldNames || [], batchCenterData);
-     
-     return { totalCount, users: finalUsers };
    }
 
    /**
     * Get batch and center names for users using cohort membership
     */
-   private async getBatchAndCenterNames(userIds: string[]): Promise<any> {
+   /**
+    * Get batch and center names for users using cohort membership with improved error handling
+    */
+   private async getBatchAndCenterNames(userIds: string[]): Promise<Record<string, { batchName: string | null; centerName: string | null }>> {
+     const apiId = APIID.USER_LIST;
+     
      if (!userIds || userIds.length === 0) {
        return {};
      }
@@ -3252,7 +3600,9 @@ export class PostgresUserService implements IServicelocator {
        SELECT 
          cm."userId",
          batch."name" AS "batchName",
-         center."name" AS "centerName"
+         batch."status" AS "batchStatus",
+         center."name" AS "centerName",
+         center."status" AS "centerStatus"
        FROM 
          public."CohortMembers" cm
          LEFT JOIN public."Cohort" batch ON cm."cohortId" = batch."cohortId"
@@ -3260,173 +3610,318 @@ export class PostgresUserService implements IServicelocator {
        WHERE 
          cm."userId" = ANY($1)
          AND cm."status" = 'active'
+         AND (batch."status" IS NULL OR batch."status" != 'archived')
+         AND (center."status" IS NULL OR center."status" != 'archived')
+       ORDER BY cm."createdAt" DESC
      `;
 
      try {
+       LoggerUtil.log(`Fetching batch and center names for ${userIds.length} users`, apiId);
        const result = await this.usersRepository.query(query, [userIds]);
        
-       // Group by userId in case a user has multiple active memberships
-       const batchCenterMap = {};
+       // Group by userId - take the most recent active membership if multiple exist
+       const batchCenterMap: Record<string, { batchName: string | null; centerName: string | null }> = {};
        result.forEach(row => {
-         const { userId, batchName, centerName } = row;
+         const { userId, batchName, centerName, batchStatus, centerStatus } = row;
          if (!batchCenterMap[userId]) {
            batchCenterMap[userId] = {
-             batchName: batchName || null,
-             centerName: centerName || null
+             batchName: (batchStatus === 'archived' || !batchName) ? null : batchName,
+             centerName: (centerStatus === 'archived' || !centerName) ? null : centerName
            };
          }
        });
 
+       LoggerUtil.log(`Batch and center data fetched for ${Object.keys(batchCenterMap).length} users`, apiId);
        return batchCenterMap;
      } catch (error) {
-       console.warn('Error fetching batch and center names:', error.message);
+       LoggerUtil.error(`Error fetching batch and center names: ${error.message}`, error.stack, apiId);
+       // Return empty object instead of throwing to avoid breaking the main operation
        return {};
      }
    }
 
+  /**
+   * Get count of users with proper error handling and validation
+   */
   private async getUserCount(userIds: string[], tenantId: string): Promise<number> {
-    const query = `
-      SELECT COUNT(DISTINCT u."userId") as total
-      FROM "Users" u
-      LEFT JOIN "UserTenantMapping" utm ON u."userId" = utm."userId"
-      WHERE u."userId" = ANY($1) AND utm."tenantId" = $2
-    `;
+    const apiId = APIID.USER_LIST;
     
-    const result = await this.usersRepository.query(query, [userIds, tenantId]);
-    return parseInt(result[0]?.total || 0);
-  }
-
-  private async getUserDetails(userIds: string[], tenantId: string, limit: number, offset: number, sortField: string, sortDirection: string) {
-    const query = `
-      SELECT DISTINCT
-        u."userId", u."username", u."firstName", u."name", u."middleName", 
-        u."lastName", u."email", u."mobile", u."gender", u."dob", 
-        u."status", u."createdAt", utm."tenantId", r."name" as "roleName"
-      FROM "Users" u
-      LEFT JOIN "UserTenantMapping" utm ON u."userId" = utm."userId"
-      LEFT JOIN "UserRolesMapping" urm ON u."userId" = urm."userId" AND utm."tenantId" = urm."tenantId"
-      LEFT JOIN "Roles" r ON urm."roleId" = r."roleId"
-      WHERE u."userId" = ANY($1) AND utm."tenantId" = $2
-      ORDER BY u."${sortField}" ${sortDirection}
-      LIMIT $3 OFFSET $4
-    `;
-    
-    return this.usersRepository.query(query, [userIds, tenantId, limit, offset]);
-  }
-
-   private aggregateUserRoles(userDetails: any[], customFieldsData: any = {}, requestedCustomFields: string[] = [], batchCenterData: any = {}) {
-    const usersMap = new Map();
-    
-    userDetails.forEach(user => {
-      const { userId, roleName, ...userData } = user;
+    try {
+      if (!userIds || userIds.length === 0) {
+        return 0;
+      }
       
-      if (usersMap.has(userId)) {
-        const existingUser = usersMap.get(userId);
-        if (roleName && !existingUser.roles.includes(roleName)) {
-          existingUser.roles.push(roleName);
-        }
-      } else {
-        const userObject = {
-          ...userData,
-          userId,
-          roles: roleName ? [roleName] : []
-        };
-        
-         // Only add customfield property if custom fields were requested
-         if (requestedCustomFields.length > 0) {
-           const userCustomFields = customFieldsData[userId] || {};
-           const userBatchCenter = batchCenterData[userId] || {};
-           const processedCustomFields = {};
-           
-           // Initialize ALL requested fields, set to null if not found
-           requestedCustomFields.forEach(fieldName => {
-             let fieldValue;
-             
-             // Handle batch and center specially using the new query data
-             if (fieldName === 'batch') {
-               fieldValue = userBatchCenter.batchName || null;
-             } else if (fieldName === 'center') {
-               fieldValue = userBatchCenter.centerName || null;
-             } else {
-               // Handle regular custom fields
-               fieldValue = userCustomFields[fieldName];
-               
-               if (fieldValue !== undefined) {
-                 // If it's an array, take the first value; otherwise use as is
-                 fieldValue = Array.isArray(fieldValue) && fieldValue.length > 0 
-                   ? fieldValue[0] 
-                   : (Array.isArray(fieldValue) ? null : fieldValue);
-               } else {
-                 // Field not found or no data, set to null
-                 fieldValue = null;
-               }
-             }
-             
-             processedCustomFields[fieldName] = fieldValue;
-           });
-           
-           userObject.customfield = processedCustomFields;
+      if (!tenantId) {
+        throw new Error('Tenant ID is required for user count');
+      }
+
+      const query = `
+        SELECT COUNT(DISTINCT u."userId") as total
+        FROM "Users" u
+        LEFT JOIN "UserTenantMapping" utm ON u."userId" = utm."userId"
+        WHERE u."userId" = ANY($1) 
+          AND utm."tenantId" = $2
+          AND u."status" != 'archived'
+      `;
+      
+      const result = await this.usersRepository.query(query, [userIds, tenantId]);
+      const count = parseInt(result[0]?.total || '0');
+      
+      LoggerUtil.log(`User count query returned ${count} active users`, apiId);
+      return count;
+    } catch (error) {
+      LoggerUtil.error(`Error in getUserCount: ${error.message}`, error.stack, apiId);
+      throw new Error(`Failed to get user count: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get user details with enhanced security and error handling
+   */
+  private async getUserDetails(
+    userIds: string[], 
+    tenantId: string, 
+    limit: number, 
+    offset: number, 
+    sortField: string, 
+    sortDirection: string
+  ): Promise<any[]> {
+    const apiId = APIID.USER_LIST;
+    
+    try {
+      if (!userIds || userIds.length === 0) {
+        return [];
+      }
+      
+      // Validate sort parameters for SQL injection prevention
+      const allowedSortFields = ['name', 'firstName', 'lastName', 'username', 'email', 'createdAt'];
+      const allowedSortDirections = ['ASC', 'DESC'];
+      
+      if (!allowedSortFields.includes(sortField)) {
+        throw new Error(`Invalid sort field: ${sortField}`);
+      }
+      
+      if (!allowedSortDirections.includes(sortDirection)) {
+        throw new Error(`Invalid sort direction: ${sortDirection}`);
+      }
+
+      const query = `
+        SELECT DISTINCT
+          u."userId", u."username", u."firstName", u."name", u."middleName", 
+          u."lastName", u."email", u."mobile", u."gender", u."dob", 
+          u."status", u."createdAt", utm."tenantId", r."name" as "roleName"
+        FROM "Users" u
+        LEFT JOIN "UserTenantMapping" utm ON u."userId" = utm."userId"
+        LEFT JOIN "UserRolesMapping" urm ON u."userId" = urm."userId" AND utm."tenantId" = urm."tenantId"
+        LEFT JOIN "Roles" r ON urm."roleId" = r."roleId"
+        WHERE u."userId" = ANY($1) 
+          AND utm."tenantId" = $2
+          AND u."status" != 'archived'
+        ORDER BY u."${sortField}" ${sortDirection}
+        LIMIT $3 OFFSET $4
+      `;
+      
+      LoggerUtil.log(`Executing user details query with sort: ${sortField} ${sortDirection}, limit: ${limit}, offset: ${offset}`, apiId);
+      const result = await this.usersRepository.query(query, [userIds, tenantId, limit, offset]);
+      
+      LoggerUtil.log(`User details query returned ${result.length} rows`, apiId);
+      return result;
+    } catch (error) {
+      LoggerUtil.error(`Error in getUserDetails: ${error.message}`, error.stack, apiId);
+      throw new Error(`Failed to get user details: ${error.message}`);
+    }
+  }
+
+   /**
+    * Aggregate user roles and custom fields with improved data processing
+    */
+   private aggregateUserRoles(
+     userDetails: any[], 
+     customFieldsData: Record<string, any> = {}, 
+     requestedCustomFields: string[] = [], 
+     batchCenterData: Record<string, { batchName: string | null; centerName: string | null }> = {}
+   ): any[] {
+     const apiId = APIID.USER_LIST;
+     
+     try {
+       if (!userDetails || userDetails.length === 0) {
+         return [];
+       }
+
+       const usersMap = new Map<string, any>();
+       
+       userDetails.forEach(user => {
+         const { userId, roleName, ...userData } = user;
+         
+         if (!userId) {
+           LoggerUtil.warn('Skipping user record without userId', apiId);
+           return;
          }
+         
+         if (usersMap.has(userId)) {
+           // User already exists, just add role if new
+           const existingUser = usersMap.get(userId);
+           if (roleName && typeof roleName === 'string' && !existingUser.roles.includes(roleName)) {
+             existingUser.roles.push(roleName);
+           }
+         } else {
+           // Create new user object
+           const userObject: any = {
+             ...userData,
+             userId,
+             roles: roleName && typeof roleName === 'string' ? [roleName] : []
+           };
+           
+           // Only add customfield property if custom fields were requested
+           if (requestedCustomFields.length > 0) {
+             const userCustomFields = customFieldsData[userId] || {};
+             const userBatchCenter = batchCenterData[userId] || { batchName: null, centerName: null };
+             const processedCustomFields: Record<string, any> = {};
+             
+             // Initialize ALL requested fields, set to null if not found
+             requestedCustomFields.forEach(fieldName => {
+               let fieldValue: any;
+               
+               // Handle batch and center specially using the cohort membership data
+               if (fieldName === 'batch') {
+                 fieldValue = userBatchCenter.batchName;
+               } else if (fieldName === 'center') {
+                 fieldValue = userBatchCenter.centerName;
+               } else {
+                 // Handle regular custom fields from the FieldValues table
+                 const rawValue = userCustomFields[fieldName];
+                 
+                 if (rawValue !== undefined && rawValue !== null) {
+                   // If it's an array, take the first value; otherwise use as is
+                   fieldValue = Array.isArray(rawValue) && rawValue.length > 0 
+                     ? rawValue[0] 
+                     : (Array.isArray(rawValue) ? null : rawValue);
+                 } else {
+                   // Field not found or no data, set to null
+                   fieldValue = null;
+                 }
+               }
+               
+               processedCustomFields[fieldName] = fieldValue;
+             });
+             
+             userObject.customfield = processedCustomFields;
+           }
+          
+          usersMap.set(userId, userObject);
+         }
+       });
+       
+       const result = Array.from(usersMap.values());
+       LoggerUtil.log(`Aggregated ${result.length} unique users from ${userDetails.length} user detail records`, apiId);
+       
+       return result;
+     } catch (error) {
+       LoggerUtil.error(`Error in aggregateUserRoles: ${error.message}`, error.stack, apiId);
+       throw new Error(`Failed to aggregate user data: ${error.message}`);
+     }
+   }
+
+  /**
+   * Get custom fields data with comprehensive error handling and caching potential
+   */
+  private async getCustomFieldsData(
+    userIds: string[], 
+    customFieldNames: string[], 
+    tenantId: string
+  ): Promise<Record<string, Record<string, any>>> {
+    const apiId = APIID.USER_LIST;
+    
+    try {
+      if (!customFieldNames || customFieldNames.length === 0) {
+        return {};
+      }
+
+      if (!userIds || userIds.length === 0) {
+        return {};
+      }
+
+      // Filter out batch and center as they're handled separately
+      const regularCustomFields = customFieldNames.filter(name => !['batch', 'center'].includes(name));
+      
+      if (regularCustomFields.length === 0) {
+        LoggerUtil.log('Only batch and center fields requested - skipping custom fields query', apiId);
+        return {};
+      }
+
+      LoggerUtil.log(`Fetching custom field data for fields: ${regularCustomFields.join(', ')}`, apiId);
+
+      // Get field IDs for requested custom fields (search only by name)
+      const fieldsQuery = `
+        SELECT "fieldId", "name" 
+        FROM "Fields" 
+        WHERE "name" = ANY($1)
+      `;
+      
+      const fieldsResult = await this.usersRepository.query(fieldsQuery, [regularCustomFields]);
+      
+      if (fieldsResult.length === 0) {
+        LoggerUtil.warn(`No fields found for requested names: ${regularCustomFields.join(', ')}`, apiId);
+        return {};
+      }
+
+      const foundFields = fieldsResult.map(f => f.name);
+      const missingFields = regularCustomFields.filter(name => !foundFields.includes(name));
+      
+      if (missingFields.length > 0) {
+        LoggerUtil.warn(`Some requested fields not found: ${missingFields.join(', ')}`, apiId);
+      }
+
+      const fieldIds = fieldsResult.map(field => field.fieldId);
+      const fieldNameMap = fieldsResult.reduce((acc, field) => {
+        acc[field.fieldId] = field.name;
+        return acc;
+      }, {} as Record<string, string>);
+
+      // Get custom field values for the users (search with tenantId)
+      const customFieldsQuery = `
+        SELECT "itemId", "fieldId", "value"
+        FROM "FieldValues" 
+        WHERE "fieldId" = ANY($1) 
+          AND "itemId" = ANY($2) 
+          AND "tenantId" = $3
+          AND "value" IS NOT NULL
+      `;
+
+      const customFieldsResult = await this.usersRepository.query(customFieldsQuery, [fieldIds, userIds, tenantId]);
+      LoggerUtil.log(`Custom fields query returned ${customFieldsResult.length} value records`, apiId);
+
+      // Structure the data by userId and fieldName
+      const customFieldsData: Record<string, Record<string, any>> = {};
+      
+      customFieldsResult.forEach(row => {
+        const { itemId: userId, fieldId, value } = row;
+        const fieldName = fieldNameMap[fieldId];
         
-        usersMap.set(userId, userObject);
-      }
-    });
-    
-    return Array.from(usersMap.values());
-  }
+        if (!fieldName) {
+          LoggerUtil.warn(`Unknown fieldId: ${fieldId}`, apiId);
+          return;
+        }
+        
+        if (!customFieldsData[userId]) {
+          customFieldsData[userId] = {};
+        }
+        
+        // Store the value as-is (text[] from database)
+        customFieldsData[userId][fieldName] = value || [];
+      });
 
-  private async getCustomFieldsData(userIds: string[], customFieldNames: string[], tenantId: string) {
-    if (!customFieldNames || customFieldNames.length === 0) {
+      LoggerUtil.log(`Structured custom field data for ${Object.keys(customFieldsData).length} users`, apiId);
+
+      // Resolve location field IDs to names for state, district, block, village
+      const resolvedCustomFieldsData = await this.resolveLocationFieldNames(customFieldsData);
+
+      return resolvedCustomFieldsData;
+    } catch (error) {
+      LoggerUtil.error(`Error in getCustomFieldsData: ${error.message}`, error.stack, apiId);
+      // Return empty object rather than throwing to avoid breaking the main operation
       return {};
     }
-
-    // Get field IDs for requested custom fields (search only by name)
-    const fieldsQuery = `
-      SELECT "fieldId", "name" 
-      FROM "Fields" 
-      WHERE "name" = ANY($1)
-    `;
-    
-    const fieldsResult = await this.usersRepository.query(fieldsQuery, [customFieldNames]);
-    
-    if (fieldsResult.length === 0) {
-      return {};
-    }
-
-    const fieldIds = fieldsResult.map(field => field.fieldId);
-    const fieldNameMap = fieldsResult.reduce((acc, field) => {
-      acc[field.fieldId] = field.name;
-      return acc;
-    }, {});
-
-    // Get custom field values for the users (search with tenantId)
-    const customFieldsQuery = `
-      SELECT "itemId", "fieldId", "value"
-      FROM "FieldValues" 
-      WHERE "fieldId" = ANY($1) AND "itemId" = ANY($2) AND "tenantId" = $3
-    `;
-
-    const customFieldsResult = await this.usersRepository.query(customFieldsQuery, [fieldIds, userIds, tenantId]);
-
-    // Structure the data by userId and fieldName
-    const customFieldsData = {};
-    
-    customFieldsResult.forEach(row => {
-      const { itemId: userId, fieldId, value } = row;
-      const fieldName = fieldNameMap[fieldId];
-      
-      if (!customFieldsData[userId]) {
-        customFieldsData[userId] = {};
-      }
-      
-      // Since value is text[], we want to show all values
-      customFieldsData[userId][fieldName] = value || [];
-    });
-
-    // Resolve location field IDs to names for state, district, block, village
-    const resolvedCustomFieldsData = await this.resolveLocationFieldNames(customFieldsData);
-
-    return resolvedCustomFieldsData;
   }
 
    private async resolveLocationFieldNames(customFieldsData: any) {
