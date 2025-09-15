@@ -1,11 +1,27 @@
-version: "3.6"
+version: '3.6'
 
 services:
-  backend:
-    image: shiksha-backend-2.0
-    container_name: "shiksha-backend-2.0"
+  user-service:
+    image: vaishali007/user-microservice:latest
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env.docker
+    depends_on:
+      - postgres
+
+  postgres:
+    image: postgres:14
+    container_name: postgres
     restart: always
     ports:
-      - 3000:3000
-    env_file:
-      - /home/ubuntu-backend-shiksha2.0/.env
+      - "15432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: oblf
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:
