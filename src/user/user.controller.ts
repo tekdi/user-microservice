@@ -34,6 +34,7 @@ import {
 } from "@nestjs/swagger";
 
 import { ExistUserDto, SuggestUserDto, UserSearchDto } from "./dto/user-search.dto";
+import { HierarchicalLocationFiltersDto } from "./dto/user-hierarchical-search.dto";
 import { UserAdapter } from "./useradapter";
 import { UserCreateDto } from "./dto/user-create.dto";
 import { UserUpdateDTO } from "./dto/user-update.dto";
@@ -360,5 +361,220 @@ export class UserController {
       foldername
     );
     return { url };
+  }
+
+  @UseFilters(new AllExceptionsFilter(APIID.USER_LIST))
+  @Post("hierarchical-search")
+  @UseGuards(JwtAuthGuard)
+  @ApiBasicAuth("access-token")
+  @ApiCreatedResponse({ 
+    description: "User list based on hierarchical location filters with pagination and sorting.",
+    schema: {
+      type: "object",
+      properties: {
+        statusCode: { type: "number", example: 200 },
+        message: { type: "string", example: "Users retrieved successfully using village filter" },
+        data: {
+          type: "object",
+          properties: {
+            users: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  userId: { type: "string" },
+                  username: { type: "string" },
+                  firstName: { type: "string" },
+                  lastName: { type: "string" },
+                  email: { type: "string" },
+                  mobile: { type: "string" },
+                  roles: { type: "array", items: { type: "string" } },
+                  customfield: {
+                    type: "object",
+                    description: "Custom fields data (only included if customfields requested). Location fields (state, district, block, village, center, batch) show names, other fields show original values.",
+                    example: {
+                      "state": "Maharashtra",
+                      "district": "Pune", 
+                      "center": "Learning Center A",
+                      "batch": "Morning Batch 2024",
+                      "designation": "Lead Teacher"
+                    }
+                  }
+                }
+              }
+            },
+            totalCount: { type: "number", example: 150 },
+            currentPageCount: { type: "number", example: 10 },
+            limit: { type: "number", example: 10 },
+            offset: { type: "number", example: 0 },
+            filters: {
+              type: "object",
+              properties: {
+                locationFilter: {
+                  type: "object",
+                  properties: {
+                    level: { type: "string", example: "state" },
+                    values: { type: "array", items: { type: "string" }, example: ["27"] }
+                  }
+                },
+                roleFilter: {
+                  type: "object", 
+                  properties: {
+                    roles: { type: "array", items: { type: "string" }, example: ["Instructor", "Lead"] }
+                  }
+                }
+              }
+            },
+            sort: {
+              type: "object",
+              properties: {
+                field: { type: "string", example: "name" },
+                direction: { type: "string", example: "asc" }
+              }
+            }
+          }
+        }
+      }
+    }
+  })
+  @ApiForbiddenResponse({ description: "Forbidden" })
+  @ApiBody({ 
+    type: HierarchicalLocationFiltersDto,
+    examples: {
+      stateOnly: {
+        summary: "State-level search only",
+        description: "Search users by state IDs only",
+        value: {
+          "limit": 10,
+          "offset": 0,
+          "filters": {
+            "state": ["27", "28"]
+          },
+          "sort": ["name", "asc"]
+        }
+      },
+      stateWithCustomFields: {
+        summary: "State-level search with custom fields",
+        description: "Search users by state IDs with custom field data",
+        value: {
+          "limit": 10,
+          "offset": 0,
+          "filters": {
+            "state": ["27"]
+          },
+          "customfields": ["state", "district", "block", "village", "center", "main_subject", "subject"],
+          "sort": ["name", "asc"]
+        }
+      },
+      villageOnly: {
+        summary: "Village-level search only",
+        description: "Search users by village IDs only (takes priority over state/district)",
+        value: {
+          "limit": 10,
+          "offset": 0,
+          "filters": {
+            "village": ["village-uuid-1"]
+          },
+          "sort": ["firstName", "asc"]
+        }
+      },
+      batchOnly: {
+        summary: "Batch-level search only",
+        description: "Direct search by batch/cohort IDs only",
+        value: {
+          "limit": 15,
+          "offset": 0,
+          "filters": {
+            "batch": ["batch-uuid-1", "batch-uuid-2"]
+          },
+          "sort": ["lastName", "desc"]
+        }
+      },
+      multipleFilters: {
+        summary: "Multiple filters (deepest wins)",
+        description: "When multiple filters provided, only the deepest (village) is used",
+        value: {
+          "limit": 10,
+          "offset": 0,
+          "filters": {
+            "state": ["27"],
+            "district": ["dist-1"],
+            "village": ["village-1"]
+          },
+          "sort": ["email", "asc"]
+        }
+      },
+      roleOnly: {
+        summary: "Role-based search only",
+        description: "Search users by role names only",
+        value: {
+          "limit": 10,
+          "offset": 0,
+          "role": ["Instructor", "Lead"],
+          "sort": ["name", "asc"]
+        }
+      },
+      locationAndRole: {
+        summary: "Location and role filters combined with custom fields",
+        description: "Search users by both location (state) and role filters - returns intersection. Custom fields for location (state, district, block, village, center, batch) will show names instead of IDs.",
+        value: {
+          "limit": 10,
+          "offset": 0,
+          "filters": {
+            "state": ["27"]
+          },
+          "role": ["Instructor", "Lead", "Content creator"],
+          "customfields": ["state", "district", "center", "batch", "designation"],
+          "sort": ["name", "asc"]
+        }
+      },
+      centerAndBatch: {
+        summary: "Request with center and batch custom fields",
+        description: "Example showing center (resolved from Cohort table by cohortId) and batch (resolved from Cohort table by parentId) fields",
+        value: {
+          "limit": 10,
+          "offset": 0,
+          "filters": {
+            "state": ["27"]
+          },
+          "customfields": ["center", "batch"],
+          "sort": ["name", "asc"]
+        }
+      }
+    }
+  })
+  @UsePipes(new ValidationPipe({ 
+    whitelist: true,
+    forbidNonWhitelisted: true,
+    transform: true
+  }))
+  @SerializeOptions({
+    strategy: "excludeAll",
+  })
+  @ApiHeader({
+    name: "tenantid",
+    description: "Tenant ID for filtering users within specific tenant (Required)",
+    required: true
+  })
+  public async getUsersByHierarchicalLocation(
+    @Headers() headers,
+    @Req() request: Request,
+    @Res() response: Response,
+    @Body() hierarchicalFiltersDto: HierarchicalLocationFiltersDto
+  ) {
+    const tenantId = headers["tenantid"];
+    
+    // Validate mandatory tenantId
+    if (!tenantId) {
+      return response.status(400).json({
+        statusCode: 400,
+        message: "tenantid header is required",
+        error: "Bad Request"
+      });
+    }
+    
+    return await this.userAdapter
+      .buildUserAdapter()
+      .getUsersByHierarchicalLocation(tenantId, request, response, hierarchicalFiltersDto);
   }
 }

@@ -18,6 +18,7 @@ import { SuccessResponse } from "src/success-response";
 import { CohortMembers } from "src/cohortMembers/entities/cohort-member.entity";
 import { isUUID } from "class-validator";
 import { ExistUserDto, SuggestUserDto, UserSearchDto } from "src/user/dto/user-search.dto";
+import { HierarchicalLocationFiltersDto } from "src/user/dto/user-hierarchical-search.dto";
 import { UserTenantMapping } from "src/userTenantMapping/entities/user-tenant-mapping.entity";
 import { UserRoleMapping } from "src/rbac/assign-role/entities/assign-role.entity";
 import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
@@ -3061,5 +3062,488 @@ export class PostgresUserService implements IServicelocator {
       );
       // Don't throw the error to avoid affecting the main operation
     }
+  }
+
+  async getUsersByHierarchicalLocation(
+    tenantId: string,
+    request: Request,
+    response: Response,
+    hierarchicalFiltersDto: HierarchicalLocationFiltersDto
+  ) {
+    const apiId = APIID.USER_LIST;
+    
+    try {
+      const { limit, offset, sort: [sortField, sortDirection] } = hierarchicalFiltersDto;
+      
+      // Validate sort parameters
+      const sortValidation = this.validateSortParameters(sortField, sortDirection);
+      if (sortValidation.error) {
+        return APIResponse.error(response, apiId, sortValidation.error.message, sortValidation.error.detail, HttpStatus.BAD_REQUEST);
+      }
+      
+      // Get user IDs from location filters (if provided)
+      let locationUserIds: string[] = [];
+      const filterResult = this.findDeepestFilter(hierarchicalFiltersDto.filters);
+      if (filterResult.level) {
+        locationUserIds = await this.getUserIdsByFilter(filterResult.level, filterResult.ids, tenantId);
+      }
+
+      // Get user IDs from role filters (if provided)
+      let roleUserIds: string[] = [];
+      if (hierarchicalFiltersDto.role && hierarchicalFiltersDto.role.length > 0) {
+        roleUserIds = await this.getUserIdsByRoles(hierarchicalFiltersDto.role, tenantId);
+      }
+
+      // Determine final user IDs based on available filters
+      let userIds: string[] = [];
+      if (locationUserIds.length > 0 && roleUserIds.length > 0) {
+        // Both filters provided - find intersection
+        userIds = locationUserIds.filter(id => roleUserIds.includes(id));
+      } else if (locationUserIds.length > 0) {
+        // Only location filters provided
+        userIds = locationUserIds;
+      } else if (roleUserIds.length > 0) {
+        // Only role filters provided  
+        userIds = roleUserIds;
+      } else {
+        return APIResponse.error(response, apiId, "No valid filters provided", "Please provide at least one location or role filter", HttpStatus.BAD_REQUEST);
+      }
+
+      if (userIds.length === 0) {
+        return APIResponse.success(response, apiId, [], HttpStatus.OK, "No users found matching the given filters");
+      }
+      
+      // Get paginated user data
+      const userData = await this.getPaginatedUsers(userIds, tenantId, limit, offset, sortValidation.sortField, sortValidation.sortDirection, hierarchicalFiltersDto.customfields);
+      
+      // Prepare filter details for response
+      const filterDetails: any = {};
+      let message = "Users retrieved successfully";
+      
+      if (filterResult.level) {
+        filterDetails.locationFilter = {
+          level: filterResult.level,
+          values: filterResult.ids
+        };
+        message += ` using ${filterResult.level} filter`;
+      }
+      
+      if (hierarchicalFiltersDto.role && hierarchicalFiltersDto.role.length > 0) {
+        filterDetails.roleFilter = {
+          roles: hierarchicalFiltersDto.role
+        };
+        message += filterResult.level ? " and role filter" : " using role filter";
+      }
+
+      return APIResponse.success(
+        response,
+        apiId,
+        {
+          users: userData.users,
+          totalCount: userData.totalCount,
+          currentPageCount: userData.users.length,
+          limit,
+          offset,
+          filters: filterDetails,
+          sort: { field: sortValidation.sortField, direction: sortValidation.sortDirection.toLowerCase() }
+        },
+        HttpStatus.OK,
+        message
+      );
+    } catch (error) {
+      LoggerUtil.error(`Error in getUsersByHierarchicalLocation: ${error.message}`, error.stack, apiId);
+      return APIResponse.error(response, apiId, error.message || "Failed to retrieve users by hierarchical location", "An error occurred while processing the hierarchical location filters", HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  private validateSortParameters(sortField: string, sortDirection: string) {
+    const allowedSortFields = ['name', 'firstName', 'lastName', 'username', 'email', 'createdAt'];
+    const allowedSortDirections = ['asc', 'desc'];
+    
+    if (!allowedSortFields.includes(sortField)) {
+      return { error: { message: "Invalid sort field", detail: `Sort field must be one of: ${allowedSortFields.join(', ')}` } };
+    }
+    
+    if (!allowedSortDirections.includes(sortDirection.toLowerCase())) {
+      return { error: { message: "Invalid sort direction", detail: "Sort direction must be 'asc' or 'desc'" } };
+    }
+    
+    return { 
+      sortField, 
+      sortDirection: sortDirection.toLowerCase() === 'desc' ? 'DESC' : 'ASC' 
+    };
+  }
+
+  private findDeepestFilter(filters: any) {
+    const hierarchyOrder = ['batch', 'center', 'village', 'block', 'district', 'state'];
+    
+    for (const level of hierarchyOrder) {
+      const filterValue = filters[level];
+      if (filterValue && Array.isArray(filterValue) && filterValue.length > 0) {
+        return { level, ids: filterValue };
+      }
+    }
+    
+    return { level: null, ids: [] };
+  }
+
+  private async getUserIdsByFilter(filterLevel: string, filterIds: string[], tenantId: string): Promise<string[]> {
+    if (filterLevel === 'batch') {
+      return this.getUserIdsByBatch(filterIds);
+    }
+    return this.getUserIdsByLocationField(filterLevel, filterIds, tenantId);
+  }
+
+  private async getUserIdsByBatch(batchIds: string[]): Promise<string[]> {
+    const query = `
+      SELECT DISTINCT cm."userId" 
+      FROM "CohortMembers" cm
+      WHERE cm."cohortId" = ANY($1) AND cm."status" = 'active'
+    `;
+    
+    const result = await this.usersRepository.query(query, [batchIds]);
+    return result.map(row => row.userId);
+  }
+
+  private async getUserIdsByLocationField(fieldName: string, fieldValues: string[], tenantId: string): Promise<string[]> {
+    // Get field ID (search only by name, not by tenantId)
+    const fieldQuery = `SELECT "fieldId" FROM "Fields" WHERE "name" = $1 LIMIT 1`;
+    const fieldResult = await this.usersRepository.query(fieldQuery, [fieldName]);
+    
+    if (fieldResult.length === 0) {
+      throw new Error(`Field configuration for ${fieldName} not found`);
+    }
+    
+    // Get user IDs from field values (search with tenantId)
+    // Using && (overlap) operator for array comparison since value column is text[]
+    const valuesQuery = `
+      SELECT DISTINCT "itemId" 
+      FROM "FieldValues" 
+      WHERE "fieldId" = $1 AND "value" && $2 AND "tenantId" = $3
+    `;
+    
+    const valuesResult = await this.usersRepository.query(valuesQuery, [fieldResult[0].fieldId, fieldValues, tenantId]);
+    return valuesResult.map(row => row.itemId);
+  }
+
+  private async getUserIdsByRoles(roleNames: string[], tenantId: string): Promise<string[]> {
+    // Get roleIds from Roles table using role names
+    const rolesQuery = `
+      SELECT "roleId" 
+      FROM "Roles" 
+      WHERE "name" = ANY($1)
+    `;
+    
+    const rolesResult = await this.usersRepository.query(rolesQuery, [roleNames]);
+    
+    if (rolesResult.length === 0) {
+      return []; // No matching roles found
+    }
+
+    const roleIds = rolesResult.map(role => role.roleId);
+
+    // Get userIds from UserRolesMapping using roleIds and tenantId
+    const userRoleMappingQuery = `
+      SELECT DISTINCT "userId" 
+      FROM "UserRolesMapping" 
+      WHERE "roleId" = ANY($1) AND "tenantId" = $2
+    `;
+
+    const userRoleMappingResult = await this.usersRepository.query(userRoleMappingQuery, [roleIds, tenantId]);
+    return userRoleMappingResult.map(row => row.userId);
+  }
+
+   private async getPaginatedUsers(userIds: string[], tenantId: string, limit: number, offset: number, sortField: string, sortDirection: string, customFieldNames?: string[]) {
+     const [totalCount, users, customFieldsData, batchCenterData] = await Promise.all([
+       this.getUserCount(userIds, tenantId),
+       this.getUserDetails(userIds, tenantId, limit, offset, sortField, sortDirection),
+       customFieldNames && customFieldNames.length > 0 
+         ? this.getCustomFieldsData(userIds, customFieldNames, tenantId)
+         : Promise.resolve({}),
+       this.getBatchAndCenterNames(userIds)
+     ]);
+     
+     return { totalCount, users: this.aggregateUserRoles(users, customFieldsData, customFieldNames || [], batchCenterData) };
+   }
+
+   /**
+    * Get batch and center names for users using cohort membership
+    */
+   private async getBatchAndCenterNames(userIds: string[]): Promise<any> {
+     if (!userIds || userIds.length === 0) {
+       return {};
+     }
+
+     const query = `
+       SELECT 
+         cm."userId",
+         batch."name" AS "batchName",
+         center."name" AS "centerName"
+       FROM 
+         public."CohortMembers" cm
+         LEFT JOIN public."Cohort" batch ON cm."cohortId" = batch."cohortId"
+         LEFT JOIN public."Cohort" center ON batch."parentId"::uuid = center."cohortId"
+       WHERE 
+         cm."userId" = ANY($1)
+         AND cm."status" = 'active'
+     `;
+
+     try {
+       const result = await this.usersRepository.query(query, [userIds]);
+       
+       // Group by userId in case a user has multiple active memberships
+       const batchCenterMap = {};
+       result.forEach(row => {
+         const { userId, batchName, centerName } = row;
+         if (!batchCenterMap[userId]) {
+           batchCenterMap[userId] = {
+             batchName: batchName || null,
+             centerName: centerName || null
+           };
+         }
+       });
+
+       return batchCenterMap;
+     } catch (error) {
+       console.warn('Error fetching batch and center names:', error.message);
+       return {};
+     }
+   }
+
+  private async getUserCount(userIds: string[], tenantId: string): Promise<number> {
+    const query = `
+      SELECT COUNT(DISTINCT u."userId") as total
+      FROM "Users" u
+      LEFT JOIN "UserTenantMapping" utm ON u."userId" = utm."userId"
+      WHERE u."userId" = ANY($1) AND utm."tenantId" = $2
+    `;
+    
+    const result = await this.usersRepository.query(query, [userIds, tenantId]);
+    return parseInt(result[0]?.total || 0);
+  }
+
+  private async getUserDetails(userIds: string[], tenantId: string, limit: number, offset: number, sortField: string, sortDirection: string) {
+    const query = `
+      SELECT DISTINCT
+        u."userId", u."username", u."firstName", u."name", u."middleName", 
+        u."lastName", u."email", u."mobile", u."gender", u."dob", 
+        u."status", u."createdAt", utm."tenantId", r."name" as "roleName"
+      FROM "Users" u
+      LEFT JOIN "UserTenantMapping" utm ON u."userId" = utm."userId"
+      LEFT JOIN "UserRolesMapping" urm ON u."userId" = urm."userId" AND utm."tenantId" = urm."tenantId"
+      LEFT JOIN "Roles" r ON urm."roleId" = r."roleId"
+      WHERE u."userId" = ANY($1) AND utm."tenantId" = $2
+      ORDER BY u."${sortField}" ${sortDirection}
+      LIMIT $3 OFFSET $4
+    `;
+    
+    return this.usersRepository.query(query, [userIds, tenantId, limit, offset]);
+  }
+
+   private aggregateUserRoles(userDetails: any[], customFieldsData: any = {}, requestedCustomFields: string[] = [], batchCenterData: any = {}) {
+    const usersMap = new Map();
+    
+    userDetails.forEach(user => {
+      const { userId, roleName, ...userData } = user;
+      
+      if (usersMap.has(userId)) {
+        const existingUser = usersMap.get(userId);
+        if (roleName && !existingUser.roles.includes(roleName)) {
+          existingUser.roles.push(roleName);
+        }
+      } else {
+        const userObject = {
+          ...userData,
+          userId,
+          roles: roleName ? [roleName] : []
+        };
+        
+         // Only add customfield property if custom fields were requested
+         if (requestedCustomFields.length > 0) {
+           const userCustomFields = customFieldsData[userId] || {};
+           const userBatchCenter = batchCenterData[userId] || {};
+           const processedCustomFields = {};
+           
+           // Initialize ALL requested fields, set to null if not found
+           requestedCustomFields.forEach(fieldName => {
+             let fieldValue;
+             
+             // Handle batch and center specially using the new query data
+             if (fieldName === 'batch') {
+               fieldValue = userBatchCenter.batchName || null;
+             } else if (fieldName === 'center') {
+               fieldValue = userBatchCenter.centerName || null;
+             } else {
+               // Handle regular custom fields
+               fieldValue = userCustomFields[fieldName];
+               
+               if (fieldValue !== undefined) {
+                 // If it's an array, take the first value; otherwise use as is
+                 fieldValue = Array.isArray(fieldValue) && fieldValue.length > 0 
+                   ? fieldValue[0] 
+                   : (Array.isArray(fieldValue) ? null : fieldValue);
+               } else {
+                 // Field not found or no data, set to null
+                 fieldValue = null;
+               }
+             }
+             
+             processedCustomFields[fieldName] = fieldValue;
+           });
+           
+           userObject.customfield = processedCustomFields;
+         }
+        
+        usersMap.set(userId, userObject);
+      }
+    });
+    
+    return Array.from(usersMap.values());
+  }
+
+  private async getCustomFieldsData(userIds: string[], customFieldNames: string[], tenantId: string) {
+    if (!customFieldNames || customFieldNames.length === 0) {
+      return {};
+    }
+
+    // Get field IDs for requested custom fields (search only by name)
+    const fieldsQuery = `
+      SELECT "fieldId", "name" 
+      FROM "Fields" 
+      WHERE "name" = ANY($1)
+    `;
+    
+    const fieldsResult = await this.usersRepository.query(fieldsQuery, [customFieldNames]);
+    
+    if (fieldsResult.length === 0) {
+      return {};
+    }
+
+    const fieldIds = fieldsResult.map(field => field.fieldId);
+    const fieldNameMap = fieldsResult.reduce((acc, field) => {
+      acc[field.fieldId] = field.name;
+      return acc;
+    }, {});
+
+    // Get custom field values for the users (search with tenantId)
+    const customFieldsQuery = `
+      SELECT "itemId", "fieldId", "value"
+      FROM "FieldValues" 
+      WHERE "fieldId" = ANY($1) AND "itemId" = ANY($2) AND "tenantId" = $3
+    `;
+
+    const customFieldsResult = await this.usersRepository.query(customFieldsQuery, [fieldIds, userIds, tenantId]);
+
+    // Structure the data by userId and fieldName
+    const customFieldsData = {};
+    
+    customFieldsResult.forEach(row => {
+      const { itemId: userId, fieldId, value } = row;
+      const fieldName = fieldNameMap[fieldId];
+      
+      if (!customFieldsData[userId]) {
+        customFieldsData[userId] = {};
+      }
+      
+      // Since value is text[], we want to show all values
+      customFieldsData[userId][fieldName] = value || [];
+    });
+
+    // Resolve location field IDs to names for state, district, block, village
+    const resolvedCustomFieldsData = await this.resolveLocationFieldNames(customFieldsData);
+
+    return resolvedCustomFieldsData;
+  }
+
+   private async resolveLocationFieldNames(customFieldsData: any) {
+     // Define location fields that need ID-to-name resolution
+     // Note: batch and center are now handled separately via getBatchAndCenterNames function
+     const locationFields = ['state', 'district', 'block', 'village'];
+     const locationTableMap = {
+       'state': { table: 'state', idColumn: 'state_id', nameColumn: 'state_name' },
+       'district': { table: 'district', idColumn: 'district_id', nameColumn: 'district_name' },
+       'block': { table: 'block', idColumn: 'block_id', nameColumn: 'block_name' },
+       'village': { table: 'village', idColumn: 'village_id', nameColumn: 'village_name' }
+     };
+
+    // Collect all unique IDs for each location field type
+    const locationIds = {};
+    Object.keys(customFieldsData).forEach(userId => {
+      Object.keys(customFieldsData[userId]).forEach(fieldName => {
+        if (locationFields.includes(fieldName)) {
+          if (!locationIds[fieldName]) {
+            locationIds[fieldName] = new Set();
+          }
+          
+          const fieldValue = customFieldsData[userId][fieldName];
+          if (Array.isArray(fieldValue)) {
+            fieldValue.forEach(id => {
+              if (id) locationIds[fieldName].add(id);
+            });
+          }
+        }
+      });
+    });
+
+    // Fetch names for each location field type
+    const locationNameMaps = {};
+    
+    for (const fieldName of Object.keys(locationIds)) {
+      if (locationIds[fieldName].size > 0) {
+        const tableInfo = locationTableMap[fieldName];
+        const idsArray = Array.from(locationIds[fieldName]);
+        
+         // Build query for regular location tables
+         const nameQuery = `
+           SELECT "${tableInfo.idColumn}", "${tableInfo.nameColumn}" 
+           FROM "${tableInfo.table}" 
+           WHERE "${tableInfo.idColumn}" = ANY($1)
+         `;
+         const queryParams = [idsArray];
+        
+         try {
+           const nameResult = await this.usersRepository.query(nameQuery, queryParams);
+           
+           // Standard ID to name mapping for all location fields
+           locationNameMaps[fieldName] = nameResult.reduce((acc, row) => {
+             const id = row[tableInfo.idColumn];
+             const name = row[tableInfo.nameColumn];
+             if (id && name) {
+               acc[id] = name;
+             }
+             return acc;
+           }, {});
+         } catch (error) {
+           console.warn(`Could not resolve names for ${fieldName}:`, error.message);
+           locationNameMaps[fieldName] = {};
+         }
+      }
+    }
+
+     // Replace IDs with names in the custom fields data
+     // Note: batch and center are now handled separately, so they're excluded from this logic
+     const resolvedData = {};
+     Object.keys(customFieldsData).forEach(userId => {
+       resolvedData[userId] = {};
+       Object.keys(customFieldsData[userId]).forEach(fieldName => {
+         const fieldValue = customFieldsData[userId][fieldName];
+         
+         if (locationFields.includes(fieldName) && locationNameMaps[fieldName]) {
+           // Replace ID with name for location fields (state, district, block, village)
+           if (Array.isArray(fieldValue) && fieldValue.length > 0) {
+             const id = fieldValue[0]; // Take first ID
+             const resolvedName = locationNameMaps[fieldName][id];
+             resolvedData[userId][fieldName] = resolvedName || id; // Use resolved name or fallback to original ID
+           } else {
+             resolvedData[userId][fieldName] = fieldValue;
+           }
+         } else {
+           // Keep original value for non-location fields (including batch and center which are handled elsewhere)
+           resolvedData[userId][fieldName] = fieldValue;
+         }
+       });
+     });
+
+    return resolvedData;
   }
 }
