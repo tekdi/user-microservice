@@ -48,8 +48,10 @@ import config from '../../common/config';
 import { CalendarField } from 'src/fields/fieldValidators/fieldTypeClasses';
 import { UserCreateSsoDto } from 'src/user/dto/user-create-sso.dto';
 import { UserElasticsearchService } from '../../elasticsearch/user-elasticsearch.service';
+import { ElasticsearchDataFetcherService } from '../../elasticsearch/elasticsearch-data-fetcher.service';
 import { IUser } from '../../elasticsearch/interfaces/user.interface';
 import { isElasticsearchEnabled } from 'src/common/utils/elasticsearch.util';
+import { ElasticsearchSyncService, SyncSection } from '../../elasticsearch/elasticsearch-sync.service';
 
 interface UpdateField {
   userId: string; // Required
@@ -94,7 +96,9 @@ export class PostgresUserService implements IServicelocator {
     private postgresAcademicYearService: PostgresAcademicYearService,
     private readonly cohortAcademicYearService: CohortAcademicYearService,
     private readonly authUtils: AuthUtils,
-    private readonly userElasticsearchService: UserElasticsearchService
+    private readonly userElasticsearchService: UserElasticsearchService,
+    private readonly elasticsearchDataFetcherService: ElasticsearchDataFetcherService,
+    private readonly elasticsearchSyncService: ElasticsearchSyncService,
   ) {
     this.jwt_secret = this.configService.get<string>('RBAC_JWT_SECRET');
     this.jwt_password_reset_expires_In = this.configService.get<string>(
@@ -1104,8 +1108,27 @@ export class PostgresUserService implements IServicelocator {
 
       const updatedUser = await this.updateBasicUserDetails(userId, userDto);
 
-      // Sync to Elasticsearch
-      await this.syncUserToElasticsearch(updatedUser);
+      // Sync to Elasticsearch using centralized service
+      if (isElasticsearchEnabled()) {
+        // Check if user exists in Elasticsearch
+        const existingUser = await this.userElasticsearchService.getUser(userId);
+        
+        if (!existingUser) {
+          // User doesn't exist in Elasticsearch, fetch all data
+          LoggerUtil.log(`User ${userId} not found in Elasticsearch, fetching all data from database`, apiId);
+          await this.elasticsearchSyncService.syncUserToElasticsearch(
+            updatedUser.userId, 
+            { section: SyncSection.ALL }
+          );
+        } else {
+          // User exists, only update profile section
+          LoggerUtil.log(`User ${userId} exists in Elasticsearch, updating profile section only`, apiId);
+          await this.elasticsearchSyncService.syncUserToElasticsearch(
+            updatedUser.userId, 
+            { section: SyncSection.PROFILE }
+          );
+        }
+      }
 
       return await APIResponse.success(
         response,
@@ -1635,7 +1658,7 @@ export class PostgresUserService implements IServicelocator {
               customFields: elasticCustomFields,
             },
             applications: [],
-            courses: [],
+            // Removed root-level courses field as requested
             createdAt: result.createdAt
               ? result.createdAt.toISOString()
               : new Date().toISOString(),
@@ -2845,90 +2868,16 @@ export class PostgresUserService implements IServicelocator {
   }
 
   /**
-   * Sync user profile to Elasticsearch.
-   * This will upsert (update or create) the user document in Elasticsearch.
-   * If the document is missing, it will fetch the user from the database and create it.
+   * Sync user profile to Elasticsearch using centralized service.
+   * This method is now deprecated in favor of the centralized service.
+   * @deprecated Use elasticsearchSyncService.syncUserToElasticsearch instead
    */
   private async syncUserToElasticsearch(user: User) {
     try {
-      const customFields = await this.getFilteredCustomFields(user.userId);
-
-      let formattedDob: string | null = null;
-      if (user.dob instanceof Date) {
-        formattedDob = user.dob.toISOString();
-      } else if (typeof user.dob === 'string') {
-        formattedDob = user.dob;
-      }
-      // Prepare the profile data
-      const profile = {
-        userId: user.userId,
-        username: user.username,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        middleName: user.middleName || '',
-        email: user.email || '',
-        mobile: user.mobile?.toString() || '',
-        mobile_country_code: user.mobile_country_code || '',
-        dob: formattedDob,
-        country: user.country,
-        gender: user.gender,
-        address: user.address || '',
-        district: user.district || '',
-        state: user.state || '',
-        pincode: user.pincode || '',
-        status: user.status,
-        customFields, // Now filtered to exclude form schema fields
-      };
-
-      // Upsert (update or create) the user profile in Elasticsearch
       if (isElasticsearchEnabled()) {
-        await this.userElasticsearchService.updateUserProfile(
-          user.userId,
-          profile,
-          async (userId: string) => {
-            // Fetch the latest user from the database for upsert
-            const dbUser = await this.usersRepository.findOne({
-              where: { userId },
-            });
-            if (!dbUser) return null;
-            const customFields = await this.getFilteredCustomFields(userId);
-            let formattedDob: string | null = null;
-            if (dbUser.dob instanceof Date) {
-              formattedDob = dbUser.dob.toISOString();
-            } else if (typeof dbUser.dob === 'string') {
-              formattedDob = dbUser.dob;
-            }
-            return {
-              userId: dbUser.userId,
-              profile: {
-                userId: dbUser.userId,
-                username: dbUser.username,
-                firstName: dbUser.firstName,
-                lastName: dbUser.lastName,
-                middleName: dbUser.middleName || '',
-                email: dbUser.email || '',
-                mobile: dbUser.mobile?.toString() || '',
-                mobile_country_code: dbUser.mobile_country_code || '',
-                dob: formattedDob,
-                gender: dbUser.gender,
-                country: dbUser.country || '',
-                address: dbUser.address || '',
-                district: dbUser.district || '',
-                state: dbUser.state || '',
-                pincode: dbUser.pincode || '',
-                status: dbUser.status,
-                customFields,
-              },
-              applications: [],
-              courses: [],
-              createdAt: dbUser.createdAt
-                ? dbUser.createdAt.toISOString()
-                : new Date().toISOString(),
-              updatedAt: dbUser.updatedAt
-                ? dbUser.updatedAt.toISOString()
-                : new Date().toISOString(),
-            };
-          }
+        await this.elasticsearchSyncService.syncUserToElasticsearch(
+          user.userId, 
+          { section: SyncSection.ALL }
         );
       }
     } catch (error) {

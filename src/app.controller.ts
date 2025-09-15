@@ -25,6 +25,15 @@ export class AppController {
     return this.appService.getHello();
   }
 
+  @Get("health")
+  getHealth(): object {
+    return {
+      status: "healthy",
+      timestamp: new Date().toISOString(),
+      service: "user-microservice",
+    };
+  }
+
   @Get("files/:fileName")
   seeUploadedFile(@Param("fileName") fileName: string, @Res() res) {
     return res.sendFile(fileName, { root: "./uploads" });

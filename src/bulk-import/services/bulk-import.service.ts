@@ -811,6 +811,7 @@ export class BulkImportService {
       formId: formSubmission.formId,
       itemId: userId,
       status: formSubmission.status || 'active',
+      completionPercentage: 100, // Set completion percentage to 100 for bulk import
       createdBy: adminId,
       updatedBy: adminId,
     });

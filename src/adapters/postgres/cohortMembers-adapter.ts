@@ -34,7 +34,13 @@ import { FormSubmissionSearchDto } from 'src/forms/dto/form-submission-search.dt
 import { FormsService } from 'src/forms/forms.service';
 import { isElasticsearchEnabled } from 'src/common/utils/elasticsearch.util';
 import { UserElasticsearchService } from 'src/elasticsearch/user-elasticsearch.service';
+import { ElasticsearchDataFetcherService } from 'src/elasticsearch/elasticsearch-data-fetcher.service';
 import axios from 'axios';
+import {
+  ElasticsearchSyncService,
+  SyncSection,
+} from '../../elasticsearch/elasticsearch-sync.service';
+
 @Injectable()
 export class PostgresCohortMembersService {
   constructor(
@@ -56,7 +62,9 @@ export class PostgresCohortMembersService {
     private readonly userService: PostgresUserService,
     private readonly formsService: FormsService,
     private readonly formSubmissionService: FormSubmissionService,
-    private readonly userElasticsearchService: UserElasticsearchService
+    private readonly userElasticsearchService: UserElasticsearchService,
+    private readonly elasticsearchDataFetcherService: ElasticsearchDataFetcherService,
+    private readonly elasticsearchSyncService: ElasticsearchSyncService
   ) {}
 
   //Get cohort member
@@ -728,7 +736,20 @@ export class PostgresCohortMembersService {
       // Update Elasticsearch with cohort member status
       if (isElasticsearchEnabled()) {
         try {
-          // First get the existing user document from Elasticsearch
+          // Use comprehensive sync to get complete user document including courses and assessment data
+          const userDocument =
+            await this.elasticsearchDataFetcherService.comprehensiveUserSync(
+              cohortMembers.userId
+            );
+
+          if (!userDocument) {
+            LoggerUtil.warn(
+              `User document not found for ${cohortMembers.userId}, skipping Elasticsearch update`
+            );
+            return;
+          }
+
+          // Get the existing user document from Elasticsearch
           const userDoc = await this.userElasticsearchService.getUser(
             cohortMembers.userId
           );
@@ -741,6 +762,7 @@ export class PostgresCohortMembersService {
             ? [...source.applications]
             : [];
 
+          // Find existing application for this cohort
           const appIndex = applications.findIndex(
             (app) => app.cohortId === cohortMembers.cohortId
           );
@@ -762,14 +784,15 @@ export class PostgresCohortMembersService {
             });
           }
 
-          // Now update the user document in Elasticsearch with the merged applications array
+          // Now update the user document in Elasticsearch with comprehensive data
           const baseDoc =
             typeof userDoc?._source === 'object' ? userDoc._source : {};
           await this.userElasticsearchService.updateUser(
             cohortMembers.userId,
-            { doc: { ...baseDoc, applications } },
+            { doc: userDocument }, // Use comprehensive user document
             async (userId: string) => {
-              return await this.formSubmissionService.buildUserDocumentForElasticsearch(
+              // Use comprehensive sync to build the full user document for Elasticsearch
+              return await this.elasticsearchDataFetcherService.comprehensiveUserSync(
                 userId
               );
             }
@@ -783,6 +806,15 @@ export class PostgresCohortMembersService {
           );
         }
       }
+
+      // Sync to Elasticsearch using centralized service
+      if (isElasticsearchEnabled()) {
+        await this.elasticsearchSyncService.syncUserToElasticsearch(
+          cohortMembers.userId,
+          { section: SyncSection.APPLICATIONS }
+        );
+      }
+
       return APIResponse.success(
         res,
         apiId,
@@ -1039,7 +1071,7 @@ export class PostgresCohortMembersService {
     completionPercentageRanges: { min: number; max: number }[],
     formId: string
   ): { query: string; parameters: any[]; limit: number; offset: number } {
-    // Build completion percentage filter conditions with proper casting
+    // Build completion percentage filter conditions with proper numeric casting
     const completionConditions = completionPercentageRanges
       .map(
         (range) =>
@@ -1202,9 +1234,9 @@ export class PostgresCohortMembersService {
               : undefined;
 
           if (!existingApplication) {
-            // If application is missing, build and upsert the full user document (with progress pages)
+            // If application is missing, use comprehensive sync to build and upsert the full user document
             const fullUserDoc =
-              await this.formSubmissionService.buildUserDocumentForElasticsearch(
+              await this.elasticsearchDataFetcherService.comprehensiveUserSync(
                 cohortMembershipToUpdate.userId
               );
             if (fullUserDoc) {
@@ -1212,7 +1244,7 @@ export class PostgresCohortMembersService {
                 cohortMembershipToUpdate.userId,
                 { doc: fullUserDoc },
                 async (userId: string) => {
-                  return await this.formSubmissionService.buildUserDocumentForElasticsearch(
+                  return await this.elasticsearchDataFetcherService.comprehensiveUserSync(
                     userId
                   );
                 }
@@ -1241,6 +1273,14 @@ export class PostgresCohortMembersService {
             apiId
           );
         }
+      }
+
+      // Sync to Elasticsearch using centralized service
+      if (isElasticsearchEnabled()) {
+        await this.elasticsearchSyncService.syncUserToElasticsearch(
+          cohortMembershipToUpdate.userId,
+          { section: SyncSection.APPLICATIONS }
+        );
       }
 
       // Send notification if applicable for this status only

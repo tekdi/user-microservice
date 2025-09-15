@@ -29,6 +29,7 @@ import { FieldsSearchDto } from '../../fields/dto/fields-search.dto';
 import jwt_decode from 'jwt-decode';
 import { Form } from '../entities/form.entity';
 import { UserElasticsearchService } from '../../elasticsearch/user-elasticsearch.service';
+import { ElasticsearchDataFetcherService } from '../../elasticsearch/elasticsearch-data-fetcher.service';
 import { FormsService } from '../../forms/forms.service';
 import { PostgresCohortService } from 'src/adapters/postgres/cohort-adapter';
 import { IUser } from '../../elasticsearch/interfaces/user.interface';
@@ -36,6 +37,10 @@ import { LoggerUtil } from 'src/common/logger/LoggerUtil';
 import { isElasticsearchEnabled } from 'src/common/utils/elasticsearch.util';
 import { CohortMembers } from 'src/cohortMembers/entities/cohort-member.entity';
 import { Cohort } from 'src/cohort/entities/cohort.entity';
+import {
+  ElasticsearchSyncService,
+  SyncSection,
+} from '../../elasticsearch/elasticsearch-sync.service';
 
 interface DateRange {
   start: string;
@@ -76,6 +81,8 @@ interface FieldSearchResponse {
 
 @Injectable()
 export class FormSubmissionService {
+  private readonly logger = new Logger(FormSubmissionService.name);
+
   constructor(
     @InjectRepository(FormSubmission)
     private formSubmissionRepository: Repository<FormSubmission>,
@@ -89,7 +96,9 @@ export class FormSubmissionService {
     private cohortRepository: Repository<Cohort>,
     private readonly fieldsService: FieldsService,
     private readonly userElasticsearchService: UserElasticsearchService,
+    private readonly elasticsearchDataFetcherService: ElasticsearchDataFetcherService,
     private readonly formsService: FormsService,
+    private readonly elasticsearchSyncService: ElasticsearchSyncService,
     @Inject(forwardRef(() => PostgresCohortService))
     private readonly postgresCohortService: PostgresCohortService
   ) {}
@@ -195,14 +204,11 @@ export class FormSubmissionService {
         createFormSubmissionDto.formSubmission.formId // Pass formId for checkbox processing
       );
 
-      // Update Elasticsearch with complete field values from database (includes dependencies)
-      // Only update if Elasticsearch is enabled
+      // Update Elasticsearch using centralized service
       if (isElasticsearchEnabled()) {
-        await this.updateApplicationInElasticsearch(
-          userId,
-          savedSubmission,
-          customFields // Fixed: now passes all fields from DB
-        );
+        await this.elasticsearchSyncService.syncUserToElasticsearch(userId, {
+          section: SyncSection.APPLICATIONS,
+        });
       }
 
       // Create response object
@@ -357,7 +363,7 @@ export class FormSubmissionService {
       Array.isArray(completionPercentage) &&
       completionPercentage.length > 0
     ) {
-      // Multiple ranges - use OR conditions (union) with proper casting
+      // Multiple ranges - use OR conditions (union) with proper numeric casting
       const rangeConditions = completionPercentage.map((range, index) => {
         const [min, max] = range.split('-').map(Number);
         return `(CAST(fs.completionPercentage AS DECIMAL(5,2)) >= :min${index} AND CAST(fs.completionPercentage AS DECIMAL(5,2)) <= :max${index})`;
@@ -1000,14 +1006,11 @@ export class FormSubmissionService {
           updatedSubmission.formId // Pass formId for checkbox processing
         );
 
-      // Update Elasticsearch after successful form submission update
-      // Only update if Elasticsearch is enabled
+      // Update Elasticsearch using centralized service
       if (isElasticsearchEnabled()) {
-        await this.updateApplicationInElasticsearch(
-          userId,
-          updatedSubmission,
-          completeFieldValues // Fixed: now passes all fields from DB
-        );
+        await this.elasticsearchSyncService.syncUserToElasticsearch(userId, {
+          section: SyncSection.APPLICATIONS,
+        });
       }
       const successResponse = {
         id: 'api.form.submission.update',
@@ -1159,9 +1162,9 @@ export class FormSubmissionService {
   }
 
   /**
-   * Update the user's applications array in Elasticsearch after a form submission update.
-   * This will upsert (update or create) the user document in Elasticsearch if missing.
-   * If the document is missing, it will fetch the user from the database and create it.
+   * Update application in Elasticsearch using centralized service
+   * This method is now deprecated in favor of the centralized service.
+   * @deprecated Use elasticsearchSyncService.syncUserToElasticsearch instead
    */
   private async updateApplicationInElasticsearch(
     userId: string,
@@ -1169,338 +1172,12 @@ export class FormSubmissionService {
     updatedFieldValues: any[]
   ): Promise<void> {
     try {
-      // Get the existing user document from Elasticsearch
-      const userDoc = await this.userElasticsearchService.getUser(userId);
-
-      // Prepare the applications array (existing or new)
-      let applications: any[] = [];
-      if (userDoc && userDoc._source) {
-        const userSource = userDoc._source as IUser;
-        applications = userSource.applications || [];
-      }
-
-      // Use the actual submissionId and formId from the updatedSubmission
-      const formIdToMatch = updatedSubmission.formId;
-      const submissionIdToMatch = updatedSubmission.submissionId;
-
-      // --- NEW LOGIC: Use the robust getFieldIdToPageNameMap utility function ---
-      let fieldIdToPageName: Record<string, string> = {};
-      let fieldIdToFieldName: Record<string, string> = {};
-      let formFieldsOnly: any[] = [];
-      try {
-        const form = await this.formsService.getFormById(formIdToMatch);
-        const fieldsObj = form && form.fields ? (form.fields as any) : null;
-
-        // Handle different schema structures
-        let schema: any = {};
-        if (fieldsObj) {
-          // Try different possible schema structures
-          if (
-            Array.isArray(fieldsObj?.result) &&
-            fieldsObj.result[0]?.schema?.properties
-          ) {
-            // Structure: { result: [{ schema: { properties: {...} } }] }
-            schema = fieldsObj.result[0].schema.properties;
-          } else if (fieldsObj?.schema?.properties) {
-            // Structure: { schema: { properties: {...} } }
-            schema = fieldsObj.schema.properties;
-          } else if (fieldsObj?.properties) {
-            // Structure: { properties: {...} }
-            schema = fieldsObj.properties;
-          } else if (typeof fieldsObj === 'object' && fieldsObj !== null) {
-            // Try to find schema in nested structure
-            const findSchema = (obj: any): any => {
-              if (obj?.schema?.properties) return obj.schema.properties;
-              if (obj?.properties) return obj.properties;
-              if (Array.isArray(obj)) {
-                for (const item of obj) {
-                  const found = findSchema(item);
-                  if (found) return found;
-                }
-              } else if (typeof obj === 'object') {
-                for (const key in obj) {
-                  const found = findSchema(obj[key]);
-                  if (found) return found;
-                }
-              }
-              return null;
-            };
-            schema = findSchema(fieldsObj) || {};
-          }
-        }
-
-        // Use the robust utility function to get field mappings
-        fieldIdToPageName = getFieldIdToPageNameMap(schema);
-
-        // Also build fieldIdToFieldName mapping for logging
-        for (const [pageKey, pageSchema] of Object.entries(schema)) {
-          const pageName = pageKey === 'default' ? 'eligibilityCheck' : pageKey;
-          const fieldProps = (pageSchema as any).properties || {};
-
-          const extractFieldNames = (properties: any) => {
-            for (const [fieldKey, fieldSchema] of Object.entries(properties)) {
-              const fieldId = (fieldSchema as any).fieldId;
-              const fieldTitle = (fieldSchema as any).title || fieldKey;
-              if (fieldId) {
-                fieldIdToFieldName[fieldId] = fieldTitle;
-              }
-
-              // Handle dependencies
-              if ((fieldSchema as any).dependencies) {
-                const dependencies = (fieldSchema as any).dependencies;
-                for (const depSchema of Object.values(dependencies)) {
-                  if (!depSchema || typeof depSchema !== 'object') continue;
-                  const dep = depSchema as any;
-                  if (dep.oneOf)
-                    dep.oneOf.forEach(
-                      (item: any) =>
-                        item?.properties && extractFieldNames(item.properties)
-                    );
-                  if (dep.allOf)
-                    dep.allOf.forEach(
-                      (item: any) =>
-                        item?.properties && extractFieldNames(item.properties)
-                    );
-                  if (dep.anyOf)
-                    dep.anyOf.forEach(
-                      (item: any) =>
-                        item?.properties && extractFieldNames(item.properties)
-                    );
-                  if (dep.properties) extractFieldNames(dep.properties);
-                }
-              }
-            }
-          };
-
-          extractFieldNames(fieldProps);
-
-          // Handle page-level dependencies
-          const pageDependencies = (pageSchema as any).dependencies || {};
-          for (const depSchema of Object.values(pageDependencies)) {
-            if (!depSchema || typeof depSchema !== 'object') continue;
-            const dep = depSchema as any;
-            if (dep.oneOf)
-              dep.oneOf.forEach(
-                (item: any) =>
-                  item?.properties && extractFieldNames(item.properties)
-              );
-            if (dep.allOf)
-              dep.allOf.forEach(
-                (item: any) =>
-                  item?.properties && extractFieldNames(item.properties)
-              );
-            if (dep.anyOf)
-              dep.anyOf.forEach(
-                (item: any) =>
-                  item?.properties && extractFieldNames(item.properties)
-              );
-            if (dep.properties) extractFieldNames(dep.properties);
-          }
-        }
-
-        for (const [fieldId, pageName] of Object.entries(fieldIdToPageName)) {
-          const fieldName = fieldIdToFieldName[fieldId] || fieldId;
-        }
-
-        // Filter updatedFieldValues to only include form fields (not custom fields)
-        const formFieldIds = new Set<string>();
-        for (const [pageKey, pageSchema] of Object.entries(schema)) {
-          const fieldProps = (pageSchema as any).properties || {};
-
-          const extractFormFieldIds = (properties: any) => {
-            for (const [fieldKey, fieldSchema] of Object.entries(properties)) {
-              const fieldId = (fieldSchema as any).fieldId;
-              if (fieldId) {
-                formFieldIds.add(fieldId);
-              }
-
-              // Handle nested dependencies structure - ensure dependency fields are included
-              if ((fieldSchema as any).dependencies) {
-                const dependencies = (fieldSchema as any).dependencies;
-                // Check if dependencies is an object
-                for (const [depKey, depSchema] of Object.entries(
-                  dependencies
-                )) {
-                  if ((depSchema as any).oneOf) {
-                    // Handle oneOf dependencies
-                    for (const oneOfItem of (depSchema as any).oneOf) {
-                      if (oneOfItem.properties) {
-                        extractFormFieldIds(oneOfItem.properties);
-                      }
-                    }
-                  } else if ((depSchema as any).properties) {
-                    // Handle direct properties dependencies
-                    extractFormFieldIds((depSchema as any).properties);
-                  }
-                }
-              }
-            }
-          };
-
-          extractFormFieldIds(fieldProps);
-        }
-                // Filter updatedFieldValues to only include form fields
-        // TEMPORARY FIX: If a field is not in formFieldIds but exists in fieldIdToPageName, include it
-        formFieldsOnly = updatedFieldValues.filter((field) => {
-          const isInFormFieldIds = formFieldIds.has(field.fieldId);
-          const isInFieldMapping = fieldIdToPageName[field.fieldId];
-          
-          return isInFormFieldIds || isInFieldMapping;
-        });
-      } catch (err) {
-        const logger = new Logger('FormSubmissionService');
-        logger.error('Schema fetch failed, cannot proceed', err);
-        // If schema fetch fails, fallback to empty map (all fields go to 'default')
-        fieldIdToPageName = {};
-        fieldIdToFieldName = {};
-        // If schema fetch fails, don't filter fields (use all updatedFieldValues)
-        formFieldsOnly = updatedFieldValues;
-      }
-      // --- END NEW LOGIC ---
-
-      // Always fetch cohortId from the related Form entity
-      // Fetch cohortId from the related Form entity with proper error handling
-      let cohortId = '';
-      try {
-        const form = await this.formsService.getFormById(formIdToMatch);
-        cohortId = form?.contextId || '';
-      } catch (error) {
-        LoggerUtil.warn(
-          `Failed to fetch cohortId for formId ${formIdToMatch}:`,
-          error
-        );
-        cohortId = '';
-      }
-      let existingAppIndex = -1;
-      if (cohortId) {
-        existingAppIndex = applications.findIndex(
-          (app) => app.cohortId === cohortId
-        );
-        // If not found by cohortId, don't fallback to avoid inconsistencies
-        // Log this scenario for investigation
-        if (existingAppIndex === -1) {
-        }
-      } else {
-        // Use formId/submissionId only when cohortId is not available
-        existingAppIndex = applications.findIndex(
-          (app) =>
-            app.formId === formIdToMatch &&
-            app.submissionId === submissionIdToMatch
-        );
-      }
-
-      // Prepare the updated fields data using the robust mapping
-      const updatedFields = {};
-      formFieldsOnly.forEach((field) => {
-        const pageKey = fieldIdToPageName[field.fieldId];
-        if (!pageKey) {
-          // Log warning for unmapped fields instead of fallback
-          LoggerUtil.warn(
-            `FieldId ${field.fieldId} not found in schema mapping! Skipping field.`
-          );
-          return; // Skip this field instead of assigning to wrong page
-        }
-        updatedFields[pageKey] ??= {
-          completed: true,
-          fields: {},
-        };
-        // Process field value for Elasticsearch - convert arrays to comma-separated strings
-        updatedFields[pageKey].fields[field.fieldId] = this.processFieldValueForElasticsearch(field.value);
-      });
-
-
-
-      if (existingAppIndex !== -1) {
-        // COMPLETELY REPLACE old pages structure instead of merging
-        const mergedPages = {};
-
-        // Only use the new schema-based mapping, don't merge with old data
-        for (const [pageKey, pageValue] of Object.entries(updatedFields)) {
-          const newPage = pageValue as {
-            completed: boolean;
-            fields: { [key: string]: any };
-          };
-          mergedPages[pageKey] = newPage;
-        }
-
-        // Merge overall progress
-        const mergedOverall = applications[existingAppIndex]?.progress?.overall
-          ? { ...applications[existingAppIndex].progress.overall }
-          : {
-              completed: updatedFieldValues.length,
-              total: updatedFieldValues.length,
-            };
-
-        // Use completionPercentage from the updatedSubmission (payload value) instead of calculating
-        const completionPercentage =
-          updatedSubmission.completionPercentage ?? 0;
-
-        // --- Update cohortmemberstatus and cohortDetails logic ---
-        // cohortmemberstatus is not a property of FormSubmission; set as empty string or fetch from CohortMembers if needed
-        applications[existingAppIndex].cohortmemberstatus =
-          applications[existingAppIndex].cohortmemberstatus ?? ''; // preserve if already set
-        // Ensure cohortDetails is populated; if missing or empty, fetch from DB
-        if (
-          !applications[existingAppIndex].cohortDetails ||
-          Object.keys(applications[existingAppIndex].cohortDetails).length === 0
-        ) {
-          applications[existingAppIndex].cohortDetails =
-            await this.fetchCohortDetailsFromDB(updatedSubmission);
-        }
-        // --- End cohortmemberstatus and cohortDetails logic ---
-
-        applications[existingAppIndex] = {
-          ...applications[existingAppIndex],
-          formId: formIdToMatch,
-          submissionId: submissionIdToMatch,
-          formstatus:
-            updatedSubmission.status ??
-            applications[existingAppIndex].formstatus,
-          // Use completionPercentage from payload (updatedSubmission)
-          completionPercentage: completionPercentage,
-          progress: {
-            pages: mergedPages,
-            overall: mergedOverall,
-          },
-          lastSavedAt: new Date().toISOString(),
-          submittedAt: new Date().toISOString(),
-        };
-
-        // Also update the FormSubmission entity in the database
-        try {
-          const submissionToUpdate =
-            await this.formSubmissionRepository.findOne({
-              where: { submissionId: submissionIdToMatch },
-            });
-          if (submissionToUpdate) {
-            submissionToUpdate.completionPercentage = completionPercentage;
-            await this.formSubmissionRepository.save(submissionToUpdate);
-          }
-        } catch (error) {
-          LoggerUtil.warn(
-            'Failed to update FormSubmission completionPercentage:',
-            error
-          );
-        }
-      } else {
-        // If no existing application found, build from DB with correct cohortDetails
-        const newApp = await this.buildApplicationFromDB(updatedSubmission);
-        applications.push(newApp);
-      }
-
-      // Upsert (update or create) the user document in Elasticsearch
       if (isElasticsearchEnabled()) {
-        await this.userElasticsearchService.updateUser(
-          userId,
-          { doc: { applications: applications } },
-          async (userId: string) => {
-            // Build the full user document for Elasticsearch, including profile and all applications
-            return await this.buildUserDocumentForElasticsearch(userId);
-          }
-        );
+        await this.elasticsearchSyncService.syncUserToElasticsearch(userId, {
+          section: SyncSection.APPLICATIONS,
+        });
       }
     } catch (elasticError) {
-      // Log Elasticsearch error but don't fail the request
       LoggerUtil.warn('Failed to update Elasticsearch:', elasticError);
     }
   }
@@ -1570,8 +1247,20 @@ export class FormSubmissionService {
         const form = await this.formsService.getFormById(submission.formId);
         const fieldsObj = form && form.fields ? (form.fields as any) : null;
 
-        // Get cohortId from form context
-        cohortId = form?.contextId || '';
+        // Get cohortId from form's contextId
+        try {
+          // Get form to find contextId (which is the cohortId)
+          cohortId = form?.contextId || '';
+          LoggerUtil.warn(
+            `Using form contextId as cohortId: ${cohortId} for formId: ${submission.formId}`
+          );
+        } catch (error) {
+          LoggerUtil.warn(
+            `Failed to fetch form for formId ${submission.formId}:`,
+            error
+          );
+          cohortId = '';
+        }
 
         // Handle different schema structures
         if (fieldsObj) {
@@ -1878,8 +1567,10 @@ export class FormSubmissionService {
         }
 
         // Process field value for Elasticsearch - convert arrays to comma-separated strings
-        pages[pageName].fields[field.fieldId] = this.processFieldValueForElasticsearch(field.value);
-        formData[pageName][field.fieldId] = this.processFieldValueForElasticsearch(field.value);
+        pages[pageName].fields[field.fieldId] =
+          this.processFieldValueForElasticsearch(field.value);
+        formData[pageName][field.fieldId] =
+          this.processFieldValueForElasticsearch(field.value);
       }
 
       if (Object.keys(pages).length === 0) {
@@ -1887,7 +1578,9 @@ export class FormSubmissionService {
           completed: true,
           fields: formFieldsOnly.reduce((acc, field) => {
             // Process field value for Elasticsearch - convert arrays to comma-separated strings
-            acc[field.fieldId] = this.processFieldValueForElasticsearch(field.value);
+            acc[field.fieldId] = this.processFieldValueForElasticsearch(
+              field.value
+            );
             return acc;
           }, {}),
         };
@@ -1980,7 +1673,27 @@ export class FormSubmissionService {
    *
    * Made public so it can be used as an upsert callback from other services (e.g., cohortMembers-adapter).
    */
+  /**
+   * Build user document for Elasticsearch using centralized data fetcher.
+   * This method provides a centralized way to fetch user data for Elasticsearch.
+   *
+   * @param userId - User ID to fetch data for
+   * @returns Promise<IUser | null> - Complete user document or null if user not found
+   */
   public async buildUserDocumentForElasticsearch(
+    userId: string
+  ): Promise<IUser | null> {
+    // Use centralized data fetcher service for consistent data structure
+    return await this.elasticsearchDataFetcherService.fetchUserDocumentForElasticsearch(
+      userId
+    );
+  }
+
+  /**
+   * Legacy method - kept for backward compatibility.
+   * @deprecated Use buildUserDocumentForElasticsearch instead
+   */
+  public async buildUserDocumentForElasticsearchLegacy(
     userId: string
   ): Promise<IUser | null> {
     // Fetch user profile from Users table
@@ -2597,15 +2310,19 @@ export class FormSubmissionService {
           }
 
           // Process field value for Elasticsearch - convert arrays to comma-separated strings
-          pages[pageName].fields[field.fieldId] = this.processFieldValueForElasticsearch(field.value);
-          formData[pageName][field.fieldId] = this.processFieldValueForElasticsearch(field.value);
+          pages[pageName].fields[field.fieldId] =
+            this.processFieldValueForElasticsearch(field.value);
+          formData[pageName][field.fieldId] =
+            this.processFieldValueForElasticsearch(field.value);
         }
         if (Object.keys(pages).length === 0) {
           pages['eligibilityCheck'] = {
             completed: true,
             fields: formFieldsOnly.reduce((acc, field) => {
               // Process field value for Elasticsearch - convert arrays to comma-separated strings
-              acc[field.fieldId] = this.processFieldValueForElasticsearch(field.value);
+              acc[field.fieldId] = this.processFieldValueForElasticsearch(
+                field.value
+              );
               return acc;
             }, {}),
           };
@@ -3017,7 +2734,7 @@ export class FormSubmissionService {
         customFields: profileCustomFields, // Only user profile custom fields
       },
       applications,
-      courses: [],
+      // Removed root-level courses field as requested
       createdAt: user.createdAt
         ? user.createdAt.toISOString()
         : new Date().toISOString(),
@@ -3040,6 +2757,60 @@ export class FormSubmissionService {
     }
     // Return value as-is for non-array values
     return value;
+  }
+
+  /**
+   * Helper function to build fieldId to fieldName mapping from form schema
+   * @param schema - Form schema object
+   * @returns Record<string, string> - Mapping of fieldId to fieldName
+   */
+  private getFieldIdToFieldNameMap(schema: any): Record<string, string> {
+    const fieldIdToFieldName: Record<string, string> = {};
+
+    function extract(properties: any, currentPage: string) {
+      for (const [fieldKey, fieldSchema] of Object.entries(properties)) {
+        const fieldId = (fieldSchema as any).fieldId;
+        const fieldTitle = (fieldSchema as any).title || fieldKey;
+        if (fieldId) {
+          fieldIdToFieldName[fieldId] = fieldTitle;
+        }
+
+        // Handle dependencies
+        if ((fieldSchema as any).dependencies) {
+          const dependencies = (fieldSchema as any).dependencies;
+          for (const depSchema of Object.values(dependencies)) {
+            if (!depSchema || typeof depSchema !== 'object') continue;
+            const dep = depSchema as any;
+            if (dep.oneOf)
+              dep.oneOf.forEach(
+                (item: any) =>
+                  item?.properties && extract(item.properties, currentPage)
+              );
+            if (dep.allOf)
+              dep.allOf.forEach(
+                (item: any) =>
+                  item?.properties && extract(item.properties, currentPage)
+              );
+            if (dep.anyOf)
+              dep.anyOf.forEach(
+                (item: any) =>
+                  item?.properties && extract(item.properties, currentPage)
+              );
+            if (dep.properties) extract(dep.properties, currentPage);
+          }
+        }
+      }
+    }
+
+    // Handle different schema structures
+    if (schema?.properties) {
+      for (const [pageKey, pageSchema] of Object.entries(schema.properties)) {
+        const fieldProps = (pageSchema as any).properties || {};
+        extract(fieldProps, pageKey);
+      }
+    }
+
+    return fieldIdToFieldName;
   }
 }
 
