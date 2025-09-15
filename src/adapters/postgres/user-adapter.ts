@@ -3076,24 +3076,12 @@ export class PostgresUserService implements IServicelocator {
     const apiId = APIID.USER_LIST;
     
     try {
-      // Step 1: Validate basic inputs
-      const inputValidation = this.validateHierarchicalInputs(tenantId, hierarchicalFiltersDto);
-      if (inputValidation.error) {
-        return APIResponse.error(response, apiId, inputValidation.error.message, inputValidation.error.detail, HttpStatus.BAD_REQUEST);
-      }
-
       const { limit, offset, sort: [sortField, sortDirection], role, filters, customfields } = hierarchicalFiltersDto;
       
-      // Step 2: Validate sort parameters
-      const sortValidation = this.validateSortParameters(sortField, sortDirection);
-      if (sortValidation.error) {
-        return APIResponse.error(response, apiId, sortValidation.error.message, sortValidation.error.detail, HttpStatus.BAD_REQUEST);
-      }
-      
-      // Step 3: Get user IDs from all filters with detailed error context
+      // Step 1: Get user IDs from all filters
       const userIds = await this.getAllFilteredUserIds(filters, role, tenantId);
       
-      // Step 4: Check if any users found
+      // Step 2: Check if any users found
       if (userIds.length === 0) {
         const noUsersMessage = this.getNoUsersFoundMessage(filters, role);
         return APIResponse.success(response, apiId, {
@@ -3102,21 +3090,22 @@ export class PostgresUserService implements IServicelocator {
           currentPageCount: 0,
           limit,
           offset,
-          sort: { field: sortValidation.sortField, direction: sortValidation.sortDirection.toLowerCase() }
+          sort: { field: sortField, direction: sortDirection.toLowerCase() }
         }, HttpStatus.OK, noUsersMessage);
       }
       
-      // Step 5: Get user data with pagination
-      const userData = await this.getPaginatedUsers(userIds, tenantId, limit, offset, sortValidation.sortField, sortValidation.sortDirection, customfields);
+      // Step 3: Get user data with pagination (normalize sort direction)
+      const normalizedSortDirection = sortDirection.toLowerCase() === 'desc' ? 'DESC' : 'ASC';
+      const userData = await this.getPaginatedUsers(userIds, tenantId, limit, offset, sortField, normalizedSortDirection, customfields);
       
-      // Step 6: Prepare response with detailed logging
+      // Step 4: Prepare response with detailed logging
       const responseData = {
         users: userData.users,
         totalCount: userData.totalCount,
         currentPageCount: userData.users.length,
         limit,
         offset,
-        sort: { field: sortValidation.sortField, direction: sortValidation.sortDirection.toLowerCase() }
+        sort: { field: sortField, direction: sortDirection.toLowerCase() }
       };
 
       LoggerUtil.log(`Successfully retrieved ${userData.users.length}/${userData.totalCount} users with filters applied`, apiId);
@@ -3181,87 +3170,6 @@ export class PostgresUserService implements IServicelocator {
     }
   }
 
-  /**
-   * Validate hierarchical input parameters comprehensively
-   */
-  private validateHierarchicalInputs(tenantId: string, dto: HierarchicalLocationFiltersDto): { error?: { message: string, detail: string } } {
-    // Validate tenantId
-    if (!tenantId || typeof tenantId !== 'string' || tenantId.trim().length === 0) {
-      return { error: { message: 'Invalid tenant ID', detail: 'Tenant ID is required and must be a non-empty string' } };
-    }
-
-    // Validate UUID format for tenantId
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!uuidRegex.test(tenantId)) {
-      return { error: { message: 'Invalid tenant ID format', detail: 'Tenant ID must be a valid UUID' } };
-    }
-
-    // Validate sort array length
-    if (!dto.sort || !Array.isArray(dto.sort) || dto.sort.length !== 2) {
-      return { error: { message: 'Invalid sort parameter', detail: 'Sort must be an array with exactly 2 elements: [field, direction]' } };
-    }
-
-    // Validate limit and offset
-    if (dto.limit <= 0 || dto.limit > 100) {
-      return { error: { message: 'Invalid limit', detail: 'Limit must be between 1 and 100' } };
-    }
-
-    if (dto.offset < 0) {
-      return { error: { message: 'Invalid offset', detail: 'Offset must be 0 or greater' } };
-    }
-
-    // Validate that at least one filter is provided
-    const hasLocationFilter = dto.filters && Object.keys(dto.filters).some(key => {
-      const value = dto.filters[key];
-      return Array.isArray(value) && value.length > 0;
-    });
-    
-    const hasRoleFilter = dto.role && Array.isArray(dto.role) && dto.role.length > 0;
-    
-    if (!hasLocationFilter && !hasRoleFilter) {
-      return { error: { message: 'No valid filters provided', detail: 'Please provide at least one location filter or role filter' } };
-    }
-
-    // Validate batch UUIDs if provided
-    if (dto.filters?.batch && Array.isArray(dto.filters.batch)) {
-      for (const batchId of dto.filters.batch) {
-        if (!uuidRegex.test(batchId)) {
-          return { error: { message: 'Invalid batch ID format', detail: `Batch ID '${batchId}' must be a valid UUID` } };
-        }
-      }
-    }
-
-    return {}; // No errors
-  }
-
-  /**
-   * Validate sort parameters with enhanced error messages
-   */
-  private validateSortParameters(sortField: string, sortDirection: string): { error?: { message: string, detail: string }, sortField?: string, sortDirection?: string } {
-    const allowedSortFields = ['name', 'firstName', 'lastName', 'username', 'email', 'createdAt'];
-    const allowedSortDirections = ['asc', 'desc'];
-    
-    if (!sortField || typeof sortField !== 'string') {
-      return { error: { message: 'Missing sort field', detail: 'Sort field is required and must be a string' } };
-    }
-    
-    if (!allowedSortFields.includes(sortField)) {
-      return { error: { message: 'Invalid sort field', detail: `Sort field '${sortField}' is not allowed. Must be one of: ${allowedSortFields.join(', ')}` } };
-    }
-    
-    if (!sortDirection || typeof sortDirection !== 'string') {
-      return { error: { message: 'Missing sort direction', detail: 'Sort direction is required and must be a string' } };
-    }
-    
-    if (!allowedSortDirections.includes(sortDirection.toLowerCase())) {
-      return { error: { message: 'Invalid sort direction', detail: `Sort direction '${sortDirection}' is not allowed. Must be 'asc' or 'desc'` } };
-    }
-    
-    return { 
-      sortField, 
-      sortDirection: sortDirection.toLowerCase() === 'desc' ? 'DESC' : 'ASC' 
-    };
-  }
 
   /**
    * Generate contextual message when no users are found

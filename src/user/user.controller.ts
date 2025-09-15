@@ -394,18 +394,67 @@ export class UserController {
     @Body() hierarchicalFiltersDto: HierarchicalLocationFiltersDto
   ) {
     const tenantId = headers["tenantid"];
+    const apiId = APIID.USER_LIST;
     
-    // Validate mandatory tenantId
-    if (!tenantId) {
+    // Comprehensive tenantId validation
+    const tenantValidation = this.validateTenantId(tenantId);
+    if (!tenantValidation.isValid) {
+      LoggerUtil.error(
+        `TenantId validation failed: ${tenantValidation.error}`,
+        `Received tenantId: ${tenantId}`,
+        apiId
+      );
+      
       return response.status(400).json({
-        statusCode: 400,
-        message: "tenantid header is required",
-        error: "Bad Request"
+        id: apiId,
+        ver: "1.0",
+        ts: new Date().toISOString(),
+        params: {
+          resmsgid: "",
+          status: "failed",
+          err: tenantValidation.error,
+          errmsg: "Invalid tenant information"
+        },
+        responseCode: 400,
+        result: {}
       });
     }
     
     return await this.userAdapter
       .buildUserAdapter()
       .getUsersByHierarchicalLocation(tenantId, request, response, hierarchicalFiltersDto);
+  }
+
+  /**
+   * Comprehensive tenant ID validation
+   * @param tenantId - Tenant ID from headers
+   * @returns Validation result with error details
+   */
+  private validateTenantId(tenantId: any): { isValid: boolean; error?: string } {
+    // Check if tenantId is present
+    if (!tenantId) {
+      return {
+        isValid: false,
+        error: "tenantid header is required"
+      };
+    }
+
+    // Check if tenantId is a non-empty string
+    if (typeof tenantId !== 'string' || tenantId.trim().length === 0) {
+      return {
+        isValid: false,
+        error: "tenantid must be a non-empty string"
+      };
+    }
+
+    // Check if tenantId is a valid UUID format
+    if (!isUUID(tenantId)) {
+      return {
+        isValid: false,
+        error: "tenantid must be a valid UUID format"
+      };
+    }
+
+    return { isValid: true };
   }
 }

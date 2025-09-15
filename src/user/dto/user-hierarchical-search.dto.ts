@@ -12,8 +12,107 @@ import {
   Max,
   IsNotEmpty,
   IsIn,
+  ArrayMinSize,
+  ArrayMaxSize,
+  registerDecorator,
+  ValidationOptions,
+  ValidationArguments,
+  ValidatorConstraint,
+  ValidatorConstraintInterface,
+  Validate,
 } from "class-validator";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+
+/**
+ * Custom validator to ensure at least one filter is provided
+ */
+@ValidatorConstraint({ name: 'atLeastOneFilter', async: false })
+export class AtLeastOneFilterConstraint implements ValidatorConstraintInterface {
+  validate(filters: any, args: ValidationArguments): boolean {
+    if (!filters || typeof filters !== 'object') {
+      return false;
+    }
+    
+    // Check if any filter has values
+    const hasLocationFilter = Object.keys(filters).some(key => {
+      const value = filters[key];
+      return Array.isArray(value) && value.length > 0;
+    });
+    
+    // Check if roles are provided in the parent object
+    const parentObject = args.object as any;
+    const hasRoleFilter = parentObject.role && Array.isArray(parentObject.role) && parentObject.role.length > 0;
+    
+    return hasLocationFilter || hasRoleFilter;
+  }
+
+  defaultMessage(): string {
+    return 'At least one location filter or role filter must be provided';
+  }
+}
+
+/**
+ * Custom validator for sort configuration
+ */
+@ValidatorConstraint({ name: 'validSortConfig', async: false })
+export class ValidSortConfigConstraint implements ValidatorConstraintInterface {
+  private allowedSortFields = ['name', 'firstName', 'lastName', 'username', 'email', 'createdAt'];
+  private allowedSortDirections = ['asc', 'desc'];
+
+  validate(sortArray: any): boolean {
+    if (!Array.isArray(sortArray) || sortArray.length !== 2) {
+      return false;
+    }
+
+    const [field, direction] = sortArray;
+    
+    // Validate field
+    if (!this.allowedSortFields.includes(field)) {
+      return false;
+    }
+    
+    // Validate direction
+    if (!this.allowedSortDirections.includes(direction?.toLowerCase())) {
+      return false;
+    }
+
+    return true;
+  }
+
+  defaultMessage(): string {
+    return `Sort must be [field, direction] where field is one of: ${['name', 'firstName', 'lastName', 'username', 'email', 'createdAt'].join(', ')} and direction is 'asc' or 'desc'`;
+  }
+}
+
+/**
+ * Decorator for validating at least one filter
+ */
+export function IsAtLeastOneFilter(validationOptions?: ValidationOptions) {
+  return function (object: Object, propertyName: string) {
+    registerDecorator({
+      target: object.constructor,
+      propertyName: propertyName,
+      options: validationOptions,
+      constraints: [],
+      validator: AtLeastOneFilterConstraint,
+    });
+  };
+}
+
+/**
+ * Decorator for validating sort configuration
+ */
+export function IsValidSortConfig(validationOptions?: ValidationOptions) {
+  return function (object: Object, propertyName: string) {
+    registerDecorator({
+      target: object.constructor,
+      propertyName: propertyName,
+      options: validationOptions,
+      constraints: [],
+      validator: ValidSortConfigConstraint,
+    });
+  };
+}
 
 class LocationFiltersDto {
   @ApiPropertyOptional({
@@ -88,6 +187,15 @@ enum SortDirection {
   DESC = "desc",
 }
 
+enum AllowedSortFields {
+  NAME = "name",
+  FIRST_NAME = "firstName",
+  LAST_NAME = "lastName",
+  USERNAME = "username",
+  EMAIL = "email",
+  CREATED_AT = "createdAt",
+}
+
 export class HierarchicalLocationFiltersDto {
   @ApiProperty({
     type: Number,
@@ -117,25 +225,33 @@ export class HierarchicalLocationFiltersDto {
 
   @ApiProperty({
     type: LocationFiltersDto,
-    description: "Location-based filters for hierarchical search",
+    description: "Location-based filters for hierarchical search. At least one location filter or role filter must be provided.",
     required: true
   })
   @Expose()
   @IsObject()
   @ValidateNested()
   @Type(() => LocationFiltersDto)
+  @IsAtLeastOneFilter({
+    message: 'At least one location filter or role filter must be provided'
+  })
   filters: LocationFiltersDto;
 
   @ApiProperty({
     type: [String],
-    description: "Sort configuration [field, direction]. Must be exactly 2 elements: [field, direction]",
+    description: "Sort configuration [field, direction]. Must be exactly 2 elements: [field, direction]. Allowed fields: name, firstName, lastName, username, email, createdAt. Directions: asc, desc",
     example: ["name", "asc"],
     isArray: true,
     required: true
   })
   @Expose()
   @IsArray()
+  @ArrayMinSize(2, { message: 'Sort array must contain exactly 2 elements: [field, direction]' })
+  @ArrayMaxSize(2, { message: 'Sort array must contain exactly 2 elements: [field, direction]' })
   @IsString({ each: true })
+  @IsValidSortConfig({
+    message: 'Invalid sort configuration. Field must be one of: name, firstName, lastName, username, email, createdAt. Direction must be asc or desc'
+  })
   sort: [string, string];
 
   @ApiPropertyOptional({
