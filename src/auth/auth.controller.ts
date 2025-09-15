@@ -5,6 +5,8 @@ import {
   ApiHeader,
   ApiBasicAuth,
   ApiOkResponse,
+  ApiParam,
+  ApiQuery,
 } from "@nestjs/swagger";
 import {
   Controller,
@@ -20,6 +22,9 @@ import {
   ValidationPipe,
   UseGuards,
   UseFilters,
+  Query,
+  Param,
+  Headers
 } from "@nestjs/common";
 import {
   AuthDto,
@@ -31,6 +36,8 @@ import { JwtAuthGuard } from "src/common/guards/keycloak.guard";
 import { APIID } from "src/common/utils/api-id.config";
 import { AllExceptionsFilter } from "src/common/filters/exception.filter";
 import { Response } from "express";
+import { MagicLinkResponseDto, RequestMagicLinkDto } from "./dto/magic-link.dto";
+import { LoggerUtil } from "src/common/logger/LoggerUtil";
 
 @ApiTags("Auth")
 @Controller("auth")
@@ -84,5 +91,87 @@ export class AuthController {
     const { refresh_token: refreshToken } = body;
 
     await this.authService.logout(refreshToken, response);
+  }
+
+  @UseFilters(new AllExceptionsFilter(APIID.REQUEST_MAGIC_LINK))
+  @Post("/request-magic-link")
+  @ApiBody({ type: RequestMagicLinkDto })
+  @UsePipes(ValidationPipe)
+  @HttpCode(HttpStatus.OK)
+  @ApiOkResponse({ 
+    description: "Magic link request processed", 
+    type: MagicLinkResponseDto 
+  })
+  async requestMagicLink(
+    @Body() requestDto: RequestMagicLinkDto,
+    @Res() response: Response
+  ): Promise<any> {
+    return this.authService.requestMagicLink(requestDto, response);
+  }
+
+  @Get("/magic-link/:token")
+  @ApiParam({ name: 'token', description: 'Magic link token' })
+  @ApiQuery({ name: 'redirect', description: 'Encoded redirect URL', required: false })
+  async validateMagicLink(
+    @Res() res: Response,
+    @Param('token') token: string,
+    @Query('redirect') redirect?: string,
+    @Headers('accept') accept?: string
+  ) {
+    const wantsJson = accept?.includes('application/json');
+    
+    try {
+      const result = await this.authService.validateMagicLink(token, redirect);
+      const baseRedirect = redirect 
+        ? redirect 
+        : `${process.env.FRONTEND_URL || 'http://localhost:3000'}/auth/success`;
+       
+      if (wantsJson) {
+        return res.status(200).json({
+          success: true,
+          message: 'Magic link validated successfully',
+          data: {
+            access_token: result.access_token,
+            refresh_token: result.refresh_token,
+            expires_in: result.expires_in,
+            redirect_url: baseRedirect
+          }
+        });
+      }
+      
+      // Set tokens in cookies to keep redirect URL short and hide tokens from URL
+      res.cookie('access_token', result.access_token, {
+        httpOnly: false,
+        secure: true,
+        sameSite: 'lax',
+        maxAge: (result.expires_in || 300) * 1000,
+      });
+      res.cookie('refresh_token', result.refresh_token, {
+        httpOnly: false,
+        secure: true,
+        sameSite: 'lax',
+        maxAge: 30 * 24 * 60 * 60 * 1000,
+      });
+      
+      return res.redirect(302, baseRedirect);
+      
+    } catch (error) {
+      LoggerUtil.error('Magic link validation failed', error?.message, 'AuthController.validateMagicLink');
+      
+      if (wantsJson) {
+        return res.status(error.status || 500).json({
+          success: false,
+          error: error.message,
+          statusCode: error.status || 500,
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      const errorUrl = redirect 
+        ? `${redirect}?error=${encodeURIComponent(error.message)}`
+        : `${process.env.FRONTEND_URL || 'http://localhost:3000'}/auth/error?error=${encodeURIComponent(error.message)}`;
+      
+      return res.redirect(302, errorUrl);
+    }
   }
 }

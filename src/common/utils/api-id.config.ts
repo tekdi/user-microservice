@@ -58,5 +58,7 @@ export const APIID = {
   SEND_OTP: "api.send.OTP",
   VERIFY_OTP: "api.verify.OTP",
   SEND_RESET_OTP: 'api.send.reset.otp',
-  SIGNED_URL: 'api.get.signedURL'
+  SIGNED_URL: 'api.get.signedURL',
+  REQUEST_MAGIC_LINK: 'api.request.magicLink',
+  VALIDATE_MAGIC_LINK: 'api.validate.magicLink'
 };
