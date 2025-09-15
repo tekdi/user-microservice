@@ -605,7 +605,12 @@ export class PostgresCohortMembersService {
       totalCount: 0,
       userDetails: [],
     };
-    const getUserDetails = await this.getUsers(where, options, order, searchtext);
+    const getUserDetails = await this.getUsers(
+      where,
+      options,
+      order,
+      searchtext
+    );
 
     if (getUserDetails.length > 0) {
       results.totalCount = parseInt(getUserDetails[0].total_count, 10);
@@ -866,8 +871,8 @@ export class PostgresCohortMembersService {
       try {
         const searchWhereClause = this.buildSearchTextWhereClause(searchtext);
         if (searchWhereClause) {
-          const searchCondition = searchWhereClause.replace(/^AND\s+/, "");
-          if (whereCase === "WHERE ") {
+          const searchCondition = searchWhereClause.replace(/^AND\s+/, '');
+          if (whereCase === 'WHERE ') {
             whereCase += searchCondition;
           } else {
             whereCase += ` AND ${searchCondition}`;
@@ -1817,6 +1822,25 @@ export class PostgresCohortMembersService {
             const result = await this.cohortMembersRepository.save(
               cohortMemberForAcademicYear
             );
+
+            // NEW: Handle LMS enrollment for shortlisted users
+            if (result.status === 'shortlisted') {
+              // Enroll user to LMS courses when status is shortlisted during bulk creation
+              // This ensures users who are shortlisted have access to cohort-specific courses
+              try {
+                await this.enrollShortlistedUserToLMSCourses(
+                  result.userId,
+                  result.cohortId
+                );
+              } catch (error) {
+                ShortlistingLogger.logShortlistingError(
+                  `Failed to enroll user ${result.userId} to LMS courses for cohort ${result.cohortId}`,
+                  error.message,
+                  'LMSEnrollment'
+                );
+              }
+            }
+
             results.push(result);
           } catch (error) {
             LoggerUtil.error(
@@ -4762,6 +4786,7 @@ export class PostgresCohortMembersService {
 
     try {
       const requestUrl = `${lmsBaseUrl}/lms-service/v1/enrollments`;
+
       const requestBody = {
         courseId: courseId,
         learnerId: userId,
@@ -4969,8 +4994,12 @@ export class PostgresCohortMembersService {
    */
   private buildSearchTextWhereClause(searchtext: string): string {
     try {
-      if (!searchtext || typeof searchtext !== 'string' || searchtext.trim().length < 2) {
-        return "";
+      if (
+        !searchtext ||
+        typeof searchtext !== 'string' ||
+        searchtext.trim().length < 2
+      ) {
+        return '';
       }
 
       // Split searchtext by spaces and process all words
@@ -4980,47 +5009,49 @@ export class PostgresCohortMembersService {
         .filter((term) => term && term.length > 0);
 
       if (searchTerms.length === 0) {
-        return "";
+        return '';
       }
 
       // Build ILIKE conditions for each search term with smart column prioritization
-      const searchConditions = searchTerms.map((term) => {
-        if (!term || typeof term !== 'string') {
-          return "";
-        }
+      const searchConditions = searchTerms
+        .map((term) => {
+          if (!term || typeof term !== 'string') {
+            return '';
+          }
 
-        const escapedTerm = term.replace(/%/g, "\\%").replace(/_/g, "\\_");
+          const escapedTerm = term.replace(/%/g, '\\%').replace(/_/g, '\\_');
 
-        // Check if this looks like an email
-        const isEmail = term.includes('@');
+          // Check if this looks like an email
+          const isEmail = term.includes('@');
 
-        if (isEmail) {
-          // For email-like terms, prioritize email and username columns only
-          return `(
+          if (isEmail) {
+            // For email-like terms, prioritize email and username columns only
+            return `(
             U."email" ILIKE '%${escapedTerm}%' OR
             U."username" ILIKE '%${escapedTerm}%'
           )`;
-        } else {
-          // For non-email terms, search across all columns
-          return `(
+          } else {
+            // For non-email terms, search across all columns
+            return `(
             U."username" ILIKE '%${escapedTerm}%' OR
             U."email" ILIKE '%${escapedTerm}%' OR
             U."firstName" ILIKE '%${escapedTerm}%' OR
             U."middleName" ILIKE '%${escapedTerm}%' OR
             U."lastName" ILIKE '%${escapedTerm}%'
           )`;
-        }
-      }).filter(condition => condition !== ""); // Filter out empty conditions
+          }
+        })
+        .filter((condition) => condition !== ''); // Filter out empty conditions
 
       if (searchConditions.length === 0) {
-        return "";
+        return '';
       }
 
       // All terms must be found (AND logic between terms)
-      return `AND (${searchConditions.join(" AND ")})`;
+      return `AND (${searchConditions.join(' AND ')})`;
     } catch (error) {
       console.error('Error in buildSearchTextWhereClause:', error);
-      return "";
+      return '';
     }
   }
 }
