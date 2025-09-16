@@ -3146,14 +3146,19 @@ export class PostgresUserService implements IServicelocator {
     const { level, ids } = filterResult;
     
     try {
-      
+      // Handle batch filtering through direct cohort membership
       if (this.isBatchFilter(level)) {
         const result = await this.usersRepository.query(this.SQL_QUERIES.BATCH_USERS, [ids]);
         const userIds: string[] = result.map((row: any) => String(row.userId));
+        LoggerUtil.log(`Batch filter returned ${userIds.length} users`, apiId);
         return userIds;
       }
-      
-      // Handle location fields (state, district, block, village, center)
+      // Handle center filtering through cohort relationships
+      if (this.isCenterFilter(level)) {
+        return await this.getUserIdsByCenter(ids, tenantId);
+      }
+
+      // Handle other location fields (state, district, block, village) through custom fields
       const fieldResult = await this.usersRepository.query(this.SQL_QUERIES.FIELD_BY_NAME, [level]);
       if (fieldResult.length === 0) {
         throw new Error(`Configuration error: Field '${level}' not found`);
@@ -3161,13 +3166,104 @@ export class PostgresUserService implements IServicelocator {
       
       const fieldId = fieldResult[0].fieldId;
       const result = await this.usersRepository.query(this.SQL_QUERIES.USERS_BY_FIELD_VALUES, [fieldId, ids, tenantId]);
+
       const userIds: string[] = result.map((row: any) => String(row.itemId));
-      
-      LoggerUtil.log(`Location filter '${level}' returned ${userIds.length} users`, apiId);
+
+      // Debug: Check which centers these state users belong to
+      if (level === 'state') {
+        const centerCheckQuery = `
+          SELECT DISTINCT 
+            u."userId",
+            center."cohortId" as "centerId", 
+            center."name" as "centerName"
+          FROM "Users" u
+          LEFT JOIN "CohortMembers" cm ON u."userId" = cm."userId" 
+          LEFT JOIN "Cohort" batch ON cm."cohortId" = batch."cohortId"
+          LEFT JOIN "Cohort" center ON batch."parentId"::text = center."cohortId"::text
+          WHERE u."userId" = ANY($1)
+          ORDER BY center."name"
+        `;
+        
+        const centerCheck = await this.usersRepository.query(centerCheckQuery, [userIds]);
+        
+        const centerCounts = {};
+        centerCheck.forEach(row => {
+          const centerKey = `${row.centerId || 'null'} (${row.centerName || 'No Center'})`;
+          centerCounts[centerKey] = (centerCounts[centerKey] || 0) + 1;
+        });
+      }
+
       return userIds;
     } catch (error) {
       LoggerUtil.error(`Error in location filter '${level}': ${error.message}`, error.stack, apiId);
       throw new Error(`Failed to filter users by ${level}: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get user IDs by center through cohort relationships
+   * Flow: Center IDs → Cohort table (parentId) → CohortMembers table → User IDs
+   */
+  private async getUserIdsByCenter(centerIds: string[], tenantId: string): Promise<string[]> {
+    const apiId = APIID.USER_LIST;
+    
+    try {
+      LoggerUtil.log(`Filtering by center through cohort relationships: ${centerIds.length} centers: [${centerIds.join(', ')}]`, apiId);
+      
+      // Step 1: Get all cohort IDs where parentId matches the center IDs
+      // Using string comparison to avoid type casting issues
+      const cohortQuery = `
+        SELECT DISTINCT "cohortId" 
+        FROM public."Cohort" 
+        WHERE "parentId"::text = ANY($1::text[])
+      `;
+      
+      const cohortResult = await this.usersRepository.query(cohortQuery, [centerIds]);
+      const cohortIds = cohortResult.map((row: any) => String(row.cohortId));
+      
+      LoggerUtil.log(`Found ${cohortIds.length} cohorts under ${centerIds.length} centers: [${cohortIds.join(', ')}]`, apiId);
+      
+      if (cohortIds.length === 0) {
+        LoggerUtil.warn(`No cohorts found for center IDs: ${centerIds.join(', ')}`, apiId);
+        return [];
+      }
+      
+      // Debug query to understand the filtering breakdown
+      const debugQuery = `
+        SELECT 
+          COUNT(*) as total_memberships,
+          COUNT(CASE WHEN cm."status" = 'active' THEN 1 END) as active_memberships,
+          COUNT(CASE WHEN cm."status" = 'inactive' THEN 1 END) as inactive_memberships,
+          COUNT(CASE WHEN u."status" = 'archived' THEN 1 END) as archived_users_memberships,
+          COUNT(DISTINCT cm."userId") as unique_all_users
+        FROM public."CohortMembers" cm
+        JOIN public."Users" u ON cm."userId" = u."userId"
+        WHERE cm."cohortId"::text = ANY($1::text[])
+      `;
+      
+      const debugResult = await this.usersRepository.query(debugQuery, [cohortIds]);
+      const stats = debugResult[0];
+      
+      LoggerUtil.log(`Debug breakdown - Total: ${stats.total_memberships}, Active: ${stats.active_memberships}, Inactive: ${stats.inactive_memberships}, Archived users: ${stats.archived_users_memberships}, Unique all users: ${stats.unique_all_users}`, apiId);
+      
+      // Step 2: Get all user IDs from CohortMembers for those cohort IDs (no status filtering)
+      const userQuery = `
+        SELECT DISTINCT cm."userId" 
+        FROM public."CohortMembers" cm
+        JOIN public."Users" u ON cm."userId" = u."userId"
+        WHERE cm."cohortId"::text = ANY($1::text[])
+      `;
+      
+      const userResult = await this.usersRepository.query(userQuery, [cohortIds]);
+      const userIds: string[] = userResult.map((row: any) => String(row.userId));
+      
+      LoggerUtil.log(`Center filter final result: ${userIds.length} unique users (all statuses) from ${cohortIds.length} cohorts`, apiId);
+      LoggerUtil.log(`Next: These ${userIds.length} users will be filtered by tenant (${tenantId}) only - no status filtering`, apiId);
+      return userIds;
+      
+    } catch (error) {
+      LoggerUtil.error(`Error in center filter: ${error.message}`, error.stack, apiId);
+      throw new Error(`Failed to filter users by center: ${error.message}`);
     }
   }
 
@@ -3276,6 +3372,13 @@ export class PostgresUserService implements IServicelocator {
   }
 
   /**
+   * Helper method to check if a filter level is center type
+   */
+  private isCenterFilter(level: string): boolean {
+    return level === this.HIERARCHICAL_FILTER_LEVELS.CENTER;
+  }
+
+  /**
    * Helper method to check if a field should be excluded from customfields (batch/center)
    */
   private isExcludedFromCustomFields(fieldName: string): boolean {
@@ -3320,9 +3423,7 @@ export class PostgresUserService implements IServicelocator {
       SELECT DISTINCT cm."userId" 
       FROM "CohortMembers" cm
       JOIN "Users" u ON cm."userId" = u."userId"
-      WHERE cm."cohortId" = ANY($1) 
-        AND cm."status" = 'active'
-        AND u."status" != 'archived'
+      WHERE cm."cohortId" = ANY($1)
     `,
     
     FIELD_BY_NAME: `
@@ -3339,7 +3440,6 @@ export class PostgresUserService implements IServicelocator {
       WHERE fv."fieldId" = $1 
         AND fv."value" && $2 
         AND fv."tenantId" = $3
-        AND u."status" != 'archived'
     `,
     
     USERS_BY_ROLES: `
@@ -3349,7 +3449,6 @@ export class PostgresUserService implements IServicelocator {
       JOIN "Users" u ON urm."userId" = u."userId"
       WHERE r."name" = ANY($1) 
         AND urm."tenantId" = $2
-        AND u."status" != 'archived'
     `
   } as const;
 
@@ -3436,8 +3535,10 @@ export class PostgresUserService implements IServicelocator {
   private async getBatchAndCenterNames(userIds: string[]): Promise<Record<string, Array<{
     centerId: string | null;
     centerName: string | null;
+    centerStatus: string | null;
     batchId: string;
     batchName: string | null;
+    batchStatus: string | null;
     cohortMember: {
       status: string;
       membershipId: string;
@@ -3480,8 +3581,10 @@ export class PostgresUserService implements IServicelocator {
       const cohortDataMap: Record<string, Array<{
         centerId: string | null;
         centerName: string | null;
+        centerStatus: string | null;
         batchId: string;
         batchName: string | null;
+        batchStatus: string | null;
         cohortMember: {
           status: string;
           membershipId: string;
@@ -3505,13 +3608,14 @@ export class PostgresUserService implements IServicelocator {
           cohortDataMap[userId] = [];
         }
 
-        // Add this cohort association to the user's cohort data
-        // Only exclude if explicitly archived, otherwise include the data
+        // Add this cohort association to the user's cohort data (include all statuses)
         const cohortEntry = {
-          centerId: (centerStatus === 'archived' || !centerId) ? null : String(centerId),
-          centerName: (centerStatus === 'archived' || !centerName) ? null : centerName,
+          centerId: centerId ? String(centerId) : null,
+          centerName: centerName || null,
+          centerStatus: centerStatus || null,
           batchId: String(batchId),
-          batchName: (batchStatus === 'archived' || !batchName) ? null : batchName,
+          batchName: batchName || null,
+          batchStatus: batchStatus || null,
           cohortMember: {
             status: membershipStatus || 'unknown',
             membershipId: String(membershipId)
@@ -3523,7 +3627,6 @@ export class PostgresUserService implements IServicelocator {
 
       return cohortDataMap;
     } catch (error) {
-      LoggerUtil.error(`Error fetching cohort associations: ${error.message}`, error.stack, apiId);
       // Return empty object instead of throwing to avoid breaking the main operation
       return {};
     }
@@ -3628,25 +3731,31 @@ export class PostgresUserService implements IServicelocator {
       }
 
       // Single optimized query that gets both count and paginated results
+      // Fixed: Apply pagination to unique users first, then get their roles
       const query = `
-        WITH user_data AS (
-          SELECT DISTINCT
-            u."userId", u."username", u."firstName", u."name", u."middleName", 
+        WITH base_users AS (
+          SELECT DISTINCT u."userId", u."username", u."firstName", u."name", u."middleName", 
             u."lastName", u."email", u."mobile", u."gender", u."dob", 
-            u."status", u."createdAt", utm."tenantId", r."name" as "roleName",
-            COUNT(*) OVER() as total_count
+            u."status", u."createdAt", utm."tenantId"
           FROM "Users" u
           LEFT JOIN "UserTenantMapping" utm ON u."userId" = utm."userId"
-          LEFT JOIN "UserRolesMapping" urm ON u."userId" = urm."userId" AND utm."tenantId" = urm."tenantId"
-          LEFT JOIN "Roles" r ON urm."roleId" = r."roleId"
-          WHERE u."userId" = ANY($1::uuid[]) 
-            AND utm."tenantId" = $2::uuid
-            AND u."status" != 'archived'
+          WHERE u."userId" = ANY($1) 
+            AND utm."tenantId" = $2
+        ),
+        paginated_users AS (
+          SELECT *, (SELECT COUNT(*) FROM base_users) as total_count
+          FROM base_users
+          ORDER BY "${sortField}" ${sortDirection}
+          LIMIT $3 OFFSET $4
         )
-        SELECT * FROM user_data
-        ORDER BY "${sortField}" ${sortDirection}
-        LIMIT $3 OFFSET $4
+        SELECT pu.*, r."name" as "roleName"
+        FROM paginated_users pu
+        LEFT JOIN "UserRolesMapping" urm ON pu."userId" = urm."userId" AND pu."tenantId" = urm."tenantId"
+        LEFT JOIN "Roles" r ON urm."roleId" = r."roleId"
+        ORDER BY pu."${sortField}" ${sortDirection}
       `;
+      
+      // Add debug logging before main query
       
       const result = await this.usersRepository.query(query, [userIds, tenantId, limit, offset]);
       
@@ -3669,8 +3778,10 @@ export class PostgresUserService implements IServicelocator {
      cohortDataMap: Record<string, Array<{
        centerId: string | null;
        centerName: string | null;
+       centerStatus: string | null;
        batchId: string;
        batchName: string | null;
+       batchStatus: string | null;
        cohortMember: {
          status: string;
          membershipId: string;
@@ -3913,7 +4024,6 @@ export class PostgresUserService implements IServicelocator {
              return acc;
            }, {});
          } catch (error) {
-           console.warn(`Could not resolve names for ${fieldName}:`, error.message);
            locationNameMaps[fieldName] = {};
          }
       }
