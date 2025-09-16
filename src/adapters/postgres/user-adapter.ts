@@ -3078,96 +3078,134 @@ export class PostgresUserService implements IServicelocator {
     try {
       const { limit, offset, sort: [sortField, sortDirection], role, filters, customfields } = hierarchicalFiltersDto;
       
-      // Step 1: Get user IDs from all filters
-      const userIds = await this.getAllFilteredUserIds(filters, role, tenantId);
+      LoggerUtil.log(`Starting hierarchical user search with filters and ${role?.length || 0} roles`, apiId);
       
-      // Step 2: Check if any users found
-      if (userIds.length === 0) {
-        const noUsersMessage = this.getNoUsersFoundMessage(filters, role);
-        return APIResponse.success(response, apiId, {
-          users: [],
-          totalCount: 0,
-          currentPageCount: 0,
-          limit,
-          offset,
-          sort: { field: sortField, direction: sortDirection.toLowerCase() }
-        }, HttpStatus.OK, noUsersMessage);
+      // Step 1: Get user IDs from location filters (if any)
+      let locationUserIds: string[] = [];
+      const filterResult = this.findDeepestFilter(filters);
+      if (filterResult.level) {
+        locationUserIds = await this.getLocationFilteredUsers(filterResult, tenantId);
       }
       
-      // Step 3: Get user data with pagination (normalize sort direction)
-      const normalizedSortDirection = sortDirection.toLowerCase() === 'desc' ? 'DESC' : 'ASC';
-      const userData = await this.getPaginatedUsers(userIds, tenantId, limit, offset, sortField, normalizedSortDirection, customfields);
+      // Step 2: Get user IDs from role filters (if any)
+      let roleUserIds: string[] = [];
+      if (role && role.length > 0) {
+        roleUserIds = await this.getRoleFilteredUsers(role, tenantId);
+      }
       
-      // Step 4: Prepare response with detailed logging
-      const responseData = {
+      // Step 3: Combine filters using efficient Set intersection
+      const combinedUserIds = this.combineFilterResults(locationUserIds, roleUserIds);
+      
+      // Step 4: Return early if no users found
+      if (combinedUserIds.length === 0) {
+        return this.createEmptyResponse(response, apiId, filters, role, limit, offset, sortField, sortDirection);
+      }
+      
+      // Step 5: Get paginated user data efficiently
+      const normalizedSortDirection = sortDirection.toLowerCase() === 'desc' ? 'DESC' : 'ASC';
+      const userData = await this.getPaginatedUsers(combinedUserIds, tenantId, limit, offset, sortField, normalizedSortDirection, customfields);
+      
+      // Step 6: Return successful response
+      LoggerUtil.log(`Successfully retrieved ${userData.users.length}/${userData.totalCount} users`, apiId);
+      return APIResponse.success(response, apiId, {
         users: userData.users,
         totalCount: userData.totalCount,
         currentPageCount: userData.users.length,
         limit,
         offset,
         sort: { field: sortField, direction: sortDirection.toLowerCase() }
-      };
-
-      LoggerUtil.log(`Successfully retrieved ${userData.users.length}/${userData.totalCount} users with filters applied`, apiId);
-      return APIResponse.success(response, apiId, responseData, HttpStatus.OK, "Users retrieved successfully");
+      }, HttpStatus.OK, "Users retrieved successfully");
       
     } catch (error) {
-      LoggerUtil.error(`Critical error in getUsersByHierarchicalLocation: ${error.message}`, error.stack, apiId);
-      return APIResponse.error(
-        response, 
-        apiId, 
-        "Failed to retrieve users", 
-        `An error occurred while processing the hierarchical filters: ${error.message}`, 
-        HttpStatus.INTERNAL_SERVER_ERROR
-      );
+      LoggerUtil.error(`Error in getUsersByHierarchicalLocation: ${error.message}`, error.stack, apiId);
+      return APIResponse.error(response, apiId, "Failed to retrieve users", 
+        `Error processing hierarchical filters: ${error.message}`, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 
   /**
-   * Get all filtered user IDs from location and role filters with comprehensive error handling
+   * Get user IDs filtered by location with simplified logic
    */
-  private async getAllFilteredUserIds(filters: any, roles: string[], tenantId: string): Promise<string[]> {
+  private async getLocationFilteredUsers(filterResult: { level: string; ids: string[] }, tenantId: string): Promise<string[]> {
+    const apiId = APIID.USER_LIST;
+    const { level, ids } = filterResult;
+    
+    try {
+      LoggerUtil.log(`Applying location filter: ${level} with ${ids.length} values`, apiId);
+      
+      if (level === 'batch') {
+        const result = await this.usersRepository.query(this.SQL_QUERIES.BATCH_USERS, [ids]);
+        const userIds: string[] = result.map((row: any) => String(row.userId));
+        LoggerUtil.log(`Batch filter returned ${userIds.length} users`, apiId);
+        return userIds;
+      }
+      
+      // Handle location fields (state, district, block, village, center)
+      const fieldResult = await this.usersRepository.query(this.SQL_QUERIES.FIELD_BY_NAME, [level]);
+      if (fieldResult.length === 0) {
+        throw new Error(`Configuration error: Field '${level}' not found`);
+      }
+      
+      const fieldId = fieldResult[0].fieldId;
+      const result = await this.usersRepository.query(this.SQL_QUERIES.USERS_BY_FIELD_VALUES, [fieldId, ids, tenantId]);
+      const userIds: string[] = result.map((row: any) => String(row.itemId));
+      
+      LoggerUtil.log(`Location filter '${level}' returned ${userIds.length} users`, apiId);
+      return userIds;
+    } catch (error) {
+      LoggerUtil.error(`Error in location filter '${level}': ${error.message}`, error.stack, apiId);
+      throw new Error(`Failed to filter users by ${level}: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get user IDs filtered by roles with simplified logic
+   */
+  private async getRoleFilteredUsers(roles: string[], tenantId: string): Promise<string[]> {
     const apiId = APIID.USER_LIST;
     
     try {
-      // Get user IDs from location filters
-      let locationUserIds: string[] = [];
-      const filterResult = this.findDeepestFilter(filters);
-      
-      if (filterResult.level) {
-        LoggerUtil.log(`Applying location filter: ${filterResult.level} with ${filterResult.ids.length} values`, apiId);
-        locationUserIds = await this.getUserIdsByFilter(filterResult.level, filterResult.ids, tenantId);
-        LoggerUtil.log(`Location filter returned ${locationUserIds.length} user IDs`, apiId);
-      }
-      
-      // Get user IDs from role filters
-      let roleUserIds: string[] = [];
-      if (roles && roles.length > 0) {
-        LoggerUtil.log(`Applying role filter with ${roles.length} roles: ${roles.join(', ')}`, apiId);
-        roleUserIds = await this.getUserIdsByRoles(roles, tenantId);
-        LoggerUtil.log(`Role filter returned ${roleUserIds.length} user IDs`, apiId);
-      }
-      
-      // Validate that at least one filter is provided
-      if (locationUserIds.length === 0 && roleUserIds.length === 0) {
-        throw new Error('No valid filters provided. Please provide at least one location or role filter');
-      }
-      
-      // Combine results: if both exist, return intersection; otherwise return whichever exists
-      let finalUserIds: string[];
-      if (locationUserIds.length > 0 && roleUserIds.length > 0) {
-        finalUserIds = locationUserIds.filter(id => roleUserIds.includes(id));
-        LoggerUtil.log(`Combined filters returned ${finalUserIds.length} user IDs (intersection)`, apiId);
-      } else {
-        finalUserIds = locationUserIds.length > 0 ? locationUserIds : roleUserIds;
-        LoggerUtil.log(`Single filter returned ${finalUserIds.length} user IDs`, apiId);
-      }
-      
-      return finalUserIds;
+      LoggerUtil.log(`Applying role filter with ${roles.length} roles: ${roles.join(', ')}`, apiId);
+      const result = await this.usersRepository.query(this.SQL_QUERIES.USERS_BY_ROLES, [roles, tenantId]);
+      const userIds: string[] = result.map((row: any) => String(row.userId));
+      LoggerUtil.log(`Role filter returned ${userIds.length} users`, apiId);
+      return userIds;
     } catch (error) {
-      LoggerUtil.error(`Error in getAllFilteredUserIds: ${error.message}`, error.stack, apiId);
-      throw error;
+      LoggerUtil.error(`Error in role filter: ${error.message}`, error.stack, apiId);
+      throw new Error(`Failed to filter users by roles: ${error.message}`);
     }
+  }
+
+  /**
+   * Combine location and role filter results efficiently
+   */
+  private combineFilterResults(locationUserIds: string[], roleUserIds: string[]): string[] {
+    if (locationUserIds.length === 0 && roleUserIds.length === 0) {
+      throw new Error('No valid filters provided. Please provide at least one location or role filter');
+    }
+    
+    if (locationUserIds.length > 0 && roleUserIds.length > 0) {
+      // Use Set intersection for O(n) performance
+      const roleUserIdsSet = new Set(roleUserIds);
+      return locationUserIds.filter(id => roleUserIdsSet.has(id));
+    }
+    
+    return locationUserIds.length > 0 ? locationUserIds : roleUserIds;
+  }
+
+  /**
+   * Create empty response when no users found
+   */
+  private createEmptyResponse(response: Response, apiId: string, filters: any, roles: string[], limit: number, offset: number, sortField: string, sortDirection: string) {
+    const noUsersMessage = this.getNoUsersFoundMessage(filters, roles);
+    return APIResponse.success(response, apiId, {
+      users: [],
+      totalCount: 0,
+      currentPageCount: 0,
+      limit,
+      offset,
+      sort: { field: sortField, direction: sortDirection.toLowerCase() }
+    }, HttpStatus.OK, noUsersMessage);
   }
 
 
@@ -3271,137 +3309,9 @@ export class PostgresUserService implements IServicelocator {
     `
   } as const;
 
-  /**
-   * Get user IDs by filter level with enhanced error handling and logging
-   */
-  private async getUserIdsByFilter(filterLevel: string, filterIds: string[], tenantId: string): Promise<string[]> {
-    const apiId = APIID.USER_LIST;
-    
-    try {
-      // Validate inputs
-      if (!filterLevel || !filterIds || filterIds.length === 0 || !tenantId) {
-        throw new Error('Invalid parameters: filterLevel, filterIds, and tenantId are required');
-      }
-
-      // Handle batch filter differently (uses cohort membership)
-      if (filterLevel === 'batch') {
-        LoggerUtil.log(`Executing batch filter query for ${filterIds.length} batch IDs`, apiId);
-        const result = await this.usersRepository.query(this.SQL_QUERIES.BATCH_USERS, [filterIds]);
-        const userIds = result.map(row => row.userId);
-        LoggerUtil.log(`Batch filter returned ${userIds.length} active users`, apiId);
-        return userIds;
-      }
-      
-      // Handle location fields (uses custom fields)
-      return this.getUserIdsByLocationField(filterLevel, filterIds, tenantId);
-    } catch (error) {
-      LoggerUtil.error(
-        `Error in getUserIdsByFilter for level '${filterLevel}': ${error.message}`,
-        error.stack,
-        apiId
-      );
-      throw new Error(`Failed to filter users by ${filterLevel}: ${error.message}`);
-    }
-  }
 
 
-  /**
-   * Get user IDs by location field with comprehensive validation and error handling
-   */
-  private async getUserIdsByLocationField(fieldName: string, fieldValues: string[], tenantId: string): Promise<string[]> {
-    const apiId = APIID.USER_LIST;
-    
-    try {
-      // Validate inputs
-      if (!fieldName || typeof fieldName !== 'string') {
-        throw new Error('Field name is required and must be a string');
-      }
-      
-      if (!fieldValues || !Array.isArray(fieldValues) || fieldValues.length === 0) {
-        throw new Error('Field values are required and must be a non-empty array');
-      }
-      
-      if (!tenantId || typeof tenantId !== 'string') {
-        throw new Error('Tenant ID is required and must be a string');
-      }
 
-      // Step 1: Get field ID by field name with better error handling
-      LoggerUtil.log(`Looking up field ID for field '${fieldName}'`, apiId);
-      const fieldResult = await this.usersRepository.query(this.SQL_QUERIES.FIELD_BY_NAME, [fieldName]);
-      
-      if (fieldResult.length === 0) {
-        throw new Error(`Configuration error: Field '${fieldName}' not found or not active. Please check field configuration.`);
-      }
-      
-      const fieldId = fieldResult[0].fieldId;
-      LoggerUtil.log(`Found field ID '${fieldId}' for field '${fieldName}'`, apiId);
-      
-      // Step 2: Get user IDs that have matching field values (excluding archived users)
-      LoggerUtil.log(`Searching for users with ${fieldName} values: ${fieldValues.join(', ')}`, apiId);
-      const result = await this.usersRepository.query(
-        this.SQL_QUERIES.USERS_BY_FIELD_VALUES, 
-        [fieldId, fieldValues, tenantId]
-      );
-      
-      const userIds = result.map(row => row.itemId);
-      LoggerUtil.log(`Location field '${fieldName}' filter returned ${userIds.length} active users`, apiId);
-      
-      return userIds;
-    } catch (error) {
-      LoggerUtil.error(
-        `Error in getUserIdsByLocationField for field '${fieldName}': ${error.message}`,
-        error.stack,
-        apiId
-      );
-      throw error; // Re-throw to be handled by caller with context
-    }
-  }
-
-  /**
-   * Get user IDs by roles with enhanced validation and error handling
-   */
-  private async getUserIdsByRoles(roleNames: string[], tenantId: string): Promise<string[]> {
-    const apiId = APIID.USER_LIST;
-    
-    try {
-      // Validate inputs
-      if (!roleNames || !Array.isArray(roleNames) || roleNames.length === 0) {
-        throw new Error('Role names are required and must be a non-empty array');
-      }
-      
-      if (!tenantId || typeof tenantId !== 'string') {
-        throw new Error('Tenant ID is required and must be a string');
-      }
-
-      // Filter out invalid role names
-      const validRoleNames = roleNames.filter(role => role && typeof role === 'string' && role.trim().length > 0);
-      
-      if (validRoleNames.length === 0) {
-        throw new Error('No valid role names provided');
-      }
-
-      if (validRoleNames.length !== roleNames.length) {
-        LoggerUtil.warn(`Filtered out ${roleNames.length - validRoleNames.length} invalid role names`, apiId);
-      }
-
-      LoggerUtil.log(`Searching for users with roles: ${validRoleNames.join(', ')}`, apiId);
-      
-      // Execute query to get user IDs by role names and tenant (excluding archived users)
-      const result = await this.usersRepository.query(this.SQL_QUERIES.USERS_BY_ROLES, [validRoleNames, tenantId]);
-      
-      const userIds = result.map(row => row.userId);
-      LoggerUtil.log(`Role filter returned ${userIds.length} active users for roles: ${validRoleNames.join(', ')}`, apiId);
-      
-      return userIds;
-    } catch (error) {
-      LoggerUtil.error(
-        `Error in getUserIdsByRoles: ${error.message}`,
-        error.stack,
-        apiId
-      );
-      throw new Error(`Failed to filter users by roles: ${error.message}`);
-    }
-  }
 
    /**
     * Get paginated users with all related data in optimized manner
@@ -3423,41 +3333,26 @@ export class PostgresUserService implements IServicelocator {
          return { totalCount: 0, users: [] };
        }
 
-       if (limit <= 0 || limit > 100) {
-         throw new Error('Limit must be between 1 and 100');
-       }
-
-       if (offset < 0) {
-         throw new Error('Offset must be 0 or greater');
-       }
-
        LoggerUtil.log(`Processing ${userIds.length} user IDs with pagination: limit=${limit}, offset=${offset}`, apiId);
        
-       // Execute all database queries in parallel for better performance
-       const [totalCount, users, customFieldsData, batchCenterData] = await Promise.allSettled([
-         // Step 1: Get total count of users
-         this.getUserCount(userIds, tenantId),
-         
-         // Step 2: Get basic user details with pagination and sorting
-         this.getUserDetails(userIds, tenantId, limit, offset, sortField, sortDirection),
-         
-         // Step 3: Get custom fields data (if requested)
-         customFieldNames && customFieldNames.length > 0 
-           ? this.getCustomFieldsData(userIds, customFieldNames, tenantId)
-           : Promise.resolve({}),
-         
-         // Step 4: Get batch and center names from cohort memberships
-         this.getBatchAndCenterNames(userIds)
-       ]);
+      // Optimize queries by combining count and details in a single query
+      const [combinedUserData, customFieldsData, batchCenterData] = await Promise.allSettled([
+        // Step 1: Get user details with total count in single query (optimized)
+        this.getUserDetailsWithCount(userIds, tenantId, limit, offset, sortField, sortDirection),
+        
+        // Step 2: Get custom fields data (if requested)
+        customFieldNames && customFieldNames.length > 0 
+          ? this.getCustomFieldsData(userIds, customFieldNames, tenantId)
+          : Promise.resolve({}),
+        
+        // Step 3: Get batch and center names from cohort memberships
+        this.getBatchAndCenterNames(userIds)
+      ]);
 
-       // Handle any failed promises
-       if (totalCount.status === 'rejected') {
-         throw new Error(`Failed to get user count: ${totalCount.reason?.message || 'Unknown error'}`);
-       }
-       
-       if (users.status === 'rejected') {
-         throw new Error(`Failed to get user details: ${users.reason?.message || 'Unknown error'}`);
-       }
+      // Handle any failed promises
+      if (combinedUserData.status === 'rejected') {
+        throw new Error(`Failed to get user data: ${combinedUserData.reason?.message || 'Unknown error'}`);
+      }
 
        // Custom fields and batch center data are optional - log warnings if they fail
        let finalCustomFieldsData = {};
@@ -3474,17 +3369,18 @@ export class PostgresUserService implements IServicelocator {
          finalBatchCenterData = batchCenterData.value;
        }
        
-       // Step 5: Combine all data together
-       const finalUsers = this.aggregateUserRoles(
-         users.value, 
-         finalCustomFieldsData, 
-         customFieldNames || [], 
-         finalBatchCenterData
-       );
-       
-       LoggerUtil.log(`Successfully processed ${finalUsers.length} users with ${Object.keys(finalCustomFieldsData).length} custom field entries`, apiId);
-       
-       return { totalCount: totalCount.value, users: finalUsers };
+      // Step 4: Combine all data together
+      const { totalCount, users } = combinedUserData.value;
+      const finalUsers = this.aggregateUserRoles(
+        users, 
+        finalCustomFieldsData, 
+        customFieldNames || [], 
+        finalBatchCenterData
+      );
+      
+      LoggerUtil.log(`Successfully processed ${finalUsers.length} users with ${Object.keys(finalCustomFieldsData).length} custom field entries`, apiId);
+      
+      return { totalCount, users: finalUsers };
      } catch (error) {
        LoggerUtil.error(`Error in getPaginatedUsers: ${error.message}`, error.stack, apiId);
        throw error;
@@ -3559,9 +3455,7 @@ export class PostgresUserService implements IServicelocator {
         return 0;
       }
       
-      if (!tenantId) {
-        throw new Error('Tenant ID is required for user count');
-      }
+      // Note: tenantId is already validated at controller level
 
       const query = `
         SELECT COUNT(DISTINCT u."userId") as total
@@ -3601,17 +3495,7 @@ export class PostgresUserService implements IServicelocator {
         return [];
       }
       
-      // Validate sort parameters for SQL injection prevention
-      const allowedSortFields = ['name', 'firstName', 'lastName', 'username', 'email', 'createdAt'];
-      const allowedSortDirections = ['ASC', 'DESC'];
-      
-      if (!allowedSortFields.includes(sortField)) {
-        throw new Error(`Invalid sort field: ${sortField}`);
-      }
-      
-      if (!allowedSortDirections.includes(sortDirection)) {
-        throw new Error(`Invalid sort direction: ${sortDirection}`);
-      }
+      // Note: Sort parameters are already validated by DTO validators
 
       const query = `
         SELECT DISTINCT
@@ -3637,6 +3521,58 @@ export class PostgresUserService implements IServicelocator {
     } catch (error) {
       LoggerUtil.error(`Error in getUserDetails: ${error.message}`, error.stack, apiId);
       throw new Error(`Failed to get user details: ${error.message}`);
+    }
+  }
+
+  /**
+   * Optimized function that gets user details with count in a single query
+   */
+  private async getUserDetailsWithCount(
+    userIds: string[], 
+    tenantId: string, 
+    limit: number, 
+    offset: number, 
+    sortField: string, 
+    sortDirection: string
+  ): Promise<{ totalCount: number; users: any[] }> {
+    const apiId = APIID.USER_LIST;
+    
+    try {
+      if (!userIds || userIds.length === 0) {
+        return { totalCount: 0, users: [] };
+      }
+
+      // Single optimized query that gets both count and paginated results
+      const query = `
+        WITH user_data AS (
+          SELECT DISTINCT
+            u."userId", u."username", u."firstName", u."name", u."middleName", 
+            u."lastName", u."email", u."mobile", u."gender", u."dob", 
+            u."status", u."createdAt", utm."tenantId", r."name" as "roleName",
+            COUNT(*) OVER() as total_count
+          FROM "Users" u
+          LEFT JOIN "UserTenantMapping" utm ON u."userId" = utm."userId"
+          LEFT JOIN "UserRolesMapping" urm ON u."userId" = urm."userId" AND utm."tenantId" = urm."tenantId"
+          LEFT JOIN "Roles" r ON urm."roleId" = r."roleId"
+          WHERE u."userId" = ANY($1::uuid[]) 
+            AND utm."tenantId" = $2::uuid
+            AND u."status" != 'archived'
+        )
+        SELECT * FROM user_data
+        ORDER BY "${sortField}" ${sortDirection}
+        LIMIT $3 OFFSET $4
+      `;
+      
+      LoggerUtil.log(`Executing optimized user query with sort: ${sortField} ${sortDirection}, limit: ${limit}, offset: ${offset}`, apiId);
+      const result = await this.usersRepository.query(query, [userIds, tenantId, limit, offset]);
+      
+      const totalCount = result.length > 0 ? parseInt(result[0].total_count) : 0;
+      LoggerUtil.log(`Optimized query returned ${result.length} rows with total count: ${totalCount}`, apiId);
+      
+      return { totalCount, users: result };
+    } catch (error) {
+      LoggerUtil.error(`Error in getUserDetailsWithCount: ${error.message}`, error.stack, apiId);
+      throw new Error(`Failed to get user details with count: ${error.message}`);
     }
   }
 

@@ -114,6 +114,74 @@ export function IsValidSortConfig(validationOptions?: ValidationOptions) {
   };
 }
 
+/**
+ * Custom validator for role names
+ */
+@ValidatorConstraint({ name: 'validRoleNames', async: false })
+export class ValidRoleNamesConstraint implements ValidatorConstraintInterface {
+  validate(roleArray: string[]): boolean {
+    if (!Array.isArray(roleArray)) {
+      return false;
+    }
+    
+    // Check if all roles are non-empty strings
+    return roleArray.every(role => role && typeof role === 'string' && role.trim().length > 0);
+  }
+
+  defaultMessage(): string {
+    return 'All role names must be non-empty strings';
+  }
+}
+
+/**
+ * Decorator for validating role names
+ */
+export function IsValidRoleNames(validationOptions?: ValidationOptions) {
+  return function (object: Object, propertyName: string) {
+    registerDecorator({
+      target: object.constructor,
+      propertyName: propertyName,
+      options: validationOptions,
+      constraints: [],
+      validator: ValidRoleNamesConstraint,
+    });
+  };
+}
+
+/**
+ * Custom validator for location filter arrays (state, district, block, village, center)
+ */
+@ValidatorConstraint({ name: 'validLocationFilter', async: false })
+export class ValidLocationFilterConstraint implements ValidatorConstraintInterface {
+  validate(filterArray: string[]): boolean {
+    if (!Array.isArray(filterArray)) {
+      return false;
+    }
+    
+    // Check if all filter values are non-empty strings
+    return filterArray.every(value => value && typeof value === 'string' && value.trim().length > 0);
+  }
+
+  defaultMessage(): string {
+    return 'All location filter values must be non-empty strings';
+  }
+}
+
+/**
+ * Decorator for validating location filter arrays
+ */
+export function IsValidLocationFilter(validationOptions?: ValidationOptions) {
+  return function (object: Object, propertyName: string) {
+    registerDecorator({
+      target: object.constructor,
+      propertyName: propertyName,
+      options: validationOptions,
+      constraints: [],
+      validator: ValidLocationFilterConstraint,
+    });
+  };
+}
+
 class LocationFiltersDto {
   @ApiPropertyOptional({
     type: [String],
@@ -123,7 +191,9 @@ class LocationFiltersDto {
   @Expose()
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(100, { message: 'State filter cannot contain more than 100 entries' })
   @IsString({ each: true })
+  @IsValidLocationFilter()
   state?: string[];
 
   @ApiPropertyOptional({
@@ -134,7 +204,9 @@ class LocationFiltersDto {
   @Expose()
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(500, { message: 'District filter cannot contain more than 500 entries' })
   @IsString({ each: true })
+  @IsValidLocationFilter()
   district?: string[];
 
   @ApiPropertyOptional({
@@ -145,7 +217,9 @@ class LocationFiltersDto {
   @Expose()
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(2000, { message: 'Block filter cannot contain more than 2000 entries' })
   @IsString({ each: true })
+  @IsValidLocationFilter()
   block?: string[];
 
   @ApiPropertyOptional({
@@ -156,7 +230,9 @@ class LocationFiltersDto {
   @Expose()
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(5000, { message: 'Village filter cannot contain more than 5000 entries' })
   @IsString({ each: true })
+  @IsValidLocationFilter()
   village?: string[];
 
   @ApiPropertyOptional({
@@ -167,7 +243,9 @@ class LocationFiltersDto {
   @Expose()
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(1000, { message: 'Center filter cannot contain more than 1000 entries' })
   @IsString({ each: true })
+  @IsValidLocationFilter()
   center?: string[];
 
   @ApiPropertyOptional({
@@ -178,6 +256,7 @@ class LocationFiltersDto {
   @Expose()
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(1000, { message: 'Batch filter cannot contain more than 1000 entries' })
   @IsUUID(undefined, { each: true })
   batch?: string[];
 }
@@ -256,13 +335,17 @@ export class HierarchicalLocationFiltersDto {
 
   @ApiPropertyOptional({
     type: [String],
-    description: "Array of role names to filter users by",
+    description: "Array of role names to filter users by. All role names must be non-empty strings. Maximum 50 roles allowed.",
     example: ["Instructor", "Lead", "Content creator", "Content reviewer", "Central Lead", "Super Admin", "State Lead", "Learner"]
   })
   @Expose()
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(50, { message: 'Role array cannot contain more than 50 roles to prevent performance issues' })
   @IsString({ each: true })
+  @IsValidRoleNames({
+    message: 'All role names must be non-empty strings'
+  })
   role?: string[];
 
   @ApiPropertyOptional({
@@ -274,5 +357,6 @@ export class HierarchicalLocationFiltersDto {
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
+  @IsValidLocationFilter()
   customfields?: string[];
 }
