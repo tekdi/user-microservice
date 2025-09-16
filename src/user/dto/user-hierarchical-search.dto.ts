@@ -350,8 +350,8 @@ export class HierarchicalLocationFiltersDto {
 
   @ApiPropertyOptional({
     type: [String],
-    description: "Array of custom field names to include in response",
-    example: ["state", "district", "block", "village", "center", "main_subject", "subject"]
+    description: "Array of custom field names to include in response. Only location-based fields are supported.",
+    example: ["state", "district", "block", "village", "main_subject", "subject"]
   })
   @Expose()
   @IsOptional()
