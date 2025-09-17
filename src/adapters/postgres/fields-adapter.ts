@@ -1774,6 +1774,19 @@ export class PostgresFieldsService implements IServicelocatorfields {
       correctValue: true,
     };
   }
+
+  async getFieldIdByLabel(label: string, tenantId?: string) {
+    const whereCondition: any = { label: label };
+    if (tenantId) {
+      whereCondition.tenantId = tenantId;
+    }
+    
+    const response = await this.fieldsRepository.findOne({
+      where: whereCondition,
+      select: ['fieldId']
+    });
+    return response?.fieldId || null;
+  }
   
   validateFieldValue(field: any, value: any) {
     try {
