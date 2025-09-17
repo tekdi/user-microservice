@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { OtpSendDTO } from "src/user/dto/otpSend.dto";
 import { UserCreateDto } from "src/user/dto/user-create.dto";
 import { ExistUserDto, SuggestUserDto, UserSearchDto } from "src/user/dto/user-search.dto";
+import { HierarchicalLocationFiltersDto } from "src/user/dto/user-hierarchical-search.dto";
 import { OtpVerifyDTO } from "src/user/dto/otpVerify.dto";
 import { UserData } from "src/user/user.controller";
 import { SendPasswordResetOTPDto } from "src/user/dto/passwordReset.dto";
@@ -40,4 +41,10 @@ export interface IServicelocator {
   sendOtp(body: OtpSendDTO, response: Response): Promise<any>;
   verifyOtp(body: OtpVerifyDTO, response: Response): Promise<any>;
   sendPasswordResetOTP(body: SendPasswordResetOTPDto, response: Response): Promise<any>;
+  getUsersByHierarchicalLocation(
+    tenantId: string,
+    request: Request,
+    response: Response,
+    hierarchicalFiltersDto: HierarchicalLocationFiltersDto
+  ): Promise<any>;
 }

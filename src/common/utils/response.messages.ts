@@ -1,4 +1,5 @@
 export const API_RESPONSES = {
+  GIVEN_FILTER_USER_NOT_FOUND: "User does not exist for given filters",
   USERNAME_NOT_FOUND: "Username does not exist",
   EMAIL_EXIST: "Email already exists",
   USER_NOT_FOUND: "User does not exist",
