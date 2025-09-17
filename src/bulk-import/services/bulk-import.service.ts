@@ -683,15 +683,39 @@ export class BulkImportService {
     }
 
     // Step 2: Get active form for this cohortId as contextId, using tenantId from header
-    const forms = await this.formsService.getFormDetail(
-      'COHORTMEMBER', // context
-      'COHORTMEMBER', // contextType
-      tenantId,
-      cohortId
-    );
-    const activeForm = Array.isArray(forms)
-      ? forms.find((f) => f.status === 'active')
-      : null;
+    let activeForm: any = null;
+    try {
+      const forms = await this.formsService.getFormDetail(
+        'COHORTMEMBER', // context
+        'COHORTMEMBER', // contextType
+        tenantId,
+        cohortId
+      );
+      activeForm = Array.isArray(forms)
+        ? forms.find((f) => f.status === 'active')
+        : null;
+    } catch (error) {
+      this.logger.error('Failed to fetch cohort form for template generation', {
+        error: error.message,
+        cohortId,
+        tenantId
+      });
+      return {
+        id: 'api.cohort.download-xlsx-template',
+        ver: '1.0',
+        ts: new Date().toISOString(),
+        params: {
+          resmsgid: uuidv4(),
+          status: 'failed',
+          err: 'FORM_FETCH_ERROR',
+          errmsg: 'Failed to fetch form data',
+          successmessage: null,
+        },
+        responseCode: 500,
+        result: { data: [] },
+      };
+    }
+
     if (!activeForm) {
       return {
         id: 'api.cohort.download-xlsx-template',
@@ -709,33 +733,183 @@ export class BulkImportService {
       };
     }
 
-    // Step 3: Extract dynamic fields from form.fields (jsonb)
-    let dynamicColumns: string[] = [];
-    if (activeForm.fields && Array.isArray(activeForm.fields)) {
-      // If fields is an array of field objects
-      dynamicColumns = activeForm.fields.map(
-        (field: any) => `${field.title} (${field.fieldId})`
-      );
-    } else if (activeForm.fields && typeof activeForm.fields === 'object') {
-      // If fields is an object, flatten and extract
-      const extractFields = (obj: any): string[] => {
-        let result: string[] = [];
-        if (Array.isArray(obj)) {
-          for (const item of obj) {
-            result = result.concat(extractFields(item));
+    // Step 2.1: Get profile form using getForm method with formType=rjsf
+    let activeProfileForm: any = null;
+    
+    try {
+      // Create a mock response object for the getForm method
+      const mockResponse = {
+        status: (code: number) => mockResponse,
+        json: (data: any) => data
+      };
+      
+      // Call getForm directly with formType=rjsf
+      const requiredData = {
+        context: 'USERS',
+        contextType: 'STUDENT',
+        tenantId: tenantId,
+        formType: 'rjsf'
+      };
+      
+      const formResponse = await this.formsService.getForm(requiredData, mockResponse);
+      
+      // Extract the form data from the response
+      if (formResponse && formResponse.result) {
+        activeProfileForm = formResponse.result;
+      }
+    } catch (error) {
+      // Fallback: try without formType parameter
+      try {
+        const profileForms = await this.formsService.getFormDetail(
+          'USERS', // context
+          'STUDENT', // contextType
+          tenantId,
+          tenantId // use tenantId as contextId
+        );
+        activeProfileForm = Array.isArray(profileForms)
+          ? profileForms.find((f) => f.status === 'active')
+          : null;
+      } catch (fallbackError) {
+        // If both methods fail, continue without profile form
+        this.logger.warn('Failed to fetch profile form for template generation', {
+          error: fallbackError.message,
+          tenantId,
+          cohortId
+        });
+      }
+    }
+
+    // Step 3: Extract dynamic fields from both forms
+    // Define core fields that should be excluded from dynamic extraction
+    const coreFieldsToExclude = [
+      'firstName',
+      'lastName', 
+      'middleName',
+      'email',
+      'gender',
+      'dob',
+      'country',
+      'status'
+    ];
+
+    // Helper function to extract fields from a form
+    const extractFieldsFromForm = (form: any): string[] => {
+      let result: string[] = [];
+      if (!form) return result;
+
+      // Handle different form structures
+      let fieldsToProcess: any = null;
+      
+      // Check if it's a profile form with schema.properties structure
+      if (form.schema && form.schema.properties) {
+        fieldsToProcess = form.schema.properties;
+      }
+      // Check if it's a regular form with fields property
+      else if (form.fields) {
+        fieldsToProcess = form.fields;
+      }
+      
+      if (!fieldsToProcess) return result;
+
+      if (Array.isArray(fieldsToProcess)) {
+        // If fields is an array of field objects
+        result = fieldsToProcess
+          .filter((field: any) => field.title && field.fieldId)
+          .map((field: any, index: number) => {
+            // Try to get field name from field object or use index
+            const fieldName = field.fieldName || field.name || `field_${index}`;
+            return `${fieldName} (${field.fieldId})`;
+          });
+      } else if (typeof fieldsToProcess === 'object') {
+        // If fields is an object, extract all fields dynamically
+        const extractFields = (obj: any, parentKey: string = ''): string[] => {
+          let fields: string[] = [];
+          if (Array.isArray(obj)) {
+            for (const item of obj) {
+              fields = fields.concat(extractFields(item, parentKey));
+            }
+          } else if (typeof obj === 'object' && obj !== null) {
+            if (obj.title && obj.fieldId) {
+              // Check if this field should be excluded (core fields)
+              const fieldKey = parentKey || Object.keys(fieldsToProcess).find(key => 
+                fieldsToProcess[key] === obj
+              );
+              
+              // Only include if it's not a core field
+              if (!coreFieldsToExclude.includes(fieldKey)) {
+                // Include field name and field ID
+                const fieldName = fieldKey || 'unknown_field';
+                fields.push(`${fieldName} (${obj.fieldId})`);
+              }
+            }
+            for (const key of Object.keys(obj)) {
+              fields = fields.concat(extractFields(obj[key], key));
+            }
           }
-        } else if (typeof obj === 'object' && obj !== null) {
-          if (obj.title && obj.fieldId) {
-            result.push(`${obj.title} (${obj.fieldId})`);
-          }
-          for (const key of Object.keys(obj)) {
-            result = result.concat(extractFields(obj[key]));
+          return fields;
+        };
+        result = extractFields(fieldsToProcess);
+      }
+
+      // Also handle dependencies section for profile forms (current address fields)
+      if (form.schema && form.schema.dependencies) {
+        const dependencies = form.schema.dependencies;
+        for (const [key, dependency] of Object.entries(dependencies)) {
+          if (typeof dependency === 'object' && dependency !== null) {
+            const depObj = dependency as any;
+            if (depObj.oneOf && Array.isArray(depObj.oneOf)) {
+              for (const oneOfItem of depObj.oneOf) {
+                if (oneOfItem.properties) {
+                  // Extract fields from dependencies using the same logic
+                  const extractDependencyFields = (obj: any, parentKey: string = ''): string[] => {
+                    let fields: string[] = [];
+                    if (Array.isArray(obj)) {
+                      for (const item of obj) {
+                        fields = fields.concat(extractDependencyFields(item, parentKey));
+                      }
+                    } else if (typeof obj === 'object' && obj !== null) {
+                      if (obj.title && obj.fieldId) {
+                        // Check if this field should be excluded (core fields)
+                        const fieldKey = parentKey || Object.keys(obj).find(key => 
+                          obj[key] === obj
+                        );
+                        
+                        // Only include if it's not a core field
+                        if (!coreFieldsToExclude.includes(fieldKey)) {
+                          // Include field name and field ID
+                          const fieldName = fieldKey || 'unknown_field';
+                          fields.push(`${fieldName} (${obj.fieldId})`);
+                        }
+                      }
+                      for (const key of Object.keys(obj)) {
+                        fields = fields.concat(extractDependencyFields(obj[key], key));
+                      }
+                    }
+                    return fields;
+                  };
+                  const depFields = extractDependencyFields(oneOfItem.properties, '');
+                  result = result.concat(depFields);
+                }
+              }
+            }
           }
         }
-        return result;
-      };
-      dynamicColumns = extractFields(activeForm.fields);
+      }
+
+      return result;
+    };
+
+    // Extract fields from cohort form
+    let cohortDynamicColumns: string[] = extractFieldsFromForm(activeForm);
+    
+    // Extract fields from profile form (if available)
+    let profileDynamicColumns: string[] = [];
+    if (activeProfileForm) {
+      profileDynamicColumns = extractFieldsFromForm(activeProfileForm);
     }
+
+    // Combine all dynamic columns
+    const dynamicColumns = [...cohortDynamicColumns, ...profileDynamicColumns];
 
     // Step 4: Compose final columns
     const defaultColumns = [
@@ -748,9 +922,19 @@ export class BulkImportService {
       'country',
       'status',
     ];
+
     const allColumns = [...defaultColumns, ...dynamicColumns];
 
-    // Step 5: Return response
+    // Step 5: Log success and return response
+    this.logger.log('XLSX template columns generated successfully', {
+      cohortId,
+      tenantId,
+      totalColumns: allColumns.length,
+      cohortFields: cohortDynamicColumns.length,
+      profileFields: profileDynamicColumns.length,
+      hasProfileForm: !!activeProfileForm
+    });
+
     return {
       id: 'api.cohort.download-xlsx-template',
       ver: '1.0',
