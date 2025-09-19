@@ -918,7 +918,7 @@ export class BulkImportService {
       'lastName',
       'email',
       'gender',
-      'dob',
+      'Date of Birth (yyyy-mm-dd)',
       'country',
       'status',
     ];
