@@ -15,6 +15,7 @@ import { PostgresModule } from "src/adapters/postgres/postgres-module";
 import { RolePermissionModule } from "src/permissionRbac/rolePermissionMapping/role-permission.module";
 import { RolePermissionService } from "src/permissionRbac/rolePermissionMapping/role-permission-mapping.service";
 import { RolePermission } from "src/permissionRbac/rolePermissionMapping/entities/rolePermissionMapping";
+import { MagicLink } from "./entities/magic-link.entity";
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { RolePermission } from "src/permissionRbac/rolePermissionMapping/entitie
       Fields,
       CohortMembers,
       RolePermission,
+      MagicLink
     ]),
     HttpModule,
     PostgresModule,
