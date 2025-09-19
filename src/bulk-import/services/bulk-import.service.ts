@@ -476,6 +476,12 @@ export class BulkImportService {
     if (!dto.customFields) {
       dto.customFields = [];
     }
+    
+    // Handle dob field - map from Excel column to dob field
+    if (userData['date of birth (yyyy-mm-dd)']) {
+      dto.dob = userData['date of birth (yyyy-mm-dd)'];
+    }
+    
     return dto;
   }
 
@@ -698,7 +704,7 @@ export class BulkImportService {
       this.logger.error('Failed to fetch cohort form for template generation', {
         error: error.message,
         cohortId,
-        tenantId
+        tenantId,
       });
       return {
         id: 'api.cohort.download-xlsx-template',
@@ -735,24 +741,27 @@ export class BulkImportService {
 
     // Step 2.1: Get profile form using getForm method with formType=rjsf
     let activeProfileForm: any = null;
-    
+
     try {
       // Create a mock response object for the getForm method
       const mockResponse = {
         status: (code: number) => mockResponse,
-        json: (data: any) => data
+        json: (data: any) => data,
       };
-      
+
       // Call getForm directly with formType=rjsf
       const requiredData = {
         context: 'USERS',
         contextType: 'STUDENT',
         tenantId: tenantId,
-        formType: 'rjsf'
+        formType: 'rjsf',
       };
-      
-      const formResponse = await this.formsService.getForm(requiredData, mockResponse);
-      
+
+      const formResponse = await this.formsService.getForm(
+        requiredData,
+        mockResponse
+      );
+
       // Extract the form data from the response
       if (formResponse && formResponse.result) {
         activeProfileForm = formResponse.result;
@@ -771,11 +780,14 @@ export class BulkImportService {
           : null;
       } catch (fallbackError) {
         // If both methods fail, continue without profile form
-        this.logger.warn('Failed to fetch profile form for template generation', {
-          error: fallbackError.message,
-          tenantId,
-          cohortId
-        });
+        this.logger.warn(
+          'Failed to fetch profile form for template generation',
+          {
+            error: fallbackError.message,
+            tenantId,
+            cohortId,
+          }
+        );
       }
     }
 
@@ -783,13 +795,13 @@ export class BulkImportService {
     // Define core fields that should be excluded from dynamic extraction
     const coreFieldsToExclude = [
       'firstName',
-      'lastName', 
+      'lastName',
       'middleName',
       'email',
       'gender',
       'dob',
       'country',
-      'status'
+      'status',
     ];
 
     // Helper function to extract fields from a form
@@ -799,7 +811,7 @@ export class BulkImportService {
 
       // Handle different form structures
       let fieldsToProcess: any = null;
-      
+
       // Check if it's a profile form with schema.properties structure
       if (form.schema && form.schema.properties) {
         fieldsToProcess = form.schema.properties;
@@ -808,7 +820,7 @@ export class BulkImportService {
       else if (form.fields) {
         fieldsToProcess = form.fields;
       }
-      
+
       if (!fieldsToProcess) return result;
 
       if (Array.isArray(fieldsToProcess)) {
@@ -831,10 +843,12 @@ export class BulkImportService {
           } else if (typeof obj === 'object' && obj !== null) {
             if (obj.title && obj.fieldId) {
               // Check if this field should be excluded (core fields)
-              const fieldKey = parentKey || Object.keys(fieldsToProcess).find(key => 
-                fieldsToProcess[key] === obj
-              );
-              
+              const fieldKey =
+                parentKey ||
+                Object.keys(fieldsToProcess).find(
+                  (key) => fieldsToProcess[key] === obj
+                );
+
               // Only include if it's not a core field
               if (!coreFieldsToExclude.includes(fieldKey)) {
                 // Include field name and field ID
@@ -861,19 +875,24 @@ export class BulkImportService {
               for (const oneOfItem of depObj.oneOf) {
                 if (oneOfItem.properties) {
                   // Extract fields from dependencies using the same logic
-                  const extractDependencyFields = (obj: any, parentKey: string = ''): string[] => {
+                  const extractDependencyFields = (
+                    obj: any,
+                    parentKey: string = ''
+                  ): string[] => {
                     let fields: string[] = [];
                     if (Array.isArray(obj)) {
                       for (const item of obj) {
-                        fields = fields.concat(extractDependencyFields(item, parentKey));
+                        fields = fields.concat(
+                          extractDependencyFields(item, parentKey)
+                        );
                       }
                     } else if (typeof obj === 'object' && obj !== null) {
                       if (obj.title && obj.fieldId) {
                         // Check if this field should be excluded (core fields)
-                        const fieldKey = parentKey || Object.keys(obj).find(key => 
-                          obj[key] === obj
-                        );
-                        
+                        const fieldKey =
+                          parentKey ||
+                          Object.keys(obj).find((key) => obj[key] === obj);
+
                         // Only include if it's not a core field
                         if (!coreFieldsToExclude.includes(fieldKey)) {
                           // Include field name and field ID
@@ -882,12 +901,17 @@ export class BulkImportService {
                         }
                       }
                       for (const key of Object.keys(obj)) {
-                        fields = fields.concat(extractDependencyFields(obj[key], key));
+                        fields = fields.concat(
+                          extractDependencyFields(obj[key], key)
+                        );
                       }
                     }
                     return fields;
                   };
-                  const depFields = extractDependencyFields(oneOfItem.properties, '');
+                  const depFields = extractDependencyFields(
+                    oneOfItem.properties,
+                    ''
+                  );
                   result = result.concat(depFields);
                 }
               }
@@ -901,7 +925,7 @@ export class BulkImportService {
 
     // Extract fields from cohort form
     let cohortDynamicColumns: string[] = extractFieldsFromForm(activeForm);
-    
+
     // Extract fields from profile form (if available)
     let profileDynamicColumns: string[] = [];
     if (activeProfileForm) {
@@ -918,7 +942,7 @@ export class BulkImportService {
       'lastName',
       'email',
       'gender',
-      'Date of Birth (yyyy-mm-dd)',
+      'date of birth (yyyy-mm-dd)',
       'country',
       'status',
     ];
@@ -932,7 +956,7 @@ export class BulkImportService {
       totalColumns: allColumns.length,
       cohortFields: cohortDynamicColumns.length,
       profileFields: profileDynamicColumns.length,
-      hasProfileForm: !!activeProfileForm
+      hasProfileForm: !!activeProfileForm,
     });
 
     return {
