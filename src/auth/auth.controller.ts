@@ -138,21 +138,7 @@ export class AuthController {
           }
         });
       }
-      
-      // Set tokens in cookies to keep redirect URL short and hide tokens from URL
-      res.cookie('access_token', result.access_token, {
-        httpOnly: false,
-        secure: true,
-        sameSite: 'lax',
-        maxAge: (result.expires_in || 300) * 1000,
-      });
-      res.cookie('refresh_token', result.refresh_token, {
-        httpOnly: false,
-        secure: true,
-        sameSite: 'lax',
-        maxAge: 30 * 24 * 60 * 60 * 1000,
-      });
-      
+        
       return res.redirect(302, baseRedirect);
       
     } catch (error) {
