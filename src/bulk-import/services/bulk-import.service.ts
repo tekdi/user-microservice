@@ -472,16 +472,18 @@ export class BulkImportService {
     });
     // Always set username to email
     dto.username = dto.email;
+    // Set status to inactive for bulk imported users
+    dto.status = 'inactive';
     // Ensure customFields is always an array to prevent undefined errors
     if (!dto.customFields) {
       dto.customFields = [];
     }
-    
+
     // Handle dob field - map from Excel column to dob field
     if (userData['date of birth (yyyy-mm-dd)']) {
       dto.dob = userData['date of birth (yyyy-mm-dd)'];
     }
-    
+
     return dto;
   }
 
@@ -801,7 +803,6 @@ export class BulkImportService {
       'gender',
       'dob',
       'country',
-      'status',
     ];
 
     // Helper function to extract fields from a form
@@ -944,7 +945,6 @@ export class BulkImportService {
       'gender',
       'date of birth (yyyy-mm-dd)',
       'country',
-      'status',
     ];
 
     const allColumns = [...defaultColumns, ...dynamicColumns];
