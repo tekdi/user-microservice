@@ -518,7 +518,6 @@ export class PostgresUserService implements IServicelocator {
     let { limit, offset, filters, exclude, sort } = userSearchDto;
     let excludeCohortIdes;
     let excludeUserIdes;
-console.log("includeCustomFields", includeCustomFields);
 
     offset = offset ? `OFFSET ${offset}` : '';
     limit = limit ? `LIMIT ${limit}` : '';
