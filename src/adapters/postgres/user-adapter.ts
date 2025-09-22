@@ -3388,14 +3388,18 @@ export class PostgresUserService implements IServicelocator {
     const requestStart = Date.now();
     
     try {
-      const { limit, offset, sort: [sortField, sortDirection], role, filters, customfields, status, name } = hierarchicalFiltersDto;
+      const { limit, offset, sort: [sortField, sortDirection], role, filters, customfields } = hierarchicalFiltersDto;
       const normalizedSortDirection = sortDirection.toLowerCase() === 'desc' ? 'DESC' : 'ASC';
+      
+      // Extract filters from filters object
+      const status = filters?.status || [];
+      const name = filters?.name;
       
       LoggerUtil.log(`Starting optimized hierarchical search - Filters: ${JSON.stringify(filters)}, Roles: ${role?.length || 0}, Name: ${name ? 'provided' : 'none'}, Status: ${status?.length || 0}`, apiId);
       
       // Check if any filters are provided
       const filterResult = this.findDeepestFilter(filters);
-      const hasAnyFilter = !!filterResult.level || (role && role.length > 0) || (name && name.trim().length > 0);
+      const hasAnyFilter = !!filterResult.level || (role && role.length > 0) || (name && name.trim().length > 0) || (status && status.length > 0);
       
       let userData: { totalCount: number; users: any[] };
       

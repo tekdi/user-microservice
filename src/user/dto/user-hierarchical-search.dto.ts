@@ -246,6 +246,33 @@ class LocationFiltersDto {
   @ArrayMaxSize(1000, { message: 'Batch filter cannot contain more than 1000 entries' })
   @IsUUID(undefined, { each: true })
   batch?: string[];
+
+  @ApiPropertyOptional({
+    type: [String],
+    description: "Array of user status values to filter by. Allowed values: active, inactive, archived",
+    example: ["active", "inactive"],
+    enum: ["active", "inactive", "archived"]
+  })
+  @Expose()
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(3, { message: 'Status filter cannot contain more than 3 entries' })
+  @IsString({ each: true })
+  @IsIn(["active", "inactive", "archived"], { each: true, message: "Status must be one of: active, inactive, archived" })
+  status?: string[];
+
+  @ApiPropertyOptional({
+    type: String,
+    description: "Search keyword to filter users by name (case-insensitive, partial match). Searches in the 'name' field.",
+    example: "demo",
+    minLength: 1,
+    maxLength: 100
+  })
+  @Expose()
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty({ message: 'Name search keyword cannot be empty' })
+  name?: string;
 }
 
 enum SortDirection {
@@ -347,30 +374,4 @@ export class HierarchicalLocationFiltersDto {
   @IsValidLocationFilter()
   customfields?: string[];
 
-  @ApiPropertyOptional({
-    type: String,
-    description: "Search keyword to filter users by name (case-insensitive, partial match). Searches in the 'name' field.",
-    example: "demo",
-    minLength: 1,
-    maxLength: 100
-  })
-  @Expose()
-  @IsOptional()
-  @IsString()
-  @IsNotEmpty({ message: 'Name search keyword cannot be empty' })
-  name?: string;
-
-  @ApiPropertyOptional({
-    type: [String],
-    description: "The status of the user. Allowed values: active, inactive, archived. This filter applies only to user status.",
-    example: ["active", "inactive", "archived"],
-    default: ["active", "inactive", "archived"],
-  })
-  @Expose()
-  @IsOptional()
-  @IsArray()
-  @IsNotEmpty({ each: true })
-  @IsString({ each: true })
-  @IsIn(["active", "inactive", "archived"], { each: true, message: "Status must be one of: active, inactive, archived" })
-  status?: string[];
 }
