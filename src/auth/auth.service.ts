@@ -18,6 +18,8 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { NotificationRequest } from "@utils/notification.axios";
 import { JwtService } from "@nestjs/jwt";
+import { ConfigService } from '@nestjs/config';
+
 
 type LoginResponse = {
   access_token: string;
@@ -34,6 +36,7 @@ export class AuthService {
     private magicLinkRepository: Repository<MagicLink>,
     private jwtService: JwtService,
     private notificationService: NotificationRequest,
+    private configService: ConfigService,
   ) { }
 
   async login(authDto, response: Response) {
@@ -159,10 +162,10 @@ export class AuthService {
     }
   }
 
-  private generateToken(): string {
+  private generateToken(length: number): string {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
     let token = '';
-    for (let i = 0; i < 16; i++) {
+    for (let i = 0; i < length; i++) {
       token += chars.charAt(Math.floor(Math.random() * chars.length));
     }
     return token;
@@ -170,8 +173,28 @@ export class AuthService {
 
   async requestMagicLink(requestDto: RequestMagicLinkDto, response: Response) {
     const apiId = APIID.REQUEST_MAGIC_LINK;
+    const expiryMinutes = this.configService.get<number>('MAGIC_LINK_EXPIRY_MINUTES', 15);
+    const tokenLength = this.configService.get<number>('MAGIC_LINK_TOKEN_LENGTH', 16);
     try {
       LoggerUtil.debug(`RequestMagicLink start: identifier=${requestDto.identifier}`, 'AuthService.requestMagicLink');
+      if (requestDto.identifier === undefined || requestDto.identifier === null) {
+        return APIResponse.error(
+          response,
+          apiId,
+          "Bad Request",
+          "Identifier is required.",
+          HttpStatus.BAD_REQUEST
+        );
+      }
+      if (requestDto.identifier.trim() === '') {
+        return APIResponse.error(
+          response,
+          apiId,
+          "Bad Request",
+          "Identifier cannot be empty.",
+          HttpStatus.BAD_REQUEST
+        );
+      }
       const user = await this.useradapter.findUserByIdentifier(requestDto.identifier);
       LoggerUtil.debug(`User lookup: ${user ? 'found ' + user.userId : 'not found'}`, 'AuthService.requestMagicLink');
       if (!user) {
@@ -184,9 +207,15 @@ export class AuthService {
         );
       }
 
+      // Invalidate any previously generated and unused magic links for this user
+      await this.magicLinkRepository.update(
+        { userId: user.userId, is_used: false },
+        { is_used: true }
+      );
+
       let token: string;
       while (true) {
-        token = this.generateToken();
+        token = this.generateToken(tokenLength);
         const existingToken = await this.magicLinkRepository.findOne({ where: { token } });
         if (!existingToken) break;
       }
@@ -195,14 +224,15 @@ export class AuthService {
       const identifierType = requestDto.identifier.includes('@')
         ? 'email'
         : (/^\d+$/.test(requestDto.identifier) ? 'phone' : 'username');
-
+    
       const magicLink = this.magicLinkRepository.create({
         token,
         identifier: requestDto.identifier,
+        userId: user.userId,
         identifier_type: identifierType,
         redirect_url: requestDto.redirectUrl,
         notification_channel: requestDto.notificationChannel,
-        expires_at: new Date(Date.now() + 15 * 60 * 1000),
+        expires_at: new Date(Date.now() + expiryMinutes * 60 * 1000),
         is_used: false,
         is_expired: false,
       });
@@ -227,7 +257,7 @@ export class AuthService {
       return APIResponse.success(
         response,
         apiId,
-        { success: true, message: 'Magic link sent successfully' },
+        { success: true, message: `Magic link sent to your ${identifierType}. It will expire in ${expiryMinutes} minutes.` },
         HttpStatus.OK,
         'Magic link request processed successfully'
       );
@@ -244,37 +274,57 @@ export class AuthService {
     }
   }
 
-  async validateMagicLink(token: string, redirect?: string) {
+  async validateMagicLink(token: string, response: Response): Promise<Response> {
+    const apiId = APIID.VALIDATE_MAGIC_LINK;
+    const singleUse = this.configService.get<string>('MAGIC_LINK_SINGLE_USE', 'true');
+    const isSingleUse = JSON.parse(singleUse.toLowerCase());
     try {
-      LoggerUtil.debug(`ValidateMagicLink start: token=${token}, redirect=${redirect || ''}`, 'AuthService.validateMagicLink');
+      LoggerUtil.debug(`ValidateMagicLink start: token=${token}`, 'AuthService.validateMagicLink');
       const magicLink = await this.magicLinkRepository.findOne({ where: { token } });
       if (!magicLink) throw new NotFoundException('Invalid magic link');
-      if (magicLink.is_used) throw new UnauthorizedException('Magic link has already been used');
+      if (isSingleUse && magicLink.is_used) throw new UnauthorizedException('Magic link has already been used');
       if (magicLink.is_expired || new Date() > magicLink.expires_at) {
         magicLink.is_expired = true;
         await this.magicLinkRepository.save(magicLink);
         throw new UnauthorizedException('Magic link has expired');
       }
 
-      const user = await this.useradapter.findUserByIdentifier(magicLink.identifier);
-      if (!user) throw new NotFoundException('User not found');
-
       magicLink.is_used = true;
       await this.magicLinkRepository.save(magicLink);
 
       // Use DB userId (Keycloak UUID) directly for token-exchange
-      const keycloakUserId = user.userId;
+      const keycloakUserId = magicLink.userId;
       if (!keycloakUserId) throw new UnauthorizedException('User missing Keycloak UUID');
 
       const kc = await this.keycloakService.exchangeTokenForUser(keycloakUserId);
-      return {
-        access_token: kc.access_token,
-        refresh_token: kc.refresh_token,
-        expires_in: kc.expires_in,
-      };
+      return APIResponse.success(
+        response,
+        apiId,
+        {
+          access_token: kc.access_token,
+          refresh_token: kc.refresh_token,
+          expires_in: kc.expires_in,
+          redirect_url: magicLink.redirect_url,
+        },
+        HttpStatus.OK,
+        'Magic link validated successfully'
+      );
     } catch (error) {
       LoggerUtil.error('validateMagicLink failed', error?.message, 'AuthService.validateMagicLink');
-      throw error;
+      const errorMessage = error?.message || "Something went wrong";
+      let statusCode = HttpStatus.INTERNAL_SERVER_ERROR;
+      if (error instanceof NotFoundException) {
+        statusCode = HttpStatus.NOT_FOUND;
+      } else if (error instanceof UnauthorizedException) {
+        statusCode = HttpStatus.UNAUTHORIZED;
+      }
+      return APIResponse.error(
+        response,
+        apiId,
+        error?.name || "Internal Server Error",
+        `Error : ${errorMessage}`,
+        statusCode
+      );
     }
   }
 

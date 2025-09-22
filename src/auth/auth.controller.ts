@@ -98,66 +98,29 @@ export class AuthController {
   @ApiBody({ type: RequestMagicLinkDto })
   @UsePipes(ValidationPipe)
   @HttpCode(HttpStatus.OK)
-  @ApiOkResponse({ 
-    description: "Magic link request processed", 
-    type: MagicLinkResponseDto 
-  })
   async requestMagicLink(
-    @Body() requestDto: RequestMagicLinkDto,
+    @Body() requestMagicLinkDto: RequestMagicLinkDto,
     @Res() response: Response
-  ): Promise<any> {
-    return this.authService.requestMagicLink(requestDto, response);
+  ) {
+    return this.authService.requestMagicLink(requestMagicLinkDto, response);
   }
 
-  @Get("/magic-link/:token")
+  @Get('/validate-magic-link/:token')
+  @UseFilters(new AllExceptionsFilter(APIID.VALIDATE_MAGIC_LINK))
+  @ApiOkResponse({ type: MagicLinkResponseDto })
   @ApiParam({ name: 'token', description: 'Magic link token' })
-  @ApiQuery({ name: 'redirect', description: 'Encoded redirect URL', required: false })
+  @ApiQuery({ name: 'redirect', required: false, description: 'URL to redirect after successful validation' })
   async validateMagicLink(
-    @Res() res: Response,
     @Param('token') token: string,
-    @Query('redirect') redirect?: string,
-    @Headers('accept') accept?: string
+    @Res() response: Response,
+    @Query('redirect') redirect: string,
   ) {
-    const wantsJson = accept?.includes('application/json');
-    
-    try {
-      const result = await this.authService.validateMagicLink(token, redirect);
-      const baseRedirect = redirect 
-        ? redirect 
-        : `${process.env.FRONTEND_URL || 'http://localhost:3000'}/auth/success`;
-       
-      if (wantsJson) {
-        return res.status(200).json({
-          success: true,
-          message: 'Magic link validated successfully',
-          data: {
-            access_token: result.access_token,
-            refresh_token: result.refresh_token,
-            expires_in: result.expires_in,
-            redirect_url: baseRedirect
-          }
-        });
-      }
-        
-      return res.redirect(302, baseRedirect);
-      
-    } catch (error) {
-      LoggerUtil.error('Magic link validation failed', error?.message, 'AuthController.validateMagicLink');
-      
-      if (wantsJson) {
-        return res.status(error.status || 500).json({
-          success: false,
-          error: error.message,
-          statusCode: error.status || 500,
-          timestamp: new Date().toISOString()
-        });
-      }
-      
-      const errorUrl = redirect 
-        ? `${redirect}?error=${encodeURIComponent(error.message)}`
-        : `${process.env.FRONTEND_URL || 'http://localhost:3000'}/auth/error?error=${encodeURIComponent(error.message)}`;
-      
-      return res.redirect(302, errorUrl);
+    LoggerUtil.debug(`Redirecting to: ${redirect}`, 'AuthService.validateMagicLink');
+    const validationResponse = await this.authService.validateMagicLink(token, response);
+    if (redirect && validationResponse.statusCode === HttpStatus.OK) {
+      response.redirect(redirect);
+      return;
     }
+    return validationResponse;
   }
 }

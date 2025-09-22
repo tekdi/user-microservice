@@ -1,12 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsString, IsOptional, IsIn, IsUrl } from 'class-validator';
+import { IsEmail, IsString, IsOptional, IsIn, IsUrl, IsNotEmpty } from 'class-validator';
 
 export class RequestMagicLinkDto {
   @ApiProperty({
     description: 'User identifier (email, phone, or username)',
     example: 'user@example.com'
   })
-  @IsString()
+  @IsNotEmpty({ message: 'Identifier is required.' })
   identifier: string;
 
   @ApiProperty({
@@ -23,7 +23,8 @@ export class RequestMagicLinkDto {
     enum: ['email', 'sms', 'whatsapp'],
     example: 'email'
   })
-  @IsIn(['email', 'sms', 'whatsapp'])
+  @IsNotEmpty({ message: 'Notification channel is required.' })
+  @IsIn(['email', 'sms', 'whatsapp'], { message: 'Notification channel must be one of: email, sms, whatsapp.' })
   notificationChannel: 'email' | 'sms' | 'whatsapp';
 }
 
