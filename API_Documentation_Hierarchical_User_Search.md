@@ -1,7 +1,7 @@
 # Hierarchical User Search API Documentation
 
 ## Overview
-The Hierarchical User Search API provides a powerful and flexible way to search and retrieve users based on hierarchical location filters (state, district, block, village, center, batch) and role-based filters. It supports pagination, sorting, and custom field inclusion with optimized performance.
+The Hierarchical User Search API provides a powerful and flexible way to search and retrieve users based on hierarchical location filters (state, district, block, village, center, batch), role-based filters, and name search. It supports pagination, sorting, and custom field inclusion with optimized performance.
 
 ---
 
@@ -34,6 +34,7 @@ The Hierarchical User Search API provides a powerful and flexible way to search 
     "batch": string[]        // Optional: Max 1000 entries (UUIDs)
   },
   "role": string[],          // Optional: Max 50 roles
+  "name": string,            // Optional: Name search keyword (1-100 chars)
   "customfields": string[]   // Optional: Location-based custom fields only
 }
 ```
@@ -81,6 +82,12 @@ The Hierarchical User Search API provides a powerful and flexible way to search 
   - Maximum: 50 roles
   - Description: Filter users by role names
   - Example: `["Instructor", "Lead", "Learner"]`
+
+- **`name`** (Optional)
+  - Type: `string`
+  - Length: 1-100 characters
+  - Description: Search keyword to filter users by name (case-insensitive, partial match)
+  - Example: `"demo"` (matches "demo1", "abdemo2", "Demo User", etc.)
 
 - **`customfields`** (Optional)
   - Type: `string[]`
@@ -284,6 +291,33 @@ The Hierarchical User Search API provides a powerful and flexible way to search 
     "village": ["village-uuid-1", "village-uuid-2", "village-uuid-3"]
   },
   "customfields": ["state", "district", "block", "village"]
+}
+```
+
+### Example 6: Name Search (Standalone)
+```json
+{
+  "limit": 20,
+  "offset": 0,
+  "sort": ["name", "asc"],
+  "filters": {},
+  "name": "demo",
+  "customfields": ["state", "district"]
+}
+```
+
+### Example 7: Combined Name Search with Location Filter
+```json
+{
+  "limit": 10,
+  "offset": 0,
+  "sort": ["name", "asc"],
+  "filters": {
+    "state": ["maharashtra-uuid"]
+  },
+  "name": "john",
+  "role": ["Instructor"],
+  "customfields": ["state", "district", "block"]
 }
 ```
 
