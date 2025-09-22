@@ -20,7 +20,6 @@ import { NotificationRequest } from "@utils/notification.axios";
 import { JwtService } from "@nestjs/jwt";
 import { ConfigService } from '@nestjs/config';
 
-
 type LoginResponse = {
   access_token: string;
   refresh_token: string;
@@ -163,10 +162,12 @@ export class AuthService {
   }
 
   private generateToken(length: number): string {
+    const crypto = require('crypto');
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
     let token = '';
+    const randomBytes = crypto.randomBytes(length);
     for (let i = 0; i < length; i++) {
-      token += chars.charAt(Math.floor(Math.random() * chars.length));
+      token += chars[randomBytes[i] % chars.length];
     }
     return token;
   }
@@ -174,8 +175,7 @@ export class AuthService {
   async requestMagicLink(requestDto: RequestMagicLinkDto, response: Response) {
     const apiId = APIID.REQUEST_MAGIC_LINK;
     const expiryMinutes = this.configService.get<number>('MAGIC_LINK_EXPIRY_MINUTES', 15);
-    const tokenLength = this.configService.get<number>('MAGIC_LINK_TOKEN_LENGTH', 16);
-    try {
+    const tokenLength = parseInt(this.configService.get<string>('MAGIC_LINK_TOKEN_LENGTH', '16'));    try {
       LoggerUtil.debug(`RequestMagicLink start: identifier=${requestDto.identifier}`, 'AuthService.requestMagicLink');
       if (requestDto.identifier === undefined || requestDto.identifier === null) {
         return APIResponse.error(
