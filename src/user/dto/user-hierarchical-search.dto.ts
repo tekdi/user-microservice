@@ -29,25 +29,12 @@ import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 @ValidatorConstraint({ name: 'atLeastOneFilter', async: false })
 export class AtLeastOneFilterConstraint implements ValidatorConstraintInterface {
   validate(filters: any, args: ValidationArguments): boolean {
-    if (!filters || typeof filters !== 'object') {
-      return false;
-    }
-    
-    // Check if any filter has values
-    const hasLocationFilter = Object.keys(filters).some(key => {
-      const value = filters[key];
-      return Array.isArray(value) && value.length > 0;
-    });
-    
-    // Check if roles are provided in the parent object
-    const parentObject = args.object as any;
-    const hasRoleFilter = parentObject.role && Array.isArray(parentObject.role) && parentObject.role.length > 0;
-    
-    return hasLocationFilter || hasRoleFilter;
+    // Allow empty filters now since we support name search and default users
+    return true;
   }
 
   defaultMessage(): string {
-    return 'At least one location filter or role filter must be provided';
+    return 'Filters are optional. You can search by location, role, or name, or leave empty for default results.';
   }
 }
 
@@ -259,6 +246,33 @@ class LocationFiltersDto {
   @ArrayMaxSize(1000, { message: 'Batch filter cannot contain more than 1000 entries' })
   @IsUUID(undefined, { each: true })
   batch?: string[];
+
+  @ApiPropertyOptional({
+    type: [String],
+    description: "Array of user status values to filter by. Allowed values: active, inactive, archived",
+    example: ["active", "inactive"],
+    enum: ["active", "inactive", "archived"]
+  })
+  @Expose()
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(3, { message: 'Status filter cannot contain more than 3 entries' })
+  @IsString({ each: true })
+  @IsIn(["active", "inactive", "archived"], { each: true, message: "Status must be one of: active, inactive, archived" })
+  status?: string[];
+
+  @ApiPropertyOptional({
+    type: String,
+    description: "Search keyword to filter users by name (case-insensitive, partial match). Searches in the 'name' field.",
+    example: "demo",
+    minLength: 1,
+    maxLength: 100
+  })
+  @Expose()
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty({ message: 'Name search keyword cannot be empty' })
+  name?: string;
 }
 
 enum SortDirection {
@@ -304,7 +318,7 @@ export class HierarchicalLocationFiltersDto {
 
   @ApiProperty({
     type: LocationFiltersDto,
-    description: "Location-based filters for hierarchical search. At least one location filter or role filter must be provided.",
+    description: "Location-based filters for hierarchical search. Filters are optional - you can search by location, role, name, or leave empty for default results.",
     required: true
   })
   @Expose()
@@ -359,4 +373,5 @@ export class HierarchicalLocationFiltersDto {
   @IsString({ each: true })
   @IsValidLocationFilter()
   customfields?: string[];
+
 }
