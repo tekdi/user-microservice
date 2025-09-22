@@ -14,4 +14,9 @@ export class UserAdapter {
     }
     return adapter;
   }
+  
+  async findUserByIdentifier(identifier: string): Promise<any> {
+    const adapter = this.buildUserAdapter();
+    return adapter.findUserByIdentifier(identifier);
+  }
 }

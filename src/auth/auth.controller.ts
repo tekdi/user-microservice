@@ -5,6 +5,8 @@ import {
   ApiHeader,
   ApiBasicAuth,
   ApiOkResponse,
+  ApiParam,
+  ApiQuery,
 } from "@nestjs/swagger";
 import {
   Controller,
@@ -20,6 +22,9 @@ import {
   ValidationPipe,
   UseGuards,
   UseFilters,
+  Query,
+  Param,
+  Headers
 } from "@nestjs/common";
 import {
   AuthDto,
@@ -31,6 +36,8 @@ import { JwtAuthGuard } from "src/common/guards/keycloak.guard";
 import { APIID } from "src/common/utils/api-id.config";
 import { AllExceptionsFilter } from "src/common/filters/exception.filter";
 import { Response } from "express";
+import { MagicLinkResponseDto, RequestMagicLinkDto } from "./dto/magic-link.dto";
+import { LoggerUtil } from "src/common/logger/LoggerUtil";
 
 @ApiTags("Auth")
 @Controller("auth")
@@ -84,5 +91,36 @@ export class AuthController {
     const { refresh_token: refreshToken } = body;
 
     await this.authService.logout(refreshToken, response);
+  }
+
+  @UseFilters(new AllExceptionsFilter(APIID.REQUEST_MAGIC_LINK))
+  @Post("/request-magic-link")
+  @ApiBody({ type: RequestMagicLinkDto })
+  @UsePipes(ValidationPipe)
+  @HttpCode(HttpStatus.OK)
+  async requestMagicLink(
+    @Body() requestMagicLinkDto: RequestMagicLinkDto,
+    @Res() response: Response
+  ) {
+    return this.authService.requestMagicLink(requestMagicLinkDto, response);
+  }
+
+  @Get('/validate-magic-link/:token')
+  @UseFilters(new AllExceptionsFilter(APIID.VALIDATE_MAGIC_LINK))
+  @ApiOkResponse({ type: MagicLinkResponseDto })
+  @ApiParam({ name: 'token', description: 'Magic link token' })
+  @ApiQuery({ name: 'redirect', required: false, description: 'URL to redirect after successful validation' })
+  async validateMagicLink(
+    @Param('token') token: string,
+    @Res() response: Response,
+    @Query('redirect') redirect: string,
+  ) {
+    LoggerUtil.debug(`Redirecting to: ${redirect}`, 'AuthService.validateMagicLink');
+    const validationResponse = await this.authService.validateMagicLink(token, response);
+    if (redirect && validationResponse.statusCode === HttpStatus.OK) {
+      response.redirect(redirect);
+      return;
+    }
+    return validationResponse;
   }
 }

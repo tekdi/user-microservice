@@ -40,4 +40,5 @@ export interface IServicelocator {
   sendOtp(body: OtpSendDTO, response: Response): Promise<any>;
   verifyOtp(body: OtpVerifyDTO, response: Response): Promise<any>;
   sendPasswordResetOTP(body: SendPasswordResetOTPDto, response: Response): Promise<any>;
+  findUserByIdentifier(identifier: string): Promise<any>;
 }

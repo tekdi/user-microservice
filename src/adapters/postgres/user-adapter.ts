@@ -3171,4 +3171,24 @@ export class PostgresUserService implements IServicelocator {
       // Don't throw the error to avoid affecting the main operation
     }
   }
+
+  async findUserByIdentifier(identifier: string): Promise<any> {
+    try {
+      const conditions: any[] = [
+        { email: ILike(identifier) },
+        { username: ILike(identifier) }
+      ];
+
+      const isNumeric = /^\d+$/.test(identifier.trim());
+      if (isNumeric) {
+        conditions.push({ mobile: parseInt(identifier, 10) });
+      }
+
+      const user = await this.usersRepository.findOne({ where: conditions });
+      return user || null;
+    } catch (error) {
+      LoggerUtil.error('Error finding user by identifier', error.message);
+      return null;
+    }
+  }
 }
