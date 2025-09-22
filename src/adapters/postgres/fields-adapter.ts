@@ -1729,9 +1729,37 @@ export class PostgresFieldsService implements IServicelocatorfields {
       if (index > 0) {
         whereCondition += ` AND `;
       }
-      whereCondition += `fields->>'${key}' = '${value}'`;
+
+      // Handle different matching strategies based on field type
+      if (Array.isArray(value)) {
+        // For array values, use IN clause for multiple values
+        const values = value.map((v) => `'${v}'`).join(',');
+        whereCondition += `fields->>'${key}' IN (${values})`;
+      } else {
+        // For single values, use flexible matching (contains, not exact)
+        whereCondition += `fields->>'${key}' ILIKE '%${value}%'`;
+      }
       index++;
     }
+
+    // First, let's check what fields exist with the given names
+    const checkFieldsQuery = `SELECT f."name", f."context", f."fieldId" FROM "Fields" f WHERE f."name" IN (${searchKey})`;
+
+    const availableFields = await this.fieldsValuesRepository.query(
+      checkFieldsQuery
+    );
+
+    // If no fields found, let's check what fields exist that might be similar
+    const similarFieldsQuery = `SELECT f."name", f."context", f."fieldId" FROM "Fields" f WHERE f."name" ILIKE '%country%' OR f."name" ILIKE '%COUNTRY%'`;
+
+    const similarFields = await this.fieldsValuesRepository.query(
+      similarFieldsQuery
+    );
+
+    // Let's also check what fields exist in the database
+    const allFieldsQuery = `SELECT f."name", f."context", f."fieldId" FROM "Fields" f WHERE f.context IN('USERS', 'NULL', 'null', '') OR f.context IS NULL LIMIT 20`;
+
+    const allFields = await this.fieldsValuesRepository.query(allFieldsQuery);
 
     const query = `WITH user_fields AS (
         SELECT
