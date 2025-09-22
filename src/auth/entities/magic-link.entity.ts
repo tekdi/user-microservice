@@ -11,7 +11,7 @@ export class MagicLink {
   @Column({ type: 'varchar', length: 255 })
   identifier: string;
 
-  @Column({ type: 'varchar', length: 255, nullable: true })
+  @Column({ type: 'uuid'})
   userId: string;
 
   @Column({ type: 'varchar', length: 20 })
