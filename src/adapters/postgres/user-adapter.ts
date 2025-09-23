@@ -1528,10 +1528,10 @@ export class PostgresUserService implements IServicelocator {
 
               // Prepare additional data for FieldValues table
               const additionalData = {
-                tenantId: tenantId || null,
+                tenantId: tenantId,
                 contextType: "USER",
-                createdBy: userCreateDto.createdBy || null,
-                updatedBy: null,
+                createdBy: userCreateDto.createdBy,
+                updatedBy: userCreateDto.updatedBy,
               };
 
               LoggerUtil.log(
@@ -4289,7 +4289,6 @@ export class PostgresUserService implements IServicelocator {
 
       // Structure the data by userId and fieldName
       const customFieldsData: Record<string, Record<string, any>> = {};
-      let multiValueFieldsCount = 0;
       
       customFieldsResult.forEach(row => {
         const { itemId: userId, fieldId, value } = row;
@@ -4306,20 +4305,7 @@ export class PostgresUserService implements IServicelocator {
         
         // Store the value as-is (text[] from database)
         customFieldsData[userId][fieldName] = value || [];
-        
-        // Log fields with multiple values for monitoring
-        if (Array.isArray(value) && value.length > 1) {
-          multiValueFieldsCount++;
-          LoggerUtil.log(
-            `Multi-value custom field detected: ${fieldName} for user ${userId} has ${value.length} values: ${value.join(', ')}`,
-            apiId
-          );
-        }
       });
-
-      if (multiValueFieldsCount > 0) {
-        LoggerUtil.log(`Found ${multiValueFieldsCount} custom fields with multiple values that will be comma-separated`, apiId);
-      }
 
 
       // Resolve location field IDs to names for state, district, block, village
@@ -4406,9 +4392,7 @@ export class PostgresUserService implements IServicelocator {
          const fieldValue = customFieldsData[userId][fieldName];
          
          if (locationFields.includes(fieldName) && locationNameMaps[fieldName]) {
-           // ENHANCEMENT: Replace ID(s) with name(s) for location fields, handling multiple values
-           // Previous behavior: Only resolved first ID to name
-           // New behavior: Resolves all IDs to names and joins with commas
+           // Replace ID(s) with name(s) for location fields (state, district, block, village)
            if (Array.isArray(fieldValue) && fieldValue.length > 0) {
              // Handle multiple IDs by resolving each one and joining with commas
              const resolvedNames = fieldValue
@@ -4424,9 +4408,8 @@ export class PostgresUserService implements IServicelocator {
              resolvedData[userId][fieldName] = fieldValue;
            }
          } else {
-           // ENHANCEMENT: For non-location fields that are arrays, join them with commas
-           // Previous behavior: Only displayed first value from array
-           // New behavior: Displays all values as comma-separated string
+           // Keep original value for non-location fields (including batch and center which are handled elsewhere)
+           // For non-location fields that are arrays, join them with commas
            if (Array.isArray(fieldValue) && fieldValue.length > 0) {
              const validValues = fieldValue.filter(val => val !== null && val !== undefined && val !== '');
              resolvedData[userId][fieldName] = validValues.length > 0 ? validValues.join(', ') : null;

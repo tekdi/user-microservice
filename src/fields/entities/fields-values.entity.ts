@@ -30,8 +30,6 @@ export class FieldValues {
   @Column("varchar", { nullable: true })
   contextType?: string;
 
-  @Column("uuid", { nullable: true })
-  contextId?: string;
 
   @CreateDateColumn({
     type: "timestamptz",

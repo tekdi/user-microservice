@@ -1749,6 +1749,10 @@ export class PostgresFieldsService implements IServicelocatorfields {
         itemId,
         fieldId: data.fieldId,
         value: data.value,
+        tenantId: additionalData.tenantId,
+        contextType: additionalData.contextType,
+        createdBy: additionalData.createdBy,
+        updatedBy: additionalData.updatedBy,
       });
     }
 
