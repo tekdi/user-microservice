@@ -194,6 +194,19 @@ export class FieldsService {
     return response;
   }
 
+  async getFieldIdByLabel(label: string, tenantId?: string) {
+    const whereCondition: any = { label: label };
+    if (tenantId) {
+      whereCondition.tenantId = tenantId;
+    }
+    
+    const response = await this.fieldsRepository.findOne({
+      where: whereCondition,
+      select: ['fieldId']
+    });
+    return response?.fieldId || null;
+  }
+
   async updateFieldValues(id: string, fieldValuesDto: FieldValuesDto) {
     try {
       const fieldsData: any = {};

@@ -6,6 +6,7 @@ import { UserCreateDto } from '../user/dto/user-create.dto';
 import { UserAdapter } from '../user/useradapter';
 import { PostgresRoleService } from '../adapters/postgres/rbac/role-adapter';
 import { PostgresUserService } from '../adapters/postgres/user-adapter';
+import { PostgresFieldsService } from '../adapters/postgres/fields-adapter';
 
 interface NewtonApiResponse {
   success: boolean;
@@ -52,7 +53,8 @@ export class SsoService {
     private readonly configService: ConfigService,
     private readonly userAdapter: UserAdapter,
     private readonly postgresRoleService: PostgresRoleService,
-    private readonly postgresUserService: PostgresUserService
+    private readonly postgresUserService: PostgresUserService,
+    private readonly postgresFieldsService: PostgresFieldsService
   ) {
     // Configuration from environment variables
     this.newtonApiEndpoint =this.configService.get<string>('KEYCLOAK')
@@ -268,6 +270,7 @@ export class SsoService {
     try {
       // Create user in local database using the actual user adapter method
       const userCreateDto = this.mapToUserCreateDto(newtonResponse, ssoRequestDto);
+      console.log("userCreateDto", newtonResponse);
       
       // Create mock request object for the user adapter method
       const mockRequest = {
@@ -278,6 +281,18 @@ export class SsoService {
         mockRequest,
         userCreateDto
       );
+
+      // Update custom fields if newtonData is available
+      if (newtonResponse.newtonData && Object.keys(newtonResponse.newtonData).length > 0) {
+        for (const [fieldLabel, fieldValue] of Object.entries(newtonResponse.newtonData)) {
+          if (fieldValue) {
+            const fieldId = await this.postgresFieldsService.getFieldIdByLabel(fieldLabel, ssoRequestDto.tenantId);
+            if (fieldId) {
+              await this.postgresFieldsService.updateUserCustomFields(createdUser.userId, { fieldId, value: fieldValue }, null);
+            }
+          }
+        }
+      }
 
       this.logger.log(`New user created successfully: ${newtonResponse.name} with ID: ${createdUser.userId}`, 'SSO_SERVICE');
 

@@ -34,6 +34,7 @@ import {
 } from "@nestjs/swagger";
 
 import { ExistUserDto, SuggestUserDto, UserSearchDto } from "./dto/user-search.dto";
+import { HierarchicalLocationFiltersDto } from "./dto/user-hierarchical-search.dto";
 import { UserAdapter } from "./useradapter";
 import { UserCreateDto } from "./dto/user-create.dto";
 import { UserUpdateDTO } from "./dto/user-update.dto";
@@ -360,5 +361,100 @@ export class UserController {
       foldername
     );
     return { url };
+  }
+
+  @UseFilters(new AllExceptionsFilter(APIID.USER_LIST))
+  @Post("hierarchical-search")
+  @UseGuards(JwtAuthGuard)
+  @ApiBasicAuth("access-token")
+  @ApiCreatedResponse({ 
+    description: "User list based on hierarchical location filters with pagination and sorting.",
+  })
+  @ApiForbiddenResponse({ description: "Forbidden" })
+  @ApiBody({ 
+    type: HierarchicalLocationFiltersDto
+  })
+  @UsePipes(new ValidationPipe({ 
+    whitelist: true,
+    forbidNonWhitelisted: true,
+    transform: true
+  }))
+  @SerializeOptions({
+    strategy: "excludeAll",
+  })
+  @ApiHeader({
+    name: "tenantid",
+    description: "Tenant ID for filtering users within specific tenant (Required)",
+    required: true
+  })
+  public async getUsersByHierarchicalLocation(
+    @Headers() headers,
+    @Req() request: Request,
+    @Res() response: Response,
+    @Body() hierarchicalFiltersDto: HierarchicalLocationFiltersDto
+  ) {
+    const tenantId = headers["tenantid"];
+    const apiId = APIID.USER_LIST;
+    
+    // Comprehensive tenantId validation
+    const tenantValidation = this.validateTenantId(tenantId);
+    if (!tenantValidation.isValid) {
+      LoggerUtil.error(
+        `TenantId validation failed: ${tenantValidation.error}`,
+        `Received tenantId: ${tenantId}`,
+        apiId
+      );
+      
+      return response.status(400).json({
+        id: apiId,
+        ver: "1.0",
+        ts: new Date().toISOString(),
+        params: {
+          resmsgid: "",
+          status: "failed",
+          err: tenantValidation.error,
+          errmsg: "Invalid tenant information"
+        },
+        responseCode: 400,
+        result: {}
+      });
+    }
+    
+    return await this.userAdapter
+      .buildUserAdapter()
+      .getUsersByHierarchicalLocation(tenantId, request, response, hierarchicalFiltersDto);
+  }
+
+  /**
+   * Comprehensive tenant ID validation
+   * @param tenantId - Tenant ID from headers
+   * @returns Validation result with error details
+   */
+  private validateTenantId(tenantId: any): { isValid: boolean; error?: string } {
+    // Check if tenantId is present
+    if (!tenantId) {
+      return {
+        isValid: false,
+        error: "tenantid header is required"
+      };
+    }
+
+    // Check if tenantId is a non-empty string
+    if (typeof tenantId !== 'string' || tenantId.trim().length === 0) {
+      return {
+        isValid: false,
+        error: "tenantid must be a non-empty string"
+      };
+    }
+
+    // Check if tenantId is a valid UUID format
+    if (!isUUID(tenantId)) {
+      return {
+        isValid: false,
+        error: "tenantid must be a valid UUID format"
+      };
+    }
+
+    return { isValid: true };
   }
 }
