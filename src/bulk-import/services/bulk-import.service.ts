@@ -798,7 +798,6 @@ export class BulkImportService {
     const coreFieldsToExclude = [
       'firstName',
       'lastName',
-      'middleName',
       'email',
       'gender',
       'dob',
@@ -939,7 +938,6 @@ export class BulkImportService {
     // Step 4: Compose final columns
     const defaultColumns = [
       'firstName',
-      'middleName',
       'lastName',
       'email',
       'gender',
