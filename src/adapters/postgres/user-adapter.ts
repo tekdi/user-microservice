@@ -3146,7 +3146,7 @@ export class PostgresUserService implements IServicelocator {
           query += ` AND (center."cohortId"::text = ANY($${paramIndex++}::text[]) OR batch."cohortId"::text = ANY($${paramIndex++}::text[]))`;
           queryParams.push(filterResult.ids, filterResult.ids);
         } else {
-          query += ` AND f."name" = $${paramIndex++} AND fv."value" = ANY($${paramIndex++}::text[])`;
+          query += ` AND f."name" = $${paramIndex++} AND fv."value" && $${paramIndex++}::text[]`;
           queryParams.push(filterResult.level, filterResult.ids);
         }
       }
