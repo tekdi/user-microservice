@@ -1757,17 +1757,76 @@ export class PostgresFieldsService implements IServicelocatorfields {
     return result;
   }
 
-  async updateUserCustomFields(itemId, data, fieldAttributesAndParams) {
+  async updateUserCustomFields(itemId, data, fieldAttributesAndParams, additionalData?: { tenantId?: string, contextType?: string, createdBy?: string, updatedBy?: string }) {
     // Ensure value is stored as an array
     if (!Array.isArray(data.value)) {
       data.value = [data.value];
     }
-  
-    const result = await this.fieldsValuesRepository.insert({
+
+    const fieldValueData: any = {
       itemId,
       fieldId: data.fieldId,
       value: data.value,
-    });
+    };
+
+    // Add additional data if provided
+    if (additionalData) {
+      if (additionalData.tenantId) {
+        fieldValueData.tenantId = additionalData.tenantId;
+      }
+      if (additionalData.contextType) {
+        fieldValueData.contextType = additionalData.contextType;
+      }
+      if (additionalData.createdBy) {
+        fieldValueData.createdBy = additionalData.createdBy;
+      }
+      if (additionalData.updatedBy) {
+        fieldValueData.updatedBy = additionalData.updatedBy;
+      }
+    }
+  
+    const result = await this.fieldsValuesRepository.insert(fieldValueData);
+  
+    return {
+      ...result,
+      correctValue: true,
+    };
+  }
+
+
+  async updateCohortCustomFields(itemId, data, fieldAttributesAndParams, additionalData?: { tenantId?: string, contextType?: string, contextId?: string, createdBy?: string, updatedBy?: string }) {
+    // Ensure value is stored as an array
+    if (!Array.isArray(data.value)) {
+      data.value = [data.value];
+    }
+
+    const fieldValueData: any = {
+      itemId,
+      fieldId: data.fieldId,
+      value: data.value,
+    };
+
+    // Add additional context data if provided
+    // This enables proper tracking and filtering of cohort custom fields
+    if (additionalData) {
+      if (additionalData.tenantId) {
+        fieldValueData.tenantId = additionalData.tenantId;
+      }
+      if (additionalData.contextType) {
+        fieldValueData.contextType = additionalData.contextType; // Should be "COHORT"
+      }
+      if (additionalData.contextId) {
+        fieldValueData.contextId = additionalData.contextId; // Maps to cohortId
+      }
+      if (additionalData.createdBy) {
+        fieldValueData.createdBy = additionalData.createdBy;
+      }
+      if (additionalData.updatedBy) {
+        fieldValueData.updatedBy = additionalData.updatedBy;
+      }
+    }
+  
+    const result = await this.fieldsValuesRepository.insert(fieldValueData);
   
     return {
       ...result,

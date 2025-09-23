@@ -379,7 +379,9 @@ export class PostgresCohortService {
       
       const createFailures = [];
 
-      //SAVE  in fieldValues table
+      // ENHANCEMENT: Save custom fields in FieldValues table with comprehensive context information
+      // Previous behavior: Basic field storage without proper context
+      // New behavior: Stores tenantId, contextType="COHORT", contextId=cohortId, createdBy, updatedBy
       if (
         response &&
         cohortCreateDto.customFields &&
@@ -387,29 +389,66 @@ export class PostgresCohortService {
       ) {
         const cohortId = response?.cohortId;
 
+        LoggerUtil.log(
+          `Processing ${cohortCreateDto.customFields.length} custom fields for cohort ${cohortId}`,
+          apiId
+        );
+
         if (cohortCreateDto.customFields.length > 0) {
           for (const fieldValues of cohortCreateDto.customFields) {
-            const fieldData = {
-              fieldId: fieldValues["fieldId"],
-              value: fieldValues["value"],
-            };
+            try {
+              const fieldData = {
+                fieldId: fieldValues["fieldId"],
+                value: fieldValues["value"],
+              };
 
-            const resfields = await this.fieldsService.updateCustomFields(
-              cohortId,
-              fieldData,
-              cohortCreateDto.customFields[0].fieldId
-            );
-            if (resfields.correctValue) {
-              if (!response["customFieldsValue"])
-                response["customFieldsValue"] = [];
-              response["customFieldsValue"].push(resfields);
-            } else {
+              // Prepare additional context data for FieldValues table
+              const additionalData = {
+                tenantId: tenantId,
+                contextType: "COHORT",
+                contextId: cohortId,
+                createdBy: cohortCreateDto.createdBy,
+                updatedBy: cohortCreateDto.updatedBy,
+              };
+
+              LoggerUtil.log(
+                `Storing custom field ${fieldData.fieldId} for cohort ${cohortId} with contextType: COHORT, tenantId: ${tenantId}`,
+                apiId
+              );
+
+              const resfields = await this.fieldsService.updateCohortCustomFields(
+                cohortId,
+                fieldData,
+                cohortCreateDto.customFields[0].fieldId,
+                additionalData
+              );
+
+              if (resfields.correctValue) {
+                if (!response["customFieldsValue"])
+                  response["customFieldsValue"] = [];
+                response["customFieldsValue"].push(resfields);
+              } else {
+                createFailures.push(
+                  `${fieldData.fieldId}: Failed to store custom field value`
+                );
+              }
+            } catch (fieldError) {
+              LoggerUtil.error(
+                `Failed to store custom field ${fieldValues["fieldId"]} for cohort ${cohortId}`,
+                `Error: ${fieldError.message}`,
+                apiId
+              );
               createFailures.push(
-                `${fieldData.fieldId}: ${resfields?.valueIssue} - ${resfields.fieldName}`
+                `${fieldValues["fieldId"]}: Failed to store custom field - ${fieldError.message}`
               );
             }
           }
         }
+
+        LoggerUtil.log(
+          `Successfully processed all custom fields for cohort ${cohortId}`,
+          apiId
+        );
       }
       // add the year mapping entry in table with cohortId and academicYearId
       await this.cohortAcademicYearService.insertCohortAcademicYear(

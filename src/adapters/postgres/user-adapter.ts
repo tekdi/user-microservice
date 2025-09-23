@@ -1463,7 +1463,7 @@ export class PostgresUserService implements IServicelocator {
         apiId,
         userContext.username
       );
-
+      console.log("userCreateDto", userCreateDto);
       const result = await this.createUserInDatabase(
         request,
         userCreateDto,
@@ -1510,27 +1510,69 @@ export class PostgresUserService implements IServicelocator {
             {}
           );
 
+          // Extract tenantId from the first tenantCohortRoleMapping entry
+          const tenantId = userCreateDto.tenantCohortRoleMapping?.[0]?.tenantId;
+
+          LoggerUtil.log(
+            `Processing ${userCreateDto.customFields.length} custom fields for user ${userContext.username}`,
+            apiId,
+            userContext.username
+          );
+
           for (const fieldValues of userCreateDto.customFields) {
-            const fieldData = {
-              fieldId: fieldValues["fieldId"],
-              value: fieldValues["value"],
-            };
+            try {
+              const fieldData = {
+                fieldId: fieldValues["fieldId"],
+                value: fieldValues["value"],
+              };
 
-            const res = await this.fieldsService.updateUserCustomFields(
-              userId,
-              fieldData,
-              customFieldAttributes[fieldData.fieldId]
-            );
+              // Prepare additional data for FieldValues table
+              const additionalData = {
+                tenantId: tenantId,
+                contextType: "USER",
+                createdBy: userCreateDto.createdBy,
+                updatedBy: userCreateDto.updatedBy,
+              };
 
-            // if (res.correctValue) {
-            //   if (!result["customFields"]) result["customFields"] = [];
-            //   result["customFields"].push(res);
-            // } else {
-            //   createFailures.push(
-            //     `${fieldData.fieldId}: ${res?.valueIssue} - ${res.fieldName}`
-            //   );
-            // }
+              LoggerUtil.log(
+                `Storing custom field ${fieldData.fieldId} for user ${userContext.username} with tenantId: ${tenantId}, contextType: USER`,
+                apiId,
+                userContext.username
+              );
+
+              const res = await this.fieldsService.updateUserCustomFields(
+                userId,
+                fieldData,
+                customFieldAttributes[fieldData.fieldId],
+                additionalData
+              );
+
+              // if (res.correctValue) {
+              //   if (!result["customFields"]) result["customFields"] = [];
+              //   result["customFields"].push(res);
+              // } else {
+              //   createFailures.push(
+              //     `${fieldData.fieldId}: ${res?.valueIssue} - ${res.fieldName}`
+              //   );
+              // }
+            } catch (fieldError) {
+              LoggerUtil.error(
+                `Failed to store custom field ${fieldValues["fieldId"]} for user ${userContext.username}`,
+                `Error: ${fieldError.message}`,
+                apiId,
+                userContext.username
+              );
+              createFailures.push(
+                `${fieldValues["fieldId"]}: Failed to store custom field - ${fieldError.message}`
+              );
+            }
           }
+
+          LoggerUtil.log(
+            `Successfully processed all custom fields for user ${userContext.username}`,
+            apiId,
+            userContext.username
+          );
         }
       }
       stepTimings['custom_fields_processing'] = Date.now() - customFieldsStartTime;
@@ -3065,317 +3107,6 @@ export class PostgresUserService implements IServicelocator {
   }
 
   /**
-   * Optimized single-query approach for hierarchical user search with pagination at SQL level
-   */
-  private async getOptimizedFilteredUsers(
-    tenantId: string,
-    filters: any,
-    roles: string[],
-    nameSearch: string | undefined,
-    status: string[],
-    limit: number,
-    offset: number,
-    sortField: string,
-    sortDirection: string,
-    customFields: string[]
-  ): Promise<{ totalCount: number; users: any[] }> {
-    const apiId = APIID.USER_LIST;
-    const startTime = Date.now();
-    
-    try {
-      // Find the deepest (most specific) location filter
-      const filterResult = this.findDeepestFilter(filters);
-      const hasLocationFilter = !!filterResult.level;
-      const hasRoleFilter = roles && roles.length > 0;
-      const hasNameFilter = nameSearch && nameSearch.trim().length > 0;
-      const hasStatusFilter = status && status.length > 0;
-      
-      // Build dynamic SQL query
-      let query = '';
-      const queryParams: any[] = [];
-      let paramIndex = 1;
-      
-      // Start building the main CTE query
-      query = `
-        WITH filtered_users AS (
-          SELECT DISTINCT u."userId"
-          FROM "Users" u
-          INNER JOIN "UserTenantMapping" utm ON u."userId" = utm."userId"
-      `;
-      
-      // Add role joins if needed
-      if (hasRoleFilter) {
-        query += `
-          INNER JOIN "UserRolesMapping" urm ON u."userId" = urm."userId" AND utm."tenantId" = urm."tenantId"
-          INNER JOIN "Roles" r ON urm."roleId" = r."roleId"
-        `;
-      }
-      
-      // Add location filter joins if needed
-      if (hasLocationFilter) {
-        if (this.isBatchFilter(filterResult.level)) {
-          query += `
-            INNER JOIN "CohortMembers" cm ON u."userId"::text = cm."userId"::text
-          `;
-        } else if (this.isCenterFilter(filterResult.level)) {
-          query += `
-            INNER JOIN "CohortMembers" cm ON u."userId"::text = cm."userId"::text
-            INNER JOIN "Cohort" batch ON cm."cohortId"::text = batch."cohortId"::text
-            INNER JOIN "Cohort" center ON batch."parentId"::text = center."cohortId"::text
-          `;
-        } else {
-          query += `
-            INNER JOIN "FieldValues" fv ON u."userId"::text = fv."itemId"::text
-            INNER JOIN "Fields" f ON fv."fieldId" = f."fieldId"
-          `;
-        }
-      }
-      
-      // Add WHERE conditions
-      query += `
-          WHERE utm."tenantId" = $${paramIndex++}
-      `;
-      queryParams.push(tenantId);
-      
-      // Add location filter conditions
-      if (hasLocationFilter) {
-        if (this.isBatchFilter(filterResult.level)) {
-          query += ` AND cm."cohortId"::text = ANY($${paramIndex++}::text[])`;
-          queryParams.push(filterResult.ids);
-        } else if (this.isCenterFilter(filterResult.level)) {
-          query += ` AND (center."cohortId"::text = ANY($${paramIndex++}::text[]) OR batch."cohortId"::text = ANY($${paramIndex++}::text[]))`;
-          queryParams.push(filterResult.ids, filterResult.ids);
-        } else {
-          query += ` AND f."name" = $${paramIndex++} AND fv."value" && $${paramIndex++}::text[]`;
-          queryParams.push(filterResult.level, filterResult.ids);
-        }
-      }
-      
-      // Add role filter conditions
-      if (hasRoleFilter) {
-        query += ` AND r."name" = ANY($${paramIndex++}::text[])`;
-        queryParams.push(roles);
-      }
-      
-      // Add name search conditions
-      if (hasNameFilter) {
-        query += ` AND LOWER(u."name") LIKE LOWER($${paramIndex++})`;
-        queryParams.push(`%${nameSearch.trim()}%`);
-      }
-      
-      // Add status filter conditions
-      if (hasStatusFilter) {
-        query += ` AND u."status" = ANY($${paramIndex++}::public.user_status[])`;
-        queryParams.push(status);
-      }
-      
-      // Complete the CTE and add pagination
-      query += `
-        ),
-        user_count AS (
-          SELECT COUNT(*) as total_count FROM filtered_users
-        ),
-        paginated_users AS (
-          SELECT 
-            u."userId", u."username", u."name", u."firstName", u."middleName", u."lastName",
-            u."email", u."mobile", u."gender", u."dob", u."status", 
-            u."createdAt", u."updatedAt", utm."tenantId",
-            (SELECT total_count FROM user_count) as total_count
-          FROM filtered_users fu
-          INNER JOIN "Users" u ON fu."userId" = u."userId"
-          INNER JOIN "UserTenantMapping" utm ON u."userId" = utm."userId"
-          ORDER BY u."${sortField}" ${sortDirection}
-          LIMIT $${paramIndex++} OFFSET $${paramIndex++}
-        )
-        SELECT 
-          pu.*, 
-          ARRAY_AGG(DISTINCT r."name") FILTER (WHERE r."name" IS NOT NULL) as roles
-        FROM paginated_users pu
-        LEFT JOIN "UserRolesMapping" urm2 ON pu."userId" = urm2."userId" AND pu."tenantId" = urm2."tenantId"
-        LEFT JOIN "Roles" r ON urm2."roleId" = r."roleId"
-        GROUP BY pu."userId", pu."username", pu."name", pu."firstName", pu."middleName", 
-                 pu."lastName", pu."email", pu."mobile", pu."gender", pu."dob", 
-                 pu."status", pu."createdAt", pu."updatedAt", pu."tenantId", pu.total_count
-        ORDER BY pu."${sortField}" ${sortDirection}
-      `;
-      
-      queryParams.push(limit, offset);
-      
-      // Execute the optimized query
-      LoggerUtil.log(`Executing optimized hierarchical search query`, apiId);
-      const userResults = await this.usersRepository.query(query, queryParams);
-      
-      const queryTime = Date.now() - startTime;
-      LoggerUtil.log(`Optimized query completed in ${queryTime}ms`, apiId);
-      
-      if (userResults.length === 0) {
-        return { totalCount: 0, users: [] };
-      }
-      
-      const totalCount = parseInt(userResults[0]?.total_count || '0');
-      const userIds = userResults.map(row => String(row.userId));
-      
-      LoggerUtil.log(`Query returned ${userIds.length} users out of ${totalCount} total`, apiId);
-      
-      // Get additional data in parallel (now with much smaller datasets)
-      const additionalDataStart = Date.now();
-      const filteredCustomFields = customFields ? customFields.filter(field => 
-        !this.isExcludedFromCustomFields(field)
-      ) : undefined;
-      
-      const [customFieldsData, cohortData] = await Promise.allSettled([
-        filteredCustomFields && filteredCustomFields.length > 0 
-          ? this.getCustomFieldsData(userIds, filteredCustomFields, tenantId)
-          : Promise.resolve({}),
-        this.getBatchAndCenterNames(userIds)
-      ]);
-      
-      const additionalDataTime = Date.now() - additionalDataStart;
-      LoggerUtil.log(`Additional data fetched in ${additionalDataTime}ms`, apiId);
-      
-      // Handle failed promises gracefully
-      const finalCustomFieldsData = customFieldsData.status === 'fulfilled' ? customFieldsData.value : {};
-      const finalCohortData = cohortData.status === 'fulfilled' ? cohortData.value : {};
-      
-      // Aggregate the results
-      const aggregateStart = Date.now();
-      const users = this.aggregateUserRoles(
-        userResults,
-        finalCustomFieldsData,
-        filteredCustomFields || [],
-        finalCohortData
-      );
-      
-      const aggregateTime = Date.now() - aggregateStart;
-      const totalTime = Date.now() - startTime;
-      
-      LoggerUtil.log(`Data aggregation completed in ${aggregateTime}ms. Total time: ${totalTime}ms`, apiId);
-      
-      return { totalCount, users };
-      
-    } catch (error) {
-      const totalTime = Date.now() - startTime;
-      LoggerUtil.error(`Optimized query failed after ${totalTime}ms: ${error.message}`, error.stack, apiId);
-      throw new Error(`Failed to execute optimized hierarchical search: ${error.message}`);
-    }
-  }
-
-  /**
-   * Optimized default users query when no filters are provided
-   */
-  private async getDefaultUsersOptimized(
-    tenantId: string,
-    limit: number,
-    offset: number,
-    sortField: string,
-    sortDirection: string,
-    customFields: string[],
-    status: string[]
-  ): Promise<{ totalCount: number; users: any[] }> {
-    const apiId = APIID.USER_LIST;
-    const startTime = Date.now();
-    
-    try {
-      const hasStatusFilter = status && status.length > 0;
-      
-      const query = `
-        WITH ranked_users AS (
-          SELECT 
-            cm."userId",
-            u."username", u."name", u."firstName", u."middleName", u."lastName",
-            u."email", u."mobile", u."gender", u."dob", u."status", 
-            u."createdAt", u."updatedAt", utm."tenantId",
-            ROW_NUMBER() OVER (PARTITION BY cm."userId" ORDER BY cm."createdAt" DESC) as rn
-          FROM "CohortMembers" cm
-          INNER JOIN "Users" u ON cm."userId"::text = u."userId"::text
-          INNER JOIN "UserTenantMapping" utm ON u."userId" = utm."userId" 
-          WHERE utm."tenantId" = $1
-            ${hasStatusFilter ? 'AND u."status" = ANY($4::public.user_status[])' : ''}
-        ),
-        distinct_users AS (
-          SELECT * FROM ranked_users WHERE rn = 1
-        ),
-        user_count AS (
-          SELECT COUNT(*) as total_count FROM distinct_users
-        ),
-        paginated_users AS (
-          SELECT *, (SELECT total_count FROM user_count) as total_count
-          FROM distinct_users
-          ORDER BY "${sortField}" ${sortDirection}
-          LIMIT $2 OFFSET $3
-        )
-        SELECT 
-          pu.*, 
-          ARRAY_AGG(DISTINCT r."name") FILTER (WHERE r."name" IS NOT NULL) as roles
-        FROM paginated_users pu
-        LEFT JOIN "UserRolesMapping" urm ON pu."userId" = urm."userId" AND pu."tenantId" = urm."tenantId"
-        LEFT JOIN "Roles" r ON urm."roleId" = r."roleId"
-        GROUP BY pu."userId", pu."username", pu."name", pu."firstName", pu."middleName", 
-                 pu."lastName", pu."email", pu."mobile", pu."gender", pu."dob", 
-                 pu."status", pu."createdAt", pu."updatedAt", pu."tenantId", pu.total_count
-        ORDER BY pu."${sortField}" ${sortDirection}
-      `;
-      
-      const queryParams = hasStatusFilter 
-        ? [tenantId, limit, offset, status]
-        : [tenantId, limit, offset];
-      
-      LoggerUtil.log(`Executing optimized default users query`, apiId);
-      const userResults = await this.usersRepository.query(query, queryParams);
-      
-      const queryTime = Date.now() - startTime;
-      LoggerUtil.log(`Default users query completed in ${queryTime}ms`, apiId);
-      
-      if (userResults.length === 0) {
-        return { totalCount: 0, users: [] };
-      }
-      
-      const totalCount = parseInt(userResults[0]?.total_count || '0');
-      const userIds = userResults.map(row => String(row.userId));
-      
-      LoggerUtil.log(`Default query returned ${userIds.length} users out of ${totalCount} total`, apiId);
-      
-      // Get additional data in parallel
-      const additionalDataStart = Date.now();
-      const filteredCustomFields = customFields.filter(field => 
-        !this.isExcludedFromCustomFields(field)
-      );
-      
-      const [customFieldsData, cohortData] = await Promise.allSettled([
-        filteredCustomFields.length > 0 
-          ? this.getCustomFieldsData(userIds, filteredCustomFields, tenantId)
-          : Promise.resolve({}),
-        this.getBatchAndCenterNames(userIds)
-      ]);
-      
-      const additionalDataTime = Date.now() - additionalDataStart;
-      LoggerUtil.log(`Default users additional data fetched in ${additionalDataTime}ms`, apiId);
-      
-      // Handle failed promises gracefully
-      const finalCustomFieldsData = customFieldsData.status === 'fulfilled' ? customFieldsData.value : {};
-      const finalCohortData = cohortData.status === 'fulfilled' ? cohortData.value : {};
-      
-      // Aggregate the results
-      const users = this.aggregateUserRoles(
-        userResults,
-        finalCustomFieldsData,
-        filteredCustomFields,
-        finalCohortData
-      );
-      
-      const totalTime = Date.now() - startTime;
-      LoggerUtil.log(`Default users completed in ${totalTime}ms`, apiId);
-      
-      return { totalCount, users };
-      
-    } catch (error) {
-      const totalTime = Date.now() - startTime;
-      LoggerUtil.error(`Default users query failed after ${totalTime}ms: ${error.message}`, error.stack, apiId);
-      throw new Error(`Failed to get default users: ${error.message}`);
-    }
-  }
-
-  /**
    * Get users by hierarchical location filters with comprehensive validation and error handling
    */
   async getUsersByHierarchicalLocation(
@@ -3385,52 +3116,73 @@ export class PostgresUserService implements IServicelocator {
     hierarchicalFiltersDto: HierarchicalLocationFiltersDto
   ): Promise<any> {
     const apiId = APIID.USER_LIST;
-    const requestStart = Date.now();
     
     try {
       const { limit, offset, sort: [sortField, sortDirection], role, filters, customfields } = hierarchicalFiltersDto;
-      const normalizedSortDirection = sortDirection.toLowerCase() === 'desc' ? 'DESC' : 'ASC';
       
-      // Extract filters from filters object
-      const status = filters?.status || [];
-      const name = filters?.name;
-      
-      LoggerUtil.log(`Starting optimized hierarchical search - Filters: ${JSON.stringify(filters)}, Roles: ${role?.length || 0}, Name: ${name ? 'provided' : 'none'}, Status: ${status?.length || 0}`, apiId);
-      
-      // Check if any filters are provided
+      // Extract filter parameters
       const filterResult = this.findDeepestFilter(filters);
-      const hasAnyFilter = !!filterResult.level || (role && role.length > 0) || (name && name.trim().length > 0) || (status && status.length > 0);
+      const nameFilter = filters?.name;
+      const statusFilter = filters?.status;
       
-      let userData: { totalCount: number; users: any[] };
-      
-      if (!hasAnyFilter) {
-        // No filters provided - get default users from CohortMembers using optimized approach
-        LoggerUtil.log(`No filters provided - getting default users from CohortMembers`, apiId);
-        userData = await this.getDefaultUsersOptimized(tenantId, limit, offset, sortField, normalizedSortDirection, customfields || [], status || []);
-      } else {
-        // Use the new optimized single-query approach
-        LoggerUtil.log(`Using optimized single-query approach`, apiId);
-        userData = await this.getOptimizedFilteredUsers(
-          tenantId,
-          filters,
-          role || [],
-          name,
-          status || [],
-          limit,
-          offset,
-          sortField,
-          normalizedSortDirection,
-          customfields || []
-        );
+      // Filter out center and batch from customfields request (they belong in cohortData)
+      const filteredCustomFields = customfields ? customfields.filter(field => 
+        !this.isExcludedFromCustomFields(field)
+      ) : undefined;
+      if (customfields && customfields.length !== (filteredCustomFields?.length || 0)) {
+        const excludedFields = this.getCohortFilterLevels().join('/');
+        LoggerUtil.warn(`Removed ${excludedFields} from customfields request - these are now in cohortData`, apiId);
       }
-      
-      const requestTime = Date.now() - requestStart;
-      LoggerUtil.log(`Total request completed in ${requestTime}ms - Found ${userData.totalCount} total users, returning ${userData.users.length}`, apiId);
-      
+
+      LoggerUtil.log(
+        `Starting optimized user search with filters: location=${!!filterResult.level}, role=${!!(role && role.length > 0)}, name=${!!nameFilter}, status=${!!(statusFilter && statusFilter.length > 0)}`,
+        apiId
+      );
+
+      // PERFORMANCE OPTIMIZATION:
+      // Instead of the old approach that:
+      // 1. Fetched ALL location-filtered users into memory (potentially 100k+ records)
+      // 2. Fetched ALL role-filtered users into memory (potentially 500k+ records)  
+      // 3. Did Set intersection in memory
+      // 4. Then applied pagination
+      //
+      // We now use a single optimized query that:
+      // 1. Applies all filters conditionally at the database level
+      // 2. Applies pagination (LIMIT/OFFSET) directly in the query
+      // 3. Only fetches the exact number of records needed for the current page
+      const optimizedQueryStartTime = Date.now();
+      const normalizedSortDirection = sortDirection.toLowerCase() === 'desc' ? 'DESC' : 'ASC';
+      const userData = await this.getOptimizedFilteredUsers(
+        tenantId,
+        limit,
+        offset,
+        sortField,
+        normalizedSortDirection,
+        filterResult.level ? filterResult : undefined,
+        role && role.length > 0 ? role : undefined,
+        nameFilter,
+        statusFilter,
+        filteredCustomFields
+      );
+      const optimizedQueryTime = Date.now() - optimizedQueryStartTime;
+
       // Return early if no users found
       if (userData.totalCount === 0) {
-        return this.createEmptyResponse(response, apiId, filters, role, name, limit, offset, sortField, sortDirection);
+        const noUsersMessage = this.getNoUsersFoundMessage(filters, role || []);
+        return APIResponse.success(response, apiId, {
+          users: [],
+          totalCount: 0,
+          currentPageCount: 0,
+          limit,
+          offset,
+          sort: { field: sortField, direction: sortDirection.toLowerCase() }
+        }, HttpStatus.OK, noUsersMessage);
       }
+
+      LoggerUtil.log(
+        `Optimized query completed in ${optimizedQueryTime}ms - returned ${userData.users.length} users (total: ${userData.totalCount})`,
+        apiId
+      );
       
       // Return successful response
       return APIResponse.success(response, apiId, {
@@ -3440,19 +3192,19 @@ export class PostgresUserService implements IServicelocator {
         limit,
         offset,
         sort: { field: sortField, direction: sortDirection.toLowerCase() }
-      }, HttpStatus.OK, `Users retrieved successfully in ${requestTime}ms`);
+      }, HttpStatus.OK, "Users retrieved successfully");
       
     } catch (error) {
-      const requestTime = Date.now() - requestStart;
-      LoggerUtil.error(`Error in getUsersByHierarchicalLocation after ${requestTime}ms: ${error.message}`, error.stack, apiId);
+      LoggerUtil.error(`Error in getUsersByHierarchicalLocation: ${error.message}`, error.stack, apiId);
       return APIResponse.error(response, apiId, "Failed to retrieve users", 
         `Error processing hierarchical filters: ${error.message}`, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 
   /**
-   * @deprecated This function is replaced by getOptimizedFilteredUsers for better performance
    * Get user IDs filtered by location with simplified logic
+   * @deprecated This function is deprecated and should not be used for new implementations.
+   * Use getOptimizedFilteredUsers() instead for better performance with database-level filtering.
    */
   private async getLocationFilteredUsers(filterResult: { level: string; ids: string[] }, tenantId: string): Promise<string[]> {
     const apiId = APIID.USER_LIST;
@@ -3493,7 +3245,7 @@ export class PostgresUserService implements IServicelocator {
           LEFT JOIN "CohortMembers" cm ON u."userId" = cm."userId" 
           LEFT JOIN "Cohort" batch ON cm."cohortId" = batch."cohortId"
           LEFT JOIN "Cohort" center ON batch."parentId"::text = center."cohortId"::text
-          WHERE u."userId"::text = ANY($1::text[])
+          WHERE u."userId" = ANY($1)
           ORDER BY center."name"
         `;
         
@@ -3582,9 +3334,8 @@ export class PostgresUserService implements IServicelocator {
 
   /**
    * Get user IDs filtered by roles with simplified logic
-   */
-  /**
-   * @deprecated This function is replaced by getOptimizedFilteredUsers for better performance
+   * @deprecated This function is deprecated and should not be used for new implementations.
+   * Use getOptimizedFilteredUsers() instead for better performance with database-level filtering.
    */
   private async getRoleFilteredUsers(roles: string[], tenantId: string): Promise<string[]> {
     const apiId = APIID.USER_LIST;
@@ -3600,59 +3351,13 @@ export class PostgresUserService implements IServicelocator {
   }
 
   /**
-   * @deprecated This function is replaced by getOptimizedFilteredUsers for better performance
-   * Get user IDs filtered by name search (case-insensitive partial match)
-   */
-  private async getNameFilteredUsers(nameKeyword: string, tenantId: string, existingUserIds?: string[]): Promise<string[]> {
-    const apiId = APIID.USER_LIST;
-    
-    try {
-      let query: string;
-      let queryParams: any[];
-      
-      if (existingUserIds && existingUserIds.length > 0) {
-        // Filter within existing user IDs (from location/role filters)
-        query = `
-          SELECT DISTINCT u."userId"
-          FROM "Users" u
-          INNER JOIN "UserTenantMapping" utm ON u."userId" = utm."userId"
-          WHERE utm."tenantId" = $1
-            AND u."userId"::text = ANY($2::text[])
-            AND LOWER(u."name") LIKE LOWER($3)
-        `;
-        queryParams = [tenantId, existingUserIds, `%${nameKeyword}%`];
-      } else {
-        // Search all users by name (when no other filters provided)
-        query = `
-          SELECT DISTINCT u."userId"
-          FROM "Users" u
-          INNER JOIN "UserTenantMapping" utm ON u."userId" = utm."userId"
-          WHERE utm."tenantId" = $1
-            AND LOWER(u."name") LIKE LOWER($2)
-        `;
-        queryParams = [tenantId, `%${nameKeyword}%`];
-      }
-      
-      const result = await this.usersRepository.query(query, queryParams);
-      const userIds: string[] = result.map((row: any) => String(row.userId));
-      
-      LoggerUtil.log(`Name search for '${nameKeyword}' found ${userIds.length} users`, apiId);
-      return userIds;
-      
-    } catch (error) {
-      LoggerUtil.error(`Error in name filter: ${error.message}`, error.stack, apiId);
-      throw new Error(`Failed to filter users by name: ${error.message}`);
-    }
-  }
-
-  /**
-   * @deprecated This function is replaced by getOptimizedFilteredUsers for better performance
    * Combine location and role filter results efficiently
+   * @deprecated This function is deprecated and should not be used for new implementations.
+   * Use getOptimizedFilteredUsers() instead for better performance with database-level filtering.
    */
   private combineFilterResults(locationUserIds: string[], roleUserIds: string[]): string[] {
-    // Allow empty filters now since we support name search and default users
     if (locationUserIds.length === 0 && roleUserIds.length === 0) {
-      return [];
+      throw new Error('No valid filters provided. Please provide at least one location or role filter');
     }
     
     if (locationUserIds.length > 0 && roleUserIds.length > 0) {
@@ -3665,45 +3370,10 @@ export class PostgresUserService implements IServicelocator {
   }
 
   /**
-   * Get default user IDs from CohortMembers when no filters are provided
-   */
-  private async getDefaultUsersFromCohortMembers(tenantId: string): Promise<string[]> {
-    const apiId = APIID.USER_LIST;
-    
-    try {
-      const query = `
-        WITH ranked_users AS (
-          SELECT 
-            cm."userId",
-            ROW_NUMBER() OVER (PARTITION BY cm."userId" ORDER BY cm."createdAt" DESC) as rn
-          FROM "CohortMembers" cm
-          INNER JOIN "Users" u ON cm."userId"::text = u."userId"::text
-          INNER JOIN "UserTenantMapping" utm ON u."userId" = utm."userId" 
-          WHERE utm."tenantId" = $1
-        )
-        SELECT "userId"
-        FROM ranked_users 
-        WHERE rn = 1
-        ORDER BY "userId"
-      `;
-      
-      const result = await this.usersRepository.query(query, [tenantId]);
-      const userIds: string[] = result.map((row: any) => String(row.userId));
-      
-      LoggerUtil.log(`Retrieved ${userIds.length} default users from CohortMembers`, apiId);
-      return userIds;
-      
-    } catch (error) {
-      LoggerUtil.error(`Error getting default users: ${error.message}`, error.stack, apiId);
-      throw new Error(`Failed to get default users: ${error.message}`);
-    }
-  }
-
-  /**
    * Create empty response when no users found
    */
-  private createEmptyResponse(response: Response, apiId: string, filters: any, roles: string[], nameSearch: string | undefined, limit: number, offset: number, sortField: string, sortDirection: string) {
-    const noUsersMessage = this.getNoUsersFoundMessage(filters, roles, nameSearch);
+  private createEmptyResponse(response: Response, apiId: string, filters: any, roles: string[], limit: number, offset: number, sortField: string, sortDirection: string) {
+    const noUsersMessage = this.getNoUsersFoundMessage(filters, roles);
     return APIResponse.success(response, apiId, {
       users: [],
       totalCount: 0,
@@ -3718,13 +3388,17 @@ export class PostgresUserService implements IServicelocator {
   /**
    * Generate contextual message when no users are found
    */
-  private getNoUsersFoundMessage(filters: any, roles: string[], nameSearch?: string): string {
+  private getNoUsersFoundMessage(filters: any, roles: string[]): string {
     const appliedFilters: string[] = [];
     
     if (filters) {
       Object.keys(filters).forEach(key => {
         const value = filters[key];
-        if (Array.isArray(value) && value.length > 0) {
+        if (key === 'name' && value && typeof value === 'string' && value.trim()) {
+          appliedFilters.push(`name: "${value.trim()}"`);
+        } else if (key === 'status' && Array.isArray(value) && value.length > 0) {
+          appliedFilters.push(`status: [${value.join(', ')}]`);
+        } else if (Array.isArray(value) && value.length > 0) {
           appliedFilters.push(`${key}: ${value.length} value(s)`);
         }
       });
@@ -3732,10 +3406,6 @@ export class PostgresUserService implements IServicelocator {
     
     if (roles && roles.length > 0) {
       appliedFilters.push(`roles: ${roles.join(', ')}`);
-    }
-    
-    if (nameSearch && nameSearch.trim().length > 0) {
-      appliedFilters.push(`name search: "${nameSearch}"`);
     }
     
     return appliedFilters.length > 0 
@@ -3855,12 +3525,253 @@ export class PostgresUserService implements IServicelocator {
     `
   } as const;
 
+  /**
+   * Optimized function to get filtered and paginated users directly from database
+   * Replaces the inefficient memory-based filtering approach
+   */
+  private async getOptimizedFilteredUsers(
+    tenantId: string,
+    limit: number,
+    offset: number,
+    sortField: string,
+    sortDirection: string,
+    locationFilter?: { level: string; ids: string[] },
+    roleFilter?: string[],
+    nameFilter?: string,
+    statusFilter?: string[],
+    customFieldNames?: string[]
+  ): Promise<{ totalCount: number; users: any[] }> {
+    const apiId = APIID.USER_LIST;
+    
+    try {
+      // Build dynamic query with conditional filters
+      const queryBuilder = this.buildOptimizedUserQuery(
+        tenantId,
+        locationFilter,
+        roleFilter,
+        nameFilter,
+        statusFilter,
+        sortField,
+        sortDirection,
+        limit,
+        offset
+      );
+
+      LoggerUtil.log(
+        `Executing optimized query with filters: location=${!!locationFilter}, role=${!!roleFilter}, name=${!!nameFilter}, status=${!!statusFilter}`,
+        apiId
+      );
+
+      const result = await this.usersRepository.query(queryBuilder.query, queryBuilder.params);
+      const totalCount = result.length > 0 ? parseInt(result[0].total_count) : 0;
+
+      // Get custom fields data if requested
+      let customFieldsData = {};
+      if (customFieldNames && customFieldNames.length > 0 && result.length > 0) {
+        const userIds = result.map((row: any) => row.userId);
+        customFieldsData = await this.getCustomFieldsData(userIds, customFieldNames, tenantId);
+      }
+
+      // Get batch and center data
+      let batchCenterData = {};
+      if (result.length > 0) {
+        const userIds = result.map((row: any) => row.userId);
+        batchCenterData = await this.getBatchAndCenterNames(userIds);
+      }
+
+      // Process and combine all data
+      const processedUsers = await this.processOptimizedUserResults(
+        result,
+        customFieldsData,
+        batchCenterData
+      );
+
+      return {
+        totalCount,
+        users: processedUsers
+      };
+
+    } catch (error) {
+      LoggerUtil.error(`Error in optimized filtered users query: ${error.message}`, error.stack, apiId);
+      throw new Error(`Failed to get optimized filtered users: ${error.message}`);
+    }
+  }
 
 
 
+
+
+  /**
+   * Build optimized user query with conditional filters and pagination
+   */
+  private buildOptimizedUserQuery(
+    tenantId: string,
+    locationFilter?: { level: string; ids: string[] },
+    roleFilter?: string[],
+    nameFilter?: string,
+    statusFilter?: string[],
+    sortField: string = 'name',
+    sortDirection: string = 'ASC',
+    limit: number = 10,
+    offset: number = 0
+  ): { query: string; params: any[] } {
+    
+    const conditions: string[] = [];
+    const params: any[] = [];
+    let paramIndex = 1;
+    
+    // Base query structure
+    let baseQuery = `
+      WITH filtered_users AS (
+        SELECT DISTINCT u."userId", u."username", u."firstName", u."name", u."middleName", 
+          u."lastName", u."email", u."mobile", u."gender", u."dob", 
+          u."status", u."createdAt", utm."tenantId"
+        FROM "Users" u
+        LEFT JOIN "UserTenantMapping" utm ON u."userId" = utm."userId"
+    `;
+
+    // Always filter by tenant
+    conditions.push(`utm."tenantId" = $${paramIndex}`);
+    params.push(tenantId);
+    paramIndex++;
+
+    // Add location filter if provided
+    if (locationFilter && locationFilter.level && locationFilter.ids.length > 0) {
+      if (this.isBatchFilter(locationFilter.level)) {
+        // Batch filtering through cohort membership
+        baseQuery += `
+          JOIN "CohortMembers" cm ON u."userId" = cm."userId"
+        `;
+        conditions.push(`cm."cohortId" = ANY($${paramIndex})`);
+        params.push(locationFilter.ids);
+        paramIndex++;
+      } else if (this.isCenterFilter(locationFilter.level)) {
+        // Center filtering through cohort relationships
+        baseQuery += `
+          JOIN "CohortMembers" cm ON u."userId" = cm."userId"
+          JOIN "Cohort" batch ON cm."cohortId" = batch."cohortId"
+          JOIN "Cohort" center ON batch."parentId"::text = center."cohortId"::text
+        `;
+        conditions.push(`center."cohortId" = ANY($${paramIndex})`);
+        params.push(locationFilter.ids);
+        paramIndex++;
+      } else {
+        // Field-based location filtering (state, district, block, village)
+        baseQuery += `
+          JOIN "FieldValues" fv ON u."userId" = fv."itemId"
+          JOIN "Fields" f ON fv."fieldId" = f."fieldId"
+        `;
+        conditions.push(`f."name" = $${paramIndex}`);
+        params.push(locationFilter.level);
+        paramIndex++;
+        
+        conditions.push(`fv."value" && $${paramIndex}`);
+        params.push(locationFilter.ids);
+        paramIndex++;
+        
+        conditions.push(`fv."tenantId" = $${paramIndex}`);
+        params.push(tenantId);
+        paramIndex++;
+      }
+    }
+
+    // Add role filter if provided
+    if (roleFilter && roleFilter.length > 0) {
+      baseQuery += `
+        JOIN "UserRolesMapping" urm ON u."userId" = urm."userId"
+        JOIN "Roles" r ON urm."roleId" = r."roleId"
+      `;
+      conditions.push(`r."name" = ANY($${paramIndex})`);
+      params.push(roleFilter);
+      paramIndex++;
+      
+      conditions.push(`urm."tenantId" = $${paramIndex}`);
+      params.push(tenantId);
+      paramIndex++;
+    }
+
+    // Add name filter if provided
+    if (nameFilter && nameFilter.trim()) {
+      conditions.push(`u."name" ILIKE $${paramIndex}`);
+      params.push(`%${nameFilter.trim()}%`);
+      paramIndex++;
+    }
+
+    // Add status filter if provided
+    if (statusFilter && statusFilter.length > 0) {
+      conditions.push(`u."status" = ANY($${paramIndex})`);
+      params.push(statusFilter);
+      paramIndex++;
+    }
+
+    // Complete the base query
+    baseQuery += `
+        WHERE ${conditions.join(' AND ')}
+      ),
+      paginated_users AS (
+        SELECT *, (SELECT COUNT(*) FROM filtered_users) as total_count
+        FROM filtered_users
+        ORDER BY "${sortField}" ${sortDirection}
+        LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+      )
+      SELECT pu.*, r."name" as "roleName"
+      FROM paginated_users pu
+      LEFT JOIN "UserRolesMapping" urm ON pu."userId" = urm."userId" AND pu."tenantId" = urm."tenantId"
+      LEFT JOIN "Roles" r ON urm."roleId" = r."roleId"
+      ORDER BY pu."${sortField}" ${sortDirection}
+    `;
+
+    // Add limit and offset parameters
+    params.push(limit, offset);
+
+    return { query: baseQuery, params };
+  }
+
+  /**
+   * Process optimized user query results
+   */
+  private async processOptimizedUserResults(
+    queryResults: any[],
+    customFieldsData: any,
+    batchCenterData: any
+  ): Promise<any[]> {
+    const userMap = new Map();
+
+    // Group results by user (since roles can create multiple rows per user)
+    for (const row of queryResults) {
+      const userId = row.userId;
+      
+      if (!userMap.has(userId)) {
+        userMap.set(userId, {
+          userId: row.userId,
+          username: row.username,
+          firstName: row.firstName,
+          name: row.name,
+          middleName: row.middleName,
+          lastName: row.lastName,
+          email: row.email,
+          mobile: row.mobile,
+          gender: row.gender,
+          dob: row.dob,
+          status: row.status,
+          createdAt: row.createdAt,
+          tenantId: row.tenantId,
+          roles: [],
+          customFields: customFieldsData[userId] || [],
+          cohortData: batchCenterData[userId] || []
+        });
+      }
+
+      // Add role if it exists and isn't already added
+      if (row.roleName && !userMap.get(userId).roles.includes(row.roleName)) {
+        userMap.get(userId).roles.push(row.roleName);
+      }
+    }
+
+    return Array.from(userMap.values());
+  }
 
    /**
-    * @deprecated This function is replaced by getOptimizedFilteredUsers for better performance
     * Get paginated users with all related data in optimized manner
     */
    private async getPaginatedUsers(
@@ -3871,7 +3782,8 @@ export class PostgresUserService implements IServicelocator {
      sortField: string, 
      sortDirection: string, 
      customFieldNames?: string[],
-     status?: string[]
+     nameFilter?: string,
+     statusFilter?: string[]
    ): Promise<{ totalCount: number; users: any[] }> {
      const apiId = APIID.USER_LIST;
      
@@ -3884,7 +3796,7 @@ export class PostgresUserService implements IServicelocator {
       // Optimize queries by combining count and details in a single query
       const [combinedUserData, customFieldsData, batchCenterData] = await Promise.allSettled([
         // Step 1: Get user details with total count in single query (optimized)
-        this.getUserDetailsWithCount(userIds, tenantId, limit, offset, sortField, sortDirection, status),
+        this.getUserDetailsWithCount(userIds, tenantId, limit, offset, sortField, sortDirection, nameFilter, statusFilter),
         
         // Step 2: Get custom fields data (if requested)
         customFieldNames && customFieldNames.length > 0 
@@ -3970,9 +3882,9 @@ export class PostgresUserService implements IServicelocator {
       FROM 
         public."CohortMembers" cm
         LEFT JOIN public."Cohort" batch ON cm."cohortId" = batch."cohortId"
-        LEFT JOIN public."Cohort" center ON batch."parentId"::text = center."cohortId"::text
+        LEFT JOIN public."Cohort" center ON batch."parentId"::uuid = center."cohortId"
       WHERE 
-        cm."userId"::text = ANY($1::text[])
+        cm."userId" = ANY($1::uuid[])
       ORDER BY cm."createdAt" DESC
     `;
     
@@ -4054,7 +3966,7 @@ export class PostgresUserService implements IServicelocator {
         SELECT COUNT(DISTINCT u."userId") as total
         FROM "Users" u
         LEFT JOIN "UserTenantMapping" utm ON u."userId" = utm."userId"
-        WHERE u."userId"::text = ANY($1::text[])
+        WHERE u."userId" = ANY($1) 
           AND utm."tenantId" = $2
           AND u."status" != 'archived'
       `;
@@ -4099,7 +4011,7 @@ export class PostgresUserService implements IServicelocator {
         LEFT JOIN "UserTenantMapping" utm ON u."userId" = utm."userId"
         LEFT JOIN "UserRolesMapping" urm ON u."userId" = urm."userId" AND utm."tenantId" = urm."tenantId"
         LEFT JOIN "Roles" r ON urm."roleId" = r."roleId"
-        WHERE u."userId"::text = ANY($1::text[])
+        WHERE u."userId" = ANY($1) 
           AND utm."tenantId" = $2
           AND u."status" != 'archived'
         ORDER BY u."${sortField}" ${sortDirection}
@@ -4127,7 +4039,8 @@ export class PostgresUserService implements IServicelocator {
     offset: number, 
     sortField: string, 
     sortDirection: string,
-    status?: string[]
+    nameFilter?: string,
+    statusFilter?: string[]
   ): Promise<{ totalCount: number; users: any[] }> {
     const apiId = APIID.USER_LIST;
     
@@ -4136,6 +4049,28 @@ export class PostgresUserService implements IServicelocator {
         return { totalCount: 0, users: [] };
       }
 
+      // Build dynamic WHERE conditions for name and status filters
+      const additionalConditions: string[] = [];
+      const queryParams: any[] = [userIds, tenantId];
+      let paramIndex = 3; // Start from $3 since $1 and $2 are already used
+      
+      if (nameFilter && nameFilter.trim()) {
+        additionalConditions.push(`u."name" ILIKE $${paramIndex}`);
+        queryParams.push(`%${nameFilter.trim()}%`);
+        paramIndex++;
+      }
+      
+      if (statusFilter && statusFilter.length > 0) {
+        additionalConditions.push(`u."status" = ANY($${paramIndex})`);
+        queryParams.push(statusFilter);
+        paramIndex++;
+      }
+      
+      // Build the WHERE clause
+      const whereClause = additionalConditions.length > 0 
+        ? `AND ${additionalConditions.join(' AND ')}`
+        : '';
+      
       // Single optimized query that gets both count and paginated results
       // Fixed: Apply pagination to unique users first, then get their roles
       const query = `
@@ -4145,15 +4080,15 @@ export class PostgresUserService implements IServicelocator {
             u."status", u."createdAt", utm."tenantId"
           FROM "Users" u
           LEFT JOIN "UserTenantMapping" utm ON u."userId" = utm."userId"
-          WHERE u."userId"::text = ANY($1::text[])
+          WHERE ${userIds.length > 0 ? 'u."userId" = ANY($1)' : '1=1'} 
             AND utm."tenantId" = $2
-            AND u."status" = ANY($5::public.user_status[])
+            ${whereClause}
         ),
         paginated_users AS (
           SELECT *, (SELECT COUNT(*) FROM base_users) as total_count
           FROM base_users
           ORDER BY "${sortField}" ${sortDirection}
-          LIMIT $3 OFFSET $4
+          LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
         )
         SELECT pu.*, r."name" as "roleName"
         FROM paginated_users pu
@@ -4162,9 +4097,10 @@ export class PostgresUserService implements IServicelocator {
         ORDER BY pu."${sortField}" ${sortDirection}
       `;
       
-      // Add debug logging before main query
+      // Add limit and offset to query parameters
+      queryParams.push(limit, offset);
       
-      const result = await this.usersRepository.query(query, [userIds, tenantId, limit, offset, status || null]);
+      const result = await this.usersRepository.query(query, queryParams);
       
       const totalCount = result.length > 0 ? parseInt(result[0].total_count) : 0;
       
@@ -4242,10 +4178,21 @@ export class PostgresUserService implements IServicelocator {
                const rawValue = userCustomFields[fieldName];
                
                if (rawValue !== undefined && rawValue !== null) {
-                 // If it's an array, take the first value; otherwise use as is
-                 fieldValue = Array.isArray(rawValue) && rawValue.length > 0 
-                   ? rawValue[0] 
-                   : (Array.isArray(rawValue) ? null : rawValue);
+                 // ENHANCEMENT: Handle multiple values by joining them with commas
+                 // Previous behavior: Only displayed first value from array
+                 // New behavior: Displays all values as comma-separated string
+                 // Example: ["english", "home_science", "life_skills"] → "english, home_science, life_skills"
+                 if (Array.isArray(rawValue)) {
+                   if (rawValue.length > 0) {
+                     // Filter out null/undefined/empty values and join with comma and space
+                     const validValues = rawValue.filter(val => val !== null && val !== undefined && val !== '');
+                     fieldValue = validValues.length > 0 ? validValues.join(', ') : null;
+                   } else {
+                     fieldValue = null;
+                   }
+                 } else {
+                   fieldValue = rawValue;
+                 }
                }
                
                processedCustomFields[fieldName] = fieldValue;
@@ -4342,6 +4289,7 @@ export class PostgresUserService implements IServicelocator {
 
       // Structure the data by userId and fieldName
       const customFieldsData: Record<string, Record<string, any>> = {};
+      let multiValueFieldsCount = 0;
       
       customFieldsResult.forEach(row => {
         const { itemId: userId, fieldId, value } = row;
@@ -4358,7 +4306,20 @@ export class PostgresUserService implements IServicelocator {
         
         // Store the value as-is (text[] from database)
         customFieldsData[userId][fieldName] = value || [];
+        
+        // Log fields with multiple values for monitoring
+        if (Array.isArray(value) && value.length > 1) {
+          multiValueFieldsCount++;
+          LoggerUtil.log(
+            `Multi-value custom field detected: ${fieldName} for user ${userId} has ${value.length} values: ${value.join(', ')}`,
+            apiId
+          );
+        }
       });
+
+      if (multiValueFieldsCount > 0) {
+        LoggerUtil.log(`Found ${multiValueFieldsCount} custom fields with multiple values that will be comma-separated`, apiId);
+      }
 
 
       // Resolve location field IDs to names for state, district, block, village
@@ -4445,17 +4406,33 @@ export class PostgresUserService implements IServicelocator {
          const fieldValue = customFieldsData[userId][fieldName];
          
          if (locationFields.includes(fieldName) && locationNameMaps[fieldName]) {
-           // Replace ID with name for location fields (state, district, block, village)
+           // ENHANCEMENT: Replace ID(s) with name(s) for location fields, handling multiple values
+           // Previous behavior: Only resolved first ID to name
+           // New behavior: Resolves all IDs to names and joins with commas
            if (Array.isArray(fieldValue) && fieldValue.length > 0) {
-             const id = fieldValue[0]; // Take first ID
-             const resolvedName = locationNameMaps[fieldName][id];
-             resolvedData[userId][fieldName] = resolvedName || id; // Use resolved name or fallback to original ID
+             // Handle multiple IDs by resolving each one and joining with commas
+             const resolvedNames = fieldValue
+               .filter(id => id !== null && id !== undefined && id !== '') // Filter out invalid IDs
+               .map(id => {
+                 const resolvedName = locationNameMaps[fieldName][id];
+                 return resolvedName || id; // Use resolved name or fallback to original ID
+               })
+               .filter(name => name !== null && name !== undefined && name !== ''); // Filter out empty results
+             
+             resolvedData[userId][fieldName] = resolvedNames.length > 0 ? resolvedNames.join(', ') : null;
            } else {
              resolvedData[userId][fieldName] = fieldValue;
            }
          } else {
-           // Keep original value for non-location fields (including batch and center which are handled elsewhere)
-           resolvedData[userId][fieldName] = fieldValue;
+           // ENHANCEMENT: For non-location fields that are arrays, join them with commas
+           // Previous behavior: Only displayed first value from array
+           // New behavior: Displays all values as comma-separated string
+           if (Array.isArray(fieldValue) && fieldValue.length > 0) {
+             const validValues = fieldValue.filter(val => val !== null && val !== undefined && val !== '');
+             resolvedData[userId][fieldName] = validValues.length > 0 ? validValues.join(', ') : null;
+           } else {
+             resolvedData[userId][fieldName] = fieldValue;
+           }
          }
        });
      });

@@ -24,6 +24,15 @@ export class FieldValues {
   @Column("uuid", { nullable: false })
   fieldId: string;
 
+  @Column("uuid", { nullable: true })
+  tenantId?: string;
+
+  @Column("varchar", { nullable: true })
+  contextType?: string;
+
+  @Column("uuid", { nullable: true })
+  contextId?: string;
+
   @CreateDateColumn({
     type: "timestamptz",
     default: () => "now()",
