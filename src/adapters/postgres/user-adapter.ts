@@ -413,12 +413,11 @@ export class PostgresUserService implements IServicelocator {
     try {
       // Extract includeCustomFields from the main DTO, default to true if not specified
       const includeCustomFields = userSearchDto.includeCustomFields !== false;
-     
+
       const findData = await this.findAllUserDetails(
         userSearchDto,
         includeCustomFields
       );
-
 
       if (findData === false) {
         LoggerUtil.error(
@@ -538,21 +537,20 @@ export class PostgresUserService implements IServicelocator {
     );
 
     if (filters && Object.keys(filters).length > 0) {
+      // this is project requirement to handle country filter based on role so this is aspire specific code
       // Check if role is Regional Admin to determine country filtering strategy
       const isRegionalAdmin = filters.role === 'Regional Admin';
 
       for (const [key, value] of Object.entries(filters)) {
-      
         // Special handling for country field based on role
         if (key === 'country') {
           if (isRegionalAdmin) {
             // For Regional Admin, treat country as custom field
-          
+
             searchCustomFields[key] = value;
             continue;
           } else {
             // For other roles, treat country as standard user table column
-           
           }
         }
 
@@ -694,7 +692,6 @@ export class PostgresUserService implements IServicelocator {
     }
 
     //Get user core fields data
-   
 
     // Fix the SQL query construction - add proper WHERE clause
     const whereClause =
@@ -706,9 +703,7 @@ export class PostgresUserService implements IServicelocator {
       LEFT JOIN public."Roles" R
       ON R."roleId" = UR."roleId" ${whereClause} GROUP BY U."userId", R."name" ${orderingCondition} ${offset} ${limit}`;
 
-   
     const userDetails = await this.usersRepository.query(query);
-   
 
     if (userDetails.length > 0) {
       result.totalCount = parseInt(userDetails[0].total_count, 10);
