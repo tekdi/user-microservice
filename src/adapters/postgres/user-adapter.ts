@@ -1528,10 +1528,10 @@ export class PostgresUserService implements IServicelocator {
 
               // Prepare additional data for FieldValues table
               const additionalData = {
-                tenantId: tenantId,
+                tenantId: tenantId || null,
                 contextType: "USER",
-                createdBy: userCreateDto.createdBy,
-                updatedBy: userCreateDto.updatedBy,
+                createdBy: userCreateDto.createdBy || null,
+                updatedBy: null,
               };
 
               LoggerUtil.log(

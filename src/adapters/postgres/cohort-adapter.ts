@@ -376,12 +376,10 @@ export class PostgresCohortService {
         );
       }
       const response = await this.cohortRepository.save(cohortCreateDto);
-      
+
       const createFailures = [];
 
-      // ENHANCEMENT: Save custom fields in FieldValues table with comprehensive context information
-      // Previous behavior: Basic field storage without proper context
-      // New behavior: Stores tenantId, contextType="COHORT", contextId=cohortId, createdBy, updatedBy
+      //SAVE  in fieldValues table
       if (
         response &&
         cohortCreateDto.customFields &&
@@ -389,66 +387,38 @@ export class PostgresCohortService {
       ) {
         const cohortId = response?.cohortId;
 
-        LoggerUtil.log(
-          `Processing ${cohortCreateDto.customFields.length} custom fields for cohort ${cohortId}`,
-          apiId
-        );
+        // Prepare additional data for FieldValues table
+        const additionalData = {
+          tenantId: tenantId || null,
+          contextType: "COHORT",
+          createdBy: cohortCreateDto.createdBy || null,
+          updatedBy: null,
+        };
 
         if (cohortCreateDto.customFields.length > 0) {
           for (const fieldValues of cohortCreateDto.customFields) {
-            try {
-              const fieldData = {
-                fieldId: fieldValues["fieldId"],
-                value: fieldValues["value"],
-              };
+            const fieldData = {
+              fieldId: fieldValues["fieldId"],
+              value: fieldValues["value"],
+            };
 
-              // Prepare additional context data for FieldValues table
-              const additionalData = {
-                tenantId: tenantId,
-                contextType: "COHORT",
-                contextId: cohortId,
-                createdBy: cohortCreateDto.createdBy,
-                updatedBy: cohortCreateDto.updatedBy,
-              };
-
-              LoggerUtil.log(
-                `Storing custom field ${fieldData.fieldId} for cohort ${cohortId} with contextType: COHORT, tenantId: ${tenantId}`,
-                apiId
-              );
-
-              const resfields = await this.fieldsService.updateCohortCustomFields(
-                cohortId,
-                fieldData,
-                cohortCreateDto.customFields[0].fieldId,
-                additionalData
-              );
-
-              if (resfields.correctValue) {
-                if (!response["customFieldsValue"])
-                  response["customFieldsValue"] = [];
-                response["customFieldsValue"].push(resfields);
-              } else {
-                createFailures.push(
-                  `${fieldData.fieldId}: Failed to store custom field value`
-                );
-              }
-            } catch (fieldError) {
-              LoggerUtil.error(
-                `Failed to store custom field ${fieldValues["fieldId"]} for cohort ${cohortId}`,
-                `Error: ${fieldError.message}`,
-                apiId
-              );
+            const resfields = await this.fieldsService.updateCustomFields(
+              cohortId,
+              fieldData,
+              cohortCreateDto.customFields[0].fieldId,
+              additionalData
+            );
+            if (resfields.correctValue) {
+              if (!response["customFieldsValue"])
+                response["customFieldsValue"] = [];
+              response["customFieldsValue"].push(resfields);
+            } else {
               createFailures.push(
-                `${fieldValues["fieldId"]}: Failed to store custom field - ${fieldError.message}`
+                `${fieldData.fieldId}: ${resfields?.valueIssue} - ${resfields.fieldName}`
               );
             }
           }
         }
-
-        LoggerUtil.log(
-          `Successfully processed all custom fields for cohort ${cohortId}`,
-          apiId
-        );
       }
       // add the year mapping entry in table with cohortId and academicYearId
       await this.cohortAcademicYearService.insertCohortAcademicYear(
@@ -602,7 +572,7 @@ export class PostgresCohortService {
         if (
           cohortUpdateDto.customFields &&
           cohortUpdateDto.customFields.length > 0
-        ) {          
+        ) {
           const contextType = cohortUpdateDto.type
             ? [cohortUpdateDto.type]
             : existingCohorDetails?.type
@@ -612,7 +582,8 @@ export class PostgresCohortService {
             "COHORT",
             contextType
           );
-          
+
+
           if (allCustomFields.length > 0) {
             const customFieldAttributes = allCustomFields.reduce(
               (fieldDetail, { fieldId, fieldAttributes, fieldParams, name }) =>
@@ -632,7 +603,7 @@ export class PostgresCohortService {
               await this.fieldsService.updateCustomFields(
                 cohortId,
                 fieldData,
-                customFieldAttributes[fieldData.fieldId]
+                customFieldAttributes[fieldData.fieldId],
               );
             }
           }
@@ -891,7 +862,7 @@ export class PostgresCohortService {
         }
       } else {
         let getCohortIdUsingCustomFields;
-        
+
         //If source config in source details from fields table is not exist then return false
 
         if (Object.keys(searchCustomFields).length > 0) {
@@ -940,7 +911,7 @@ export class PostgresCohortService {
           order,
         });
 
-        
+
         const cohortData = data.slice(offset, offset + limit);
         count = totalCount;
 
@@ -1136,7 +1107,7 @@ export class PostgresCohortService {
       throw new Error("No cohort IDs found for the given fieldId and value.");
     }
 
-    const existingCohortIds = await this.getCohortDetailsByIds(cohortIds,academicYearId);
+    const existingCohortIds = await this.getCohortDetailsByIds(cohortIds, academicYearId);
     return existingCohortIds;
   }
 
@@ -1222,7 +1193,7 @@ export class PostgresCohortService {
     try {
       // For delete events, we may want to include just basic information since the cohort might already be removed
       let cohortData: any;
-      
+
       if (eventType === 'deleted') {
         cohortData = {
           cohortId: cohortId,
