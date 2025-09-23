@@ -537,8 +537,24 @@ export class PostgresUserService implements IServicelocator {
     );
 
     if (filters && Object.keys(filters).length > 0) {
+      // this is project requirement to handle country filter based on role so this is aspire specific code
+      // Check if role is Regional Admin to determine country filtering strategy
+      const isRegionalAdmin = filters.role === 'Regional Admin';
+
       for (const [key, value] of Object.entries(filters)) {
-        if (userKeys.includes(key)) {
+        // Special handling for country field based on role
+        if (key === 'country') {
+          if (isRegionalAdmin) {
+            // For Regional Admin, treat country as custom field
+
+            searchCustomFields[key] = value;
+            continue;
+          } else {
+            // For other roles, treat country as standard user table column
+          }
+        }
+
+        if (userKeys.includes(key) || (key === 'country' && !isRegionalAdmin)) {
           if (index > 0) {
             whereCondition += ` AND `;
           }
@@ -676,12 +692,16 @@ export class PostgresUserService implements IServicelocator {
     }
 
     //Get user core fields data
+
+    // Fix the SQL query construction - add proper WHERE clause
+    const whereClause =
+      whereCondition && whereCondition !== 'WHERE' ? whereCondition : '';
     const query = `SELECT U."userId", U."username",U."email", U."firstName", U."middleName", U."lastName", U."gender", U."dob", R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", U.status,U.country, COUNT(*) OVER() AS total_count 
       FROM  public."Users" U
       LEFT JOIN public."UserRolesMapping" UR
       ON UR."userId" = U."userId"
       LEFT JOIN public."Roles" R
-      ON R."roleId" = UR."roleId" ${whereCondition} GROUP BY U."userId", R."name" ${orderingCondition} ${offset} ${limit}`;
+      ON R."roleId" = UR."roleId" ${whereClause} GROUP BY U."userId", R."name" ${orderingCondition} ${offset} ${limit}`;
 
     const userDetails = await this.usersRepository.query(query);
 
