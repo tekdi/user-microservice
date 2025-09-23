@@ -1463,7 +1463,7 @@ export class PostgresUserService implements IServicelocator {
         apiId,
         userContext.username
       );
-      console.log("userCreateDto", userCreateDto);
+
       const result = await this.createUserInDatabase(
         request,
         userCreateDto,
@@ -1510,15 +1510,6 @@ export class PostgresUserService implements IServicelocator {
             {}
           );
 
-          // Extract tenantId from the first tenantCohortRoleMapping entry
-          const tenantId = userCreateDto.tenantCohortRoleMapping?.[0]?.tenantId;
-
-          LoggerUtil.log(
-            `Processing ${userCreateDto.customFields.length} custom fields for user ${userContext.username}`,
-            apiId,
-            userContext.username
-          );
-
           for (const fieldValues of userCreateDto.customFields) {
 
             const fieldData = {
@@ -1528,7 +1519,7 @@ export class PostgresUserService implements IServicelocator {
 
             // Prepare additional data for FieldValues table
             const additionalData = {
-              tenantId: tenantId,
+              tenantId:  userCreateDto.tenantCohortRoleMapping?.[0]?.tenantId || null,
               contextType: "USER",
               createdBy: userCreateDto.createdBy,
               updatedBy: userCreateDto.updatedBy,
@@ -3108,26 +3099,8 @@ export class PostgresUserService implements IServicelocator {
       ) : undefined;
       if (customfields && customfields.length !== (filteredCustomFields?.length || 0)) {
         const excludedFields = this.getCohortFilterLevels().join('/');
-        LoggerUtil.warn(`Removed ${excludedFields} from customfields request - these are now in cohortData`, apiId);
       }
 
-      LoggerUtil.log(
-        `Starting optimized user search with filters: location=${!!filterResult.level}, role=${!!(role && role.length > 0)}, name=${!!nameFilter}, status=${!!(statusFilter && statusFilter.length > 0)}`,
-        apiId
-      );
-
-      // PERFORMANCE OPTIMIZATION:
-      // Instead of the old approach that:
-      // 1. Fetched ALL location-filtered users into memory (potentially 100k+ records)
-      // 2. Fetched ALL role-filtered users into memory (potentially 500k+ records)  
-      // 3. Did Set intersection in memory
-      // 4. Then applied pagination
-      //
-      // We now use a single optimized query that:
-      // 1. Applies all filters conditionally at the database level
-      // 2. Applies pagination (LIMIT/OFFSET) directly in the query
-      // 3. Only fetches the exact number of records needed for the current page
-      const optimizedQueryStartTime = Date.now();
       const normalizedSortDirection = sortDirection.toLowerCase() === 'desc' ? 'DESC' : 'ASC';
       const userData = await this.getOptimizedFilteredUsers(
         tenantId,
@@ -3141,7 +3114,6 @@ export class PostgresUserService implements IServicelocator {
         statusFilter,
         filteredCustomFields
       );
-      const optimizedQueryTime = Date.now() - optimizedQueryStartTime;
 
       // Return early if no users found
       if (userData.totalCount === 0) {
@@ -3156,10 +3128,6 @@ export class PostgresUserService implements IServicelocator {
         }, HttpStatus.OK, noUsersMessage);
       }
 
-      LoggerUtil.log(
-        `Optimized query completed in ${optimizedQueryTime}ms - returned ${userData.users.length} users (total: ${userData.totalCount})`,
-        apiId
-      );
 
       // Return successful response
       return APIResponse.success(response, apiId, {
@@ -3521,7 +3489,7 @@ export class PostgresUserService implements IServicelocator {
     const apiId = APIID.USER_LIST;
 
     try {
-      // Build dynamic query with conditional filters
+      // Get user Data with conditional filters
       const queryBuilder = this.buildOptimizedUserQuery(
         tenantId,
         locationFilter,
@@ -3532,11 +3500,6 @@ export class PostgresUserService implements IServicelocator {
         sortDirection,
         limit,
         offset
-      );
-
-      LoggerUtil.log(
-        `Executing optimized query with filters: location=${!!locationFilter}, role=${!!roleFilter}, name=${!!nameFilter}, status=${!!statusFilter}`,
-        apiId
       );
 
       const result = await this.usersRepository.query(queryBuilder.query, queryBuilder.params);
@@ -3700,7 +3663,6 @@ export class PostgresUserService implements IServicelocator {
 
     // Add limit and offset parameters
     params.push(limit, offset);
-
     return { query: baseQuery, params };
   }
 
