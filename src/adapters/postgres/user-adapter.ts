@@ -834,13 +834,13 @@ export class PostgresUserService implements IServicelocator {
 
       if (roleData.length > 0) {
         const tenantId = data.tenantId;
-        
+
         // If tenant already exists in map, just add roles to existing entry
         if (tenantMap.has(tenantId)) {
           const existingTenant = tenantMap.get(tenantId);
           roleData.forEach(role => {
             // Avoid duplicate roles
-            const roleExists = existingTenant.roles.some(existingRole => 
+            const roleExists = existingTenant.roles.some(existingRole =>
               existingRole.roleId === role.roleid
             );
             if (!roleExists) {
@@ -967,7 +967,7 @@ export class PostgresUserService implements IServicelocator {
       // Synchronize user status with Keycloak
       if (userDto.userData?.status) {
         const isUserActive = userDto.userData.status === 'active';
-        
+
         // Async Keycloak status synchronization - non-blocking
         this.syncUserStatusWithKeycloak(userDto.userId, isUserActive, apiId)
           .catch(error => LoggerUtil.error(
@@ -1520,59 +1520,36 @@ export class PostgresUserService implements IServicelocator {
           );
 
           for (const fieldValues of userCreateDto.customFields) {
-            try {
-              const fieldData = {
-                fieldId: fieldValues["fieldId"],
-                value: fieldValues["value"],
-              };
 
-              // Prepare additional data for FieldValues table
-              const additionalData = {
-                tenantId: tenantId,
-                contextType: "USER",
-                createdBy: userCreateDto.createdBy,
-                updatedBy: userCreateDto.updatedBy,
-              };
+            const fieldData = {
+              fieldId: fieldValues["fieldId"],
+              value: fieldValues["value"],
+            };
 
-              LoggerUtil.log(
-                `Storing custom field ${fieldData.fieldId} for user ${userContext.username} with tenantId: ${tenantId}, contextType: USER`,
-                apiId,
-                userContext.username
-              );
+            // Prepare additional data for FieldValues table
+            const additionalData = {
+              tenantId: tenantId,
+              contextType: "USER",
+              createdBy: userCreateDto.createdBy,
+              updatedBy: userCreateDto.updatedBy,
+            };
 
-              const res = await this.fieldsService.updateUserCustomFields(
-                userId,
-                fieldData,
-                customFieldAttributes[fieldData.fieldId],
-                additionalData
-              );
+            const res = await this.fieldsService.updateUserCustomFields(
+              userId,
+              fieldData,
+              customFieldAttributes[fieldData.fieldId],
+              additionalData
+            );
 
-              // if (res.correctValue) {
-              //   if (!result["customFields"]) result["customFields"] = [];
-              //   result["customFields"].push(res);
-              // } else {
-              //   createFailures.push(
-              //     `${fieldData.fieldId}: ${res?.valueIssue} - ${res.fieldName}`
-              //   );
-              // }
-            } catch (fieldError) {
-              LoggerUtil.error(
-                `Failed to store custom field ${fieldValues["fieldId"]} for user ${userContext.username}`,
-                `Error: ${fieldError.message}`,
-                apiId,
-                userContext.username
-              );
-              createFailures.push(
-                `${fieldValues["fieldId"]}: Failed to store custom field - ${fieldError.message}`
-              );
-            }
+            // if (res.correctValue) {
+            //   if (!result["customFields"]) result["customFields"] = [];
+            //   result["customFields"].push(res);
+            // } else {
+            //   createFailures.push(
+            //     `${fieldData.fieldId}: ${res?.valueIssue} - ${res.fieldName}`
+            //   );
+            // }
           }
-
-          LoggerUtil.log(
-            `Successfully processed all custom fields for user ${userContext.username}`,
-            apiId,
-            userContext.username
-          );
         }
       }
       stepTimings['custom_fields_processing'] = Date.now() - customFieldsStartTime;
@@ -3116,17 +3093,17 @@ export class PostgresUserService implements IServicelocator {
     hierarchicalFiltersDto: HierarchicalLocationFiltersDto
   ): Promise<any> {
     const apiId = APIID.USER_LIST;
-    
+
     try {
       const { limit, offset, sort: [sortField, sortDirection], role, filters, customfields } = hierarchicalFiltersDto;
-      
+
       // Extract filter parameters
       const filterResult = this.findDeepestFilter(filters);
       const nameFilter = filters?.name;
       const statusFilter = filters?.status;
-      
+
       // Filter out center and batch from customfields request (they belong in cohortData)
-      const filteredCustomFields = customfields ? customfields.filter(field => 
+      const filteredCustomFields = customfields ? customfields.filter(field =>
         !this.isExcludedFromCustomFields(field)
       ) : undefined;
       if (customfields && customfields.length !== (filteredCustomFields?.length || 0)) {
@@ -3183,7 +3160,7 @@ export class PostgresUserService implements IServicelocator {
         `Optimized query completed in ${optimizedQueryTime}ms - returned ${userData.users.length} users (total: ${userData.totalCount})`,
         apiId
       );
-      
+
       // Return successful response
       return APIResponse.success(response, apiId, {
         users: userData.users,
@@ -3193,10 +3170,10 @@ export class PostgresUserService implements IServicelocator {
         offset,
         sort: { field: sortField, direction: sortDirection.toLowerCase() }
       }, HttpStatus.OK, "Users retrieved successfully");
-      
+
     } catch (error) {
       LoggerUtil.error(`Error in getUsersByHierarchicalLocation: ${error.message}`, error.stack, apiId);
-      return APIResponse.error(response, apiId, "Failed to retrieve users", 
+      return APIResponse.error(response, apiId, "Failed to retrieve users",
         `Error processing hierarchical filters: ${error.message}`, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
@@ -3209,7 +3186,7 @@ export class PostgresUserService implements IServicelocator {
   private async getLocationFilteredUsers(filterResult: { level: string; ids: string[] }, tenantId: string): Promise<string[]> {
     const apiId = APIID.USER_LIST;
     const { level, ids } = filterResult;
-    
+
     try {
       // Handle batch filtering through direct cohort membership
       if (this.isBatchFilter(level)) {
@@ -3228,7 +3205,7 @@ export class PostgresUserService implements IServicelocator {
       if (fieldResult.length === 0) {
         throw new Error(`Configuration error: Field '${level}' not found`);
       }
-      
+
       const fieldId = fieldResult[0].fieldId;
       const result = await this.usersRepository.query(this.SQL_QUERIES.USERS_BY_FIELD_VALUES, [fieldId, ids, tenantId]);
 
@@ -3248,9 +3225,9 @@ export class PostgresUserService implements IServicelocator {
           WHERE u."userId" = ANY($1)
           ORDER BY center."name"
         `;
-        
+
         const centerCheck = await this.usersRepository.query(centerCheckQuery, [userIds]);
-        
+
         const centerCounts = {};
         centerCheck.forEach(row => {
           const centerKey = `${row.centerId || 'null'} (${row.centerName || 'No Center'})`;
@@ -3271,10 +3248,10 @@ export class PostgresUserService implements IServicelocator {
    */
   private async getUserIdsByCenter(centerIds: string[], tenantId: string): Promise<string[]> {
     const apiId = APIID.USER_LIST;
-    
+
     try {
       LoggerUtil.log(`Filtering by center through cohort relationships: ${centerIds.length} centers: [${centerIds.join(', ')}]`, apiId);
-      
+
       // Step 1: Get all cohort IDs where parentId matches the center IDs
       // Using string comparison to avoid type casting issues
       const cohortQuery = `
@@ -3282,17 +3259,17 @@ export class PostgresUserService implements IServicelocator {
         FROM public."Cohort" 
         WHERE "parentId"::text = ANY($1::text[])
       `;
-      
+
       const cohortResult = await this.usersRepository.query(cohortQuery, [centerIds]);
       const cohortIds = cohortResult.map((row: any) => String(row.cohortId));
-      
+
       LoggerUtil.log(`Found ${cohortIds.length} cohorts under ${centerIds.length} centers: [${cohortIds.join(', ')}]`, apiId);
-      
+
       if (cohortIds.length === 0) {
         LoggerUtil.warn(`No cohorts found for center IDs: ${centerIds.join(', ')}`, apiId);
         return [];
       }
-      
+
       // Debug query to understand the filtering breakdown
       const debugQuery = `
         SELECT 
@@ -3305,12 +3282,12 @@ export class PostgresUserService implements IServicelocator {
         JOIN public."Users" u ON cm."userId" = u."userId"
         WHERE cm."cohortId"::text = ANY($1::text[])
       `;
-      
+
       const debugResult = await this.usersRepository.query(debugQuery, [cohortIds]);
       const stats = debugResult[0];
-      
+
       LoggerUtil.log(`Debug breakdown - Total: ${stats.total_memberships}, Active: ${stats.active_memberships}, Inactive: ${stats.inactive_memberships}, Archived users: ${stats.archived_users_memberships}, Unique all users: ${stats.unique_all_users}`, apiId);
-      
+
       // Step 2: Get all user IDs from CohortMembers for those cohort IDs (no status filtering)
       const userQuery = `
         SELECT DISTINCT cm."userId" 
@@ -3318,14 +3295,14 @@ export class PostgresUserService implements IServicelocator {
         JOIN public."Users" u ON cm."userId" = u."userId"
         WHERE cm."cohortId"::text = ANY($1::text[])
       `;
-      
+
       const userResult = await this.usersRepository.query(userQuery, [cohortIds]);
       const userIds: string[] = userResult.map((row: any) => String(row.userId));
-      
+
       LoggerUtil.log(`Center filter final result: ${userIds.length} unique users (all statuses) from ${cohortIds.length} cohorts`, apiId);
       LoggerUtil.log(`Next: These ${userIds.length} users will be filtered by tenant (${tenantId}) only - no status filtering`, apiId);
       return userIds;
-      
+
     } catch (error) {
       LoggerUtil.error(`Error in center filter: ${error.message}`, error.stack, apiId);
       throw new Error(`Failed to filter users by center: ${error.message}`);
@@ -3339,7 +3316,7 @@ export class PostgresUserService implements IServicelocator {
    */
   private async getRoleFilteredUsers(roles: string[], tenantId: string): Promise<string[]> {
     const apiId = APIID.USER_LIST;
-    
+
     try {
       const result = await this.usersRepository.query(this.SQL_QUERIES.USERS_BY_ROLES, [roles, tenantId]);
       const userIds: string[] = result.map((row: any) => String(row.userId));
@@ -3359,13 +3336,13 @@ export class PostgresUserService implements IServicelocator {
     if (locationUserIds.length === 0 && roleUserIds.length === 0) {
       throw new Error('No valid filters provided. Please provide at least one location or role filter');
     }
-    
+
     if (locationUserIds.length > 0 && roleUserIds.length > 0) {
       // Use Set intersection for O(n) performance
       const roleUserIdsSet = new Set(roleUserIds);
       return locationUserIds.filter(id => roleUserIdsSet.has(id));
     }
-    
+
     return locationUserIds.length > 0 ? locationUserIds : roleUserIds;
   }
 
@@ -3390,7 +3367,7 @@ export class PostgresUserService implements IServicelocator {
    */
   private getNoUsersFoundMessage(filters: any, roles: string[]): string {
     const appliedFilters: string[] = [];
-    
+
     if (filters) {
       Object.keys(filters).forEach(key => {
         const value = filters[key];
@@ -3403,12 +3380,12 @@ export class PostgresUserService implements IServicelocator {
         }
       });
     }
-    
+
     if (roles && roles.length > 0) {
       appliedFilters.push(`roles: ${roles.join(', ')}`);
     }
-    
-    return appliedFilters.length > 0 
+
+    return appliedFilters.length > 0
       ? `No users found matching the applied filters: ${appliedFilters.join(', ')}`
       : 'No users found matching the given criteria';
   }
@@ -3472,7 +3449,7 @@ export class PostgresUserService implements IServicelocator {
     if (!filters || typeof filters !== 'object') {
       return { level: null, ids: [] };
     }
-    
+
     // Check filters in order from most specific to least specific
     for (const level of this.FILTER_HIERARCHY_ORDER) {
       const filterIds = filters[level];
@@ -3484,7 +3461,7 @@ export class PostgresUserService implements IServicelocator {
         }
       }
     }
-    
+
     return { level: null, ids: [] };
   }
 
@@ -3498,14 +3475,14 @@ export class PostgresUserService implements IServicelocator {
       JOIN "Users" u ON cm."userId" = u."userId"
       WHERE cm."cohortId" = ANY($1)
     `,
-    
+
     FIELD_BY_NAME: `
       SELECT "fieldId" 
       FROM "Fields" 
       WHERE "name" = $1 
       LIMIT 1
     `,
-    
+
     USERS_BY_FIELD_VALUES: `
       SELECT DISTINCT fv."itemId" 
       FROM "FieldValues" fv
@@ -3514,7 +3491,7 @@ export class PostgresUserService implements IServicelocator {
         AND fv."value" && $2 
         AND fv."tenantId" = $3
     `,
-    
+
     USERS_BY_ROLES: `
       SELECT DISTINCT urm."userId" 
       FROM "UserRolesMapping" urm
@@ -3542,7 +3519,7 @@ export class PostgresUserService implements IServicelocator {
     customFieldNames?: string[]
   ): Promise<{ totalCount: number; users: any[] }> {
     const apiId = APIID.USER_LIST;
-    
+
     try {
       // Build dynamic query with conditional filters
       const queryBuilder = this.buildOptimizedUserQuery(
@@ -3615,11 +3592,11 @@ export class PostgresUserService implements IServicelocator {
     limit: number = 10,
     offset: number = 0
   ): { query: string; params: any[] } {
-    
+
     const conditions: string[] = [];
     const params: any[] = [];
     let paramIndex = 1;
-    
+
     // Base query structure
     let baseQuery = `
       WITH filtered_users AS (
@@ -3664,11 +3641,11 @@ export class PostgresUserService implements IServicelocator {
         conditions.push(`f."name" = $${paramIndex}`);
         params.push(locationFilter.level);
         paramIndex++;
-        
+
         conditions.push(`fv."value" && $${paramIndex}`);
         params.push(locationFilter.ids);
         paramIndex++;
-        
+
         conditions.push(`fv."tenantId" = $${paramIndex}`);
         params.push(tenantId);
         paramIndex++;
@@ -3684,7 +3661,7 @@ export class PostgresUserService implements IServicelocator {
       conditions.push(`r."name" = ANY($${paramIndex})`);
       params.push(roleFilter);
       paramIndex++;
-      
+
       conditions.push(`urm."tenantId" = $${paramIndex}`);
       params.push(tenantId);
       paramIndex++;
@@ -3740,7 +3717,7 @@ export class PostgresUserService implements IServicelocator {
     // Group results by user (since roles can create multiple rows per user)
     for (const row of queryResults) {
       const userId = row.userId;
-      
+
       if (!userMap.has(userId)) {
         userMap.set(userId, {
           userId: row.userId,
@@ -3771,38 +3748,38 @@ export class PostgresUserService implements IServicelocator {
     return Array.from(userMap.values());
   }
 
-   /**
-    * Get paginated users with all related data in optimized manner
-    */
-   private async getPaginatedUsers(
-     userIds: string[], 
-     tenantId: string, 
-     limit: number, 
-     offset: number, 
-     sortField: string, 
-     sortDirection: string, 
-     customFieldNames?: string[],
-     nameFilter?: string,
-     statusFilter?: string[]
-   ): Promise<{ totalCount: number; users: any[] }> {
-     const apiId = APIID.USER_LIST;
-     
-     try {
-       // Validate inputs
-       if (!userIds || userIds.length === 0) {
-         return { totalCount: 0, users: [] };
-       }
+  /**
+   * Get paginated users with all related data in optimized manner
+   */
+  private async getPaginatedUsers(
+    userIds: string[],
+    tenantId: string,
+    limit: number,
+    offset: number,
+    sortField: string,
+    sortDirection: string,
+    customFieldNames?: string[],
+    nameFilter?: string,
+    statusFilter?: string[]
+  ): Promise<{ totalCount: number; users: any[] }> {
+    const apiId = APIID.USER_LIST;
+
+    try {
+      // Validate inputs
+      if (!userIds || userIds.length === 0) {
+        return { totalCount: 0, users: [] };
+      }
 
       // Optimize queries by combining count and details in a single query
       const [combinedUserData, customFieldsData, batchCenterData] = await Promise.allSettled([
         // Step 1: Get user details with total count in single query (optimized)
         this.getUserDetailsWithCount(userIds, tenantId, limit, offset, sortField, sortDirection, nameFilter, statusFilter),
-        
+
         // Step 2: Get custom fields data (if requested)
-        customFieldNames && customFieldNames.length > 0 
+        customFieldNames && customFieldNames.length > 0
           ? this.getCustomFieldsData(userIds, customFieldNames, tenantId)
           : Promise.resolve({}),
-        
+
         // Step 3: Get all cohort associations (batch and center data)
         this.getBatchAndCenterNames(userIds)
       ]);
@@ -3812,40 +3789,40 @@ export class PostgresUserService implements IServicelocator {
         throw new Error(`Failed to get user data: ${combinedUserData.reason?.message || 'Unknown error'}`);
       }
 
-       // Custom fields and batch center data are optional - log warnings if they fail
-       let finalCustomFieldsData = {};
-       if (customFieldsData.status === 'rejected') {
-         LoggerUtil.warn(`Failed to fetch custom fields data: ${customFieldsData.reason?.message}`, apiId);
-       } else {
-         finalCustomFieldsData = customFieldsData.value;
-       }
+      // Custom fields and batch center data are optional - log warnings if they fail
+      let finalCustomFieldsData = {};
+      if (customFieldsData.status === 'rejected') {
+        LoggerUtil.warn(`Failed to fetch custom fields data: ${customFieldsData.reason?.message}`, apiId);
+      } else {
+        finalCustomFieldsData = customFieldsData.value;
+      }
 
-       let finalCohortData = {};
-       if (batchCenterData.status === 'rejected') {
-         LoggerUtil.warn(`Failed to fetch cohort data: ${batchCenterData.reason?.message}`, apiId);
-       } else {
-         finalCohortData = batchCenterData.value;
-       }
-       
+      let finalCohortData = {};
+      if (batchCenterData.status === 'rejected') {
+        LoggerUtil.warn(`Failed to fetch cohort data: ${batchCenterData.reason?.message}`, apiId);
+      } else {
+        finalCohortData = batchCenterData.value;
+      }
+
       // Step 4: Combine all data together
       const { totalCount, users } = combinedUserData.value;
       const finalUsers = this.aggregateUserRoles(
-        users, 
-        finalCustomFieldsData, 
-        customFieldNames || [], 
+        users,
+        finalCustomFieldsData,
+        customFieldNames || [],
         finalCohortData
       );
-            
-      return { totalCount, users: finalUsers };
-     } catch (error) {
-       LoggerUtil.error(`Error in getPaginatedUsers: ${error.message}`, error.stack, apiId);
-       throw error;
-     }
-   }
 
-   /**
-    * Get batch and center names for users using cohort membership
-    */
+      return { totalCount, users: finalUsers };
+    } catch (error) {
+      LoggerUtil.error(`Error in getPaginatedUsers: ${error.message}`, error.stack, apiId);
+      throw error;
+    }
+  }
+
+  /**
+   * Get batch and center names for users using cohort membership
+   */
   /**
    * Get all cohort associations for users with complete details for cohortData structure
    */
@@ -3862,7 +3839,7 @@ export class PostgresUserService implements IServicelocator {
     };
   }>>> {
     const apiId = APIID.USER_LIST;
-    
+
     if (!userIds || userIds.length === 0) {
       return {};
     }
@@ -3887,13 +3864,13 @@ export class PostgresUserService implements IServicelocator {
         cm."userId" = ANY($1::uuid[])
       ORDER BY cm."createdAt" DESC
     `;
-    
+
     try {
       const result = await this.usersRepository.query(query, [userIds]);
       if (result.length === 0) {
         LoggerUtil.warn(`No cohort memberships found for any of the ${userIds.length} users`, apiId);
       }
-      
+
       // Group all associations by userId (not just the most recent)
       const cohortDataMap: Record<string, Array<{
         centerId: string | null;
@@ -3909,16 +3886,16 @@ export class PostgresUserService implements IServicelocator {
       }>> = {};
 
       result.forEach((row: any) => {
-        const { 
-          userId, 
-          membershipId, 
-          membershipStatus, 
-          batchId, 
-          batchName, 
-          batchStatus, 
-          centerId, 
-          centerName, 
-          centerStatus 
+        const {
+          userId,
+          membershipId,
+          membershipStatus,
+          batchId,
+          batchName,
+          batchStatus,
+          centerId,
+          centerName,
+          centerStatus
         } = row;
 
         if (!cohortDataMap[userId]) {
@@ -3938,7 +3915,7 @@ export class PostgresUserService implements IServicelocator {
             membershipId: String(membershipId)
           }
         };
-        
+
         cohortDataMap[userId].push(cohortEntry);
       });
 
@@ -3954,12 +3931,12 @@ export class PostgresUserService implements IServicelocator {
    */
   private async getUserCount(userIds: string[], tenantId: string): Promise<number> {
     const apiId = APIID.USER_LIST;
-    
+
     try {
       if (!userIds || userIds.length === 0) {
         return 0;
       }
-      
+
       // Note: tenantId is already validated at controller level
 
       const query = `
@@ -3970,10 +3947,10 @@ export class PostgresUserService implements IServicelocator {
           AND utm."tenantId" = $2
           AND u."status" != 'archived'
       `;
-      
+
       const result = await this.usersRepository.query(query, [userIds, tenantId]);
       const count = parseInt(result[0]?.total || '0');
-      
+
       LoggerUtil.log(`User count query returned ${count} active users`, apiId);
       return count;
     } catch (error) {
@@ -3986,20 +3963,20 @@ export class PostgresUserService implements IServicelocator {
    * Get user details with enhanced security and error handling
    */
   private async getUserDetails(
-    userIds: string[], 
-    tenantId: string, 
-    limit: number, 
-    offset: number, 
-    sortField: string, 
+    userIds: string[],
+    tenantId: string,
+    limit: number,
+    offset: number,
+    sortField: string,
     sortDirection: string
   ): Promise<any[]> {
     const apiId = APIID.USER_LIST;
-    
+
     try {
       if (!userIds || userIds.length === 0) {
         return [];
       }
-      
+
       // Note: Sort parameters are already validated by DTO validators
 
       const query = `
@@ -4017,10 +3994,10 @@ export class PostgresUserService implements IServicelocator {
         ORDER BY u."${sortField}" ${sortDirection}
         LIMIT $3 OFFSET $4
       `;
-      
+
       LoggerUtil.log(`Executing user details query with sort: ${sortField} ${sortDirection}, limit: ${limit}, offset: ${offset}`, apiId);
       const result = await this.usersRepository.query(query, [userIds, tenantId, limit, offset]);
-      
+
       LoggerUtil.log(`User details query returned ${result.length} rows`, apiId);
       return result;
     } catch (error) {
@@ -4033,17 +4010,17 @@ export class PostgresUserService implements IServicelocator {
    * Optimized function that gets user details with count in a single query
    */
   private async getUserDetailsWithCount(
-    userIds: string[], 
-    tenantId: string, 
-    limit: number, 
-    offset: number, 
-    sortField: string, 
+    userIds: string[],
+    tenantId: string,
+    limit: number,
+    offset: number,
+    sortField: string,
     sortDirection: string,
     nameFilter?: string,
     statusFilter?: string[]
   ): Promise<{ totalCount: number; users: any[] }> {
     const apiId = APIID.USER_LIST;
-    
+
     try {
       if (!userIds || userIds.length === 0) {
         return { totalCount: 0, users: [] };
@@ -4053,24 +4030,24 @@ export class PostgresUserService implements IServicelocator {
       const additionalConditions: string[] = [];
       const queryParams: any[] = [userIds, tenantId];
       let paramIndex = 3; // Start from $3 since $1 and $2 are already used
-      
+
       if (nameFilter && nameFilter.trim()) {
         additionalConditions.push(`u."name" ILIKE $${paramIndex}`);
         queryParams.push(`%${nameFilter.trim()}%`);
         paramIndex++;
       }
-      
+
       if (statusFilter && statusFilter.length > 0) {
         additionalConditions.push(`u."status" = ANY($${paramIndex})`);
         queryParams.push(statusFilter);
         paramIndex++;
       }
-      
+
       // Build the WHERE clause
-      const whereClause = additionalConditions.length > 0 
+      const whereClause = additionalConditions.length > 0
         ? `AND ${additionalConditions.join(' AND ')}`
         : '';
-      
+
       // Single optimized query that gets both count and paginated results
       // Fixed: Apply pagination to unique users first, then get their roles
       const query = `
@@ -4096,14 +4073,14 @@ export class PostgresUserService implements IServicelocator {
         LEFT JOIN "Roles" r ON urm."roleId" = r."roleId"
         ORDER BY pu."${sortField}" ${sortDirection}
       `;
-      
+
       // Add limit and offset to query parameters
       queryParams.push(limit, offset);
-      
+
       const result = await this.usersRepository.query(query, queryParams);
-      
+
       const totalCount = result.length > 0 ? parseInt(result[0].total_count) : 0;
-      
+
       return { totalCount, users: result };
     } catch (error) {
       LoggerUtil.error(`Error in getUserDetailsWithCount: ${error.message}`, error.stack, apiId);
@@ -4111,123 +4088,123 @@ export class PostgresUserService implements IServicelocator {
     }
   }
 
-   /**
-    * Aggregate user roles and custom fields with improved data processing
-    */
-   private aggregateUserRoles(
-     userDetails: any[], 
-     customFieldsData: Record<string, any> = {}, 
-     requestedCustomFields: string[] = [], 
-     cohortDataMap: Record<string, Array<{
-       centerId: string | null;
-       centerName: string | null;
-       centerStatus: string | null;
-       batchId: string;
-       batchName: string | null;
-       batchStatus: string | null;
-       cohortMember: {
-         status: string;
-         membershipId: string;
-       };
-     }>> = {}
-   ): any[] {
-     const apiId = APIID.USER_LIST;
-     
-     try {
-       if (!userDetails || userDetails.length === 0) {
-         return [];
-       }
+  /**
+   * Aggregate user roles and custom fields with improved data processing
+   */
+  private aggregateUserRoles(
+    userDetails: any[],
+    customFieldsData: Record<string, any> = {},
+    requestedCustomFields: string[] = [],
+    cohortDataMap: Record<string, Array<{
+      centerId: string | null;
+      centerName: string | null;
+      centerStatus: string | null;
+      batchId: string;
+      batchName: string | null;
+      batchStatus: string | null;
+      cohortMember: {
+        status: string;
+        membershipId: string;
+      };
+    }>> = {}
+  ): any[] {
+    const apiId = APIID.USER_LIST;
 
-       const usersMap = new Map<string, any>();
-       
-       userDetails.forEach(user => {
-         const { userId, roleName, ...userData } = user;
-         
-         if (!userId) {
-           LoggerUtil.warn('Skipping user record without userId', apiId);
-           return;
-         }
-         
-         if (usersMap.has(userId)) {
-           // User already exists, just add role if new
-           const existingUser = usersMap.get(userId);
-           if (roleName && typeof roleName === 'string' && !existingUser.roles.includes(roleName)) {
-             existingUser.roles.push(roleName);
-           }
-         } else {
-           // Create new user object
-           const userObject: any = {
-             ...userData,
-             userId,
-             roles: roleName && typeof roleName === 'string' ? [roleName] : []
-           };
-           
-           // Only add customfield property if custom fields were requested (location fields only)
-           if (requestedCustomFields.length > 0) {
-             const userCustomFields = customFieldsData[userId] || {};
-             const processedCustomFields: Record<string, any> = {};
-             
-             // Initialize ONLY location-based custom fields, completely exclude center and batch
-             requestedCustomFields.forEach(fieldName => {
-               // Skip center and batch completely - they belong in cohortData only
-               if (this.isExcludedFromCustomFields(fieldName)) {
-                 return; // Skip processing these fields entirely
-               }
-               
-               let fieldValue: any = null;
-               const rawValue = userCustomFields[fieldName];
-               
-               if (rawValue !== undefined && rawValue !== null) {
-                 // ENHANCEMENT: Handle multiple values by joining them with commas
-                 // Previous behavior: Only displayed first value from array
-                 // New behavior: Displays all values as comma-separated string
-                 // Example: ["english", "home_science", "life_skills"] → "english, home_science, life_skills"
-                 if (Array.isArray(rawValue)) {
-                   if (rawValue.length > 0) {
-                     // Filter out null/undefined/empty values and join with comma and space
-                     const validValues = rawValue.filter(val => val !== null && val !== undefined && val !== '');
-                     fieldValue = validValues.length > 0 ? validValues.join(', ') : null;
-                   } else {
-                     fieldValue = null;
-                   }
-                 } else {
-                   fieldValue = rawValue;
-                 }
-               }
-               
-               processedCustomFields[fieldName] = fieldValue;
-             });
-             
-             userObject.customfield = processedCustomFields;
-           }
+    try {
+      if (!userDetails || userDetails.length === 0) {
+        return [];
+      }
 
-           // Add cohortData array with all batch/center associations for this user
-           const userCohortData = cohortDataMap[userId] || [];
-           userObject.cohortData = userCohortData;
+      const usersMap = new Map<string, any>();
+
+      userDetails.forEach(user => {
+        const { userId, roleName, ...userData } = user;
+
+        if (!userId) {
+          LoggerUtil.warn('Skipping user record without userId', apiId);
+          return;
+        }
+
+        if (usersMap.has(userId)) {
+          // User already exists, just add role if new
+          const existingUser = usersMap.get(userId);
+          if (roleName && typeof roleName === 'string' && !existingUser.roles.includes(roleName)) {
+            existingUser.roles.push(roleName);
+          }
+        } else {
+          // Create new user object
+          const userObject: any = {
+            ...userData,
+            userId,
+            roles: roleName && typeof roleName === 'string' ? [roleName] : []
+          };
+
+          // Only add customfield property if custom fields were requested (location fields only)
+          if (requestedCustomFields.length > 0) {
+            const userCustomFields = customFieldsData[userId] || {};
+            const processedCustomFields: Record<string, any> = {};
+
+            // Initialize ONLY location-based custom fields, completely exclude center and batch
+            requestedCustomFields.forEach(fieldName => {
+              // Skip center and batch completely - they belong in cohortData only
+              if (this.isExcludedFromCustomFields(fieldName)) {
+                return; // Skip processing these fields entirely
+              }
+
+              let fieldValue: any = null;
+              const rawValue = userCustomFields[fieldName];
+
+              if (rawValue !== undefined && rawValue !== null) {
+                // ENHANCEMENT: Handle multiple values by joining them with commas
+                // Previous behavior: Only displayed first value from array
+                // New behavior: Displays all values as comma-separated string
+                // Example: ["english", "home_science", "life_skills"] → "english, home_science, life_skills"
+                if (Array.isArray(rawValue)) {
+                  if (rawValue.length > 0) {
+                    // Filter out null/undefined/empty values and join with comma and space
+                    const validValues = rawValue.filter(val => val !== null && val !== undefined && val !== '');
+                    fieldValue = validValues.length > 0 ? validValues.join(', ') : null;
+                  } else {
+                    fieldValue = null;
+                  }
+                } else {
+                  fieldValue = rawValue;
+                }
+              }
+
+              processedCustomFields[fieldName] = fieldValue;
+            });
+
+            userObject.customfield = processedCustomFields;
+          }
+
+          // Add cohortData array with all batch/center associations for this user
+          const userCohortData = cohortDataMap[userId] || [];
+          userObject.cohortData = userCohortData;
           //  LoggerUtil.log(`User ${userId} assigned ${userCohortData.length} cohort data entries`, apiId);
-          
+
           usersMap.set(userId, userObject);
-         }
-       });
-       
-       const result = Array.from(usersMap.values());       
-       return result;
-     } catch (error) {
-       LoggerUtil.error(`Error in aggregateUserRoles: ${error.message}`, error.stack, apiId);
-       throw new Error(`Failed to aggregate user data: ${error.message}`);
-     }
-   }
+        }
+      });
+
+      const result = Array.from(usersMap.values());
+      return result;
+    } catch (error) {
+      LoggerUtil.error(`Error in aggregateUserRoles: ${error.message}`, error.stack, apiId);
+      throw new Error(`Failed to aggregate user data: ${error.message}`);
+    }
+  }
 
   /**
    * Get custom fields data with comprehensive error handling and caching potential
    */
   private async getCustomFieldsData(
-    userIds: string[], 
-    customFieldNames: string[], 
+    userIds: string[],
+    customFieldNames: string[],
     tenantId: string
   ): Promise<Record<string, Record<string, any>>> {
     const apiId = APIID.USER_LIST;
-    
+
     try {
       if (!customFieldNames || customFieldNames.length === 0) {
         return {};
@@ -4238,10 +4215,10 @@ export class PostgresUserService implements IServicelocator {
       }
 
       // Filter out batch and center as they're now handled in cohortData
-      const regularCustomFields = customFieldNames.filter(name => 
+      const regularCustomFields = customFieldNames.filter(name =>
         !this.isExcludedFromCustomFields(name)
       );
-      
+
       if (regularCustomFields.length === 0) {
         const excludedFields = this.getCohortFilterLevels().join(' and ');
         LoggerUtil.log(`Only ${excludedFields} fields requested - skipping custom fields query`, apiId);
@@ -4254,9 +4231,9 @@ export class PostgresUserService implements IServicelocator {
         FROM "Fields" 
         WHERE "name" = ANY($1)
       `;
-      
+
       const fieldsResult = await this.usersRepository.query(fieldsQuery, [regularCustomFields]);
-      
+
       if (fieldsResult.length === 0) {
         LoggerUtil.warn(`No fields found for requested names: ${regularCustomFields.join(', ')}`, apiId);
         return {};
@@ -4264,7 +4241,7 @@ export class PostgresUserService implements IServicelocator {
 
       const foundFields = fieldsResult.map(f => f.name);
       const missingFields = regularCustomFields.filter(name => !foundFields.includes(name));
-      
+
       if (missingFields.length > 0) {
         LoggerUtil.warn(`Some requested fields not found: ${missingFields.join(', ')}`, apiId);
       }
@@ -4289,20 +4266,20 @@ export class PostgresUserService implements IServicelocator {
 
       // Structure the data by userId and fieldName
       const customFieldsData: Record<string, Record<string, any>> = {};
-      
+
       customFieldsResult.forEach(row => {
         const { itemId: userId, fieldId, value } = row;
         const fieldName = fieldNameMap[fieldId];
-        
+
         if (!fieldName) {
           LoggerUtil.warn(`Unknown fieldId: ${fieldId}`, apiId);
           return;
         }
-        
+
         if (!customFieldsData[userId]) {
           customFieldsData[userId] = {};
         }
-        
+
         // Store the value as-is (text[] from database)
         customFieldsData[userId][fieldName] = value || [];
       });
@@ -4319,16 +4296,16 @@ export class PostgresUserService implements IServicelocator {
     }
   }
 
-   private async resolveLocationFieldNames(customFieldsData: any) {
-     // Define location fields that need ID-to-name resolution
-     // Note: batch and center are now handled separately via getBatchAndCenterNames function
-     const locationFields = ['state', 'district', 'block', 'village'];
-     const locationTableMap = {
-       'state': { table: 'state', idColumn: 'state_id', nameColumn: 'state_name' },
-       'district': { table: 'district', idColumn: 'district_id', nameColumn: 'district_name' },
-       'block': { table: 'block', idColumn: 'block_id', nameColumn: 'block_name' },
-       'village': { table: 'village', idColumn: 'village_id', nameColumn: 'village_name' }
-     };
+  private async resolveLocationFieldNames(customFieldsData: any) {
+    // Define location fields that need ID-to-name resolution
+    // Note: batch and center are now handled separately via getBatchAndCenterNames function
+    const locationFields = ['state', 'district', 'block', 'village'];
+    const locationTableMap = {
+      'state': { table: 'state', idColumn: 'state_id', nameColumn: 'state_name' },
+      'district': { table: 'district', idColumn: 'district_id', nameColumn: 'district_name' },
+      'block': { table: 'block', idColumn: 'block_id', nameColumn: 'block_name' },
+      'village': { table: 'village', idColumn: 'village_id', nameColumn: 'village_name' }
+    };
 
     // Collect all unique IDs for each location field type
     const locationIds = {};
@@ -4338,7 +4315,7 @@ export class PostgresUserService implements IServicelocator {
           if (!locationIds[fieldName]) {
             locationIds[fieldName] = new Set();
           }
-          
+
           const fieldValue = customFieldsData[userId][fieldName];
           if (Array.isArray(fieldValue)) {
             fieldValue.forEach(id => {
@@ -4351,74 +4328,74 @@ export class PostgresUserService implements IServicelocator {
 
     // Fetch names for each location field type
     const locationNameMaps = {};
-    
+
     for (const fieldName of Object.keys(locationIds)) {
       if (locationIds[fieldName].size > 0) {
         const tableInfo = locationTableMap[fieldName];
         const idsArray = Array.from(locationIds[fieldName]);
-        
-         // Build query for regular location tables
-         const nameQuery = `
+
+        // Build query for regular location tables
+        const nameQuery = `
            SELECT "${tableInfo.idColumn}", "${tableInfo.nameColumn}" 
            FROM "${tableInfo.table}" 
            WHERE "${tableInfo.idColumn}" = ANY($1)
          `;
-         const queryParams = [idsArray];
-        
-         try {
-           const nameResult = await this.usersRepository.query(nameQuery, queryParams);
-           
-           // Standard ID to name mapping for all location fields
-           locationNameMaps[fieldName] = nameResult.reduce((acc, row) => {
-             const id = row[tableInfo.idColumn];
-             const name = row[tableInfo.nameColumn];
-             if (id && name) {
-               acc[id] = name;
-             }
-             return acc;
-           }, {});
-         } catch (error) {
-           locationNameMaps[fieldName] = {};
-         }
+        const queryParams = [idsArray];
+
+        try {
+          const nameResult = await this.usersRepository.query(nameQuery, queryParams);
+
+          // Standard ID to name mapping for all location fields
+          locationNameMaps[fieldName] = nameResult.reduce((acc, row) => {
+            const id = row[tableInfo.idColumn];
+            const name = row[tableInfo.nameColumn];
+            if (id && name) {
+              acc[id] = name;
+            }
+            return acc;
+          }, {});
+        } catch (error) {
+          locationNameMaps[fieldName] = {};
+        }
       }
     }
 
-     // Replace IDs with names in the custom fields data
-     // Note: batch and center are now handled separately, so they're excluded from this logic
-     const resolvedData = {};
-     Object.keys(customFieldsData).forEach(userId => {
-       resolvedData[userId] = {};
-       Object.keys(customFieldsData[userId]).forEach(fieldName => {
-         const fieldValue = customFieldsData[userId][fieldName];
-         
-         if (locationFields.includes(fieldName) && locationNameMaps[fieldName]) {
-           // Replace ID(s) with name(s) for location fields (state, district, block, village)
-           if (Array.isArray(fieldValue) && fieldValue.length > 0) {
-             // Handle multiple IDs by resolving each one and joining with commas
-             const resolvedNames = fieldValue
-               .filter(id => id !== null && id !== undefined && id !== '') // Filter out invalid IDs
-               .map(id => {
-                 const resolvedName = locationNameMaps[fieldName][id];
-                 return resolvedName || id; // Use resolved name or fallback to original ID
-               })
-               .filter(name => name !== null && name !== undefined && name !== ''); // Filter out empty results
-             
-             resolvedData[userId][fieldName] = resolvedNames.length > 0 ? resolvedNames.join(', ') : null;
-           } else {
-             resolvedData[userId][fieldName] = fieldValue;
-           }
-         } else {
-           // Keep original value for non-location fields (including batch and center which are handled elsewhere)
-           // For non-location fields that are arrays, join them with commas
-           if (Array.isArray(fieldValue) && fieldValue.length > 0) {
-             const validValues = fieldValue.filter(val => val !== null && val !== undefined && val !== '');
-             resolvedData[userId][fieldName] = validValues.length > 0 ? validValues.join(', ') : null;
-           } else {
-             resolvedData[userId][fieldName] = fieldValue;
-           }
-         }
-       });
-     });
+    // Replace IDs with names in the custom fields data
+    // Note: batch and center are now handled separately, so they're excluded from this logic
+    const resolvedData = {};
+    Object.keys(customFieldsData).forEach(userId => {
+      resolvedData[userId] = {};
+      Object.keys(customFieldsData[userId]).forEach(fieldName => {
+        const fieldValue = customFieldsData[userId][fieldName];
+
+        if (locationFields.includes(fieldName) && locationNameMaps[fieldName]) {
+          // Replace ID(s) with name(s) for location fields (state, district, block, village)
+          if (Array.isArray(fieldValue) && fieldValue.length > 0) {
+            // Handle multiple IDs by resolving each one and joining with commas
+            const resolvedNames = fieldValue
+              .filter(id => id !== null && id !== undefined && id !== '') // Filter out invalid IDs
+              .map(id => {
+                const resolvedName = locationNameMaps[fieldName][id];
+                return resolvedName || id; // Use resolved name or fallback to original ID
+              })
+              .filter(name => name !== null && name !== undefined && name !== ''); // Filter out empty results
+
+            resolvedData[userId][fieldName] = resolvedNames.length > 0 ? resolvedNames.join(', ') : null;
+          } else {
+            resolvedData[userId][fieldName] = fieldValue;
+          }
+        } else {
+          // Keep original value for non-location fields (including batch and center which are handled elsewhere)
+          // For non-location fields that are arrays, join them with commas
+          if (Array.isArray(fieldValue) && fieldValue.length > 0) {
+            const validValues = fieldValue.filter(val => val !== null && val !== undefined && val !== '');
+            resolvedData[userId][fieldName] = validValues.length > 0 ? validValues.join(', ') : null;
+          } else {
+            resolvedData[userId][fieldName] = fieldValue;
+          }
+        }
+      });
+    });
 
     return resolvedData;
   }
