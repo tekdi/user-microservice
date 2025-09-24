@@ -169,6 +169,7 @@ export class UserController {
     @Res() response: Response
   ) {
     userUpdateDto.userData.updatedBy = loginUserId;
+    userUpdateDto.userData.createdBy = loginUserId;
     userUpdateDto.userId = userId;
     const tenantId = headers["tenantid"];
     userUpdateDto.userData.tenantId = tenantId ? tenantId : null;
