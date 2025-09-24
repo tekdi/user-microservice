@@ -240,8 +240,6 @@ export class AuthService {
       await this.magicLinkRepository.save(magicLink);
       LoggerUtil.debug(`Magic link saved: channel=${requestDto.notificationChannel}`, 'AuthService.requestMagicLink');
 
-      // Build the exact URL that will be sent in the notification so we can also return it in API response
-      const finalUrl = this.buildMagicLinkUrl(token, requestDto.redirectUrl);
       
       try {
         await this.sendMagicLinkNotification(requestDto.identifier, token, requestDto.notificationChannel, requestDto.redirectUrl);
@@ -250,7 +248,7 @@ export class AuthService {
         return APIResponse.success(
           response,
           apiId,
-          { success: true, magic_link: finalUrl, message: 'Magic link created; notification failed' },
+          { success: true, message: 'Magic link created; notification failed' },
           HttpStatus.OK,
           'Magic link created but notification failed'
         );
@@ -260,7 +258,7 @@ export class AuthService {
       return APIResponse.success(
         response,
         apiId,
-        { success: true, magic_link: finalUrl, message: `Magic link sent to your ${identifierType}. It will expire in ${expiryMinutes} minutes.` },
+        { success: true, message: `Magic link sent to your ${identifierType}. It will expire in ${expiryMinutes} minutes.` },
         HttpStatus.OK,
         'Magic link request processed successfully'
       );
@@ -337,7 +335,12 @@ export class AuthService {
     channel: string, 
     redirectUrl?: string
   ): Promise<void> {
-    const finalUrl = this.buildMagicLinkUrl(token, redirectUrl);
+    const baseUrl = (process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/$/, '');
+    //changes done for switch case for whatsapp to be sent as phone number in magic link for swadhaar by Apurva
+    const isPhone = /^\d+$/.test(identifier);
+    const magicLinkPath = isPhone ? `/magic-link/${identifier}/${token}` : `/magic-link/${token}`;
+    const magicLinkUrl = `${baseUrl}${magicLinkPath}`;
+    const finalUrl = redirectUrl ? `${magicLinkUrl}?redirect=${encodeURIComponent(redirectUrl)}` : magicLinkUrl;
     LoggerUtil.debug(`Notify channel=${channel}, url=${finalUrl}`, 'AuthService.sendMagicLinkNotification');
 
     if (channel === 'email') {
@@ -375,11 +378,5 @@ export class AuthService {
     }
 
     throw new Error(`Unsupported notification channel: ${channel}`);
-  }
-
-  private buildMagicLinkUrl(token: string, redirectUrl?: string): string {
-    const baseUrl = (process.env.FRONTEND_URL).replace(/\/$/, '');
-    const magicLinkUrl = `${baseUrl}/magic-link/${token}`;
-    return redirectUrl ? `${magicLinkUrl}?redirect=${encodeURIComponent(redirectUrl)}` : magicLinkUrl;
   }
 }
