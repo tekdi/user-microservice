@@ -579,84 +579,30 @@ export class UserElasticsearchService implements OnModuleInit {
               if (field === 'country') {
                 // Check if value is an array (multiple countries)
                 if (Array.isArray(value) && value.length > 0) {
-                  this.logger.log(
-                    `Country filter - multiple countries: ${JSON.stringify(value)}`
-                  );
-                  // Use flexible matching for multiple countries
-                  const countryQueries = value.map(country => ({
-                    bool: {
-                      should: [
-                        // Case-insensitive exact match
-                        {
-                          match: {
-                            [`profile.${field}`]: {
-                              query: String(country),
-                              operator: 'or',
-                              fuzziness: 'AUTO',
-                            },
+                  const countries = value
+                    .map(v => String(v).trim())
+                    .filter(v => v.length > 0);
+                  if (countries.length > 0) {
+                    searchQuery.bool.filter.push({
+                      bool: {
+                        should: countries.map(c => ({
+                          term: {
+                            [`profile.${field}`]: { value: c, case_insensitive: true },
                           },
-                        },
-                        // Wildcard match for partial matching (case insensitive)
-                        {
-                          wildcard: {
-                            [`profile.${field}`]: `*${String(country).toLowerCase()}*`,
-                          },
-                        },
-                        // Also try with original case
-                        {
-                          wildcard: {
-                            [`profile.${field}`]: `*${String(country)}*`,
-                          },
-                        },
-                      ],
-                      minimum_should_match: 1,
-                    },
-                  }));
-                  
-                  searchQuery.bool.filter.push({
-                    bool: {
-                      should: countryQueries,
-                      minimum_should_match: 1,
-                    },
-                  });
+                        })),
+                        minimum_should_match: 1,
+                      },
+                    });
+                  }
                 } else {
-                  // Single country with flexible matching
-                  this.logger.log(
-                    `Country filter - single country: "${value}", lowercase: "${String(
-                      value
-                    ).toLowerCase()}"`
-                  );
-                  searchQuery.bool.filter.push({
-                    bool: {
-                      should: [
-                        // Case-insensitive exact match
-                        {
-                          match: {
-                            [`profile.${field}`]: {
-                              query: String(value),
-                              operator: 'or',
-                              fuzziness: 'AUTO',
-                            },
-                          },
-                        },
-                        // Wildcard match for partial matching (case insensitive)
-                        {
-                          wildcard: {
-                            [`profile.${field}`]: `*${String(
-                              value
-                            ).toLowerCase()}*`,
-                          },
-                        },
-                        // Also try with original case
-                        {
-                          wildcard: {
-                            [`profile.${field}`]: `*${String(value)}*`,
-                          },
-                        },
-                      ],
-                      minimum_should_match: 1,
-                    },
-                  });
+                  const country = String(value).trim();
+                  if (country.length > 0) {
+                    searchQuery.bool.filter.push({
+                      term: {
+                        [`profile.${field}`]: { value: country, case_insensitive: true },
+                      },
+                    });
+                  }
                 }
               } else {
                 searchQuery.bool.filter.push({
