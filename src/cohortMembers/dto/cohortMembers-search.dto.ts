@@ -78,6 +78,15 @@ class FiltersDto {
   @IsNotEmpty()
   @MinLength(2, { message: 'Search text must be at least 2 characters long' })
   searchtext?: string;
+
+  @ApiPropertyOptional({
+    type: [String],
+    description: 'Auto tags to filter users',
+    example: ['completed_alumni', 'all_alumni'],
+  })
+  @IsOptional()
+  @IsArray()
+  auto_tags?: string[];
 }
 export class CohortMembersSearchDto {
   @ApiProperty({
