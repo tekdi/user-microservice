@@ -1732,7 +1732,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
     );
   }
 
-  async updateCustomFields(itemId, data, fieldAttributesAndParams) {
+  async updateCustomFields(itemId, data, fieldAttributesAndParams, additionalData?: { tenantId?: string, contextType?: string, createdBy?: string, updatedBy?: string }) {
     // Ensure value is stored as an array
     if (!Array.isArray(data.value)) {
       data.value = [data.value]; // Convert single value to array
@@ -1749,6 +1749,10 @@ export class PostgresFieldsService implements IServicelocatorfields {
         itemId,
         fieldId: data.fieldId,
         value: data.value,
+        tenantId: additionalData.tenantId,
+        contextType: additionalData.contextType,
+        createdBy: additionalData.createdBy,
+        updatedBy: additionalData.updatedBy,
       });
     }
 
@@ -1757,7 +1761,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
     return result;
   }
 
-  async updateUserCustomFields(itemId, data, fieldAttributesAndParams) {
+  async updateUserCustomFields(itemId, data, fieldAttributesAndParams, additionalData?: { tenantId?: string, contextType?: string, createdBy?: string, updatedBy?: string }) {
     // Ensure value is stored as an array
     if (!Array.isArray(data.value)) {
       data.value = [data.value];
@@ -1767,6 +1771,10 @@ export class PostgresFieldsService implements IServicelocatorfields {
       itemId,
       fieldId: data.fieldId,
       value: data.value,
+      tenantId: additionalData.tenantId,
+      contextType: additionalData.contextType,
+      createdBy: additionalData.createdBy,
+      updatedBy: additionalData.updatedBy,
     });
   
     return {
