@@ -64,6 +64,15 @@ export class setFilters {
 
   @ApiPropertyOptional({
     type: [String],
+    description: 'Auto Tags',
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  auto_tags: string[];
+
+  @ApiPropertyOptional({
+    type: [String],
     description: 'status',
   })
   @IsOptional()
@@ -78,9 +87,10 @@ export class setFilters {
    */
   @ApiPropertyOptional({
     type: String,
-    description: 'Search text for username, email, firstName, middleName, lastName',
+    description:
+      'Search text for username, email, firstName, middleName, lastName',
     example: 'john doe',
-    minLength: 2
+    minLength: 2,
   })
   @IsOptional()
   @IsString()

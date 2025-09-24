@@ -565,23 +565,35 @@ export class PostgresUserService implements IServicelocator {
               key === 'status' ||
               key === 'email' ||
               key === 'userId' ||
-              key === 'country'
+              key === 'country' ||
+              key === 'auto_tags'
             ) {
               if (
                 Array.isArray(value) &&
                 value.every((item) => typeof item === 'string')
               ) {
-                const status = value
-                  .map(
-                    (item) =>
-                      `'${
-                        key === 'country'
-                          ? item.trim()
-                          : item.trim().toLowerCase()
-                      }'`
-                  )
-                  .join(',');
-                whereCondition += ` U."${key}" IN(${status})`;
+                if (key === 'auto_tags') {
+                  // Handle auto_tags with PostgreSQL ANY operator
+                  const tagConditions = value.map((tag) => {
+                    const trimmedTag = tag.trim();
+                    const escapedTag = trimmedTag.replace(/'/g, "''");
+                    return `'${escapedTag}' = ANY(U."auto_tags")`;
+                  });
+                  whereCondition += ` (${tagConditions.join(' OR ')})`;
+                } else {
+                  // Handle other array fields (status, email, userId, country)
+                  const status = value
+                    .map(
+                      (item) =>
+                        `'${
+                          key === 'country'
+                            ? item.trim()
+                            : item.trim().toLowerCase()
+                        }'`
+                    )
+                    .join(',');
+                  whereCondition += ` U."${key}" IN(${status})`;
+                }
               }
             } else {
               whereCondition += ` U."${key}" = '${value}'`;
@@ -696,7 +708,7 @@ export class PostgresUserService implements IServicelocator {
     // Fix the SQL query construction - add proper WHERE clause
     const whereClause =
       whereCondition && whereCondition !== 'WHERE' ? whereCondition : '';
-    const query = `SELECT U."userId", U."username",U."email", U."firstName", U."middleName", U."lastName", U."gender", U."dob", R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", U.status,U.country, COUNT(*) OVER() AS total_count 
+    const query = `SELECT U."userId", U."username",U."email", U."firstName", U."middleName", U."lastName", U."gender", U."dob", R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", U.status,U.country,U.auto_tags, COUNT(*) OVER() AS total_count 
       FROM  public."Users" U
       LEFT JOIN public."UserRolesMapping" UR
       ON UR."userId" = U."userId"
@@ -911,6 +923,7 @@ export class PostgresUserService implements IServicelocator {
         'deviceId',
         'mobile_country_code',
         'country',
+        'auto_tags',
       ],
     });
     if (!userDetails) {
