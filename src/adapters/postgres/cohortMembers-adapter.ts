@@ -860,13 +860,11 @@ export class PostgresCohortMembersService {
             return `CM."${key}" IN (${formattedIds})`;
           }
           case 'auto_tags': {
-            // Handle auto_tags with PostgreSQL ANY operator
-            const tagConditions = value.map((tag) => {
-              const trimmedTag = tag.trim();
-              const escapedTag = trimmedTag.replace(/'/g, "''");
-              return `'${escapedTag}' = ANY(U."auto_tags")`;
-            });
-            return `(${tagConditions.join(' OR ')})`;
+            // Handle auto_tags with PostgreSQL array overlap operator
+            const escaped = value
+              .map((tag) => `'${tag.trim().replace(/'/g, "''")}'`)
+              .join(', ');
+            return `(U."auto_tags" && ARRAY[${escaped}]::text[])`;
           }
           default: {
             return `CM."${key}"='${value}'`;
@@ -987,13 +985,11 @@ export class PostgresCohortMembersService {
             return `CM."${key}" IN (${formattedIds})`;
           }
           case 'auto_tags': {
-            // Handle auto_tags with PostgreSQL ANY operator
-            const tagConditions = value.map((tag) => {
-              const trimmedTag = tag.trim();
-              const escapedTag = trimmedTag.replace(/'/g, "''");
-              return `'${escapedTag}' = ANY(U."auto_tags")`;
-            });
-            return `(${tagConditions.join(' OR ')})`;
+            // Handle auto_tags with PostgreSQL array overlap operator
+            const escaped = value
+              .map((tag) => `'${tag.trim().replace(/'/g, "''")}'`)
+              .join(', ');
+            return `(U."auto_tags" && ARRAY[${escaped}]::text[])`;
           }
           default: {
             parameters.push(value);

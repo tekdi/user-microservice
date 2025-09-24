@@ -119,6 +119,6 @@ export class User {
   @Column({ nullable: true })
   country: string;
 
-  @Column({ nullable: true })
-  auto_tags: string;
+  @Column('text', { array: true, nullable: true })
+  auto_tags: string[];
 }

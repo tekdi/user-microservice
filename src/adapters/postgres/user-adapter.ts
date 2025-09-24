@@ -573,13 +573,10 @@ export class PostgresUserService implements IServicelocator {
                 value.every((item) => typeof item === 'string')
               ) {
                 if (key === 'auto_tags') {
-                  // Handle auto_tags with PostgreSQL ANY operator
-                  const tagConditions = value.map((tag) => {
-                    const trimmedTag = tag.trim();
-                    const escapedTag = trimmedTag.replace(/'/g, "''");
-                    return `'${escapedTag}' = ANY(U."auto_tags")`;
-                  });
-                  whereCondition += ` (${tagConditions.join(' OR ')})`;
+                  const escaped = value
+                    .map((tag) => `'${tag.trim().replace(/'/g, "''")}'`)
+                    .join(',');
+                  whereCondition += ` (U."auto_tags" && ARRAY[${escaped}]::text[])`;
                 } else {
                   // Handle other array fields (status, email, userId, country)
                   const status = value
