@@ -3696,7 +3696,7 @@ export class PostgresUserService implements IServicelocator {
           createdAt: row.createdAt,
           tenantId: row.tenantId,
           roles: [],
-          customFields: customFieldsData[userId] || [],
+          customfield: customFieldsData[userId] || [],
           cohortData: batchCenterData[userId] || []
         });
       }
