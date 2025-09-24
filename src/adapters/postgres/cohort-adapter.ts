@@ -376,7 +376,7 @@ export class PostgresCohortService {
         );
       }
       const response = await this.cohortRepository.save(cohortCreateDto);
-      
+
       const createFailures = [];
 
       //SAVE  in fieldValues table
@@ -386,6 +386,14 @@ export class PostgresCohortService {
         cohortCreateDto.customFields.length > 0
       ) {
         const cohortId = response?.cohortId;
+
+        // Prepare additional data for FieldValues table
+        const additionalData = {
+          tenantId: tenantId || null,
+          contextType: "COHORT",
+          createdBy: cohortCreateDto.createdBy || null,
+          updatedBy: null,
+        };
 
         if (cohortCreateDto.customFields.length > 0) {
           for (const fieldValues of cohortCreateDto.customFields) {
@@ -397,7 +405,8 @@ export class PostgresCohortService {
             const resfields = await this.fieldsService.updateCustomFields(
               cohortId,
               fieldData,
-              cohortCreateDto.customFields[0].fieldId
+              cohortCreateDto.customFields[0].fieldId,
+              additionalData
             );
             if (resfields.correctValue) {
               if (!response["customFieldsValue"])
@@ -563,7 +572,7 @@ export class PostgresCohortService {
         if (
           cohortUpdateDto.customFields &&
           cohortUpdateDto.customFields.length > 0
-        ) {          
+        ) {
           const contextType = cohortUpdateDto.type
             ? [cohortUpdateDto.type]
             : existingCohorDetails?.type
@@ -573,7 +582,8 @@ export class PostgresCohortService {
             "COHORT",
             contextType
           );
-          
+
+
           if (allCustomFields.length > 0) {
             const customFieldAttributes = allCustomFields.reduce(
               (fieldDetail, { fieldId, fieldAttributes, fieldParams, name }) =>
@@ -593,7 +603,7 @@ export class PostgresCohortService {
               await this.fieldsService.updateCustomFields(
                 cohortId,
                 fieldData,
-                customFieldAttributes[fieldData.fieldId]
+                customFieldAttributes[fieldData.fieldId],
               );
             }
           }
@@ -852,7 +862,7 @@ export class PostgresCohortService {
         }
       } else {
         let getCohortIdUsingCustomFields;
-        
+
         //If source config in source details from fields table is not exist then return false
 
         if (Object.keys(searchCustomFields).length > 0) {
@@ -901,7 +911,7 @@ export class PostgresCohortService {
           order,
         });
 
-        
+
         const cohortData = data.slice(offset, offset + limit);
         count = totalCount;
 
@@ -1097,7 +1107,7 @@ export class PostgresCohortService {
       throw new Error("No cohort IDs found for the given fieldId and value.");
     }
 
-    const existingCohortIds = await this.getCohortDetailsByIds(cohortIds,academicYearId);
+    const existingCohortIds = await this.getCohortDetailsByIds(cohortIds, academicYearId);
     return existingCohortIds;
   }
 
@@ -1183,7 +1193,7 @@ export class PostgresCohortService {
     try {
       // For delete events, we may want to include just basic information since the cohort might already be removed
       let cohortData: any;
-      
+
       if (eventType === 'deleted') {
         cohortData = {
           cohortId: cohortId,
