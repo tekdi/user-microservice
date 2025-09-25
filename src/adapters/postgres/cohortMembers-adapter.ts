@@ -383,6 +383,7 @@ export class PostgresCohortMembersService {
         'lastName',
         'email',
         'country',
+        'auto_tags',
       ];
       whereKeys.forEach((key) => {
         if (whereClause[key]) {
@@ -858,6 +859,13 @@ export class PostgresCohortMembersService {
               : `'${value}'`;
             return `CM."${key}" IN (${formattedIds})`;
           }
+          case 'auto_tags': {
+            // Handle auto_tags with PostgreSQL array overlap operator
+            const escaped = value
+              .map((tag) => `'${tag.trim().replace(/'/g, "''")}'`)
+              .join(', ');
+            return `(U."auto_tags" && ARRAY[${escaped}]::text[])`;
+          }
           default: {
             return `CM."${key}"='${value}'`;
           }
@@ -884,7 +892,7 @@ export class PostgresCohortMembersService {
       }
     }
 
-    let query = `SELECT U."userId", U."username",U."email", U."firstName", U."middleName", U."lastName", R."name" AS role, U."district", U."state",U."mobile",U."deviceId",U."gender",U."dob",U."country",
+    let query = `SELECT U."userId", U."username",U."email", U."firstName", U."middleName", U."lastName", R."name" AS role, U."district", U."state",U."mobile",U."deviceId",U."gender",U."dob",U."country",U."auto_tags",
       CM."status", CM."statusReason",CM."cohortMembershipId",CM."cohortId",CM."status",CM."createdAt", CM."updatedAt",U."createdBy",U."updatedBy", COUNT(*) OVER() AS total_count  FROM public."CohortMembers" CM
       INNER JOIN public."Users" U
       ON CM."userId" = U."userId"
@@ -976,6 +984,13 @@ export class PostgresCohortMembersService {
               : `'${value}'`;
             return `CM."${key}" IN (${formattedIds})`;
           }
+          case 'auto_tags': {
+            // Handle auto_tags with PostgreSQL array overlap operator
+            const escaped = value
+              .map((tag) => `'${tag.trim().replace(/'/g, "''")}'`)
+              .join(', ');
+            return `(U."auto_tags" && ARRAY[${escaped}]::text[])`;
+          }
           default: {
             parameters.push(value);
             return `CM."${key}"=$${parameterIndex++}`;
@@ -994,7 +1009,7 @@ export class PostgresCohortMembersService {
       }
     }
 
-    let query = `SELECT U."userId", U."username",U."email", U."firstName", U."middleName", U."lastName", R."name" AS role, U."district", U."state",U."mobile",U."deviceId",U."gender",U."dob",U."country",
+    let query = `SELECT U."userId", U."username",U."email", U."firstName", U."middleName", U."lastName", R."name" AS role, U."district", U."state",U."mobile",U."deviceId",U."gender",U."dob",U."country",U."auto_tags",
       CM."status", CM."statusReason",CM."cohortMembershipId",CM."cohortId",CM."status",CM."createdAt", CM."updatedAt",U."createdBy",U."updatedBy", COUNT(*) OVER() AS total_count  
       FROM public."CohortMembers" CM
       INNER JOIN public."Users" U
@@ -2186,6 +2201,7 @@ export class PostgresCohortMembersService {
           'lastName',
           'email',
           'country',
+          'auto_tags',
         ];
         const uniqueWhere = new Map();
         whereKeys.forEach((key) => {
@@ -2400,6 +2416,7 @@ export class PostgresCohortMembersService {
       'lastName',
       'email',
       'country',
+      'auto_tags',
     ];
     const uniqueWhere = new Map();
     whereKeys.forEach((key) => {
