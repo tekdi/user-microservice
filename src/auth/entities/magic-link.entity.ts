@@ -23,6 +23,9 @@ export class MagicLink {
   @Column({ type: 'varchar', length: 20 })
   notification_channel: string;
 
+  @Column({ type: 'jsonb', nullable: true })
+  optional_parameters: { [key: string]: string };
+
   @Column({ type: 'timestamp' })
   expires_at: Date;
 

@@ -232,6 +232,7 @@ export class AuthService {
         identifier_type: identifierType,
         redirect_url: requestDto.redirectUrl,
         notification_channel: requestDto.notificationChannel,
+        optional_parameters: requestDto.optionalParameters, // Storing optional parameters
         expires_at: new Date(Date.now() + expiryMinutes * 60 * 1000),
         is_used: false,
         is_expired: false,
@@ -242,7 +243,8 @@ export class AuthService {
 
       
       try {
-        await this.sendMagicLinkNotification(requestDto.identifier, token, requestDto.notificationChannel, requestDto.redirectUrl);
+        // Comment added for Swadhaar magic link changes
+        await this.sendMagicLinkNotification(requestDto.identifier, token, requestDto.notificationChannel, requestDto.redirectUrl, requestDto.optionalParameters);
       } catch (notificationError) {
         LoggerUtil.error('Magic link notification failed', notificationError?.message, 'AuthService.requestMagicLink');
         return APIResponse.success(
@@ -333,12 +335,21 @@ export class AuthService {
     identifier: string, 
     token: string, 
     channel: string, 
-    redirectUrl?: string
+    redirectUrl?: string,
+    optionalParameters?: { [key: string]: string } // Modified for Swadhaar specific magic link to use optionalParameters
   ): Promise<void> {
-    const baseUrl = (process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/$/, '');
+    const baseUrl = (process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/?$/, '');
+    // Comment added for Swadhaar magic link changes
     //changes done for switch case for whatsapp to be sent as phone number in magic link for swadhaar by Apurva
-    const isPhone = /^\d+$/.test(identifier);
-    const magicLinkPath = isPhone ? `/magic-link/${identifier}/${token}` : `/magic-link/${token}`;
+    let magicLinkPath: string;
+    const doId = optionalParameters?.do_id; // Extract do_id from optionalParameters
+    if (doId) {
+      // Swadhaar specific magic link with dynamic do_id
+      magicLinkPath = `/player/${doId}?activeLink=/dashboard/${identifier}/${token}`;
+    } else {
+      const isPhone = /^\d+$/.test(identifier);
+      magicLinkPath = isPhone ? `/magic-link/${identifier}/${token}` : `/magic-link/${token}`;
+    }
     const magicLinkUrl = `${baseUrl}${magicLinkPath}`;
     const finalUrl = redirectUrl ? `${magicLinkUrl}?redirect=${encodeURIComponent(redirectUrl)}` : magicLinkUrl;
     LoggerUtil.debug(`Notify channel=${channel}, url=${finalUrl}`, 'AuthService.sendMagicLinkNotification');

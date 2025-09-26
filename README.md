@@ -19,3 +19,56 @@ There are two types of fields: core/primary and custom. Core fields are directly
 For instance, in a Learning Management System (LMS), tenants can be defined as different programs. Cohorts would represent student classes or groups within a particular state. Roles could include Admin, Teacher, and Student. Privileges might encompass actions like creating or deleting users, as well as viewing or updating profiles. Core fields would consist of fundamental information such as username, email, and contact details. Custom fields could include attributes like gender, with a radio button type offering options like male or female.
 
 Refer to the Documentation link for more details - https://tekdi.github.io/docs/user-service/about
+
+## Keycloak Configuration for Magic Link 
+1.Pre-Setup: Enable Token Exchange Feature in Keycloak
+When starting Keycloak (Docker), set the feature flags:
+
+environment:
+  - KC_FEATURES=token-exchange,admin-fine-grained-authz
+
+Restart Keycloak to apply.
+ Without this, the Token Exchange and fine-grained permissions options will not show up in the Admin Console.
+
+2.Service Account Roles Required for shiksha
+Assign these roles to the shiksha service account (Clients → shiksha → Service Account Roles):
+a.realm-management/impersonation
+Needed to impersonate users during token exchange.
+Required for exchangeTokenForUser() flows.
+b.realm-management/view-users
+Needed to validate user existence and fetch details.
+c.realm-management/manage-users
+Needed for user-related operations during token exchange.
+d.offline_access
+Needed so the magic link flow can return refresh tokens as well as access tokens.
+
+3.Steps for Enabling Fine-Grained Token Exchange for shiksha
+a. Log in to Keycloak Admin Console
+Select the realm where shiksha exists.
+
+b. Enable Fine-Grained Permissions for shiksha
+Go to Clients → shiksha → Permissions.
+Toggle “Permissions Enabled” → ON.
+
+c. Configure Token-Exchange Permission
+Under shiksha → Permissions, you will now see:
+View
+Manage
+Configure
+Token Exchange ✅
+Click Token Exchange to open its configuration.
+
+d. Create a Policy for Token Exchange
+Go to Authorization → Policies → Create Policy → Client.
+Name it: allow-shiksha-token-exchange.
+Select client: shiksha.
+Save.
+
+e. Assign Policy to Token Exchange Permission
+Go back to Permissions → Token Exchange.
+In the Policies section → click Add Policy.
+Select the policy allow-shiksha-token-exchange.
+Save.
+
+
+
