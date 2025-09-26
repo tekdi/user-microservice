@@ -25,6 +25,10 @@ export class CohortCreateDto {
   @Expose()
   updatedAt: string;
 
+  @Expose()
+  @IsOptional()
+  params: Object;
+
   //programId
   @ApiPropertyOptional({
     type: String,
@@ -88,7 +92,7 @@ export class CohortCreateDto {
   //file path
   @ApiPropertyOptional({ type: () => [String] })
   @IsArray()
-  @IsString({ each: true })    
+  @IsString({ each: true })
   @IsOptional()
   image: string[];
 
