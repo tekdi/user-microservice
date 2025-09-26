@@ -9,10 +9,10 @@ import { FieldValues } from "./entities/fields-values.entity";
 import { InjectRepository } from "@nestjs/typeorm";
 import { IsNull, Not, Repository, getConnection, getRepository } from "typeorm";
 import { SuccessResponse } from "src/success-response";
-import { off } from "process";
 import APIResponse from "src/utils/response";
-import { log } from "util";
 import { ErrorResponseTypeOrm } from "src/error-response-typeorm";
+import { resolveLocationCustomFieldsFromChatbotInput } from "src/utils/chatbot-location-resolver";
+import { DataSource } from "typeorm";
 
 @Injectable()
 export class FieldsService {
@@ -20,7 +20,8 @@ export class FieldsService {
     @InjectRepository(Fields)
     private fieldsRepository: Repository<Fields>,
     @InjectRepository(FieldValues)
-    private fieldsValuesRepository: Repository<FieldValues>
+    private fieldsValuesRepository: Repository<FieldValues>,
+    private datasource: DataSource
   ) {}
 
   //fields

@@ -43,6 +43,9 @@ export class Cohort {
   @Column()
   attendanceCaptureImage: boolean;
 
+  @Column({ type: "json", nullable: true })
+  params: Object;
+
   @CreateDateColumn({
     type: "timestamp with time zone",
     default: () => "CURRENT_TIMESTAMP",

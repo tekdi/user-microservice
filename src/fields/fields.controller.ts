@@ -246,4 +246,15 @@ export class FieldsController {
       .buildFieldsAdapter()
       .deleteFieldValues(fieldValuesDeleteDto, response);
   }
+
+  @Post("/createFromChatbot")
+  @UseGuards(JwtAuthGuard)
+  public async getlocationdetails(
+    @Body() input: object,
+    @Res() response: Response
+  ) {
+    return await this.fieldsAdapter
+      .buildFieldsAdapter()
+      .getlocationdetails(input, response);
+  }
 }

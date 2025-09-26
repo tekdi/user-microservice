@@ -47,4 +47,5 @@ export interface IServicelocatorfields {
   deleteFieldOptions(requiredData, response);
   getFormCustomField(requiredData, response);
   deleteFieldValues(requiredData: FieldValuesDeleteDto, response: Response);
+  getlocationdetails(input: any, response: Response);
 }
