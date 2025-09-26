@@ -9,9 +9,7 @@ import { FieldValues } from "./entities/fields-values.entity";
 import { InjectRepository } from "@nestjs/typeorm";
 import { IsNull, Not, Repository, getConnection, getRepository } from "typeorm";
 import { SuccessResponse } from "src/success-response";
-import { off } from "process";
 import APIResponse from "src/utils/response";
-import { log } from "util";
 import { ErrorResponseTypeOrm } from "src/error-response-typeorm";
 
 @Injectable()
