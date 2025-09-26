@@ -240,6 +240,7 @@ export class AuthService {
       await this.magicLinkRepository.save(magicLink);
       LoggerUtil.debug(`Magic link saved: channel=${requestDto.notificationChannel}`, 'AuthService.requestMagicLink');
 
+      
       try {
         await this.sendMagicLinkNotification(requestDto.identifier, token, requestDto.notificationChannel, requestDto.redirectUrl);
       } catch (notificationError) {
@@ -335,7 +336,10 @@ export class AuthService {
     redirectUrl?: string
   ): Promise<void> {
     const baseUrl = (process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/$/, '');
-    const magicLinkUrl = `${baseUrl}/magic-link/${token}`;
+    //changes done for switch case for whatsapp to be sent as phone number in magic link for swadhaar by Apurva
+    const isPhone = /^\d+$/.test(identifier);
+    const magicLinkPath = isPhone ? `/magic-link/${identifier}/${token}` : `/magic-link/${token}`;
+    const magicLinkUrl = `${baseUrl}${magicLinkPath}`;
     const finalUrl = redirectUrl ? `${magicLinkUrl}?redirect=${encodeURIComponent(redirectUrl)}` : magicLinkUrl;
     LoggerUtil.debug(`Notify channel=${channel}, url=${finalUrl}`, 'AuthService.sendMagicLinkNotification');
 
