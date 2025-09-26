@@ -11,7 +11,6 @@ import { IsNull, Not, Repository, getConnection, getRepository } from "typeorm";
 import { SuccessResponse } from "src/success-response";
 import APIResponse from "src/utils/response";
 import { ErrorResponseTypeOrm } from "src/error-response-typeorm";
-import { DataSource } from "typeorm";
 
 @Injectable()
 export class FieldsService {
@@ -19,8 +18,7 @@ export class FieldsService {
     @InjectRepository(Fields)
     private fieldsRepository: Repository<Fields>,
     @InjectRepository(FieldValues)
-    private fieldsValuesRepository: Repository<FieldValues>,
-    private datasource: DataSource
+    private fieldsValuesRepository: Repository<FieldValues>
   ) {}
 
   //fields

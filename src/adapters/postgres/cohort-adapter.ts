@@ -327,15 +327,15 @@ export class PostgresCohortService {
           tenantId
         );
 
-      // if (!academicYear) {
-      //   return APIResponse.error(
-      //     res,
-      //     apiId,
-      //     HttpStatus.NOT_FOUND.toLocaleString(),
-      //     API_RESPONSES.ACADEMICYEAR_NOT_FOUND,
-      //     HttpStatus.NOT_FOUND
-      //   );
-      // }
+      if (!academicYear) {
+        return APIResponse.error(
+          res,
+          apiId,
+          HttpStatus.NOT_FOUND.toLocaleString(),
+          API_RESPONSES.ACADEMICYEAR_NOT_FOUND,
+          HttpStatus.NOT_FOUND
+        );
+      }
 
       if (
         cohortCreateDto.customFields &&
@@ -734,24 +734,24 @@ export class PostgresCohortService {
 
       const whereClause = {};
       const searchCustomFields = {};
-      // if (academicYearId) {
-      //   // check if the tenantId and academic year exist together
-      //   cohortsByAcademicYear =
-      //     await this.cohortAcademicYearService.getCohortsAcademicYear(
-      //       academicYearId,
-      //       tenantId
-      //     );
+      if (academicYearId) {
+        // check if the tenantId and academic year exist together
+        cohortsByAcademicYear =
+          await this.cohortAcademicYearService.getCohortsAcademicYear(
+            academicYearId,
+            tenantId
+          );
 
-      //   if (cohortsByAcademicYear?.length === 0) {
-      //     return APIResponse.error(
-      //       response,
-      //       apiId,
-      //       API_RESPONSES.COHORT_NOT_AVAILABLE_FOR_ACADEMIC_YEAR,
-      //       API_RESPONSES.COHORT_NOT_AVAILABLE_FOR_ACADEMIC_YEAR,
-      //       HttpStatus.NOT_FOUND
-      //     );
-      //   }
-      // }
+        if (cohortsByAcademicYear?.length === 0) {
+          return APIResponse.error(
+            response,
+            apiId,
+            API_RESPONSES.COHORT_NOT_AVAILABLE_FOR_ACADEMIC_YEAR,
+            API_RESPONSES.COHORT_NOT_AVAILABLE_FOR_ACADEMIC_YEAR,
+            HttpStatus.NOT_FOUND
+          );
+        }
+      }
       if (filters && Object.keys(filters).length > 0) {
         if (filters?.customFieldsName) {
           Object.entries(filters.customFieldsName).forEach(([key, value]) => {

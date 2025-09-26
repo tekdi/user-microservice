@@ -25,15 +25,13 @@ import jwt_decode from "jwt-decode";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
 import { API_RESPONSES } from "@utils/response.messages";
 import { FieldValuesDeleteDto } from "src/fields/dto/field-values-delete.dto";
-import { DataSource } from "typeorm";
 @Injectable()
 export class PostgresFieldsService implements IServicelocatorfields {
   constructor(
     @InjectRepository(Fields)
     private fieldsRepository: Repository<Fields>,
     @InjectRepository(FieldValues)
-    private fieldsValuesRepository: Repository<FieldValues>,
-    private datasource: DataSource
+    private fieldsValuesRepository: Repository<FieldValues>
   ) {}
 
   async getFormCustomField(requiredData, response) {
@@ -1207,7 +1205,6 @@ export class PostgresFieldsService implements IServicelocatorfields {
       if (contextType) {
         condition.contextType = contextType;
       }
-      console.log("condition: ", condition);
       const fetchFieldParams = await this.fieldsRepository.findOne({
         where: condition,
       });
