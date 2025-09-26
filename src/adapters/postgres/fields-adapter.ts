@@ -25,7 +25,6 @@ import jwt_decode from "jwt-decode";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
 import { API_RESPONSES } from "@utils/response.messages";
 import { FieldValuesDeleteDto } from "src/fields/dto/field-values-delete.dto";
-import { resolveLocationCustomFieldsFromChatbotInput } from "src/utils/chatbot-location-resolver";
 import { DataSource } from "typeorm";
 @Injectable()
 export class PostgresFieldsService implements IServicelocatorfields {
@@ -1932,9 +1931,6 @@ export class PostgresFieldsService implements IServicelocatorfields {
               }
             });
           } else if (data.sourceDetails.source === "table") {
-            if (/^\{"\d+"\}$/.test(allIds)) {
-              allIds = Number(allIds.replace(/[^0-9]/g, ""));
-            }
             const whereCond = `"${data.sourceDetails.table}_id" IN (${allIds})`;
             const labels = await this.findDynamicOptions(
               data.sourceDetails.table,
@@ -2036,37 +2032,6 @@ export class PostgresFieldsService implements IServicelocatorfields {
         API_RESPONSES.SERVER_ERROR,
         `Error : ${errorMessage}`,
         HttpStatus.INTERNAL_SERVER_ERROR
-      );
-    }
-  }
-
-  public async getlocationdetails(input, res: Response) {
-    const apiId = "api.fields.createFromChatbot";
-    try {
-      const result = await resolveLocationCustomFieldsFromChatbotInput(
-        this.datasource,
-        input
-      );
-      return await APIResponse.success(
-        res,
-        apiId,
-        result,
-        HttpStatus.OK,
-        "Field Values fetched successfully."
-      );
-    } catch (e) {
-      const errorMessage = e?.message || "Validation failed";
-      LoggerUtil.error(
-        `${API_RESPONSES.SERVER_ERROR}`,
-        `Error: ${errorMessage}`,
-        apiId
-      );
-      return APIResponse.error(
-        res,
-        apiId,
-        "BAD_REQUEST",
-        errorMessage,
-        HttpStatus.BAD_REQUEST
       );
     }
   }

@@ -11,7 +11,6 @@ import { IsNull, Not, Repository, getConnection, getRepository } from "typeorm";
 import { SuccessResponse } from "src/success-response";
 import APIResponse from "src/utils/response";
 import { ErrorResponseTypeOrm } from "src/error-response-typeorm";
-import { resolveLocationCustomFieldsFromChatbotInput } from "src/utils/chatbot-location-resolver";
 import { DataSource } from "typeorm";
 
 @Injectable()
