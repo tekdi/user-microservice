@@ -26,6 +26,16 @@ export class RequestMagicLinkDto {
   @IsNotEmpty({ message: 'Notification channel is required.' })
   @IsIn(['email', 'sms', 'whatsapp'], { message: 'Notification channel must be one of: email, sms, whatsapp.' })
   notificationChannel: 'email' | 'sms' | 'whatsapp';
+
+  @ApiProperty({
+    description: 'Optional parameters for specific notification channels',
+    type: 'object',
+    additionalProperties: { type: 'string' },
+    example: { do_id: 'do_2143882321388011521280' },
+    required: false
+  })
+  @IsOptional()
+  optionalParameters?: { [key: string]: string };
 }
 
 export class MagicLinkResponseDto {
