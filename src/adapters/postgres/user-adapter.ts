@@ -2992,6 +2992,7 @@ export class PostgresUserService implements IServicelocator {
                     cm."cohortId" as "batchId",
                     cm."createdAt" as "joinedAt",
                     cm."status" as "cohortMemberStatus",
+                    cm."cohortMembershipId" as "cohortMemberId",
                     batch."name" as "batchName",
                     batch."type" as "batchType",
                     batch."status" as "batchStatus",
@@ -3022,6 +3023,7 @@ export class PostgresUserService implements IServicelocator {
                   batchStatus: result.batchStatus,
                   joinedAt: result.joinedAt,
                   cohortMemberStatus: result.cohortMemberStatus,
+                  cohortMemberId: result.cohortMemberId,
                   tenantId: result.tenantId,
 
                   // Parent Cohort details
