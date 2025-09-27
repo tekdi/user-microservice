@@ -978,6 +978,13 @@ export class PostgresUserService implements IServicelocator {
       }
 
       if (userDto?.customFields?.length > 0) {
+        // additionalData?: { tenantId?: string, contextType?: string, createdBy?: string, updatedBy?: string }
+        let additionalData = {
+          tenantId : userDto.userData?.tenantId,
+          contextType: "USER",
+          createdBy: userDto.userData?.createdBy,
+          updatedBy: userDto.userData?.updatedBy
+        }
         const getFieldsAttributes =
           await this.fieldsService.getEditableFieldsAttributes(userDto.userData.tenantId);
 
@@ -995,7 +1002,7 @@ export class PostgresUserService implements IServicelocator {
             const result = await this.fieldsService.updateCustomFields(
               userDto.userId,
               data,
-              fieldIdAndAttributes[data.fieldId]
+              fieldIdAndAttributes[data.fieldId], additionalData
             );
             if (result.correctValue) {
               if (!updatedData["customFields"])
@@ -3698,7 +3705,7 @@ export class PostgresUserService implements IServicelocator {
           createdAt: row.createdAt,
           tenantId: row.tenantId,
           roles: [],
-          customFields: customFieldsData[userId] || [],
+          customfield: customFieldsData[userId] || [],
           cohortData: batchCenterData[userId] || []
         });
       }
