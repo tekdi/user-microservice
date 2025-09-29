@@ -29,6 +29,7 @@ import { APIID } from 'src/common/utils/api-id.config';
 import { IServicelocator } from '../userservicelocator';
 import { PostgresFieldsService } from './fields-adapter';
 import { PostgresRoleService } from './rbac/role-adapter';
+import { FieldValuesDto } from 'src/fields/dto/field-values.dto';
 import { CustomFieldsValidation } from '@utils/custom-field-validation';
 import { NotificationRequest } from '@utils/notification.axios';
 import { JwtUtil } from '@utils/jwt-token';
@@ -1100,21 +1101,93 @@ export class PostgresUserService implements IServicelocator {
         const editFailures = [];
         for (const data of userDto.customFields) {
           if (isEditableFieldId.includes(data.fieldId)) {
-            const result = await this.fieldsService.updateCustomFields(
-              userDto.userId,
-              data,
-              fieldIdAndAttributes[data.fieldId]
-            );
-            if (result.correctValue) {
-              if (!updatedData['customFields'])
-                updatedData['customFields'] = [];
-              updatedData['customFields'].push(result);
-            } else {
-              editFailures.push(
-                `${data.fieldId}: ${result?.valueIssue} - ${result.fieldName}`
+            try {
+              // Step 1: Find existing field value record in database
+              // This checks if the user already has a value for this field
+              const existingFieldValue =
+                await this.fieldsValueRepository.findOne({
+                  where: {
+                    itemId: userDto.userId, // User ID
+                    fieldId: data.fieldId, // Field ID
+                  },
+                });
+
+              if (existingFieldValue) {
+                // Step 2: Update existing field value using the new updateFieldValues method
+                // This method properly updates both 'value' and type-specific columns (like 'radioValue')
+                const result = await this.fieldsService.updateFieldValues(
+                  existingFieldValue.fieldValuesId, // ID of the existing field value record
+                  {
+                    fieldValuesId: existingFieldValue.fieldValuesId,
+                    value: data.value, // New value from request
+                    status: 'active' as any,
+                  }
+                );
+
+                // Step 3: Check if update was successful
+                if (result && !(result as any).errorMessage) {
+                  // Add to success response data
+                  if (!updatedData['customFields'])
+                    updatedData['customFields'] = [];
+                  updatedData['customFields'].push({
+                    fieldId: data.fieldId,
+                    value: data.value,
+                    success: true,
+                  });
+                } else {
+                  // Add to failure list if update failed
+                  editFailures.push(
+                    `${data.fieldId}: Failed to update field value`
+                  );
+                }
+              } else {
+                // Step 4: Create new field value if it doesn't exist
+                // This happens when user is setting a field value for the first time
+                const result = await this.fieldsService.createFieldValues(
+                  null, // No existing ID for new records
+                  {
+                    fieldId: data.fieldId, // Field ID from request
+                    value: data.value, // Value from request
+                    itemId: userDto.userId, // User ID
+                    createdBy: userDto.userId, // Who is creating (for audit)
+                    updatedBy: userDto.userId, // Who is updating (for audit)
+                    createdAt: new Date(), // Current timestamp
+                    updatedAt: new Date(), // Current timestamp
+                  },
+                  response // Response object required by the method
+                );
+
+                // Step 5: Check if creation was successful
+                if (result && !(result as any).errorMessage) {
+                  // Add to success response data
+                  if (!updatedData['customFields'])
+                    updatedData['customFields'] = [];
+                  updatedData['customFields'].push({
+                    fieldId: data.fieldId,
+                    value: data.value,
+                    success: true,
+                  });
+                } else {
+                  // Add to failure list if creation failed
+                  editFailures.push(
+                    `${data.fieldId}: Failed to create field value`
+                  );
+                }
+              }
+            } catch (error) {
+              // Step 6: Handle any errors during field value processing
+              // Log the error for debugging
+              LoggerUtil.error(
+                `Failed to update field value for fieldId: ${data.fieldId}`,
+                `Error: ${error.message}`,
+                apiId
               );
+              // Add error to failure list
+              editFailures.push(`${data.fieldId}: ${error.message}`);
             }
           } else {
+            // Step 7: Handle non-editable fields
+            // Add field ID to list of fields that cannot be edited
             unEditableIdes.push(data.fieldId);
           }
         }
