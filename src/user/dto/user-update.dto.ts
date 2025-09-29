@@ -66,7 +66,7 @@ class UserDataDTO {
       'female',
       'transgender',
       'non-binary',
-      'I do not want to disclose',
+      'i do not want to disclose',
     ],
   })
   @Expose()
@@ -75,7 +75,7 @@ class UserDataDTO {
     'female',
     'transgender',
     'non-binary',
-    'I do not want to disclose',
+    'i do not want to disclose',
   ])
   @IsOptional()
   gender?: string;

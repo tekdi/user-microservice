@@ -2001,7 +2001,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
         if (data.sourceDetails.source === 'fieldparams') {
           data.fieldParams.options.forEach((option) => {
             if (data.value === option.value) {
-              processedValue = option.label;
+              processedValue = option.value;
             }
           });
         } else if (data.sourceDetails.source === 'table') {

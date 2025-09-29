@@ -112,7 +112,7 @@ export class UserCreateDto {
       'female',
       'transgender',
       'non-binary',
-      'I do not want to disclose',
+      'i do not want to disclose',
     ],
   })
   @Expose()
@@ -122,7 +122,7 @@ export class UserCreateDto {
     'female',
     'transgender',
     'non-binary',
-    'I do not want to disclose',
+    'i do not want to disclose',
   ])
   gender: string;
 
