@@ -57,8 +57,11 @@ export const APIID = {
   TENANT_LIST: "api.tenant.list",
   SEND_OTP: "api.send.OTP",
   VERIFY_OTP: "api.verify.OTP",
-  SEND_RESET_OTP: 'api.send.reset.otp',
-  SIGNED_URL: 'api.get.signedURL',
-  REQUEST_MAGIC_LINK: 'api.request.magicLink',
-  VALIDATE_MAGIC_LINK: 'api.validate.magicLink'
+  SEND_RESET_OTP: "api.send.reset.otp",
+  SIGNED_URL: "api.get.signedURL",
+  REQUEST_MAGIC_LINK: "api.request.magicLink",
+  VALIDATE_MAGIC_LINK: "api.validate.magicLink",
+  COHORT_CONTENT_CREATE: "api.cohortcontent.create",
+  COHORT_CONTENT_SEARCH: "api.cohortcontent.search",
+  COHORT_CONTENT_UPDATE: "api.cohortcontent.update",
 };
