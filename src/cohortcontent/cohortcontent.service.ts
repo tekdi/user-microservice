@@ -25,6 +25,22 @@ export class CohortContentService {
   ): Promise<Response> {
     let apiId = APIID.COHORT_CONTENT_CREATE;
     try {
+      const { tenantId, cohortId, contentId } = createCohortContentDto;
+
+      // Check if record already exists for tenantId + cohortId + contentId
+      const existing = await this.cohortContentRepository.findOne({
+        where: { tenantId, cohortId, contentId },
+      });
+
+      if (existing) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.CONFLICT,
+          API_RESPONSES.COHORT_CONTENT_EXISTS,
+          HttpStatus.CONFLICT
+        );
+      }
       const cohortContentDetails = {
         ...createCohortContentDto,
         createdBy: createCohortContentDto.userId,
@@ -32,6 +48,7 @@ export class CohortContentService {
         createdAt: new Date(),
         updatedAt: new Date(),
       };
+      
       const cohortContent =
         this.cohortContentRepository.create(cohortContentDetails);
       const result = await this.cohortContentRepository.save(cohortContent);

@@ -18,9 +18,6 @@ export class CohortContent {
   @Column({ type: "varchar" })
   contentId: string;
 
-  @Column({ type: "uuid" })
-  cohortId: string;
-
   @ManyToOne(() => Tenant)
   @JoinColumn({ name: "tenantId", referencedColumnName: "tenantId" })
   @Column({ type: "uuid", nullable: false })
@@ -28,7 +25,7 @@ export class CohortContent {
 
   @ManyToOne(() => Cohort)
   @JoinColumn({ name: "cohortId", referencedColumnName: "cohortId" })
-  cohort: string;
+  cohortId: string;
 
   @Column({ type: "json", nullable: true })
   params: object;
