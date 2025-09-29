@@ -12,6 +12,7 @@ import {
   checkIfUsernameExistsInKeycloak,
   updateUserEnabledStatusInKeycloak,
   checkIfEmailExistsInKeycloak,
+  getKeycloakTokensForUsername,
 } from "../../common/utils/keycloak.adapter.util";
 import { ErrorResponse } from "src/error-response";
 import { SuccessResponse } from "src/success-response";
@@ -2343,92 +2344,6 @@ export class PostgresUserService implements IServicelocator {
     return `+91${mobile}`;
   }
 
-  // Exchange admin token for a specific user's tokens using Keycloak Token Exchange
-  // Exchanges a service-account access token for a specific user's tokens via Keycloak Token Exchange
-  // Prerequisites: service account (client) is allowed to perform token-exchange and impersonate users
-  private async exchangeKeycloakTokenForUserId(keycloakUserId: string, adminAccessToken: string) {
-    const qs = require("qs");
-    const baseURL = this.configService.get<string>("KEYCLOAK");
-    const realm = this.configService.get<string>("KEYCLOAK_REALM");
-    const clientId = this.configService.get<string>("KEYCLOAK_CLIENT_ID");
-    const clientSecret = this.configService.get<string>("KEYCLOAK_CLIENT_SECRET");
-
-    const data = qs.stringify({
-      client_id: clientId,
-      client_secret: clientSecret,
-      grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
-      subject_token: adminAccessToken,
-      subject_token_type: "urn:ietf:params:oauth:token-type:access_token",
-      requested_subject: keycloakUserId,
-      scope: "openid offline_access",
-    });
-
-    const axiosConfig = {
-      method: "post",
-      url: `${baseURL}realms/${realm}/protocol/openid-connect/token`,
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      data,
-    };
-
-    try {
-      const res = await this.axios(axiosConfig);
-      return res.data;
-    } catch (e) {
-      const detail = e?.response?.data ? JSON.stringify(e.response.data) : e?.message;
-      LoggerUtil.warn(`Token exchange error: ${detail}`, APIID.VERIFY_OTP);
-      throw e;
-    }
-  }
-
-  // Resolves a username to a Keycloak user and exchanges tokens to obtain access/refresh tokens
-  private async getKeycloakTokensForUsername(username: string) {
-    const adminTokenRes = await getKeycloakAdminToken();
-    const adminAccessToken = adminTokenRes?.data?.access_token;
-    if (!adminAccessToken) return null;
-
-    const kcUserRes = await checkIfUsernameExistsInKeycloak(username, adminAccessToken);
-    const kcUser = Array.isArray(kcUserRes?.data) && kcUserRes.data.length > 0 ? kcUserRes.data[0] : null;
-    if (!kcUser?.id) return null;
-
-    // Use service account (client credentials) token for token-exchange subject
-    const serviceAccountToken = await this.getServiceAccountAccessToken();
-    if (!serviceAccountToken) return null;
-    return this.exchangeKeycloakTokenForUserId(kcUser.id, serviceAccountToken);
-  }
-
-  // Obtains a service-account access token via client_credentials grant
-  private async getServiceAccountAccessToken(): Promise<string | null> {
-    const qs = require("qs");
-    const baseURL = this.configService.get<string>("KEYCLOAK");
-    const realm = this.configService.get<string>("KEYCLOAK_REALM");
-    const clientId = this.configService.get<string>("KEYCLOAK_CLIENT_ID");
-    const clientSecret = this.configService.get<string>("KEYCLOAK_CLIENT_SECRET");
-
-    const data = qs.stringify({
-      grant_type: "client_credentials",
-      client_id: clientId,
-      client_secret: clientSecret,
-    });
-
-    const axiosConfig = {
-      method: "post",
-      url: `${baseURL}realms/${realm}/protocol/openid-connect/token`,
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      data,
-    };
-
-    try {
-      const res = await this.axios(axiosConfig);
-      return res?.data?.access_token || null;
-    } catch (e) {
-      const detail = e?.response?.data ? JSON.stringify(e.response.data) : e?.message;
-      LoggerUtil.warn(`Service account token error: ${detail}`, APIID.VERIFY_OTP);
-      return null;
-    }
-  }
-
   //Generate Has code as per username or mobile Number
   private generateOtpHash(mobileOrUsername: string, otp: string, reason: string) {
     const ttl = this.otpExpiry * 60 * 1000; // Expiration in milliseconds
@@ -2752,7 +2667,7 @@ export class PostgresUserService implements IServicelocator {
             const dbUser = await this.usersRepository.findOne({ where: { mobile: Number(mobile) } });
             const usernameToLookup = dbUser?.username;
             if (usernameToLookup) {
-              const tokens = await this.getKeycloakTokensForUsername(usernameToLookup);
+              const tokens = await getKeycloakTokensForUsername(usernameToLookup);
               if (tokens?.access_token) {
                 responseData['access_token'] = tokens.access_token;
                 if (tokens?.refresh_token) responseData['refresh_token'] = tokens.refresh_token;
