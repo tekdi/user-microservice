@@ -1,7 +1,7 @@
-import { Injectable, NotFoundException, HttpStatus } from "@nestjs/common";
+import { Injectable, HttpStatus } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
-import { Request, Response } from "express";
+import { Response } from "express";
 import { CohortContent } from "./entities/cohort-content.entity";
 import {
   CohortContentDto,
