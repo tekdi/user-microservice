@@ -2,7 +2,7 @@ name: Deploy to dev
 on:
   push:
     branches:
-      - aspire-leaders
+      - 
 jobs:
   deploy_to_server1:
     runs-on: ubuntu-latest
