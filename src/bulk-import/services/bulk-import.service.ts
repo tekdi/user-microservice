@@ -116,6 +116,7 @@ export class BulkImportService {
       console.info(`[BulkImport] Starting bulk import for ${userData.length} users`);
 
       const processedUserIds: string[] = []; // Track all processed users (both new and updated)
+      const userIdByRowIndex = new Map<number, string>(); // ADD THIS LINE
       let loginUser = null;
 
       // Ensure processedUserIds is always an array
@@ -169,7 +170,7 @@ export class BulkImportService {
           if (createdUser && createdUser.userId) {
             // Add to processed users list
             processedUserIds.push(createdUser.userId);
-            
+            userIdByRowIndex.set(i, createdUser.userId); // ADD THIS LINE
             // Check if this was a new user or existing user update
             const isNewUser = !(createdUser as any).isUpdated;
             
@@ -311,7 +312,7 @@ export class BulkImportService {
           // 4. For each user, build customFields and create form submission
           for (let i = 0; i < userData.length; i++) {
             const user = userData[i];
-            const userId = processedUserIds[i];
+            const userId = userIdByRowIndex.get(i);
             if (!userId) continue;
             // Build customFields array for this user
             const customFields =
@@ -369,7 +370,9 @@ export class BulkImportService {
 
       // After all DB operations, update Elasticsearch with full user document for each user
       if (isElasticsearchEnabled()) {
-        for (const userId of processedUserIds) {
+        for (let i = 0; i < userData.length; i++) {
+          const userId = userIdByRowIndex.get(i);
+          if (!userId) continue;
           try {
             const userDoc =
               await this.formSubmissionService.buildUserDocumentForElasticsearch(
