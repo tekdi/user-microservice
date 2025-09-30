@@ -258,6 +258,90 @@ async function checkIfUsernameExistsInKeycloak(username, token) {
   return userResponse;
 }
 
+// Exchange admin/service-account token for a specific user's tokens using Keycloak Token Exchange
+async function exchangeKeycloakTokenForUserId(keycloakUserId: string, subjectAccessToken: string) {
+  const qs = require("qs");
+  const baseURL = process.env.KEYCLOAK;
+  const realm = process.env.KEYCLOAK_REALM;
+  const clientId = process.env.KEYCLOAK_CLIENT_ID;
+  const clientSecret = process.env.KEYCLOAK_CLIENT_SECRET;
+
+  const data = qs.stringify({
+    client_id: clientId,
+    client_secret: clientSecret,
+    grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
+    subject_token: subjectAccessToken,
+    subject_token_type: "urn:ietf:params:oauth:token-type:access_token",
+    requested_subject: keycloakUserId,
+    scope: "openid offline_access",
+  });
+
+  const axiosConfig = {
+    method: "post",
+    url: `${baseURL}realms/${realm}/protocol/openid-connect/token`,
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    data,
+  };
+
+  try {
+    const res = await axios(axiosConfig);
+    return res.data;
+  } catch (e) {
+    const detail = e?.response?.data ? JSON.stringify(e.response.data) : e?.message;
+    LoggerUtil.warn(`Token exchange error: ${detail}`);
+    throw e;
+  }
+}
+
+// Obtains a service-account access token via client_credentials grant
+async function getServiceAccountAccessToken(): Promise<string | null> {
+  const qs = require("qs");
+  const baseURL = process.env.KEYCLOAK;
+  const realm = process.env.KEYCLOAK_REALM;
+  const clientId = process.env.KEYCLOAK_CLIENT_ID;
+  const clientSecret = process.env.KEYCLOAK_CLIENT_SECRET;
+
+  const data = qs.stringify({
+    grant_type: "client_credentials",
+    client_id: clientId,
+    client_secret: clientSecret,
+  });
+
+  const axiosConfig = {
+    method: "post",
+    url: `${baseURL}realms/${realm}/protocol/openid-connect/token`,
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    data,
+  };
+
+  try {
+    const res = await axios(axiosConfig);
+    return res?.data?.access_token || null;
+  } catch (e) {
+    const detail = e?.response?.data ? JSON.stringify(e.response.data) : e?.message;
+    LoggerUtil.warn(`Service account token error: ${detail}`);
+    return null;
+  }
+}
+
+// Resolves a username to a Keycloak user and exchanges tokens to obtain access/refresh tokens
+async function getKeycloakTokensForUsername(username: string) {
+  const adminTokenRes = await getKeycloakAdminToken();
+  const adminAccessToken = adminTokenRes?.data?.access_token;
+  if (!adminAccessToken) return null;
+
+  const kcUserRes = await checkIfUsernameExistsInKeycloak(username, adminAccessToken);
+  const kcUser = Array.isArray(kcUserRes?.data) && kcUserRes.data.length > 0 ? kcUserRes.data[0] : null;
+  if (!kcUser?.id) return null;
+
+  // Use service account (client credentials) token for token-exchange subject
+  const serviceAccountToken = await getServiceAccountAccessToken();
+  if (!serviceAccountToken) return null;
+  return exchangeKeycloakTokenForUserId(kcUser.id, serviceAccountToken);
+}
+
 // Define the structure for user enable/disable operation
 interface UpdateUserEnabledQuery {
   userId: string;
@@ -322,6 +406,9 @@ async function updateUserEnabledStatusInKeycloak(
   }
 }
 
+
+
+
 export {
   getUserGroup,
   getUserRole,
@@ -331,4 +418,7 @@ export {
   updateUserEnabledStatusInKeycloak,
   checkIfEmailExistsInKeycloak,
   checkIfUsernameExistsInKeycloak,
+  exchangeKeycloakTokenForUserId,
+  getServiceAccountAccessToken,
+  getKeycloakTokensForUsername,
 };

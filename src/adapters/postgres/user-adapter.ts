@@ -12,6 +12,7 @@ import {
   checkIfUsernameExistsInKeycloak,
   updateUserEnabledStatusInKeycloak,
   checkIfEmailExistsInKeycloak,
+  getKeycloakTokensForUsername,
 } from "../../common/utils/keycloak.adapter.util";
 import { ErrorResponse } from "src/error-response";
 import { SuccessResponse } from "src/success-response";
@@ -2550,7 +2551,9 @@ export class PostgresUserService implements IServicelocator {
       throw new Error(`${API_RESPONSES.WHATSAPP_NOTIFICATION_ERROR}:  ${error.message}`);
     }
   }
-  //verify OTP based on reason [signup , forgot]
+  // verify OTP based on reason [signup , forgot , login]
+  // On successful 'login': attempts Keycloak token exchange and returns access_token/refresh_token
+  // On successful 'forgot': returns a short-lived reset token for password reset
   async verifyOtp(body: OtpVerifyDTO, response: Response) {
     const apiId = APIID.VERIFY_OTP;
     try {
@@ -2652,12 +2655,32 @@ export class PostgresUserService implements IServicelocator {
         );
       }
 
-      // Verify OTP hash
+      // Verify OTP hash against the provided inputs
       const data = `${identifier}.${otp}.${reason}.${expires}`;
       const calculatedHash = this.authUtils.calculateHash(data, this.smsKey);
       if (calculatedHash === hashValue) {
-        // For forgot password flow, include the reset token in response
+        // Base response
         const responseData = { success: true };
+        // For login flow, attempt to return Keycloak tokens for the user identified by mobile
+        if (reason === 'login') {
+          try {
+            const dbUser = await this.usersRepository.findOne({ where: { mobile: Number(mobile) } });
+            const usernameToLookup = dbUser?.username;
+            if (usernameToLookup) {
+              const tokens = await getKeycloakTokensForUsername(usernameToLookup);
+              if (tokens?.access_token) {
+                responseData['access_token'] = tokens.access_token;
+                if (tokens?.refresh_token) responseData['refresh_token'] = tokens.refresh_token;
+                if (tokens?.expires_in) responseData['expires_in'] = tokens.expires_in;
+                if (tokens?.refresh_expires_in) responseData['refresh_expires_in'] = tokens.refresh_expires_in;
+                if (tokens?.token_type) responseData['token_type'] = tokens.token_type;
+              }
+            }
+          } catch (ex) {
+            // Non-blocking: OTP success even if token exchange fails
+            LoggerUtil.warn(`Keycloak token exchange failed: ${ex?.message || ex}`, APIID.VERIFY_OTP);
+          }
+        }
         if (reason === 'forgot' && resetToken) {
           responseData['token'] = resetToken;
         }
