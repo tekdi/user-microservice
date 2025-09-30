@@ -1661,6 +1661,18 @@ export class PostgresCohortMembersService {
     return mappingExist;
   }
 
+  public async findExistingCohortMember(userId, cohortId, cohortAcademicYearId) {
+    const existingMember = await this.cohortMembersRepository.findOne({
+      where: {
+        userId: userId,
+        cohortId: cohortId,
+        cohortAcademicYearId: cohortAcademicYearId,
+      },
+    });
+
+    return existingMember;
+  }
+
   public async createBulkCohortMembers(
     loginUser: any,
     cohortMembersDto: {
@@ -1782,61 +1794,66 @@ export class PostgresCohortMembersService {
               );
               continue;
             }
-            // get active mapping entries
-            const mappingExists = await this.cohortUserMapping(
+            // Check if any mapping exists (regardless of status)
+            const existingMember = await this.findExistingCohortMember(
               userId,
               cohortId,
               cohortExists[0].cohortAcademicYearId
             );
-            if (mappingExists) {
-              // if (mappingExists.status === MemberStatus.ACTIVE) {
-              // errors.push(`Mapping already exists for userId ${userId} and cohortId ${cohortId} for this academic year`);
-              errors.push(
-                API_RESPONSES.MAPPING_EXIST_BW_USER_AND_COHORT(userId, cohortId)
-              );
-              continue;
-            }
-            // else if (mappingExists.status === MemberStatus.ARCHIVED) {
 
-            //   const cohortMemberForAcademicYear = {
-            //     ...cohortMembers,
-            //     cohortAcademicYearId: cohortExists[0].cohortAcademicYearId,
-            //   };
-            //   const result = await this.cohortMembersRepository.save(
-            //     cohortMemberForAcademicYear
-            //   );
-            // const updateCohort = await this.cohortMembersRepository.update(
-            //   {
-            //     userId,
-            //     cohortId,
-            //     cohortAcademicYearId: cohortExists[0].cohortAcademicYearId,
-            //   },
-            //   { status: MemberStatus.ACTIVE }
-            // );
-            //   results.push(result);
-            //   continue;
-            // }
-            // }
-            // add new entry
-            const cohortMemberForAcademicYear = {
-              ...cohortMembers,
-              cohortAcademicYearId: cohortExists[0].cohortAcademicYearId,
-              // Use status from DTO if provided (e.g., for bulk import), otherwise default to ACTIVE
-              // status: cohortMembersDto.status ? cohortMembersDto.status as MemberStatus : MemberStatus.ACTIVE, // Cast to MemberStatus
-              status: cohortMembersDto.status
-                ? Object.values(MemberStatus).includes(
-                    cohortMembersDto.status as MemberStatus
-                  )
-                  ? (cohortMembersDto.status as MemberStatus)
-                  : MemberStatus.ACTIVE
-                : MemberStatus.ACTIVE,
-              // Use statusReason from DTO if provided, otherwise default to empty string
-              statusReason: cohortMembersDto.statusReason || '',
-            };
-            // Need to add User in cohort for Academic year
-            const result = await this.cohortMembersRepository.save(
-              cohortMemberForAcademicYear
-            );
+            let result;
+
+            if (existingMember) {
+              // Update existing cohort member
+              const updateData = {
+                status: cohortMembersDto.status
+                  ? Object.values(MemberStatus).includes(
+                      cohortMembersDto.status as MemberStatus
+                    )
+                    ? (cohortMembersDto.status as MemberStatus)
+                    : MemberStatus.ACTIVE
+                  : MemberStatus.ACTIVE,
+                statusReason: cohortMembersDto.statusReason || existingMember.statusReason || '',
+                updatedBy: loginUser,
+                updatedAt: new Date(),
+              };
+
+              await this.cohortMembersRepository.update(
+                {
+                  userId,
+                  cohortId,
+                  cohortAcademicYearId: cohortExists[0].cohortAcademicYearId,
+                },
+                updateData
+              );
+
+              // Get the updated record
+              result = await this.cohortMembersRepository.findOne({
+                where: {
+                  userId,
+                  cohortId,
+                  cohortAcademicYearId: cohortExists[0].cohortAcademicYearId,
+                },
+              });
+            } else {
+              // Create new cohort member
+              const cohortMemberForAcademicYear = {
+                ...cohortMembers,
+                cohortAcademicYearId: cohortExists[0].cohortAcademicYearId,
+                status: cohortMembersDto.status
+                  ? Object.values(MemberStatus).includes(
+                      cohortMembersDto.status as MemberStatus
+                    )
+                    ? (cohortMembersDto.status as MemberStatus)
+                    : MemberStatus.ACTIVE
+                  : MemberStatus.ACTIVE,
+                statusReason: cohortMembersDto.statusReason || '',
+              };
+              
+              result = await this.cohortMembersRepository.save(
+                cohortMemberForAcademicYear
+              );
+            }
 
             // NEW: Handle LMS enrollment for shortlisted users
             if (result.status === 'shortlisted') {

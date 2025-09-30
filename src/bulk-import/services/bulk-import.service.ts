@@ -229,35 +229,20 @@ export class BulkImportService {
       // Handle cohort membership for all processed users
       if (processedUserIds.length > 0) {
         try {
-          // Create cohort members for all users (new and existing)
+          // Create or update cohort members for all users (new and existing)
+          // The createBulkCohortMembers method now handles upsert logic internally
           await this.cohortMembersService.createBulkCohortMembers(
             loginUser,
             {
               userId: processedUserIds,
               cohortId: [cohortId],
               status: MemberStatus.SHORTLISTED,
-              statusReason: 'Added/Updated via bulk import',
+              statusReason: 'Updated via bulk import',
             } as any,
             null,
             tenantId,
             request.headers.academicyearid
           );
-
-          // Update status to 'shortlisted' for all users in this cohort and academic year
-          await this.cohortMembersRepository
-            .createQueryBuilder()
-            .update()
-            .set({ 
-              status: MemberStatus.SHORTLISTED,
-              statusReason: 'Updated via bulk import',
-              updatedAt: new Date()
-            })
-            .where('userId IN (:...userIds)', { userIds: processedUserIds })
-            .andWhere('cohortId = :cohortId', { cohortId })
-            .andWhere('cohortAcademicYearId = :cohortAcademicYearId', {
-              cohortAcademicYearId: request.headers.academicyearid,
-            })
-            .execute();
         } catch (cohortError) {
           this.logger.error(`Failed to update cohort membership: ${cohortError.message}`);
           // Don't fail the entire import for cohort errors
