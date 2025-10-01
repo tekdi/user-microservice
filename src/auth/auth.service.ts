@@ -242,8 +242,7 @@ export class AuthService {
 
       
       try {
-        await this.sendMagicLinkNotification(requestDto.identifier, token, requestDto.notificationChannel, requestDto.redirectUrl);
-      } catch (notificationError) {
+        await this.sendMagicLinkNotification(requestDto.identifier, token, requestDto.notificationChannel, requestDto.redirectUrl);      } catch (notificationError) {
         LoggerUtil.error('Magic link notification failed', notificationError?.message, 'AuthService.requestMagicLink');
         return APIResponse.success(
           response,
@@ -335,8 +334,7 @@ export class AuthService {
     channel: string, 
     redirectUrl?: string
   ): Promise<void> {
-    const baseUrl = (process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/$/, '');
-    //changes done for switch case for whatsapp to be sent as phone number in magic link for swadhaar by Apurva
+    const baseUrl = (process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/?$/, '');
     const isPhone = /^\d+$/.test(identifier);
     const magicLinkPath = isPhone ? `/magic-link/${identifier}/${token}` : `/magic-link/${token}`;
     const magicLinkUrl = `${baseUrl}${magicLinkPath}`;

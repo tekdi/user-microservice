@@ -26,6 +26,7 @@ export class RequestMagicLinkDto {
   @IsNotEmpty({ message: 'Notification channel is required.' })
   @IsIn(['email', 'sms', 'whatsapp'], { message: 'Notification channel must be one of: email, sms, whatsapp.' })
   notificationChannel: 'email' | 'sms' | 'whatsapp';
+
 }
 
 export class MagicLinkResponseDto {
