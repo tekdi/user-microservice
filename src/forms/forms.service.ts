@@ -7,11 +7,13 @@ import {
 import jwt_decode from 'jwt-decode';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Form } from './entities/form.entity';
-import { IsNull, Repository } from 'typeorm';
+import { IsNull, Repository, In } from 'typeorm';
 import { PostgresFieldsService } from '../adapters/postgres/fields-adapter';
 import APIResponse from 'src/common/responses/response';
 import { CohortContextType } from './utils/form-class';
 import { FormCreateDto } from './dto/form-create.dto';
+import { FormCopyDto } from './dto/form-copy.dto';
+import { FieldsDto } from '../fields/dto/fields.dto';
 import { APIID } from '@utils/api-id.config';
 import { API_RESPONSES } from '@utils/response.messages';
 import { FormStatus } from './dto/form-create.dto';
@@ -661,5 +663,505 @@ export class FormsService {
       );
       throw error;
     }
+  }
+
+  /**
+   * Copies an existing form to a new cohort with all its fields and rules.
+   * @param request The HTTP request object containing JWT token
+   * @param formCopyDto The form copy data containing source formId and target cohortId
+   * @param response The HTTP response object
+   * @returns API response with the copied form data
+   */
+  async copyForm(request: any, formCopyDto: FormCopyDto, response: any) {
+    let apiId = APIID.FORM_COPY;
+
+    try {
+      const decoded: any = jwt_decode(request.headers.authorization);
+      const createdBy = decoded?.sub;
+      const updatedBy = decoded?.sub;
+
+      // Fetch the source form
+      const sourceForm = await this.getFormById(formCopyDto.formId);
+
+      // Check for existing form conflict
+      const conflictCheck = await this.checkForExistingFormConflict(formCopyDto.cohortId, response, apiId);
+      if (conflictCheck) {
+        return conflictCheck;
+      }
+
+      // Process field copying and mapping
+      const fieldIdMapping = await this.processFieldCopying(
+        sourceForm,
+        formCopyDto,
+        createdBy,
+        updatedBy
+      );
+
+      // Create the new form with updated field IDs
+      const newForm = await this.createCopiedForm(
+        sourceForm,
+        formCopyDto,
+        fieldIdMapping,
+        createdBy,
+        updatedBy,
+        request,
+        response
+      );
+
+      if (newForm.statusCode !== 200) {
+        return newForm;
+      }
+
+      return APIResponse.success(
+        response,
+        apiId,
+        newForm.data,
+        HttpStatus.OK,
+        'Form copied successfully to the new cohort.'
+      );
+
+    } catch (error) {
+      const errorMessage = error.message || 'Internal server error';
+      return APIResponse.error(
+        response,
+        apiId,
+        'INTERNAL_SERVER_ERROR',
+        errorMessage,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  /**
+   * Checks if target cohort already has a form in draft or active state
+   * @param cohortId The target cohort ID
+   * @param response The HTTP response object
+   * @param apiId The API ID for error responses
+   * @returns Conflict error response if form exists, null otherwise
+   */
+  private async checkForExistingFormConflict(cohortId: string, response: any, apiId: string): Promise<any> {
+    const existingForm = await this.formRepository.findOne({
+      where: {
+        contextId: cohortId,
+        status: In([FormStatus.DRAFT, FormStatus.ACTIVE])
+      }
+    });
+
+    if (existingForm) {
+      return APIResponse.error(
+        response,
+        apiId,
+        'CONFLICT',
+        'This cohort already has an application form in draft or published state. To continue, please unpublish the current application form before proceeding.',
+        HttpStatus.CONFLICT
+      );
+    }
+
+    return null;
+  }
+
+  /**
+   * Processes field copying and creates field ID mapping
+   * @param sourceForm The source form to copy from
+   * @param formCopyDto The form copy data
+   * @param createdBy The user creating the fields
+   * @param updatedBy The user updating the fields
+   * @returns Map of old fieldId to new fieldId
+   */
+  private async processFieldCopying(
+    sourceForm: any,
+    formCopyDto: FormCopyDto,
+    createdBy: string,
+    updatedBy: string
+  ): Promise<Map<string, string>> {
+    const fieldIdMapping = new Map<string, string>();
+    const foundFieldIds = this.extractFieldIdsFromJson(sourceForm.fields, sourceForm.rules);
+
+    if (foundFieldIds.size === 0) {
+      Logger.warn('No fieldIds found in source form');
+      return fieldIdMapping;
+    }
+
+    Logger.log(`Found ${foundFieldIds.size} unique fieldIds to process`);
+
+    // Process fields in bulk
+    const fieldMapping = await this.processFieldsInBulk(
+      foundFieldIds,
+      formCopyDto,
+      createdBy,
+      updatedBy
+    );
+
+    // Update the fieldIdMapping with all mappings
+    fieldIdMapping.clear();
+    for (const [oldId, newId] of fieldMapping) {
+      fieldIdMapping.set(oldId, newId);
+    }
+
+    Logger.log(`Field mapping completed: ${fieldIdMapping.size} fields processed`);
+    return fieldIdMapping;
+  }
+
+  /**
+   * Processes fields in bulk operations
+   * @param foundFieldIds Set of field IDs to process
+   * @param formCopyDto The form copy data
+   * @param createdBy The user creating the fields
+   * @param updatedBy The user updating the fields
+   * @returns Map of old fieldId to new fieldId
+   */
+  private async processFieldsInBulk(
+    foundFieldIds: Set<string>,
+    formCopyDto: FormCopyDto,
+    createdBy: string,
+    updatedBy: string
+  ): Promise<Map<string, string>> {
+    const fieldIdsArray = Array.from(foundFieldIds);
+
+    // Bulk fetch all original fields at once
+    const originalFields = await this.bulkFetchFields(fieldIdsArray);
+
+    // Check for existing fields in target cohort in bulk
+    const existingFields = await this.bulkCheckExistingFields(formCopyDto.cohortId, fieldIdsArray);
+
+    // Prepare fields for bulk creation
+    const fieldsToCreate = [];
+    const fieldsToMap = new Map<string, string>();
+
+    for (const fieldId of foundFieldIds) {
+      if (existingFields.has(fieldId)) {
+        fieldsToMap.set(fieldId, fieldId); // Map to itself since it already exists
+        continue;
+      }
+
+      const originalField = originalFields.get(fieldId);
+      if (originalField) {
+        const newFieldData = this.prepareFieldDataForCopy(
+          originalField,
+          formCopyDto.cohortId,
+          createdBy,
+          updatedBy,
+          formCopyDto.tenantId
+        );
+        fieldsToCreate.push(newFieldData);
+      } else {
+        Logger.warn(`Original field not found for fieldId: ${fieldId}`);
+      }
+    }
+
+    // Bulk create all fields at once
+    if (fieldsToCreate.length > 0) {
+      Logger.log(`Creating ${fieldsToCreate.length} fields in bulk`);
+      const createdFields = await this.bulkCreateFields(fieldsToCreate);
+
+      // Map created fields back to original fieldIds
+      for (let i = 0; i < fieldsToCreate.length; i++) {
+        const originalFieldId = fieldsToCreate[i].originalFieldId;
+        const createdField = createdFields[i];
+        if (createdField?.fieldId) {
+          fieldsToMap.set(originalFieldId, createdField.fieldId);
+          Logger.log(`Successfully created field ${createdField.fieldId} for field ${originalFieldId}`);
+        }
+      }
+    }
+
+    return fieldsToMap;
+  }
+
+  /**
+   * Creates the copied form with updated field IDs
+   * @param sourceForm The source form to copy from
+   * @param formCopyDto The form copy data
+   * @param fieldIdMapping Map of old fieldId to new fieldId
+   * @param createdBy The user creating the form
+   * @param updatedBy The user updating the form
+   * @param request The HTTP request object
+   * @param response The HTTP response object
+   * @returns API response with the created form
+   */
+  private async createCopiedForm(
+    sourceForm: any,
+    formCopyDto: FormCopyDto,
+    fieldIdMapping: Map<string, string>,
+    createdBy: string,
+    updatedBy: string,
+    request: any,
+    response: any
+  ): Promise<any> {
+    // Update field IDs in both fields and rules JSON
+    const updatedFields = this.updateFieldIdsInJson(sourceForm.fields, fieldIdMapping);
+    const updatedRules = sourceForm.rules ? 
+      this.updateFieldIdsInJson(sourceForm.rules, fieldIdMapping) : 
+      sourceForm.rules;
+
+    // Create the new form data with updated field IDs
+    const newFormData: FormCreateDto = {
+      tenantId: (formCopyDto.tenantId || sourceForm.tenantId) ?? '',
+      title: sourceForm.title,
+      context: sourceForm.context,
+      contextType: sourceForm.contextType,
+      contextId: formCopyDto.cohortId,
+      status: FormStatus.DRAFT,
+      createdBy,
+      updatedBy,
+      fields: updatedFields,
+      rules: updatedRules,
+    };
+
+    // Create the new form using existing createForm method
+    return await this.createForm(request, newFormData, response);
+  }
+
+  /**
+   * Creates a field directly in the database without HTTP responses
+   * @param fieldData The field data to create
+   * @param createdBy The user who created the field
+   * @param updatedBy The user who last updated the field
+   * @returns The created field entity
+   */
+  private async createFieldDirectly(fieldData: FieldsDto, createdBy: string, updatedBy: string): Promise<any> {
+    try {
+      // Extract and exclude all database metadata fields to prevent primary key reuse
+      const {
+        fieldId,        // Primary key - exclude
+        id,             // Primary key - exclude
+        createdAt,      // Auto-generated timestamp - exclude
+        updatedAt,      // Auto-generated timestamp - exclude
+        deletedAt,      // Soft delete timestamp - exclude
+        version,        // Optimistic locking version - exclude
+        fieldValues,    // Relationship - exclude
+        ...businessData // All other fields are business data
+      } = fieldData as any;
+
+      // Create clean payload with only business data, explicitly excluding all DB metadata
+      const fieldsData: any = {
+        // Include only business data fields (no DB metadata)
+        ...businessData,
+        // Override specific fields for the new field
+        contextId: (fieldData as any).contextId, // This is the new cohortId
+        createdBy,
+        updatedBy,
+        status: 'active',
+        // Ensure ordering is not null (required field)
+        ordering: fieldData.ordering || 0,
+        // Ensure required field has a default value
+        required: (fieldData as any).required === undefined ? true : (fieldData as any).required,
+        // Ensure dependsOn is not undefined
+        dependsOn: fieldData.dependsOn || null,
+        // Handle JSON fields - convert objects to strings for database storage
+        fieldParams: this.sanitizeJsonField(fieldData.fieldParams),
+        fieldAttributes: this.sanitizeJsonField(fieldData.fieldAttributes),
+        sourceDetails: this.sanitizeJsonField(fieldData.sourceDetails),
+      };
+
+      // Create the field using the fields service repository directly
+      const result = await this.fieldsService.createFieldDirectly(fieldsData);
+
+      return result;
+    } catch (error) {
+      Logger.error(`Error creating field directly: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Optimized method to extract fieldIds from JSON using recursive traversal
+   * @param fieldsJson The fields JSON object
+   * @param rulesJson The rules JSON object (optional)
+   * @returns Set of unique fieldIds found
+   */
+  private extractFieldIdsFromJson(fieldsJson: any, rulesJson?: any): Set<string> {
+    const fieldIds = new Set<string>();
+
+    const extractFromObject = (obj: any): void => {
+      if (!obj || typeof obj !== 'object') return;
+
+      if (obj.fieldId && typeof obj.fieldId === 'string') {
+        fieldIds.add(obj.fieldId);
+      }
+
+      // Recursively search all object values
+      for (const value of Object.values(obj)) {
+        if (Array.isArray(value)) {
+          for (const item of value) {
+            extractFromObject(item);
+          }
+        } else if (typeof value === 'object') {
+          extractFromObject(value);
+        }
+      }
+    };
+
+    // Extract from fields JSON
+    if (fieldsJson) {
+      extractFromObject(fieldsJson);
+    }
+
+    // Extract from rules JSON
+    if (rulesJson) {
+      extractFromObject(rulesJson);
+    }
+
+    return fieldIds;
+  }
+
+  /**
+   * Bulk fetch multiple fields by their IDs
+   * @param fieldIds Array of field IDs to fetch
+   * @returns Map of fieldId to field data
+   */
+  private async bulkFetchFields(fieldIds: string[]): Promise<Map<string, any>> {
+    if (fieldIds.length === 0) return new Map();
+
+    try {
+      const fields = await this.fieldsService.getFieldsByIds(fieldIds);
+      const fieldMap = new Map<string, any>();
+
+      for (const field of fields) {
+        if (field?.fieldId) {
+          fieldMap.set(field.fieldId, field);
+        }
+      }
+
+      return fieldMap;
+    } catch (error) {
+      Logger.error(`bulkFetchFields failed for fieldIds: ${fieldIds.join(',')} - Error: ${error.message}`);
+      throw error; // Rethrow to allow copy workflow to abort cleanly
+    }
+  }
+
+  /**
+   * Bulk check if fields already exist in target cohort
+   * @param cohortId The target cohort ID
+   * @param fieldIds Array of field IDs to check
+   * @returns Set of fieldIds that already exist in target cohort
+   */
+  private async bulkCheckExistingFields(cohortId: string, fieldIds: string[]): Promise<Set<string>> {
+    if (fieldIds.length === 0) return new Set();
+
+    try {
+      const existingFields = await this.fieldsService.getFieldsByContextIdAndFieldIds(cohortId, fieldIds);
+      return new Set(existingFields.map(field => field.fieldId));
+    } catch (error) {
+      Logger.error(`bulkCheckExistingFields failed for cohortId: ${cohortId}, fieldIds: ${fieldIds.join(',')} - Error: ${error.message}`);
+      throw error; // Rethrow to allow copy workflow to abort cleanly
+    }
+  }
+
+  /**
+   * Prepare field data for copying with all necessary properties
+   * @param originalField The original field data
+   * @param cohortId The target cohort ID
+   * @param createdBy The user creating the field
+   * @param updatedBy The user updating the field
+   * @param tenantId The tenant ID for the new field
+   * @returns Prepared field data for bulk creation
+   */
+  private prepareFieldDataForCopy(originalField: any, cohortId: string, createdBy: string, updatedBy: string, tenantId?: string): any {
+    // Extract and exclude all database metadata fields to prevent primary key reuse
+    const {
+      fieldId,        // Primary key - exclude
+      id,             // Primary key - exclude
+      createdAt,      // Auto-generated timestamp - exclude
+      updatedAt,      // Auto-generated timestamp - exclude
+      deletedAt,      // Soft delete timestamp - exclude
+      version,        // Optimistic locking version - exclude
+      fieldValues,    // Relationship - exclude
+      ...businessData // All other fields are business data
+    } = originalField;
+
+    return {
+      // Include only business data fields (no DB metadata)
+      ...businessData,
+      // Override specific fields for the new field
+      contextId: cohortId, // New cohortId
+      tenantId: (tenantId || originalField.tenantId) ?? '', // Use provided tenantId or fallback to original, with null-safe default
+      createdBy,
+      updatedBy,
+      status: 'active',
+      // Ensure critical fields have proper values
+      ordering: originalField.ordering || 0,
+      required: originalField.required === undefined ? true : originalField.required,
+      dependsOn: originalField.dependsOn || null,
+      // Handle JSON fields - convert objects to strings for database storage
+      fieldParams: this.sanitizeJsonField(originalField.fieldParams),
+      fieldAttributes: this.sanitizeJsonField(originalField.fieldAttributes),
+      sourceDetails: this.sanitizeJsonField(originalField.sourceDetails),
+      // Store original fieldId for mapping after creation
+      originalFieldId: originalField.fieldId,
+    };
+  }
+
+  /**
+   * Bulk create multiple fields at once
+   * @param fieldsData Array of field data to create
+   * @returns Array of created field entities
+   */
+  private async bulkCreateFields(fieldsData: any[]): Promise<any[]> {
+    if (fieldsData.length === 0) return [];
+
+    try {
+      return await this.fieldsService.bulkCreateFields(fieldsData);
+    } catch (error) {
+      Logger.error(`bulkCreateFields failed for ${fieldsData.length} fields - Error: ${error.message}`);
+      throw error; // Rethrow to allow copy workflow to abort cleanly
+    }
+  }
+
+  /**
+   * Sanitizes JSON fields by converting objects to strings for database storage
+   * @param fieldValue The field value to sanitize
+   * @returns Sanitized field value (string or null)
+   */
+  private sanitizeJsonField(fieldValue: any): string | null {
+    if (!fieldValue) {
+      return null;
+    }
+
+    if (typeof fieldValue === 'string') {
+      return fieldValue;
+    }
+
+    return JSON.stringify(fieldValue);
+  }
+
+  /**
+   * Helper method to recursively update field IDs in JSON objects
+   * @param obj The object to update
+   * @param fieldIdMapping Map of old fieldId to new fieldId
+   * @returns Updated object with new field IDs
+   */
+  private updateFieldIdsInJson(obj: any, fieldIdMapping: Map<string, string>): any {
+    if (obj === null || obj === undefined) {
+      return obj;
+    }
+
+    if (typeof obj === 'string') {
+      return obj;
+    }
+
+    if (Array.isArray(obj)) {
+      return obj.map(item => this.updateFieldIdsInJson(item, fieldIdMapping));
+    }
+
+    if (typeof obj === 'object') {
+      const updatedObj = { ...obj };
+
+      // If this object has a fieldId property, update it
+      if (updatedObj.fieldId && fieldIdMapping.has(updatedObj.fieldId)) {
+        updatedObj.fieldId = fieldIdMapping.get(updatedObj.fieldId);
+      }
+
+      // Recursively update all properties
+      for (const key in updatedObj) {
+        if (updatedObj.hasOwnProperty(key)) {
+          updatedObj[key] = this.updateFieldIdsInJson(updatedObj[key], fieldIdMapping);
+        }
+      }
+
+      return updatedObj;
+    }
+
+    return obj;
   }
 }

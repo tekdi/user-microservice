@@ -96,6 +96,7 @@ export const APIID = {
   FORM_GET: 'api.form.read',
   FORM_CREATE: 'api.form.create',
   FORM_UPDATE: 'api.form.update',
+  FORM_COPY: 'api.form.copy',
 
   // Cohort Academic Year Mapping APIs
   ADD_COHORT_TO_ACADEMIC_YEAR: 'api.create.cohortAcademicYear',

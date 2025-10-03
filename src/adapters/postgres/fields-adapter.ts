@@ -809,6 +809,39 @@ export class PostgresFieldsService implements IServicelocatorfields {
     }
   }
 
+  /**
+   * Creates a field directly in the database without HTTP responses
+   * @param fieldsData The field data to create
+   * @returns The created field entity
+   */
+  async createFieldDirectly(fieldsData: any): Promise<any> {
+    try {
+      // Check if field already exists
+      const existingField = await this.fieldsRepository.find({
+        where: {
+          context: fieldsData.context,
+          contextType: fieldsData.contextType,
+          name: fieldsData.name,
+          type: fieldsData.type,
+          contextId: fieldsData.contextId,
+          status: FieldStatus.ACTIVE,
+        },
+      });
+
+      if (existingField.length > 0) {
+        return existingField[0];
+      }
+
+      // Create the field
+      const result = await this.fieldsRepository.save(fieldsData);
+
+      return result;
+    } catch (error) {
+      LoggerUtil.error(`Error creating field directly: ${error.message}`);
+      throw error;
+    }
+  }
+
   async searchFields(
     tenantId: string,
     request: any,
@@ -2066,5 +2099,42 @@ export class PostgresFieldsService implements IServicelocatorfields {
     } catch (error) {
       throw new Error(`Failed to archive fields: ${error.message}`);
     }
+  }
+
+  /**
+   * Bulk check if fields already exist in target cohort
+   * @param cohortId The target cohort ID
+   * @param fieldIds Array of field IDs to check
+   * @returns Array of existing field entities
+   */
+  async getFieldsByContextIdAndFieldIds(cohortId: string, fieldIds: string[]): Promise<any[]> {
+    return await this.fieldsRepository.find({
+      where: {
+        contextId: cohortId,
+        fieldId: In(fieldIds),
+        status: FieldStatus.ACTIVE,
+      },
+    });
+  }
+
+  /**
+   * Bulk create multiple fields at once
+   * @param fieldsData Array of field data to create
+   * @returns Array of created field entities
+   */
+  async bulkCreateFields(fieldsData: any[]): Promise<any[]> {
+    if (fieldsData.length === 0) return [];
+
+    // Remove originalFieldId and fieldId from each field data before saving
+    const cleanedFieldsData = fieldsData.map(field => {
+      const { originalFieldId, fieldId, ...cleanField } = field;
+      return cleanField;
+    });
+
+    // Use TypeORM's save method for bulk insert - let any exception propagate
+    const result = await this.fieldsRepository.save(cleanedFieldsData);
+
+    // Ensure result is always an array
+    return Array.isArray(result) ? result : [result];
   }
 }
