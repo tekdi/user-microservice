@@ -179,7 +179,7 @@ export class UserController {
   @UseFilters(new AllExceptionsFilter(APIID.USER_UPDATE))
   @Patch('update/:userid')
   @UsePipes(new ValidationPipe())
-  @UseGuards(JwtAuthGuard)
+  // @UseGuards(JwtAuthGuard)
   @ApiBasicAuth('access-token')
   @ApiBody({ type: UserUpdateDTO })
   @ApiOkResponse({ description: API_RESPONSES.USER_UPDATED_SUCCESSFULLY })

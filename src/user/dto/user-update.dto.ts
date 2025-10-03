@@ -171,6 +171,17 @@ class UserDataDTO {
     message: `Action must be either ${Object.values(ActionType).join(' or ')}`,
   }) // Restrict to "add" or "remove"
   action: ActionType;
+
+  @ApiProperty({
+    type: [String],
+    description: 'Auto tags to be added to the user',
+    example: ['all_alumni', 'completed_alumni'],
+    required: false,
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  auto_tags?: string[];
 }
 class CustomFieldDTO {
   @ApiProperty({ type: () => String })

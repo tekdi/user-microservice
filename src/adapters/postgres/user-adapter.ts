@@ -1310,6 +1310,23 @@ export class PostgresUserService implements IServicelocator {
         return null;
       }
 
+      // Handle auto_tags merging logic
+      if (
+        (userData as any).auto_tags &&
+        Array.isArray((userData as any).auto_tags)
+      ) {
+        // Get existing auto_tags or initialize as empty array
+        const existingAutoTags = (user as any).auto_tags || [];
+
+        // Merge new tags with existing ones, removing duplicates
+        const mergedTags = [
+          ...new Set([...existingAutoTags, ...(userData as any).auto_tags]),
+        ];
+
+        // Update userData with merged tags
+        (userData as any).auto_tags = mergedTags;
+      }
+
       await Object.assign(user, userData);
       return this.usersRepository.save(user);
     } catch (error) {
