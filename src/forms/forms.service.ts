@@ -730,7 +730,7 @@ export class FormsService {
           const originalField = originalFields.get(fieldId);
           if (originalField) {
             // Prepare field data for bulk creation
-            const newFieldData = this.prepareFieldDataForCopy(originalField, formCopyDto.cohortId, createdBy, updatedBy);
+            const newFieldData = this.prepareFieldDataForCopy(originalField, formCopyDto.cohortId, createdBy, updatedBy, formCopyDto.tenantId);
             fieldsToCreate.push(newFieldData);
             // We'll map the fieldId after bulk creation
           } else {
@@ -769,7 +769,7 @@ export class FormsService {
 
       // Create the new form data with updated field IDs
       const newFormData: FormCreateDto = {
-        tenantId: sourceForm.tenantId,
+        tenantId: formCopyDto.tenantId || sourceForm.tenantId,
         title: sourceForm.title,
         context: sourceForm.context,
         contextType: sourceForm.contextType,
@@ -820,10 +820,19 @@ export class FormsService {
    */
   private async createFieldDirectly(fieldData: FieldsDto, createdBy: string, updatedBy: string): Promise<any> {
     try {
-      // Convert fieldData to plain object and spread all properties
+      // Extract only business data fields, excluding database metadata
+      const {
+        fieldId,        // Primary key - exclude
+        createdAt,      // Auto-generated timestamp - exclude
+        updatedAt,      // Auto-generated timestamp - exclude
+        fieldValues,    // Relationship - exclude
+        ...businessData // All other fields are business data
+      } = fieldData as any;
+
+      // Convert fieldData to plain object with only business data
       const fieldsData: any = {
-        ...fieldData, // Spread all properties from the original field
-        // Override only the properties that need to change for the new field
+        ...businessData, // Spread only business data fields
+        // Override specific fields for the new field
         contextId: (fieldData as any).contextId, // This is the new cohortId
         createdBy,
         updatedBy,
@@ -915,8 +924,8 @@ export class FormsService {
 
       return fieldMap;
     } catch (error) {
-      Logger.error(`Error bulk fetching fields: ${error.message}`);
-      return new Map();
+      Logger.error(`bulkFetchFields failed for fieldIds: ${fieldIds.join(',')} - Error: ${error.message}`);
+      throw error; // Rethrow to allow copy workflow to abort cleanly
     }
   }
 
@@ -933,8 +942,8 @@ export class FormsService {
       const existingFields = await this.fieldsService.getFieldsByContextIdAndFieldIds(cohortId, fieldIds);
       return new Set(existingFields.map(field => field.fieldId));
     } catch (error) {
-      Logger.error(`Error checking existing fields: ${error.message}`);
-      return new Set();
+      Logger.error(`bulkCheckExistingFields failed for cohortId: ${cohortId}, fieldIds: ${fieldIds.join(',')} - Error: ${error.message}`);
+      throw error; // Rethrow to allow copy workflow to abort cleanly
     }
   }
 
@@ -944,12 +953,25 @@ export class FormsService {
    * @param cohortId The target cohort ID
    * @param createdBy The user creating the field
    * @param updatedBy The user updating the field
+   * @param tenantId The tenant ID for the new field
    * @returns Prepared field data for bulk creation
    */
-  private prepareFieldDataForCopy(originalField: any, cohortId: string, createdBy: string, updatedBy: string): any {
+  private prepareFieldDataForCopy(originalField: any, cohortId: string, createdBy: string, updatedBy: string, tenantId?: string): any {
+    // Extract only business data fields, excluding database metadata
+    const {
+      fieldId,        // Primary key - exclude
+      createdAt,      // Auto-generated timestamp - exclude
+      updatedAt,      // Auto-generated timestamp - exclude
+      fieldValues,    // Relationship - exclude
+      ...businessData // All other fields are business data
+    } = originalField;
+
     return {
-      ...originalField, // Spread all properties from the original field
-      contextId: cohortId, // Override only the contextId (cohortId)
+      // Include only business data fields
+      ...businessData,
+      // Override specific fields for the new field
+      contextId: cohortId, // New cohortId
+      tenantId: tenantId || originalField.tenantId, // Use provided tenantId or fallback to original
       createdBy,
       updatedBy,
       status: 'active',
@@ -983,8 +1005,8 @@ export class FormsService {
     try {
       return await this.fieldsService.bulkCreateFields(fieldsData);
     } catch (error) {
-      Logger.error(`Error bulk creating fields: ${error.message}`);
-      return [];
+      Logger.error(`bulkCreateFields failed for ${fieldsData.length} fields - Error: ${error.message}`);
+      throw error; // Rethrow to allow copy workflow to abort cleanly
     }
   }
 

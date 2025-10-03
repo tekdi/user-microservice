@@ -2108,18 +2108,13 @@ export class PostgresFieldsService implements IServicelocatorfields {
    * @returns Array of existing field entities
    */
   async getFieldsByContextIdAndFieldIds(cohortId: string, fieldIds: string[]): Promise<any[]> {
-    try {
-      return await this.fieldsRepository.find({
-        where: {
-          contextId: cohortId,
-          fieldId: In(fieldIds),
-          status: FieldStatus.ACTIVE,
-        },
-      });
-    } catch (error) {
-      LoggerUtil.error(`Error checking existing fields: ${error.message}`);
-      return [];
-    }
+    return await this.fieldsRepository.find({
+      where: {
+        contextId: cohortId,
+        fieldId: In(fieldIds),
+        status: FieldStatus.ACTIVE,
+      },
+    });
   }
 
   /**
@@ -2130,21 +2125,16 @@ export class PostgresFieldsService implements IServicelocatorfields {
   async bulkCreateFields(fieldsData: any[]): Promise<any[]> {
     if (fieldsData.length === 0) return [];
 
-    try {
-      // Remove originalFieldId from each field data before saving
-      const cleanedFieldsData = fieldsData.map(field => {
-        const { originalFieldId, ...cleanField } = field;
-        return cleanField;
-      });
+    // Remove originalFieldId and fieldId from each field data before saving
+    const cleanedFieldsData = fieldsData.map(field => {
+      const { originalFieldId, fieldId, ...cleanField } = field;
+      return cleanField;
+    });
 
-      // Use TypeORM's save method for bulk insert
-      const result = await this.fieldsRepository.save(cleanedFieldsData);
+    // Use TypeORM's save method for bulk insert - let any exception propagate
+    const result = await this.fieldsRepository.save(cleanedFieldsData);
 
-      // Ensure result is always an array
-      return Array.isArray(result) ? result : [result];
-    } catch (error) {
-      LoggerUtil.error(`Error bulk creating fields: ${error.message}`);
-      throw error;
-    }
+    // Ensure result is always an array
+    return Array.isArray(result) ? result : [result];
   }
 }

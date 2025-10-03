@@ -139,6 +139,7 @@ export class FormsController {
     if (tenantId && !isUUID(tenantId)) {
       throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
     }
+    formCopyDto.tenantId = tenantId;
     return await this.formsService.copyForm(request, formCopyDto, response);
   }
 }

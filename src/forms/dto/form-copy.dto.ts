@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsString, IsUUID } from 'class-validator';
+import { IsNotEmpty, IsString, IsUUID, IsOptional } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class FormCopyDto {
@@ -23,4 +23,16 @@ export class FormCopyDto {
   @IsNotEmpty()
   @IsUUID(undefined, { message: 'Cohort ID must be a valid UUID' })
   cohortId: string;
+
+  @ApiProperty({
+    type: String,
+    description: 'Tenant ID for the copied form',
+    example: '550e8400-e29b-41d4-a716-446655440000',
+    format: 'uuid',
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  @IsUUID(undefined, { message: 'Tenant ID must be a valid UUID' })
+  tenantId?: string;
 }
