@@ -896,7 +896,7 @@ export class FormsService {
 
     // Create the new form data with updated field IDs
     const newFormData: FormCreateDto = {
-      tenantId: formCopyDto.tenantId || sourceForm.tenantId,
+      tenantId: (formCopyDto.tenantId || sourceForm.tenantId) ?? '',
       title: sourceForm.title,
       context: sourceForm.context,
       contextType: sourceForm.contextType,
@@ -921,18 +921,22 @@ export class FormsService {
    */
   private async createFieldDirectly(fieldData: FieldsDto, createdBy: string, updatedBy: string): Promise<any> {
     try {
-      // Extract only business data fields, excluding database metadata
+      // Extract and exclude all database metadata fields to prevent primary key reuse
       const {
         fieldId,        // Primary key - exclude
+        id,             // Primary key - exclude
         createdAt,      // Auto-generated timestamp - exclude
         updatedAt,      // Auto-generated timestamp - exclude
+        deletedAt,      // Soft delete timestamp - exclude
+        version,        // Optimistic locking version - exclude
         fieldValues,    // Relationship - exclude
         ...businessData // All other fields are business data
       } = fieldData as any;
 
-      // Convert fieldData to plain object with only business data
+      // Create clean payload with only business data, explicitly excluding all DB metadata
       const fieldsData: any = {
-        ...businessData, // Spread only business data fields
+        // Include only business data fields (no DB metadata)
+        ...businessData,
         // Override specific fields for the new field
         contextId: (fieldData as any).contextId, // This is the new cohortId
         createdBy,
@@ -1054,21 +1058,24 @@ export class FormsService {
    * @returns Prepared field data for bulk creation
    */
   private prepareFieldDataForCopy(originalField: any, cohortId: string, createdBy: string, updatedBy: string, tenantId?: string): any {
-    // Extract only business data fields, excluding database metadata
+    // Extract and exclude all database metadata fields to prevent primary key reuse
     const {
       fieldId,        // Primary key - exclude
+      id,             // Primary key - exclude
       createdAt,      // Auto-generated timestamp - exclude
       updatedAt,      // Auto-generated timestamp - exclude
+      deletedAt,      // Soft delete timestamp - exclude
+      version,        // Optimistic locking version - exclude
       fieldValues,    // Relationship - exclude
       ...businessData // All other fields are business data
     } = originalField;
 
     return {
-      // Include only business data fields
+      // Include only business data fields (no DB metadata)
       ...businessData,
       // Override specific fields for the new field
       contextId: cohortId, // New cohortId
-      tenantId: tenantId || originalField.tenantId, // Use provided tenantId or fallback to original
+      tenantId: (tenantId || originalField.tenantId) ?? '', // Use provided tenantId or fallback to original, with null-safe default
       createdBy,
       updatedBy,
       status: 'active',
