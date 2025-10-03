@@ -12,6 +12,7 @@ import { Role } from '../rbac/role/entities/role.entity';
 import { BulkImportController } from './controllers/bulk-import.controller';
 import { BulkImportService } from './services/bulk-import.service';
 import { NotificationRequest } from '../common/utils/notification.axios';
+import { JwtUtil } from '../common/utils/jwt-token';
 import { UserModule } from '../user/user.module';
 import { CohortMembersModule } from '../cohortMembers/cohortMembers.module';
 import { ElasticsearchModule } from '../elasticsearch/elasticsearch.module';
@@ -45,6 +46,7 @@ import { Form } from '../forms/entities/form.entity';
   providers: [
     BulkImportService,
     NotificationRequest,
+    JwtUtil,
   ],
   exports: [BulkImportService],
 })

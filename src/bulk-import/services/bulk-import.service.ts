@@ -14,6 +14,8 @@ import { PostgresUserService } from '../../adapters/postgres/user-adapter';
 import { PostgresCohortMembersService } from '../../adapters/postgres/cohortMembers-adapter';
 import { NotificationRequest } from '../../common/utils/notification.axios';
 import { LoggerUtil } from '../../common/logger/LoggerUtil';
+import { JwtUtil } from '../../common/utils/jwt-token';
+import { formatTime } from '../../common/utils/formatTimeConversion';
 import { UserCreateDto } from '../../user/dto/user-create.dto';
 import { CohortMembersDto } from '../../cohortMembers/dto/cohortMembers.dto';
 import { Response } from 'express';
@@ -64,7 +66,8 @@ export class BulkImportService {
     private readonly userElasticsearchService: UserElasticsearchService,
     @InjectRepository(FieldValues)
     private readonly fieldsValueRepository: Repository<FieldValues>,
-    private readonly fieldsService: PostgresFieldsService
+    private readonly fieldsService: PostgresFieldsService,
+    private readonly jwtUtil: JwtUtil
   ) {}
 
   async processBulkImport(
@@ -175,13 +178,13 @@ export class BulkImportService {
             const isNewUser = !(createdUser as any).isUpdated;
             
             if (isNewUser) {
-              // Send password reset link only for new users
+              // Send bulk import specific notification for new users
               try {
-                await this.userService.sendPasswordResetLink(
+                await this.sendBulkImportNotification(
                   request,
-                  createdUser.username,
-                  '',
-                  null
+                  createdUser,
+                  batchId,
+                  i + 2
                 );
               } catch (notifError) {
                 BulkImportLogger.logNotificationError(
@@ -684,6 +687,111 @@ export class BulkImportService {
         
         throw createError;
       }
+    }
+  }
+
+  /**
+   * Send bulk import specific notification for users
+   */
+  private async sendBulkImportNotification(
+    request: any,
+    user: any,
+    batchId: string,
+    rowNumber: number
+  ): Promise<void> {
+    try {
+      // Get user details with tenant information
+      const userData: any = await this.userService.findUserDetails(null, user.username);
+      if (!userData) {
+        throw new Error('User data not found');
+      }
+
+      // Validate required fields
+      if (!userData.email) {
+        throw new Error('User email not found');
+      }
+      if (!userData.userId) {
+        throw new Error('User ID not found');
+      }
+
+      // Generate token for password reset
+      const tokenPayload = {
+        sub: user.userId,
+        email: userData.email,
+      };
+      
+      const jwtExpireTime = this.configService.get<string>('PASSWORD_RESET_JWT_EXPIRES_IN');
+      const jwtSecretKey = this.configService.get<string>('RBAC_JWT_SECRET');
+      const frontEndUrl = `${this.configService.get<string>('RESET_FRONTEND_URL')}/reset-password`;
+      const backEndUrl = `${this.configService.get<string>('RESET_BACKEND_URL')}/reset-password`;
+      
+      const resetToken = await this.jwtUtil.generateTokenForForgotPassword(
+        tokenPayload,
+        jwtExpireTime,
+        jwtSecretKey
+      );
+
+      // Format expiration time
+      const time = formatTime(jwtExpireTime);
+      const programName = userData?.tenantData?.[0]?.tenantName;
+      const capilatizeFirstLettterOfProgram = programName
+        ? programName.charAt(0).toUpperCase() + programName.slice(1)
+        : 'Learner Account';
+
+      // Determine redirect URL for reset password based on user role
+      const userRole = userData?.tenantData?.[0]?.roleName;
+      let resetPasswordUrlPath = frontEndUrl;
+
+      if (userRole === 'Admin' || userRole === 'Regional Admin') {
+        resetPasswordUrlPath = backEndUrl;
+      }
+
+      // Use bulk import specific notification key
+      const notificationKey = userData?.status === 'inactive'
+        ? 'onBulkStudentCreated'
+        : 'OnForgotPasswordReset';
+
+      // Send Notification with bulk import specific template
+      const notificationPayload = {
+        isQueue: false,
+        context: 'USER',
+        key: notificationKey,
+        replacements: {
+          '{username}': userData?.firstName && userData?.lastName
+            ? `${userData.firstName} ${userData.lastName}`.trim()
+            : userData?.firstName || userData?.username,
+          '{firstName}': userData?.firstName || '',
+          '{lastName}': userData?.lastName || '',
+          '{resetToken}': resetToken,
+          '{programName}': capilatizeFirstLettterOfProgram,
+          '{expireTime}': time,
+          '{resetPasswordUrl}': resetPasswordUrlPath,
+          '{redirectUrl}': '', // Empty for bulk import
+        },
+        email: {
+          receipients: [userData.email],
+        },
+      };
+      
+      const mailSend = await this.notificationRequest.sendNotification(
+        notificationPayload
+      );
+      
+      // Check for errors in the email sending process
+      if (mailSend?.result?.email?.errors && mailSend.result.email.errors.length > 0) {
+        const errorMessages = mailSend.result.email.errors.map(error => 
+          typeof error === 'string' ? error : error.error || JSON.stringify(error)
+        );
+        throw new Error(`Email sending failed: ${errorMessages.join(', ')}`);
+      }
+      
+    } catch (error) {
+      console.error(`[BulkImport] Failed to send notification for user ${user.username}:`, {
+        message: error.message,
+        stack: error.stack,
+        error: error
+      });
+      throw error;
     }
   }
 
