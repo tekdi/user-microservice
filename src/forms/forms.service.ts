@@ -747,7 +747,7 @@ export class FormsService {
           for (let i = 0; i < fieldsToCreate.length; i++) {
             const originalFieldId = fieldsToCreate[i].originalFieldId;
             const createdField = createdFields[i];
-            if (createdField && createdField.fieldId) {
+            if (createdField?.fieldId) {
               fieldsToMap.set(originalFieldId, createdField.fieldId);
               Logger.log(`Successfully created field ${createdField.fieldId} for field ${originalFieldId}`);
             }
@@ -844,15 +844,9 @@ export class FormsService {
         // Ensure dependsOn is not undefined
         dependsOn: fieldData.dependsOn || null,
         // Handle JSON fields - convert objects to strings for database storage
-        fieldParams: fieldData.fieldParams ? 
-          (typeof fieldData.fieldParams === 'string' ? fieldData.fieldParams : JSON.stringify(fieldData.fieldParams)) : 
-          null,
-        fieldAttributes: fieldData.fieldAttributes ? 
-          (typeof fieldData.fieldAttributes === 'string' ? fieldData.fieldAttributes : JSON.stringify(fieldData.fieldAttributes)) : 
-          null,
-        sourceDetails: fieldData.sourceDetails ? 
-          (typeof fieldData.sourceDetails === 'string' ? fieldData.sourceDetails : JSON.stringify(fieldData.sourceDetails)) : 
-          null,
+        fieldParams: this.sanitizeJsonField(fieldData.fieldParams),
+        fieldAttributes: this.sanitizeJsonField(fieldData.fieldAttributes),
+        sourceDetails: this.sanitizeJsonField(fieldData.sourceDetails),
       };
 
       // Create the field using the fields service repository directly
@@ -917,7 +911,7 @@ export class FormsService {
       const fieldMap = new Map<string, any>();
 
       fields.forEach(field => {
-        if (field && field.fieldId) {
+        if (field?.fieldId) {
           fieldMap.set(field.fieldId, field);
         }
       });
@@ -980,15 +974,9 @@ export class FormsService {
       required: originalField.required !== undefined ? originalField.required : true,
       dependsOn: originalField.dependsOn || null,
       // Handle JSON fields - convert objects to strings for database storage
-      fieldParams: originalField.fieldParams ? 
-        (typeof originalField.fieldParams === 'string' ? originalField.fieldParams : JSON.stringify(originalField.fieldParams)) : 
-        null,
-      fieldAttributes: originalField.fieldAttributes ? 
-        (typeof originalField.fieldAttributes === 'string' ? originalField.fieldAttributes : JSON.stringify(originalField.fieldAttributes)) : 
-        null,
-      sourceDetails: originalField.sourceDetails ? 
-        (typeof originalField.sourceDetails === 'string' ? originalField.sourceDetails : JSON.stringify(originalField.sourceDetails)) : 
-        null,
+      fieldParams: this.sanitizeJsonField(originalField.fieldParams),
+      fieldAttributes: this.sanitizeJsonField(originalField.fieldAttributes),
+      sourceDetails: this.sanitizeJsonField(originalField.sourceDetails),
       // Store original fieldId for mapping after creation
       originalFieldId: originalField.fieldId,
     };
@@ -1008,6 +996,23 @@ export class FormsService {
       Logger.error(`bulkCreateFields failed for ${fieldsData.length} fields - Error: ${error.message}`);
       throw error; // Rethrow to allow copy workflow to abort cleanly
     }
+  }
+
+  /**
+   * Sanitizes JSON fields by converting objects to strings for database storage
+   * @param fieldValue The field value to sanitize
+   * @returns Sanitized field value (string or null)
+   */
+  private sanitizeJsonField(fieldValue: any): string | null {
+    if (!fieldValue) {
+      return null;
+    }
+
+    if (typeof fieldValue === 'string') {
+      return fieldValue;
+    }
+
+    return JSON.stringify(fieldValue);
   }
 
   /**
