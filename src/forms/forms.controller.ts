@@ -29,6 +29,7 @@ import {
 } from '@nestjs/swagger';
 import { AllExceptionsFilter } from 'src/common/filters/exception.filter';
 import { FormCreateDto } from './dto/form-create.dto';
+import { FormCopyDto } from './dto/form-copy.dto';
 import { APIID } from '@utils/api-id.config';
 import { isUUID } from 'class-validator';
 import { API_RESPONSES } from '@utils/response.messages';
@@ -114,5 +115,30 @@ export class FormsController {
       formUpdateDto,
       response
     );
+  }
+
+  @UseFilters(new AllExceptionsFilter(APIID.FORM_COPY))
+  @Post('/copy')
+  @ApiBasicAuth('access-token')
+  @ApiCreatedResponse({ description: 'Form copied successfully to the new cohort.' })
+  @ApiBadRequestResponse({ description: 'Bad request.' })
+  @ApiInternalServerErrorResponse({ description: 'Internal Server Error.' })
+  @UsePipes(new ValidationPipe())
+  @ApiBody({ type: FormCopyDto })
+  @ApiHeader({
+    name: 'tenantid',
+    required: false,
+  })
+  public async copyForm(
+    @Headers() headers,
+    @Req() request: Request,
+    @Body() formCopyDto: FormCopyDto,
+    @Res() response: Response
+  ) {
+    let tenantId = headers['tenantid'];
+    if (tenantId && !isUUID(tenantId)) {
+      throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
+    }
+    return await this.formsService.copyForm(request, formCopyDto, response);
   }
 }

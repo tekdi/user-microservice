@@ -13,6 +13,7 @@ export enum FormStatus {
   ACTIVE = 'active',
   INACTIVE = 'inactive',
   ARCHIVED = 'archived',
+  DRAFT = 'draft',
 }
 export class FormCreateDto {
   tenantId: string;
