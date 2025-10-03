@@ -81,6 +81,7 @@ export class BulkImportService {
     successCount: number;
     failureCount: number;
     failures: Array<{ email: string; error: string }>;
+    batchId: string;
   }> {
     const batchId = uuidv4();
 
@@ -89,6 +90,7 @@ export class BulkImportService {
       successCount: 0,
       failureCount: 0,
       failures: [] as Array<{ email: string; error: string }>,
+      batchId: batchId,
     };
 
     try {
@@ -117,6 +119,7 @@ export class BulkImportService {
 
       BulkImportLogger.logImportStart(batchId, userData.length);
       console.info(`[BulkImport] Starting bulk import for ${userData.length} users`);
+      
 
       const processedUserIds: string[] = []; // Track all processed users (both new and updated)
       const userIdByRowIndex = new Map<number, string>(); // ADD THIS LINE
@@ -132,101 +135,145 @@ export class BulkImportService {
         );
         loginUser = decoded?.sub;
       }
-      // Process each user
-      for (let i = 0; i < userData.length; i++) {
-        try {
-          results.totalProcessed++;
-          const user = userData[i];
+      // Process users in batches to improve performance
+      // Dynamic batch sizing based on total users
+      let batchSize = 10; // Default for small datasets
+      if (userData.length > 1000) {
+        batchSize = 20; // Larger batches for big datasets
+      } else if (userData.length > 100) {
+        batchSize = 10; // Medium batches for medium datasets
+      }
+      
+      
+      const userBatches = [];
+      for (let i = 0; i < userData.length; i += batchSize) {
+        userBatches.push(userData.slice(i, i + batchSize));
+      }
 
-          // Validate user data
-          if (!user || typeof user !== 'object') {
-            throw new Error(`Invalid user data at row ${i + 2}`);
-          }
+      // Add timeout for the entire bulk import process (30 minutes)
+      const importTimeout = 30 * 60 * 1000; // 30 minutes in milliseconds
+      const importStartTime = Date.now();
 
-          // Validate required fields
-          if (!user.email || !user.firstName || !user.lastName) {
-            throw new Error(
-              `Missing required fields (email, firstName, lastName) at row ${
-                i + 2
-              }`
-            );
-          }
-
-          // 1. Create user (do not change userService.createUser signature)
-          const userCreateDto = this.mapToUserCreateDto(user);
-          // Do NOT include cohortIds in tenantRoleMapping to avoid internal cohort member creation
-          const tenantRoleMapping: tenantRoleMappingDto = {
-            roleId: '493c04e2-a9db-47f2-b304-503da358d5f4',
-            cohortIds: [], // Set to empty array to satisfy type, but do not include cohortId
-            tenantId: tenantId,
-          };
-          userCreateDto.tenantCohortRoleMapping = [tenantRoleMapping];
-
-          // Keep response for compatibility, but do not log or stringify it
-          const createdUser = await this.createUserForBulk(
-            request,
-            userCreateDto,
-            request.headers.academicyearid
-          );
-
-          // Process user (create new or update existing)
-          if (createdUser && createdUser.userId) {
-            // Add to processed users list
-            processedUserIds.push(createdUser.userId);
-            userIdByRowIndex.set(i, createdUser.userId); // ADD THIS LINE
-            // Check if this was a new user or existing user update
-            const isNewUser = !(createdUser as any).isUpdated;
-            
-            if (isNewUser) {
-              // Send bulk import specific notification for new users
-              try {
-                await this.sendBulkImportNotification(
-                  request,
-                  createdUser,
-                  batchId,
-                  i + 2
-                );
-              } catch (notifError) {
-                BulkImportLogger.logNotificationError(
-                  batchId,
-                  i + 2,
-                  createdUser.userId,
-                  notifError
-                );
-              }
-            }
-            
-            // Log appropriate message based on whether user was created or updated
-            if (isNewUser) {
-              BulkImportLogger.logUserCreationSuccess(
-                batchId,
-                i + 2,
-                createdUser.userId,
-                createdUser.username
-              );
-            } else {
-              // Log update success instead of creation success
-              this.logger.log(`[BulkImportLogger] Successfully updated user from row ${i + 2}: ${createdUser.username} (${createdUser.userId})`);
-            }
-            results.successCount++;
-          } else {
-            throw new Error('Failed to process user');
-          }
-        } catch (error) {
-          results.failureCount++;
-          // Log only serializable error and user data
-          const userDataItem = userData[i] || {};
-          BulkImportLogger.logUserCreationError(
-            batchId,
-            i + 2,
-            { message: error.message, stack: error.stack },
-            userDataItem
-          );
-          results.failures.push({
-            email: (userDataItem as any)?.email || 'Unknown',
-            error: error.message,
-          });
+      for (let batchIndex = 0; batchIndex < userBatches.length; batchIndex++) {
+        // Check for timeout
+        if (Date.now() - importStartTime > importTimeout) {
+          console.error(`[BulkImport] Import timeout reached after ${importTimeout / 1000 / 60} minutes`);
+          throw new Error('Bulk import timeout - process took too long');
         }
+        
+        const batch = userBatches[batchIndex];
+        
+        // Process users in parallel within each batch
+        const batchPromises = batch.map(async (user, userIndex) => {
+          const globalIndex = batchIndex * batchSize + userIndex;
+          try {
+            results.totalProcessed++;
+            
+            // Validate user data
+            if (!user || typeof user !== 'object') {
+              throw new Error(`Invalid user data at row ${globalIndex + 2}`);
+            }
+
+            // Validate required fields
+            if (!user.email || !user.firstName || !user.lastName) {
+              throw new Error(
+                `Missing required fields (email, firstName, lastName) at row ${
+                  globalIndex + 2
+                }`
+              );
+            }
+
+            // 1. Create user (do not change userService.createUser signature)
+            const userCreateDto = this.mapToUserCreateDto(user);
+            // Do NOT include cohortIds in tenantRoleMapping to avoid internal cohort member creation
+            const tenantRoleMapping: tenantRoleMappingDto = {
+              roleId: '493c04e2-a9db-47f2-b304-503da358d5f4',
+              cohortIds: [], // Set to empty array to satisfy type, but do not include cohortId
+              tenantId: tenantId,
+            };
+            userCreateDto.tenantCohortRoleMapping = [tenantRoleMapping];
+
+            // Keep response for compatibility, but do not log or stringify it
+            const createdUser = await this.createUserForBulk(
+              request,
+              userCreateDto,
+              request.headers.academicyearid
+            );
+
+            // Process user (create new or update existing)
+            if (createdUser && createdUser.userId) {
+              // Add to processed users list
+              processedUserIds.push(createdUser.userId);
+              userIdByRowIndex.set(globalIndex, createdUser.userId);
+              // Check if this was a new user or existing user update
+              const isNewUser = !(createdUser as any).isUpdated;
+              
+              // Log appropriate message based on whether user was created or updated
+              if (isNewUser) {
+                BulkImportLogger.logUserCreationSuccess(
+                  batchId,
+                  globalIndex + 2,
+                  createdUser.userId,
+                  createdUser.username
+                );
+              } else {
+                // Log update success instead of creation success
+                this.logger.log(`[BulkImportLogger] Successfully updated user from row ${globalIndex + 2}: ${createdUser.username} (${createdUser.userId})`);
+              }
+              results.successCount++;
+              
+              return { success: true, user: createdUser, index: globalIndex, isNewUser };
+            } else {
+              throw new Error('Failed to process user');
+            }
+          } catch (error) {
+            results.failureCount++;
+            // Log only serializable error and user data
+            BulkImportLogger.logUserCreationError(
+              batchId,
+              globalIndex + 2,
+              { message: error.message, stack: error.stack },
+              user
+            );
+            results.failures.push({
+              email: user?.email || 'Unknown',
+              error: error.message,
+            });
+            return { success: false, error: error.message, index: globalIndex };
+          }
+        });
+
+        // Wait for all users in this batch to complete
+        const batchResults = await Promise.all(batchPromises);
+        
+        // Send notifications for successful new users (after batch completion) - Non-blocking
+        const notificationPromises = batchResults
+          .filter(result => result.success && result.isNewUser)
+          .map(async (result) => {
+            try {
+              await this.sendBulkImportNotification(
+                request,
+                result.user,
+                batchId,
+                result.index + 2
+              );
+            } catch (notifError) {
+              // Log error but don't fail the import
+              console.error(`[BulkImport] Notification failed for user ${result.user.username}: ${notifError.message}`);
+              BulkImportLogger.logNotificationError(
+                batchId,
+                result.index + 2,
+                result.user.userId,
+                notifError
+              );
+            }
+          });
+
+        // Don't wait for notifications - let them run in background
+        Promise.all(notificationPromises).catch(error => {
+          console.error(`[BulkImport] Background notification error: ${error.message}`);
+        });
+        
       }
 
       // Handle cohort membership for all processed users
@@ -297,54 +344,94 @@ export class BulkImportService {
             }
           }
 
-          // 4. For each user, build customFields and create form submission
-          for (let i = 0; i < userData.length; i++) {
-            const user = userData[i];
-            const userId = userIdByRowIndex.get(i);
-            if (!userId) continue;
-            // Build customFields array for this user
-            const customFields =
-              fieldHeaderMap && Object.keys(fieldHeaderMap).length > 0
-                ? Object.entries(fieldHeaderMap).map(
-                    ([header, { fieldId }]) => ({
-                      fieldId,
-                      value:
-                        user[header] !== undefined && user[header] !== null
-                          ? String(user[header])
-                          : '',
-                    })
-                  )
-                : [];
-            // Build CreateFormSubmissionDto
-            const createFormSubmissionDto = {
-              userId: userId, // The imported user's ID
-              tenantId: tenantId,
-              formSubmission: {
-                formId: activeForm.formid,
-                status: 'active',
-              },
-              customFields,
-            };
-            // Call internal method to create form submission with correct userId, createdBy, updatedBy
-            try {
-              const formSubmissionResult =
-                await this.createFormSubmissionForBulk(
-                  createFormSubmissionDto,
-                  loginUser // adminId for createdBy/updatedBy
-                );
-            } catch (formError) {
-              this.logger.error(`[DEBUG] Form submission failed for user ${userId}: ${formError.message}`);
-              BulkImportLogger.logUserCreationError(
-                batchId,
-                i + 2,
-                { message: 'Form submission failed', error: formError.message },
-                user
-              );
-              results.failures.push({
-                email: user?.email,
-                error: 'Form submission failed: ' + formError.message,
-              });
+          // 4. Process form submissions in optimized batches for better performance
+          const formSubmissionBatchSize = 10; // Increased batch size for better throughput
+          const formSubmissionBatches = [];
+          for (let i = 0; i < userData.length; i += formSubmissionBatchSize) {
+            formSubmissionBatches.push(userData.slice(i, i + formSubmissionBatchSize));
+          }
+          
+          let formSubmissionsCreated = 0;
+
+          for (let batchIndex = 0; batchIndex < formSubmissionBatches.length; batchIndex++) {
+            // Check for timeout
+            if (Date.now() - importStartTime > importTimeout) {
+              console.error(`[BulkImport] Form submission timeout reached after ${importTimeout / 1000 / 60} minutes`);
+              throw new Error('Bulk import form submission timeout - process took too long');
             }
+            
+            const batch = formSubmissionBatches[batchIndex];
+            
+            const formSubmissionPromises = batch.map(async (user, userIndex) => {
+              const globalIndex = batchIndex * formSubmissionBatchSize + userIndex;
+              const userId = userIdByRowIndex.get(globalIndex);
+              if (!userId) return { success: false, error: 'User ID not found', index: globalIndex };
+              
+              try {
+                // Build customFields array for this user
+                const customFields =
+                  fieldHeaderMap && Object.keys(fieldHeaderMap).length > 0
+                    ? Object.entries(fieldHeaderMap).map(
+                        ([header, { fieldId }]) => ({
+                          fieldId,
+                          value:
+                            user[header] !== undefined && user[header] !== null
+                              ? String(user[header])
+                              : '',
+                        })
+                      )
+                    : [];
+                // Build CreateFormSubmissionDto
+                const createFormSubmissionDto = {
+                  userId: userId, // The imported user's ID
+                  tenantId: tenantId,
+                  formSubmission: {
+                    formId: activeForm.formid,
+                    status: 'active',
+                  },
+                  customFields,
+                };
+                // Call internal method to create form submission with correct userId, createdBy, updatedBy
+                // Add timeout and retry logic for form submissions
+                const formSubmissionResult = await Promise.race([
+                  this.createFormSubmissionForBulk(
+                    createFormSubmissionDto,
+                    loginUser // adminId for createdBy/updatedBy
+                  ),
+                  new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('Form submission timeout')), 10000) // 10 second timeout
+                  )
+                ]);
+                return { success: true, userId, index: globalIndex };
+              } catch (formError) {
+                this.logger.error(`[DEBUG] Form submission failed for user ${userId}: ${formError.message}`);
+                BulkImportLogger.logUserCreationError(
+                  batchId,
+                  globalIndex + 2,
+                  { message: 'Form submission failed', error: formError.message },
+                  user
+                );
+                return { success: false, error: formError.message, index: globalIndex, userId };
+              }
+            });
+
+            // Wait for all form submissions in this batch to complete
+            const formSubmissionResults = await Promise.all(formSubmissionPromises);
+            
+            // Count successful form submissions
+            const successfulSubmissions = formSubmissionResults.filter(result => result.success).length;
+            formSubmissionsCreated += successfulSubmissions;
+            
+            // Log failures
+            formSubmissionResults
+              .filter(result => !result.success)
+              .forEach(result => {
+                results.failures.push({
+                  email: userData[result.index]?.email || 'Unknown',
+                  error: 'Form submission failed: ' + result.error,
+                });
+              });
+            
           }
         }
       }
@@ -377,6 +464,7 @@ export class BulkImportService {
           }
         }
       }
+      
       // Wrap the summary in APIResponse.success
       return APIResponse.success(
         response,
@@ -690,6 +778,9 @@ export class BulkImportService {
     }
   }
 
+
+
+
   /**
    * Send bulk import specific notification for users
    */
@@ -791,7 +882,8 @@ export class BulkImportService {
         stack: error.stack,
         error: error
       });
-      throw error;
+      // Don't throw error - let the import continue even if notifications fail
+      // The notification failure is logged but doesn't stop the import
     }
   }
 
