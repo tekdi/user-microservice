@@ -683,118 +683,39 @@ export class FormsService {
       // Fetch the source form
       const sourceForm = await this.getFormById(formCopyDto.formId);
 
-      // Check if target cohort already has a form in draft or active state
-      const existingForm = await this.formRepository.findOne({
-        where: {
-          contextId: formCopyDto.cohortId,
-          status: In([FormStatus.DRAFT, FormStatus.ACTIVE])
-        }
-      });
-
-      if (existingForm) {
-        return APIResponse.error(
-          response,
-          apiId,
-          'CONFLICT',
-          'This cohort already has an application form in draft or published state. To continue, please unpublish the current application form before proceeding.',
-          HttpStatus.CONFLICT
-        );
+      // Check for existing form conflict
+      const conflictCheck = await this.checkForExistingFormConflict(formCopyDto.cohortId, response, apiId);
+      if (conflictCheck) {
+        return conflictCheck;
       }
 
-      // Extract all fieldIds from the fields JSON using optimized method
-      const fieldIdMapping = new Map<string, string>();
-      const foundFieldIds = this.extractFieldIdsFromJson(sourceForm.fields, sourceForm.rules);
+      // Process field copying and mapping
+      const fieldIdMapping = await this.processFieldCopying(
+        sourceForm,
+        formCopyDto,
+        createdBy,
+        updatedBy
+      );
 
-      if (foundFieldIds.size === 0) {
-        Logger.warn('No fieldIds found in source form');
-      } else {
-        Logger.log(`Found ${foundFieldIds.size} unique fieldIds to process`);
-
-        // Bulk fetch all original fields at once
-        const originalFields = await this.bulkFetchFields(Array.from(foundFieldIds));
-
-        // Check for existing fields in target cohort in bulk
-        const existingFields = await this.bulkCheckExistingFields(formCopyDto.cohortId, Array.from(foundFieldIds));
-
-        // Prepare fields for bulk creation
-        const fieldsToCreate = [];
-        const fieldsToMap = new Map<string, string>();
-
-        for (const fieldId of foundFieldIds) {
-          // Check if field already exists in target cohort
-          if (existingFields.has(fieldId)) {
-            fieldsToMap.set(fieldId, fieldId); // Map to itself since it already exists
-            continue;
-          }
-
-          const originalField = originalFields.get(fieldId);
-          if (originalField) {
-            // Prepare field data for bulk creation
-            const newFieldData = this.prepareFieldDataForCopy(originalField, formCopyDto.cohortId, createdBy, updatedBy, formCopyDto.tenantId);
-            fieldsToCreate.push(newFieldData);
-            // We'll map the fieldId after bulk creation
-          } else {
-            Logger.warn(`Original field not found for fieldId: ${fieldId}`);
-          }
-        }
-
-        // Bulk create all fields at once
-        if (fieldsToCreate.length > 0) {
-          Logger.log(`Creating ${fieldsToCreate.length} fields in bulk`);
-          const createdFields = await this.bulkCreateFields(fieldsToCreate);
-
-          // Map created fields back to original fieldIds
-          for (let i = 0; i < fieldsToCreate.length; i++) {
-            const originalFieldId = fieldsToCreate[i].originalFieldId;
-            const createdField = createdFields[i];
-            if (createdField?.fieldId) {
-              fieldsToMap.set(originalFieldId, createdField.fieldId);
-              Logger.log(`Successfully created field ${createdField.fieldId} for field ${originalFieldId}`);
-            }
-          }
-        }
-
-        // Update the fieldIdMapping with all mappings
-        fieldIdMapping.clear();
-        for (const [oldId, newId] of fieldsToMap) {
-          fieldIdMapping.set(oldId, newId);
-        }
-
-        Logger.log(`Field mapping completed: ${fieldIdMapping.size} fields processed`);
-      }
-
-      // Update field IDs in both fields and rules JSON
-      const updatedFields = this.updateFieldIdsInJson(sourceForm.fields, fieldIdMapping);
-      const updatedRules = sourceForm.rules ? this.updateFieldIdsInJson(sourceForm.rules, fieldIdMapping) : sourceForm.rules;
-
-      // Create the new form data with updated field IDs
-      const newFormData: FormCreateDto = {
-        tenantId: formCopyDto.tenantId || sourceForm.tenantId,
-        title: sourceForm.title,
-        context: sourceForm.context,
-        contextType: sourceForm.contextType,
-        contextId: formCopyDto.cohortId,
-        status: FormStatus.DRAFT,
+      // Create the new form with updated field IDs
+      const newForm = await this.createCopiedForm(
+        sourceForm,
+        formCopyDto,
+        fieldIdMapping,
         createdBy,
         updatedBy,
-        fields: updatedFields,
-        rules: updatedRules,
-      };
+        request,
+        response
+      );
 
-      // Create the new form using existing createForm method
-      const createFormResult = await this.createForm(request, newFormData, response);
-
-      // If form creation failed, return the error
-      if (createFormResult.statusCode !== 200) {
-        return createFormResult;
+      if (newForm.statusCode !== 200) {
+        return newForm;
       }
-
-      const newForm = createFormResult.data;
 
       return APIResponse.success(
         response,
         apiId,
-        newForm,
+        newForm.data,
         HttpStatus.OK,
         'Form copied successfully to the new cohort.'
       );
@@ -809,6 +730,186 @@ export class FormsService {
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
+  }
+
+  /**
+   * Checks if target cohort already has a form in draft or active state
+   * @param cohortId The target cohort ID
+   * @param response The HTTP response object
+   * @param apiId The API ID for error responses
+   * @returns Conflict error response if form exists, null otherwise
+   */
+  private async checkForExistingFormConflict(cohortId: string, response: any, apiId: string): Promise<any> {
+    const existingForm = await this.formRepository.findOne({
+      where: {
+        contextId: cohortId,
+        status: In([FormStatus.DRAFT, FormStatus.ACTIVE])
+      }
+    });
+
+    if (existingForm) {
+      return APIResponse.error(
+        response,
+        apiId,
+        'CONFLICT',
+        'This cohort already has an application form in draft or published state. To continue, please unpublish the current application form before proceeding.',
+        HttpStatus.CONFLICT
+      );
+    }
+
+    return null;
+  }
+
+  /**
+   * Processes field copying and creates field ID mapping
+   * @param sourceForm The source form to copy from
+   * @param formCopyDto The form copy data
+   * @param createdBy The user creating the fields
+   * @param updatedBy The user updating the fields
+   * @returns Map of old fieldId to new fieldId
+   */
+  private async processFieldCopying(
+    sourceForm: any,
+    formCopyDto: FormCopyDto,
+    createdBy: string,
+    updatedBy: string
+  ): Promise<Map<string, string>> {
+    const fieldIdMapping = new Map<string, string>();
+    const foundFieldIds = this.extractFieldIdsFromJson(sourceForm.fields, sourceForm.rules);
+
+    if (foundFieldIds.size === 0) {
+      Logger.warn('No fieldIds found in source form');
+      return fieldIdMapping;
+    }
+
+    Logger.log(`Found ${foundFieldIds.size} unique fieldIds to process`);
+
+    // Process fields in bulk
+    const fieldMapping = await this.processFieldsInBulk(
+      foundFieldIds,
+      formCopyDto,
+      createdBy,
+      updatedBy
+    );
+
+    // Update the fieldIdMapping with all mappings
+    fieldIdMapping.clear();
+    for (const [oldId, newId] of fieldMapping) {
+      fieldIdMapping.set(oldId, newId);
+    }
+
+    Logger.log(`Field mapping completed: ${fieldIdMapping.size} fields processed`);
+    return fieldIdMapping;
+  }
+
+  /**
+   * Processes fields in bulk operations
+   * @param foundFieldIds Set of field IDs to process
+   * @param formCopyDto The form copy data
+   * @param createdBy The user creating the fields
+   * @param updatedBy The user updating the fields
+   * @returns Map of old fieldId to new fieldId
+   */
+  private async processFieldsInBulk(
+    foundFieldIds: Set<string>,
+    formCopyDto: FormCopyDto,
+    createdBy: string,
+    updatedBy: string
+  ): Promise<Map<string, string>> {
+    const fieldIdsArray = Array.from(foundFieldIds);
+
+    // Bulk fetch all original fields at once
+    const originalFields = await this.bulkFetchFields(fieldIdsArray);
+
+    // Check for existing fields in target cohort in bulk
+    const existingFields = await this.bulkCheckExistingFields(formCopyDto.cohortId, fieldIdsArray);
+
+    // Prepare fields for bulk creation
+    const fieldsToCreate = [];
+    const fieldsToMap = new Map<string, string>();
+
+    for (const fieldId of foundFieldIds) {
+      if (existingFields.has(fieldId)) {
+        fieldsToMap.set(fieldId, fieldId); // Map to itself since it already exists
+        continue;
+      }
+
+      const originalField = originalFields.get(fieldId);
+      if (originalField) {
+        const newFieldData = this.prepareFieldDataForCopy(
+          originalField,
+          formCopyDto.cohortId,
+          createdBy,
+          updatedBy,
+          formCopyDto.tenantId
+        );
+        fieldsToCreate.push(newFieldData);
+      } else {
+        Logger.warn(`Original field not found for fieldId: ${fieldId}`);
+      }
+    }
+
+    // Bulk create all fields at once
+    if (fieldsToCreate.length > 0) {
+      Logger.log(`Creating ${fieldsToCreate.length} fields in bulk`);
+      const createdFields = await this.bulkCreateFields(fieldsToCreate);
+
+      // Map created fields back to original fieldIds
+      for (let i = 0; i < fieldsToCreate.length; i++) {
+        const originalFieldId = fieldsToCreate[i].originalFieldId;
+        const createdField = createdFields[i];
+        if (createdField?.fieldId) {
+          fieldsToMap.set(originalFieldId, createdField.fieldId);
+          Logger.log(`Successfully created field ${createdField.fieldId} for field ${originalFieldId}`);
+        }
+      }
+    }
+
+    return fieldsToMap;
+  }
+
+  /**
+   * Creates the copied form with updated field IDs
+   * @param sourceForm The source form to copy from
+   * @param formCopyDto The form copy data
+   * @param fieldIdMapping Map of old fieldId to new fieldId
+   * @param createdBy The user creating the form
+   * @param updatedBy The user updating the form
+   * @param request The HTTP request object
+   * @param response The HTTP response object
+   * @returns API response with the created form
+   */
+  private async createCopiedForm(
+    sourceForm: any,
+    formCopyDto: FormCopyDto,
+    fieldIdMapping: Map<string, string>,
+    createdBy: string,
+    updatedBy: string,
+    request: any,
+    response: any
+  ): Promise<any> {
+    // Update field IDs in both fields and rules JSON
+    const updatedFields = this.updateFieldIdsInJson(sourceForm.fields, fieldIdMapping);
+    const updatedRules = sourceForm.rules ? 
+      this.updateFieldIdsInJson(sourceForm.rules, fieldIdMapping) : 
+      sourceForm.rules;
+
+    // Create the new form data with updated field IDs
+    const newFormData: FormCreateDto = {
+      tenantId: formCopyDto.tenantId || sourceForm.tenantId,
+      title: sourceForm.title,
+      context: sourceForm.context,
+      contextType: sourceForm.contextType,
+      contextId: formCopyDto.cohortId,
+      status: FormStatus.DRAFT,
+      createdBy,
+      updatedBy,
+      fields: updatedFields,
+      rules: updatedRules,
+    };
+
+    // Create the new form using existing createForm method
+    return await this.createForm(request, newFormData, response);
   }
 
   /**
@@ -840,7 +941,7 @@ export class FormsService {
         // Ensure ordering is not null (required field)
         ordering: fieldData.ordering || 0,
         // Ensure required field has a default value
-        required: (fieldData as any).required !== undefined ? (fieldData as any).required : true,
+        required: (fieldData as any).required === undefined ? true : (fieldData as any).required,
         // Ensure dependsOn is not undefined
         dependsOn: fieldData.dependsOn || null,
         // Handle JSON fields - convert objects to strings for database storage
@@ -876,13 +977,15 @@ export class FormsService {
       }
 
       // Recursively search all object values
-      Object.values(obj).forEach(value => {
+      for (const value of Object.values(obj)) {
         if (Array.isArray(value)) {
-          value.forEach(item => extractFromObject(item));
+          for (const item of value) {
+            extractFromObject(item);
+          }
         } else if (typeof value === 'object') {
           extractFromObject(value);
         }
-      });
+      }
     };
 
     // Extract from fields JSON
@@ -910,11 +1013,11 @@ export class FormsService {
       const fields = await this.fieldsService.getFieldsByIds(fieldIds);
       const fieldMap = new Map<string, any>();
 
-      fields.forEach(field => {
+      for (const field of fields) {
         if (field?.fieldId) {
           fieldMap.set(field.fieldId, field);
         }
-      });
+      }
 
       return fieldMap;
     } catch (error) {
@@ -971,7 +1074,7 @@ export class FormsService {
       status: 'active',
       // Ensure critical fields have proper values
       ordering: originalField.ordering || 0,
-      required: originalField.required !== undefined ? originalField.required : true,
+      required: originalField.required === undefined ? true : originalField.required,
       dependsOn: originalField.dependsOn || null,
       // Handle JSON fields - convert objects to strings for database storage
       fieldParams: this.sanitizeJsonField(originalField.fieldParams),
