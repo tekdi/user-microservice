@@ -75,14 +75,14 @@ export class BulkImportService {
   /**
    * Send progress update to aspire specific service
    * @param importJobId - The import job ID to update
-   * @param successCount - Number of successful imports
-   * @param failureCount - Number of failed imports
+   * @param successIncrement - Number of successful imports to increment by
+   * @param failureIncrement - Number of failed imports to increment by
    * @param status - Optional status update
    */
   private async sendProgressUpdate(
     importJobId: string,
-    successCount: number,
-    failureCount: number,
+    successIncrement: number,
+    failureIncrement: number,
     status?: string,
     tenantId?: string,
     authorization?: string
@@ -90,10 +90,10 @@ export class BulkImportService {
     try {
       const aspireSpecificServiceUrl =
         this.configService.get('ASPIRE_SPECIFIC_SERVICE_URL') ||
-        'http://localhost:3010';
+        '';
       const updateData: any = {
-        successCount,
-        failureCount,
+        successCount: successIncrement,
+        failureCount: failureIncrement,
       };
 
       if (status) {
@@ -132,7 +132,7 @@ export class BulkImportService {
 
       if (response.status >= 200 && response.status < 300) {
         this.logger.log(
-          `[BulkImport] Progress update sent successfully: ${successCount} success, ${failureCount} failures`
+          `[BulkImport] Progress update sent successfully: +${successIncrement} success, +${failureIncrement} failures`
         );
       } else {
         this.logger.warn(
@@ -347,10 +347,15 @@ export class BulkImportService {
         // Using void to avoid blocking the import process on external HTTP calls
         if (request.headers['x-import-job-id']) {
           const importJobId = request.headers['x-import-job-id'];
+          
+          // Calculate incremental changes for this batch
+          const batchSuccessCount = batchResults.filter(result => result.success).length;
+          const batchFailureCount = batchResults.filter(result => !result.success).length;
+          
           void this.sendProgressUpdate(
             importJobId,
-            results.successCount,
-            results.failureCount,
+            batchSuccessCount,
+            batchFailureCount,
             undefined,
             tenantId,
             request.headers.authorization
@@ -507,14 +512,21 @@ export class BulkImportService {
                   const customFields =
                     fieldHeaderMap && Object.keys(fieldHeaderMap).length > 0
                       ? Object.entries(fieldHeaderMap).map(
-                          ([header, { fieldId }]) => ({
-                            fieldId,
-                            value:
-                              user[header] !== undefined &&
-                              user[header] !== null
-                                ? String(user[header])
-                                : '',
-                          })
+                          ([header, { fieldId }]) => {
+                            let fieldValue = user[header] !== undefined && user[header] !== null
+                              ? String(user[header])
+                              : '';
+                            
+                            // Convert pipe-separated values to comma-separated values
+                            if (fieldValue && fieldValue.includes('|')) {
+                              fieldValue = this.convertPipeToCommaSeparated(fieldValue);
+                            }
+                            
+                            return {
+                              fieldId,
+                              value: fieldValue,
+                            };
+                          }
                         )
                       : [];
                   // Build CreateFormSubmissionDto
@@ -605,8 +617,8 @@ export class BulkImportService {
         const importJobId = request.headers['x-import-job-id'];
         void this.sendProgressUpdate(
           importJobId,
-          results.successCount,
-          results.failureCount,
+          0, // No additional success count (already sent incrementally)
+          0, // No additional failure count (already sent incrementally)
           'completed',
           tenantId,
           request.headers.authorization
@@ -719,11 +731,33 @@ export class BulkImportService {
       throw new Error('Invalid row data: row must be an object');
     }
 
+    // Process all field values to convert pipe-separated values to comma-separated
+    const processedRow = { ...row };
+    for (const [key, value] of Object.entries(processedRow)) {
+      if (typeof value === 'string' && value.includes('|')) {
+        processedRow[key] = this.convertPipeToCommaSeparated(value);
+      }
+    }
+
     // Always set username from email, never from file
     return {
-      ...row,
-      username: row.email ? row.email.toLowerCase() : undefined,
+      ...processedRow,
+      username: processedRow.email ? processedRow.email.toLowerCase() : undefined,
     };
+  }
+
+  /**
+   * Converts pipe-separated values to comma-separated values
+   * @param value - The string value that may contain pipe separators
+   * @returns The converted string with comma separators
+   */
+  private convertPipeToCommaSeparated(value: string): string {
+    if (!value || typeof value !== 'string') {
+      return value;
+    }
+    
+    // Replace pipe separators with comma separators
+    return value.replace(/\|/g, ',');
   }
 
   private mapToUserCreateDto(userData: BulkImportUserData): UserCreateDto {
