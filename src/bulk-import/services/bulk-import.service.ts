@@ -88,49 +88,58 @@ export class BulkImportService {
     authorization?: string
   ): Promise<void> {
     try {
-      const aspireSpecificServiceUrl = this.configService.get('ASPIRE_SPECIFIC_SERVICE_URL') || 'http://localhost:3010';
+      const aspireSpecificServiceUrl =
+        this.configService.get('ASPIRE_SPECIFIC_SERVICE_URL') ||
+        'http://localhost:3010';
       const updateData: any = {
         successCount,
-        failureCount
+        failureCount,
       };
-      
+
       if (status) {
         updateData.status = status;
       }
 
       const url = `${aspireSpecificServiceUrl}/aspirespecific/import-users/import-jobs/${importJobId}/progress`;
-      
+
       this.logger.log(`[BulkImport] Sending progress update to: ${url}`);
       this.logger.log(`[BulkImport] Update data:`, JSON.stringify(updateData));
 
       const headers: any = {
         'Content-Type': 'application/json',
       };
-      
+
       if (tenantId) {
         headers['tenantid'] = tenantId;
       }
-      
+
       if (authorization) {
         headers['Authorization'] = authorization;
       }
 
-      const response = await this.httpService.put(
-        url,
-        updateData,
-        {
-          headers,
-          timeout: 5000
-        }
+      const response = await this.httpService.put(url, updateData, {
+        headers,
+        timeout: 5000,
+      });
+
+      this.logger.log(
+        `[BulkImport] Progress update response status: ${response.status}`
+      );
+      this.logger.log(
+        `[BulkImport] Progress update response data:`,
+        JSON.stringify(response.data)
       );
 
-      this.logger.log(`[BulkImport] Progress update response status: ${response.status}`);
-      this.logger.log(`[BulkImport] Progress update response data:`, JSON.stringify(response.data));
-
       if (response.status >= 200 && response.status < 300) {
-        this.logger.log(`[BulkImport] Progress update sent successfully: ${successCount} success, ${failureCount} failures`);
+        this.logger.log(
+          `[BulkImport] Progress update sent successfully: ${successCount} success, ${failureCount} failures`
+        );
       } else {
-        this.logger.warn(`[BulkImport] Progress update failed with status ${response.status}: ${JSON.stringify(response.data)}`);
+        this.logger.warn(
+          `[BulkImport] Progress update failed with status ${
+            response.status
+          }: ${JSON.stringify(response.data)}`
+        );
       }
     } catch (error) {
       this.logger.error(`[BulkImport] Failed to send progress update:`, error);
@@ -138,7 +147,7 @@ export class BulkImportService {
         message: error.message,
         status: error.response?.status,
         statusText: error.response?.statusText,
-        data: error.response?.data
+        data: error.response?.data,
       });
       // Don't throw error - progress update failure shouldn't stop the import
     }
@@ -1463,7 +1472,7 @@ export class BulkImportService {
       // Update existing form submission
       console.info(`[BulkImport] Updating form submission for user: ${userId}`);
       existingSubmission.status = formSubmission.status || 'active';
-      existingSubmission.completionPercentage = 100.0; // Set completion to 100% for bulk import
+      existingSubmission.completionPercentage = 100; // Set completion to 100% for bulk import
       existingSubmission.updatedBy = adminId;
       existingSubmission.updatedAt = new Date();
       savedSubmission = await this.formSubmissionService[
@@ -1478,7 +1487,7 @@ export class BulkImportService {
         formId: formSubmission.formId,
         itemId: userId,
         status: formSubmission.status || 'active',
-        completionPercentage: 100.0, // Set completion to 100% for bulk import
+        completionPercentage: 100, // Set completion to 100% for bulk import
         createdBy: adminId,
         updatedBy: adminId,
       });
