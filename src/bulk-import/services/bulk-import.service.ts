@@ -42,6 +42,7 @@ import { FieldValuesDto } from '../../fields/dto/field-values.dto';
 import { UserElasticsearchService } from '../../elasticsearch/user-elasticsearch.service';
 import { FieldValues } from '../../fields/entities/fields-values.entity';
 import { PostgresFieldsService } from '../../adapters/postgres/fields-adapter';
+import { HttpService } from '../../common/utils/http-service';
 
 @Injectable()
 export class BulkImportService {
@@ -67,8 +68,90 @@ export class BulkImportService {
     @InjectRepository(FieldValues)
     private readonly fieldsValueRepository: Repository<FieldValues>,
     private readonly fieldsService: PostgresFieldsService,
-    private readonly jwtUtil: JwtUtil
+    private readonly jwtUtil: JwtUtil,
+    private readonly httpService: HttpService
   ) {}
+
+  /**
+   * Send progress update to aspire specific service
+   * @param importJobId - The import job ID to update
+   * @param successCount - Number of successful imports
+   * @param failureCount - Number of failed imports
+   * @param status - Optional status update
+   */
+  private async sendProgressUpdate(
+    importJobId: string,
+    successCount: number,
+    failureCount: number,
+    status?: string,
+    tenantId?: string,
+    authorization?: string
+  ): Promise<void> {
+    try {
+      const aspireSpecificServiceUrl =
+        this.configService.get('ASPIRE_SPECIFIC_SERVICE_URL') ||
+        'http://localhost:3010';
+      const updateData: any = {
+        successCount,
+        failureCount,
+      };
+
+      if (status) {
+        updateData.status = status;
+      }
+
+      const url = `${aspireSpecificServiceUrl}/aspirespecific/import-users/import-jobs/${importJobId}/progress`;
+
+      this.logger.log(`[BulkImport] Sending progress update to: ${url}`);
+      this.logger.log(`[BulkImport] Update data:`, JSON.stringify(updateData));
+
+      const headers: any = {
+        'Content-Type': 'application/json',
+      };
+
+      if (tenantId) {
+        headers['tenantid'] = tenantId;
+      }
+
+      if (authorization) {
+        headers['Authorization'] = authorization;
+      }
+
+      const response = await this.httpService.put(url, updateData, {
+        headers,
+        timeout: 5000,
+      });
+
+      this.logger.log(
+        `[BulkImport] Progress update response status: ${response.status}`
+      );
+      this.logger.log(
+        `[BulkImport] Progress update response data:`,
+        JSON.stringify(response.data)
+      );
+
+      if (response.status >= 200 && response.status < 300) {
+        this.logger.log(
+          `[BulkImport] Progress update sent successfully: ${successCount} success, ${failureCount} failures`
+        );
+      } else {
+        this.logger.warn(
+          `[BulkImport] Progress update failed with status ${
+            response.status
+          }: ${JSON.stringify(response.data)}`
+        );
+      }
+    } catch (error) {
+      this.logger.error(`[BulkImport] Failed to send progress update:`, error);
+      this.logger.error(`[BulkImport] Error details:`, {
+        message: error.message,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+      });
+      // Don't throw error - progress update failure shouldn't stop the import
+    }
+  }
 
   async processBulkImport(
     file: Express.Multer.File,
@@ -118,8 +201,9 @@ export class BulkImportService {
       }
 
       BulkImportLogger.logImportStart(batchId, userData.length);
-      console.info(`[BulkImport] Starting bulk import for ${userData.length} users`);
-      
+      console.info(
+        `[BulkImport] Starting bulk import for ${userData.length} users`
+      );
 
       const processedUserIds: string[] = []; // Track all processed users (both new and updated)
       const userIdByRowIndex = new Map<number, string>(); // ADD THIS LINE
@@ -137,14 +221,13 @@ export class BulkImportService {
       }
       // Process users in batches to improve performance
       // Dynamic batch sizing based on total users
-      let batchSize = 10; // Default for small datasets
+      let batchSize = 100; // Default for small datasets
       if (userData.length > 1000) {
-        batchSize = 20; // Larger batches for big datasets
+        batchSize = 200; // Larger batches for big datasets
       } else if (userData.length > 100) {
-        batchSize = 10; // Medium batches for medium datasets
+        batchSize = 100; // Medium batches for medium datasets
       }
-      
-      
+
       const userBatches = [];
       for (let i = 0; i < userData.length; i += batchSize) {
         userBatches.push(userData.slice(i, i + batchSize));
@@ -157,18 +240,22 @@ export class BulkImportService {
       for (let batchIndex = 0; batchIndex < userBatches.length; batchIndex++) {
         // Check for timeout
         if (Date.now() - importStartTime > importTimeout) {
-          console.error(`[BulkImport] Import timeout reached after ${importTimeout / 1000 / 60} minutes`);
+          console.error(
+            `[BulkImport] Import timeout reached after ${
+              importTimeout / 1000 / 60
+            } minutes`
+          );
           throw new Error('Bulk import timeout - process took too long');
         }
-        
+
         const batch = userBatches[batchIndex];
-        
+
         // Process users in parallel within each batch
         const batchPromises = batch.map(async (user, userIndex) => {
           const globalIndex = batchIndex * batchSize + userIndex;
           try {
             results.totalProcessed++;
-            
+
             // Validate user data
             if (!user || typeof user !== 'object') {
               throw new Error(`Invalid user data at row ${globalIndex + 2}`);
@@ -207,7 +294,7 @@ export class BulkImportService {
               userIdByRowIndex.set(globalIndex, createdUser.userId);
               // Check if this was a new user or existing user update
               const isNewUser = !(createdUser as any).isUpdated;
-              
+
               // Log appropriate message based on whether user was created or updated
               if (isNewUser) {
                 BulkImportLogger.logUserCreationSuccess(
@@ -218,11 +305,20 @@ export class BulkImportService {
                 );
               } else {
                 // Log update success instead of creation success
-                this.logger.log(`[BulkImportLogger] Successfully updated user from row ${globalIndex + 2}: ${createdUser.username} (${createdUser.userId})`);
+                this.logger.log(
+                  `[BulkImportLogger] Successfully updated user from row ${
+                    globalIndex + 2
+                  }: ${createdUser.username} (${createdUser.userId})`
+                );
               }
               results.successCount++;
-              
-              return { success: true, user: createdUser, index: globalIndex, isNewUser };
+
+              return {
+                success: true,
+                user: createdUser,
+                index: globalIndex,
+                isNewUser,
+              };
             } else {
               throw new Error('Failed to process user');
             }
@@ -245,10 +341,25 @@ export class BulkImportService {
 
         // Wait for all users in this batch to complete
         const batchResults = await Promise.all(batchPromises);
-        
+
+        // Send real-time progress update to aspire specific service (fire-and-forget)
+        // This ensures the import job status API shows real-time progress
+        // Using void to avoid blocking the import process on external HTTP calls
+        if (request.headers['x-import-job-id']) {
+          const importJobId = request.headers['x-import-job-id'];
+          void this.sendProgressUpdate(
+            importJobId,
+            results.successCount,
+            results.failureCount,
+            undefined,
+            tenantId,
+            request.headers.authorization
+          );
+        }
+
         // Send notifications for successful new users (after batch completion) - Non-blocking
         const notificationPromises = batchResults
-          .filter(result => result.success && result.isNewUser)
+          .filter((result) => result.success && result.isNewUser)
           .map(async (result) => {
             try {
               await this.sendBulkImportNotification(
@@ -259,7 +370,9 @@ export class BulkImportService {
               );
             } catch (notifError) {
               // Log error but don't fail the import
-              console.error(`[BulkImport] Notification failed for user ${result.user.username}: ${notifError.message}`);
+              console.error(
+                `[BulkImport] Notification failed for user ${result.user.username}: ${notifError.message}`
+              );
               BulkImportLogger.logNotificationError(
                 batchId,
                 result.index + 2,
@@ -270,10 +383,11 @@ export class BulkImportService {
           });
 
         // Don't wait for notifications - let them run in background
-        Promise.all(notificationPromises).catch(error => {
-          console.error(`[BulkImport] Background notification error: ${error.message}`);
+        Promise.all(notificationPromises).catch((error) => {
+          console.error(
+            `[BulkImport] Background notification error: ${error.message}`
+          );
         });
-        
       }
 
       // Handle cohort membership for all processed users
@@ -294,7 +408,9 @@ export class BulkImportService {
             request.headers.academicyearid
           );
         } catch (cohortError) {
-          this.logger.error(`Failed to update cohort membership: ${cohortError.message}`);
+          this.logger.error(
+            `Failed to update cohort membership: ${cohortError.message}`
+          );
           // Don't fail the entire import for cohort errors
         }
 
@@ -348,90 +464,128 @@ export class BulkImportService {
           const formSubmissionBatchSize = 10; // Increased batch size for better throughput
           const formSubmissionBatches = [];
           for (let i = 0; i < userData.length; i += formSubmissionBatchSize) {
-            formSubmissionBatches.push(userData.slice(i, i + formSubmissionBatchSize));
+            formSubmissionBatches.push(
+              userData.slice(i, i + formSubmissionBatchSize)
+            );
           }
-          
+
           let formSubmissionsCreated = 0;
 
-          for (let batchIndex = 0; batchIndex < formSubmissionBatches.length; batchIndex++) {
+          for (
+            let batchIndex = 0;
+            batchIndex < formSubmissionBatches.length;
+            batchIndex++
+          ) {
             // Check for timeout
             if (Date.now() - importStartTime > importTimeout) {
-              console.error(`[BulkImport] Form submission timeout reached after ${importTimeout / 1000 / 60} minutes`);
-              throw new Error('Bulk import form submission timeout - process took too long');
+              console.error(
+                `[BulkImport] Form submission timeout reached after ${
+                  importTimeout / 1000 / 60
+                } minutes`
+              );
+              throw new Error(
+                'Bulk import form submission timeout - process took too long'
+              );
             }
-            
+
             const batch = formSubmissionBatches[batchIndex];
-            
-            const formSubmissionPromises = batch.map(async (user, userIndex) => {
-              const globalIndex = batchIndex * formSubmissionBatchSize + userIndex;
-              const userId = userIdByRowIndex.get(globalIndex);
-              if (!userId) return { success: false, error: 'User ID not found', index: globalIndex };
-              
-              try {
-                // Build customFields array for this user
-                const customFields =
-                  fieldHeaderMap && Object.keys(fieldHeaderMap).length > 0
-                    ? Object.entries(fieldHeaderMap).map(
-                        ([header, { fieldId }]) => ({
-                          fieldId,
-                          value:
-                            user[header] !== undefined && user[header] !== null
-                              ? String(user[header])
-                              : '',
-                        })
-                      )
-                    : [];
-                // Build CreateFormSubmissionDto
-                const createFormSubmissionDto = {
-                  userId: userId, // The imported user's ID
-                  tenantId: tenantId,
-                  formSubmission: {
-                    formId: activeForm.formid,
-                    status: 'active',
-                  },
-                  customFields,
-                };
-                // Call internal method to create form submission with correct userId, createdBy, updatedBy
-                // Add timeout and retry logic for form submissions
-                const formSubmissionResult = await Promise.race([
-                  this.createFormSubmissionForBulk(
-                    createFormSubmissionDto,
-                    loginUser // adminId for createdBy/updatedBy
-                  ),
-                  new Promise((_, reject) => 
-                    setTimeout(() => reject(new Error('Form submission timeout')), 10000) // 10 second timeout
-                  )
-                ]);
-                return { success: true, userId, index: globalIndex };
-              } catch (formError) {
-                this.logger.error(`[DEBUG] Form submission failed for user ${userId}: ${formError.message}`);
-                BulkImportLogger.logUserCreationError(
-                  batchId,
-                  globalIndex + 2,
-                  { message: 'Form submission failed', error: formError.message },
-                  user
-                );
-                return { success: false, error: formError.message, index: globalIndex, userId };
+
+            const formSubmissionPromises = batch.map(
+              async (user, userIndex) => {
+                const globalIndex =
+                  batchIndex * formSubmissionBatchSize + userIndex;
+                const userId = userIdByRowIndex.get(globalIndex);
+                if (!userId)
+                  return {
+                    success: false,
+                    error: 'User ID not found',
+                    index: globalIndex,
+                  };
+
+                try {
+                  // Build customFields array for this user
+                  const customFields =
+                    fieldHeaderMap && Object.keys(fieldHeaderMap).length > 0
+                      ? Object.entries(fieldHeaderMap).map(
+                          ([header, { fieldId }]) => ({
+                            fieldId,
+                            value:
+                              user[header] !== undefined &&
+                              user[header] !== null
+                                ? String(user[header])
+                                : '',
+                          })
+                        )
+                      : [];
+                  // Build CreateFormSubmissionDto
+                  const createFormSubmissionDto = {
+                    userId: userId, // The imported user's ID
+                    tenantId: tenantId,
+                    formSubmission: {
+                      formId: activeForm.formid,
+                      status: 'active',
+                    },
+                    customFields,
+                  };
+                  // Call internal method to create form submission with correct userId, createdBy, updatedBy
+                  // Add timeout and retry logic for form submissions
+                  await Promise.race([
+                    this.createFormSubmissionForBulk(
+                      createFormSubmissionDto,
+                      loginUser // adminId for createdBy/updatedBy
+                    ),
+                    new Promise(
+                      (_, reject) =>
+                        setTimeout(
+                          () => reject(new Error('Form submission timeout')),
+                          10000
+                        ) // 10 second timeout
+                    ),
+                  ]);
+                  return { success: true, userId, index: globalIndex };
+                } catch (formError) {
+                  this.logger.error(
+                    `[DEBUG] Form submission failed for user ${userId}: ${formError.message}`
+                  );
+                  BulkImportLogger.logUserCreationError(
+                    batchId,
+                    globalIndex + 2,
+                    {
+                      message: 'Form submission failed',
+                      error: formError.message,
+                    },
+                    user
+                  );
+                  return {
+                    success: false,
+                    error: formError.message,
+                    index: globalIndex,
+                    userId,
+                  };
+                }
               }
-            });
+            );
 
             // Wait for all form submissions in this batch to complete
-            const formSubmissionResults = await Promise.all(formSubmissionPromises);
-            
+            const formSubmissionResults = await Promise.all(
+              formSubmissionPromises
+            );
+
             // Count successful form submissions
-            const successfulSubmissions = formSubmissionResults.filter(result => result.success).length;
+            const successfulSubmissions = formSubmissionResults.filter(
+              (result) => result.success
+            ).length;
             formSubmissionsCreated += successfulSubmissions;
-            
+
             // Log failures
             formSubmissionResults
-              .filter(result => !result.success)
-              .forEach(result => {
+              .filter((result) => !result.success)
+              .forEach((result) => {
                 results.failures.push({
                   email: userData[result.index]?.email || 'Unknown',
                   error: 'Form submission failed: ' + result.error,
                 });
               });
-            
           }
         }
       }
@@ -441,7 +595,23 @@ export class BulkImportService {
         successCount: results.successCount,
         failureCount: results.failureCount,
       });
-      console.info(`[BulkImport] Completed bulk import: ${results.successCount} successful, ${results.failureCount} failed`);
+      console.info(
+        `[BulkImport] Completed bulk import: ${results.successCount} successful, ${results.failureCount} failed`
+      );
+
+      // Send final progress update to mark import as completed (fire-and-forget)
+      // Using void to avoid blocking the import process on external HTTP calls
+      if (request.headers['x-import-job-id']) {
+        const importJobId = request.headers['x-import-job-id'];
+        void this.sendProgressUpdate(
+          importJobId,
+          results.successCount,
+          results.failureCount,
+          'completed',
+          tenantId,
+          request.headers.authorization
+        );
+      }
 
       // After all DB operations, update Elasticsearch with full user document for each user
       if (isElasticsearchEnabled()) {
@@ -464,7 +634,7 @@ export class BulkImportService {
           }
         }
       }
-      
+
       // Wrap the summary in APIResponse.success
       return APIResponse.success(
         response,
@@ -700,15 +870,21 @@ export class BulkImportService {
     const token = keycloakResponse.data.access_token;
 
     // Check if user exists in Keycloak or DB
-    const checkUserinKeyCloakandDb = await this.userService.checkUserinKeyCloakandDb(userCreateDto);
-    
+    const checkUserinKeyCloakandDb =
+      await this.userService.checkUserinKeyCloakandDb(userCreateDto);
+
     if (checkUserinKeyCloakandDb) {
       // User exists - update existing user
-      console.info(`[BulkImport] Updating existing user: ${userCreateDto.email}`);
-      
+      console.info(
+        `[BulkImport] Updating existing user: ${userCreateDto.email}`
+      );
+
       try {
         // Find existing user in Keycloak
-        const existingUserData = await this.findExistingUser(userCreateDto, token);
+        const existingUserData = await this.findExistingUser(
+          userCreateDto,
+          token
+        );
         if (existingUserData) {
           return await this.updateExistingUserForBulk(
             request,
@@ -720,13 +896,17 @@ export class BulkImportService {
           throw new Error('User exists but could not be found in Keycloak');
         }
       } catch (updateError) {
-        this.logger.error(`Failed to update existing user: ${updateError.message}`);
-        throw new Error(`Failed to update existing user: ${updateError.message}`);
+        this.logger.error(
+          `Failed to update existing user: ${updateError.message}`
+        );
+        throw new Error(
+          `Failed to update existing user: ${updateError.message}`
+        );
       }
     } else {
       // User doesn't exist - create new user
       console.info(`[BulkImport] Creating new user: ${userCreateDto.email}`);
-      
+
       try {
         // Create user in Keycloak
         const resKeycloak = await createUserInKeyCloak(userSchema, token);
@@ -734,10 +914,12 @@ export class BulkImportService {
           throw new Error(resKeycloak);
         }
         if (resKeycloak.statusCode !== 201) {
-          throw new Error(resKeycloak.message || 'Failed to create user in Keycloak.');
+          throw new Error(
+            resKeycloak.message || 'Failed to create user in Keycloak.'
+          );
         }
         userCreateDto.userId = resKeycloak.userId;
-        
+
         // Create user in DB
         const result = await this.userService.createUserInDatabase(
           request,
@@ -745,16 +927,22 @@ export class BulkImportService {
           academicYearId,
           null
         );
-        
+
         // Mark as new user
         (result as any).isUpdated = false;
         return result;
       } catch (createError) {
         // If creation fails with "user exists" error, try to find and update
-        if (createError.message && (createError.message.includes('User exists with same username') || createError.message.includes('User exists'))) {
-                    
+        if (
+          createError.message &&
+          (createError.message.includes('User exists with same username') ||
+            createError.message.includes('User exists'))
+        ) {
           try {
-            const existingUserData = await this.findExistingUser(userCreateDto, token);
+            const existingUserData = await this.findExistingUser(
+              userCreateDto,
+              token
+            );
             if (existingUserData) {
               return await this.updateExistingUserForBulk(
                 request,
@@ -764,22 +952,25 @@ export class BulkImportService {
               );
             }
           } catch (findError) {
-            this.logger.error(`Failed to find existing user: ${findError.message}`);
+            this.logger.error(
+              `Failed to find existing user: ${findError.message}`
+            );
           }
         }
-        
+
         // Only log the error if it's not a "user exists" error that we're handling
-        if (!createError.message || (!createError.message.includes('User exists with same username') && !createError.message.includes('User exists'))) {
+        if (
+          !createError.message ||
+          (!createError.message.includes('User exists with same username') &&
+            !createError.message.includes('User exists'))
+        ) {
           this.logger.error(`User creation failed: ${createError.message}`);
         }
-        
+
         throw createError;
       }
     }
   }
-
-
-
 
   /**
    * Send bulk import specific notification for users
@@ -792,7 +983,10 @@ export class BulkImportService {
   ): Promise<void> {
     try {
       // Get user details with tenant information
-      const userData: any = await this.userService.findUserDetails(null, user.username);
+      const userData: any = await this.userService.findUserDetails(
+        null,
+        user.username
+      );
       if (!userData) {
         throw new Error('User data not found');
       }
@@ -810,12 +1004,18 @@ export class BulkImportService {
         sub: user.userId,
         email: userData.email,
       };
-      
-      const jwtExpireTime = this.configService.get<string>('PASSWORD_RESET_JWT_EXPIRES_IN');
+
+      const jwtExpireTime = this.configService.get<string>(
+        'PASSWORD_RESET_JWT_EXPIRES_IN'
+      );
       const jwtSecretKey = this.configService.get<string>('RBAC_JWT_SECRET');
-      const frontEndUrl = `${this.configService.get<string>('RESET_FRONTEND_URL')}/reset-password`;
-      const backEndUrl = `${this.configService.get<string>('RESET_BACKEND_URL')}/reset-password`;
-      
+      const frontEndUrl = `${this.configService.get<string>(
+        'RESET_FRONTEND_URL'
+      )}/reset-password`;
+      const backEndUrl = `${this.configService.get<string>(
+        'RESET_BACKEND_URL'
+      )}/reset-password`;
+
       const resetToken = await this.jwtUtil.generateTokenForForgotPassword(
         tokenPayload,
         jwtExpireTime,
@@ -838,9 +1038,10 @@ export class BulkImportService {
       }
 
       // Use bulk import specific notification key
-      const notificationKey = userData?.status === 'inactive'
-        ? 'onBulkStudentCreated'
-        : 'OnForgotPasswordReset';
+      const notificationKey =
+        userData?.status === 'inactive'
+          ? 'onBulkStudentCreated'
+          : 'OnForgotPasswordReset';
 
       // Send Notification with bulk import specific template
       const notificationPayload = {
@@ -848,9 +1049,10 @@ export class BulkImportService {
         context: 'USER',
         key: notificationKey,
         replacements: {
-          '{username}': userData?.firstName && userData?.lastName
-            ? `${userData.firstName} ${userData.lastName}`.trim()
-            : userData?.firstName || userData?.username,
+          '{username}':
+            userData?.firstName && userData?.lastName
+              ? `${userData.firstName} ${userData.lastName}`.trim()
+              : userData?.firstName || userData?.username,
           '{firstName}': userData?.firstName || '',
           '{lastName}': userData?.lastName || '',
           '{resetToken}': resetToken,
@@ -863,25 +1065,32 @@ export class BulkImportService {
           receipients: [userData.email],
         },
       };
-      
+
       const mailSend = await this.notificationRequest.sendNotification(
         notificationPayload
       );
-      
+
       // Check for errors in the email sending process
-      if (mailSend?.result?.email?.errors && mailSend.result.email.errors.length > 0) {
-        const errorMessages = mailSend.result.email.errors.map(error => 
-          typeof error === 'string' ? error : error.error || JSON.stringify(error)
+      if (
+        mailSend?.result?.email?.errors &&
+        mailSend.result.email.errors.length > 0
+      ) {
+        const errorMessages = mailSend.result.email.errors.map((error) =>
+          typeof error === 'string'
+            ? error
+            : error.error || JSON.stringify(error)
         );
         throw new Error(`Email sending failed: ${errorMessages.join(', ')}`);
       }
-      
     } catch (error) {
-      console.error(`[BulkImport] Failed to send notification for user ${user.username}:`, {
-        message: error.message,
-        stack: error.stack,
-        error: error
-      });
+      console.error(
+        `[BulkImport] Failed to send notification for user ${user.username}:`,
+        {
+          message: error.message,
+          stack: error.stack,
+          error: error,
+        }
+      );
       // Don't throw error - let the import continue even if notifications fail
       // The notification failure is logged but doesn't stop the import
     }
@@ -1259,13 +1468,13 @@ export class BulkImportService {
         status: In(['active', 'inactive']),
       },
     });
-    
+
     let savedSubmission;
     if (existingSubmission) {
       // Update existing form submission
       console.info(`[BulkImport] Updating form submission for user: ${userId}`);
       existingSubmission.status = formSubmission.status || 'active';
-      existingSubmission.completionPercentage = 100.00; // Set completion to 100% for bulk import
+      existingSubmission.completionPercentage = 100; // Set completion to 100% for bulk import
       existingSubmission.updatedBy = adminId;
       existingSubmission.updatedAt = new Date();
       savedSubmission = await this.formSubmissionService[
@@ -1280,7 +1489,7 @@ export class BulkImportService {
         formId: formSubmission.formId,
         itemId: userId,
         status: formSubmission.status || 'active',
-        completionPercentage: 100.00, // Set completion to 100% for bulk import
+        completionPercentage: 100, // Set completion to 100% for bulk import
         createdBy: adminId,
         updatedBy: adminId,
       });
@@ -1297,12 +1506,15 @@ export class BulkImportService {
       for (const fieldValue of customFields) {
         try {
           // Validate field ID is a valid UUID
-          const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+          const uuidRegex =
+            /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
           if (!uuidRegex.test(fieldValue.fieldId)) {
-            this.logger.warn(`Skipping invalid field ID: ${fieldValue.fieldId} (not a valid UUID)`);
+            this.logger.warn(
+              `Skipping invalid field ID: ${fieldValue.fieldId} (not a valid UUID)`
+            );
             continue;
           }
-          
+
           // Check if field value already exists
           const existingFieldValue = await this.fieldsValueRepository.findOne({
             where: {
@@ -1310,15 +1522,15 @@ export class BulkImportService {
               fieldId: fieldValue.fieldId,
             },
           });
-          
+
           if (existingFieldValue) {
             // Update existing field value
             await this.fieldsService.updateFieldValues(
               existingFieldValue.fieldValuesId,
-              { 
+              {
                 fieldValuesId: existingFieldValue.fieldValuesId,
                 value: fieldValue.value,
-                status: 'active' as any
+                status: 'active' as any,
               }
             );
           } else {
@@ -1336,7 +1548,9 @@ export class BulkImportService {
             );
           }
         } catch (fieldError) {
-          this.logger.error(`Failed to process field value ${fieldValue.fieldId}: ${fieldError.message}`);
+          this.logger.error(
+            `Failed to process field value ${fieldValue.fieldId}: ${fieldError.message}`
+          );
         }
       }
     }
@@ -1347,14 +1561,19 @@ export class BulkImportService {
   /**
    * Find existing user in Keycloak by email or username
    */
-  private async findExistingUser(userCreateDto: UserCreateDto, token: string): Promise<any> {
+  private async findExistingUser(
+    userCreateDto: UserCreateDto,
+    token: string
+  ): Promise<any> {
     try {
       const axios = require('axios');
-      
+
       // Try to find by email first
       if (userCreateDto.email) {
-        const emailSearchUrl = `${process.env.KEYCLOAK}${process.env.KEYCLOAK_ADMIN}?email=${encodeURIComponent(userCreateDto.email)}`;
-        
+        const emailSearchUrl = `${process.env.KEYCLOAK}${
+          process.env.KEYCLOAK_ADMIN
+        }?email=${encodeURIComponent(userCreateDto.email)}`;
+
         try {
           const emailResponse = await axios.get(emailSearchUrl, {
             headers: {
@@ -1362,20 +1581,24 @@ export class BulkImportService {
               Authorization: `Bearer ${token}`,
             },
           });
-          
+
           if (emailResponse.data && emailResponse.data.length > 0) {
-            console.info(`[BulkImport] Found existing user by email: ${userCreateDto.email}`);
+            console.info(
+              `[BulkImport] Found existing user by email: ${userCreateDto.email}`
+            );
             return { data: emailResponse.data };
           }
         } catch (emailError) {
           // Email search failed, continue to username search
         }
       }
-      
+
       // Try to find by username
       if (userCreateDto.username) {
-        const usernameSearchUrl = `${process.env.KEYCLOAK}${process.env.KEYCLOAK_ADMIN}?username=${encodeURIComponent(userCreateDto.username)}&exact=true`;
-        
+        const usernameSearchUrl = `${process.env.KEYCLOAK}${
+          process.env.KEYCLOAK_ADMIN
+        }?username=${encodeURIComponent(userCreateDto.username)}&exact=true`;
+
         try {
           const usernameResponse = await axios.get(usernameSearchUrl, {
             headers: {
@@ -1383,16 +1606,18 @@ export class BulkImportService {
               Authorization: `Bearer ${token}`,
             },
           });
-          
+
           if (usernameResponse.data && usernameResponse.data.length > 0) {
-            console.info(`[BulkImport] Found existing user by username: ${userCreateDto.username}`);
+            console.info(
+              `[BulkImport] Found existing user by username: ${userCreateDto.username}`
+            );
             return { data: usernameResponse.data };
           }
         } catch (usernameError) {
           // Username search failed
         }
       }
-      
+
       return null;
     } catch (error) {
       this.logger.error(`Error finding existing user: ${error.message}`);
@@ -1410,18 +1635,20 @@ export class BulkImportService {
     existingUserData: any
   ): Promise<User> {
     try {
-      console.info(`[BulkImport] Updating existing user: ${userCreateDto.email}`);
-      
+      console.info(
+        `[BulkImport] Updating existing user: ${userCreateDto.email}`
+      );
+
       // Extract existing user ID from Keycloak data
       const existingUserId = existingUserData.data?.[0]?.id;
       if (!existingUserId) {
         throw new Error('Could not extract user ID from existing user data');
       }
-      
+
       // Get Keycloak admin token
       const keycloakResponse = await getKeycloakAdminToken();
       const token = keycloakResponse.data.access_token;
-      
+
       // Update user in Keycloak
       const updateQuery = {
         userId: existingUserId,
@@ -1431,7 +1658,7 @@ export class BulkImportService {
         email: userCreateDto.email,
       };
       await updateUserInKeyCloak(updateQuery, token);
-      
+
       // Update basic user details in database
       const updateUserDto = {
         firstName: userCreateDto.firstName,
@@ -1444,29 +1671,37 @@ export class BulkImportService {
         dob: userCreateDto.dob ? new Date(userCreateDto.dob) : undefined,
         mobile: userCreateDto.mobile ? Number(userCreateDto.mobile) : undefined,
       };
-      
-      await this.userService.updateBasicUserDetails(existingUserId, updateUserDto);
-      
+
+      await this.userService.updateBasicUserDetails(
+        existingUserId,
+        updateUserDto
+      );
+
       // Update custom fields if provided
-      if (userCreateDto.customFields && Array.isArray(userCreateDto.customFields)) {
+      if (
+        userCreateDto.customFields &&
+        Array.isArray(userCreateDto.customFields)
+      ) {
         for (const customField of userCreateDto.customFields) {
           try {
             // Check if field value exists
-            const existingFieldValue = await this.fieldsValueRepository.findOne({
-              where: {
-                itemId: existingUserId,
-                fieldId: customField.fieldId,
-              },
-            });
-            
+            const existingFieldValue = await this.fieldsValueRepository.findOne(
+              {
+                where: {
+                  itemId: existingUserId,
+                  fieldId: customField.fieldId,
+                },
+              }
+            );
+
             if (existingFieldValue) {
               // Update existing field value
               await this.fieldsService.updateFieldValues(
                 existingFieldValue.fieldValuesId,
-                { 
+                {
                   fieldValuesId: existingFieldValue.fieldValuesId,
                   value: customField.value,
-                  status: 'active' as any
+                  status: 'active' as any,
                 }
               );
             } else {
@@ -1475,31 +1710,39 @@ export class BulkImportService {
                 fieldId: customField.fieldId,
                 value: customField.value,
                 itemId: existingUserId,
-                createdBy: request.headers.authorization ? require('jwt-decode')(request.headers.authorization)?.sub : null,
-                updatedBy: request.headers.authorization ? require('jwt-decode')(request.headers.authorization)?.sub : null,
+                createdBy: request.headers.authorization
+                  ? require('jwt-decode')(request.headers.authorization)?.sub
+                  : null,
+                updatedBy: request.headers.authorization
+                  ? require('jwt-decode')(request.headers.authorization)?.sub
+                  : null,
               };
               await this.fieldsValueRepository.save(fieldValueDto);
             }
           } catch (fieldError) {
-            this.logger.error(`[DEBUG] Failed to update custom field ${customField.fieldId}: ${fieldError.message}`);
+            this.logger.error(
+              `[DEBUG] Failed to update custom field ${customField.fieldId}: ${fieldError.message}`
+            );
           }
         }
       }
-      
+
       // Get the updated user from database
       const updatedUser = await this.userRepository.findOne({
-        where: { userId: existingUserId }
+        where: { userId: existingUserId },
       });
-      
+
       if (!updatedUser) {
         throw new Error('User not found after update');
       }
-      
+
       // Mark the user as updated for tracking purposes
       (updatedUser as any).isUpdated = true;
       return updatedUser;
     } catch (error) {
-      this.logger.error(`[DEBUG] Failed to update existing user: ${error.message}`);
+      this.logger.error(
+        `[DEBUG] Failed to update existing user: ${error.message}`
+      );
       throw new Error(`Failed to update existing user: ${error.message}`);
     }
   }
