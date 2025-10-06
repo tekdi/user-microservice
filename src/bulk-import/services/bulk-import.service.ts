@@ -91,6 +91,13 @@ export class BulkImportService {
       const aspireSpecificServiceUrl =
         this.configService.get('ASPIRE_SPECIFIC_SERVICE_URL') ||
         '';
+      
+      // Validate that we have a proper URL
+      if (!aspireSpecificServiceUrl || aspireSpecificServiceUrl.trim() === '') {
+        this.logger.warn('[BulkImport] ASPIRE_SPECIFIC_SERVICE_URL is not configured, skipping progress update');
+        return;
+      }
+
       const updateData: any = {
         successCount: successIncrement,
         failureCount: failureIncrement,
@@ -148,7 +155,17 @@ export class BulkImportService {
         status: error.response?.status,
         statusText: error.response?.statusText,
         data: error.response?.data,
+        url: error.config?.url,
+        method: error.config?.method
       });
+      
+      // Provide specific guidance for common errors
+      if (error.response?.status === 405) {
+        this.logger.error(`[BulkImport] HTTP 405 Method Not Allowed - Check if the aspire specific service is running and the URL is correct`);
+      } else if (error.code === 'ECONNREFUSED') {
+        this.logger.error(`[BulkImport] Connection refused - Check if the aspire specific service is running on the configured URL`);
+      }
+      
       // Don't throw error - progress update failure shouldn't stop the import
     }
   }
