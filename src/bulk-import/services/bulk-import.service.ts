@@ -342,11 +342,12 @@ export class BulkImportService {
         // Wait for all users in this batch to complete
         const batchResults = await Promise.all(batchPromises);
 
-        // Send real-time progress update to aspire specific service
+        // Send real-time progress update to aspire specific service (fire-and-forget)
         // This ensures the import job status API shows real-time progress
+        // Using void to avoid blocking the import process on external HTTP calls
         if (request.headers['x-import-job-id']) {
           const importJobId = request.headers['x-import-job-id'];
-          await this.sendProgressUpdate(
+          void this.sendProgressUpdate(
             importJobId,
             results.successCount,
             results.failureCount,
@@ -598,10 +599,11 @@ export class BulkImportService {
         `[BulkImport] Completed bulk import: ${results.successCount} successful, ${results.failureCount} failed`
       );
 
-      // Send final progress update to mark import as completed
+      // Send final progress update to mark import as completed (fire-and-forget)
+      // Using void to avoid blocking the import process on external HTTP calls
       if (request.headers['x-import-job-id']) {
         const importJobId = request.headers['x-import-job-id'];
-        await this.sendProgressUpdate(
+        void this.sendProgressUpdate(
           importJobId,
           results.successCount,
           results.failureCount,
