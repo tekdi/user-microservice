@@ -124,7 +124,9 @@ export class BulkImportService {
         headers['Authorization'] = authorization;
       }
 
-      const response = await this.httpService.put(url, updateData, {
+      // Use axios instead of httpService for aspire specific service calls
+      const axios = require('axios');
+      const response = await axios.put(url, updateData, {
         headers,
         timeout: 5000,
       });
@@ -359,25 +361,8 @@ export class BulkImportService {
         // Wait for all users in this batch to complete
         const batchResults = await Promise.all(batchPromises);
 
-        // Send real-time progress update to aspire specific service (fire-and-forget)
-        // This ensures the import job status API shows real-time progress
-        // Using void to avoid blocking the import process on external HTTP calls
-        if (request.headers['x-import-job-id']) {
-          const importJobId = request.headers['x-import-job-id'];
-          
-          // Calculate incremental changes for this batch
-          const batchSuccessCount = batchResults.filter(result => result.success).length;
-          const batchFailureCount = batchResults.filter(result => !result.success).length;
-          
-          void this.sendProgressUpdate(
-            importJobId,
-            batchSuccessCount,
-            batchFailureCount,
-            undefined,
-            tenantId,
-            request.headers.authorization
-          );
-        }
+        // Note: Progress updates are now sent only at the end to avoid double-counting
+        // Real-time progress updates were causing accumulation issues in the aspire specific service
 
         // Send notifications for successful new users (after batch completion) - Non-blocking
         const notificationPromises = batchResults
