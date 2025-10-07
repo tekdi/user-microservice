@@ -361,8 +361,22 @@ export class BulkImportService {
         // Wait for all users in this batch to complete
         const batchResults = await Promise.all(batchPromises);
 
-        // Note: Progress updates are now sent only at the end to avoid double-counting
-        // Real-time progress updates were causing accumulation issues in the aspire specific service
+        // Calculate batch success and failure counts
+        const batchSuccessCount = batchResults.filter(result => result.success).length;
+        const batchFailureCount = batchResults.filter(result => !result.success).length;
+
+        // Send progress update for this batch (fire-and-forget)
+        if (request.headers['x-import-job-id'] && (batchSuccessCount > 0 || batchFailureCount > 0)) {
+          const importJobId = request.headers['x-import-job-id'];
+          void this.sendProgressUpdate(
+            importJobId,
+            batchSuccessCount,
+            batchFailureCount,
+            undefined, // Don't update status, just counts
+            tenantId,
+            request.headers.authorization
+          );
+        }
 
         // Send notifications for successful new users (after batch completion) - Non-blocking
         const notificationPromises = batchResults
@@ -619,8 +633,8 @@ export class BulkImportService {
         const importJobId = request.headers['x-import-job-id'];
         void this.sendProgressUpdate(
           importJobId,
-          0, // No additional success count (already sent incrementally)
-          0, // No additional failure count (already sent incrementally)
+          0, // No additional counts - only status update
+          0, // No additional counts - only status update
           'completed',
           tenantId,
           request.headers.authorization
