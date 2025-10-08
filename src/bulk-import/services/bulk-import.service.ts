@@ -366,7 +366,10 @@ export class BulkImportService {
         const batchFailureCount = batchResults.filter(result => !result.success).length;
 
         // Send progress update for this batch (fire-and-forget)
-        if (request.headers['x-import-job-id'] && (batchSuccessCount > 0 || batchFailureCount > 0)) {
+        // Skip progress updates when called by Kafka consumer to prevent double counting
+        if (request.headers['x-import-job-id'] && 
+            !request.headers['x-kafka-consumer'] && 
+            (batchSuccessCount > 0 || batchFailureCount > 0)) {
           const importJobId = request.headers['x-import-job-id'];
           void this.sendProgressUpdate(
             importJobId,
@@ -628,8 +631,8 @@ export class BulkImportService {
       );
 
       // Send final progress update to mark import as completed (fire-and-forget)
-      // Using void to avoid blocking the import process on external HTTP calls
-      if (request.headers['x-import-job-id']) {
+      // Skip progress updates when called by Kafka consumer to prevent double counting
+      if (request.headers['x-import-job-id'] && !request.headers['x-kafka-consumer']) {
         const importJobId = request.headers['x-import-job-id'];
         void this.sendProgressUpdate(
           importJobId,
