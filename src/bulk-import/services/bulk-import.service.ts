@@ -381,9 +381,9 @@ export class BulkImportService {
           );
         }
 
-        // Send notifications for successful new users (after batch completion) - Non-blocking
+        // Send notifications for all successful users (both new and existing) - Non-blocking
         const notificationPromises = batchResults
-          .filter((result) => result.success && result.isNewUser)
+          .filter((result) => result.success)
           .map(async (result) => {
             try {
               await this.sendBulkImportNotification(
