@@ -2270,7 +2270,7 @@ export class PostgresUserService implements IServicelocator {
         const notificationPayload = {
           isQueue: false,
           context: 'USER',
-          key: 'OnPasswordReset',
+          key: 'OnForgotPasswordReset',
           replacements: {
             '{username}': userData?.name,
             '{programName}': userData?.tenantData?.[0]?.tenantName
