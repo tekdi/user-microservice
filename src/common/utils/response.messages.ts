@@ -48,6 +48,7 @@ export const API_RESPONSES = {
   TENANT_ID_NOTFOUND: '"Invalid input: TenantId must be a valid UUID."',
   COHORT_NOTFOUND: 'Cohort not exist for this year.',
   USER_NOTFOUND: 'User not exist for this year.',
+  USER_NOT_MEMBER_OF_COHORT: 'User is not a member of any cohort',
   USER_DETAIL_NOTFOUND: 'User details not found',
   COHORT_GET_SUCCESSFULLY: 'Cohort members details fetched successfully.',
   COHORT_USER_NOTFOUND: 'User not exist in this cohort for this year.',
