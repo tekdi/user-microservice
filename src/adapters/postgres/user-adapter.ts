@@ -321,7 +321,7 @@ export class PostgresUserService implements IServicelocator {
           body.newPassword,
           userDetail.userId
         );
-
+        console.log('InForgotPassApiResponse', apiResponse);
         // Update tempPassword and user status
         if (apiResponse?.statusCode === 204) {
           // Initialize an empty object to collect fields that need to be updated
@@ -336,7 +336,7 @@ export class PostgresUserService implements IServicelocator {
           if (userData.status === 'inactive') {
             updatePayload.status = 'active';
           }
-
+          console.log('InForgotPassuserData===>', updatePayload);
           // Only call the update function if there is at least one field to update
           if (Object.keys(updatePayload).length > 0) {
             await this.usersRepository.update(userData.userId, updatePayload);
@@ -2131,6 +2131,7 @@ export class PostgresUserService implements IServicelocator {
       const user = request.user;
 
       const userData: any = await this.findUserDetails(null, user.username);
+      console.log('InResetPassuserData===========>', userData);
       let userId;
 
       if (userData?.userId) {
@@ -2177,7 +2178,7 @@ export class PostgresUserService implements IServicelocator {
           HttpStatus.INTERNAL_SERVER_ERROR
         );
       }
-
+      console.log('InResetPassApiResponse===========>', apiResponse);
       if (apiResponse.statusCode === 204) {
         if (userData.temporaryPassword) {
           await this.usersRepository.update(userData.userId, {
