@@ -1,5 +1,5 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { Tenant } from './entities/tenent.entity';
+import { Tenant, TenantStatus } from './entities/tenent.entity';
 import { ILike, In, Repository } from 'typeorm';
 import APIResponse from "src/common/responses/response";
 import { InjectRepository } from '@nestjs/typeorm';
@@ -21,7 +21,7 @@ export class TenantService {
     public async getTenants(request: Request, response: Response): Promise<Response> {
         let apiId = APIID.TENANT_LIST;
         try {
-            let result = await this.tenantRepository.find({ where: { status: "published" } });
+            let result = await this.tenantRepository.find({ where: { status: TenantStatus.ACTIVE } });
 
             if (result.length === 0) {
                 return APIResponse.error(

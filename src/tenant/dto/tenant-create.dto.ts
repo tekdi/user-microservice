@@ -25,6 +25,12 @@ export class TenantCreateDto {
     @IsNotEmpty()
     name: string;
 
+    //type
+    @ApiPropertyOptional({ type: () => String })
+    @IsString()
+    @IsOptional()
+    type?: string;
+
     //domain
     @ApiPropertyOptional({ type: () => String })
     @IsString()
