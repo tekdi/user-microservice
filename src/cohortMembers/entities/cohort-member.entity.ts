@@ -11,6 +11,7 @@ export enum MemberStatus {
   INACTIVE = "inactive",
   DROPOUT = "dropout",
   ARCHIVED = "archived",
+  REASSIGNED = "reassigned",
 }
 
 @Entity("CohortMembers")

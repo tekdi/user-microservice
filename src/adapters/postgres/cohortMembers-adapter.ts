@@ -164,6 +164,9 @@ export class PostgresCohortMembersService {
         district: data?.district,
         state: data?.state,
         mobile: data?.mobile,
+        status: data?.status,
+        statusReason: data?.statusReason,
+        cohortMembershipId: data?.cohortMembershipId,
       };
 
       if (fieldShowHide === "true") {
@@ -228,10 +231,11 @@ export class PostgresCohortMembersService {
     } else {
       whereCase = `where CM."userId" =$1`;
     }
-    const query = `SELECT U."userId", U."username", "firstName", "middleName", "lastName",
-     U."district", U."state",U."mobile" FROM public."CohortMembers" CM
-    LEFT JOIN public."Users" U
-    ON CM."userId" = U."userId" ${whereCase}`;
+    const query = `SELECT U."userId", U."username", U."firstName", U."middleName", U."lastName", U."mobile",
+ CM."status", CM."statusReason", CM."cohortMembershipId"
+ FROM public."CohortMembers" CM
+LEFT JOIN public."Users" U
+ON CM."userId" = U."userId" ${whereCase}`;
 
     const result = await this.usersRepository.query(query, [searchData]);
     return result;
