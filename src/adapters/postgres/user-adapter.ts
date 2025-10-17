@@ -356,11 +356,12 @@ export class PostgresUserService implements IServicelocator {
     tenantId: string,
     request: any,
     response: any,
-    userSearchDto: UserSearchDto
+    userSearchDto: UserSearchDto,
+    includeCustomFields: boolean = true
   ) {
     const apiId = APIID.USER_LIST;
     try {
-      const findData = await this.findAllUserDetails(userSearchDto, tenantId);
+      const findData = await this.findAllUserDetails(userSearchDto, tenantId, includeCustomFields);
 
       if (findData === false) {
         LoggerUtil.error(
@@ -403,7 +404,7 @@ export class PostgresUserService implements IServicelocator {
   }
 
 
-  async findAllUserDetails(userSearchDto, tenantId?: string) {
+  async findAllUserDetails(userSearchDto, tenantId?: string, includeCustomFields: boolean = true) {
     let { limit, offset, filters, exclude, sort } = userSearchDto;
     let excludeCohortIdes;
     let excludeUserIdes;
@@ -574,7 +575,7 @@ export class PostgresUserService implements IServicelocator {
     }
 
     //Get user core fields data
-    const query = `SELECT U."userId",U."enrollmentId", U."username",U."email", U."firstName", U."name",UTM."tenantId", U."middleName", U."lastName", U."gender", U."dob", R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", U."status", COUNT(*) OVER() AS total_count 
+    const query = `SELECT U."userId",U."enrollmentId", U."username",U."email", U."firstName", U."name",UTM."tenantId", U."middleName", U."lastName", U."gender", U."dob", R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", U."status", UTM."status" AS "platformStatus", COUNT(*) OVER() AS total_count 
       FROM  public."Users" U
       LEFT JOIN public."CohortMembers" CM 
       ON CM."userId" = U."userId"
@@ -583,28 +584,41 @@ export class PostgresUserService implements IServicelocator {
       LEFT JOIN public."UserTenantMapping" UTM
       ON UTM."userId" = U."userId"
       LEFT JOIN public."Roles" R
-      ON R."roleId" = UR."roleId" ${whereCondition} GROUP BY U."userId",UTM."tenantId", R."name" ${orderingCondition} ${offset} ${limit}`;
+      ON R."roleId" = UR."roleId" ${whereCondition} GROUP BY U."userId",UTM."tenantId", UTM."status", R."name" ${orderingCondition} ${offset} ${limit}`;
     const userDetails = await this.usersRepository.query(query);
 
     if (userDetails.length > 0) {
       result.totalCount = parseInt(userDetails[0].total_count, 10);
 
-      // Get user custom field data
-      for (const userData of userDetails) {
-        const customFields = await this.fieldsService.getCustomFieldDetails(
-          userData.userId, 'Users'
+      // OPTIMIZED: Conditionally fetch custom fields only when requested
+      if (includeCustomFields) {
+        // OPTIMIZED: Batch fetch custom fields for all users in one query (instead of N+1 queries)
+        const userIds = userDetails.map(user => user.userId);
+        const bulkCustomFields = await this.fieldsService.getBulkCustomFieldDetails(
+          userIds, 'Users'
         );
 
-        userData["customFields"] = Array.isArray(customFields)
-          ? customFields.map((data) => ({
-            fieldId: data?.fieldId,
-            label: data?.label,
-            selectedValues: data?.selectedValues,
-            type: data?.type,
-          }))
-          : [];
+        // Map custom fields back to users (in-memory operation - fast!)
+        for (const userData of userDetails) {
+          const customFields = bulkCustomFields[userData.userId] || [];
 
-        result.getUserDetails.push(userData);
+          userData["customFields"] = Array.isArray(customFields)
+            ? customFields.map((data) => ({
+              fieldId: data?.fieldId,
+              label: data?.label,
+              selectedValues: data?.selectedValues,
+              type: data?.type,
+            }))
+            : [];
+
+          result.getUserDetails.push(userData);
+        }
+      } else {
+        // Skip custom fields fetch - much faster for listing
+        for (const userData of userDetails) {
+          userData["customFields"] = [];
+          result.getUserDetails.push(userData);
+        }
       }
     } else {
       return false;

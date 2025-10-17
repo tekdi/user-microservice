@@ -13,6 +13,7 @@ import {
   Min,
 } from "class-validator";
 import { Expose } from "class-transformer";
+import { TenantStatus } from "../entities/tenent.entity";
 
 export class TenantFilters {
   @ApiPropertyOptional({ type: () => String, description: 'Tenant Id must be a (UUID)' })
@@ -27,6 +28,11 @@ export class TenantFilters {
   name?: string;
 
   @ApiPropertyOptional({ type: () => String })
+  @IsString()
+  @IsOptional()
+  type?: string;
+
+  @ApiPropertyOptional({ type: () => String })
   @IsOptional()
   @IsString()
   domain?: string;
@@ -34,17 +40,17 @@ export class TenantFilters {
   @ApiPropertyOptional({
     type: [String],
     description: "Status of the tenant",
-    enum: ['published', 'draft', 'archived'],
+    enum: TenantStatus,
     isArray: true,
-    default: ['published'],
+    default: [TenantStatus.ACTIVE],
   })
   @IsArray()
   @IsOptional()
   @ArrayNotEmpty() // Ensures the array is not empty (if provided)
-  @IsIn(['published', 'draft', 'archived'], { each: true }) // Validates each array element
+  @IsIn([TenantStatus.ACTIVE, TenantStatus.INACTIVE, TenantStatus.ARCHIVED], { each: true }) // Validates each array element
   @IsNotEmpty({ each: true }) // Ensures no empty strings in the array
   @Expose()
-  status?: ('published' | 'draft' | 'archived')[];
+  status?: TenantStatus[];
 
   @ApiPropertyOptional({ type: () => String, description: 'The ID of the creator (UUID)' })
   @IsString()

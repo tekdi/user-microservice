@@ -192,16 +192,24 @@ export class UserController {
   @ApiHeader({
     name: "tenantid",
   })
+  @ApiQuery({
+    name: "includeCustomFields",
+    description: "Include custom fields in response (default: true). Set to false for faster response.",
+    required: false,
+    type: Boolean,
+  })
   public async searchUser(
     @Headers() headers,
     @Req() request: Request,
     @Res() response: Response,
-    @Body() userSearchDto: UserSearchDto
+    @Body() userSearchDto: UserSearchDto,
+    @Query("includeCustomFields") includeCustomFields: string = "true"
   ) {
     const tenantId = headers["tenantid"];
+    const shouldIncludeCustomFields = includeCustomFields !== "false";
     return await this.userAdapter
       .buildUserAdapter()
-      .searchUser(tenantId, request, response, userSearchDto);
+      .searchUser(tenantId, request, response, userSearchDto, shouldIncludeCustomFields);
   }
 
   @Post("/password-reset-link")
