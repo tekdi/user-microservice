@@ -2,6 +2,7 @@ import {
   CheckboxField,
   DropdownField,
   NumericField,
+  JsonField,
   RadioField,
   TextField,
 } from "./fieldTypeClasses";
@@ -23,6 +24,8 @@ export class FieldFactory {
         return new TextField(fieldAttributes);
       case "numeric":
         return new NumericField(fieldAttributes);
+      case "json":
+        return new JsonField(fieldAttributes);
       default:
         throw new Error(`Unsupported field type: ${type}`);
     }
