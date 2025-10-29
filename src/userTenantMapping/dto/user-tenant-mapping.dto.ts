@@ -1,6 +1,6 @@
 import { Expose } from "class-transformer";
 import { ApiProperty } from "@nestjs/swagger";
-import { IsNotEmpty, IsString, IsUUID, IsArray, IsOptional } from "class-validator";
+import { IsNotEmpty, IsString, IsUUID, IsArray, IsOptional, IsIn } from "class-validator";
 
 export class UserTenantMappingDto {
   @ApiProperty({
@@ -50,6 +50,25 @@ export class UserTenantMappingDto {
     fieldId: string;
     value: any;
   }>;
+
+  constructor(obj: any) {
+    Object.assign(this, obj);
+  }
+}
+
+export class UpdateAssignTenantStatusDto {
+  @ApiProperty({
+    enum: ["active", "inactive", "archived"],
+    description: "Status of the user-tenant mapping",
+    example: "active"
+  })
+  @Expose()
+  @IsNotEmpty({ message: "Status is required" })
+  @IsString({ message: "Status must be a string" })
+  @IsIn(["active", "inactive", "archived"], { 
+    message: "Status must be one of: active, inactive, archived" 
+  })
+  status: string;
 
   constructor(obj: any) {
     Object.assign(this, obj);

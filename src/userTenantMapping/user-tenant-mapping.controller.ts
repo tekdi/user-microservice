@@ -11,6 +11,7 @@ import {
   ApiConflictResponse,
   ApiNotFoundResponse,
   ApiQuery,
+  ApiParam,
 } from "@nestjs/swagger";
 import {
   Controller,
@@ -18,6 +19,7 @@ import {
   Post,
   Body,
   Put,
+  Patch,
   Param,
   UseInterceptors,
   Req,
@@ -34,7 +36,7 @@ import {
 import { Request } from "@nestjs/common";
 import { Response, response } from "express";
 import { AssignTenantAdapter } from "./user-tenant-mapping.adapter";
-import { UserTenantMappingDto } from "./dto/user-tenant-mapping.dto";
+import { UserTenantMappingDto, UpdateAssignTenantStatusDto } from "./dto/user-tenant-mapping.dto";
 import { JwtAuthGuard } from "src/common/guards/keycloak.guard";
 import { AllExceptionsFilter } from "src/common/filters/exception.filter";
 import { APIID } from "src/common/utils/api-id.config";
@@ -72,6 +74,14 @@ export class AssignTenantController {
   @Get("/:userId")
   @UseGuards(JwtAuthGuard)
   @ApiBasicAuth("access-token")
+  @ApiParam({
+    name: "userId",
+    required: true,
+    type: String,
+    format: "uuid",
+    description: "User ID (UUID format) - Required",
+    example: "13946cb5-daee-410e-9174-25f73357f8cb"
+  })
   @ApiOkResponse({ description: "User tenant mappings retrieved successfully" })
   @ApiNotFoundResponse({ description: "No mappings found" })
   @ApiQuery({ 
@@ -88,5 +98,43 @@ export class AssignTenantController {
     return await this.assignTenantAdapter
       .buildAssignTenantAdapter()
       .getUserTenantMappings(userId, includeArchived === "true", response);
+  }
+
+  @UseFilters(new AllExceptionsFilter(APIID.ASSIGN_TENANT_UPDATE_STATUS))
+  @Patch("/status")
+  @ApiBasicAuth("access-token")
+  @ApiQuery({
+    name: "userId",
+    required: true,
+    type: String,
+    description: "User ID (UUID format) - Required",
+    example: "13946cb5-daee-410e-9174-25f73357f8cb"
+  })
+  @ApiQuery({
+    name: "tenantId",
+    required: true,
+    type: String,
+    description: "Tenant ID (UUID format) - Required",
+    example: "914ca990-9b45-4385-a06b-05054f35d0b9"
+  })
+  @ApiOkResponse({
+    description: "User-Tenant mapping status updated successfully.",
+  })
+  @ApiBadRequestResponse({ description: "Bad request." })
+  @ApiNotFoundResponse({ description: "User-Tenant mapping not found." })
+  @ApiInternalServerErrorResponse({ description: "Internal Server Error." })
+  @UsePipes(new ValidationPipe())
+  @ApiBody({ type: UpdateAssignTenantStatusDto })
+  public async updateAssignTenantStatus(
+    @Headers() headers,
+    @Req() request: Request,
+    @Query("userId", ParseUUIDPipe) userId: string,
+    @Query("tenantId", ParseUUIDPipe) tenantId: string,
+    @Body() updateStatusDto: UpdateAssignTenantStatusDto,
+    @Res() response: Response
+  ) {
+    return await this.assignTenantAdapter
+      .buildAssignTenantAdapter()
+      .updateAssignTenantStatus(request, userId, tenantId, updateStatusDto, response);
   }
 }
