@@ -6,4 +6,10 @@ export interface IServicelocatorAssignTenant {
     assignTenantMappingDto: UserTenantMappingDto,
     response: Response
   );
+  
+  getUserTenantMappings(
+    userId: string,
+    includeArchived: boolean,
+    response: Response
+  );
 }

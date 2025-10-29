@@ -9,6 +9,8 @@ import {
   ApiInternalServerErrorResponse,
   ApiOkResponse,
   ApiConflictResponse,
+  ApiNotFoundResponse,
+  ApiQuery,
 } from "@nestjs/swagger";
 import {
   Controller,
@@ -26,6 +28,8 @@ import {
   ValidationPipe,
   UsePipes,
   UseFilters,
+  ParseUUIDPipe,
+  Query,
 } from "@nestjs/common";
 import { Request } from "@nestjs/common";
 import { Response, response } from "express";
@@ -63,5 +67,26 @@ export class AssignTenantController {
     return await this.assignTenantAdapter
       .buildAssignTenantAdapter()
       .userTenantMapping(request, userTenantMappingDto, response);
+  }
+
+  @Get("/:userId")
+  @UseGuards(JwtAuthGuard)
+  @ApiBasicAuth("access-token")
+  @ApiOkResponse({ description: "User tenant mappings retrieved successfully" })
+  @ApiNotFoundResponse({ description: "No mappings found" })
+  @ApiQuery({ 
+    name: "includeArchived", 
+    required: false, 
+    type: Boolean,
+    description: "Include archived mappings" 
+  })
+  public async getUserTenantMappings(
+    @Param("userId", ParseUUIDPipe) userId: string,
+    @Query("includeArchived") includeArchived: string,
+    @Res() response: Response
+  ) {
+    return await this.assignTenantAdapter
+      .buildAssignTenantAdapter()
+      .getUserTenantMappings(userId, includeArchived === "true", response);
   }
 }
