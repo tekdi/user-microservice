@@ -23,8 +23,7 @@ import { PostgresFieldsService } from "./fields-adapter";
 
 @Injectable()
 export class PostgresAssignTenantService
-  implements IServicelocatorAssignTenant
-{
+  implements IServicelocatorAssignTenant {
   constructor(
     @InjectRepository(UserTenantMapping)
     private userTenantMappingRepository: Repository<UserTenantMapping>,
@@ -38,7 +37,7 @@ export class PostgresAssignTenantService
     private userRoleMappingRepository: Repository<UserRoleMapping>,
     private postgresUserService: PostgresUserService,
     private fieldsService: PostgresFieldsService
-  ) {}
+  ) { }
 
   public async validateUserTenantMapping(
     userId: string,
@@ -49,37 +48,28 @@ export class PostgresAssignTenantService
     response: Response,
     errors: any[]
   ) {
-    // check if user tenant mapping exists.
-    const existingMapping = await this.userTenantMappingRepository.findOne({
-      where: { userId, tenantId },
-    });
-    if (existingMapping) {
-      errors.push({
-        errorMessage: `User already exists in Tenant ${tenantId}.`,
-      });
-      return false;
-    }
+    const [userExist, tenantExist, existingMapping, roleExist] = await Promise.all([
+      this.userRepository.findOne({ where: { userId } }),
+      this.tenantsRepository.findOne({ where: { tenantId } }),
+      this.userTenantMappingRepository.findOne({ where: { userId, tenantId } }),
+      this.roleRepository.findOne({ where: { roleId } }),
+    ]);
 
-    // check if user exists
-    const userExist = await this.userRepository.findOne({ where: { userId } });
     if (!userExist) {
       errors.push({ errorMessage: `User ${userId} does not exist.` });
       return false;
     }
 
-    // check if tenant exists
-    const tenantExist = await this.tenantsRepository.findOne({
-      where: { tenantId },
-    });
     if (!tenantExist) {
       errors.push({ errorMessage: `Tenant ${tenantId} does not exist.` });
       return false;
     }
 
-    // check if role exists
-    const roleExist = await this.roleRepository.findOne({
-      where: { roleId },
-    });
+    if (existingMapping) {
+      errors.push({ errorMessage: `User already exists in Tenant ${tenantId}.` });
+      return false;
+    }
+
     if (!roleExist) {
       errors.push({ errorMessage: `Role ${roleId} does not exist.` });
       return false;
@@ -87,24 +77,24 @@ export class PostgresAssignTenantService
 
     // Validate custom fields if provided
     if (customField && customField.length > 0) {
-        // Transform DTO to match the structure expected by PostgresUserService.validateCustomField
-        const transformedDto = {
-          customFields: customField, // Note: PostgresUserService expects 'customFields' not 'customField'
-          tenantCohortRoleMapping: [{ tenantId },{ roleId }] // Provide tenantId in expected structure
-        };
-    
-        // Use existing validateCustomField from PostgresUserService
-        const customFieldError = await this.postgresUserService.validateCustomField(
-          transformedDto,
-          response,
-          apiId
-        );
+      // Transform DTO to match the structure expected by PostgresUserService.validateCustomField
+      const transformedDto = {
+        customFields: customField, // Note: PostgresUserService expects 'customFields' not 'customField'
+        tenantCohortRoleMapping: [{ tenantId }, { roleId }] // Provide tenantId in expected structure
+      };
 
-        if (customFieldError) {
-          errors.push({ errorMessage: customFieldError });
-          return false;
-        }
+      // Use existing validateCustomField from PostgresUserService
+      const customFieldError = await this.postgresUserService.validateCustomField(
+        transformedDto,
+        response,
+        apiId
+      );
+
+      if (customFieldError) {
+        errors.push({ errorMessage: customFieldError });
+        return false;
       }
+    }
     return true;
   }
 
@@ -115,11 +105,8 @@ export class PostgresAssignTenantService
   ) {
     const apiId = APIID.ASSIGN_TENANT_CREATE;
     try {
-      const userId = assignTenantMappingDto.userId;
-      const tenantId = assignTenantMappingDto.tenantId;
-      const roleId = assignTenantMappingDto.roleId;
-      const customField = assignTenantMappingDto.customField || [];
 
+      const { userId, tenantId, roleId, customField = [] } = assignTenantMappingDto;
       const errors = [];
 
       // Step 2: Validate user-tenant-role mapping
@@ -138,7 +125,7 @@ export class PostgresAssignTenantService
           response,
           apiId,
           "Bad Request",
-          `User not added to tenant: ${JSON.stringify(errors)}`,
+          `User not added to tenant: ${errors[0].errorMessage}`,
           HttpStatus.BAD_REQUEST
         );
       }
@@ -178,7 +165,7 @@ export class PostgresAssignTenantService
 
         // Find custom fields for USER_TENANT_MAPPING context
         const customFields = await this.fieldsService.findCustomFields(
-          "USER_TENANT_MAPPING",
+          "USERS",
           roles
         );
 
@@ -208,7 +195,7 @@ export class PostgresAssignTenantService
               updatedBy: request["user"].userId,
             };
 
-            const res = await this.fieldsService.updateUserCustomFields(
+            await this.fieldsService.updateUserCustomFields(
               userId,
               fieldData,
               customFieldAttributes[fieldData.fieldId],
@@ -259,7 +246,7 @@ export class PostgresAssignTenantService
     response: Response
   ) {
     const apiId = "API-USER-TENANT-MAPPING-GET";
-    
+
     try {
       // Validate userId
       if (!isUUID(userId)) {
