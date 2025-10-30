@@ -87,7 +87,6 @@ export class SsoService {
       
       // Step 3: Call Newton API to authenticate and get user data (with roles)
       const newtonResponse = await this.callNewtonApi(ssoRequestDto, roleName);
-      
       if (!newtonResponse.success) {
         throw new HttpException(
           `Newton API authentication failed: ${newtonResponse.message}`,
@@ -287,8 +286,19 @@ export class SsoService {
         for (const [fieldLabel, fieldValue] of Object.entries(newtonResponse.newtonData)) {
           if (fieldValue) {
             const fieldId = await this.postgresFieldsService.getFieldIdByLabel(fieldLabel, ssoRequestDto.tenantId);
+            console.log("fieldId", fieldId);
             if (fieldId) {
-              await this.postgresFieldsService.updateUserCustomFields(createdUser.userId, { fieldId, value: fieldValue }, null);
+              await this.postgresFieldsService.updateUserCustomFields(
+                createdUser.userId, 
+                { fieldId, value: fieldValue }, 
+                null,
+                {
+                  tenantId: ssoRequestDto.tenantId,
+                  contextType: "USER",
+                  createdBy: newtonResponse.userId,
+                  updatedBy: newtonResponse.userId
+                }
+              );
             }
           }
         }
