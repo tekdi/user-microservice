@@ -30,9 +30,6 @@ export class Tenants {
   })
   status: TenantStatus;
 
-  @Column({ type: "varchar", nullable: true })
-  statusReason: string;
-
   @Column({ type: "uuid", nullable: true })
   createdBy: string;
 
