@@ -33,9 +33,6 @@ export class UserTenantMapping {
   })
   status: UserTenantMappingStatus;
 
-  @Column({ type: "varchar", nullable: true })
-  statusReason: string;
-
   @CreateDateColumn({
     type: "timestamp with time zone",
     default: () => "CURRENT_TIMESTAMP",
