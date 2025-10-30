@@ -1,5 +1,5 @@
 import { Response } from "express";
-import { UserTenantMappingDto } from "src/userTenantMapping/dto/user-tenant-mapping.dto";
+import { UserTenantMappingDto, UpdateAssignTenantStatusDto } from "src/userTenantMapping/dto/user-tenant-mapping.dto";
 export interface IServicelocatorAssignTenant {
   userTenantMapping(
     request: any,
@@ -10,6 +10,14 @@ export interface IServicelocatorAssignTenant {
   getUserTenantMappings(
     userId: string,
     includeArchived: boolean,
+    response: Response
+  );
+
+  updateAssignTenantStatus(
+    request: any,
+    userId: string,
+    tenantId: string,
+    updateStatusDto: UpdateAssignTenantStatusDto,
     response: Response
   );
 }

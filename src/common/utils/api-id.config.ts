@@ -33,6 +33,7 @@ export const APIID = {
   COHORT_UPDATE: "api.cohort.update",
   COHORT_DELETE: "api.cohort.delete",
   ASSIGN_TENANT_CREATE: "api.assigntenant.create",
+  ASSIGN_TENANT_UPDATE_STATUS: "api.assigntenant.updatestatus",
   FIELDS_CREATE: "api.fields.create",
   FIELDS_SEARCH: "api.fields.search",
   FIELDVALUES_CREATE: "api.fieldValues.create",

@@ -321,4 +321,76 @@ export class PostgresAssignTenantService
     }
   }
 
+  public async updateAssignTenantStatus(
+    request: any,
+    userId: string,
+    tenantId: string,
+    updateStatusDto: any,
+    response: Response
+  ) {
+    const apiId = APIID.ASSIGN_TENANT_UPDATE_STATUS;
+    
+    try {
+      // Check if the mapping exists
+      const existingMapping = await this.userTenantMappingRepository.findOne({
+        where: { userId, tenantId },
+      });
+
+      if (!existingMapping) {
+        return APIResponse.error(
+          response,
+          apiId,
+          "NOT_FOUND",
+          `User-Tenant mapping not found for userId: ${userId} and tenantId: ${tenantId}`,
+          HttpStatus.NOT_FOUND
+        );
+      }
+
+      // Update the status
+      existingMapping.status = updateStatusDto.status;
+      existingMapping.updatedBy = request["user"].userId;
+      existingMapping.updatedAt = new Date();
+
+      await this.userTenantMappingRepository.save(existingMapping);
+
+      LoggerUtil.log(
+        `Successfully updated status for user ${userId} in tenant ${tenantId}`,
+        apiId,
+        userId
+      );
+
+      // Construct response
+      const result = {
+        userId: userId,
+        tenantId: tenantId,
+        status: existingMapping.status,
+        message: `User-Tenant mapping status updated successfully.`,
+      };
+
+      return await APIResponse.success(
+        response,
+        apiId,
+        result,
+        HttpStatus.OK,
+        "User-Tenant mapping status updated successfully."
+      );
+    } catch (error) {
+      console.log('error', error);
+      const errorMessage = error?.message || "Something went wrong";
+      LoggerUtil.error(
+        `Error in updateAssignTenantStatus for user ${userId} and tenant ${tenantId}`,
+        `Error: ${errorMessage}`,
+        apiId,
+        userId
+      );
+      return APIResponse.error(
+        response,
+        apiId,
+        "Internal Server Error",
+        `Error : ${errorMessage}`,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
 }
