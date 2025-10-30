@@ -16,6 +16,7 @@ export enum FieldType {
   RADIO = "radio", // string
   DROPDOWN = "drop_down", // comma seperated string array
   CHECKBOX = "checkbox", // comma seperated string array
+  JSON = "json", // json object
 }
 
 @Entity({ name: "Fields" })
