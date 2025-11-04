@@ -7,6 +7,8 @@ import { UserAdapter } from '../user/useradapter';
 import { PostgresRoleService } from '../adapters/postgres/rbac/role-adapter';
 import { PostgresUserService } from '../adapters/postgres/user-adapter';
 import { PostgresFieldsService } from '../adapters/postgres/fields-adapter';
+import { SSO_DEFAULTS } from '../constants/sso.constants';
+import { PostgresAssignTenantService } from 'src/adapters/postgres/userTenantMapping-adapter';
 
 interface NewtonApiResponse {
   success: boolean;
@@ -54,7 +56,8 @@ export class SsoService {
     private readonly userAdapter: UserAdapter,
     private readonly postgresRoleService: PostgresRoleService,
     private readonly postgresUserService: PostgresUserService,
-    private readonly postgresFieldsService: PostgresFieldsService
+    private readonly postgresFieldsService: PostgresFieldsService,
+    private readonly postgresAssignTenantService: PostgresAssignTenantService
   ) {
     // Configuration from environment variables
     this.newtonApiEndpoint =this.configService.get<string>('KEYCLOAK')
@@ -70,9 +73,15 @@ export class SsoService {
     try {
       this.logger.log(`Starting SSO authentication for provider: ${ssoRequestDto.ssoProvider}`, 'SSO_SERVICE');
       
-      // Step 1: Validate input parameters
-      if (!ssoRequestDto.roleId || !ssoRequestDto.tenantId) {
-        throw new HttpException('Role ID and Tenant ID are required', HttpStatus.BAD_REQUEST);
+      // Step 1: Apply default values if not provided
+      if (!ssoRequestDto.tenantId) {
+        ssoRequestDto.tenantId = SSO_DEFAULTS.DEFAULT_TENANT_ID;
+        this.logger.log(`Using default tenant ID: ${SSO_DEFAULTS.DEFAULT_TENANT_ID}`, 'SSO_SERVICE');
+      }
+      
+      if (!ssoRequestDto.roleId) {
+        ssoRequestDto.roleId = SSO_DEFAULTS.DEFAULT_LEARNER_ROLE_ID;
+        this.logger.log(`Using default learner role ID: ${SSO_DEFAULTS.DEFAULT_LEARNER_ROLE_ID}`, 'SSO_SERVICE');
       }
       
       // Step 2: Fetch role name from roleId before calling Newton API
@@ -269,8 +278,6 @@ export class SsoService {
     try {
       // Create user in local database using the actual user adapter method
       const userCreateDto = this.mapToUserCreateDto(newtonResponse, ssoRequestDto);
-      console.log("userCreateDto", newtonResponse);
-      
       // Create mock request object for the user adapter method
       const mockRequest = {
         headers: { authorization: null } // No JWT token for SSO users
@@ -280,6 +287,8 @@ export class SsoService {
         mockRequest,
         userCreateDto
       );
+
+      //Map User to Role and Tenant
 
       // Update custom fields if newtonData is available
       if (newtonResponse.newtonData && Object.keys(newtonResponse.newtonData).length > 0) {
@@ -302,6 +311,17 @@ export class SsoService {
             }
           }
         }
+      }
+      // Map Manager Role as well
+      if(newtonResponse.newtonData.IS_MANAGER){
+        const tenantsData = {
+          userId: createdUser.userId,
+          tenantRoleMapping: {
+            tenantId: ssoRequestDto.tenantId,
+            roleId: SSO_DEFAULTS.MANAGER_ROLE_ID
+          }
+        };
+        await this.postgresUserService.assignUserToTenantAndRoll(tenantsData,tenantsData.userId)
       }
 
       this.logger.log(`New user created successfully: ${newtonResponse.name} with ID: ${createdUser.userId}`, 'SSO_SERVICE');
@@ -329,7 +349,7 @@ export class SsoService {
   private mapToUserCreateDto(
     newtonResponse: NewtonApiResponse,
     ssoRequestDto: SsoRequestDto
-  ): UserCreateDto {
+  ){
     // Parse name from Newton response (e.g., "ADMIN-NEWTON" -> firstName: "ADMIN", lastName: "NEWTON")
     const { firstName, lastName } = this.parseFullName(newtonResponse.name || '');
     
@@ -359,13 +379,13 @@ export class SsoService {
       updatedAt: new Date().toISOString(),
       createdBy: newtonResponse.userId, // Use the Newton user ID as creator
       updatedBy: newtonResponse.userId, // Use the Newton user ID as updater
+      customFields: [],
+      automaticMember: undefined,
       tenantCohortRoleMapping: [{
         tenantId: ssoRequestDto.tenantId,
         cohortIds: [],
         roleId: ssoRequestDto.roleId
       }],
-      customFields: [],
-      automaticMember: undefined
     };
   }
 
