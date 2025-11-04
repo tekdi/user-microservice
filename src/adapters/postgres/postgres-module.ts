@@ -64,12 +64,14 @@ import { KafkaModule } from "src/kafka/kafka.module";
   exports: [
     PostgresUserService,
     PostgresFieldsService,
+    PostgresRoleService, // Exported because RoleModule needs it
     NotificationRequest,
     JwtUtil,
     JwtService,
     CohortAcademicYearService,
     PostgresAcademicYearService,
     AutomaticMemberService,
+    // AuthUtils is NOT exported - only used internally by PostgresUserService
   ],
 })
 export class PostgresModule { }

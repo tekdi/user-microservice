@@ -6,10 +6,20 @@ import { AssignTenantAdapter } from "./user-tenant-mapping.adapter";
 import { PostgresAssignTenantService } from "src/adapters/postgres/userTenantMapping-adapter";
 import { User } from "src/user/entities/user-entity";
 import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
+import { Role } from "src/rbac/role/entities/role.entity";
+import { UserRoleMapping } from "src/rbac/assign-role/entities/assign-role.entity";
+import { PostgresModule } from "src/adapters/postgres/postgres-module";
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([UserTenantMapping, User, Tenants]),
+    TypeOrmModule.forFeature([
+      UserTenantMapping, 
+      User, 
+      Tenants,
+      Role,
+      UserRoleMapping,
+    ]),
+    PostgresModule, // This provides PostgresUserService and other services you need
     HttpModule,
   ],
   controllers: [AssignTenantController],
