@@ -28,6 +28,11 @@ export interface IServicelocator {
     userSearchDto: UserSearchDto,
     includeCustomFields?: boolean
   );
+  searchUserMultiTenant(
+    request: any,
+    response: any,
+    userSearchDto: UserSearchDto
+  );
   resetUserPassword(
     request: any,
     username: string,

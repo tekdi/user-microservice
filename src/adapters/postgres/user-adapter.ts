@@ -403,6 +403,44 @@ export class PostgresUserService implements IServicelocator {
     }
   }
 
+  /**
+ * Multi-tenant user list service function
+ * Calls the existing searchUser function
+ */
+  async searchUserMultiTenant(
+    request: any,
+    response: any,
+    userSearchDto: UserSearchDto
+  ) {
+    const apiId = APIID.USER_HIERARCHY_VIEW;
+
+    let searchUserData = await this.findAllUserDetails(userSearchDto, null, false);
+
+    if (!(searchUserData && searchUserData.getUserDetails?.length)) {
+      return APIResponse.error(
+        response,
+        apiId,
+        API_RESPONSES.USER_NOT_FOUND,
+        API_RESPONSES.NOT_FOUND,
+        HttpStatus.NOT_FOUND
+      );
+    }
+    // Fetch and assign custom fields for each user
+    for (let user of searchUserData.getUserDetails) {
+      const parentTenantCustomFieldData = await this.fieldsService.getCustomFieldDetails(user.userId, 'Users');
+      user.customFields = parentTenantCustomFieldData || [];
+    }
+
+    LoggerUtil.log(API_RESPONSES.USER_HIERARCHY_VIEW_SUCCESS, apiId);
+    return await APIResponse.success(
+      response,
+      apiId,
+      searchUserData,
+      HttpStatus.OK,
+      API_RESPONSES.USER_HIERARCHY_VIEW_SUCCESS
+    );
+  }
+
 
   async findAllUserDetails(userSearchDto, tenantId?: string, includeCustomFields: boolean = true) {
     let { limit, offset, filters, exclude, sort } = userSearchDto;
@@ -994,7 +1032,7 @@ export class PostgresUserService implements IServicelocator {
       if (userDto?.customFields?.length > 0) {
         // additionalData?: { tenantId?: string, contextType?: string, createdBy?: string, updatedBy?: string }
         let additionalData = {
-          tenantId : userDto.userData?.tenantId,
+          tenantId: userDto.userData?.tenantId,
           contextType: "USER",
           createdBy: userDto.userData?.createdBy,
           updatedBy: userDto.userData?.updatedBy
@@ -1540,7 +1578,7 @@ export class PostgresUserService implements IServicelocator {
 
             // Prepare additional data for FieldValues table
             const additionalData = {
-              tenantId:  userCreateDto.tenantCohortRoleMapping?.[0]?.tenantId || null,
+              tenantId: userCreateDto.tenantCohortRoleMapping?.[0]?.tenantId || null,
               contextType: "USER",
               createdBy: userCreateDto.createdBy,
               updatedBy: userCreateDto.updatedBy,
