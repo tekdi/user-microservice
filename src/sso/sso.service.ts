@@ -313,7 +313,7 @@ export class SsoService {
         }
       }
       // Map Manager Role as well
-      if(newtonResponse.newtonData.IS_MANAGER){
+      if(newtonResponse.newtonData.IS_MANAGER?.toUpperCase() === 'YES'){
         const tenantsData = {
           userId: createdUser.userId,
           tenantRoleMapping: {
