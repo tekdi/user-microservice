@@ -8,12 +8,19 @@ import { API_RESPONSES } from "@utils/response.messages";
 import { APIID } from "@utils/api-id.config";
 import { v4 as uuidv4 } from 'uuid';
 import { createPresignedPost } from "@aws-sdk/s3-presigned-post";
-
+import jwt_decode from "jwt-decode";
 import { InjectRepository } from "@nestjs/typeorm";
 import { DataSource, ILike, In, Repository } from "typeorm";
 import { User } from "../../user/entities/user-entity";
 import { CohortMembers, MemberStatus } from "src/cohortMembers/entities/cohort-member.entity";
-
+import {
+  getKeycloakAdminToken,
+  createUserInKeyCloak,
+  updateUserInKeyCloak,
+  checkIfUsernameExistsInKeycloak,
+  checkIfEmailExistsInKeycloak,
+  assignRoleToUserInKeycloak
+} from "../../common/utils/keycloak.adapter.util";
 @Injectable()
 export class OblfService {
 constructor(
@@ -237,8 +244,6 @@ constructor(
                 academicYearId,
                 cohortId
             );
-            console.log('Generated SQL:', sql);
-            console.log('Parameters:', params);
             const { sql: countSql, params: countParams } = this.buildEligibleUsersRawSql(
                 'count',
                 filters,
@@ -364,5 +369,192 @@ constructor(
                 params
             };
         }        
+    }
+
+    async syncAllUsersToKeycloak() {
+        // Fetch all users with the given status
+        const users = await this.usersRepository.find();
+        if (users.length === 0) {
+            console.log('No users found to sync.');
+            return { message: 'No users found to sync.' };
+        }
+        console.log(`Found ${users.length} users to sync.`);
+        // Get Keycloak admin token
+        const token = await getKeycloakAdminToken();
+
+        for (const user of users) {
+            user['id'] = user.userId;
+            user['password'] = user.username + '@oblf'; // Set a default password or generate one
+            if (!user.firstName || user.firstName.trim() === '' || user.firstName === 'NULL') {
+                user.firstName = user.name ? user.name.split(' ')[0] : '';
+                user.lastName = user.name ? user.name.split(' ')[1] : '';
+            }
+
+            // Remove fields set to null from user object
+            Object.keys(user).forEach(key => {
+                if (user[key] === "NULL" || user[key] === null || user[key] === "null" || user[key] === "undefined") {
+                    delete user[key];
+                }
+            });
+
+            // Check if user already exists in Keycloak (optional)
+            const exists = await checkIfUsernameExistsInKeycloak(
+                user.username,
+                token.data.access_token
+            );
+             if (exists?.data?.length > 0) {
+               console.log(`User ${user.username} already exists in Keycloak.`);
+               continue; // Skip to the next user
+            }
+            else {
+                // Create user in Keycloak
+               const resKeycloak = await createUserInKeyCloak(
+                    user,
+                    token.data.access_token,
+                    'teacher'
+                );
+                if (resKeycloak?.statusCode !== 201) {
+                    console.error(`Failed to create user ${user.username} in Keycloak. Message: ${resKeycloak.message}`);
+                    continue; // Skip to the next user
+                } else {
+                    // Optionally assign role to user in Keycloak
+                    const roleRes = await assignRoleToUserInKeycloak(resKeycloak.userId, token.data.access_token);   
+                    console.log(`User ${user.username} created in Keycloak.`);
+                     // Update id of the user in Users table with new Keycloak id
+                    await this.usersRepository.update(
+                        { userId: user.userId },
+                        { userId: resKeycloak.userId }
+                    );
+                    console.log(`Updated Users table: set userId = ${resKeycloak.userId} for username = ${user.username}`);
+                }
+            } 
+        }
+        console.log(`All users synced to Keycloak with teacher role.`);
+        return { message: 'All users synced to Keycloak with teacher role.' };
+    }
+
+    async assignTeacherToClass(req, response, academicYearId, tenantId, authBearer) {
+        try {
+            const { userId, cohortId, params } = req;
+            
+            const teacherRoleId = 'f9646ef7-4c3b-4fa0-90ba-e24019ae686f'; // teacher roleId
+
+            const academicYear = await this.checkIfActiveYear(
+              academicYearId,
+              tenantId
+            );
+            if (!academicYear) {
+                return APIResponse.error(
+                response,
+                'api.add.cohortMembers',
+                HttpStatus.NOT_FOUND.toLocaleString(),
+                API_RESPONSES.ACADEMICYEAR_NOT_FOUND,
+                HttpStatus.NOT_FOUND
+                );
+            }
+
+            const cohortExists = await this.isCohortExistForYear(
+                academicYearId,
+                cohortId
+                );
+            if (cohortExists.length === 0) {
+                return APIResponse.error(
+                response,
+                'api.add.cohortMembers',
+                HttpStatus.NOT_FOUND.toLocaleString(),
+                API_RESPONSES.COHORTID_NOTFOUND_FOT_THIS_YEAR(cohortId),
+                HttpStatus.NOT_FOUND
+                );
+            }
+            const cohortAcademicYearId = cohortExists[0].cohortAcademicYearId;
+
+
+            // Check if assignment exists
+            const existingAssignment = await this.cohortMembersRepository.findOne({
+                where: {
+                    userId: userId,
+                    cohortId: cohortId,
+                    cohortAcademicYearId: cohortAcademicYearId
+                }
+            });
+            let result;
+            const decoded: any = jwt_decode(authBearer);
+            const loginUserId = decoded?.sub;
+
+            if (existingAssignment) {
+                // Update existing assignment
+                result = await this.cohortMembersRepository.update(
+                    {
+                        userId: userId,
+                        cohortId: cohortId,
+                        cohortAcademicYearId: cohortAcademicYearId
+                    },
+                    {
+                        status: MemberStatus.ACTIVE,
+                        params: params || {},
+                        updatedAt: new Date(),
+                        updatedBy: loginUserId
+                    }
+                );
+            } else {
+                // Create new assignment
+                result = await this.cohortMembersRepository.save({
+                    userId: userId,
+                    cohortId: cohortId,
+                    status: MemberStatus.ACTIVE,
+                    createdBy: loginUserId,
+                    params: params || {},
+                    createdAt: new Date(),
+                    cohortAcademicYearId: cohortAcademicYearId
+                });
+            }
+
+            // archive other teachers assigned to the same class in the same academic year
+            const allRes = await this.dataSource.query(
+                `UPDATE "CohortMembers"
+                 SET "status" = $1, "statusReason" = $2, "updatedAt" = $3
+                 WHERE "cohortId" = $4
+                   AND "cohortAcademicYearId" = $5
+                   AND "userId" != $6
+                   AND "userId" IN (
+                     SELECT "userId"
+                     FROM "UserRolesMapping"
+                     GROUP BY "userId"
+                     HAVING COUNT(*) = SUM(CASE WHEN "roleId" = $7 THEN 1 ELSE 0 END)
+                   )
+                 RETURNING "userId"`,
+                [
+                    MemberStatus.ARCHIVED,
+                    'New teacher assigned',
+                    new Date(),
+                    cohortId,
+                    cohortAcademicYearId,
+                    userId,
+                    teacherRoleId
+                ]
+            );
+            console.log(`Archived ${allRes.rowCount} other teachers assigned to class ${cohortId} for academic year ${academicYearId}.`);
+
+            const message = existingAssignment 
+                ? `User ${userId} reassigned as teacher to class ${cohortId}`
+                : `User ${userId} newly assigned as teacher to class ${cohortId}`;
+
+            return await APIResponse.success(
+                response,
+                'api.assign.teacher',
+                { result, message },
+                HttpStatus.OK,
+                message
+            );
+
+        } catch (error) {
+            return await APIResponse.error(
+                response,
+                'api.assign.teacher',
+                error,
+                `Error assigning teacher: ${error.message}`,
+                HttpStatus.INTERNAL_SERVER_ERROR
+            );
+        }
     }
 }
