@@ -15,7 +15,7 @@ export const SSO_DEFAULTS = {
    * This role ID will be used when not provided in the request
    */
   DEFAULT_LEARNER_ROLE_ID: 'eea7ddab-bdf9-4db1-a1bb-43ef503d65ef',
-  MANAGER_ROLE_ID: 'c4454929-954e-4c51-bb7d-cca834ab9375	'
+  MANAGER_ROLE_ID: 'c4454929-954e-4c51-bb7d-cca834ab9375'
 } as const;
 
 /**
