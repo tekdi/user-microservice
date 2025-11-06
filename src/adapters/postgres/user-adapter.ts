@@ -50,6 +50,7 @@ import { randomInt } from 'crypto';
 import { UUID } from "aws-sdk/clients/cloudtrail";
 import { AutomaticMemberService } from "src/automatic-member/automatic-member.service";
 import { KafkaService } from "src/kafka/kafka.service";
+import { isAllowedTenant } from "src/config/tenant.config";
 
 interface UpdateField {
   userId: string; // Required
@@ -1954,27 +1955,98 @@ export class PostgresUserService implements IServicelocator {
   }
 
 
-  async assignUserToTenantAndRoll(tenantsData, createdBy) {
+  async assignUserToTenantAndRoll(tenantsData, createdBy, userType?: string) {
     try {
       const tenantId = tenantsData?.tenantRoleMapping?.tenantId;
       const userId = tenantsData?.userId;
       const roleId = tenantsData?.tenantRoleMapping?.roleId;
 
       if (roleId) {
-        const data = await this.userRoleMappingRepository.save({
-          userId: userId,
-          tenantId: tenantId,
-          roleId: roleId,
-          createdBy: createdBy,
-        });
+        // Check if userType is 'assignTenant' and handle accordingly
+        if (userType === 'assignedUserToChildTenant') {
+          // Find existing role mapping for this user
+          const existingRoleMapping = await this.userRoleMappingRepository.findOne({
+            where: { userId: userId },
+          });
+
+          if (existingRoleMapping) {
+            // Check if existing tenantId matches the config file tenant
+            if (isAllowedTenant(existingRoleMapping.tenantId)) {
+              // Update existing mapping with new tenantId and roleId
+              existingRoleMapping.tenantId = tenantId;
+              existingRoleMapping.roleId = roleId;
+              existingRoleMapping.createdBy = createdBy;
+              await this.userRoleMappingRepository.save(existingRoleMapping);
+              LoggerUtil.log(`Updated role mapping for user ${userId} from tenant ${existingRoleMapping.tenantId} to ${tenantId}`);
+            } else {
+              // Create new mapping if existing tenant is not in config
+              await this.userRoleMappingRepository.save({
+                userId: userId,
+                tenantId: tenantId,
+                roleId: roleId,
+                createdBy: createdBy,
+              });
+            }
+          } else {
+            // No existing mapping, create new one
+            await this.userRoleMappingRepository.save({
+              userId: userId,
+              tenantId: tenantId,
+              roleId: roleId,
+              createdBy: createdBy,
+            });
+          }
+        } else {
+          // Default behavior - create new mapping
+          const data = await this.userRoleMappingRepository.save({
+            userId: userId,
+            tenantId: tenantId,
+            roleId: roleId,
+            createdBy: createdBy,
+          });
+        }
       }
 
       if (tenantId) {
-        const data = await this.userTenantMappingRepository.save({
-          userId: userId,
-          tenantId: tenantId,
-          createdBy: createdBy,
-        });
+        // Check if userType is 'assignTenant' and handle accordingly
+        if (userType === 'assignedUserToChildTenant') {
+          // Find existing tenant mapping for this user
+          const existingMapping = await this.userTenantMappingRepository.findOne({
+            where: { userId: userId },
+          });
+
+          if (existingMapping) {
+            // Check if existing tenantId matches the config file tenant
+            if (isAllowedTenant(existingMapping.tenantId)) {
+              // Update existing mapping with new tenantId
+              existingMapping.tenantId = tenantId;
+              existingMapping.createdBy = createdBy;
+              await this.userTenantMappingRepository.save(existingMapping);
+              LoggerUtil.log(`Updated tenant mapping for user ${userId} from ${existingMapping.tenantId} to ${tenantId}`);
+            } else {
+              // Create new mapping if existing tenant is not in config
+              await this.userTenantMappingRepository.save({
+                userId: userId,
+                tenantId: tenantId,
+                createdBy: createdBy,
+              });
+            }
+          } else {
+            // No existing mapping, create new one
+            await this.userTenantMappingRepository.save({
+              userId: userId,
+              tenantId: tenantId,
+              createdBy: createdBy,
+            });
+          }
+        } else {
+          // Default behavior - create new mapping
+          const data = await this.userTenantMappingRepository.save({
+            userId: userId,
+            tenantId: tenantId,
+            createdBy: createdBy,
+          });
+        }
       }
 
       LoggerUtil.log(API_RESPONSES.USER_TENANT);
