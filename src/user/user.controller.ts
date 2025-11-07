@@ -35,6 +35,7 @@ import {
 
 import { ExistUserDto, SuggestUserDto, UserSearchDto } from "./dto/user-search.dto";
 import { HierarchicalLocationFiltersDto } from "./dto/user-hierarchical-search.dto";
+import { UserHierarchyViewDto } from "./dto/user-hierarchy-view.dto";
 import { UserAdapter } from "./useradapter";
 import { UserCreateDto } from "./dto/user-create.dto";
 import { UserUpdateDTO } from "./dto/user-update.dto";
@@ -56,7 +57,6 @@ import { OtpVerifyDTO } from "./dto/otpVerify.dto";
 import { UploadS3Service } from "src/common/services/upload-S3.service";
 import { GetUserId } from "src/common/decorators/getUserId.decorator";
 import { GetTenantId } from "src/common/decorators/getTenantId.decorator";
-import { isAllowedTenant, getTenantConfig } from "src/config/tenant.config";
 export interface UserData {
   context: string;
   tenantId: string;
@@ -230,9 +230,8 @@ export class UserController {
   @Post("/user/v1/users-hierarchy-view")
   @UseGuards(JwtAuthGuard)
   @ApiBasicAuth("access-token")
-  @ApiCreatedResponse({ description: "Multi-tenant user list." })
-  @ApiForbiddenResponse({ description: "Tenant is not authorized to access this resource." })
-  @ApiBody({ type: UserSearchDto })
+  @ApiCreatedResponse({ description: "User hierarchy view by email." })
+  @ApiBody({ type: UserHierarchyViewDto })
   @UsePipes(ValidationPipe)
   @SerializeOptions({
     strategy: "excludeAll",
@@ -246,22 +245,11 @@ export class UserController {
     @GetTenantId() tenantId: string,
     @Req() request: Request,
     @Res() response: Response,
-    @Body() userSearchDto: UserSearchDto
+    @Body() userHierarchyViewDto: UserHierarchyViewDto
   ) {
-    // Check if tenant ID is in the allowed list
-    if (!isAllowedTenant(tenantId)) {
-      const tenantConfig = getTenantConfig(tenantId);
-      return response.status(403).json({
-        statusCode: 403,
-        message: "Access denied. Tenant is not authorized to access this resource.",
-        error: "Forbidden",
-        tenantId: tenantId
-      });
-    }
-
     return await this.userAdapter
       .buildUserAdapter()
-      .searchUserMultiTenant(request, response, userSearchDto);
+      .searchUserMultiTenant(tenantId, request, response, userHierarchyViewDto);
   }
   
   @Post("/forgot-password")

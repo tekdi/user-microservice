@@ -19,6 +19,7 @@ import { CohortMembers } from "src/cohortMembers/entities/cohort-member.entity";
 import { isUUID } from "class-validator";
 import { ExistUserDto, SuggestUserDto, UserSearchDto } from "src/user/dto/user-search.dto";
 import { HierarchicalLocationFiltersDto } from "src/user/dto/user-hierarchical-search.dto";
+import { UserHierarchyViewDto } from "src/user/dto/user-hierarchy-view.dto";
 import { UserTenantMapping } from "src/userTenantMapping/entities/user-tenant-mapping.entity";
 import { UserRoleMapping } from "src/rbac/assign-role/entities/assign-role.entity";
 import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
@@ -405,14 +406,68 @@ export class PostgresUserService implements IServicelocator {
 
   /**
  * Multi-tenant user list service function
- * Calls the existing searchUser function
+ * Fetches user hierarchy by email
  */
   async searchUserMultiTenant(
+    tenantId: string,
     request: any,
     response: any,
-    userSearchDto: UserSearchDto
+    userHierarchyViewDto: UserHierarchyViewDto
   ) {
     const apiId = APIID.USER_HIERARCHY_VIEW;
+    const { email } = userHierarchyViewDto;
+
+    // Step 1: Fetch tenant domain from Tenants table
+    const tenant = await this.tenantsRepository.findOne({
+      where: { tenantId: tenantId }
+    });
+
+    if (!tenant) {
+      return APIResponse.error(
+        response,
+        apiId,
+        "Tenant not found",
+        API_RESPONSES.TENANT_NOT_FOUND,
+        HttpStatus.NOT_FOUND
+      );
+    }
+
+    // Step 2: Extract domain from email
+    const emailDomain = email.split('@')[1];
+    
+    if (!emailDomain) {
+      return APIResponse.error(
+        response,
+        apiId,
+        "Invalid email format",
+        "Email must contain a valid domain",
+        HttpStatus.BAD_REQUEST
+      );
+    }
+
+    // Step 3: Compare email domain with tenant domain
+    if (emailDomain.toLowerCase() !== tenant.domain.toLowerCase()) {
+      LoggerUtil.error(
+        `Domain mismatch: Email domain '${emailDomain}' does not match tenant domain '${tenant.domain}'`,
+        apiId
+      );
+      return APIResponse.error(
+        response,
+        apiId,
+        `Email domain mismatch. Expected domain: ${tenant.domain}, but got: ${emailDomain}`,
+        "Domain validation failed",
+        HttpStatus.FORBIDDEN
+      );
+    }
+
+    // Create search DTO with email filter
+    const userSearchDto: UserSearchDto = {
+      limit: 0,
+      offset: 0,
+      filters: {
+        email: [email]
+      }
+    } as any;
 
     let searchUserData = await this.findAllUserDetails(userSearchDto, null, false);
 
@@ -425,9 +480,10 @@ export class PostgresUserService implements IServicelocator {
         HttpStatus.NOT_FOUND
       );
     }
+
     // Fetch and assign custom fields for each user
     for (let user of searchUserData.getUserDetails) {
-      const parentTenantCustomFieldData = await this.fieldsService.getCustomFieldDetails(user.userId, 'Users');
+      const parentTenantCustomFieldData = await this.fieldsService.getCustomFieldDetails(user.userId, 'Users', false);
       user.customFields = parentTenantCustomFieldData || [];
     }
 
