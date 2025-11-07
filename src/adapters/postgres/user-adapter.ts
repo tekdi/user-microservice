@@ -2042,7 +2042,7 @@ export class PostgresUserService implements IServicelocator {
   }
 
 
-  async assignUserToTenantAndRoll(tenantsData, createdBy, userType?: string) {
+  async assignUserToTenantAndRoll(tenantsData, createdBy, userType?: boolean) {
     try {
       const tenantId = tenantsData?.tenantRoleMapping?.tenantId;
       const userId = tenantsData?.userId;
@@ -2050,7 +2050,7 @@ export class PostgresUserService implements IServicelocator {
 
         if (roleId) {
           // Check if userType is 'assignTenant' and handle accordingly
-          if (userType === 'assignedUserToChildTenant') {
+          if (userType === true) {
             // Find existing role mapping for this user
             const existingRoleMapping = await this.userRoleMappingRepository.findOne({
               where: { userId: userId },
@@ -2100,7 +2100,7 @@ export class PostgresUserService implements IServicelocator {
 
         if (tenantId) {
           // Check if userType is 'assignTenant' and handle accordingly
-          if (userType === 'assignedUserToChildTenant') {
+          if (userType === true) {
             // Find existing tenant mapping for this user
             const existingMapping = await this.userTenantMappingRepository.findOne({
               where: { userId: userId },

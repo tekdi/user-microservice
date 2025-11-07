@@ -142,7 +142,7 @@ export class PostgresAssignTenantService
       await this.postgresUserService.assignUserToTenantAndRoll(
         tenantsData,
         request["user"].userId,
-        'assignedUserToChildTenant'
+        true
       );
 
       LoggerUtil.log(
