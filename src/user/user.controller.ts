@@ -386,29 +386,6 @@ export class UserController {
       return this.oblfservice.findEligibleUsers(request, response, dto, academicYearId, tenantId);
   }
 
-
-  // GET /users/eligible
-  @Post('syncAllUsersToKeycloak')
-  @ApiHeader({ name: "academicyearid"})
-  @ApiHeader({ name: "tenantid" })
-
-  async syncAllUsersToKeycloak(
-    @Headers() headers,
-    @Res() response,
-    @Req() request: Request,
-  
-    @Body() dto: {
-    cohortId: string;
-    page?: number;
-    limit?: number;
-    filters?: any;
-  }) {
-      const academicYearId = headers["academicyearid"];
-      const tenantId = headers["tenantid"];
-
-      return this.oblfservice.syncAllUsersToKeycloak();
-  }
-
   @Post('addMembersByfilter')
   @ApiHeader({ name: "academicyearid"})
   @ApiHeader({ name: "tenantid" })
