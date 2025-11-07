@@ -1839,7 +1839,7 @@ export class PostgresUserService implements IServicelocator {
 
   async createUserInDatabase(
     request: any,
-    userCreateDto: UserCreateDto,
+    userCreateDto,
     academicYearId?: string,
     response?: Response
   ): Promise<User> {

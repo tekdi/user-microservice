@@ -14,7 +14,10 @@ import { FieldValues } from '../fields/entities/fields-values.entity';
 import { PostgresModule } from '../adapters/postgres/postgres-module';
 import { PostgresRoleService } from '../adapters/postgres/rbac/role-adapter';
 import { PostgresFieldsService } from '../adapters/postgres/fields-adapter';
-import { Tenants } from '../userTenantMapping/entities/tenant.entity';
+import { PostgresAssignTenantService } from 'src/adapters/postgres/userTenantMapping-adapter';
+import { UserTenantMapping } from 'src/userTenantMapping/entities/user-tenant-mapping.entity';
+import { User } from 'src/user/entities/user-entity';
+import { Tenants } from 'src/userTenantMapping/entities/tenant.entity';
 
 @Module({
   imports: [
@@ -28,6 +31,8 @@ import { Tenants } from '../userTenantMapping/entities/tenant.entity';
       RolePrivilegeMapping,
       Fields,
       FieldValues,
+      UserTenantMapping,
+      User,
       Tenants
     ])
   ],
@@ -36,7 +41,8 @@ import { Tenants } from '../userTenantMapping/entities/tenant.entity';
     SsoService, 
     HttpService,
     PostgresRoleService, // Added separately since not exported from PostgresModule
-    PostgresFieldsService
+    PostgresFieldsService,
+    PostgresAssignTenantService,
   ],
   exports: [SsoService]
 })
