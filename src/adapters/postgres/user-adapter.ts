@@ -50,6 +50,7 @@ import { randomInt } from 'crypto';
 import { UUID } from "aws-sdk/clients/cloudtrail";
 import { AutomaticMemberService } from "src/automatic-member/automatic-member.service";
 import { KafkaService } from "src/kafka/kafka.service";
+import { isAllowedTenant } from "src/config/tenant.config";
 
 interface UpdateField {
   userId: string; // Required
@@ -356,11 +357,12 @@ export class PostgresUserService implements IServicelocator {
     tenantId: string,
     request: any,
     response: any,
-    userSearchDto: UserSearchDto
+    userSearchDto: UserSearchDto,
+    includeCustomFields: boolean = true
   ) {
     const apiId = APIID.USER_LIST;
     try {
-      const findData = await this.findAllUserDetails(userSearchDto, tenantId);
+      const findData = await this.findAllUserDetails(userSearchDto, tenantId, includeCustomFields);
 
       if (findData === false) {
         LoggerUtil.error(
@@ -402,8 +404,47 @@ export class PostgresUserService implements IServicelocator {
     }
   }
 
+  /**
+ * Multi-tenant user list service function
+ * Calls the existing searchUser function
+ */
+  async searchUserMultiTenant(
+    tenantId: string,
+    request: any,
+    response: any,
+    userSearchDto: UserSearchDto
+  ) {
+    const apiId = APIID.USER_HIERARCHY_VIEW;
 
-  async findAllUserDetails(userSearchDto, tenantId?: string) {
+    let searchUserData = await this.findAllUserDetails(userSearchDto, null, false);
+
+    if (!(searchUserData && searchUserData.getUserDetails?.length)) {
+      return APIResponse.error(
+        response,
+        apiId,
+        API_RESPONSES.USER_NOT_FOUND,
+        API_RESPONSES.NOT_FOUND,
+        HttpStatus.NOT_FOUND
+      );
+    }
+    // Fetch and assign custom fields for each user
+    for (let user of searchUserData.getUserDetails) {
+      const parentTenantCustomFieldData = await this.fieldsService.getCustomFieldDetails(user.userId, 'Users', false, tenantId);
+      user.customFields = parentTenantCustomFieldData || [];
+    }
+
+    LoggerUtil.log(API_RESPONSES.USER_HIERARCHY_VIEW_SUCCESS, apiId);
+    return await APIResponse.success(
+      response,
+      apiId,
+      searchUserData,
+      HttpStatus.OK,
+      API_RESPONSES.USER_HIERARCHY_VIEW_SUCCESS
+    );
+  }
+
+
+  async findAllUserDetails(userSearchDto, tenantId?: string, includeCustomFields: boolean = true) {
     let { limit, offset, filters, exclude, sort } = userSearchDto;
     let excludeCohortIdes;
     let excludeUserIdes;
@@ -574,7 +615,7 @@ export class PostgresUserService implements IServicelocator {
     }
 
     //Get user core fields data
-    const query = `SELECT U."userId",U."enrollmentId", U."username",U."email", U."firstName", U."name",UTM."tenantId", U."middleName", U."lastName", U."gender", U."dob", R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", U."status", COUNT(*) OVER() AS total_count 
+    const query = `SELECT U."userId",U."enrollmentId", U."username",U."email", U."firstName", U."name",UTM."tenantId", U."middleName", U."lastName", U."gender", U."dob", R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", U."status", UTM."status" AS "platformStatus", COUNT(*) OVER() AS total_count 
       FROM  public."Users" U
       LEFT JOIN public."CohortMembers" CM 
       ON CM."userId" = U."userId"
@@ -583,28 +624,41 @@ export class PostgresUserService implements IServicelocator {
       LEFT JOIN public."UserTenantMapping" UTM
       ON UTM."userId" = U."userId"
       LEFT JOIN public."Roles" R
-      ON R."roleId" = UR."roleId" ${whereCondition} GROUP BY U."userId",UTM."tenantId", R."name" ${orderingCondition} ${offset} ${limit}`;
+      ON R."roleId" = UR."roleId" ${whereCondition} GROUP BY U."userId",UTM."tenantId", UTM."status", R."name" ${orderingCondition} ${offset} ${limit}`;
     const userDetails = await this.usersRepository.query(query);
 
     if (userDetails.length > 0) {
       result.totalCount = parseInt(userDetails[0].total_count, 10);
 
-      // Get user custom field data
-      for (const userData of userDetails) {
-        const customFields = await this.fieldsService.getCustomFieldDetails(
-          userData.userId, 'Users'
+      // OPTIMIZED: Conditionally fetch custom fields only when requested
+      if (includeCustomFields) {
+        // OPTIMIZED: Batch fetch custom fields for all users in one query (instead of N+1 queries)
+        const userIds = userDetails.map(user => user.userId);
+        const bulkCustomFields = await this.fieldsService.getBulkCustomFieldDetails(
+          userIds, 'Users',tenantId
         );
 
-        userData["customFields"] = Array.isArray(customFields)
-          ? customFields.map((data) => ({
-            fieldId: data?.fieldId,
-            label: data?.label,
-            selectedValues: data?.selectedValues,
-            type: data?.type,
-          }))
-          : [];
+        // Map custom fields back to users (in-memory operation - fast!)
+        for (const userData of userDetails) {
+          const customFields = bulkCustomFields[userData.userId] || [];
 
-        result.getUserDetails.push(userData);
+          userData["customFields"] = Array.isArray(customFields)
+            ? customFields.map((data) => ({
+              fieldId: data?.fieldId,
+              label: data?.label,
+              selectedValues: data?.selectedValues,
+              type: data?.type,
+            }))
+            : [];
+
+          result.getUserDetails.push(userData);
+        }
+      } else {
+        // Skip custom fields fetch - much faster for listing
+        for (const userData of userDetails) {
+          userData["customFields"] = [];
+          result.getUserDetails.push(userData);
+        }
       }
     } else {
       return false;
@@ -980,7 +1034,7 @@ export class PostgresUserService implements IServicelocator {
       if (userDto?.customFields?.length > 0) {
         // additionalData?: { tenantId?: string, contextType?: string, createdBy?: string, updatedBy?: string }
         let additionalData = {
-          tenantId : userDto.userData?.tenantId,
+          tenantId: userDto.userData?.tenantId,
           contextType: "USER",
           createdBy: userDto.userData?.createdBy,
           updatedBy: userDto.userData?.updatedBy
@@ -1526,7 +1580,7 @@ export class PostgresUserService implements IServicelocator {
 
             // Prepare additional data for FieldValues table
             const additionalData = {
-              tenantId:  userCreateDto.tenantCohortRoleMapping?.[0]?.tenantId || null,
+              tenantId: userCreateDto.tenantCohortRoleMapping?.[0]?.tenantId || null,
               contextType: "USER",
               createdBy: userCreateDto.createdBy,
               updatedBy: userCreateDto.updatedBy,
@@ -1902,27 +1956,98 @@ export class PostgresUserService implements IServicelocator {
   }
 
 
-  async assignUserToTenantAndRoll(tenantsData, createdBy) {
+  async assignUserToTenantAndRoll(tenantsData, createdBy, userType?: string) {
     try {
       const tenantId = tenantsData?.tenantRoleMapping?.tenantId;
       const userId = tenantsData?.userId;
       const roleId = tenantsData?.tenantRoleMapping?.roleId;
 
       if (roleId) {
-        const data = await this.userRoleMappingRepository.save({
-          userId: userId,
-          tenantId: tenantId,
-          roleId: roleId,
-          createdBy: createdBy,
-        });
+        // Check if userType is 'assignTenant' and handle accordingly
+        if (userType === 'assignedUserToChildTenant') {
+          // Find existing role mapping for this user
+          const existingRoleMapping = await this.userRoleMappingRepository.findOne({
+            where: { userId: userId },
+          });
+
+          if (existingRoleMapping) {
+            // Check if existing tenantId matches the config file tenant
+            if (isAllowedTenant(existingRoleMapping.tenantId)) {
+              // Update existing mapping with new tenantId and roleId
+              existingRoleMapping.tenantId = tenantId;
+              existingRoleMapping.roleId = roleId;
+              existingRoleMapping.createdBy = createdBy;
+              await this.userRoleMappingRepository.save(existingRoleMapping);
+              LoggerUtil.log(`Updated role mapping for user ${userId} from tenant ${existingRoleMapping.tenantId} to ${tenantId}`);
+            } else {
+              // Create new mapping if existing tenant is not in config
+              await this.userRoleMappingRepository.save({
+                userId: userId,
+                tenantId: tenantId,
+                roleId: roleId,
+                createdBy: createdBy,
+              });
+            }
+          } else {
+            // No existing mapping, create new one
+            await this.userRoleMappingRepository.save({
+              userId: userId,
+              tenantId: tenantId,
+              roleId: roleId,
+              createdBy: createdBy,
+            });
+          }
+        } else {
+          // Default behavior - create new mapping
+          const data = await this.userRoleMappingRepository.save({
+            userId: userId,
+            tenantId: tenantId,
+            roleId: roleId,
+            createdBy: createdBy,
+          });
+        }
       }
 
       if (tenantId) {
-        const data = await this.userTenantMappingRepository.save({
-          userId: userId,
-          tenantId: tenantId,
-          createdBy: createdBy,
-        });
+        // Check if userType is 'assignTenant' and handle accordingly
+        if (userType === 'assignedUserToChildTenant') {
+          // Find existing tenant mapping for this user
+          const existingMapping = await this.userTenantMappingRepository.findOne({
+            where: { userId: userId },
+          });
+
+          if (existingMapping) {
+            // Check if existing tenantId matches the config file tenant
+            if (isAllowedTenant(existingMapping.tenantId)) {
+              // Update existing mapping with new tenantId
+              existingMapping.tenantId = tenantId;
+              existingMapping.createdBy = createdBy;
+              await this.userTenantMappingRepository.save(existingMapping);
+              LoggerUtil.log(`Updated tenant mapping for user ${userId} from ${existingMapping.tenantId} to ${tenantId}`);
+            } else {
+              // Create new mapping if existing tenant is not in config
+              await this.userTenantMappingRepository.save({
+                userId: userId,
+                tenantId: tenantId,
+                createdBy: createdBy,
+              });
+            }
+          } else {
+            // No existing mapping, create new one
+            await this.userTenantMappingRepository.save({
+              userId: userId,
+              tenantId: tenantId,
+              createdBy: createdBy,
+            });
+          }
+        } else {
+          // Default behavior - create new mapping
+          const data = await this.userTenantMappingRepository.save({
+            userId: userId,
+            tenantId: tenantId,
+            createdBy: createdBy,
+          });
+        }
       }
 
       LoggerUtil.log(API_RESPONSES.USER_TENANT);

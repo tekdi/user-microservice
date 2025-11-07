@@ -7,10 +7,11 @@ import { FieldValues } from "./entities/fields-values.entity";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { PostgresModule } from "src/adapters/postgres/postgres-module";
 import { FieldsService } from "./fields.service";
+import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Fields, FieldValues]),
+    TypeOrmModule.forFeature([Fields, FieldValues, Tenants]),
     HttpModule,
     PostgresModule,
   ],

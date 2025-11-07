@@ -55,6 +55,8 @@ import { OtpSendDTO } from "./dto/otpSend.dto";
 import { OtpVerifyDTO } from "./dto/otpVerify.dto";
 import { UploadS3Service } from "src/common/services/upload-S3.service";
 import { GetUserId } from "src/common/decorators/getUserId.decorator";
+import { GetTenantId } from "src/common/decorators/getTenantId.decorator";
+import { isAllowedTenant, getTenantConfig } from "src/config/tenant.config";
 export interface UserData {
   context: string;
   tenantId: string;
@@ -181,8 +183,8 @@ export class UserController {
 
   @UseFilters(new AllExceptionsFilter(APIID.USER_LIST))
   @Post("/list")
-  // @UseGuards(JwtAuthGuard)
-  // @ApiBasicAuth("access-token")
+  @UseGuards(JwtAuthGuard)
+  @ApiBasicAuth("access-token")
   @ApiCreatedResponse({ description: "User list." })
   @ApiBody({ type: UserSearchDto })
   @UsePipes(ValidationPipe)
@@ -191,17 +193,19 @@ export class UserController {
   })
   @ApiHeader({
     name: "tenantid",
+    required: true,
+    description: "Tenant ID (must be a valid UUID)",
   })
   public async searchUser(
-    @Headers() headers,
+    @GetTenantId() tenantId: string,
     @Req() request: Request,
     @Res() response: Response,
     @Body() userSearchDto: UserSearchDto
   ) {
-    const tenantId = headers["tenantid"];
+    const shouldIncludeCustomFields = userSearchDto.includeCustomFields !== "false";
     return await this.userAdapter
       .buildUserAdapter()
-      .searchUser(tenantId, request, response, userSearchDto);
+      .searchUser(tenantId, request, response, userSearchDto, shouldIncludeCustomFields);
   }
 
   @Post("/password-reset-link")
@@ -223,6 +227,44 @@ export class UserController {
       );
   }
 
+  @UseFilters(new AllExceptionsFilter(APIID.USER_HIERARCHY_VIEW))
+  @Post("/user/v1/users-hierarchy-view")
+  @UseGuards(JwtAuthGuard)
+  @ApiBasicAuth("access-token")
+  @ApiCreatedResponse({ description: "Multi-tenant user list." })
+  @ApiForbiddenResponse({ description: "Tenant is not authorized to access this resource." })
+  @ApiBody({ type: UserSearchDto })
+  @UsePipes(ValidationPipe)
+  @SerializeOptions({
+    strategy: "excludeAll",
+  })
+  @ApiHeader({
+    name: "tenantid",
+    required: true,
+    description: "Tenant ID (must be a valid UUID)",
+  })
+  public async searchUserMultiTenant(
+    @GetTenantId() tenantId: string,
+    @Req() request: Request,
+    @Res() response: Response,
+    @Body() userSearchDto: UserSearchDto
+  ) {
+    // Check if tenant ID is in the allowed list
+    if (!isAllowedTenant(tenantId)) {
+      const tenantConfig = getTenantConfig(tenantId);
+      return response.status(403).json({
+        statusCode: 403,
+        message: "Access denied. Tenant is not authorized to access this resource.",
+        error: "Forbidden",
+        tenantId: tenantId
+      });
+    }
+
+    return await this.userAdapter
+      .buildUserAdapter()
+      .searchUserMultiTenant(tenantId, request, response, userSearchDto);
+  }
+  
   @Post("/forgot-password")
   @ApiOkResponse({ description: "Forgot password reset successfully." })
   @ApiBody({ type: ForgotPasswordDto })
@@ -385,42 +427,15 @@ export class UserController {
   })
   @ApiHeader({
     name: "tenantid",
-    description: "Tenant ID for filtering users within specific tenant (Required)",
-    required: true
+    required: true,
+    description: "Tenant ID (must be a valid UUID)",
   })
   public async getUsersByHierarchicalLocation(
-    @Headers() headers,
+    @GetTenantId() tenantId: string,
     @Req() request: Request,
     @Res() response: Response,
     @Body() hierarchicalFiltersDto: HierarchicalLocationFiltersDto
   ) {
-    const tenantId = headers["tenantid"];
-    const apiId = APIID.USER_LIST;
-    
-    // Comprehensive tenantId validation
-    const tenantValidation = this.validateTenantId(tenantId);
-    if (!tenantValidation.isValid) {
-      LoggerUtil.error(
-        `TenantId validation failed: ${tenantValidation.error}`,
-        `Received tenantId: ${tenantId}`,
-        apiId
-      );
-      
-      return response.status(400).json({
-        id: apiId,
-        ver: "1.0",
-        ts: new Date().toISOString(),
-        params: {
-          resmsgid: "",
-          status: "failed",
-          err: tenantValidation.error,
-          errmsg: "Invalid tenant information"
-        },
-        responseCode: 400,
-        result: {}
-      });
-    }
-    
     return await this.userAdapter
       .buildUserAdapter()
       .getUsersByHierarchicalLocation(tenantId, request, response, hierarchicalFiltersDto);
