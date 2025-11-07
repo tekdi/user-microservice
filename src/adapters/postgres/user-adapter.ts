@@ -417,7 +417,7 @@ export class PostgresUserService implements IServicelocator {
     const apiId = APIID.USER_HIERARCHY_VIEW;
     const { email } = userHierarchyViewDto;
 
-    // Step 1: Fetch tenant domain from Tenants table
+    // Step 1: Fetch tenant from Tenants table
     const tenant = await this.tenantsRepository.findOne({
       where: { tenantId: tenantId }
     });
@@ -432,7 +432,32 @@ export class PostgresUserService implements IServicelocator {
       );
     }
 
-    // Step 2: Extract domain from email
+    // Step 2: Fetch parent tenant using parentId
+    if (!tenant.parentId) {
+      return APIResponse.error(
+        response,
+        apiId,
+        "Parent tenant not configured",
+        "This tenant does not have a parent tenant configured",
+        HttpStatus.BAD_REQUEST
+      );
+    }
+
+    const parentTenant = await this.tenantsRepository.findOne({
+      where: { tenantId: tenant.parentId }
+    });
+
+    if (!parentTenant) {
+      return APIResponse.error(
+        response,
+        apiId,
+        "Parent tenant not found",
+        `Parent tenant with ID ${tenant.parentId} not found`,
+        HttpStatus.NOT_FOUND
+      );
+    }
+
+    // Step 3: Extract domain from email
     const emailDomain = email.split('@')[1];
     
     if (!emailDomain) {
@@ -445,20 +470,22 @@ export class PostgresUserService implements IServicelocator {
       );
     }
 
-    // Step 3: Compare email domain with tenant domain
-    if (emailDomain.toLowerCase() !== tenant.domain.toLowerCase()) {
+    // Step 4: Compare email domain with parent tenant domain
+    if (emailDomain.toLowerCase() !== parentTenant.domain.toLowerCase()) {
       LoggerUtil.error(
-        `Domain mismatch: Email domain '${emailDomain}' does not match tenant domain '${tenant.domain}'`,
+        `Domain mismatch: Email domain '${emailDomain}' does not match parent tenant domain '${parentTenant.domain}'`,
         apiId
       );
       return APIResponse.error(
         response,
         apiId,
-        `Email domain mismatch. Expected domain: ${tenant.domain}, but got: ${emailDomain}`,
+        `Email domain mismatch. Expected domain: ${parentTenant.domain}, but got: ${emailDomain}`,
         "Domain validation failed",
         HttpStatus.FORBIDDEN
       );
     }
+
+    LoggerUtil.log(`Domain validation passed for tenant ${tenantId} with parent tenant ${parentTenant.tenantId} (domain: ${parentTenant.domain})`);
 
     // Create search DTO with email filter
     const userSearchDto: UserSearchDto = {
