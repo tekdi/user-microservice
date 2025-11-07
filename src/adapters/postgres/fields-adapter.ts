@@ -2003,6 +2003,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
       joinCond = `fv."itemId" = u."cohortId"`;
     }
 
+    
     try {
       // Single query to fetch all custom fields for all items
       const query = `
