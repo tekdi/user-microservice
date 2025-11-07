@@ -19,6 +19,7 @@ import { CohortMembers } from "src/cohortMembers/entities/cohort-member.entity";
 import { isUUID } from "class-validator";
 import { ExistUserDto, SuggestUserDto, UserSearchDto } from "src/user/dto/user-search.dto";
 import { HierarchicalLocationFiltersDto } from "src/user/dto/user-hierarchical-search.dto";
+import { UserHierarchyViewDto } from "src/user/dto/user-hierarchy-view.dto";
 import { UserTenantMapping } from "src/userTenantMapping/entities/user-tenant-mapping.entity";
 import { UserRoleMapping } from "src/rbac/assign-role/entities/assign-role.entity";
 import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
@@ -401,6 +402,131 @@ export class PostgresUserService implements IServicelocator {
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
+  }
+
+  /**
+ * Multi-tenant user list service function
+ * Fetches user hierarchy by email
+ */
+  async searchUserMultiTenant(
+    tenantId: string,
+    request: any,
+    response: any,
+    userHierarchyViewDto: UserHierarchyViewDto
+  ) {
+    const apiId = APIID.USER_HIERARCHY_VIEW;
+    const { email } = userHierarchyViewDto;
+
+    // Step 1: Fetch tenant from Tenants table
+    const tenant = await this.tenantsRepository.findOne({
+      where: { tenantId: tenantId }
+    });
+
+    if (!tenant) {
+      return APIResponse.error(
+        response,
+        apiId,
+        "Tenant not found",
+        API_RESPONSES.TENANT_NOT_FOUND,
+        HttpStatus.NOT_FOUND
+      );
+    }
+
+    // Step 2: Fetch parent tenant using parentId
+    if (!tenant.parentId) {
+      return APIResponse.error(
+        response,
+        apiId,
+        "Parent tenant not configured",
+        "This tenant does not have a parent tenant configured",
+        HttpStatus.BAD_REQUEST
+      );
+    }
+
+    const parentTenant = await this.tenantsRepository.findOne({
+      where: { tenantId: tenant.parentId }
+    });
+
+    if (!parentTenant) {
+      return APIResponse.error(
+        response,
+        apiId,
+        "Parent tenant not found",
+        `Parent tenant with ID ${tenant.parentId} not found`,
+        HttpStatus.NOT_FOUND
+      );
+    }
+
+    // Step 3: Extract domain from email
+    const emailDomain = email.split('@')[1];
+    
+    if (!emailDomain) {
+      return APIResponse.error(
+        response,
+        apiId,
+        "Invalid email format",
+        "Email must contain a valid domain",
+        HttpStatus.BAD_REQUEST
+      );
+    }
+
+    // Step 4: Compare email domain with parent tenant domain
+    if (emailDomain.toLowerCase() !== parentTenant.domain.toLowerCase()) {
+      LoggerUtil.error(
+        `Domain mismatch: Email domain '${emailDomain}' does not match parent tenant domain '${parentTenant.domain}'`,
+        apiId
+      );
+      return APIResponse.error(
+        response,
+        apiId,
+        `Email domain mismatch. Expected domain: ${parentTenant.domain}, but got: ${emailDomain}`,
+        "Domain validation failed",
+        HttpStatus.FORBIDDEN
+      );
+    }
+
+    LoggerUtil.log(`Domain validation passed for tenant ${tenantId} with parent tenant ${parentTenant.tenantId} (domain: ${parentTenant.domain})`);
+
+    // Create search DTO with email filter
+    const userSearchDto: UserSearchDto = {
+      limit: 0,
+      offset: 0,
+      filters: {
+        email: [email]
+      }
+    } as any;
+
+    let searchUserData = await this.findAllUserDetails(userSearchDto, null, false);
+
+    if (!(searchUserData && searchUserData.getUserDetails?.length)) {
+      return APIResponse.error(
+        response,
+        apiId,
+        API_RESPONSES.USER_NOT_FOUND,
+        API_RESPONSES.NOT_FOUND,
+        HttpStatus.NOT_FOUND
+      );
+    }
+
+    // Get only the first user from the results
+    const firstUser = searchUserData.getUserDetails[0];
+
+    // Fetch and assign custom fields
+    const parentTenantCustomFieldData = await this.fieldsService.getCustomFieldDetails(firstUser.userId, 'Users', false);
+    firstUser.customFields = parentTenantCustomFieldData || [];
+
+    // Remove tenantId and total_count from the response
+    delete firstUser.tenantId;
+    delete firstUser.total_count;
+
+    LoggerUtil.log(API_RESPONSES.USER_HIERARCHY_VIEW_SUCCESS, apiId);
+    return await APIResponse.success(
+      response,
+      apiId,
+      { user: firstUser },
+      HttpStatus.OK,
+      API_RESPONSES.USER_HIERARCHY_VIEW_SUCCESS
+    );
   }
 
 
@@ -994,7 +1120,7 @@ export class PostgresUserService implements IServicelocator {
       if (userDto?.customFields?.length > 0) {
         // additionalData?: { tenantId?: string, contextType?: string, createdBy?: string, updatedBy?: string }
         let additionalData = {
-          tenantId : userDto.userData?.tenantId,
+          tenantId: userDto.userData?.tenantId,
           contextType: "USER",
           createdBy: userDto.userData?.createdBy,
           updatedBy: userDto.userData?.updatedBy
@@ -1540,7 +1666,7 @@ export class PostgresUserService implements IServicelocator {
 
             // Prepare additional data for FieldValues table
             const additionalData = {
-              tenantId:  userCreateDto.tenantCohortRoleMapping?.[0]?.tenantId || null,
+              tenantId: userCreateDto.tenantCohortRoleMapping?.[0]?.tenantId || null,
               contextType: "USER",
               createdBy: userCreateDto.createdBy,
               updatedBy: userCreateDto.updatedBy,
