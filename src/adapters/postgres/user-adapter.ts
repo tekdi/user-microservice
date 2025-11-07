@@ -481,17 +481,22 @@ export class PostgresUserService implements IServicelocator {
       );
     }
 
-    // Fetch and assign custom fields for each user
-    for (let user of searchUserData.getUserDetails) {
-      const parentTenantCustomFieldData = await this.fieldsService.getCustomFieldDetails(user.userId, 'Users', false);
-      user.customFields = parentTenantCustomFieldData || [];
-    }
+    // Get only the first user from the results
+    const firstUser = searchUserData.getUserDetails[0];
+
+    // Fetch and assign custom fields
+    const parentTenantCustomFieldData = await this.fieldsService.getCustomFieldDetails(firstUser.userId, 'Users', false);
+    firstUser.customFields = parentTenantCustomFieldData || [];
+
+    // Remove tenantId and total_count from the response
+    delete firstUser.tenantId;
+    delete firstUser.total_count;
 
     LoggerUtil.log(API_RESPONSES.USER_HIERARCHY_VIEW_SUCCESS, apiId);
     return await APIResponse.success(
       response,
       apiId,
-      searchUserData,
+      { user: firstUser },
       HttpStatus.OK,
       API_RESPONSES.USER_HIERARCHY_VIEW_SUCCESS
     );
