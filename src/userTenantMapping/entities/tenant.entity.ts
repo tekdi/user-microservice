@@ -31,6 +31,9 @@ export class Tenants {
   status: TenantStatus;
 
   @Column({ type: "uuid", nullable: true })
+  parentId: string;
+
+  @Column({ type: "uuid", nullable: true })
   createdBy: string;
 
   @Column({ type: "uuid", nullable: true })

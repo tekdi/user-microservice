@@ -193,14 +193,15 @@ export class UserController {
   })
   @ApiHeader({
     name: "tenantid",
+    required: true,
+    description: "Tenant ID (must be a valid UUID)",
   })
   public async searchUser(
-    @Headers() headers,
+    @GetTenantId() tenantId: string,
     @Req() request: Request,
     @Res() response: Response,
     @Body() userSearchDto: UserSearchDto
   ) {
-    const tenantId = headers["tenantid"];
     const shouldIncludeCustomFields = userSearchDto.includeCustomFields !== "false";
     return await this.userAdapter
       .buildUserAdapter()
@@ -261,7 +262,7 @@ export class UserController {
 
     return await this.userAdapter
       .buildUserAdapter()
-      .searchUserMultiTenant(request, response, userSearchDto);
+      .searchUserMultiTenant(tenantId, request, response, userSearchDto);
   }
   
   @Post("/forgot-password")
@@ -426,42 +427,15 @@ export class UserController {
   })
   @ApiHeader({
     name: "tenantid",
-    description: "Tenant ID for filtering users within specific tenant (Required)",
-    required: true
+    required: true,
+    description: "Tenant ID (must be a valid UUID)",
   })
   public async getUsersByHierarchicalLocation(
-    @Headers() headers,
+    @GetTenantId() tenantId: string,
     @Req() request: Request,
     @Res() response: Response,
     @Body() hierarchicalFiltersDto: HierarchicalLocationFiltersDto
   ) {
-    const tenantId = headers["tenantid"];
-    const apiId = APIID.USER_LIST;
-    
-    // Comprehensive tenantId validation
-    const tenantValidation = this.validateTenantId(tenantId);
-    if (!tenantValidation.isValid) {
-      LoggerUtil.error(
-        `TenantId validation failed: ${tenantValidation.error}`,
-        `Received tenantId: ${tenantId}`,
-        apiId
-      );
-      
-      return response.status(400).json({
-        id: apiId,
-        ver: "1.0",
-        ts: new Date().toISOString(),
-        params: {
-          resmsgid: "",
-          status: "failed",
-          err: tenantValidation.error,
-          errmsg: "Invalid tenant information"
-        },
-        responseCode: 400,
-        result: {}
-      });
-    }
-    
     return await this.userAdapter
       .buildUserAdapter()
       .getUsersByHierarchicalLocation(tenantId, request, response, hierarchicalFiltersDto);

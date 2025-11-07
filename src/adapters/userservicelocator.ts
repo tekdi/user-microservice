@@ -29,6 +29,7 @@ export interface IServicelocator {
     includeCustomFields?: boolean
   );
   searchUserMultiTenant(
+    tenantId: string,
     request: any,
     response: any,
     userSearchDto: UserSearchDto

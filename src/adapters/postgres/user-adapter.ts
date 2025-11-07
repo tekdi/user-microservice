@@ -409,6 +409,7 @@ export class PostgresUserService implements IServicelocator {
  * Calls the existing searchUser function
  */
   async searchUserMultiTenant(
+    tenantId: string,
     request: any,
     response: any,
     userSearchDto: UserSearchDto
@@ -428,7 +429,7 @@ export class PostgresUserService implements IServicelocator {
     }
     // Fetch and assign custom fields for each user
     for (let user of searchUserData.getUserDetails) {
-      const parentTenantCustomFieldData = await this.fieldsService.getCustomFieldDetails(user.userId, 'Users');
+      const parentTenantCustomFieldData = await this.fieldsService.getCustomFieldDetails(user.userId, 'Users', false, tenantId);
       user.customFields = parentTenantCustomFieldData || [];
     }
 
@@ -634,7 +635,7 @@ export class PostgresUserService implements IServicelocator {
         // OPTIMIZED: Batch fetch custom fields for all users in one query (instead of N+1 queries)
         const userIds = userDetails.map(user => user.userId);
         const bulkCustomFields = await this.fieldsService.getBulkCustomFieldDetails(
-          userIds, 'Users'
+          userIds, 'Users',tenantId
         );
 
         // Map custom fields back to users (in-memory operation - fast!)

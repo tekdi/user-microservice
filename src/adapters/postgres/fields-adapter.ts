@@ -26,13 +26,16 @@ import { LoggerUtil } from "src/common/logger/LoggerUtil";
 import { API_RESPONSES } from "@utils/response.messages";
 import { FieldValuesDeleteDto } from "src/fields/dto/field-values-delete.dto";
 import { check } from "prettier";
+import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
 @Injectable()
 export class PostgresFieldsService implements IServicelocatorfields {
   constructor(
     @InjectRepository(Fields)
     private fieldsRepository: Repository<Fields>,
     @InjectRepository(FieldValues)
-    private fieldsValuesRepository: Repository<FieldValues>
+    private fieldsValuesRepository: Repository<FieldValues>,
+    @InjectRepository(Tenants)
+    private tenantsRepository: Repository<Tenants>
   ) { }
 
   async getFormCustomField(requiredData, response) {
@@ -1864,7 +1867,8 @@ export class PostgresFieldsService implements IServicelocatorfields {
   public async getCustomFieldDetails(
     itemId: string,
     tableName: string,
-    fieldOption?: boolean
+    fieldOption?: boolean,
+    tenantId?: string
   ) {
     let joinCond;
     if (tableName === "Users") {
@@ -1873,24 +1877,47 @@ export class PostgresFieldsService implements IServicelocatorfields {
       joinCond = `fv."itemId" = u."cohortId"`;
     }
     try {
-      const query = `
-      SELECT DISTINCT 
-        f."fieldId",
-        f."label", 
-        fv."value", 
-        f."type", 
-        f."fieldParams",
-        f."sourceDetails"
-      FROM public."${tableName}" u
-      LEFT JOIN (
-        SELECT DISTINCT ON (fv."fieldId", fv."itemId") fv.*
-        FROM public."FieldValues" fv
-      ) fv ON ${joinCond}
-      INNER JOIN public."Fields" f ON fv."fieldId" = f."fieldId"
-      WHERE fv."itemId" = $1;
-    `;
+      let tenantFilter = '';
+      let queryParams: any[] = [itemId];
 
-      let result = await this.fieldsRepository.query(query, [itemId]);
+      // If tenantId is provided, fetch parent tenant ID and build filter
+      if (tenantId) {
+        const tenant = await this.tenantsRepository.findOne({
+          where: { tenantId: tenantId }
+        });
+
+        if (tenant?.parentId) {
+          // Include both tenant and parent tenant in filter
+          tenantFilter = 'AND f."tenantId" IN ($2, $3)';
+          queryParams = [itemId, tenantId, tenant.parentId];
+          LoggerUtil.log(`Fetching custom fields for tenant ${tenantId} and parent ${tenant.parentId}`);
+        } else {
+          // Only tenant filter
+          tenantFilter = 'AND f."tenantId" = $2';
+          queryParams = [itemId, tenantId];
+          LoggerUtil.log(`Fetching custom fields for tenant ${tenantId} only`);
+        }
+      }
+
+      const query = `
+        SELECT DISTINCT 
+          f."fieldId",
+          f."label", 
+          fv."value", 
+          f."type", 
+          f."fieldParams",
+          f."sourceDetails",
+          f."tenantId"
+        FROM public."${tableName}" u
+        LEFT JOIN (
+          SELECT DISTINCT ON (fv."fieldId", fv."itemId") fv.*
+          FROM public."FieldValues" fv
+        ) fv ON ${joinCond}
+        INNER JOIN public."Fields" f ON fv."fieldId" = f."fieldId"
+        WHERE fv."itemId" = $1 ${tenantFilter};
+      `;
+
+      let result = await this.fieldsRepository.query(query, queryParams);
       result = result.map(async (data) => {
         const allIds = data.value;
         let optionValues;
@@ -1990,7 +2017,8 @@ export class PostgresFieldsService implements IServicelocatorfields {
    */
   public async getBulkCustomFieldDetails(
     itemIds: string[],
-    tableName: string
+    tableName: string,
+    tenantId?: string
   ): Promise<Record<string, any[]>> {
     if (!itemIds || itemIds.length === 0) {
       return {};
@@ -2004,28 +2032,50 @@ export class PostgresFieldsService implements IServicelocatorfields {
     }
 
     try {
-      // Single query to fetch all custom fields for all items
-      const query = `
-      SELECT DISTINCT 
-        fv."itemId",
-        f."fieldId",
-        f."label", 
-        fv."value", 
-        f."type", 
-        f."fieldParams",
-        f."sourceDetails"
-      FROM public."${tableName}" u
-      LEFT JOIN (
-        SELECT DISTINCT ON (fv."fieldId", fv."itemId") fv.*
-        FROM public."FieldValues" fv
-        WHERE fv."itemId" = ANY($1)
-      ) fv ON ${joinCond}
-      INNER JOIN public."Fields" f ON fv."fieldId" = f."fieldId"
-      WHERE fv."itemId" = ANY($1)
-      ORDER BY fv."itemId", f."fieldId";
-    `;
+      let tenantFilter = '';
+      let fieldTenantFilter = '';
+      let queryParams: any[] = [itemIds];
 
-      let results = await this.fieldsRepository.query(query, [itemIds]);
+      // If tenantId is provided, fetch parent tenant ID and build filter
+      if (tenantId) {
+        const tenant = await this.tenantsRepository.findOne({
+          where: { tenantId: tenantId }
+        });
+
+        if (tenant?.parentId) {
+          // Include both tenant and parent tenant in filter
+          tenantFilter = 'AND fv."tenantId" IN ($2, $3)';
+          queryParams = [itemIds, tenantId, tenant.parentId];
+        } else {
+          // Only tenant filter
+          tenantFilter = 'AND fv."tenantId" = $2';
+          queryParams = [itemIds, tenantId];
+        }
+      }
+
+      const query = `
+        SELECT DISTINCT 
+          fv."itemId",
+          f."fieldId",
+          f."label", 
+          fv."value", 
+          f."type", 
+          f."fieldParams",
+          f."sourceDetails",
+          f."tenantId"
+        FROM public."${tableName}" u
+        LEFT JOIN (
+          SELECT DISTINCT ON (fv."fieldId", fv."itemId") fv.*
+          FROM public."FieldValues" fv
+          WHERE fv."itemId" = ANY($1) ${tenantFilter}
+        ) fv ON ${joinCond}
+        INNER JOIN public."Fields" f ON fv."fieldId" = f."fieldId"
+        WHERE fv."itemId" = ANY($1) ${fieldTenantFilter}
+        ORDER BY fv."itemId", f."fieldId";
+      `;
+      console.log("query -->> ", query);
+      console.log("queryParams -->> ", queryParams);
+      let results = await this.fieldsRepository.query(query, queryParams);
 
       // Process all results
       const processedResults = await Promise.all(

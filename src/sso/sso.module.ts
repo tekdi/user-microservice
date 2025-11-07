@@ -14,6 +14,7 @@ import { FieldValues } from '../fields/entities/fields-values.entity';
 import { PostgresModule } from '../adapters/postgres/postgres-module';
 import { PostgresRoleService } from '../adapters/postgres/rbac/role-adapter';
 import { PostgresFieldsService } from '../adapters/postgres/fields-adapter';
+import { Tenants } from '../userTenantMapping/entities/tenant.entity';
 
 @Module({
   imports: [
@@ -26,7 +27,8 @@ import { PostgresFieldsService } from '../adapters/postgres/fields-adapter';
       UserRoleMapping, 
       RolePrivilegeMapping,
       Fields,
-      FieldValues
+      FieldValues,
+      Tenants
     ])
   ],
   controllers: [SsoController],
