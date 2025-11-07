@@ -25,7 +25,8 @@ export interface IServicelocator {
     tenantId: string,
     request: any,
     response: any,
-    userSearchDto: UserSearchDto
+    userSearchDto: UserSearchDto,
+    includeCustomFields?: boolean
   );
   resetUserPassword(
     request: any,
