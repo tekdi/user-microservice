@@ -13,14 +13,7 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { DataSource, ILike, In, Repository } from "typeorm";
 import { User } from "../../user/entities/user-entity";
 import { CohortMembers, MemberStatus } from "src/cohortMembers/entities/cohort-member.entity";
-import {
-  getKeycloakAdminToken,
-  createUserInKeyCloak,
-  updateUserInKeyCloak,
-  checkIfUsernameExistsInKeycloak,
-  checkIfEmailExistsInKeycloak,
-  assignRoleToUserInKeycloak
-} from "../../common/utils/keycloak.adapter.util";
+
 @Injectable()
 export class OblfService {
 constructor(
@@ -371,67 +364,6 @@ constructor(
         }        
     }
 
-    async syncAllUsersToKeycloak() {
-        // Fetch all users with the given status
-        const users = await this.usersRepository.find();
-        if (users.length === 0) {
-            console.log('No users found to sync.');
-            return { message: 'No users found to sync.' };
-        }
-        console.log(`Found ${users.length} users to sync.`);
-        // Get Keycloak admin token
-        const token = await getKeycloakAdminToken();
-
-        for (const user of users) {
-            user['id'] = user.userId;
-            user['password'] = user.username + '@oblf'; // Set a default password or generate one
-            if (!user.firstName || user.firstName.trim() === '' || user.firstName === 'NULL') {
-                user.firstName = user.name ? user.name.split(' ')[0] : '';
-                user.lastName = user.name ? user.name.split(' ')[1] : '';
-            }
-
-            // Remove fields set to null from user object
-            Object.keys(user).forEach(key => {
-                if (user[key] === "NULL" || user[key] === null || user[key] === "null" || user[key] === "undefined") {
-                    delete user[key];
-                }
-            });
-
-            // Check if user already exists in Keycloak (optional)
-            const exists = await checkIfUsernameExistsInKeycloak(
-                user.username,
-                token.data.access_token
-            );
-             if (exists?.data?.length > 0) {
-               console.log(`User ${user.username} already exists in Keycloak.`);
-               continue; // Skip to the next user
-            }
-            else {
-                // Create user in Keycloak
-               const resKeycloak = await createUserInKeyCloak(
-                    user,
-                    token.data.access_token,
-                    'teacher'
-                );
-                if (resKeycloak?.statusCode !== 201) {
-                    console.error(`Failed to create user ${user.username} in Keycloak. Message: ${resKeycloak.message}`);
-                    continue; // Skip to the next user
-                } else {
-                    // Optionally assign role to user in Keycloak
-                    const roleRes = await assignRoleToUserInKeycloak(resKeycloak.userId, token.data.access_token);   
-                    console.log(`User ${user.username} created in Keycloak.`);
-                     // Update id of the user in Users table with new Keycloak id
-                    await this.usersRepository.update(
-                        { userId: user.userId },
-                        { userId: resKeycloak.userId }
-                    );
-                    console.log(`Updated Users table: set userId = ${resKeycloak.userId} for username = ${user.username}`);
-                }
-            } 
-        }
-        console.log(`All users synced to Keycloak with teacher role.`);
-        return { message: 'All users synced to Keycloak with teacher role.' };
-    }
 
     async assignTeacherToClass(req, response, academicYearId, tenantId, authBearer) {
         try {
