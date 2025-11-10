@@ -723,6 +723,17 @@ ON CM."userId" = U."userId" ${whereCase}`;
       let result = await this.cohortMembersRepository.save(
         cohortMembershipToUpdate
       );
+
+      if (!result) {
+        return APIResponse.error(
+          res,
+          apiId,
+          "Internal Server Error",
+          "Failed to update cohort member.",
+          HttpStatus.INTERNAL_SERVER_ERROR
+        );
+      }
+
       //update custom fields
       let responseForCustomField;
       if (
@@ -739,18 +750,19 @@ ON CM."userId" = U."userId" ${whereCase}`;
           cohortMembersUpdateDto
         );
         if (result && responseForCustomField.success) {
-          await this.publishCohortMemberEvent(
-            "updated",
-            cohortMembershipId,
-            apiId
-          );
-
-          return APIResponse.success(
+          APIResponse.success(
             res,
             apiId,
             [],
             HttpStatus.CREATED,
             API_RESPONSES.COHORTMEMBER_UPDATE_SUCCESSFULLY
+          );
+
+
+          await this.publishCohortMemberEvent(
+            "updated",
+            cohortMembershipId,
+            apiId
           );
         } else {
           const errorMessage =
@@ -763,10 +775,7 @@ ON CM."userId" = U."userId" ${whereCase}`;
             HttpStatus.INTERNAL_SERVER_ERROR
           );
         }
-      }
-
-
-      if (result) {
+      } else {
         APIResponse.success(
           res,
           apiId,
@@ -774,7 +783,6 @@ ON CM."userId" = U."userId" ${whereCase}`;
           HttpStatus.OK,
           API_RESPONSES.COHORTMEMBER_UPDATE_SUCCESSFULLY
         );
-
       }
     } catch (error) {
       LoggerUtil.error(
