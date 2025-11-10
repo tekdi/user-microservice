@@ -41,8 +41,8 @@ import { JwtAuthGuard } from "src/common/guards/keycloak.guard";
 import { AllExceptionsFilter } from "src/common/filters/exception.filter";
 import { APIID } from "src/common/utils/api-id.config";
 
-@ApiTags("AssignTenant")
-@Controller("assign-tenant")
+@ApiTags("UserTenant")
+@Controller("user-tenant")
 @UseGuards(JwtAuthGuard)
 export class AssignTenantController {
   constructor(private readonly assignTenantAdapter: AssignTenantAdapter) {}

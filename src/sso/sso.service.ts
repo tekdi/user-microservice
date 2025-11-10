@@ -321,7 +321,7 @@ export class SsoService {
             roleId: SSO_DEFAULTS.MANAGER_ROLE_ID
           }
         };
-        await this.postgresUserService.assignUserToTenantAndRoll(tenantsData,tenantsData.userId)
+        await this.postgresUserService.assignUserToTenantAndRoll(tenantsData,tenantsData.userId, true)
       }
 
       this.logger.log(`New user created successfully: ${newtonResponse.name} with ID: ${createdUser.userId}`, 'SSO_SERVICE');

@@ -141,7 +141,8 @@ export class PostgresAssignTenantService
 
       await this.postgresUserService.assignUserToTenantAndRoll(
         tenantsData,
-        request["user"].userId
+        request["user"].userId,
+        true
       );
 
       LoggerUtil.log(

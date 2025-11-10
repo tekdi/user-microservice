@@ -2042,27 +2042,101 @@ export class PostgresUserService implements IServicelocator {
   }
 
 
-  async assignUserToTenantAndRoll(tenantsData, createdBy) {
+  private async isRootTenant(tenantId: string): Promise<boolean> {
+    const tenant = await this.tenantsRepository.findOne({
+      where: { tenantId }
+    });
+    return tenant && tenant.parentId === null;
+  }
+
+  private async handleRoleMappingForUser(
+    userId: string,
+    tenantId: string,
+    roleId: string,
+    createdBy: string,
+    shouldUpdateIfRoot: boolean
+  ): Promise<void> {
+    const existingMapping = await this.userRoleMappingRepository.findOne({
+      where: { userId }
+    });
+
+    if (!shouldUpdateIfRoot || !existingMapping) {
+      await this.userRoleMappingRepository.save({
+        userId,
+        tenantId,
+        roleId,
+        createdBy
+      });
+      return;
+    }
+
+    const isRoot = await this.isRootTenant(existingMapping.tenantId);
+    
+    if (isRoot) {
+      existingMapping.tenantId = tenantId;
+      existingMapping.roleId = roleId;
+      existingMapping.createdBy = createdBy;
+      await this.userRoleMappingRepository.save(existingMapping);
+      LoggerUtil.log(`Updated role mapping for user ${userId} from root tenant to ${tenantId}`);
+    } else {
+      await this.userRoleMappingRepository.save({
+        userId,
+        tenantId,
+        roleId,
+        createdBy
+      });
+    }
+  }
+
+  private async handleTenantMappingForUser(
+    userId: string,
+    tenantId: string,
+    createdBy: string,
+    shouldUpdateIfRoot: boolean
+  ): Promise<void> {
+    const existingMapping = await this.userTenantMappingRepository.findOne({
+      where: { userId }
+    });
+
+    if (!shouldUpdateIfRoot || !existingMapping) {
+      await this.userTenantMappingRepository.save({
+        userId,
+        tenantId,
+        createdBy
+      });
+      return;
+    }
+
+    const isRoot = await this.isRootTenant(existingMapping.tenantId);
+    
+    if (isRoot) {
+      existingMapping.tenantId = tenantId;
+      existingMapping.createdBy = createdBy;
+      await this.userTenantMappingRepository.save(existingMapping);
+      LoggerUtil.log(`Updated tenant mapping for user ${userId} from root tenant to ${tenantId}`);
+    } else {
+      await this.userTenantMappingRepository.save({
+        userId,
+        tenantId,
+        createdBy
+      });
+    }
+  }
+
+  async assignUserToTenantAndRoll(tenantsData, createdBy, userType?: boolean) {
     try {
-      const tenantId = tenantsData?.tenantRoleMapping?.tenantId;
-      const userId = tenantsData?.userId;
-      const roleId = tenantsData?.tenantRoleMapping?.roleId;
+      const { tenantId, userId, roleId } = {
+        tenantId: tenantsData?.tenantRoleMapping?.tenantId,
+        userId: tenantsData?.userId,
+        roleId: tenantsData?.tenantRoleMapping?.roleId
+      };
 
       if (roleId) {
-        const data = await this.userRoleMappingRepository.save({
-          userId: userId,
-          tenantId: tenantId,
-          roleId: roleId,
-          createdBy: createdBy,
-        });
+        await this.handleRoleMappingForUser(userId, tenantId, roleId, createdBy, userType);
       }
 
       if (tenantId) {
-        const data = await this.userTenantMappingRepository.save({
-          userId: userId,
-          tenantId: tenantId,
-          createdBy: createdBy,
-        });
+        await this.handleTenantMappingForUser(userId, tenantId, createdBy, userType);
       }
 
       LoggerUtil.log(API_RESPONSES.USER_TENANT);
