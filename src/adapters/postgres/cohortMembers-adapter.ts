@@ -23,6 +23,7 @@ import { LoggerUtil } from "src/common/logger/LoggerUtil";
 import { PostgresUserService } from "./user-adapter";
 import { isValid } from "date-fns";
 import { FieldValuesOptionDto } from "src/user/dto/user-create.dto";
+import { KafkaService } from "src/kafka/kafka.service";
 
 @Injectable()
 export class PostgresCohortMembersService {
@@ -40,7 +41,8 @@ export class PostgresCohortMembersService {
     private readonly academicyearService: PostgresAcademicYearService,
     private readonly notificationRequest: NotificationRequest,
     private fieldsService: PostgresFieldsService,
-    private userService: PostgresUserService
+    private userService: PostgresUserService,
+    private readonly kafkaService: KafkaService
   ) { }
 
   //Get cohort member
@@ -737,6 +739,12 @@ ON CM."userId" = U."userId" ${whereCase}`;
           cohortMembersUpdateDto
         );
         if (result && responseForCustomField.success) {
+          await this.publishCohortMemberEvent(
+            "updated",
+            cohortMembershipId,
+            apiId
+          );
+
           return APIResponse.success(
             res,
             apiId,
@@ -756,14 +764,17 @@ ON CM."userId" = U."userId" ${whereCase}`;
           );
         }
       }
+
+
       if (result) {
-        return APIResponse.success(
+        APIResponse.success(
           res,
           apiId,
           [],
           HttpStatus.OK,
           API_RESPONSES.COHORTMEMBER_UPDATE_SUCCESSFULLY
         );
+
       }
     } catch (error) {
       LoggerUtil.error(
@@ -1161,6 +1172,94 @@ ON CM."userId" = U."userId" ${whereCase}`;
       return { success: true, data: results };
     } catch (error) {
       return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Publish cohort member events by delegating to user event publisher
+   * Fetches the userId from cohortMembershipId and publishes a user event.
+   */
+  public async publishCohortMemberEvent(
+    eventType: "created" | "updated" | "deleted",
+    cohortMembershipId: string,
+    apiId: string
+  ): Promise<void> {
+    try {
+      // Prepare payload depending on event type
+      let cohortMemberData: any;
+
+      if (eventType === "deleted") {
+        cohortMemberData = {
+          cohortMembershipId,
+          deletedAt: new Date().toISOString(),
+        };
+      } else {
+        // Fetch only the custom fields we care about and send a minimal payload
+        let membershipCustomFields = [] as any[];
+        try {
+          const fields = await this.fieldsService.getFieldsAndFieldsValues(
+            cohortMembershipId
+          );
+          // Keep only 4 target fields by label (case-insensitive) with minimal shape { label, value }
+          const wanted = new Set(["subject", "fees", "registration", "board"]);
+          membershipCustomFields = (fields || [])
+            .map((field: any) => ({
+              label: field?.label,
+              value: field?.value,
+              selectedValues: field?.selectedValues,
+            }))
+            .filter((f: any) =>
+              wanted.has((f?.label || "").toString().trim().toLowerCase())
+            )
+            .map((f: any) => ({
+              label: f?.label,
+              // Prefer direct value; if absent, derive a string from selectedValues
+              value:
+                f?.value ??
+                (Array.isArray(f?.selectedValues)
+                  ? f.selectedValues
+                      .map(
+                        (v: any) =>
+                          v?.value ??
+                          v?.label ??
+                          v?.name ??
+                          v?.id ??
+                          (typeof v === "string" ? v : null)
+                      )
+                      .filter((v: any) => v != null)
+                      .join(",")
+                  : null),
+            }));
+        } catch (cfError) {
+          LoggerUtil.error(
+            `Failed to fetch cohort member custom fields`,
+            `Error: ${cfError.message}`,
+            apiId
+          );
+        }
+
+        cohortMemberData = {
+          cohortMembershipId,
+          customFields: membershipCustomFields,
+          eventTimestamp: new Date().toISOString(),
+        };
+      }
+
+      await this.kafkaService.publishCohortMemberEvent(
+        eventType,
+        cohortMemberData,
+        cohortMembershipId
+      );
+      LoggerUtil.log(
+        `Cohort member ${eventType} event published to Kafka for cohortMembershipId ${cohortMembershipId}`,
+        apiId
+      );
+    } catch (error) {
+      LoggerUtil.error(
+        `Failed to publish cohort member ${eventType} event`,
+        `Error: ${error.message}`,
+        apiId
+      );
     }
   }
 }

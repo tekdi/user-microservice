@@ -403,4 +403,50 @@ export class KafkaService implements OnModuleInit, OnModuleDestroy {
     await this.publishMessage(topic, payload, cohortId);
     this.logger.log(`Cohort ${eventType} event published for cohort ${cohortId} with type: ${transformedCohortData.type}`);
   }
+
+  /**
+   * Publish a cohort member-related event to Kafka
+   * 
+   * @param eventType - The type of cohort member event (created, updated, deleted)
+   * @param cohortMemberData - The membership data to include in the event
+   * @param cohortMembershipId - The ID of the cohort membership (message key)
+   */
+  async publishCohortMemberEvent(
+    eventType: 'created' | 'updated' | 'deleted',
+    cohortMemberData: any,
+    cohortMembershipId: string
+  ): Promise<void> {
+    if (!this.isKafkaEnabled) {
+      this.logger.warn('Kafka is disabled. Skipping cohort member event publish.');
+      return;
+    }
+
+    const topic = this.configService.get<string>('KAFKA_TOPIC', 'user-topic');
+
+    let fullEventType = '';
+    switch (eventType) {
+      case 'created':
+        fullEventType = 'COHORT_MEMBER_CREATED';
+        break;
+      case 'updated':
+        fullEventType = 'COHORT_MEMBER_UPDATED';
+        break;
+      case 'deleted':
+        fullEventType = 'COHORT_MEMBER_DELETED';
+        break;
+      default:
+        fullEventType = 'UNKNOWN_EVENT';
+        break;
+    }
+
+    const payload = {
+      eventType: fullEventType,
+      timestamp: new Date().toISOString(),
+      cohortMembershipId,
+      data: cohortMemberData
+    };
+
+    await this.publishMessage(topic, payload, cohortMembershipId);
+    this.logger.log(`Cohort member ${eventType} event published for cohortMembershipId ${cohortMembershipId}`);
+  }
 }

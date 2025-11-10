@@ -13,6 +13,7 @@ import { CohortAcademicYear } from "src/cohortAcademicYear/entities/cohortAcadem
 import { PostgresAcademicYearService } from "src/adapters/postgres/academicyears-adapter";
 import { AcademicYear } from "src/academicyears/entities/academicyears-entity";
 import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
+import { KafkaModule } from "src/kafka/kafka.module";
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
     ]),
     HttpModule,
     PostgresModule,
+    KafkaModule,
   ],
   controllers: [CohortMembersController],
   providers: [
