@@ -35,6 +35,7 @@ import {
 
 import { ExistUserDto, SuggestUserDto, UserSearchDto } from "./dto/user-search.dto";
 import { HierarchicalLocationFiltersDto } from "./dto/user-hierarchical-search.dto";
+import { UserHierarchyViewDto } from "./dto/user-hierarchy-view.dto";
 import { UserAdapter } from "./useradapter";
 import { UserCreateDto } from "./dto/user-create.dto";
 import { UserUpdateDTO } from "./dto/user-update.dto";
@@ -55,6 +56,7 @@ import { OtpSendDTO } from "./dto/otpSend.dto";
 import { OtpVerifyDTO } from "./dto/otpVerify.dto";
 import { UploadS3Service } from "src/common/services/upload-S3.service";
 import { GetUserId } from "src/common/decorators/getUserId.decorator";
+import { GetTenantId } from "src/common/decorators/getTenantId.decorator";
 export interface UserData {
   context: string;
   tenantId: string;
@@ -181,8 +183,8 @@ export class UserController {
 
   @UseFilters(new AllExceptionsFilter(APIID.USER_LIST))
   @Post("/list")
-  // @UseGuards(JwtAuthGuard)
-  // @ApiBasicAuth("access-token")
+  @UseGuards(JwtAuthGuard)
+  @ApiBasicAuth("access-token")
   @ApiCreatedResponse({ description: "User list." })
   @ApiBody({ type: UserSearchDto })
   @UsePipes(ValidationPipe)
@@ -199,9 +201,10 @@ export class UserController {
     @Body() userSearchDto: UserSearchDto
   ) {
     const tenantId = headers["tenantid"];
+    const shouldIncludeCustomFields = userSearchDto.includeCustomFields !== "false";
     return await this.userAdapter
       .buildUserAdapter()
-      .searchUser(tenantId, request, response, userSearchDto);
+      .searchUser(tenantId, request, response, userSearchDto, shouldIncludeCustomFields);
   }
 
   @Post("/password-reset-link")
@@ -223,6 +226,32 @@ export class UserController {
       );
   }
 
+  @UseFilters(new AllExceptionsFilter(APIID.USER_HIERARCHY_VIEW))
+  @Post("/user/v1/users-hierarchy-view")
+  @UseGuards(JwtAuthGuard)
+  @ApiBasicAuth("access-token")
+  @ApiCreatedResponse({ description: "User hierarchy view by email." })
+  @ApiBody({ type: UserHierarchyViewDto })
+  @UsePipes(ValidationPipe)
+  @SerializeOptions({
+    strategy: "excludeAll",
+  })
+  @ApiHeader({
+    name: "tenantid",
+    required: true,
+    description: "Tenant ID (must be a valid UUID)",
+  })
+  public async searchUserMultiTenant(
+    @GetTenantId() tenantId: string,
+    @Req() request: Request,
+    @Res() response: Response,
+    @Body() userHierarchyViewDto: UserHierarchyViewDto
+  ) {
+    return await this.userAdapter
+      .buildUserAdapter()
+      .searchUserMultiTenant(tenantId, request, response, userHierarchyViewDto);
+  }
+  
   @Post("/forgot-password")
   @ApiOkResponse({ description: "Forgot password reset successfully." })
   @ApiBody({ type: ForgotPasswordDto })

@@ -298,6 +298,16 @@ export class UserSearchDto {
     return this.sort ? this.sort[1] : undefined;
   }
 
+  @ApiPropertyOptional({
+    type: String,
+    description: "Include custom fields in response (default: true). Set to false for faster response.",
+    default: "true",
+  })
+  @Expose()
+  @IsOptional()
+  @IsString()
+  includeCustomFields?: string = "true";
+
   constructor(partial: Partial<UserSearchDto>) {
     Object.assign(this, partial);
   }

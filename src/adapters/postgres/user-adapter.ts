@@ -19,6 +19,7 @@ import { CohortMembers } from "src/cohortMembers/entities/cohort-member.entity";
 import { isUUID } from "class-validator";
 import { ExistUserDto, SuggestUserDto, UserSearchDto } from "src/user/dto/user-search.dto";
 import { HierarchicalLocationFiltersDto } from "src/user/dto/user-hierarchical-search.dto";
+import { UserHierarchyViewDto } from "src/user/dto/user-hierarchy-view.dto";
 import { UserTenantMapping } from "src/userTenantMapping/entities/user-tenant-mapping.entity";
 import { UserRoleMapping } from "src/rbac/assign-role/entities/assign-role.entity";
 import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
@@ -356,11 +357,12 @@ export class PostgresUserService implements IServicelocator {
     tenantId: string,
     request: any,
     response: any,
-    userSearchDto: UserSearchDto
+    userSearchDto: UserSearchDto,
+    includeCustomFields: boolean = true
   ) {
     const apiId = APIID.USER_LIST;
     try {
-      const findData = await this.findAllUserDetails(userSearchDto, tenantId);
+      const findData = await this.findAllUserDetails(userSearchDto, tenantId, includeCustomFields);
 
       if (findData === false) {
         LoggerUtil.error(
@@ -402,8 +404,133 @@ export class PostgresUserService implements IServicelocator {
     }
   }
 
+  /**
+ * Multi-tenant user list service function
+ * Fetches user hierarchy by email
+ */
+  async searchUserMultiTenant(
+    tenantId: string,
+    request: any,
+    response: any,
+    userHierarchyViewDto: UserHierarchyViewDto
+  ) {
+    const apiId = APIID.USER_HIERARCHY_VIEW;
+    const { email } = userHierarchyViewDto;
 
-  async findAllUserDetails(userSearchDto, tenantId?: string) {
+    // Step 1: Fetch tenant from Tenants table
+    const tenant = await this.tenantsRepository.findOne({
+      where: { tenantId: tenantId }
+    });
+
+    if (!tenant) {
+      return APIResponse.error(
+        response,
+        apiId,
+        "Tenant not found",
+        API_RESPONSES.TENANT_NOT_FOUND,
+        HttpStatus.NOT_FOUND
+      );
+    }
+
+    // Step 2: Fetch parent tenant using parentId
+    if (!tenant.parentId) {
+      return APIResponse.error(
+        response,
+        apiId,
+        "Parent tenant not configured",
+        "This tenant does not have a parent tenant configured",
+        HttpStatus.BAD_REQUEST
+      );
+    }
+
+    const parentTenant = await this.tenantsRepository.findOne({
+      where: { tenantId: tenant.parentId }
+    });
+
+    if (!parentTenant) {
+      return APIResponse.error(
+        response,
+        apiId,
+        "Parent tenant not found",
+        `Parent tenant with ID ${tenant.parentId} not found`,
+        HttpStatus.NOT_FOUND
+      );
+    }
+
+    // Step 3: Extract domain from email
+    const emailDomain = email.split('@')[1];
+    
+    if (!emailDomain) {
+      return APIResponse.error(
+        response,
+        apiId,
+        "Invalid email format",
+        "Email must contain a valid domain",
+        HttpStatus.BAD_REQUEST
+      );
+    }
+
+    // Step 4: Compare email domain with parent tenant domain
+    if (emailDomain.toLowerCase() !== parentTenant.domain.toLowerCase()) {
+      LoggerUtil.error(
+        `Domain mismatch: Email domain '${emailDomain}' does not match parent tenant domain '${parentTenant.domain}'`,
+        apiId
+      );
+      return APIResponse.error(
+        response,
+        apiId,
+        `Email domain mismatch. Expected domain: ${parentTenant.domain}, but got: ${emailDomain}`,
+        "Domain validation failed",
+        HttpStatus.FORBIDDEN
+      );
+    }
+
+    LoggerUtil.log(`Domain validation passed for tenant ${tenantId} with parent tenant ${parentTenant.tenantId} (domain: ${parentTenant.domain})`);
+
+    // Create search DTO with email filter
+    const userSearchDto: UserSearchDto = {
+      limit: 0,
+      offset: 0,
+      filters: {
+        email: [email]
+      }
+    } as any;
+
+    let searchUserData = await this.findAllUserDetails(userSearchDto, null, false);
+
+    if (!(searchUserData && searchUserData.getUserDetails?.length)) {
+      return APIResponse.error(
+        response,
+        apiId,
+        API_RESPONSES.USER_NOT_FOUND,
+        API_RESPONSES.NOT_FOUND,
+        HttpStatus.NOT_FOUND
+      );
+    }
+
+    // Get only the first user from the results
+    const firstUser = searchUserData.getUserDetails[0];
+
+    // Fetch and assign custom fields
+    const parentTenantCustomFieldData = await this.fieldsService.getCustomFieldDetails(firstUser.userId, 'Users', false);
+    firstUser.customFields = parentTenantCustomFieldData || [];
+
+    // Remove tenantId and total_count from the response
+    delete firstUser.tenantId;
+    delete firstUser.total_count;
+
+    LoggerUtil.log(API_RESPONSES.USER_HIERARCHY_VIEW_SUCCESS, apiId);
+    return await APIResponse.success(
+      response,
+      apiId,
+      { user: firstUser },
+      HttpStatus.OK,
+      API_RESPONSES.USER_HIERARCHY_VIEW_SUCCESS
+    );
+  }
+
+
+  async findAllUserDetails(userSearchDto, tenantId?: string, includeCustomFields: boolean = true) {
     let { limit, offset, filters, exclude, sort } = userSearchDto;
     let excludeCohortIdes;
     let excludeUserIdes;
@@ -574,7 +701,7 @@ export class PostgresUserService implements IServicelocator {
     }
 
     //Get user core fields data
-    const query = `SELECT U."userId",U."enrollmentId", U."username",U."email", U."firstName", U."name",UTM."tenantId", U."middleName", U."lastName", U."gender", U."dob", R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", U."status", COUNT(*) OVER() AS total_count 
+    const query = `SELECT U."userId",U."enrollmentId", U."username",U."email", U."firstName", U."name",UTM."tenantId", U."middleName", U."lastName", U."gender", U."dob", R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", U."status", UTM."status" AS "platformStatus", COUNT(*) OVER() AS total_count 
       FROM  public."Users" U
       LEFT JOIN public."CohortMembers" CM 
       ON CM."userId" = U."userId"
@@ -583,28 +710,41 @@ export class PostgresUserService implements IServicelocator {
       LEFT JOIN public."UserTenantMapping" UTM
       ON UTM."userId" = U."userId"
       LEFT JOIN public."Roles" R
-      ON R."roleId" = UR."roleId" ${whereCondition} GROUP BY U."userId",UTM."tenantId", R."name" ${orderingCondition} ${offset} ${limit}`;
+      ON R."roleId" = UR."roleId" ${whereCondition} GROUP BY U."userId",UTM."tenantId", UTM."status", R."name" ${orderingCondition} ${offset} ${limit}`;
     const userDetails = await this.usersRepository.query(query);
 
     if (userDetails.length > 0) {
       result.totalCount = parseInt(userDetails[0].total_count, 10);
 
-      // Get user custom field data
-      for (const userData of userDetails) {
-        const customFields = await this.fieldsService.getCustomFieldDetails(
-          userData.userId, 'Users'
+      // OPTIMIZED: Conditionally fetch custom fields only when requested
+      if (includeCustomFields) {
+        // OPTIMIZED: Batch fetch custom fields for all users in one query (instead of N+1 queries)
+        const userIds = userDetails.map(user => user.userId);
+        const bulkCustomFields = await this.fieldsService.getBulkCustomFieldDetails(
+          userIds, 'Users'
         );
 
-        userData["customFields"] = Array.isArray(customFields)
-          ? customFields.map((data) => ({
-            fieldId: data?.fieldId,
-            label: data?.label,
-            selectedValues: data?.selectedValues,
-            type: data?.type,
-          }))
-          : [];
+        // Map custom fields back to users (in-memory operation - fast!)
+        for (const userData of userDetails) {
+          const customFields = bulkCustomFields[userData.userId] || [];
 
-        result.getUserDetails.push(userData);
+          userData["customFields"] = Array.isArray(customFields)
+            ? customFields.map((data) => ({
+              fieldId: data?.fieldId,
+              label: data?.label,
+              selectedValues: data?.selectedValues,
+              type: data?.type,
+            }))
+            : [];
+
+          result.getUserDetails.push(userData);
+        }
+      } else {
+        // Skip custom fields fetch - much faster for listing
+        for (const userData of userDetails) {
+          userData["customFields"] = [];
+          result.getUserDetails.push(userData);
+        }
       }
     } else {
       return false;
@@ -980,7 +1120,7 @@ export class PostgresUserService implements IServicelocator {
       if (userDto?.customFields?.length > 0) {
         // additionalData?: { tenantId?: string, contextType?: string, createdBy?: string, updatedBy?: string }
         let additionalData = {
-          tenantId : userDto.userData?.tenantId,
+          tenantId: userDto.userData?.tenantId,
           contextType: "USER",
           createdBy: userDto.userData?.createdBy,
           updatedBy: userDto.userData?.updatedBy
@@ -1526,7 +1666,7 @@ export class PostgresUserService implements IServicelocator {
 
             // Prepare additional data for FieldValues table
             const additionalData = {
-              tenantId:  userCreateDto.tenantCohortRoleMapping?.[0]?.tenantId || null,
+              tenantId: userCreateDto.tenantCohortRoleMapping?.[0]?.tenantId || null,
               contextType: "USER",
               createdBy: userCreateDto.createdBy,
               updatedBy: userCreateDto.updatedBy,
@@ -1902,27 +2042,101 @@ export class PostgresUserService implements IServicelocator {
   }
 
 
-  async assignUserToTenantAndRoll(tenantsData, createdBy) {
+  private async isRootTenant(tenantId: string): Promise<boolean> {
+    const tenant = await this.tenantsRepository.findOne({
+      where: { tenantId }
+    });
+    return tenant && tenant.parentId === null;
+  }
+
+  private async handleRoleMappingForUser(
+    userId: string,
+    tenantId: string,
+    roleId: string,
+    createdBy: string,
+    shouldUpdateIfRoot: boolean
+  ): Promise<void> {
+    const existingMapping = await this.userRoleMappingRepository.findOne({
+      where: { userId }
+    });
+
+    if (!shouldUpdateIfRoot || !existingMapping) {
+      await this.userRoleMappingRepository.save({
+        userId,
+        tenantId,
+        roleId,
+        createdBy
+      });
+      return;
+    }
+
+    const isRoot = await this.isRootTenant(existingMapping.tenantId);
+    
+    if (isRoot) {
+      existingMapping.tenantId = tenantId;
+      existingMapping.roleId = roleId;
+      existingMapping.createdBy = createdBy;
+      await this.userRoleMappingRepository.save(existingMapping);
+      LoggerUtil.log(`Updated role mapping for user ${userId} from root tenant to ${tenantId}`);
+    } else {
+      await this.userRoleMappingRepository.save({
+        userId,
+        tenantId,
+        roleId,
+        createdBy
+      });
+    }
+  }
+
+  private async handleTenantMappingForUser(
+    userId: string,
+    tenantId: string,
+    createdBy: string,
+    shouldUpdateIfRoot: boolean
+  ): Promise<void> {
+    const existingMapping = await this.userTenantMappingRepository.findOne({
+      where: { userId }
+    });
+
+    if (!shouldUpdateIfRoot || !existingMapping) {
+      await this.userTenantMappingRepository.save({
+        userId,
+        tenantId,
+        createdBy
+      });
+      return;
+    }
+
+    const isRoot = await this.isRootTenant(existingMapping.tenantId);
+    
+    if (isRoot) {
+      existingMapping.tenantId = tenantId;
+      existingMapping.createdBy = createdBy;
+      await this.userTenantMappingRepository.save(existingMapping);
+      LoggerUtil.log(`Updated tenant mapping for user ${userId} from root tenant to ${tenantId}`);
+    } else {
+      await this.userTenantMappingRepository.save({
+        userId,
+        tenantId,
+        createdBy
+      });
+    }
+  }
+
+  async assignUserToTenantAndRoll(tenantsData, createdBy, userType?: boolean) {
     try {
-      const tenantId = tenantsData?.tenantRoleMapping?.tenantId;
-      const userId = tenantsData?.userId;
-      const roleId = tenantsData?.tenantRoleMapping?.roleId;
+      const { tenantId, userId, roleId } = {
+        tenantId: tenantsData?.tenantRoleMapping?.tenantId,
+        userId: tenantsData?.userId,
+        roleId: tenantsData?.tenantRoleMapping?.roleId
+      };
 
       if (roleId) {
-        const data = await this.userRoleMappingRepository.save({
-          userId: userId,
-          tenantId: tenantId,
-          roleId: roleId,
-          createdBy: createdBy,
-        });
+        await this.handleRoleMappingForUser(userId, tenantId, roleId, createdBy, userType);
       }
 
       if (tenantId) {
-        const data = await this.userTenantMappingRepository.save({
-          userId: userId,
-          tenantId: tenantId,
-          createdBy: createdBy,
-        });
+        await this.handleTenantMappingForUser(userId, tenantId, createdBy, userType);
       }
 
       LoggerUtil.log(API_RESPONSES.USER_TENANT);

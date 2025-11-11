@@ -1982,6 +1982,157 @@ export class PostgresFieldsService implements IServicelocatorfields {
     }
   }
 
+  /**
+   * Batch fetch custom fields for multiple items (optimized for N+1 query problem)
+   * @param itemIds - Array of item IDs (userIds or cohortIds)
+   * @param tableName - Table name ('Users' or 'Cohort')
+   * @returns Object mapping itemId to their custom fields array
+   */
+  public async getBulkCustomFieldDetails(
+    itemIds: string[],
+    tableName: string
+  ): Promise<Record<string, any[]>> {
+    if (!itemIds || itemIds.length === 0) {
+      return {};
+    }
+
+    let joinCond: string;
+    if (tableName === "Users") {
+      joinCond = `fv."itemId" = u."userId"`;
+    } else if (tableName === "Cohort") {
+      joinCond = `fv."itemId" = u."cohortId"`;
+    }
+
+    
+    try {
+      // Single query to fetch all custom fields for all items
+      const query = `
+      SELECT DISTINCT 
+        fv."itemId",
+        f."fieldId",
+        f."label", 
+        fv."value", 
+        f."type", 
+        f."fieldParams",
+        f."sourceDetails"
+      FROM public."${tableName}" u
+      LEFT JOIN (
+        SELECT DISTINCT ON (fv."fieldId", fv."itemId") fv.*
+        FROM public."FieldValues" fv
+        WHERE fv."itemId" = ANY($1)
+      ) fv ON ${joinCond}
+      INNER JOIN public."Fields" f ON fv."fieldId" = f."fieldId"
+      WHERE fv."itemId" = ANY($1)
+      ORDER BY fv."itemId", f."fieldId";
+    `;
+
+      let results = await this.fieldsRepository.query(query, [itemIds]);
+
+      // Process all results
+      const processedResults = await Promise.all(
+        results.map(async (data) => {
+          const allIds = data.value;
+          let processedValue = [];
+          let allSelectedValues;
+          const selectedValues = data.value;
+          const allFieldsOptions = data?.fieldParams?.options
+            ? data.fieldParams.options
+            : null;
+
+          if (data.sourceDetails) {
+            if (data.sourceDetails.source === "fieldparams") {
+              allFieldsOptions.forEach((option) => {
+                const selectedOptionKey = option.value;
+
+                if (data.type === "checkbox" || data.type === "drop_down") {
+                  if (selectedValues.includes(selectedOptionKey)) {
+                    allSelectedValues = {
+                      id: option?.value,
+                      value: option?.value,
+                      label: option?.label,
+                    };
+                    processedValue.push(allSelectedValues);
+                  }
+                } else {
+                  if (selectedValues.includes(selectedOptionKey)) {
+                    allSelectedValues = {
+                      id: option?.name,
+                      value: option?.value,
+                      label: option?.label,
+                      order: option?.order,
+                    };
+                    processedValue.push(allSelectedValues);
+                  }
+                }
+              });
+            } else if (data.sourceDetails.source === "table") {
+              const whereCond = `"${data.sourceDetails.table}_id" IN (${allIds})`;
+              const labels = await this.findDynamicOptions(
+                data.sourceDetails.table,
+                whereCond
+              );
+              const tableName = data.sourceDetails.table;
+
+              const idField = `${tableName}_id`;
+              const nameField = `${tableName}_name`;
+
+              processedValue = labels.map((data) => ({
+                id: data[idField],
+                value: data[nameField],
+              }));
+            } else if (data.sourceDetails?.externalsource) {
+              processedValue = data?.value;
+            }
+          } else {
+            processedValue = selectedValues;
+          }
+
+          return {
+            itemId: data.itemId,
+            fieldId: data.fieldId,
+            label: data.label,
+            type: data.type,
+            selectedValues: processedValue,
+          };
+        })
+      );
+
+      // Group by itemId
+      const groupedByItemId: Record<string, any[]> = {};
+      
+      // Initialize all itemIds with empty arrays
+      itemIds.forEach(itemId => {
+        groupedByItemId[itemId] = [];
+      });
+
+      // Group results by itemId
+      processedResults.forEach((field) => {
+        if (!groupedByItemId[field.itemId]) {
+          groupedByItemId[field.itemId] = [];
+        }
+        groupedByItemId[field.itemId].push({
+          fieldId: field.fieldId,
+          label: field.label,
+          selectedValues: field.selectedValues,
+          type: field.type,
+        });
+      });
+
+      return groupedByItemId;
+    } catch (error) {
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error in getBulkCustomFieldDetails: ${error.message}`
+      );
+      // Return empty object for all items on error
+      const emptyResult: Record<string, any[]> = {};
+      itemIds.forEach(itemId => {
+        emptyResult[itemId] = [];
+      });
+      return emptyResult;
+    }
+  }
+
   public async getFieldsByIds(fieldIds: string[]) {
     return this.fieldsRepository.find({
       where: {
