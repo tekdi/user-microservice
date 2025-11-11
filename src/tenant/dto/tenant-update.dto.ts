@@ -1,6 +1,6 @@
 import { Expose } from "class-transformer";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { IsIn, IsNotEmpty, IsOptional, IsString } from "class-validator";
+import { IsIn, IsNotEmpty, IsOptional, IsString, IsUUID } from "class-validator";
 import { TenantStatus } from "../entities/tenent.entity";
 
 export class TenantUpdateDto {
@@ -69,6 +69,12 @@ export class TenantUpdateDto {
     @IsString()
     @IsOptional()
     programHead?: string;
+
+    @ApiPropertyOptional({ type: () => String, description: 'Parent Tenant ID (UUID)' })
+    @IsString()
+    @IsUUID()
+    @IsOptional()
+    parentId?: string;
 
     constructor(obj?: Partial<TenantUpdateDto>) {
         if (obj) {
