@@ -77,4 +77,7 @@ export class Tenant {
 
   @Column({ type: 'json', nullable: true })
   contentFilter: any;
+
+  @Column({ type: "uuid", nullable: true })
+  parentId: string | null; // UUID of the parent tenant
 }

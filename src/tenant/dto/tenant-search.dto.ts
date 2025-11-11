@@ -68,6 +68,12 @@ export class TenantFilters {
   @IsString()
   @IsOptional()
   programHead?: string;
+
+  @ApiPropertyOptional({ type: () => String, description: 'Parent Tenant ID (UUID)' })
+  @IsString()
+  @IsUUID()
+  @IsOptional()
+  parentId?: string;
 }
 
 export class TenantSearchDTO {

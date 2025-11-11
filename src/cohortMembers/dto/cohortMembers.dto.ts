@@ -1,6 +1,6 @@
 import { Expose } from "class-transformer";
 import { ApiProperty } from "@nestjs/swagger";
-import { IsNotEmpty, IsUUID } from "class-validator";
+import { IsNotEmpty, IsOptional, IsUUID } from "class-validator";
 
 export class CohortMembersDto {
   //generated fields
@@ -34,7 +34,7 @@ export class CohortMembersDto {
     default: "",
   })
   @Expose()
-  @IsNotEmpty()
+  @IsOptional()
   @IsUUID(undefined, { message: "cohortAcademicYearId Id must be a valid UUID" })
   cohortAcademicYearId: string;
 
