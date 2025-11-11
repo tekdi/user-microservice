@@ -70,6 +70,17 @@ export class UpdateAssignTenantStatusDto {
   })
   status: string;
 
+  @ApiProperty({
+    type: String,
+    description: "Reason for status update",
+    required: false,
+    example: "User requested account deactivation"
+  })
+  @Expose()
+  @IsOptional()
+  @IsString({ message: "Reason must be a string" })
+  reason?: string;
+
   constructor(obj: any) {
     Object.assign(this, obj);
   }
