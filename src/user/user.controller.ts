@@ -227,7 +227,7 @@ export class UserController {
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.USER_HIERARCHY_VIEW))
-  @Post("/user/v1/users-hierarchy-view")
+  @Post("/users-hierarchy-view")
   @UseGuards(JwtAuthGuard)
   @ApiBasicAuth("access-token")
   @ApiCreatedResponse({ description: "User hierarchy view by email." })
