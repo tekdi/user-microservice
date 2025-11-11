@@ -431,12 +431,17 @@ export class PostgresUserService implements IServicelocator {
       let coreFields = await this.getCoreColumnNames();
       const allCoreField = [...coreFields, 'fromDate', 'toDate', 'role', 'tenantId', 'name'];
 
-      for (const [key, value] of Object.entries(filters)) {
+      for (const [key, avalue] of Object.entries(filters)) {
         //Check request filter are proesent on core file or cutom fields
         if (allCoreField.includes(key)) {
           if (index > 0 && index < Object.keys(filters).length) {
             whereCondition += ` AND `;
           }
+          
+          const value = Array.isArray(avalue)
+        ? avalue.map(v => v.replace(/'/g, "''"))
+        : String(avalue).replace(/'/g, "''");
+
           switch (key) {
             case "firstName":
             case "name":
@@ -492,7 +497,7 @@ export class PostgresUserService implements IServicelocator {
           }
         } else {
           //For custom field store the data in key value pear
-          searchCustomFields[key] = value;
+          searchCustomFields[key] = avalue;
         }
       }
     }
@@ -560,7 +565,7 @@ export class PostgresUserService implements IServicelocator {
     } else if (index === 0) {
       whereCondition = "";
     }
-
+    
     // Apply tenant filtering conditionally if tenantId is provided from headers
     if (tenantId && tenantId.trim() !== '') {
       if (index === 0 && whereCondition === "") {
@@ -585,7 +590,6 @@ export class PostgresUserService implements IServicelocator {
       LEFT JOIN public."Roles" R
       ON R."roleId" = UR."roleId" ${whereCondition} GROUP BY U."userId",UTM."tenantId", R."name" ${orderingCondition} ${offset} ${limit}`;
     const userDetails = await this.usersRepository.query(query);
-
     if (userDetails.length > 0) {
       result.totalCount = parseInt(userDetails[0].total_count, 10);
 
