@@ -325,6 +325,46 @@ export class KafkaService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Publish a user-tenant-related event to Kafka
+   * 
+   * @param eventType - The type of user-tenant event (created, updated, deleted)
+   * @param userTenantData - The user-tenant data to include in the event
+   * @param userId - The ID of the user (used as the message key)
+   */
+  async publishUserTenantEvent(eventType: 'created' | 'updated' | 'deleted', userTenantData: any, userId: string): Promise<void> {
+    if (!this.isKafkaEnabled) {
+      this.logger.warn('Kafka is disabled. Skipping user-tenant event publish.');
+      return; // Do nothing if Kafka is disabled
+    }
+
+    const topic = this.configService.get<string>('KAFKA_TOPIC', 'user-topic');
+    let fullEventType = '';
+    switch (eventType) {
+      case 'created':
+        fullEventType = 'USER_TENANT_MAPPING';
+        break;
+      case 'updated':
+        fullEventType = 'USER_TENANT_STATUS_UPDATE';
+        break;
+      case 'deleted':
+        fullEventType = 'USER_TENANT_DELETED';
+        break;
+      default:
+        fullEventType = 'UNKNOWN_EVENT';
+        break;
+    }
+    const payload = {
+      eventType: fullEventType,
+      timestamp: new Date().toISOString(),
+      userId,
+      data: userTenantData
+    };
+
+    await this.publishMessage(topic, payload, userId);
+    this.logger.log(`User-tenant ${eventType} event published for user ${userId}`);
+  }
+
+  /**
    * Publish a cohort-related event to Kafka with TYPE_OF_CENTER transformation
    * 
    * @param eventType - The type of cohort event (created, updated, deleted)

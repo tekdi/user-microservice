@@ -9,6 +9,7 @@ import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
 import { Role } from "src/rbac/role/entities/role.entity";
 import { UserRoleMapping } from "src/rbac/assign-role/entities/assign-role.entity";
 import { PostgresModule } from "src/adapters/postgres/postgres-module";
+import { KafkaModule } from "src/kafka/kafka.module";
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { PostgresModule } from "src/adapters/postgres/postgres-module";
       UserRoleMapping,
     ]),
     PostgresModule, // This provides PostgresUserService and other services you need
+    KafkaModule, // This provides KafkaService for Kafka event publishing
     HttpModule,
   ],
   controllers: [AssignTenantController],
