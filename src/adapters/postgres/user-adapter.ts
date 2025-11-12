@@ -3915,10 +3915,9 @@ export class PostgresUserService implements IServicelocator {
           mobile: row.mobile,
           gender: row.gender,
           dob: row.dob,
-          status: row.status,
+          status: row.platformStatus,
           createdAt: row.createdAt,
           tenantId: row.tenantId,
-          platformStatus: row.platformStatus,
           roles: [],
           customfield: customFieldsData[userId] || [],
           cohortData: batchCenterData[userId] || []
