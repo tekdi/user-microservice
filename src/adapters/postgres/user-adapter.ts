@@ -701,7 +701,7 @@ export class PostgresUserService implements IServicelocator {
     }
 
     //Get user core fields data
-    const query = `SELECT U."userId",U."enrollmentId", U."username",U."email", U."firstName", U."name",UTM."tenantId", U."middleName", U."lastName", U."gender", U."dob", R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", U."status", UTM."status" AS "platformStatus", COUNT(*) OVER() AS total_count 
+    const query = `SELECT U."userId",U."enrollmentId", U."username",U."email", U."firstName", U."name",UTM."tenantId", U."middleName", U."lastName", U."gender", U."dob", R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", U."status", UTM."status" AS "tenantStatus", COUNT(*) OVER() AS total_count 
       FROM  public."Users" U
       LEFT JOIN public."CohortMembers" CM 
       ON CM."userId" = U."userId"
@@ -788,7 +788,7 @@ export class PostgresUserService implements IServicelocator {
       'U.createdAt AS "createdAt"',
       'U.updatedAt AS "updatedAt"',
       'U.status AS "status"',
-      'UTM.status AS "platformStatus"',
+      'UTM.status AS "tenantStatus"',
       'COUNT(*) OVER() AS "total_count"',
     ])
     .groupBy('U.userId')
@@ -3973,7 +3973,7 @@ export class PostgresUserService implements IServicelocator {
       WITH filtered_users AS (
         SELECT DISTINCT u."userId", u."username", u."firstName", u."name", u."middleName", 
           u."lastName", u."email", u."mobile", u."gender", u."dob", 
-          u."status", u."createdAt", utm."tenantId", utm."status" as "platformStatus"
+          u."status", u."createdAt", utm."tenantId", utm."status" as "tenantStatus"
         FROM "Users" u
         LEFT JOIN "UserTenantMapping" utm ON u."userId" = utm."userId"
     `;
@@ -4100,7 +4100,7 @@ export class PostgresUserService implements IServicelocator {
           mobile: row.mobile,
           gender: row.gender,
           dob: row.dob,
-          status: row.platformStatus,
+          status: row.tenantStatus,
           createdAt: row.createdAt,
           tenantId: row.tenantId,
           roles: [],
