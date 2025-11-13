@@ -530,7 +530,7 @@ export class PostgresUserService implements IServicelocator {
   }
 
 
-  async findAllUserDetails(userSearchDto, tenantId?: string, includeCustomFields: boolean = true) {
+  async findAllUserDetails1(userSearchDto, tenantId?: string, includeCustomFields: boolean = true) {
     let { limit, offset, filters, exclude, sort } = userSearchDto;
     let excludeCohortIdes;
     let excludeUserIdes;
@@ -713,6 +713,243 @@ export class PostgresUserService implements IServicelocator {
       ON R."roleId" = UR."roleId" ${whereCondition} GROUP BY U."userId",UTM."tenantId", UTM."status", R."name" ${orderingCondition} ${offset} ${limit}`;
     const userDetails = await this.usersRepository.query(query);
 
+    if (userDetails.length > 0) {
+      result.totalCount = parseInt(userDetails[0].total_count, 10);
+
+      // OPTIMIZED: Conditionally fetch custom fields only when requested
+      if (includeCustomFields) {
+        // OPTIMIZED: Batch fetch custom fields for all users in one query (instead of N+1 queries)
+        const userIds = userDetails.map(user => user.userId);
+        const bulkCustomFields = await this.fieldsService.getBulkCustomFieldDetails(
+          userIds, 'Users'
+        );
+
+        // Map custom fields back to users (in-memory operation - fast!)
+        for (const userData of userDetails) {
+          const customFields = bulkCustomFields[userData.userId] || [];
+
+          userData["customFields"] = Array.isArray(customFields)
+            ? customFields.map((data) => ({
+              fieldId: data?.fieldId,
+              label: data?.label,
+              selectedValues: data?.selectedValues,
+              type: data?.type,
+            }))
+            : [];
+
+          result.getUserDetails.push(userData);
+        }
+      } else {
+        // Skip custom fields fetch - much faster for listing
+        for (const userData of userDetails) {
+          userData["customFields"] = [];
+          result.getUserDetails.push(userData);
+        }
+      }
+    } else {
+      return false;
+    }
+    return result;
+  }
+    async findAllUserDetails(userSearchDto, tenantId?: string,includeCustomFields: boolean = true) {
+    let { limit, offset, filters, exclude, sort } = userSearchDto;
+    let excludeCohortIdes;
+    let excludeUserIdes;
+
+    const result = {
+      totalCount: 0,
+      getUserDetails: [],
+    };
+
+    const searchCustomFields: any = {};
+
+    const userAllKeys = this.usersRepository.metadata.columns.map(
+      (column) => column.propertyName
+    );
+    const userKeys = userAllKeys.filter(
+      (key) => key !== "district" && key !== "state"
+    );
+
+    // Build TypeORM QueryBuilder - automatically handles SQL injection protection
+    const queryBuilder = this.usersRepository
+      .createQueryBuilder("U")
+      .leftJoin("CohortMembers", "CM", "CM.userId = U.userId")
+      .leftJoin("UserRolesMapping", "UR", "UR.userId = U.userId")
+      .leftJoin("UserTenantMapping", "UTM", "UTM.userId = U.userId")
+      .leftJoin("Roles", "R", "R.roleId = UR.roleId")
+      .select([
+        'U.userId',
+        'U.enrollmentId',
+        'U.username',
+        'U.email',
+        'U.firstName',
+        'U.name',
+        'UTM.tenantId',
+        'U.middleName',
+        'U.lastName',
+        'U.gender',
+        'U.dob',
+        'U.mobile',
+        'U.createdBy',
+        'U.updatedBy',
+        'U.createdAt',
+        'U.updatedAt',
+        'U.status'
+      ])
+      .addSelect('R.name', 'role')
+      .addSelect('COUNT(*) OVER()', 'total_count')
+      .groupBy('U.userId')
+      .addGroupBy('UTM.tenantId')
+      .addGroupBy('R.name');
+
+    // Handle filters
+    if (filters && Object.keys(filters).length > 0) {
+      let coreFields = await this.getCoreColumnNames();
+      const allCoreField = [...coreFields, 'fromDate', 'toDate', 'role', 'tenantId', 'name'];
+
+      for (const [key, avalue] of Object.entries(filters)) {
+        if (allCoreField.includes(key)) {
+          const value = Array.isArray(avalue) ? avalue : avalue;
+
+          switch (key) {
+            case "firstName":
+            case "name":
+              const nameValue = Array.isArray(value) ? value[0] : value;
+              queryBuilder.andWhere(`U.${key} ILIKE :${key}`, {
+                [key]: `%${nameValue}%`
+              });
+              break;
+
+            case "status":
+            case "email":
+            case "username":
+            case "userId":
+              if (Array.isArray(value) && value.every((item) => typeof item === "string")) {
+                queryBuilder.andWhere(`U.${key} IN (:...${key})`, {
+                  [key]: value.map((item) => item.trim().toLowerCase())
+                });
+              } else {
+                if (key === "username") {
+                  queryBuilder.andWhere(`U.${key} ILIKE :${key}`, {
+                    [key]: String(value)
+                  });
+                } else {
+                  queryBuilder.andWhere(`U.${key} = :${key}`, {
+                    [key]: String(value)
+                  });
+                }
+              }
+              break;
+
+            case "role":
+              queryBuilder.andWhere(`R.name = :role`, {
+                role: String(value)
+              });
+              break;
+
+            case "fromDate":
+              queryBuilder.andWhere(`DATE(U.createdAt) >= :fromDate`, {
+                fromDate: String(value)
+              });
+              break;
+
+            case "toDate":
+              queryBuilder.andWhere(`DATE(U.createdAt) <= :toDate`, {
+                toDate: String(value)
+              });
+              break;
+
+            case "tenantId":
+              queryBuilder.andWhere(`UTM.tenantId = :tenantId`, {
+                tenantId: String(value)
+              });
+              break;
+
+            default:
+              queryBuilder.andWhere(`U.${key} = :${key}`, {
+                [key]: String(value)
+              });
+              break;
+          }
+        } else {
+          //For custom field store the data in key value pair
+          searchCustomFields[key] = avalue;
+        }
+      }
+    }
+
+    // Handle exclude
+    if (exclude && Object.keys(exclude).length > 0) {
+      Object.entries(exclude).forEach(([key, value]) => {
+        if (key == "cohortIds") {
+          excludeCohortIdes = value;
+        }
+        if (key == "userIds") {
+          excludeUserIdes = value;
+        }
+      });
+    }
+
+    // Handle custom field filtering
+    let getUserIdUsingCustomFields;
+    if (Object.keys(searchCustomFields).length > 0) {
+      const context = "USERS";
+      getUserIdUsingCustomFields =
+        await this.fieldsService.filterUserUsingCustomFieldsOptimized(
+          context,
+          searchCustomFields
+        );
+
+      if (getUserIdUsingCustomFields == null) {
+        return false;
+      }
+    }
+
+    if (getUserIdUsingCustomFields && getUserIdUsingCustomFields.length > 0) {
+      queryBuilder.andWhere(`U.userId IN (:...customFieldUserIds)`, {
+        customFieldUserIds: getUserIdUsingCustomFields
+      });
+    }
+
+    // Handle exclude clauses
+    if (excludeUserIdes?.length > 0) {
+      queryBuilder.andWhere(`U.userId NOT IN (:...excludeUserIds)`, {
+        excludeUserIds: excludeUserIdes
+      });
+    }
+
+    if (excludeCohortIdes?.length > 0) {
+      queryBuilder.andWhere(`CM.cohortId NOT IN (:...excludeCohortIds)`, {
+        excludeCohortIds: excludeCohortIdes
+      });
+    }
+
+    // Apply tenant filtering conditionally if tenantId is provided from headers
+    if (tenantId && tenantId.trim() !== '') {
+      queryBuilder.andWhere(`UTM.tenantId = :headerTenantId`, {
+        headerTenantId: tenantId
+      });
+      LoggerUtil.log(`Applying tenant filter for tenantId: ${tenantId}`, APIID.USER_LIST);
+    } else {
+      LoggerUtil.warn(`No tenantId provided - returning users from all tenants`, APIID.USER_LIST);
+    }
+
+    // Handle sorting
+    if (sort && Object.keys(sort).length > 0) {
+      // Note: Column names should be validated against a whitelist for security
+      queryBuilder.orderBy(`U.${sort[0]}`, sort[1] as 'ASC' | 'DESC');
+    }
+
+    // Handle pagination
+    if (offset) {
+      queryBuilder.offset(parseInt(offset, 10));
+    }
+    if (limit) {
+      queryBuilder.limit(parseInt(limit, 10));
+    }
+
+    // Execute query - TypeORM automatically handles SQL injection protection
+    const userDetails = await queryBuilder.getRawMany();
     if (userDetails.length > 0) {
       result.totalCount = parseInt(userDetails[0].total_count, 10);
 
