@@ -4025,7 +4025,7 @@ export class PostgresUserService implements IServicelocator {
       WITH filtered_users AS (
         SELECT DISTINCT u."userId", u."username", u."firstName", u."name", u."middleName", 
           u."lastName", u."email", u."mobile", u."gender", u."dob", 
-          u."status", u."createdAt", utm."tenantId"
+          u."status", u."createdAt", utm."tenantId", utm."status" as "platformStatus"
         FROM "Users" u
         LEFT JOIN "UserTenantMapping" utm ON u."userId" = utm."userId"
     `;
@@ -4152,7 +4152,7 @@ export class PostgresUserService implements IServicelocator {
           mobile: row.mobile,
           gender: row.gender,
           dob: row.dob,
-          status: row.status,
+          status: row.platformStatus,
           createdAt: row.createdAt,
           tenantId: row.tenantId,
           roles: [],
