@@ -935,10 +935,12 @@ export class PostgresUserService implements IServicelocator {
     }
 
     // Handle sorting
-    if (sort && Object.keys(sort).length > 0) {
-      // Note: Column names should be validated against a whitelist for security
-      queryBuilder.orderBy(`U.${sort[0]}`, sort[1] as 'ASC' | 'DESC');
-    }
+    if (sort && Array.isArray(sort) && sort.length === 2) {
+  const [column, direction] = sort;
+  const order = direction.toUpperCase() === 'DESC' ? 'DESC' : 'ASC'; // normalize
+  queryBuilder.orderBy(`U.${column}`, order as 'ASC' | 'DESC');
+}
+
 
     // Handle pagination
     if (offset) {
