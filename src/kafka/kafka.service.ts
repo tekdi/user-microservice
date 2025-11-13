@@ -331,7 +331,7 @@ export class KafkaService implements OnModuleInit, OnModuleDestroy {
    * @param userTenantData - The user-tenant data to include in the event
    * @param userId - The ID of the user (used as the message key)
    */
-  async publishUserTenantEvent(eventType: 'created' | 'updated' | 'deleted', userTenantData: any, userId: string): Promise<void> {
+  async publishUserTenantEvent(eventType: 'created' | 'updated_status' | 'deleted', userTenantData: any, userId: string): Promise<void> {
     if (!this.isKafkaEnabled) {
       this.logger.warn('Kafka is disabled. Skipping user-tenant event publish.');
       return; // Do nothing if Kafka is disabled
@@ -343,7 +343,7 @@ export class KafkaService implements OnModuleInit, OnModuleDestroy {
       case 'created':
         fullEventType = 'USER_TENANT_MAPPING';
         break;
-      case 'updated':
+      case 'updated_status':
         fullEventType = 'USER_TENANT_STATUS_UPDATE';
         break;
       case 'deleted':

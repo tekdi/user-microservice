@@ -390,7 +390,7 @@ export class PostgresAssignTenantService
       );
 
       // Publish user-tenant status update event to Kafka asynchronously - after response is sent to client
-      this.publishUserTenantMappingEvent('updated', userId, tenantId, apiId)
+      this.publishUserTenantMappingEvent('updated_status', userId, tenantId, apiId)
         .catch(error => LoggerUtil.error(
           `Failed to publish user-tenant updated event to Kafka for user ${userId}`,
           `Error: ${error.message}`,
@@ -426,7 +426,7 @@ export class PostgresAssignTenantService
    * @param apiId API ID for logging
    */
   public async publishUserTenantMappingEvent(
-    eventType: 'created' | 'updated' | 'deleted',
+    eventType: 'created' | 'updated_status' | 'deleted',
     userId: string,
     tenantId: string,
     apiId: string
@@ -441,8 +441,45 @@ export class PostgresAssignTenantService
           tenantId: tenantId,
           deletedAt: new Date().toISOString()
         };
+      } else if (eventType === 'updated_status') {
+        // For USER_TENANT_STATUS_UPDATE, fetch only UserTenantMapping table data
+        try {
+          const mapping = await this.userTenantMappingRepository.findOne({
+            where: { userId, tenantId },
+            select: ["Id", "userId", "tenantId", "status", "createdAt", "updatedAt", "createdBy", "updatedBy"]
+          });
+
+          if (!mapping) {
+            LoggerUtil.error(
+              `Failed to fetch user-tenant mapping data for Kafka event`,
+              `Mapping not found for userId: ${userId}, tenantId: ${tenantId}`,
+              apiId
+            );
+            userTenantData = { userId, tenantId };
+          } else {
+            // Build the user-tenant data object with only UserTenantMapping table fields
+            userTenantData = {
+              Id: mapping.Id,
+              userId: mapping.userId,
+              tenantId: mapping.tenantId,
+              status: mapping.status,
+              createdAt: mapping.createdAt,
+              updatedAt: mapping.updatedAt,
+              createdBy: mapping.createdBy,
+              updatedBy: mapping.updatedBy
+            };
+          }
+        } catch (error) {
+          LoggerUtil.error(
+            `Failed to fetch user-tenant mapping data for Kafka event`,
+            `Error: ${error.message}`,
+            apiId
+          );
+          // Return at least the userId and tenantId if we can't fetch complete data
+          userTenantData = { userId, tenantId };
+        }
       } else {
-        // For create and update, fetch complete data from DB
+        // For create events (USER_TENANT_MAPPING), fetch complete data from DB
         try {
           // Fetch user-tenant mapping data
           const mapping = await this.userTenantMappingRepository.findOne({
