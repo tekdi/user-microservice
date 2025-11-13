@@ -530,227 +530,227 @@ export class PostgresUserService implements IServicelocator {
   }
 
 
-  async findAllUserDetails1(userSearchDto, tenantId?: string, includeCustomFields: boolean = true) {
-    let { limit, offset, filters, exclude, sort } = userSearchDto;
-    let excludeCohortIdes;
-    let excludeUserIdes;
+  // async findAllUserDetails1(userSearchDto, tenantId?: string, includeCustomFields: boolean = true) {
+  //   let { limit, offset, filters, exclude, sort } = userSearchDto;
+  //   let excludeCohortIdes;
+  //   let excludeUserIdes;
 
-    offset = offset ? `OFFSET ${offset}` : "";
-    limit = limit ? `LIMIT ${limit}` : "";
-    const result = {
-      totalCount: 0,
-      getUserDetails: [],
-    };
+  //   offset = offset ? `OFFSET ${offset}` : "";
+  //   limit = limit ? `LIMIT ${limit}` : "";
+  //   const result = {
+  //     totalCount: 0,
+  //     getUserDetails: [],
+  //   };
 
-    let whereCondition = `WHERE`;
-    let index = 0;
-    const searchCustomFields: any = {};
+  //   let whereCondition = `WHERE`;
+  //   let index = 0;
+  //   const searchCustomFields: any = {};
 
-    const userAllKeys = this.usersRepository.metadata.columns.map(
-      (column) => column.propertyName
-    );
-    const userKeys = userAllKeys.filter(
-      (key) => key !== "district" && key !== "state"
-    );
+  //   const userAllKeys = this.usersRepository.metadata.columns.map(
+  //     (column) => column.propertyName
+  //   );
+  //   const userKeys = userAllKeys.filter(
+  //     (key) => key !== "district" && key !== "state"
+  //   );
 
-    if (filters && Object.keys(filters).length > 0) {
-      //Fwtch all core fields
-      let coreFields = await this.getCoreColumnNames();
-      const allCoreField = [...coreFields, 'fromDate', 'toDate', 'role', 'tenantId', 'name'];
+  //   if (filters && Object.keys(filters).length > 0) {
+  //     //Fwtch all core fields
+  //     let coreFields = await this.getCoreColumnNames();
+  //     const allCoreField = [...coreFields, 'fromDate', 'toDate', 'role', 'tenantId', 'name'];
 
-      for (const [key, value] of Object.entries(filters)) {
-        //Check request filter are proesent on core file or cutom fields
-        if (allCoreField.includes(key)) {
-          if (index > 0 && index < Object.keys(filters).length) {
-            whereCondition += ` AND `;
-          }
-          switch (key) {
-            case "firstName":
-            case "name":
-              whereCondition += ` U."${key}" ILIKE '%${value}%'`;
-              index++;
-              break;
+  //     for (const [key, value] of Object.entries(filters)) {
+  //       //Check request filter are proesent on core file or cutom fields
+  //       if (allCoreField.includes(key)) {
+  //         if (index > 0 && index < Object.keys(filters).length) {
+  //           whereCondition += ` AND `;
+  //         }
+  //         switch (key) {
+  //           case "firstName":
+  //           case "name":
+  //             whereCondition += ` U."${key}" ILIKE '%${value}%'`;
+  //             index++;
+  //             break;
 
-            case "status":
-            case "email":
-            case "username":
-            case "userId":
-              if (Array.isArray(value) && value.every((item) => typeof item === "string")) {
-                const status = value.map((item) => `'${item.trim().toLowerCase()}'`).join(",");
-                whereCondition += ` U."${key}" IN(${status})`;
-              } else {
-                if (key === "username") {
-                  whereCondition += ` U."${key}" ILIKE '${value}'`;
-                } else {
-                  whereCondition += ` U."${key}" = '${value}'`;
-                }
-              }
-              index++;
-              break;
+  //           case "status":
+  //           case "email":
+  //           case "username":
+  //           case "userId":
+  //             if (Array.isArray(value) && value.every((item) => typeof item === "string")) {
+  //               const status = value.map((item) => `'${item.trim().toLowerCase()}'`).join(",");
+  //               whereCondition += ` U."${key}" IN(${status})`;
+  //             } else {
+  //               if (key === "username") {
+  //                 whereCondition += ` U."${key}" ILIKE '${value}'`;
+  //               } else {
+  //                 whereCondition += ` U."${key}" = '${value}'`;
+  //               }
+  //             }
+  //             index++;
+  //             break;
 
-            case "role":
-              whereCondition += ` R."name" = '${value}'`;
-              index++;
-              break;
+  //           case "role":
+  //             whereCondition += ` R."name" = '${value}'`;
+  //             index++;
+  //             break;
 
-            case "status":
-              whereCondition += ` U."status" IN('${value}')`;
-              index++;
+  //           case "status":
+  //             whereCondition += ` U."status" IN('${value}')`;
+  //             index++;
 
-            case "fromDate":
-              whereCondition += ` DATE(U."createdAt") >= '${value}'`;
-              index++;
-              break;
+  //           case "fromDate":
+  //             whereCondition += ` DATE(U."createdAt") >= '${value}'`;
+  //             index++;
+  //             break;
 
-            case "toDate":
-              whereCondition += ` DATE(U."createdAt") <= '${value}'`;
-              index++;
-              break;
+  //           case "toDate":
+  //             whereCondition += ` DATE(U."createdAt") <= '${value}'`;
+  //             index++;
+  //             break;
 
-            case "tenantId":
-              whereCondition += `UTM."tenantId" = '${value}'`;
-              index++;
-              break;
+  //           case "tenantId":
+  //             whereCondition += `UTM."tenantId" = '${value}'`;
+  //             index++;
+  //             break;
 
-            default:
-              whereCondition += ` U."${key}" = '${value}'`;
-              index++;
-              break;
-          }
-        } else {
-          //For custom field store the data in key value pear
-          searchCustomFields[key] = value;
-        }
-      }
-    }
+  //           default:
+  //             whereCondition += ` U."${key}" = '${value}'`;
+  //             index++;
+  //             break;
+  //         }
+  //       } else {
+  //         //For custom field store the data in key value pear
+  //         searchCustomFields[key] = value;
+  //       }
+  //     }
+  //   }
 
-    if (exclude && Object.keys(exclude).length > 0) {
-      Object.entries(exclude).forEach(([key, value]) => {
-        if (key == "cohortIds") {
-          excludeCohortIdes = value;
-        }
-        if (key == "userIds") {
-          excludeUserIdes = value;
-        }
-      });
-    }
+  //   if (exclude && Object.keys(exclude).length > 0) {
+  //     Object.entries(exclude).forEach(([key, value]) => {
+  //       if (key == "cohortIds") {
+  //         excludeCohortIdes = value;
+  //       }
+  //       if (key == "userIds") {
+  //         excludeUserIdes = value;
+  //       }
+  //     });
+  //   }
 
-    let orderingCondition = "";
-    if (sort && Object.keys(sort).length > 0) {
-      orderingCondition = `ORDER BY U."${sort[0]}" ${sort[1]}`;
-    }
+  //   let orderingCondition = "";
+  //   if (sort && Object.keys(sort).length > 0) {
+  //     orderingCondition = `ORDER BY U."${sort[0]}" ${sort[1]}`;
+  //   }
 
-    let getUserIdUsingCustomFields;
+  //   let getUserIdUsingCustomFields;
 
-    //If source config in source details from fields table is not exist then return false
-    if (Object.keys(searchCustomFields).length > 0) {
+  //   //If source config in source details from fields table is not exist then return false
+  //   if (Object.keys(searchCustomFields).length > 0) {
 
-      const context = "USERS";
-      getUserIdUsingCustomFields =
-        await this.fieldsService.filterUserUsingCustomFieldsOptimized(
-          context,
-          searchCustomFields
-        );
+  //     const context = "USERS";
+  //     getUserIdUsingCustomFields =
+  //       await this.fieldsService.filterUserUsingCustomFieldsOptimized(
+  //         context,
+  //         searchCustomFields
+  //       );
 
-      if (getUserIdUsingCustomFields == null) {
-        return false;
-      }
-    }
+  //     if (getUserIdUsingCustomFields == null) {
+  //       return false;
+  //     }
+  //   }
 
-    if (getUserIdUsingCustomFields && getUserIdUsingCustomFields.length > 0) {
-      const userIdsDependsOnCustomFields = getUserIdUsingCustomFields
-        .map((userId) => `'${userId}'`)
-        .join(",");
-      whereCondition += `${index > 0 ? " AND " : ""} U."userId" IN (${userIdsDependsOnCustomFields})`;
-      index++;
-    }
+  //   if (getUserIdUsingCustomFields && getUserIdUsingCustomFields.length > 0) {
+  //     const userIdsDependsOnCustomFields = getUserIdUsingCustomFields
+  //       .map((userId) => `'${userId}'`)
+  //       .join(",");
+  //     whereCondition += `${index > 0 ? " AND " : ""} U."userId" IN (${userIdsDependsOnCustomFields})`;
+  //     index++;
+  //   }
 
-    const userIds =
-      excludeUserIdes?.length > 0
-        ? excludeUserIdes.map((userId) => `'${userId}'`).join(",")
-        : null;
+  //   const userIds =
+  //     excludeUserIdes?.length > 0
+  //       ? excludeUserIdes.map((userId) => `'${userId}'`).join(",")
+  //       : null;
 
-    const cohortIds =
-      excludeCohortIdes?.length > 0
-        ? excludeCohortIdes.map((cohortId) => `'${cohortId}'`).join(",")
-        : null;
+  //   const cohortIds =
+  //     excludeCohortIdes?.length > 0
+  //       ? excludeCohortIdes.map((cohortId) => `'${cohortId}'`).join(",")
+  //       : null;
 
-    if (userIds || cohortIds) {
-      const userCondition = userIds ? ` U."userId" NOT IN (${userIds})` : "";
-      const cohortCondition = cohortIds
-        ? `CM."cohortId" NOT IN (${cohortIds})`
-        : "";
-      const combinedCondition = [userCondition, cohortCondition]
-        .filter(String)
-        .join(" AND ");
-      whereCondition += (index > 0 ? " AND " : "") + combinedCondition;
-    } else if (index === 0) {
-      whereCondition = "";
-    }
+  //   if (userIds || cohortIds) {
+  //     const userCondition = userIds ? ` U."userId" NOT IN (${userIds})` : "";
+  //     const cohortCondition = cohortIds
+  //       ? `CM."cohortId" NOT IN (${cohortIds})`
+  //       : "";
+  //     const combinedCondition = [userCondition, cohortCondition]
+  //       .filter(String)
+  //       .join(" AND ");
+  //     whereCondition += (index > 0 ? " AND " : "") + combinedCondition;
+  //   } else if (index === 0) {
+  //     whereCondition = "";
+  //   }
 
-    // Apply tenant filtering conditionally if tenantId is provided from headers
-    if (tenantId && tenantId.trim() !== '') {
-      if (index === 0 && whereCondition === "") {
-        whereCondition = `WHERE UTM."tenantId" = '${tenantId}'`;
-      } else {
-        whereCondition += ` AND UTM."tenantId" = '${tenantId}'`;
-      }
-      LoggerUtil.log(`Applying tenant filter for tenantId: ${tenantId}`, APIID.USER_LIST);
-    } else {
-      LoggerUtil.warn(`No tenantId provided - returning users from all tenants`, APIID.USER_LIST);
-    }
+  //   // Apply tenant filtering conditionally if tenantId is provided from headers
+  //   if (tenantId && tenantId.trim() !== '') {
+  //     if (index === 0 && whereCondition === "") {
+  //       whereCondition = `WHERE UTM."tenantId" = '${tenantId}'`;
+  //     } else {
+  //       whereCondition += ` AND UTM."tenantId" = '${tenantId}'`;
+  //     }
+  //     LoggerUtil.log(`Applying tenant filter for tenantId: ${tenantId}`, APIID.USER_LIST);
+  //   } else {
+  //     LoggerUtil.warn(`No tenantId provided - returning users from all tenants`, APIID.USER_LIST);
+  //   }
 
-    //Get user core fields data
-    const query = `SELECT U."userId",U."enrollmentId", U."username",U."email", U."firstName", U."name",UTM."tenantId", U."middleName", U."lastName", U."gender", U."dob", R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", U."status", UTM."status" AS "platformStatus", COUNT(*) OVER() AS total_count 
-      FROM  public."Users" U
-      LEFT JOIN public."CohortMembers" CM 
-      ON CM."userId" = U."userId"
-      LEFT JOIN public."UserRolesMapping" UR
-      ON UR."userId" = U."userId"
-      LEFT JOIN public."UserTenantMapping" UTM
-      ON UTM."userId" = U."userId"
-      LEFT JOIN public."Roles" R
-      ON R."roleId" = UR."roleId" ${whereCondition} GROUP BY U."userId",UTM."tenantId", UTM."status", R."name" ${orderingCondition} ${offset} ${limit}`;
-    const userDetails = await this.usersRepository.query(query);
+  //   //Get user core fields data
+  //   const query = `SELECT U."userId",U."enrollmentId", U."username",U."email", U."firstName", U."name",UTM."tenantId", U."middleName", U."lastName", U."gender", U."dob", R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", U."status", UTM."status" AS "tenantStatus", COUNT(*) OVER() AS total_count 
+  //     FROM  public."Users" U
+  //     LEFT JOIN public."CohortMembers" CM 
+  //     ON CM."userId" = U."userId"
+  //     LEFT JOIN public."UserRolesMapping" UR
+  //     ON UR."userId" = U."userId"
+  //     LEFT JOIN public."UserTenantMapping" UTM
+  //     ON UTM."userId" = U."userId"
+  //     LEFT JOIN public."Roles" R
+  //     ON R."roleId" = UR."roleId" ${whereCondition} GROUP BY U."userId",UTM."tenantId", UTM."status", R."name" ${orderingCondition} ${offset} ${limit}`;
+  //   const userDetails = await this.usersRepository.query(query);
 
-    if (userDetails.length > 0) {
-      result.totalCount = parseInt(userDetails[0].total_count, 10);
+  //   if (userDetails.length > 0) {
+  //     result.totalCount = parseInt(userDetails[0].total_count, 10);
 
-      // OPTIMIZED: Conditionally fetch custom fields only when requested
-      if (includeCustomFields) {
-        // OPTIMIZED: Batch fetch custom fields for all users in one query (instead of N+1 queries)
-        const userIds = userDetails.map(user => user.userId);
-        const bulkCustomFields = await this.fieldsService.getBulkCustomFieldDetails(
-          userIds, 'Users'
-        );
+  //     // OPTIMIZED: Conditionally fetch custom fields only when requested
+  //     if (includeCustomFields) {
+  //       // OPTIMIZED: Batch fetch custom fields for all users in one query (instead of N+1 queries)
+  //       const userIds = userDetails.map(user => user.userId);
+  //       const bulkCustomFields = await this.fieldsService.getBulkCustomFieldDetails(
+  //         userIds, 'Users'
+  //       );
 
-        // Map custom fields back to users (in-memory operation - fast!)
-        for (const userData of userDetails) {
-          const customFields = bulkCustomFields[userData.userId] || [];
+  //       // Map custom fields back to users (in-memory operation - fast!)
+  //       for (const userData of userDetails) {
+  //         const customFields = bulkCustomFields[userData.userId] || [];
 
-          userData["customFields"] = Array.isArray(customFields)
-            ? customFields.map((data) => ({
-              fieldId: data?.fieldId,
-              label: data?.label,
-              selectedValues: data?.selectedValues,
-              type: data?.type,
-            }))
-            : [];
+  //         userData["customFields"] = Array.isArray(customFields)
+  //           ? customFields.map((data) => ({
+  //             fieldId: data?.fieldId,
+  //             label: data?.label,
+  //             selectedValues: data?.selectedValues,
+  //             type: data?.type,
+  //           }))
+  //           : [];
 
-          result.getUserDetails.push(userData);
-        }
-      } else {
-        // Skip custom fields fetch - much faster for listing
-        for (const userData of userDetails) {
-          userData["customFields"] = [];
-          result.getUserDetails.push(userData);
-        }
-      }
-    } else {
-      return false;
-    }
-    return result;
-  }
+  //         result.getUserDetails.push(userData);
+  //       }
+  //     } else {
+  //       // Skip custom fields fetch - much faster for listing
+  //       for (const userData of userDetails) {
+  //         userData["customFields"] = [];
+  //         result.getUserDetails.push(userData);
+  //       }
+  //     }
+  //   } else {
+  //     return false;
+  //   }
+  //   return result;
+  // }
   async findAllUserDetails(userSearchDto, tenantId?: string, includeCustomFields: boolean = true) {
   let { limit, offset, filters, exclude, sort } = userSearchDto;
   let excludeCohortIdes;
@@ -788,7 +788,7 @@ export class PostgresUserService implements IServicelocator {
       'U.createdAt AS "createdAt"',
       'U.updatedAt AS "updatedAt"',
       'U.status AS "status"',
-      'UTM.status AS "platformStatus"',
+      'UTM.status AS "tenantStatus"',
       'COUNT(*) OVER() AS "total_count"',
     ])
     .groupBy('U.userId')
@@ -3973,7 +3973,7 @@ export class PostgresUserService implements IServicelocator {
       WITH filtered_users AS (
         SELECT DISTINCT u."userId", u."username", u."firstName", u."name", u."middleName", 
           u."lastName", u."email", u."mobile", u."gender", u."dob", 
-          u."status", u."createdAt", utm."tenantId", utm."status" as "platformStatus"
+          u."status", u."createdAt", utm."tenantId", utm."status" as "tenantStatus"
         FROM "Users" u
         LEFT JOIN "UserTenantMapping" utm ON u."userId" = utm."userId"
     `;
@@ -4100,7 +4100,7 @@ export class PostgresUserService implements IServicelocator {
           mobile: row.mobile,
           gender: row.gender,
           dob: row.dob,
-          status: row.platformStatus,
+          status: row.tenantStatus,
           createdAt: row.createdAt,
           tenantId: row.tenantId,
           roles: [],
