@@ -530,7 +530,7 @@ export class PostgresUserService implements IServicelocator {
   }
 
 
-  async findAllUserDetails(userSearchDto, tenantId?: string, includeCustomFields: boolean = true) {
+  async findAllUserDetails1(userSearchDto, tenantId?: string, includeCustomFields: boolean = true) {
     let { limit, offset, filters, exclude, sort } = userSearchDto;
     let excludeCohortIdes;
     let excludeUserIdes;
@@ -751,245 +751,191 @@ export class PostgresUserService implements IServicelocator {
     }
     return result;
   }
-    async findAllUserDetails1(userSearchDto, tenantId?: string,includeCustomFields: boolean = true) {
-    let { limit, offset, filters, exclude, sort } = userSearchDto;
-    let excludeCohortIdes;
-    let excludeUserIdes;
+  async findAllUserDetails(userSearchDto, tenantId?: string, includeCustomFields: boolean = true) {
+  let { limit, offset, filters, exclude, sort } = userSearchDto;
+  let excludeCohortIdes;
+  let excludeUserIdes;
 
-    const result = {
-      totalCount: 0,
-      getUserDetails: [],
-    };
+  const result = {
+    totalCount: 0,
+    getUserDetails: [],
+  };
 
-    const searchCustomFields: any = {};
+  const searchCustomFields: any = {};
 
-    const userAllKeys = this.usersRepository.metadata.columns.map(
-      (column) => column.propertyName
-    );
-    const userKeys = userAllKeys.filter(
-      (key) => key !== "district" && key !== "state"
-    );
+  const queryBuilder = this.usersRepository
+    .createQueryBuilder("U")
+    .leftJoin("CohortMembers", "CM", "CM.userId = U.userId")
+    .leftJoin("UserRolesMapping", "UR", "UR.userId = U.userId")
+    .leftJoin("UserTenantMapping", "UTM", "UTM.userId = U.userId")
+    .leftJoin("Roles", "R", "R.roleId = UR.roleId")
+    .select([
+      'U.userId AS "userId"',
+      'U.enrollmentId AS "enrollmentId"',
+      'U.username AS "username"',
+      'U.email AS "email"',
+      'U.firstName AS "firstName"',
+      'U.name AS "name"',
+      'UTM.tenantId AS "tenantId"',
+      'U.middleName AS "middleName"',
+      'U.lastName AS "lastName"',
+      'U.gender AS "gender"',
+      'U.dob AS "dob"',
+      'R.name AS "role"',
+      'U.mobile AS "mobile"',
+      'U.createdBy AS "createdBy"',
+      'U.updatedBy AS "updatedBy"',
+      'U.createdAt AS "createdAt"',
+      'U.updatedAt AS "updatedAt"',
+      'U.status AS "status"',
+      'UTM.status AS "platformStatus"',
+      'COUNT(*) OVER() AS "total_count"',
+    ])
+    .groupBy('U.userId')
+    .addGroupBy('UTM.tenantId')
+    .addGroupBy('UTM.status')
+    .addGroupBy('R.name');
 
-    // Build TypeORM QueryBuilder - automatically handles SQL injection protection
-    const queryBuilder = this.usersRepository
-      .createQueryBuilder("U")
-      .leftJoin("CohortMembers", "CM", "CM.userId = U.userId")
-      .leftJoin("UserRolesMapping", "UR", "UR.userId = U.userId")
-      .leftJoin("UserTenantMapping", "UTM", "UTM.userId = U.userId")
-      .leftJoin("Roles", "R", "R.roleId = UR.roleId")
-      .select([
-        'U.userId',
-        'U.enrollmentId',
-        'U.username',
-        'U.email',
-        'U.firstName',
-        'U.name',
-        'UTM.tenantId',
-        'U.middleName',
-        'U.lastName',
-        'U.gender',
-        'U.dob',
-        'U.mobile',
-        'U.createdBy',
-        'U.updatedBy',
-        'U.createdAt',
-        'U.updatedAt',
-        'U.status'
-      ])
-      .addSelect('R.name', 'role')
-      .addSelect('COUNT(*) OVER()', 'total_count')
-      .groupBy('U.userId')
-      .addGroupBy('UTM.tenantId')
-      .addGroupBy('R.name');
+  // --- Filters ---
+  if (filters && Object.keys(filters).length > 0) {
+    const coreFields = await this.getCoreColumnNames();
+    const allCoreField = [...coreFields, 'fromDate', 'toDate', 'role', 'tenantId', 'name'];
 
-    // Handle filters
-    if (filters && Object.keys(filters).length > 0) {
-      let coreFields = await this.getCoreColumnNames();
-      const allCoreField = [...coreFields, 'fromDate', 'toDate', 'role', 'tenantId', 'name'];
+    for (const [key, avalue] of Object.entries(filters)) {
+      if (allCoreField.includes(key)) {
+        const value = Array.isArray(avalue) ? avalue : avalue;
 
-      for (const [key, avalue] of Object.entries(filters)) {
-        if (allCoreField.includes(key)) {
-          const value = Array.isArray(avalue) ? avalue : avalue;
+        switch (key) {
+          case "firstName":
+          case "name":
+            const nameValue = Array.isArray(value) ? value[0] : value;
+            queryBuilder.andWhere(`U.${key} ILIKE :${key}`, {
+              [key]: `%${nameValue}%`,
+            });
+            break;
 
-          switch (key) {
-            case "firstName":
-            case "name":
-              const nameValue = Array.isArray(value) ? value[0] : value;
-              queryBuilder.andWhere(`U.${key} ILIKE :${key}`, {
-                [key]: `%${nameValue}%`
+          case "status":
+          case "email":
+          case "username":
+          case "userId":
+            if (Array.isArray(value) && value.every((item) => typeof item === "string")) {
+              queryBuilder.andWhere(`U.${key} IN (:...${key})`, {
+                [key]: value.map((item) => item.trim().toLowerCase()),
               });
-              break;
-
-            case "status":
-            case "email":
-            case "username":
-            case "userId":
-              if (Array.isArray(value) && value.every((item) => typeof item === "string")) {
-                queryBuilder.andWhere(`U.${key} IN (:...${key})`, {
-                  [key]: value.map((item) => item.trim().toLowerCase())
-                });
+            } else {
+              if (key === "username") {
+                queryBuilder.andWhere(`U.${key} ILIKE :${key}`, { [key]: String(value) });
               } else {
-                if (key === "username") {
-                  queryBuilder.andWhere(`U.${key} ILIKE :${key}`, {
-                    [key]: String(value)
-                  });
-                } else {
-                  queryBuilder.andWhere(`U.${key} = :${key}`, {
-                    [key]: String(value)
-                  });
-                }
+                queryBuilder.andWhere(`U.${key} = :${key}`, { [key]: String(value) });
               }
-              break;
+            }
+            break;
 
-            case "role":
-              queryBuilder.andWhere(`R.name = :role`, {
-                role: String(value)
-              });
-              break;
+          case "role":
+            queryBuilder.andWhere(`R.name = :role`, { role: String(value) });
+            break;
 
-            case "fromDate":
-              queryBuilder.andWhere(`DATE(U.createdAt) >= :fromDate`, {
-                fromDate: String(value)
-              });
-              break;
+          case "fromDate":
+            queryBuilder.andWhere(`DATE(U.createdAt) >= :fromDate`, { fromDate: String(value) });
+            break;
 
-            case "toDate":
-              queryBuilder.andWhere(`DATE(U.createdAt) <= :toDate`, {
-                toDate: String(value)
-              });
-              break;
+          case "toDate":
+            queryBuilder.andWhere(`DATE(U.createdAt) <= :toDate`, { toDate: String(value) });
+            break;
 
-            case "tenantId":
-              queryBuilder.andWhere(`UTM.tenantId = :tenantId`, {
-                tenantId: String(value)
-              });
-              break;
+          case "tenantId":
+            queryBuilder.andWhere(`UTM.tenantId = :tenantId`, { tenantId: String(value) });
+            break;
 
-            default:
-              queryBuilder.andWhere(`U.${key} = :${key}`, {
-                [key]: String(value)
-              });
-              break;
-          }
-        } else {
-          //For custom field store the data in key value pair
-          searchCustomFields[key] = avalue;
-        }
-      }
-    }
-
-    // Handle exclude
-    if (exclude && Object.keys(exclude).length > 0) {
-      Object.entries(exclude).forEach(([key, value]) => {
-        if (key == "cohortIds") {
-          excludeCohortIdes = value;
-        }
-        if (key == "userIds") {
-          excludeUserIdes = value;
-        }
-      });
-    }
-
-    // Handle custom field filtering
-    let getUserIdUsingCustomFields;
-    if (Object.keys(searchCustomFields).length > 0) {
-      const context = "USERS";
-      getUserIdUsingCustomFields =
-        await this.fieldsService.filterUserUsingCustomFieldsOptimized(
-          context,
-          searchCustomFields
-        );
-
-      if (getUserIdUsingCustomFields == null) {
-        return false;
-      }
-    }
-
-    if (getUserIdUsingCustomFields && getUserIdUsingCustomFields.length > 0) {
-      queryBuilder.andWhere(`U.userId IN (:...customFieldUserIds)`, {
-        customFieldUserIds: getUserIdUsingCustomFields
-      });
-    }
-
-    // Handle exclude clauses
-    if (excludeUserIdes?.length > 0) {
-      queryBuilder.andWhere(`U.userId NOT IN (:...excludeUserIds)`, {
-        excludeUserIds: excludeUserIdes
-      });
-    }
-
-    if (excludeCohortIdes?.length > 0) {
-      queryBuilder.andWhere(`CM.cohortId NOT IN (:...excludeCohortIds)`, {
-        excludeCohortIds: excludeCohortIdes
-      });
-    }
-
-    // Apply tenant filtering conditionally if tenantId is provided from headers
-    if (tenantId && tenantId.trim() !== '') {
-      queryBuilder.andWhere(`UTM.tenantId = :headerTenantId`, {
-        headerTenantId: tenantId
-      });
-      LoggerUtil.log(`Applying tenant filter for tenantId: ${tenantId}`, APIID.USER_LIST);
-    } else {
-      LoggerUtil.warn(`No tenantId provided - returning users from all tenants`, APIID.USER_LIST);
-    }
-
-    // Handle sorting
-    if (sort && Array.isArray(sort) && sort.length === 2) {
-    const [column, direction] = sort;
-    const order = direction.toUpperCase() === 'DESC' ? 'DESC' : 'ASC'; // normalize
-    queryBuilder.orderBy(`U.${column}`, order as 'ASC' | 'DESC');
-}
-
-
-    // Handle pagination
-    if (offset) {
-      queryBuilder.offset(parseInt(offset, 10));
-    }
-    if (limit) {
-      queryBuilder.limit(parseInt(limit, 10));
-    }
-
-    // Execute query - TypeORM automatically handles SQL injection protection
-    const userDetails = await queryBuilder.getRawMany();
-    if (userDetails.length > 0) {
-      result.totalCount = parseInt(userDetails[0].total_count, 10);
-
-      // OPTIMIZED: Conditionally fetch custom fields only when requested
-      if (includeCustomFields) {
-        // OPTIMIZED: Batch fetch custom fields for all users in one query (instead of N+1 queries)
-        const userIds = userDetails.map(user => user.userId);
-        const bulkCustomFields = await this.fieldsService.getBulkCustomFieldDetails(
-          userIds, 'Users'
-        );
-
-        // Map custom fields back to users (in-memory operation - fast!)
-        for (const userData of userDetails) {
-          const customFields = bulkCustomFields[userData.userId] || [];
-
-          userData["customFields"] = Array.isArray(customFields)
-            ? customFields.map((data) => ({
-              fieldId: data?.fieldId,
-              label: data?.label,
-              selectedValues: data?.selectedValues,
-              type: data?.type,
-            }))
-            : [];
-
-          result.getUserDetails.push(userData);
+          default:
+            queryBuilder.andWhere(`U.${key} = :${key}`, { [key]: String(value) });
+            break;
         }
       } else {
-        // Skip custom fields fetch - much faster for listing
-        for (const userData of userDetails) {
-          userData["customFields"] = [];
-          result.getUserDetails.push(userData);
-        }
+        searchCustomFields[key] = avalue;
       }
-    } else {
-      return false;
     }
-    return result;
   }
+
+  // --- Exclusions ---
+  if (exclude && Object.keys(exclude).length > 0) {
+    Object.entries(exclude).forEach(([key, value]) => {
+      if (key == "cohortIds") excludeCohortIdes = value;
+      if (key == "userIds") excludeUserIdes = value;
+    });
+  }
+
+  // --- Custom Field Filtering ---
+  if (Object.keys(searchCustomFields).length > 0) {
+    const context = "USERS";
+    const customUserIds = await this.fieldsService.filterUserUsingCustomFieldsOptimized(context, searchCustomFields);
+    if (!customUserIds) return false;
+
+    queryBuilder.andWhere(`U.userId IN (:...customFieldUserIds)`, {
+      customFieldUserIds: customUserIds,
+    });
+  }
+
+  if (excludeUserIdes?.length > 0) {
+    queryBuilder.andWhere(`U.userId NOT IN (:...excludeUserIds)`, {
+      excludeUserIds: excludeUserIdes,
+    });
+  }
+
+  if (excludeCohortIdes?.length > 0) {
+    queryBuilder.andWhere(`CM.cohortId NOT IN (:...excludeCohortIds)`, {
+      excludeCohortIds: excludeCohortIdes,
+    });
+  }
+
+  // --- Tenant filter ---
+  if (tenantId && tenantId.trim() !== "") {
+    queryBuilder.andWhere(`UTM.tenantId = :headerTenantId`, { headerTenantId: tenantId });
+  }
+
+  // --- Sorting ---
+  if (sort && Array.isArray(sort) && sort.length === 2) {
+    const [column, direction] = sort;
+    const order = direction.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
+    queryBuilder.orderBy(`U.${column}`, order as 'ASC' | 'DESC');
+  }
+
+  // --- Pagination ---
+  if (offset) queryBuilder.offset(parseInt(offset, 10));
+  if (limit) queryBuilder.limit(parseInt(limit, 10));
+
+  // --- Execute ---
+  const userDetails = await queryBuilder.getRawMany();
+
+  if (userDetails.length === 0) return false;
+
+  result.totalCount = parseInt(userDetails[0].total_count, 10);
+
+  // --- Fetch & attach custom fields ---
+  if (includeCustomFields) {
+    const userIds = userDetails.map((u) => u.userId);
+    const bulkCustomFields = await this.fieldsService.getBulkCustomFieldDetails(userIds, 'Users');
+
+    for (const userData of userDetails) {
+      const customFields = bulkCustomFields[userData.userId] || [];
+      userData["customFields"] = customFields.map((data) => ({
+        fieldId: data?.fieldId,
+        label: data?.label,
+        selectedValues: data?.selectedValues,
+        type: data?.type,
+      }));
+      result.getUserDetails.push(userData);
+    }
+  } else {
+    for (const userData of userDetails) {
+      userData["customFields"] = [];
+      result.getUserDetails.push(userData);
+    }
+  }
+
+  return result;
+}
+
 
   async getUsersDetailsById(userData: UserData, response: any) {
     const apiId = APIID.USER_GET;
