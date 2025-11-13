@@ -530,7 +530,7 @@ export class PostgresUserService implements IServicelocator {
   }
 
 
-  async findAllUserDetails1(userSearchDto, tenantId?: string, includeCustomFields: boolean = true) {
+  async findAllUserDetails(userSearchDto, tenantId?: string, includeCustomFields: boolean = true) {
     let { limit, offset, filters, exclude, sort } = userSearchDto;
     let excludeCohortIdes;
     let excludeUserIdes;
@@ -751,7 +751,7 @@ export class PostgresUserService implements IServicelocator {
     }
     return result;
   }
-    async findAllUserDetails(userSearchDto, tenantId?: string,includeCustomFields: boolean = true) {
+    async findAllUserDetails1(userSearchDto, tenantId?: string,includeCustomFields: boolean = true) {
     let { limit, offset, filters, exclude, sort } = userSearchDto;
     let excludeCohortIdes;
     let excludeUserIdes;
@@ -936,9 +936,9 @@ export class PostgresUserService implements IServicelocator {
 
     // Handle sorting
     if (sort && Array.isArray(sort) && sort.length === 2) {
-  const [column, direction] = sort;
-  const order = direction.toUpperCase() === 'DESC' ? 'DESC' : 'ASC'; // normalize
-  queryBuilder.orderBy(`U.${column}`, order as 'ASC' | 'DESC');
+    const [column, direction] = sort;
+    const order = direction.toUpperCase() === 'DESC' ? 'DESC' : 'ASC'; // normalize
+    queryBuilder.orderBy(`U.${column}`, order as 'ASC' | 'DESC');
 }
 
 
