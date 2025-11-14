@@ -323,7 +323,7 @@ export class SsoService {
         };
         await this.postgresUserService.assignUserToTenantAndRoll(tenantsData,tenantsData.userId, true)
       }
-
+      this.postgresUserService.publishUserEvent('created', createdUser.userId, 'api.sso.service')
       this.logger.log(`New user created successfully: ${newtonResponse.name} with ID: ${createdUser.userId}`, 'SSO_SERVICE');
 
     } catch (error) {
