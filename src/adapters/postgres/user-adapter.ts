@@ -799,7 +799,7 @@ export class PostgresUserService implements IServicelocator {
   // --- Filters ---
   if (filters && Object.keys(filters).length > 0) {
     const coreFields = await this.getCoreColumnNames();
-    const allCoreField = [...coreFields, 'fromDate', 'toDate', 'role', 'tenantId', 'name'];
+    const allCoreField = [...coreFields, 'fromDate', 'toDate', 'role', 'tenantId', 'name', 'tenantStatus'];
 
     for (const [key, avalue] of Object.entries(filters)) {
       if (allCoreField.includes(key)) {
@@ -828,6 +828,16 @@ export class PostgresUserService implements IServicelocator {
               } else {
                 queryBuilder.andWhere(`U.${key} = :${key}`, { [key]: String(value) });
               }
+            }
+            break;
+
+          case "tenantStatus":
+            if (Array.isArray(value) && value.every((item) => typeof item === "string")) {
+              queryBuilder.andWhere(`UTM.status IN (:...tenantStatus)`, {
+                tenantStatus: value.map((item) => item.trim().toLowerCase()),
+              });
+            } else {
+              queryBuilder.andWhere(`UTM.status = :tenantStatus`, { tenantStatus: String(value).toLowerCase() });
             }
             break;
 

@@ -90,6 +90,15 @@ export class setFilters {
   @IsEnum(['active', 'inactive'], { each: true })
   status: string[];
 
+  @ApiPropertyOptional({
+    type: [String],
+    description: "tenantStatus - Status from UserTenantMapping table (active, inactive, archived)",
+  })
+  @IsOptional()
+  @IsArray()
+  @IsEnum(['active', 'inactive', 'archived'], { each: true })
+  tenantStatus: string[];
+
   @ApiPropertyOptional({ type: String, description: 'Start date in YYYY-MM-DD format' })
   @IsOptional()
   @IsDateString({}, { message: 'fromDate must be a valid date string (YYYY-MM-DD)' })
