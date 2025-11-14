@@ -90,6 +90,15 @@ export class setFilters {
   @IsEnum(['active', 'inactive'], { each: true })
   status: string[];
 
+  @ApiPropertyOptional({
+    type: [String],
+    description: "tenantStatus - Status from UserTenantMapping table (active, inactive, archived)",
+  })
+  @IsOptional()
+  @IsArray()
+  @IsEnum(['active', 'inactive', 'archived'], { each: true })
+  tenantStatus: string[];
+
   @ApiPropertyOptional({ type: String, description: 'Start date in YYYY-MM-DD format' })
   @IsOptional()
   @IsDateString({}, { message: 'fromDate must be a valid date string (YYYY-MM-DD)' })
@@ -297,6 +306,16 @@ export class UserSearchDto {
   get sortDirection(): string | undefined {
     return this.sort ? this.sort[1] : undefined;
   }
+
+  @ApiPropertyOptional({
+    type: String,
+    description: "Include custom fields in response (default: true). Set to false for faster response.",
+    default: "true",
+  })
+  @Expose()
+  @IsOptional()
+  @IsString()
+  includeCustomFields?: string = "true";
 
   constructor(partial: Partial<UserSearchDto>) {
     Object.assign(this, partial);

@@ -1,5 +1,5 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { Tenant } from './entities/tenent.entity';
+import { Tenant, TenantStatus } from './entities/tenent.entity';
 import { ILike, In, Repository } from 'typeorm';
 import APIResponse from "src/common/responses/response";
 import { InjectRepository } from '@nestjs/typeorm';
@@ -19,10 +19,13 @@ export class TenantService {
     ) { }
 
     public async getTenants(request: Request, response: Response): Promise<Response> {
-        let apiId = APIID.TENANT_LIST;
+        const apiId = APIID.TENANT_LIST;
+    
         try {
-            let result = await this.tenantRepository.find({ where: { status: "published" } });
-
+            const result = await this.tenantRepository.find({
+                where: { status: TenantStatus.ACTIVE },
+            });
+    
             if (result.length === 0) {
                 return APIResponse.error(
                     response,
@@ -32,48 +35,93 @@ export class TenantService {
                     HttpStatus.NOT_FOUND
                 );
             }
-
-            for (let tenantData of result) {
-
-                let query = `SELECT * FROM public."Roles" WHERE "tenantId" = '${tenantData.tenantId}'`;
-                let getRole = await this.tenantRepository.query(query);
-
-                if (getRole.length == 0) {
-                    let query = `SELECT * FROM public."Roles"`;
-                    getRole = await this.tenantRepository.query(query);
+    
+            // Separate parents and children
+            const parents: any[] = [];
+            const childrenMap = new Map<string, any[]>();
+            const tenantMap = new Map<string, any>();
+    
+            // Process all tenants to add role details and build maps
+            for (const tenantData of result) {
+                // Convert tenant entity to plain object
+                const tenantObj = { ...tenantData };
+    
+                // Fetch roles only for child tenants (skip for parent tenants)
+                if (tenantData.parentId) {
+                    let query = `SELECT * FROM public."Roles" WHERE "tenantId" = '${tenantData.tenantId}'`;
+                    let getRole = await this.tenantRepository.query(query);
+    
+                    if (getRole.length === 0) {
+                        // fallback if tenant-specific roles not found
+                        getRole = await this.tenantRepository.query(`SELECT * FROM public."Roles"`);
+                    }
+    
+                    if (getRole.length > 0) {
+                        tenantObj['role'] = getRole.map((roleData: any) => ({
+                            roleId: roleData.roleId,
+                            name: roleData.name,
+                            code: roleData.code,
+                        }));
+                    } else {
+                        tenantObj['role'] = null;
+                    }
+                } else {
+                    // Parent tenant → skip role assignment
+                    tenantObj['role'] = null;
                 }
-
-                // Add role details to the tenantData object
-                let roleDetails = [];
-                if (getRole.length == 0) {
-                    tenantData['role'] = null;
+    
+                tenantMap.set(tenantData.tenantId, tenantObj);
+    
+                // Group by parentId
+                if (!tenantData.parentId) {
+                    // This is a parent tenant
+                    tenantObj['children'] = [];
+                    parents.push(tenantObj);
+                } else {
+                    // This is a child tenant
+                    if (!childrenMap.has(tenantData.parentId)) {
+                        childrenMap.set(tenantData.parentId, []);
+                    }
+                    childrenMap.get(tenantData.parentId)!.push(tenantObj);
                 }
-
-                for (let roleData of getRole) {
-                    roleDetails.push({
-                        roleId: roleData.roleId,
-                        name: roleData.name,
-                        code: roleData.code
-                    });
-                    tenantData['role'] = roleDetails;
-                }
-
             }
-
+    
+            // Attach children to their respective parents
+            for (const parent of parents) {
+                const children = childrenMap.get(parent.tenantId) || [];
+                parent['children'] = children;
+            }
+    
+            // Handle orphan children (whose parentId doesn’t exist)
+            const orphanChildren: any[] = [];
+            for (const [parentId, children] of childrenMap.entries()) {
+                if (!tenantMap.has(parentId)) {
+                    orphanChildren.push(...children);
+                }
+            }
+    
+            // Combine parents with children and orphan children
+            const groupedResult = [...parents];
+            if (orphanChildren.length > 0) {
+                groupedResult.push(...orphanChildren);
+            }
+    
             return APIResponse.success(
                 response,
                 apiId,
-                result,
+                groupedResult,
                 HttpStatus.OK,
                 API_RESPONSES.TENANT_GET
             );
+    
         } catch (error) {
             const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
             LoggerUtil.error(
                 `${API_RESPONSES.SERVER_ERROR}`,
                 `Error: ${errorMessage}`,
                 apiId
-            )
+            );
+    
             return APIResponse.error(
                 response,
                 apiId,
@@ -83,6 +131,7 @@ export class TenantService {
             );
         }
     }
+    
 
     public async searchTenants(request: Request, tenantSearchDTO: TenantSearchDTO, response: Response): Promise<Response> {
         let apiId = APIID.TENANT_SEARCH;
@@ -100,6 +149,15 @@ export class TenantService {
                         case 'status':
                             if (Array.isArray(value)) {
                                 whereClause[key] = In(value);
+                            } else {
+                                whereClause[key] = value;
+                            }
+                            break;
+
+                        case 'parentId':
+                            // Handle parentId filter - can be null for parent tenants or a UUID for children
+                            if (value === null || value === 'null') {
+                                whereClause[key] = null;
                             } else {
                                 whereClause[key] = value;
                             }
@@ -193,6 +251,23 @@ export class TenantService {
                 );
             }
 
+            // Validate parentId if provided
+            if (tenantCreateDto.parentId) {
+                const parentTenant = await this.tenantRepository.findOne({
+                    where: { tenantId: tenantCreateDto.parentId }
+                });
+
+                if (!parentTenant) {
+                    return APIResponse.error(
+                        response,
+                        apiId,
+                        API_RESPONSES.NOT_FOUND,
+                        "Parent tenant not found",
+                        HttpStatus.NOT_FOUND
+                    );
+                }
+            }
+
             let result = await this.tenantRepository.save(tenantCreateDto);
             if (result) {
                 return APIResponse.success(
@@ -236,6 +311,23 @@ export class TenantService {
                     apiId,
                     API_RESPONSES.CONFLICT,
                     API_RESPONSES.TENANT_EXISTS,
+                    HttpStatus.CONFLICT
+                );
+            }
+
+            // Check if this tenant has children
+            const children = await this.tenantRepository.find({
+                where: {
+                    "parentId": tenantId
+                }
+            });
+
+            if (children.length > 0) {
+                return APIResponse.error(
+                    response,
+                    apiId,
+                    API_RESPONSES.CONFLICT,
+                    "Cannot delete tenant with child tenants. Please delete or reassign child tenants first.",
                     HttpStatus.CONFLICT
                 );
             }
@@ -308,7 +400,7 @@ export class TenantService {
                         "name": tenantUpdateDto.name
                     }
                 })
-                if (checkExistingTenantName) {
+                if (checkExistingTenantName && checkExistingTenantName.tenantId !== tenantId) {
                     return APIResponse.error(
                         response,
                         apiId,
@@ -316,6 +408,80 @@ export class TenantService {
                         API_RESPONSES.TENANT_EXISTS,
                         HttpStatus.CONFLICT
                     );
+                }
+            }
+
+            // Validate parentId if provided
+            if (tenantUpdateDto.parentId !== undefined) {
+                // Prevent self-reference
+                if (tenantUpdateDto.parentId === tenantId) {
+                    return APIResponse.error(
+                        response,
+                        apiId,
+                        API_RESPONSES.CONFLICT,
+                        "A tenant cannot be its own parent",
+                        HttpStatus.CONFLICT
+                    );
+                }
+
+                // If parentId is not null, validate it exists
+                if (tenantUpdateDto.parentId) {
+                    const parentTenant = await this.tenantRepository.findOne({
+                        where: { tenantId: tenantUpdateDto.parentId }
+                    });
+
+                    if (!parentTenant) {
+                        return APIResponse.error(
+                            response,
+                            apiId,
+                            API_RESPONSES.NOT_FOUND,
+                            "Parent tenant not found",
+                            HttpStatus.NOT_FOUND
+                        );
+                    }
+
+                    // Prevent circular reference: check if the proposed parent is a descendant of this tenant
+                    // (i.e., if this tenant is anywhere in the parent chain of the proposed parent)
+                    let currentParentId = tenantUpdateDto.parentId;
+                    const visitedTenants = new Set<string>();
+                    visitedTenants.add(tenantId); // Prevent checking the tenant itself
+
+                    while (currentParentId) {
+                        // If we've already visited this tenant, we have a circular reference
+                        if (visitedTenants.has(currentParentId)) {
+                            return APIResponse.error(
+                                response,
+                                apiId,
+                                API_RESPONSES.CONFLICT,
+                                "Circular reference detected: cannot set parent that would create a circular hierarchy",
+                                HttpStatus.CONFLICT
+                            );
+                        }
+
+                        // If the proposed parent is the current tenant, it's a circular reference
+                        if (currentParentId === tenantId) {
+                            return APIResponse.error(
+                                response,
+                                apiId,
+                                API_RESPONSES.CONFLICT,
+                                "Circular reference detected: cannot set parent that is a descendant of this tenant",
+                                HttpStatus.CONFLICT
+                            );
+                        }
+
+                        visitedTenants.add(currentParentId);
+
+                        // Get the parent of the current parent to check further up the chain
+                        const currentParent = await this.tenantRepository.findOne({
+                            where: { tenantId: currentParentId }
+                        });
+
+                        if (!currentParent || !currentParent.parentId) {
+                            break; // Reached the top of the hierarchy
+                        }
+
+                        currentParentId = currentParent.parentId;
+                    }
                 }
             }
 

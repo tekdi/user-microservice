@@ -24,25 +24,25 @@ export class SsoRequestDto {
   userId: string;
 
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     type: String,
-    description: 'Tenant ID for multi-tenant applications',
+    description: 'Tenant ID for multi-tenant applications (optional - uses default if not provided)',
     example: '550e8400-e29b-41d4-a716-446655440000'
   })
   @Expose()
-  @IsNotEmpty()
+  @IsOptional()
   @IsUUID()
-  tenantId: string;
+  tenantId?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     type: String,
-    description: 'Role ID for the user',
+    description: 'Role ID for the user (optional - uses default learner role if not provided)',
     example: '550e8400-e29b-41d4-a716-446655440001'
   })
   @Expose()
-  @IsNotEmpty()
+  @IsOptional()
   @IsUUID()
-  roleId: string;
+  roleId?: string;
 
   @ApiPropertyOptional({
     type: String,

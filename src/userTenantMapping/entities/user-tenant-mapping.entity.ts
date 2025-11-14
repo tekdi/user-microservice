@@ -9,6 +9,12 @@ import {
 } from "typeorm";
 import { User } from "src/user/entities/user-entity";
 
+export enum UserTenantMappingStatus {
+  ACTIVE = "active",
+  INACTIVE = "inactive",
+  ARCHIVED = "archived",
+}
+
 @Entity({ name: "UserTenantMapping" })
 export class UserTenantMapping {
   @PrimaryGeneratedColumn("uuid")
@@ -19,6 +25,16 @@ export class UserTenantMapping {
 
   @Column("uuid")
   tenantId: string;
+
+  @Column({
+    type: "enum",
+    enum: UserTenantMappingStatus,
+    default: UserTenantMappingStatus.ACTIVE,
+  })
+  status: UserTenantMappingStatus;
+
+  @Column({ type: "text", nullable: true })
+  reason: string;
 
   @CreateDateColumn({
     type: "timestamp with time zone",

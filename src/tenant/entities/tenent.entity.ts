@@ -7,6 +7,12 @@ import {
   UpdateDateColumn,
 } from "typeorm";
 
+export enum TenantStatus {
+  ACTIVE = "active",
+  INACTIVE = "inactive",
+  ARCHIVED = "archived"
+}
+
 @Entity("Tenants")
 export class Tenant {
   @PrimaryGeneratedColumn("uuid")
@@ -14,6 +20,9 @@ export class Tenant {
 
   @Column({ type: "text" })
   name: string; // Text field for tenant's name
+
+  @Column({ type: "text", nullable: true })
+  type: string | null; // Text field for tenant's type
 
   @Column({ type: "text", nullable: true })
   domain: string | null; // Text field for tenant's domain
@@ -34,11 +43,11 @@ export class Tenant {
   description: string;
 
   @Column({
-    type: "text",
-    default: "draft",
-    enum: ["published", "draft", "archived"],
+    type: "enum",
+    enum: TenantStatus,
+    default: TenantStatus.ACTIVE,
   })
-  status: "published" | "draft" | "archived"; // Status column with enum values
+  status: TenantStatus;
 
   @Column("int4", { nullable: false })
   @Min(0)
@@ -68,4 +77,7 @@ export class Tenant {
 
   @Column({ type: 'json', nullable: true })
   contentFilter: any;
+
+  @Column({ type: "uuid", nullable: true })
+  parentId: string | null; // UUID of the parent tenant
 }

@@ -19,6 +19,7 @@ import { CohortMembers } from "src/cohortMembers/entities/cohort-member.entity";
 import { isUUID } from "class-validator";
 import { ExistUserDto, SuggestUserDto, UserSearchDto } from "src/user/dto/user-search.dto";
 import { HierarchicalLocationFiltersDto } from "src/user/dto/user-hierarchical-search.dto";
+import { UserHierarchyViewDto } from "src/user/dto/user-hierarchy-view.dto";
 import { UserTenantMapping } from "src/userTenantMapping/entities/user-tenant-mapping.entity";
 import { UserRoleMapping } from "src/rbac/assign-role/entities/assign-role.entity";
 import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
@@ -356,11 +357,12 @@ export class PostgresUserService implements IServicelocator {
     tenantId: string,
     request: any,
     response: any,
-    userSearchDto: UserSearchDto
+    userSearchDto: UserSearchDto,
+    includeCustomFields: boolean = true
   ) {
     const apiId = APIID.USER_LIST;
     try {
-      const findData = await this.findAllUserDetails(userSearchDto, tenantId);
+      const findData = await this.findAllUserDetails(userSearchDto, tenantId, includeCustomFields);
 
       if (findData === false) {
         LoggerUtil.error(
@@ -402,219 +404,548 @@ export class PostgresUserService implements IServicelocator {
     }
   }
 
+  /**
+ * Multi-tenant user list service function
+ * Fetches user hierarchy by email
+ */
+  async searchUserMultiTenant(
+    tenantId: string,
+    request: any,
+    response: any,
+    userHierarchyViewDto: UserHierarchyViewDto
+  ) {
+    const apiId = APIID.USER_HIERARCHY_VIEW;
+    const { email } = userHierarchyViewDto;
 
-  async findAllUserDetails(userSearchDto, tenantId?: string) {
-    let { limit, offset, filters, exclude, sort } = userSearchDto;
-    let excludeCohortIdes;
-    let excludeUserIdes;
+    // Step 1: Fetch tenant from Tenants table
+    const tenant = await this.tenantsRepository.findOne({
+      where: { tenantId: tenantId }
+    });
 
-    offset = offset ? `OFFSET ${offset}` : "";
-    limit = limit ? `LIMIT ${limit}` : "";
-    const result = {
-      totalCount: 0,
-      getUserDetails: [],
-    };
-
-    let whereCondition = `WHERE`;
-    let index = 0;
-    const searchCustomFields: any = {};
-
-    const userAllKeys = this.usersRepository.metadata.columns.map(
-      (column) => column.propertyName
-    );
-    const userKeys = userAllKeys.filter(
-      (key) => key !== "district" && key !== "state"
-    );
-
-    if (filters && Object.keys(filters).length > 0) {
-      //Fwtch all core fields
-      let coreFields = await this.getCoreColumnNames();
-      const allCoreField = [...coreFields, 'fromDate', 'toDate', 'role', 'tenantId', 'name'];
-
-      for (const [key, avalue] of Object.entries(filters)) {
-        //Check request filter are proesent on core file or cutom fields
-        if (allCoreField.includes(key)) {
-          if (index > 0 && index < Object.keys(filters).length) {
-            whereCondition += ` AND `;
-          }
-          
-          const value = Array.isArray(avalue)
-        ? avalue.map(v => v.replace(/'/g, "''"))
-        : String(avalue).replace(/'/g, "''");
-
-          switch (key) {
-            case "firstName":
-            case "name":
-              whereCondition += ` U."${key}" ILIKE '%${value}%'`;
-              index++;
-              break;
-
-            case "status":
-            case "email":
-            case "username":
-            case "userId":
-              if (Array.isArray(value) && value.every((item) => typeof item === "string")) {
-                const status = value.map((item) => `'${item.trim().toLowerCase()}'`).join(",");
-                whereCondition += ` U."${key}" IN(${status})`;
-              } else {
-                if (key === "username") {
-                  whereCondition += ` U."${key}" ILIKE '${value}'`;
-                } else {
-                  whereCondition += ` U."${key}" = '${value}'`;
-                }
-              }
-              index++;
-              break;
-
-            case "role":
-              whereCondition += ` R."name" = '${value}'`;
-              index++;
-              break;
-
-            case "status":
-              whereCondition += ` U."status" IN('${value}')`;
-              index++;
-
-            case "fromDate":
-              whereCondition += ` DATE(U."createdAt") >= '${value}'`;
-              index++;
-              break;
-
-            case "toDate":
-              whereCondition += ` DATE(U."createdAt") <= '${value}'`;
-              index++;
-              break;
-
-            case "tenantId":
-              whereCondition += `UTM."tenantId" = '${value}'`;
-              index++;
-              break;
-
-            default:
-              whereCondition += ` U."${key}" = '${value}'`;
-              index++;
-              break;
-          }
-        } else {
-          //For custom field store the data in key value pear
-          searchCustomFields[key] = avalue;
-        }
-      }
+    if (!tenant) {
+      return APIResponse.error(
+        response,
+        apiId,
+        "Tenant not found",
+        API_RESPONSES.TENANT_NOT_FOUND,
+        HttpStatus.NOT_FOUND
+      );
     }
 
-    if (exclude && Object.keys(exclude).length > 0) {
-      Object.entries(exclude).forEach(([key, value]) => {
-        if (key == "cohortIds") {
-          excludeCohortIdes = value;
-        }
-        if (key == "userIds") {
-          excludeUserIdes = value;
-        }
-      });
+    // Step 2: Fetch parent tenant using parentId
+    if (!tenant.parentId) {
+      return APIResponse.error(
+        response,
+        apiId,
+        "Parent tenant not configured",
+        "This tenant does not have a parent tenant configured",
+        HttpStatus.BAD_REQUEST
+      );
     }
 
-    let orderingCondition = "";
-    if (sort && Object.keys(sort).length > 0) {
-      orderingCondition = `ORDER BY U."${sort[0]}" ${sort[1]}`;
+    const parentTenant = await this.tenantsRepository.findOne({
+      where: { tenantId: tenant.parentId }
+    });
+
+    if (!parentTenant) {
+      return APIResponse.error(
+        response,
+        apiId,
+        "Parent tenant not found",
+        `Parent tenant with ID ${tenant.parentId} not found`,
+        HttpStatus.NOT_FOUND
+      );
     }
 
-    let getUserIdUsingCustomFields;
-
-    //If source config in source details from fields table is not exist then return false
-    if (Object.keys(searchCustomFields).length > 0) {
-
-      const context = "USERS";
-      getUserIdUsingCustomFields =
-        await this.fieldsService.filterUserUsingCustomFieldsOptimized(
-          context,
-          searchCustomFields
-        );
-
-      if (getUserIdUsingCustomFields == null) {
-        return false;
-      }
-    }
-
-    if (getUserIdUsingCustomFields && getUserIdUsingCustomFields.length > 0) {
-      const userIdsDependsOnCustomFields = getUserIdUsingCustomFields
-        .map((userId) => `'${userId}'`)
-        .join(",");
-      whereCondition += `${index > 0 ? " AND " : ""} U."userId" IN (${userIdsDependsOnCustomFields})`;
-      index++;
-    }
-
-    const userIds =
-      excludeUserIdes?.length > 0
-        ? excludeUserIdes.map((userId) => `'${userId}'`).join(",")
-        : null;
-
-    const cohortIds =
-      excludeCohortIdes?.length > 0
-        ? excludeCohortIdes.map((cohortId) => `'${cohortId}'`).join(",")
-        : null;
-
-    if (userIds || cohortIds) {
-      const userCondition = userIds ? ` U."userId" NOT IN (${userIds})` : "";
-      const cohortCondition = cohortIds
-        ? `CM."cohortId" NOT IN (${cohortIds})`
-        : "";
-      const combinedCondition = [userCondition, cohortCondition]
-        .filter(String)
-        .join(" AND ");
-      whereCondition += (index > 0 ? " AND " : "") + combinedCondition;
-    } else if (index === 0) {
-      whereCondition = "";
-    }
+    // Step 3: Extract domain from email
+    const emailDomain = email.split('@')[1];
     
-    // Apply tenant filtering conditionally if tenantId is provided from headers
-    if (tenantId && tenantId.trim() !== '') {
-      if (index === 0 && whereCondition === "") {
-        whereCondition = `WHERE UTM."tenantId" = '${tenantId}'`;
-      } else {
-        whereCondition += ` AND UTM."tenantId" = '${tenantId}'`;
-      }
-      LoggerUtil.log(`Applying tenant filter for tenantId: ${tenantId}`, APIID.USER_LIST);
-    } else {
-      LoggerUtil.warn(`No tenantId provided - returning users from all tenants`, APIID.USER_LIST);
+    if (!emailDomain) {
+      return APIResponse.error(
+        response,
+        apiId,
+        "Invalid email format",
+        "Email must contain a valid domain",
+        HttpStatus.BAD_REQUEST
+      );
     }
 
-    //Get user core fields data
-    const query = `SELECT U."userId",U."enrollmentId", U."username",U."email", U."firstName", U."name",UTM."tenantId", U."middleName", U."lastName", U."gender", U."dob", R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", U."status", COUNT(*) OVER() AS total_count 
-      FROM  public."Users" U
-      LEFT JOIN public."CohortMembers" CM 
-      ON CM."userId" = U."userId"
-      LEFT JOIN public."UserRolesMapping" UR
-      ON UR."userId" = U."userId"
-      LEFT JOIN public."UserTenantMapping" UTM
-      ON UTM."userId" = U."userId"
-      LEFT JOIN public."Roles" R
-      ON R."roleId" = UR."roleId" ${whereCondition} GROUP BY U."userId",UTM."tenantId", R."name" ${orderingCondition} ${offset} ${limit}`;
-    const userDetails = await this.usersRepository.query(query);
-    if (userDetails.length > 0) {
-      result.totalCount = parseInt(userDetails[0].total_count, 10);
-
-      // Get user custom field data
-      for (const userData of userDetails) {
-        const customFields = await this.fieldsService.getCustomFieldDetails(
-          userData.userId, 'Users'
-        );
-
-        userData["customFields"] = Array.isArray(customFields)
-          ? customFields.map((data) => ({
-            fieldId: data?.fieldId,
-            label: data?.label,
-            selectedValues: data?.selectedValues,
-            type: data?.type,
-          }))
-          : [];
-
-        result.getUserDetails.push(userData);
-      }
-    } else {
-      return false;
+    // Step 4: Compare email domain with parent tenant domain
+    if (emailDomain.toLowerCase() !== parentTenant.domain.toLowerCase()) {
+      LoggerUtil.error(
+        `Domain mismatch: Email domain '${emailDomain}' does not match parent tenant domain '${parentTenant.domain}'`,
+        apiId
+      );
+      return APIResponse.error(
+        response,
+        apiId,
+        `Email domain mismatch. Expected domain: ${parentTenant.domain}, but got: ${emailDomain}`,
+        "Domain validation failed",
+        HttpStatus.FORBIDDEN
+      );
     }
-    return result;
+
+    LoggerUtil.log(`Domain validation passed for tenant ${tenantId} with parent tenant ${parentTenant.tenantId} (domain: ${parentTenant.domain})`);
+
+    // Create search DTO with email filter
+    const userSearchDto: UserSearchDto = {
+      limit: 0,
+      offset: 0,
+      filters: {
+        email: [email]
+      }
+    } as any;
+
+    let searchUserData = await this.findAllUserDetails(userSearchDto, null, false);
+
+    if (!(searchUserData && searchUserData.getUserDetails?.length)) {
+      return APIResponse.error(
+        response,
+        apiId,
+        API_RESPONSES.USER_NOT_FOUND,
+        API_RESPONSES.NOT_FOUND,
+        HttpStatus.NOT_FOUND
+      );
+    }
+
+    // Get only the first user from the results
+    const firstUser = searchUserData.getUserDetails[0];
+
+    // Fetch and assign custom fields
+    const parentTenantCustomFieldData = await this.fieldsService.getCustomFieldDetails(firstUser.userId, 'Users', false);
+    firstUser.customFields = parentTenantCustomFieldData || [];
+
+    // Remove tenantId and total_count from the response
+    delete firstUser.tenantId;
+    delete firstUser.total_count;
+
+    LoggerUtil.log(API_RESPONSES.USER_HIERARCHY_VIEW_SUCCESS, apiId);
+    return await APIResponse.success(
+      response,
+      apiId,
+      { user: firstUser },
+      HttpStatus.OK,
+      API_RESPONSES.USER_HIERARCHY_VIEW_SUCCESS
+    );
   }
+
+
+  // async findAllUserDetails1(userSearchDto, tenantId?: string, includeCustomFields: boolean = true) {
+  //   let { limit, offset, filters, exclude, sort } = userSearchDto;
+  //   let excludeCohortIdes;
+  //   let excludeUserIdes;
+
+  //   offset = offset ? `OFFSET ${offset}` : "";
+  //   limit = limit ? `LIMIT ${limit}` : "";
+  //   const result = {
+  //     totalCount: 0,
+  //     getUserDetails: [],
+  //   };
+
+  //   let whereCondition = `WHERE`;
+  //   let index = 0;
+  //   const searchCustomFields: any = {};
+
+  //   const userAllKeys = this.usersRepository.metadata.columns.map(
+  //     (column) => column.propertyName
+  //   );
+  //   const userKeys = userAllKeys.filter(
+  //     (key) => key !== "district" && key !== "state"
+  //   );
+
+  //   if (filters && Object.keys(filters).length > 0) {
+  //     //Fwtch all core fields
+  //     let coreFields = await this.getCoreColumnNames();
+  //     const allCoreField = [...coreFields, 'fromDate', 'toDate', 'role', 'tenantId', 'name'];
+
+  //     for (const [key, value] of Object.entries(filters)) {
+  //       //Check request filter are proesent on core file or cutom fields
+  //       if (allCoreField.includes(key)) {
+  //         if (index > 0 && index < Object.keys(filters).length) {
+  //           whereCondition += ` AND `;
+  //         }
+  //         switch (key) {
+  //           case "firstName":
+  //           case "name":
+  //             whereCondition += ` U."${key}" ILIKE '%${value}%'`;
+  //             index++;
+  //             break;
+
+  //           case "status":
+  //           case "email":
+  //           case "username":
+  //           case "userId":
+  //             if (Array.isArray(value) && value.every((item) => typeof item === "string")) {
+  //               const status = value.map((item) => `'${item.trim().toLowerCase()}'`).join(",");
+  //               whereCondition += ` U."${key}" IN(${status})`;
+  //             } else {
+  //               if (key === "username") {
+  //                 whereCondition += ` U."${key}" ILIKE '${value}'`;
+  //               } else {
+  //                 whereCondition += ` U."${key}" = '${value}'`;
+  //               }
+  //             }
+  //             index++;
+  //             break;
+
+  //           case "role":
+  //             whereCondition += ` R."name" = '${value}'`;
+  //             index++;
+  //             break;
+
+  //           case "status":
+  //             whereCondition += ` U."status" IN('${value}')`;
+  //             index++;
+
+  //           case "fromDate":
+  //             whereCondition += ` DATE(U."createdAt") >= '${value}'`;
+  //             index++;
+  //             break;
+
+  //           case "toDate":
+  //             whereCondition += ` DATE(U."createdAt") <= '${value}'`;
+  //             index++;
+  //             break;
+
+  //           case "tenantId":
+  //             whereCondition += `UTM."tenantId" = '${value}'`;
+  //             index++;
+  //             break;
+
+  //           default:
+  //             whereCondition += ` U."${key}" = '${value}'`;
+  //             index++;
+  //             break;
+  //         }
+  //       } else {
+  //         //For custom field store the data in key value pear
+  //         searchCustomFields[key] = value;
+  //       }
+  //     }
+  //   }
+
+  //   if (exclude && Object.keys(exclude).length > 0) {
+  //     Object.entries(exclude).forEach(([key, value]) => {
+  //       if (key == "cohortIds") {
+  //         excludeCohortIdes = value;
+  //       }
+  //       if (key == "userIds") {
+  //         excludeUserIdes = value;
+  //       }
+  //     });
+  //   }
+
+  //   let orderingCondition = "";
+  //   if (sort && Object.keys(sort).length > 0) {
+  //     orderingCondition = `ORDER BY U."${sort[0]}" ${sort[1]}`;
+  //   }
+
+  //   let getUserIdUsingCustomFields;
+
+  //   //If source config in source details from fields table is not exist then return false
+  //   if (Object.keys(searchCustomFields).length > 0) {
+
+  //     const context = "USERS";
+  //     getUserIdUsingCustomFields =
+  //       await this.fieldsService.filterUserUsingCustomFieldsOptimized(
+  //         context,
+  //         searchCustomFields
+  //       );
+
+  //     if (getUserIdUsingCustomFields == null) {
+  //       return false;
+  //     }
+  //   }
+
+  //   if (getUserIdUsingCustomFields && getUserIdUsingCustomFields.length > 0) {
+  //     const userIdsDependsOnCustomFields = getUserIdUsingCustomFields
+  //       .map((userId) => `'${userId}'`)
+  //       .join(",");
+  //     whereCondition += `${index > 0 ? " AND " : ""} U."userId" IN (${userIdsDependsOnCustomFields})`;
+  //     index++;
+  //   }
+
+  //   const userIds =
+  //     excludeUserIdes?.length > 0
+  //       ? excludeUserIdes.map((userId) => `'${userId}'`).join(",")
+  //       : null;
+
+  //   const cohortIds =
+  //     excludeCohortIdes?.length > 0
+  //       ? excludeCohortIdes.map((cohortId) => `'${cohortId}'`).join(",")
+  //       : null;
+
+  //   if (userIds || cohortIds) {
+  //     const userCondition = userIds ? ` U."userId" NOT IN (${userIds})` : "";
+  //     const cohortCondition = cohortIds
+  //       ? `CM."cohortId" NOT IN (${cohortIds})`
+  //       : "";
+  //     const combinedCondition = [userCondition, cohortCondition]
+  //       .filter(String)
+  //       .join(" AND ");
+  //     whereCondition += (index > 0 ? " AND " : "") + combinedCondition;
+  //   } else if (index === 0) {
+  //     whereCondition = "";
+  //   }
+
+  //   // Apply tenant filtering conditionally if tenantId is provided from headers
+  //   if (tenantId && tenantId.trim() !== '') {
+  //     if (index === 0 && whereCondition === "") {
+  //       whereCondition = `WHERE UTM."tenantId" = '${tenantId}'`;
+  //     } else {
+  //       whereCondition += ` AND UTM."tenantId" = '${tenantId}'`;
+  //     }
+  //     LoggerUtil.log(`Applying tenant filter for tenantId: ${tenantId}`, APIID.USER_LIST);
+  //   } else {
+  //     LoggerUtil.warn(`No tenantId provided - returning users from all tenants`, APIID.USER_LIST);
+  //   }
+
+  //   //Get user core fields data
+  //   const query = `SELECT U."userId",U."enrollmentId", U."username",U."email", U."firstName", U."name",UTM."tenantId", U."middleName", U."lastName", U."gender", U."dob", R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", U."status", UTM."status" AS "tenantStatus", COUNT(*) OVER() AS total_count 
+  //     FROM  public."Users" U
+  //     LEFT JOIN public."CohortMembers" CM 
+  //     ON CM."userId" = U."userId"
+  //     LEFT JOIN public."UserRolesMapping" UR
+  //     ON UR."userId" = U."userId"
+  //     LEFT JOIN public."UserTenantMapping" UTM
+  //     ON UTM."userId" = U."userId"
+  //     LEFT JOIN public."Roles" R
+  //     ON R."roleId" = UR."roleId" ${whereCondition} GROUP BY U."userId",UTM."tenantId", UTM."status", R."name" ${orderingCondition} ${offset} ${limit}`;
+  //   const userDetails = await this.usersRepository.query(query);
+
+  //   if (userDetails.length > 0) {
+  //     result.totalCount = parseInt(userDetails[0].total_count, 10);
+
+  //     // OPTIMIZED: Conditionally fetch custom fields only when requested
+  //     if (includeCustomFields) {
+  //       // OPTIMIZED: Batch fetch custom fields for all users in one query (instead of N+1 queries)
+  //       const userIds = userDetails.map(user => user.userId);
+  //       const bulkCustomFields = await this.fieldsService.getBulkCustomFieldDetails(
+  //         userIds, 'Users'
+  //       );
+
+  //       // Map custom fields back to users (in-memory operation - fast!)
+  //       for (const userData of userDetails) {
+  //         const customFields = bulkCustomFields[userData.userId] || [];
+
+  //         userData["customFields"] = Array.isArray(customFields)
+  //           ? customFields.map((data) => ({
+  //             fieldId: data?.fieldId,
+  //             label: data?.label,
+  //             selectedValues: data?.selectedValues,
+  //             type: data?.type,
+  //           }))
+  //           : [];
+
+  //         result.getUserDetails.push(userData);
+  //       }
+  //     } else {
+  //       // Skip custom fields fetch - much faster for listing
+  //       for (const userData of userDetails) {
+  //         userData["customFields"] = [];
+  //         result.getUserDetails.push(userData);
+  //       }
+  //     }
+  //   } else {
+  //     return false;
+  //   }
+  //   return result;
+  // }
+  async findAllUserDetails(userSearchDto, tenantId?: string, includeCustomFields: boolean = true) {
+  let { limit, offset, filters, exclude, sort } = userSearchDto;
+  let excludeCohortIdes;
+  let excludeUserIdes;
+
+  const result = {
+    totalCount: 0,
+    getUserDetails: [],
+  };
+
+  const searchCustomFields: any = {};
+
+  const queryBuilder = this.usersRepository
+    .createQueryBuilder("U")
+    .leftJoin("CohortMembers", "CM", "CM.userId = U.userId")
+    .leftJoin("UserRolesMapping", "UR", "UR.userId = U.userId")
+    .leftJoin("UserTenantMapping", "UTM", "UTM.userId = U.userId")
+    .leftJoin("Roles", "R", "R.roleId = UR.roleId")
+    .select([
+      'U.userId AS "userId"',
+      'U.enrollmentId AS "enrollmentId"',
+      'U.username AS "username"',
+      'U.email AS "email"',
+      'U.firstName AS "firstName"',
+      'U.name AS "name"',
+      'UTM.tenantId AS "tenantId"',
+      'U.middleName AS "middleName"',
+      'U.lastName AS "lastName"',
+      'U.gender AS "gender"',
+      'U.dob AS "dob"',
+      'R.name AS "role"',
+      'U.mobile AS "mobile"',
+      'U.createdBy AS "createdBy"',
+      'U.updatedBy AS "updatedBy"',
+      'U.createdAt AS "createdAt"',
+      'U.updatedAt AS "updatedAt"',
+      'U.status AS "status"',
+      'UTM.status AS "tenantStatus"',
+      'COUNT(*) OVER() AS "total_count"',
+    ])
+    .groupBy('U.userId')
+    .addGroupBy('UTM.tenantId')
+    .addGroupBy('UTM.status')
+    .addGroupBy('R.name');
+
+  // --- Filters ---
+  if (filters && Object.keys(filters).length > 0) {
+    const coreFields = await this.getCoreColumnNames();
+    const allCoreField = [...coreFields, 'fromDate', 'toDate', 'role', 'tenantId', 'name', 'tenantStatus'];
+
+    for (const [key, avalue] of Object.entries(filters)) {
+      if (allCoreField.includes(key)) {
+        const value = Array.isArray(avalue) ? avalue : avalue;
+
+        switch (key) {
+          case "firstName":
+          case "name":
+            const nameValue = Array.isArray(value) ? value[0] : value;
+            queryBuilder.andWhere(`U.${key} ILIKE :${key}`, {
+              [key]: `%${nameValue}%`,
+            });
+            break;
+
+          case "status":
+          case "email":
+          case "username":
+          case "userId":
+            if (Array.isArray(value) && value.every((item) => typeof item === "string")) {
+              queryBuilder.andWhere(`U.${key} IN (:...${key})`, {
+                [key]: value.map((item) => item.trim().toLowerCase()),
+              });
+            } else {
+              if (key === "username") {
+                queryBuilder.andWhere(`U.${key} ILIKE :${key}`, { [key]: String(value) });
+              } else {
+                queryBuilder.andWhere(`U.${key} = :${key}`, { [key]: String(value) });
+              }
+            }
+            break;
+
+          case "tenantStatus":
+            if (Array.isArray(value) && value.every((item) => typeof item === "string")) {
+              queryBuilder.andWhere(`UTM.status IN (:...tenantStatus)`, {
+                tenantStatus: value.map((item) => item.trim().toLowerCase()),
+              });
+            } else {
+              queryBuilder.andWhere(`UTM.status = :tenantStatus`, { tenantStatus: String(value).toLowerCase() });
+            }
+            break;
+
+          case "role":
+            queryBuilder.andWhere(`R.name = :role`, { role: String(value) });
+            break;
+
+          case "fromDate":
+            queryBuilder.andWhere(`DATE(U.createdAt) >= :fromDate`, { fromDate: String(value) });
+            break;
+
+          case "toDate":
+            queryBuilder.andWhere(`DATE(U.createdAt) <= :toDate`, { toDate: String(value) });
+            break;
+
+          case "tenantId":
+            queryBuilder.andWhere(`UTM.tenantId = :tenantId`, { tenantId: String(value) });
+            break;
+
+          default:
+            queryBuilder.andWhere(`U.${key} = :${key}`, { [key]: String(value) });
+            break;
+        }
+      } else {
+        searchCustomFields[key] = avalue;
+      }
+    }
+  }
+
+  // --- Exclusions ---
+  if (exclude && Object.keys(exclude).length > 0) {
+    Object.entries(exclude).forEach(([key, value]) => {
+      if (key == "cohortIds") excludeCohortIdes = value;
+      if (key == "userIds") excludeUserIdes = value;
+    });
+  }
+
+  // --- Custom Field Filtering ---
+  if (Object.keys(searchCustomFields).length > 0) {
+    const context = "USERS";
+    const customUserIds = await this.fieldsService.filterUserUsingCustomFieldsOptimized(context, searchCustomFields);
+    if (!customUserIds) return false;
+
+    queryBuilder.andWhere(`U.userId IN (:...customFieldUserIds)`, {
+      customFieldUserIds: customUserIds,
+    });
+  }
+
+  if (excludeUserIdes?.length > 0) {
+    queryBuilder.andWhere(`U.userId NOT IN (:...excludeUserIds)`, {
+      excludeUserIds: excludeUserIdes,
+    });
+  }
+
+  if (excludeCohortIdes?.length > 0) {
+    queryBuilder.andWhere(`CM.cohortId NOT IN (:...excludeCohortIds)`, {
+      excludeCohortIds: excludeCohortIdes,
+    });
+  }
+
+  // --- Tenant filter ---
+  if (tenantId && tenantId.trim() !== "") {
+    queryBuilder.andWhere(`UTM.tenantId = :headerTenantId`, { headerTenantId: tenantId });
+  }
+
+  // --- Sorting ---
+  if (sort && Array.isArray(sort) && sort.length === 2) {
+    const [column, direction] = sort;
+    const order = direction.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
+    queryBuilder.orderBy(`U.${column}`, order as 'ASC' | 'DESC');
+  }
+
+  // --- Pagination ---
+  if (offset) queryBuilder.offset(parseInt(offset, 10));
+  if (limit) queryBuilder.limit(parseInt(limit, 10));
+
+  // --- Execute ---
+  const userDetails = await queryBuilder.getRawMany();
+
+  if (userDetails.length === 0) return false;
+
+  result.totalCount = parseInt(userDetails[0].total_count, 10);
+
+  // --- Fetch & attach custom fields ---
+  if (includeCustomFields) {
+    const userIds = userDetails.map((u) => u.userId);
+    const bulkCustomFields = await this.fieldsService.getBulkCustomFieldDetails(userIds, 'Users');
+
+    for (const userData of userDetails) {
+      const customFields = bulkCustomFields[userData.userId] || [];
+      userData["customFields"] = customFields.map((data) => ({
+        fieldId: data?.fieldId,
+        label: data?.label,
+        selectedValues: data?.selectedValues,
+        type: data?.type,
+      }));
+      result.getUserDetails.push(userData);
+    }
+  } else {
+    for (const userData of userDetails) {
+      userData["customFields"] = [];
+      result.getUserDetails.push(userData);
+    }
+  }
+
+  return result;
+}
+
 
   async getUsersDetailsById(userData: UserData, response: any) {
     const apiId = APIID.USER_GET;
@@ -984,7 +1315,7 @@ export class PostgresUserService implements IServicelocator {
       if (userDto?.customFields?.length > 0) {
         // additionalData?: { tenantId?: string, contextType?: string, createdBy?: string, updatedBy?: string }
         let additionalData = {
-          tenantId : userDto.userData?.tenantId,
+          tenantId: userDto.userData?.tenantId,
           contextType: "USER",
           createdBy: userDto.userData?.createdBy,
           updatedBy: userDto.userData?.updatedBy
@@ -1530,7 +1861,7 @@ export class PostgresUserService implements IServicelocator {
 
             // Prepare additional data for FieldValues table
             const additionalData = {
-              tenantId:  userCreateDto.tenantCohortRoleMapping?.[0]?.tenantId || null,
+              tenantId: userCreateDto.tenantCohortRoleMapping?.[0]?.tenantId || null,
               contextType: "USER",
               createdBy: userCreateDto.createdBy,
               updatedBy: userCreateDto.updatedBy,
@@ -1789,7 +2120,7 @@ export class PostgresUserService implements IServicelocator {
 
   async createUserInDatabase(
     request: any,
-    userCreateDto: UserCreateDto,
+    userCreateDto,
     academicYearId?: string,
     response?: Response
   ): Promise<User> {
@@ -1906,27 +2237,101 @@ export class PostgresUserService implements IServicelocator {
   }
 
 
-  async assignUserToTenantAndRoll(tenantsData, createdBy) {
+  private async isRootTenant(tenantId: string): Promise<boolean> {
+    const tenant = await this.tenantsRepository.findOne({
+      where: { tenantId }
+    });
+    return tenant && tenant.parentId === null;
+  }
+
+  private async handleRoleMappingForUser(
+    userId: string,
+    tenantId: string,
+    roleId: string,
+    createdBy: string,
+    shouldUpdateIfRoot: boolean
+  ): Promise<void> {
+    const existingMapping = await this.userRoleMappingRepository.findOne({
+      where: { userId }
+    });
+
+    if (!shouldUpdateIfRoot || !existingMapping) {
+      await this.userRoleMappingRepository.save({
+        userId,
+        tenantId,
+        roleId,
+        createdBy
+      });
+      return;
+    }
+
+    const isRoot = await this.isRootTenant(existingMapping.tenantId);
+    
+    if (isRoot) {
+      existingMapping.tenantId = tenantId;
+      existingMapping.roleId = roleId;
+      existingMapping.createdBy = createdBy;
+      await this.userRoleMappingRepository.save(existingMapping);
+      LoggerUtil.log(`Updated role mapping for user ${userId} from root tenant to ${tenantId}`);
+    } else {
+      await this.userRoleMappingRepository.save({
+        userId,
+        tenantId,
+        roleId,
+        createdBy
+      });
+    }
+  }
+
+  private async handleTenantMappingForUser(
+    userId: string,
+    tenantId: string,
+    createdBy: string,
+    shouldUpdateIfRoot: boolean
+  ): Promise<void> {
+    const existingMapping = await this.userTenantMappingRepository.findOne({
+      where: { userId }
+    });
+
+    if (!shouldUpdateIfRoot || !existingMapping) {
+      await this.userTenantMappingRepository.save({
+        userId,
+        tenantId,
+        createdBy
+      });
+      return;
+    }
+
+    const isRoot = await this.isRootTenant(existingMapping.tenantId);
+    
+    if (isRoot) {
+      existingMapping.tenantId = tenantId;
+      existingMapping.createdBy = createdBy;
+      await this.userTenantMappingRepository.save(existingMapping);
+      LoggerUtil.log(`Updated tenant mapping for user ${userId} from root tenant to ${tenantId}`);
+    } else {
+      await this.userTenantMappingRepository.save({
+        userId,
+        tenantId,
+        createdBy
+      });
+    }
+  }
+
+  async assignUserToTenantAndRoll(tenantsData, createdBy, userType?: boolean) {
     try {
-      const tenantId = tenantsData?.tenantRoleMapping?.tenantId;
-      const userId = tenantsData?.userId;
-      const roleId = tenantsData?.tenantRoleMapping?.roleId;
+      const { tenantId, userId, roleId } = {
+        tenantId: tenantsData?.tenantRoleMapping?.tenantId,
+        userId: tenantsData?.userId,
+        roleId: tenantsData?.tenantRoleMapping?.roleId
+      };
 
       if (roleId) {
-        const data = await this.userRoleMappingRepository.save({
-          userId: userId,
-          tenantId: tenantId,
-          roleId: roleId,
-          createdBy: createdBy,
-        });
+        await this.handleRoleMappingForUser(userId, tenantId, roleId, createdBy, userType);
       }
 
       if (tenantId) {
-        const data = await this.userTenantMappingRepository.save({
-          userId: userId,
-          tenantId: tenantId,
-          createdBy: createdBy,
-        });
+        await this.handleTenantMappingForUser(userId, tenantId, createdBy, userType);
       }
 
       LoggerUtil.log(API_RESPONSES.USER_TENANT);
@@ -3578,7 +3983,7 @@ export class PostgresUserService implements IServicelocator {
       WITH filtered_users AS (
         SELECT DISTINCT u."userId", u."username", u."firstName", u."name", u."middleName", 
           u."lastName", u."email", u."mobile", u."gender", u."dob", 
-          u."status", u."createdAt", utm."tenantId"
+          u."status", u."createdAt", utm."tenantId", utm."status" as "tenantStatus"
         FROM "Users" u
         LEFT JOIN "UserTenantMapping" utm ON u."userId" = utm."userId"
     `;
@@ -3705,7 +4110,7 @@ export class PostgresUserService implements IServicelocator {
           mobile: row.mobile,
           gender: row.gender,
           dob: row.dob,
-          status: row.status,
+          status: row.tenantStatus,
           createdAt: row.createdAt,
           tenantId: row.tenantId,
           roles: [],
