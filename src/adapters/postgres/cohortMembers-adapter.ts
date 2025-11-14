@@ -3156,7 +3156,7 @@ export class PostgresCohortMembersService {
       INNER JOIN public."FieldValues" fv ON c."cohortId" = fv."itemId"
       WHERE c."status" = 'active'
       AND fv."fieldId" = $1
-      AND fv."value" <= $2
+      AND fv."calendarValue"::date <= $2::date
       AND fv."itemId" IS NOT NULL
       ORDER BY c."cohortId"
     `;
