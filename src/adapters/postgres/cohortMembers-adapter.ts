@@ -1661,7 +1661,11 @@ export class PostgresCohortMembersService {
     return mappingExist;
   }
 
-  public async findExistingCohortMember(userId, cohortId, cohortAcademicYearId) {
+  public async findExistingCohortMember(
+    userId,
+    cohortId,
+    cohortAcademicYearId
+  ) {
     const existingMember = await this.cohortMembersRepository.findOne({
       where: {
         userId: userId,
@@ -1813,7 +1817,10 @@ export class PostgresCohortMembersService {
                     ? (cohortMembersDto.status as MemberStatus)
                     : MemberStatus.ACTIVE
                   : MemberStatus.ACTIVE,
-                statusReason: cohortMembersDto.statusReason || existingMember.statusReason || '',
+                statusReason:
+                  cohortMembersDto.statusReason ||
+                  existingMember.statusReason ||
+                  '',
                 updatedBy: loginUser,
                 updatedAt: new Date(),
               };
@@ -1849,7 +1856,7 @@ export class PostgresCohortMembersService {
                   : MemberStatus.ACTIVE,
                 statusReason: cohortMembersDto.statusReason || '',
               };
-              
+
               result = await this.cohortMembersRepository.save(
                 cohortMemberForAcademicYear
               );
@@ -2608,7 +2615,7 @@ export class PostgresCohortMembersService {
       );
 
       // Step 1: Process Active Cohorts
-      const currentDateUTC = new Date().toISOString().split('T')[0]; // Use UTC date for timezone consistency
+      const currentDateUTC = new Date().toISOString(); // Use UTC date for timezone consistency
       const activeCohorts = await this.processActiveCohorts(
         tenantId,
         academicyearId,
@@ -3149,7 +3156,7 @@ export class PostgresCohortMembersService {
       INNER JOIN public."FieldValues" fv ON c."cohortId" = fv."itemId"
       WHERE c."status" = 'active'
       AND fv."fieldId" = $1
-      AND fv."calendarValue"::date <= $2::date
+      AND fv."value" <= $2
       AND fv."itemId" IS NOT NULL
       ORDER BY c."cohortId"
     `;
@@ -3158,7 +3165,6 @@ export class PostgresCohortMembersService {
       shortlistDateFieldId,
       currentDateUTC,
     ]);
-
     return results;
   }
 
