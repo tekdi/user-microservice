@@ -364,6 +364,11 @@ export class PostgresAssignTenantService
       existingMapping.status = updateStatusDto.status;
       existingMapping.updatedBy = request["user"].userId;
       existingMapping.updatedAt = new Date();
+      
+      // Update reason if provided
+      if (updateStatusDto.reason) {
+        existingMapping.reason = updateStatusDto.reason;
+      }
 
       await this.userTenantMappingRepository.save(existingMapping);
 
@@ -378,6 +383,7 @@ export class PostgresAssignTenantService
         userId: userId,
         tenantId: tenantId,
         status: existingMapping.status,
+        reason: existingMapping.reason,
         message: `User-Tenant mapping status updated successfully.`,
       };
 
