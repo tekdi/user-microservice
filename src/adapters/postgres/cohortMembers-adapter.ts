@@ -876,40 +876,10 @@ export class PostgresCohortMembersService {
             return `(U."auto_tags" && ARRAY[${escaped}]::text[])`;
           }
           case 'createdAt': {
-            const dateCondition = this.buildDateFilterCondition(
-              'CM."createdAt"',
-              value
-            );
-            if (!dateCondition) {
-              LoggerUtil.warn(
-                `Invalid createdAt filter value: ${value}`,
-                'COHORT_MEMBER_SEARCH'
-              );
-              return null; // Return null for invalid dates to filter out
-            }
-            LoggerUtil.log(
-              `Created createdAt filter condition: ${dateCondition}`,
-              'COHORT_MEMBER_SEARCH'
-            );
-            return dateCondition;
+            return this.processDateFilterCondition('createdAt', value, 'COHORT_MEMBER_SEARCH');
           }
           case 'updatedAt': {
-            const dateCondition = this.buildDateFilterCondition(
-              'CM."updatedAt"',
-              value
-            );
-            if (!dateCondition) {
-              LoggerUtil.warn(
-                `Invalid updatedAt filter value: ${value}`,
-                'COHORT_MEMBER_SEARCH'
-              );
-              return null; // Return null for invalid dates to filter out
-            }
-            LoggerUtil.log(
-              `Created updatedAt filter condition: ${dateCondition}`,
-              'COHORT_MEMBER_SEARCH'
-            );
-            return dateCondition;
+            return this.processDateFilterCondition('updatedAt', value, 'COHORT_MEMBER_SEARCH');
           }
           default: {
             return `CM."${key}"='${value}'`;
@@ -1053,18 +1023,10 @@ export class PostgresCohortMembersService {
             return `(U."auto_tags" && ARRAY[${escaped}]::text[])`;
           }
           case 'createdAt': {
-            const dateCondition = this.buildDateFilterCondition(
-              'CM."createdAt"',
-              value
-            );
-            return dateCondition || null; // Return null for invalid dates to filter out
+            return this.processDateFilterCondition('createdAt', value);
           }
           case 'updatedAt': {
-            const dateCondition = this.buildDateFilterCondition(
-              'CM."updatedAt"',
-              value
-            );
-            return dateCondition || null; // Return null for invalid dates to filter out
+            return this.processDateFilterCondition('updatedAt', value);
           }
           default: {
             parameters.push(value);
@@ -5117,6 +5079,38 @@ export class PostgresCohortMembersService {
   }
 
   /**
+   * Processes date filter condition for createdAt or updatedAt fields
+   * Handles validation, logging, and error handling consistently across all methods
+   *
+   * @param fieldName - The field name ('createdAt' or 'updatedAt')
+   * @param value - The date/time filter value
+   * @param apiId - Optional API ID for logging context
+   * @returns SQL condition string or null if invalid
+   */
+  private processDateFilterCondition(
+    fieldName: 'createdAt' | 'updatedAt',
+    value: any,
+    apiId?: string
+  ): string | null {
+    const columnName = `CM."${fieldName}"`;
+    const dateCondition = this.buildDateFilterCondition(columnName, value);
+
+    if (!dateCondition) {
+      LoggerUtil.warn(
+        `Invalid ${fieldName} filter value: ${value}`,
+        apiId || 'COHORT_MEMBER_SEARCH'
+      );
+      return null;
+    }
+
+    LoggerUtil.log(
+      `Created ${fieldName} filter condition: ${dateCondition}`,
+      apiId || 'COHORT_MEMBER_SEARCH'
+    );
+    return dateCondition;
+  }
+
+  /**
    * Builds SQL condition for date/time filtering
    * Supports multiple formats:
    * - Single date: "2025-11-14" (matches entire day)
@@ -5205,6 +5199,16 @@ export class PostgresCohortMembersService {
    * - YYYY-MM-DD HH:MM
    * - YYYY-MM-DD HH:MM:SS
    *
+   * Validates calendar validity (e.g., rejects February 30, Month 13, etc.)
+   * and ensures time components are within valid ranges.
+   *
+   * Timezone Handling:
+   * All timestamps are interpreted as UTC. The input date/time strings are
+   * treated as UTC values and passed directly to PostgreSQL, which stores
+   * them as TIMESTAMP (without timezone). When PostgreSQL compares these
+   * values, it uses the database server's timezone settings. For consistent
+   * behavior, ensure the database server timezone is set to UTC.
+   *
    * @param dateTimeString - The date/time string to parse
    * @param endOfDay - If true, sets time to end of day (23:59:59.999)
    * @returns Formatted date/time string or null if invalid
@@ -5221,6 +5225,16 @@ export class PostgresCohortMembersService {
 
     // Date only format: YYYY-MM-DD
     if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      // Validate date is actually valid (e.g., rejects February 30, Month 13)
+      const date = new Date(trimmed);
+      if (isNaN(date.getTime())) {
+        LoggerUtil.warn(
+          `Invalid date value: ${trimmed}`,
+          'DateFilter'
+        );
+        return null;
+      }
+
       if (endOfDay) {
         return `${trimmed} 23:59:59.999`;
       }
@@ -5234,7 +5248,18 @@ export class PostgresCohortMembersService {
 
     if (match) {
       const [, date, hour, minute, second = '00'] = match;
-      // Validate hour (0-23) and minute (0-59)
+
+      // Validate date part (e.g., rejects February 30, Month 13)
+      const dateObj = new Date(date);
+      if (isNaN(dateObj.getTime())) {
+        LoggerUtil.warn(
+          `Invalid date value: ${date}`,
+          'DateFilter'
+        );
+        return null;
+      }
+
+      // Validate time components
       const hourNum = parseInt(hour, 10);
       const minuteNum = parseInt(minute, 10);
       const secondNum = parseInt(second, 10);
@@ -5247,7 +5272,6 @@ export class PostgresCohortMembersService {
         secondNum >= 0 &&
         secondNum <= 59
       ) {
-        // Format hour and minute with leading zeros
         const formattedHour = hour.padStart(2, '0');
         const formattedMinute = minute.padStart(2, '0');
         const formattedSecond = second.padStart(2, '0');
