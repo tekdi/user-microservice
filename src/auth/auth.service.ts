@@ -14,6 +14,8 @@ import { Response } from "express";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { User } from "src/user/entities/user-entity";
+import { PostgresUserService } from "src/adapters/postgres/user-adapter";
+import { LoggerUtil } from "src/common/logger/LoggerUtil";
 
 type LoginResponse = {
   access_token: string;
@@ -90,13 +92,29 @@ export class AuthService {
         );
       }
 
-      return APIResponse.success(
+      // Send response to the client first (low latency)
+      const apiResponse = APIResponse.success(
         response,
         apiId,
         data,
         HttpStatus.OK,
         "User fetched by auth token Successfully."
       );
+
+      // Publish user login event to Kafka asynchronously - after response is sent to client
+      // Using 'login' event type which only sends lastLogin timestamp (lightweight)
+      if (data && data.userId) {
+        (this.useradapter.buildUserAdapter() as PostgresUserService)
+          .publishUserEvent('login', data.userId, apiId)
+          .catch(error => {
+            // Log error but don't block - Kafka failures shouldn't affect auth flow
+            LoggerUtil.error(
+              `Failed to publish user login event to Kafka for ${username}`,
+              `Error: ${error.message}`,
+              apiId
+            );
+          });
+      }
     } catch (e) {
       const errorMessage = e?.message || "Something went wrong";
       return APIResponse.error(
