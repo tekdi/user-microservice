@@ -3346,12 +3346,12 @@ export class PostgresUserService implements IServicelocator {
 
   /**
    * Publish user events to Kafka
-   * @param eventType Type of event (created, updated, deleted)
+   * @param eventType Type of event (created, updated, deleted, login)
    * @param userId User ID for whom the event is published
    * @param apiId API ID for logging
    */
   public async publishUserEvent(
-    eventType: 'created' | 'updated' | 'deleted',
+    eventType: 'created' | 'updated' | 'deleted' | 'login',
     userId: string,
     apiId: string
   ): Promise<void> {
@@ -3363,6 +3363,17 @@ export class PostgresUserService implements IServicelocator {
         userData = {
           userId: userId,
           deletedAt: new Date().toISOString()
+        };
+      } else if (eventType === 'login') {
+        // For login events, only send lastLogin timestamp (lightweight)
+        const user = await this.usersRepository.findOne({
+          where: { userId: userId },
+          select: ['userId', 'lastLogin']
+        });
+
+        userData = {
+          userId: userId,
+          lastLogin: user?.lastLogin ? user.lastLogin.toISOString() : new Date().toISOString()
         };
       } else {
         // For create and update, fetch complete data from DB
