@@ -916,7 +916,9 @@ export class PostgresCohortMembersService {
           }
         }
       };
-      const conditions = where.map(processCondition).filter((c) => c !== null && c !== '');
+      const conditions = where
+        .map(processCondition)
+        .filter((c) => c !== null && c !== '');
       if (conditions.length > 0) {
         whereCase += conditions.join(' AND ');
       }
@@ -950,7 +952,10 @@ export class PostgresCohortMembersService {
       ON R."roleId" = UR."roleId" ${whereCase}`;
 
     // Debug logging for date filters
-    if (whereCase.includes('CAST(CM."createdAt"') || whereCase.includes('CAST(CM."updatedAt"')) {
+    if (
+      whereCase.includes('CAST(CM."createdAt"') ||
+      whereCase.includes('CAST(CM."updatedAt"')
+    ) {
       LoggerUtil.log(
         `Generated query with date filter. WHERE clause: ${whereCase}`,
         'COHORT_MEMBER_SEARCH'
@@ -2522,7 +2527,7 @@ export class PostgresCohortMembersService {
     const uniqueWhere = new Map();
     whereKeys.forEach((key) => {
       if (whereClause[key]) {
-        // Date filters (createdAt, updatedAt) should remain as strings, not arrays
+        // Date filters (createdAt, updatedAt)
         if (key === 'createdAt' || key === 'updatedAt') {
           if (!uniqueWhere.has(key)) {
             uniqueWhere.set(key, whereClause[key]);
@@ -5223,7 +5228,8 @@ export class PostgresCohortMembersService {
     }
 
     // Date with time format: YYYY-MM-DD HH:MM or YYYY-MM-DD HH:MM:SS
-    const dateTimeRegex = /^(\d{4}-\d{2}-\d{2})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?$/;
+    const dateTimeRegex =
+      /^(\d{4}-\d{2}-\d{2})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?$/;
     const match = trimmed.match(dateTimeRegex);
 
     if (match) {
