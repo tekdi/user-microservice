@@ -31,10 +31,10 @@ export class CohortMembers {
   @Column({ type: 'uuid' })
   userId: string;
 
-  @CreateDateColumn({ type: 'date', default: () => 'CURRENT_DATE' })
+  @CreateDateColumn({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   createdAt: Date;
 
-  @UpdateDateColumn({ type: 'date', default: () => 'CURRENT_DATE' })
+  @UpdateDateColumn({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   updatedAt: Date;
 
   @Column({ type: 'uuid', nullable: true })
