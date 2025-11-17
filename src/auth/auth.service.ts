@@ -11,6 +11,9 @@ import APIResponse from "src/common/responses/response";
 import { KeycloakService } from "src/common/utils/keycloak.service";
 import { APIID } from "src/common/utils/api-id.config";
 import { Response } from "express";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { User } from "src/user/entities/user-entity";
 
 type LoginResponse = {
   access_token: string;
@@ -22,7 +25,9 @@ type LoginResponse = {
 export class AuthService {
   constructor(
     private readonly useradapter: UserAdapter,
-    private readonly keycloakService: KeycloakService
+    private readonly keycloakService: KeycloakService,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>
   ) { }
 
   async login(authDto, response: Response) {
@@ -76,6 +81,14 @@ export class AuthService {
       const data = await this.useradapter
         .buildUserAdapter()
         .findUserDetails(null, username, tenantId);
+
+      // Update lastLogin timestamp for the user (stored in UTC/GMT)
+      if (data && data.userId) {
+        await this.userRepository.update(
+          { userId: data.userId },
+          { lastLogin: new Date() } // Stored as UTC/GMT in timestamptz column
+        );
+      }
 
       return APIResponse.success(
         response,
