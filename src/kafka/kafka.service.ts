@@ -287,11 +287,11 @@ export class KafkaService implements OnModuleInit, OnModuleDestroy {
   /**
    * Publish a user-related event to Kafka
    * 
-   * @param eventType - The type of user event (created, updated, deleted)
+   * @param eventType - The type of user event (created, updated, deleted, login)
    * @param userData - The user data to include in the event
    * @param userId - The ID of the user (used as the message key)
    */
-  async publishUserEvent(eventType: 'created' | 'updated' | 'deleted', userData: any, userId: string): Promise<void> {
+  async publishUserEvent(eventType: 'created' | 'updated' | 'deleted' | 'login', userData: any, userId: string): Promise<void> {
     if (!this.isKafkaEnabled) {
       this.logger.warn('Kafka is disabled. Skipping user event publish.');
       return; // Do nothing if Kafka is disabled
@@ -308,6 +308,9 @@ export class KafkaService implements OnModuleInit, OnModuleDestroy {
         break;
       case 'deleted':
         fullEventType = 'USER_DELETED';
+        break;
+      case 'login':
+        fullEventType = 'USER_LOGIN';
         break;
       default:
         fullEventType = 'UNKNOWN_EVENT';
