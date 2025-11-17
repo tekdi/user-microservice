@@ -384,6 +384,8 @@ export class PostgresCohortMembersService {
         'email',
         'country',
         'auto_tags',
+        'createdAt',
+        'updatedAt',
       ];
       whereKeys.forEach((key) => {
         if (whereClause[key]) {
@@ -402,12 +404,19 @@ export class PostgresCohortMembersService {
       const uniqueWhere = new Map(); // Store unique conditions
       whereKeys.forEach((key) => {
         if (whereClause[key]) {
-          const value = Array.isArray(whereClause[key])
-            ? whereClause[key] //Ensure it's an array
-            : [whereClause[key]]; // Wrap single value in an array
+          // Date filters (createdAt, updatedAt) should remain as strings, not arrays
+          if (key === 'createdAt' || key === 'updatedAt') {
+            if (!uniqueWhere.has(key)) {
+              uniqueWhere.set(key, whereClause[key]);
+            }
+          } else {
+            const value = Array.isArray(whereClause[key])
+              ? whereClause[key] //Ensure it's an array
+              : [whereClause[key]]; // Wrap single value in an array
 
-          if (!uniqueWhere.has(key)) {
-            uniqueWhere.set(key, value);
+            if (!uniqueWhere.has(key)) {
+              uniqueWhere.set(key, value);
+            }
           }
         }
       });
@@ -866,12 +875,51 @@ export class PostgresCohortMembersService {
               .join(', ');
             return `(U."auto_tags" && ARRAY[${escaped}]::text[])`;
           }
+          case 'createdAt': {
+            const dateCondition = this.buildDateFilterCondition(
+              'CM."createdAt"',
+              value
+            );
+            if (!dateCondition) {
+              LoggerUtil.warn(
+                `Invalid createdAt filter value: ${value}`,
+                'COHORT_MEMBER_SEARCH'
+              );
+              return null; // Return null for invalid dates to filter out
+            }
+            LoggerUtil.log(
+              `Created createdAt filter condition: ${dateCondition}`,
+              'COHORT_MEMBER_SEARCH'
+            );
+            return dateCondition;
+          }
+          case 'updatedAt': {
+            const dateCondition = this.buildDateFilterCondition(
+              'CM."updatedAt"',
+              value
+            );
+            if (!dateCondition) {
+              LoggerUtil.warn(
+                `Invalid updatedAt filter value: ${value}`,
+                'COHORT_MEMBER_SEARCH'
+              );
+              return null; // Return null for invalid dates to filter out
+            }
+            LoggerUtil.log(
+              `Created updatedAt filter condition: ${dateCondition}`,
+              'COHORT_MEMBER_SEARCH'
+            );
+            return dateCondition;
+          }
           default: {
             return `CM."${key}"='${value}'`;
           }
         }
       };
-      whereCase += where.map(processCondition).join(' AND ');
+      const conditions = where.map(processCondition).filter((c) => c !== null && c !== '');
+      if (conditions.length > 0) {
+        whereCase += conditions.join(' AND ');
+      }
     }
 
     // Add searchtext filter if provided
@@ -900,6 +948,14 @@ export class PostgresCohortMembersService {
       ON UR."userId" = U."userId"
       INNER JOIN public."Roles" R
       ON R."roleId" = UR."roleId" ${whereCase}`;
+
+    // Debug logging for date filters
+    if (whereCase.includes('CAST(CM."createdAt"') || whereCase.includes('CAST(CM."updatedAt"')) {
+      LoggerUtil.log(
+        `Generated query with date filter. WHERE clause: ${whereCase}`,
+        'COHORT_MEMBER_SEARCH'
+      );
+    }
 
     options.forEach((option) => {
       if (option[0] === 'limit') {
@@ -991,13 +1047,30 @@ export class PostgresCohortMembersService {
               .join(', ');
             return `(U."auto_tags" && ARRAY[${escaped}]::text[])`;
           }
+          case 'createdAt': {
+            const dateCondition = this.buildDateFilterCondition(
+              'CM."createdAt"',
+              value
+            );
+            return dateCondition || null; // Return null for invalid dates to filter out
+          }
+          case 'updatedAt': {
+            const dateCondition = this.buildDateFilterCondition(
+              'CM."updatedAt"',
+              value
+            );
+            return dateCondition || null; // Return null for invalid dates to filter out
+          }
           default: {
             parameters.push(value);
             return `CM."${key}"=$${parameterIndex++}`;
           }
         }
       };
-      whereCase += where.map(processCondition).join(' AND ');
+      const conditions = where.map(processCondition).filter((c) => c !== null);
+      if (conditions.length > 0) {
+        whereCase += conditions.join(' AND ');
+      }
     }
 
     // Add additional where conditions if provided
@@ -2226,6 +2299,8 @@ export class PostgresCohortMembersService {
           'email',
           'country',
           'auto_tags',
+          'createdAt',
+          'updatedAt',
         ];
         const uniqueWhere = new Map();
         whereKeys.forEach((key) => {
@@ -2441,15 +2516,24 @@ export class PostgresCohortMembersService {
       'email',
       'country',
       'auto_tags',
+      'createdAt',
+      'updatedAt',
     ];
     const uniqueWhere = new Map();
     whereKeys.forEach((key) => {
       if (whereClause[key]) {
-        const value = Array.isArray(whereClause[key])
-          ? whereClause[key]
-          : [whereClause[key]];
-        if (!uniqueWhere.has(key)) {
-          uniqueWhere.set(key, value);
+        // Date filters (createdAt, updatedAt) should remain as strings, not arrays
+        if (key === 'createdAt' || key === 'updatedAt') {
+          if (!uniqueWhere.has(key)) {
+            uniqueWhere.set(key, whereClause[key]);
+          }
+        } else {
+          const value = Array.isArray(whereClause[key])
+            ? whereClause[key]
+            : [whereClause[key]];
+          if (!uniqueWhere.has(key)) {
+            uniqueWhere.set(key, value);
+          }
         }
       }
     });
@@ -5025,6 +5109,148 @@ export class PostgresCohortMembersService {
     } catch (error) {
       throw error;
     }
+  }
+
+  /**
+   * Builds SQL condition for date/time filtering
+   * Supports multiple formats:
+   * - Single date: "2025-11-14" (matches entire day)
+   * - Date with time: "2025-11-14 11:40" or "2025-11-14 23:40" (exact timestamp)
+   * - Date range: "2025-11-14 to 2025-11-20" (inclusive range)
+   *
+   * Note: Handles both date and timestamp column types by casting to timestamp for comparison
+   *
+   * @param columnName - The database column name (e.g., 'CM."createdAt"')
+   * @param value - The date/time filter value
+   * @returns SQL condition string for date filtering
+   */
+  private buildDateFilterCondition(columnName: string, value: any): string {
+    if (!value || typeof value !== 'string') {
+      return '';
+    }
+
+    const trimmedValue = value.trim();
+
+    // Check for date range format: "2025-11-14 to 2025-11-20"
+    if (trimmedValue.toLowerCase().includes(' to ')) {
+      const parts = trimmedValue.split(/ to /i);
+      if (parts.length === 2) {
+        const startDateStr = parts[0].trim();
+        const endDateStr = parts[1].trim();
+        const startDate = this.parseDateTime(startDateStr);
+        const endDate = this.parseDateTime(endDateStr, true); // true = end of day
+
+        if (startDate && endDate) {
+          // Cast column to timestamp to handle both date and timestamp column types
+          // Use DATE() function for date columns to ensure proper comparison
+          const condition = `(CAST(${columnName} AS TIMESTAMP) >= '${startDate}'::timestamp AND CAST(${columnName} AS TIMESTAMP) <= '${endDate}'::timestamp)`;
+          LoggerUtil.log(
+            `Date range filter: ${startDateStr} to ${endDateStr} -> ${condition}`,
+            'DateFilter'
+          );
+          return condition;
+        } else {
+          LoggerUtil.warn(
+            `Failed to parse date range: startDate=${startDate}, endDate=${endDate} for value: ${trimmedValue}`,
+            'DateFilter'
+          );
+        }
+      }
+    }
+
+    // Single date or date with time
+    const parsedDate = this.parseDateTime(trimmedValue);
+    if (parsedDate) {
+      // Check if it's a date-only format (YYYY-MM-DD)
+      if (/^\d{4}-\d{2}-\d{2}$/.test(trimmedValue)) {
+        // Date only - match entire day (from 00:00:00 to 23:59:59.999)
+        // Cast column to timestamp to handle both date and timestamp column types
+        const startOfDay = `${trimmedValue} 00:00:00`;
+        const endOfDay = `${trimmedValue} 23:59:59.999`;
+        const condition = `(CAST(${columnName} AS TIMESTAMP) >= '${startOfDay}'::timestamp AND CAST(${columnName} AS TIMESTAMP) <= '${endOfDay}'::timestamp)`;
+        LoggerUtil.log(
+          `Single date filter: ${trimmedValue} -> ${condition}`,
+          'DateFilter'
+        );
+        return condition;
+      } else {
+        // Date with time - exact match (with tolerance for milliseconds)
+        // Cast column to timestamp to handle both date and timestamp column types
+        const condition = `(CAST(${columnName} AS TIMESTAMP) >= '${parsedDate}'::timestamp AND CAST(${columnName} AS TIMESTAMP) < '${parsedDate}'::timestamp + interval '1 second')`;
+        LoggerUtil.log(
+          `Date with time filter: ${trimmedValue} -> ${condition}`,
+          'DateFilter'
+        );
+        return condition;
+      }
+    }
+
+    // Invalid format - return empty string (will be filtered out)
+    LoggerUtil.warn(
+      `Invalid date format: ${trimmedValue}. Expected formats: YYYY-MM-DD, YYYY-MM-DD HH:MM, or YYYY-MM-DD to YYYY-MM-DD`,
+      'DateFilter'
+    );
+    return '';
+  }
+
+  /**
+   * Parses a date/time string and returns it in PostgreSQL timestamp format
+   * Supports formats:
+   * - YYYY-MM-DD
+   * - YYYY-MM-DD HH:MM
+   * - YYYY-MM-DD HH:MM:SS
+   *
+   * @param dateTimeString - The date/time string to parse
+   * @param endOfDay - If true, sets time to end of day (23:59:59.999)
+   * @returns Formatted date/time string or null if invalid
+   */
+  private parseDateTime(
+    dateTimeString: string,
+    endOfDay: boolean = false
+  ): string | null {
+    if (!dateTimeString || typeof dateTimeString !== 'string') {
+      return null;
+    }
+
+    const trimmed = dateTimeString.trim();
+
+    // Date only format: YYYY-MM-DD
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      if (endOfDay) {
+        return `${trimmed} 23:59:59.999`;
+      }
+      return `${trimmed} 00:00:00`;
+    }
+
+    // Date with time format: YYYY-MM-DD HH:MM or YYYY-MM-DD HH:MM:SS
+    const dateTimeRegex = /^(\d{4}-\d{2}-\d{2})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?$/;
+    const match = trimmed.match(dateTimeRegex);
+
+    if (match) {
+      const [, date, hour, minute, second = '00'] = match;
+      // Validate hour (0-23) and minute (0-59)
+      const hourNum = parseInt(hour, 10);
+      const minuteNum = parseInt(minute, 10);
+      const secondNum = parseInt(second, 10);
+
+      if (
+        hourNum >= 0 &&
+        hourNum <= 23 &&
+        minuteNum >= 0 &&
+        minuteNum <= 59 &&
+        secondNum >= 0 &&
+        secondNum <= 59
+      ) {
+        // Format hour and minute with leading zeros
+        const formattedHour = hour.padStart(2, '0');
+        const formattedMinute = minute.padStart(2, '0');
+        const formattedSecond = second.padStart(2, '0');
+
+        return `${date} ${formattedHour}:${formattedMinute}:${formattedSecond}`;
+      }
+    }
+
+    return null;
   }
 
   /**

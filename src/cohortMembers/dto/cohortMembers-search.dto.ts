@@ -87,6 +87,26 @@ class FiltersDto {
   @IsOptional()
   @IsArray()
   auto_tags?: string[];
+
+  @ApiPropertyOptional({
+    type: String,
+    description:
+      'Filter by createdAt. Supports: single date (2025-11-14), date with time (2025-11-14 11:40), or date range (2025-11-14 to 2025-11-20)',
+    example: '2025-11-14',
+  })
+  @IsOptional()
+  @IsString()
+  createdAt?: string;
+
+  @ApiPropertyOptional({
+    type: String,
+    description:
+      'Filter by updatedAt. Supports: single date (2025-11-14), date with time (2025-11-14 11:40), or date range (2025-11-14 to 2025-11-20)',
+    example: '2025-11-14',
+  })
+  @IsOptional()
+  @IsString()
+  updatedAt?: string;
 }
 export class CohortMembersSearchDto {
   @ApiProperty({
