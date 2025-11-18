@@ -10,6 +10,7 @@ import { PostgresFieldsService } from '../adapters/postgres/fields-adapter';
 import { SSO_DEFAULTS } from '../constants/sso.constants';
 import { PostgresAssignTenantService } from 'src/adapters/postgres/userTenantMapping-adapter';
 
+
 interface NewtonApiResponse {
   success: boolean;
   redirectUrl?: string;
@@ -106,6 +107,7 @@ export class SsoService {
       // Step 4: Check if user is existing or new
       if (!newtonResponse.isNewUser) {
         this.logger.log(`Existing user detected: ${newtonResponse.name}`, 'SSO_SERVICE');
+        await this.handleExistingUser(newtonResponse, ssoRequestDto);
         return this.createStandardResponse(newtonResponse);
       } else {
         this.logger.log(`New user detected: ${newtonResponse.name}`, 'SSO_SERVICE');
@@ -422,6 +424,144 @@ export class SsoService {
       firstName: fullName.trim(),
       lastName: ''
     };
+  }
+
+
+  /**
+   * Update or create newtonData fields in fieldvalues table
+   * Uses updateCustomFields which handles both update and create scenarios
+   * @param userId - User ID to update fields for
+   * @param newtonData - Newton data object with field labels and values
+   * @param updatedBy - User ID who is updating (from token or newton response)
+   * @param tenantId - Tenant ID (uses default if not provided)
+   */
+  private async updateNewtonDataFields(
+    userId: string,
+    newtonData: Record<string, any> | undefined,
+    updatedBy: string,
+    tenantId?: string
+  ): Promise<void> {
+    try {
+      // Use default tenantId if not provided
+      const effectiveTenantId = tenantId || SSO_DEFAULTS.DEFAULT_TENANT_ID;
+
+      if (!newtonData || Object.keys(newtonData).length === 0) {
+        this.logger.log(`No newtonData to update for user: ${userId}`, 'SSO_SERVICE');
+        return;
+      }
+
+      this.logger.log(
+        `Updating newtonData fields for user: ${userId} in tenant: ${effectiveTenantId}`,
+        'SSO_SERVICE'
+      );
+
+      for (const [fieldLabel, fieldValue] of Object.entries(newtonData)) {
+        if (fieldValue) {
+          const fieldId = await this.postgresFieldsService.getFieldIdByLabel(
+            fieldLabel,
+            effectiveTenantId
+          );
+          
+          if (fieldId) {
+            // Use updateCustomFields which handles both update and create (upsert behavior)
+            await this.postgresFieldsService.updateCustomFields(
+              userId,
+              { fieldId, value: fieldValue },
+              null, // fieldAttributesAndParams not needed for simple updates
+              {
+                tenantId: effectiveTenantId,
+                contextType: "USER",
+                createdBy: updatedBy,
+                updatedBy: updatedBy
+              }
+            );
+            this.logger.log(
+              `Updated field ${fieldLabel} (${fieldId}) for user ${userId}`,
+              'SSO_SERVICE'
+            );
+          } else {
+            this.logger.warn(
+              `Field label '${fieldLabel}' not found for tenant ${effectiveTenantId}`,
+              'SSO_SERVICE'
+            );
+          }
+        }
+      }
+
+      this.logger.log(
+        `Successfully updated newtonData fields for user: ${userId}`,
+        'SSO_SERVICE'
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to update newtonData fields for user ${userId}: ${error.message}`,
+        error.stack,
+        'SSO_SERVICE'
+      );
+      // Don't throw - allow the SSO flow to continue even if field updates fail
+    }
+  }
+
+  /**
+   * Handle existing user - decode userId from token and update newtonData
+   * @param newtonResponse - Response from Newton API
+   * @param ssoRequestDto - Original SSO request
+   */
+  private async handleExistingUser(
+    newtonResponse: NewtonApiResponse,
+    ssoRequestDto: SsoRequestDto
+  ): Promise<void> {
+    try {
+      // Decode userId from access token
+      
+
+      // Use decoded userId if available, otherwise fallback to newtonResponse.userId or ssoRequestDto.userId
+      const userId = newtonResponse.userId || ssoRequestDto.userId;
+      
+      if (!userId) {
+        this.logger.error('No userId available for existing user', 'SSO_SERVICE');
+        throw new HttpException(
+          'Unable to determine user ID for existing user',
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      this.logger.log(
+        `Processing existing user: ${userId})`,
+        'SSO_SERVICE'
+      );
+
+      // Ensure tenantId uses default if not provided
+      const effectiveTenantId = ssoRequestDto.tenantId || SSO_DEFAULTS.DEFAULT_TENANT_ID;
+
+      // Update/create newtonData fields every time
+      await this.updateNewtonDataFields(
+        userId,
+        newtonResponse.newtonData,
+        userId, // Use the userId as updatedBy
+        effectiveTenantId
+      );
+
+      this.logger.log(
+        `Successfully processed existing user: ${userId}`,
+        'SSO_SERVICE'
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to handle existing user: ${error.message}`,
+        error.stack,
+        'SSO_SERVICE'
+      );
+      
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      
+      throw new HttpException(
+        'Failed to process existing user',
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
   }
 
   /**
