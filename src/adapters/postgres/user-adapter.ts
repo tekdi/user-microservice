@@ -4622,7 +4622,6 @@ export class PostgresUserService implements IServicelocator {
         FROM "Fields" 
         WHERE "name" = ANY($1)
       `;
-      console.log("hiii");
       const fieldsResult = await this.usersRepository.query(fieldsQuery, [regularCustomFields]);
 
       if (fieldsResult.length === 0) {
@@ -4654,7 +4653,7 @@ export class PostgresUserService implements IServicelocator {
       `;
 
       const customFieldsResult = await this.usersRepository.query(customFieldsQuery, [fieldIds, userIds, tenantId]);
-      console.log("customFieldsResult", customFieldsResult);
+
       // Structure the data by userId and fieldName
       const customFieldsData: Record<string, Record<string, any>> = {};
 
@@ -4697,8 +4696,6 @@ export class PostgresUserService implements IServicelocator {
       'block': { table: 'block', idColumn: 'block_id', nameColumn: 'block_name' },
       'village': { table: 'village', idColumn: 'village_id', nameColumn: 'village_name' }
     };
-
-    console.log("locationTableMap", locationTableMap);
     
     // Collect all unique IDs for each location field type
     const locationIds = {};
