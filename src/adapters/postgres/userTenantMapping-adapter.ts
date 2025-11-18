@@ -452,7 +452,7 @@ export class PostgresAssignTenantService
         try {
           const mapping = await this.userTenantMappingRepository.findOne({
             where: { userId, tenantId },
-            select: ["Id", "userId", "tenantId", "status", "createdAt", "updatedAt", "createdBy", "updatedBy"]
+            select: ["Id", "userId", "tenantId", "status", "reason", "createdAt", "updatedAt", "createdBy", "updatedBy"]
           });
 
           if (!mapping) {
@@ -469,6 +469,7 @@ export class PostgresAssignTenantService
               userId: mapping.userId,
               tenantId: mapping.tenantId,
               status: mapping.status,
+              reason: mapping.reason,
               createdAt: mapping.createdAt,
               updatedAt: mapping.updatedAt,
               createdBy: mapping.createdBy,
