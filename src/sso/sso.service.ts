@@ -107,8 +107,20 @@ export class SsoService {
       // Step 4: Check if user is existing or new
       if (!newtonResponse.isNewUser) {
         this.logger.log(`Existing user detected: ${newtonResponse.name}`, 'SSO_SERVICE');
-        await this.handleExistingUser(newtonResponse, ssoRequestDto);
-        return this.createStandardResponse(newtonResponse);
+        // Send response to client first
+        const response = this.createStandardResponse(newtonResponse);
+        
+        // Update newtonData asynchronously in background (fire and forget)
+        this.handleExistingUser(newtonResponse, ssoRequestDto).catch(error => {
+          // Log error but don't block the response
+          this.logger.error(
+            `Background update of newtonData failed: ${error.message}`,
+            error.stack,
+            'SSO_SERVICE'
+          );
+        });
+        
+        return response;
       } else {
         this.logger.log(`New user detected: ${newtonResponse.name}`, 'SSO_SERVICE');
         await this.handleNewUser(newtonResponse, ssoRequestDto);
@@ -487,7 +499,6 @@ export class SsoService {
           }
         }
       }
-
       this.logger.log(
         `Successfully updated newtonData fields for user: ${userId}`,
         'SSO_SERVICE'
@@ -541,6 +552,17 @@ export class SsoService {
         userId, // Use the userId as updatedBy
         effectiveTenantId
       );
+
+      // Publish user updated event to Kafka
+      this.postgresUserService.publishUserEvent('updated', userId, 'api.sso.service')
+        .catch(error => {
+          // Log error but don't block - Kafka failures shouldn't affect SSO flow
+          this.logger.error(
+            `Failed to publish user updated event to Kafka for ${userId}`,
+            `Error: ${error.message}`,
+            'SSO_SERVICE'
+          );
+        });
 
       this.logger.log(
         `Successfully processed existing user: ${userId}`,
