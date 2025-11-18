@@ -4068,7 +4068,7 @@ export class PostgresUserService implements IServicelocator {
 
     // Add status filter if provided
     if (statusFilter && statusFilter.length > 0) {
-      conditions.push(`u."status" = ANY($${paramIndex})`);
+      conditions.push(`utm."status" = ANY($${paramIndex})`);
       params.push(statusFilter);
       paramIndex++;
     }
