@@ -4622,7 +4622,7 @@ export class PostgresUserService implements IServicelocator {
         FROM "Fields" 
         WHERE "name" = ANY($1)
       `;
-
+      console.log("hiii");
       const fieldsResult = await this.usersRepository.query(fieldsQuery, [regularCustomFields]);
 
       if (fieldsResult.length === 0) {
@@ -4654,7 +4654,7 @@ export class PostgresUserService implements IServicelocator {
       `;
 
       const customFieldsResult = await this.usersRepository.query(customFieldsQuery, [fieldIds, userIds, tenantId]);
-
+      console.log("customFieldsResult", customFieldsResult);
       // Structure the data by userId and fieldName
       const customFieldsData: Record<string, Record<string, any>> = {};
 
@@ -4698,6 +4698,8 @@ export class PostgresUserService implements IServicelocator {
       'village': { table: 'village', idColumn: 'village_id', nameColumn: 'village_name' }
     };
 
+    console.log("locationTableMap", locationTableMap);
+    
     // Collect all unique IDs for each location field type
     const locationIds = {};
     Object.keys(customFieldsData).forEach(userId => {
@@ -4740,7 +4742,8 @@ export class PostgresUserService implements IServicelocator {
           locationNameMaps[fieldName] = nameResult.reduce((acc, row) => {
             const id = row[tableInfo.idColumn];
             const name = row[tableInfo.nameColumn];
-            if (id && name) {
+            // Explicitly check for null/undefined to allow 0 as valid ID
+            if (id !== null && id !== undefined && name !== null && name !== undefined) {
               acc[id] = name;
             }
             return acc;
@@ -4764,12 +4767,17 @@ export class PostgresUserService implements IServicelocator {
           if (Array.isArray(fieldValue) && fieldValue.length > 0) {
             // Handle multiple IDs by resolving each one and joining with commas
             const resolvedNames = fieldValue
-              .filter(id => id !== null && id !== undefined && id !== '') // Filter out invalid IDs
+              .filter(id => id !== null && id !== undefined && id !== '') // Filter out invalid IDs, but allow 0
               .map(id => {
                 const resolvedName = locationNameMaps[fieldName][id];
-                return resolvedName || id; // Use resolved name or fallback to original ID
+                // Explicitly check if resolvedName exists (not undefined/null) to handle 0 as valid value
+                // If resolvedName is 0 or "0", it should be used, not fallback to id
+                if (resolvedName !== undefined && resolvedName !== null) {
+                  return resolvedName;
+                }
+                return id; // Fallback to original ID if not found in map
               })
-              .filter(name => name !== null && name !== undefined && name !== ''); // Filter out empty results
+              .filter(name => name !== null && name !== undefined && name !== ''); // Filter out empty results, but allow 0 and "0"
 
             resolvedData[userId][fieldName] = resolvedNames.length > 0 ? resolvedNames.join(', ') : null;
           } else {
