@@ -169,6 +169,9 @@ export class CohortMembersController {
   ) {
     const tenantId = headers["tenantid"];
     const academicyearId = headers["academicyearid"];
+    if (!tenantId || !isUUID(tenantId)) {
+      throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
+    }
     if (!academicyearId || !isUUID(academicyearId)) {
       throw new BadRequestException(
         "academicyearId is required and must be a valid UUID."

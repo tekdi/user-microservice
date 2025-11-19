@@ -339,7 +339,7 @@ export class SsoService {
       }
       this.postgresUserService.publishUserEvent('created', createdUser.userId, 'api.sso.service')
       this.logger.log(`New user created successfully: ${newtonResponse.name} with ID: ${createdUser.userId}`, 'SSO_SERVICE');
-
+      this.postgresUserService.publishUserEvent('created', createdUser.userId, 'api.sso.service')
     } catch (error) {
       this.logger.error(
         `Failed to create new user: ${error.message}`,

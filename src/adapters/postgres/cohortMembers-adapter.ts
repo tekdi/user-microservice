@@ -364,7 +364,8 @@ ON CM."userId" = U."userId" ${whereCase}`;
         where,
         "true",
         options,
-        order
+        order,
+        tenantId
       );
 
       if (results["userDetails"].length == 0) {
@@ -438,14 +439,15 @@ ON CM."userId" = U."userId" ${whereCase}`;
     where: any,
     fieldShowHide: any,
     options: any,
-    order: any
+    order: any,
+    tenantId: string
   ) {
     const results = {
       totalCount: 0,
       userDetails: [],
     };
 
-    const getUserDetails = await this.getUsers(where, options, order);
+    const getUserDetails = await this.getUsers(where, options, order, tenantId);
 
     if (getUserDetails.length > 0) {
       results.totalCount = parseInt(getUserDetails[0].total_count, 10);
@@ -592,13 +594,17 @@ ON CM."userId" = U."userId" ${whereCase}`;
     });
   }
 
-  async getUsers(where: any, options: any, order: any) {
+  async getUsers(where: any, options: any, order: any, tenantId: string) {
     let whereCase = ``;
     let limit, offset;
+    const whereConditions: string[] = [];
+
+    // Always add tenantId filter
+    if (tenantId) {
+      whereConditions.push(`UTM."tenantId"='${tenantId}'`);
+    }
 
     if (where.length > 0) {
-      whereCase = "WHERE ";
-
       const processCondition = ([key, value]) => {
         switch (key) {
           case "role":
@@ -623,18 +629,41 @@ ON CM."userId" = U."userId" ${whereCase}`;
           }
         }
       };
-      whereCase += where.map(processCondition).join(" AND ");
+      whereConditions.push(...where.map(processCondition));
     }
 
-    let query = `SELECT U."userId", U."enrollmentId", U."username", "firstName", "middleName", "lastName", R."name" AS role, U."mobile",U."deviceId",
-      CM."status", CM."statusReason",CM."cohortMembershipId",CM."status",CM."createdAt", CM."updatedAt",U."createdBy",U."updatedBy", COUNT(*) OVER() AS total_count  FROM public."CohortMembers" CM
-      INNER JOIN public."Users" U
-      ON CM."userId" = U."userId"
-      INNER JOIN public."UserRolesMapping" UR
-      ON UR."userId" = U."userId"
-      INNER JOIN public."Roles" R
-      ON R."roleId" = UR."roleId" ${whereCase}`;
+    if (whereConditions.length > 0) {
+      whereCase = "WHERE " + whereConditions.join(" AND ");
+    }
 
+    let query = `SELECT 
+  U."userId", 
+  U."enrollmentId", 
+  U."username", 
+  U."firstName", 
+  U."middleName", 
+  U."lastName", 
+  R."name" AS role, 
+  U."mobile",
+  U."deviceId",
+  CM."status", 
+  CM."statusReason",
+  CM."cohortMembershipId",
+  CM."createdAt", 
+  CM."updatedAt",
+  U."createdBy",
+  U."updatedBy",
+  COUNT(*) OVER() AS total_count
+FROM public."CohortMembers" CM
+INNER JOIN public."Users" U
+  ON CM."userId" = U."userId"
+INNER JOIN public."UserTenantMapping" UTM
+  ON U."userId" = UTM."userId"
+INNER JOIN public."UserRolesMapping" UR
+  ON UR."userId" = U."userId" AND UR."tenantId" = UTM."tenantId"
+INNER JOIN public."Roles" R
+  ON R."roleId" = UR."roleId"
+${whereCase}`;
     options.forEach((option) => {
       if (option[0] === "limit") {
         limit = option[1];
