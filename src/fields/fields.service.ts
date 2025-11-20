@@ -582,12 +582,20 @@ const fieldType = fieldMetadata.schema?.type || fieldMetadata.type; // Type from
           case 'text':
             typedValue = result.textValue || result.value;
             // Check if field has maxSelection or minSelection in fieldParams (multi-select field)
-            if (result.fieldParams && (result.fieldParams.maxSelection || result.fieldParams.minSelection)) {
+            // Use != null to check for defined values (not null/undefined), not just truthiness
+            if (
+              result.fieldParams &&
+              (result.fieldParams.maxSelection != null ||
+                result.fieldParams.minSelection != null)
+            ) {
               // Wrap the value in an array as per requirement
-              if (typedValue) {
-                typedValue = [typedValue];
-              } else {
-                typedValue = [];
+              // Only wrap if not already an array, and handle empty strings properly
+              if (!Array.isArray(typedValue)) {
+                if (typedValue && typedValue !== '') {
+                  typedValue = [typedValue];
+                } else {
+                  typedValue = [];
+                }
               }
             }
             break;
