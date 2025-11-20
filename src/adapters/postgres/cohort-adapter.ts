@@ -902,13 +902,13 @@ export class PostgresCohortService {
           });
         }
 
-        Object.entries(filters).forEach(([key, value]) => {
+        for (const [key, value] of Object.entries(filters)) {
           if (!allowedKeys.includes(key) && key !== 'customFieldsName') {
             return APIResponse.error(
               response,
               apiId,
               `${key} Invalid key`,
-              `Invalid filter key`,
+              'Invalid filter key',
               HttpStatus.BAD_REQUEST
             );
           }
@@ -924,16 +924,35 @@ export class PostgresCohortService {
               value !== null &&
               !Array.isArray(value)
             ) {
-              const operator = Object.keys(value)[0];
+              const operatorKeys = Object.keys(value);
+              if (operatorKeys.length === 0) {
+                return APIResponse.error(
+                  response,
+                  apiId,
+                  `Invalid ${key} filter format. Expected an object with one operator key (gt, gte, lt, lte, eq, ne).`,
+                  'Invalid filter format',
+                  HttpStatus.BAD_REQUEST
+                );
+              }
+              if (operatorKeys.length > 1) {
+                return APIResponse.error(
+                  response,
+                  apiId,
+                  `Invalid ${key} filter format. Only one operator is allowed. Found: ${operatorKeys.join(', ')}`,
+                  'Invalid filter format',
+                  HttpStatus.BAD_REQUEST
+                );
+              }
+              const operator = operatorKeys[0];
               const dateValue = value[operator];
               const validOperators = ['lt', 'lte', 'gt', 'gte', 'eq', 'ne'];
-              
+
               if (!validOperators.includes(operator)) {
                 return APIResponse.error(
                   response,
                   apiId,
                   `Invalid operator: ${operator}. Valid operators are: ${validOperators.join(', ')}`,
-                  `Invalid filter operator`,
+                  'Invalid filter operator',
                   HttpStatus.BAD_REQUEST
                 );
               }
@@ -945,7 +964,7 @@ export class PostgresCohortService {
                   response,
                   apiId,
                   `Invalid date value for ${key}: ${dateValue}`,
-                  `Invalid date format`,
+                  'Invalid date format',
                   HttpStatus.BAD_REQUEST
                 );
               }
@@ -979,7 +998,7 @@ export class PostgresCohortService {
                   response,
                   apiId,
                   `Invalid date value for ${key}: ${value}`,
-                  `Invalid date format`,
+                  'Invalid date format',
                   HttpStatus.BAD_REQUEST
                 );
               }
@@ -988,7 +1007,7 @@ export class PostgresCohortService {
           } else if (cohortAllKeys.includes(key)) {
             whereClause[key] = value;
           }
-        });
+        }
       }
 
       if (whereClause['parentId']) {
