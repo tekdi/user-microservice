@@ -84,7 +84,7 @@ export class FormSubmissionService {
     private fieldValuesRepository: Repository<FieldValues>,
     @InjectRepository(Form)
     private formRepository: Repository<Form>,
-    @InjectRepository(Fields) // ADD THIS
+    @InjectRepository(Fields)
     private fieldsRepository: Repository<Fields>,
     @InjectRepository(CohortMembers)
     private cohortMembersRepository: Repository<CohortMembers>,
@@ -218,7 +218,7 @@ export class FormSubmissionService {
         await this.fieldValuesRepository
           .createQueryBuilder()
           .insert()
-          .into('FieldValues')
+          .into(FieldValues)
           .values(fieldValuesToInsert)
           .execute();
       }
