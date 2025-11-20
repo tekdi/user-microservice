@@ -588,11 +588,62 @@ const fieldType = fieldMetadata.schema?.type || fieldMetadata.type; // Type from
               (result.fieldParams.maxSelection != null ||
                 result.fieldParams.minSelection != null)
             ) {
-              // Wrap the value in an array as per requirement
-              // Only wrap if not already an array, and handle empty strings properly
+              // Only process if not already an array, and handle empty strings properly
               if (!Array.isArray(typedValue)) {
                 if (typedValue && typedValue !== '') {
-                  typedValue = [typedValue];
+                  // Get enum options from fieldParams for proper matching
+                  const rawOptions = (result.fieldParams as any)?.options;
+                  const enumOptions: string[] = Array.isArray(rawOptions?.enum)
+                    ? rawOptions.enum
+                    : Array.isArray(rawOptions)
+                    ? rawOptions
+                    : [];
+
+                  const normalized = typeof typedValue === 'string' ? typedValue.trim() : typedValue;
+
+                  // Check if the value exactly matches a single enum option
+                  if (enumOptions.length > 0 && enumOptions.includes(normalized)) {
+                    typedValue = [normalized];
+                  } else if (typeof normalized === 'string' && normalized.includes(',')) {
+                    // Handle comma-separated values by matching against enum options
+                    let parts: string[] = [];
+
+                    // First try splitting on ".," pattern (for options that end with dots)
+                    if (normalized.includes('.,')) {
+                      parts = normalized
+                        .split('.,')
+                        .map((v) => v.trim())
+                        .filter((v) => v.length > 0)
+                        .map((v) => (v.endsWith('.') ? v : v + '.'));
+                    } else {
+                      // Fallback to regular comma splitting
+                      parts = normalized
+                        .split(/\s*,\s*/g)
+                        .map((v) => v.trim())
+                        .filter((v) => v.length > 0);
+                    }
+
+                    // Match parts against enum options to ensure we only return valid options
+                    if (enumOptions.length > 0) {
+                      const matchedValues = parts.filter((p) => {
+                        const partTrimmed = p.trim();
+                        return enumOptions.some((opt) => opt.trim() === partTrimmed);
+                      });
+
+                      if (matchedValues.length > 0) {
+                        typedValue = matchedValues;
+                      } else {
+                        // If no exact matches but we have parts, return them (might be valid but not in enum)
+                        typedValue = parts;
+                      }
+                    } else {
+                      // No enum options available, return parts as-is
+                      typedValue = parts;
+                    }
+                  } else {
+                    // Single value that doesn't match enum, wrap in array
+                    typedValue = [normalized];
+                  }
                 } else {
                   typedValue = [];
                 }

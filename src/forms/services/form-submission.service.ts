@@ -36,6 +36,7 @@ import { LoggerUtil } from 'src/common/logger/LoggerUtil';
 import { isElasticsearchEnabled } from 'src/common/utils/elasticsearch.util';
 import { CohortMembers } from 'src/cohortMembers/entities/cohort-member.entity';
 import { Cohort } from 'src/cohort/entities/cohort.entity';
+import { FieldValueConverter } from 'src/utils/field-value-converter';
 
 interface DateRange {
   start: string;
@@ -83,6 +84,8 @@ export class FormSubmissionService {
     private fieldValuesRepository: Repository<FieldValues>,
     @InjectRepository(Form)
     private formRepository: Repository<Form>,
+    @InjectRepository(Fields)
+    private fieldsRepository: Repository<Fields>,
     @InjectRepository(CohortMembers)
     private cohortMembersRepository: Repository<CohortMembers>,
     @InjectRepository(Cohort)
@@ -107,13 +110,25 @@ export class FormSubmissionService {
         throw new BadRequestException('User ID not found in token');
       }
 
-      // Check if form exists and is active
-      const form = await this.formRepository.findOne({
-        where: {
-          formid: createFormSubmissionDto.formSubmission.formId,
-          status: 'active',
-        },
-      });
+      // OPTIMIZATION 1: Parallelize independent queries - form check and existing submission check
+      const [form, existingSubmission] = await Promise.all([
+        this.formRepository.findOne({
+          where: {
+            formid: createFormSubmissionDto.formSubmission.formId,
+            status: 'active',
+          },
+        }),
+        this.formSubmissionRepository.findOne({
+          where: {
+            formId: createFormSubmissionDto.formSubmission.formId,
+            itemId: userId,
+            status: In([
+              FormSubmissionStatus.ACTIVE,
+              FormSubmissionStatus.INACTIVE,
+            ]),
+          },
+        }),
+      ]);
 
       if (!form) {
         return APIResponse.error(
@@ -124,18 +139,6 @@ export class FormSubmissionService {
           HttpStatus.BAD_REQUEST
         );
       }
-
-      // Check for existing active/inactive submissions with same formId and itemId
-      const existingSubmission = await this.formSubmissionRepository.findOne({
-        where: {
-          formId: createFormSubmissionDto.formSubmission.formId,
-          itemId: userId,
-          status: In([
-            FormSubmissionStatus.ACTIVE,
-            FormSubmissionStatus.INACTIVE,
-          ]),
-        },
-      });
 
       if (existingSubmission) {
         return APIResponse.error(
@@ -170,39 +173,73 @@ export class FormSubmissionService {
         formSubmission
       );
 
-      // Save field values using FieldsService
-      for (const fieldValue of createFormSubmissionDto.customFields) {
-        const fieldValueDto = new FieldValuesDto({
-          fieldId: fieldValue.fieldId,
-          value: fieldValue.value,
-          itemId: savedSubmission.itemId,
-          createdBy: userId,
-          updatedBy: userId,
+      // OPTIMIZATION 2: Batch fetch all field details in ONE query instead of N queries
+      const fieldIds = createFormSubmissionDto.customFields.map(
+        (fv) => fv.fieldId
+      );
+      const fieldDetailsMap = new Map<string, Fields>();
+      if (fieldIds.length > 0) {
+        const fieldDetails = await this.fieldsRepository.find({
+          where: { fieldId: In(fieldIds) },
         });
-
-        const result = await this.fieldsService.createFieldValues(
-          null,
-          fieldValueDto
-        );
-        if (result instanceof ErrorResponseTypeOrm) {
-          throw new BadRequestException(result.errorMessage);
-        }
+        fieldDetails.forEach((field) => {
+          fieldDetailsMap.set(field.fieldId, field);
+        });
       }
 
+      // OPTIMIZATION 3: Batch insert all field values in ONE database operation instead of N sequential inserts
+      const fieldValuesToInsert = createFormSubmissionDto.customFields.map(
+        (fieldValue) => {
+          const fieldDetails = fieldDetailsMap.get(fieldValue.fieldId);
+          if (!fieldDetails) {
+            throw new BadRequestException(
+              `Field not found: ${fieldValue.fieldId}`
+            );
+          }
+
+          // Use FieldValueConverter to prepare field data
+          const fieldData = FieldValueConverter.prepareFieldData(
+            fieldValue.fieldId,
+            fieldValue.value,
+            savedSubmission.itemId,
+            fieldDetails.type
+          );
+
+          // Set common fields
+          fieldData.createdBy = userId;
+          fieldData.updatedBy = userId;
+
+          return fieldData;
+        }
+      );
+
+      // Batch insert all field values at once
+      if (fieldValuesToInsert.length > 0) {
+        await this.fieldValuesRepository
+          .createQueryBuilder()
+          .insert()
+          .into(FieldValues)
+          .values(fieldValuesToInsert)
+          .execute();
+      }
       // Get the complete field values with field information
+      // Note: We still need this call for checkbox processing and proper formatting
       const customFields = await this.fieldsService.getFieldsAndFieldsValues(
         savedSubmission.itemId,
         createFormSubmissionDto.formSubmission.formId // Pass formId for checkbox processing
       );
 
-      // Update Elasticsearch with complete field values from database (includes dependencies)
-      // Only update if Elasticsearch is enabled
+      // OPTIMIZATION 4: Make Elasticsearch update non-blocking (fire and forget)
+      // This prevents Elasticsearch from blocking the API response
       if (isElasticsearchEnabled()) {
-        await this.updateApplicationInElasticsearch(
+        this.updateApplicationInElasticsearch(
           userId,
           savedSubmission,
-          customFields // Fixed: now passes all fields from DB
-        );
+          customFields
+        ).catch((elasticError) => {
+          // Log error but don't fail the request
+          LoggerUtil.warn('Failed to update Elasticsearch:', elasticError);
+        });
       }
 
       // Create response object
@@ -1339,12 +1376,12 @@ export class FormSubmissionService {
 
           extractFormFieldIds(fieldProps);
         }
-                // Filter updatedFieldValues to only include form fields
+        // Filter updatedFieldValues to only include form fields
         // TEMPORARY FIX: If a field is not in formFieldIds but exists in fieldIdToPageName, include it
         formFieldsOnly = updatedFieldValues.filter((field) => {
           const isInFormFieldIds = formFieldIds.has(field.fieldId);
           const isInFieldMapping = fieldIdToPageName[field.fieldId];
-          
+
           return isInFormFieldIds || isInFieldMapping;
         });
       } catch (err) {
@@ -1405,10 +1442,9 @@ export class FormSubmissionService {
           fields: {},
         };
         // Process field value for Elasticsearch - convert arrays to comma-separated strings
-        updatedFields[pageKey].fields[field.fieldId] = this.processFieldValueForElasticsearch(field.value);
+        updatedFields[pageKey].fields[field.fieldId] =
+          this.processFieldValueForElasticsearch(field.value);
       });
-
-
 
       if (existingAppIndex !== -1) {
         // COMPLETELY REPLACE old pages structure instead of merging
@@ -1878,8 +1914,10 @@ export class FormSubmissionService {
         }
 
         // Process field value for Elasticsearch - convert arrays to comma-separated strings
-        pages[pageName].fields[field.fieldId] = this.processFieldValueForElasticsearch(field.value);
-        formData[pageName][field.fieldId] = this.processFieldValueForElasticsearch(field.value);
+        pages[pageName].fields[field.fieldId] =
+          this.processFieldValueForElasticsearch(field.value);
+        formData[pageName][field.fieldId] =
+          this.processFieldValueForElasticsearch(field.value);
       }
 
       if (Object.keys(pages).length === 0) {
@@ -1887,7 +1925,9 @@ export class FormSubmissionService {
           completed: true,
           fields: formFieldsOnly.reduce((acc, field) => {
             // Process field value for Elasticsearch - convert arrays to comma-separated strings
-            acc[field.fieldId] = this.processFieldValueForElasticsearch(field.value);
+            acc[field.fieldId] = this.processFieldValueForElasticsearch(
+              field.value
+            );
             return acc;
           }, {}),
         };
@@ -2597,15 +2637,19 @@ export class FormSubmissionService {
           }
 
           // Process field value for Elasticsearch - convert arrays to comma-separated strings
-          pages[pageName].fields[field.fieldId] = this.processFieldValueForElasticsearch(field.value);
-          formData[pageName][field.fieldId] = this.processFieldValueForElasticsearch(field.value);
+          pages[pageName].fields[field.fieldId] =
+            this.processFieldValueForElasticsearch(field.value);
+          formData[pageName][field.fieldId] =
+            this.processFieldValueForElasticsearch(field.value);
         }
         if (Object.keys(pages).length === 0) {
           pages['eligibilityCheck'] = {
             completed: true,
             fields: formFieldsOnly.reduce((acc, field) => {
               // Process field value for Elasticsearch - convert arrays to comma-separated strings
-              acc[field.fieldId] = this.processFieldValueForElasticsearch(field.value);
+              acc[field.fieldId] = this.processFieldValueForElasticsearch(
+                field.value
+              );
               return acc;
             }, {}),
           };
