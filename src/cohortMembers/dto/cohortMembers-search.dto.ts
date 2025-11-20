@@ -107,6 +107,24 @@ class FiltersDto {
   @IsOptional()
   @IsString()
   updatedAt?: string;
+
+  @ApiPropertyOptional({
+    type: Object,
+    description:
+      'Filter by cohort start date. Supports operators: gt, gte, lt, lte, eq, ne. Example: {"lte": "2025-11-20"}',
+    example: { lte: '2025-11-20' },
+  })
+  @IsOptional()
+  cohort_startDate?: { [key: string]: string };
+
+  @ApiPropertyOptional({
+    type: Object,
+    description:
+      'Filter by cohort end date. Supports operators: gt, gte, lt, lte, eq, ne. Example: {"gte": "2025-11-20"}',
+    example: { gte: '2025-11-20' },
+  })
+  @IsOptional()
+  cohort_endDate?: { [key: string]: string };
 }
 export class CohortMembersSearchDto {
   @ApiProperty({

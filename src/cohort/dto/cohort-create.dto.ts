@@ -1,12 +1,13 @@
-import { Expose, Type } from "class-transformer";
+import { Expose, Type, Transform } from 'class-transformer';
 import {
   IsNotEmpty,
   IsOptional,
   ValidateNested,
   IsEnum,
-} from "class-validator";
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { FieldValuesOptionDto } from "src/user/dto/user-create.dto";
+  IsDateString,
+} from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { FieldValuesOptionDto } from 'src/user/dto/user-create.dto';
 
 export class CohortCreateDto {
   @Expose()
@@ -26,8 +27,8 @@ export class CohortCreateDto {
   //programId
   @ApiPropertyOptional({
     type: String,
-    description: "The programId of the cohort",
-    default: "",
+    description: 'The programId of the cohort',
+    default: '',
   })
   @Expose()
   programId: string;
@@ -35,8 +36,8 @@ export class CohortCreateDto {
   //parentId
   @ApiPropertyOptional({
     type: String,
-    description: "The parentId of the cohort",
-    default: "",
+    description: 'The parentId of the cohort',
+    default: '',
   })
   @Expose()
   parentId: string;
@@ -48,8 +49,8 @@ export class CohortCreateDto {
   //name
   @ApiProperty({
     type: String,
-    description: "The name of the cohort",
-    default: "",
+    description: 'The name of the cohort',
+    default: '',
   })
   @Expose()
   @IsNotEmpty()
@@ -58,8 +59,8 @@ export class CohortCreateDto {
   //type
   @ApiProperty({
     type: String,
-    description: "The type of the cohort",
-    default: "",
+    description: 'The type of the cohort',
+    default: '',
   })
   @Expose()
   @IsNotEmpty()
@@ -70,11 +71,11 @@ export class CohortCreateDto {
   // status: string;
   @ApiProperty({
     type: String,
-    description: "The status of Cohort",
+    description: 'The status of Cohort',
   })
   @IsOptional()
-  @IsEnum(["active", "archived", "inactive"], {
-    message: "Status must be one of: active, archived, inactive",
+  @IsEnum(['active', 'archived', 'inactive'], {
+    message: 'Status must be one of: active, archived, inactive',
   })
   @Expose()
   status: string;
@@ -82,6 +83,30 @@ export class CohortCreateDto {
   //attendanceCaptureImage
   @Expose()
   attendanceCaptureImage: boolean;
+
+  //cohort_startDate
+  @ApiPropertyOptional({
+    type: String,
+    format: 'date-time',
+    description:
+      'The start date of the cohort. Accepts various formats: YYYY-MM-DD, YYYY-MM-DD HH:mm:ss, YYYY-MM-DDTHH:mm:ssZ, etc.',
+    example: '2025-01-01T00:00:00Z',
+  })
+  @Expose()
+  @IsOptional()
+  cohort_startDate: string;
+
+  //cohort_endDate
+  @ApiPropertyOptional({
+    type: String,
+    format: 'date-time',
+    description:
+      'The end date of the cohort. Accepts various formats: YYYY-MM-DD, YYYY-MM-DD HH:mm:ss, YYYY-MM-DDTHH:mm:ssZ, etc.',
+    example: '2025-12-31T23:59:59Z',
+  })
+  @Expose()
+  @IsOptional()
+  cohort_endDate: string;
 
   //image need for future
   // @Expose()
@@ -104,7 +129,7 @@ export class CohortCreateDto {
   //fieldValues
   @ApiPropertyOptional({
     type: [FieldValuesOptionDto],
-    description: "The fieldValues Object",
+    description: 'The fieldValues Object',
   })
   @ValidateNested({ each: true })
   @Type(() => FieldValuesOptionDto)
