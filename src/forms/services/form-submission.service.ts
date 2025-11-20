@@ -995,36 +995,133 @@ export class FormSubmissionService {
       let updatedFieldValues = [];
       if (updateFormSubmissionDto.customFields?.length > 0) {
         try {
-          const fieldValuePromises = updateFormSubmissionDto.customFields.map(
-            async (fieldValue) => {
-              try {
-                const existingValue = await this.fieldValuesRepository
-                  .createQueryBuilder('fieldValue')
-                  .where('fieldValue.fieldId = :fieldId', {
-                    fieldId: fieldValue.fieldId,
-                  })
-                  .andWhere('fieldValue.itemId = :itemId', { itemId: userId })
-                  .getOne();
-
-                const result = await this.updateFieldValues(
-                  fieldValue,
-                  userId,
-                  existingValue
-                );
-                return result;
-              } catch (error) {
-                console.error('Error updating field value:', error);
-                return null;
-              }
-            }
+          // OPTIMIZATION 1: Batch fetch all existing field values in ONE query instead of N queries
+          const fieldIds = updateFormSubmissionDto.customFields.map(
+            (fv) => fv.fieldId
           );
+          const existingFieldValues = await this.fieldValuesRepository.find({
+            where: {
+              fieldId: In(fieldIds),
+              itemId: userId,
+            },
+          });
+          const existingFieldValuesMap = new Map<string, FieldValues>();
+          existingFieldValues.forEach((fv) => {
+            existingFieldValuesMap.set(fv.fieldId, fv);
+          });
 
-          const results = await Promise.all(fieldValuePromises);
-          updatedFieldValues = results.filter((result) => result !== null);
+          // OPTIMIZATION 2: Batch fetch all field details in ONE query instead of N queries
+          const fieldDetailsMap = new Map<string, Fields>();
+          if (fieldIds.length > 0) {
+            const fieldDetails = await this.fieldsRepository.find({
+              where: { fieldId: In(fieldIds) },
+            });
+            fieldDetails.forEach((field) => {
+              fieldDetailsMap.set(field.fieldId, field);
+            });
+          }
 
-          // Ensure all field value updates are committed to database before proceeding
-          // This prevents race conditions where getFieldsAndFieldsValues might fetch stale data
-          await this.fieldValuesRepository.query('SELECT 1'); // Force a database round trip to ensure commits
+          // OPTIMIZATION 3: Separate updates and inserts for batch operations
+          const fieldValuesToUpdate: any[] = [];
+          const fieldValuesToInsert: any[] = [];
+          const fieldMetadataMap = new Map<string, Fields>();
+
+          for (const fieldValue of updateFormSubmissionDto.customFields) {
+            const existingValue = existingFieldValuesMap.get(fieldValue.fieldId);
+            const fieldDetails = fieldDetailsMap.get(fieldValue.fieldId);
+
+            if (!fieldDetails) {
+              LoggerUtil.warn(
+                `Field not found: ${fieldValue.fieldId}, skipping update`
+              );
+              continue;
+            }
+
+            // Prepare field data using FieldValueConverter
+            const fieldData = FieldValueConverter.prepareFieldData(
+              fieldValue.fieldId,
+              fieldValue.value,
+              userId,
+              fieldDetails.type
+            );
+
+            fieldData.updatedBy = userId;
+            if (existingValue) {
+              // Update existing field value
+              fieldData.fieldValuesId = existingValue.fieldValuesId;
+              fieldData.createdBy = existingValue.createdBy;
+              fieldValuesToUpdate.push(fieldData);
+            } else {
+              // Insert new field value
+              fieldData.createdBy = userId;
+              fieldValuesToInsert.push(fieldData);
+            }
+
+            // Store field metadata for response
+            fieldMetadataMap.set(fieldValue.fieldId, fieldDetails);
+          }
+
+          // OPTIMIZATION 4: Batch update existing field values
+          if (fieldValuesToUpdate.length > 0) {
+            await Promise.all(
+              fieldValuesToUpdate.map((fieldData) =>
+                this.fieldValuesRepository
+                  .createQueryBuilder()
+                  .update(FieldValues)
+                  .set({
+                    value: fieldData.value,
+                    textValue: fieldData.textValue,
+                    numberValue: fieldData.numberValue,
+                    calendarValue: fieldData.calendarValue,
+                    dropdownValue: fieldData.dropdownValue,
+                    radioValue: fieldData.radioValue,
+                    checkboxValue: fieldData.checkboxValue,
+                    textareaValue: fieldData.textareaValue,
+                    fileValue: fieldData.fileValue,
+                    updatedBy: fieldData.updatedBy,
+                    updatedAt: () => 'CURRENT_TIMESTAMP',
+                  })
+                  .where('fieldValuesId = :fieldValuesId', {
+                    fieldValuesId: fieldData.fieldValuesId,
+                  })
+                  .execute()
+              )
+            );
+          }
+
+          // OPTIMIZATION 5: Batch insert new field values
+          if (fieldValuesToInsert.length > 0) {
+            await this.fieldValuesRepository
+              .createQueryBuilder()
+              .insert()
+              .into(FieldValues)
+              .values(fieldValuesToInsert)
+              .execute();
+          }
+
+          // Build response with field metadata
+          const allFieldValues = [
+            ...fieldValuesToUpdate,
+            ...fieldValuesToInsert,
+          ];
+          updatedFieldValues = allFieldValues.map((fieldData) => {
+            const field = fieldMetadataMap.get(fieldData.fieldId);
+            if (!field) return null;
+
+            return {
+              fieldValuesId: fieldData.fieldValuesId,
+              fieldId: field.fieldId,
+              fieldname: field.name,
+              label: field.label,
+              type: field.type.toLowerCase(),
+              value: fieldData.value,
+              context: field.context,
+              state: field.state,
+              contextType: field.contextType,
+              fieldParams: field.fieldParams || {},
+            };
+          });
+          updatedFieldValues = updatedFieldValues.filter((fv) => fv !== null);
         } catch (error) {
           LoggerUtil.warn(`Failed to update field values`, error);
         }
@@ -1037,14 +1134,17 @@ export class FormSubmissionService {
           updatedSubmission.formId // Pass formId for checkbox processing
         );
 
-      // Update Elasticsearch after successful form submission update
-      // Only update if Elasticsearch is enabled
+      // OPTIMIZATION 6: Make Elasticsearch update non-blocking (fire and forget)
+      // This prevents Elasticsearch from blocking the API response
       if (isElasticsearchEnabled()) {
-        await this.updateApplicationInElasticsearch(
+        this.updateApplicationInElasticsearch(
           userId,
           updatedSubmission,
-          completeFieldValues // Fixed: now passes all fields from DB
-        );
+          completeFieldValues
+        ).catch((elasticError) => {
+          // Log error but don't fail the request
+          LoggerUtil.warn('Failed to update Elasticsearch:', elasticError);
+        });
       }
       const successResponse = {
         id: 'api.form.submission.update',
