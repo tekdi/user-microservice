@@ -581,6 +581,15 @@ const fieldType = fieldMetadata.schema?.type || fieldMetadata.type; // Type from
         switch (result.type) {
           case 'text':
             typedValue = result.textValue || result.value;
+            // Check if field has maxSelection or minSelection in fieldParams (multi-select field)
+            if (result.fieldParams && (result.fieldParams.maxSelection || result.fieldParams.minSelection)) {
+              // Wrap the value in an array as per requirement
+              if (typedValue) {
+                typedValue = [typedValue];
+              } else {
+                typedValue = [];
+              }
+            }
             break;
           case 'numeric':
             typedValue = result.numberValue || result.value;
