@@ -1281,6 +1281,8 @@ export class PostgresCohortMembersService {
     const apiId = APIID.COHORT_MEMBER_UPDATE;
     try {
       cohortMembersUpdateDto.updatedBy = loginUser;
+      
+      // Early validation: Check UUID format
       if (!isUUID(cohortMembershipId)) {
         return APIResponse.error(
           res,
@@ -1290,32 +1292,35 @@ export class PostgresCohortMembersService {
           HttpStatus.BAD_REQUEST
         );
       }
-      //validate custom fileds
-      let customFieldValidate;
+
+      // Early validation: Validate custom fields before database operations
       if (
         cohortMembersUpdateDto.customFields &&
         cohortMembersUpdateDto.customFields.length > 0
       ) {
-        customFieldValidate =
+        const customFieldValidate =
           await this.fieldsService.validateCustomFieldByContext(
             cohortMembersUpdateDto,
             'COHORTMEMBER',
             'COHORTMEMBER'
           );
-        if (!customFieldValidate || !isValid) {
+        // FIXED: Check if customFieldValidate is valid (truthy and not an error string)
+        if (!customFieldValidate || typeof customFieldValidate === 'string') {
           return APIResponse.error(
-            response,
+            res,
             apiId,
             'BAD_REQUEST',
-            `${customFieldValidate}`,
+            `${customFieldValidate || 'Custom field validation failed'}`,
             HttpStatus.BAD_REQUEST
           );
         }
       }
 
+      // Fetch only needed fields for status comparison and update
       const cohortMembershipToUpdate =
         await this.cohortMembersRepository.findOne({
           where: { cohortMembershipId: cohortMembershipId },
+          select: ['cohortMembershipId', 'userId', 'cohortId', 'status', 'updatedAt'],
         });
 
       if (!cohortMembershipToUpdate) {
@@ -1330,127 +1335,182 @@ export class PostgresCohortMembersService {
 
       // Store the previous status before updating
       const previousStatus = cohortMembershipToUpdate.status;
-
-      Object.assign(cohortMembershipToUpdate, cohortMembersUpdateDto);
-      const result = await this.cohortMembersRepository.save(
-        cohortMembershipToUpdate
-      );
-
-      // NEW: Handle LMS enrollment for shortlisted and rejected users
-      if (cohortMembershipToUpdate.status === 'shortlisted') {
-        // Enroll user to LMS courses when status is updated to shortlisted
-        // This ensures users who are shortlisted have access to cohort-specific courses
-        try {
-          await this.enrollShortlistedUserToLMSCourses(
-            cohortMembershipToUpdate.userId,
-            cohortMembershipToUpdate.cohortId
-          );
-        } catch (error) {
-          ShortlistingLogger.logShortlistingError(
-            `Failed to enroll user ${cohortMembershipToUpdate.userId} to LMS courses for cohort ${cohortMembershipToUpdate.cohortId}`,
-            error.message,
-            'LMSEnrollment'
-          );
-        }
-      }
-
-      if (cohortMembershipToUpdate.status === 'rejected') {
-        // De-enroll user from LMS courses when status is updated to rejected
-        // This ensures users who are rejected lose access to cohort-specific courses
-        try {
-          await this.deenrollRejectedUserFromLMSCourses(
-            cohortMembershipToUpdate.userId,
-            cohortMembershipToUpdate.cohortId
-          );
-        } catch (error) {
-          ShortlistingLogger.logShortlistingError(
-            `Failed to de-enroll user ${cohortMembershipToUpdate.userId} from LMS courses for cohort ${cohortMembershipToUpdate.cohortId}`,
-            error.message,
-            'LMSDeenrollment'
-          );
-        }
-      }
-
-      // Update Elasticsearch with updated cohort member status
-      if (isElasticsearchEnabled()) {
-        try {
-          // First get the existing user document from Elasticsearch
-          const userDoc = await this.userElasticsearchService.getUser(
-            cohortMembershipToUpdate.userId
-          );
-
-          // Extract the application array if present
-          const source =
-            userDoc && userDoc._source
-              ? (userDoc._source as { applications?: any[] })
-              : undefined;
-          const existingApplication =
-            source && Array.isArray(source.applications)
-              ? source.applications.find(
-                  (app) => app.cohortId === cohortMembershipToUpdate.cohortId
-                )
-              : undefined;
-
-          if (!existingApplication) {
-            // If application is missing, build and upsert the full user document (with progress pages)
-            const fullUserDoc =
-              await this.formSubmissionService.buildUserDocumentForElasticsearch(
-                cohortMembershipToUpdate.userId
-              );
-            if (fullUserDoc) {
-              await this.userElasticsearchService.updateUser(
-                cohortMembershipToUpdate.userId,
-                { doc: fullUserDoc },
-                async (userId: string) => {
-                  return await this.formSubmissionService.buildUserDocumentForElasticsearch(
-                    userId
-                  );
-                }
-              );
-            }
-          } else {
-            // SOLUTION 3: Use field-specific update to preserve existing data
-            // This prevents the deletion of application data (progress, formData, etc.)
-            // by only updating specific fields instead of replacing the entire application object
-            await this.updateElasticsearchWithFieldSpecificChanges(
-              cohortMembershipToUpdate.userId,
-              cohortMembershipToUpdate.cohortId,
-              {
-                cohortmemberstatus: result.status ?? 'active',
-                statusReason: cohortMembersUpdateDto.statusReason,
-                status: cohortMembersUpdateDto.status,
-              },
-              existingApplication
-            );
-          }
-        } catch (elasticError) {
-          // Log Elasticsearch error but don't fail the request
-          LoggerUtil.error(
-            'Failed to update Elasticsearch with cohort member status',
-            `Error: ${elasticError.message}`,
-            apiId
-          );
-        }
-      }
-
-      // Send notification if applicable for this status only
-      let notifyStatuses: string[] = [];
       const { status, statusReason } = cohortMembersUpdateDto;
 
-      // Send notification if applicable for this status only
-      if (previousStatus === 'applied' && status === 'submitted') {
-        notifyStatuses = ['submitted'];
-      } else {
-        notifyStatuses = ['dropout', 'shortlisted', 'rejected'];
+      // Prepare update data (exclude customFields and non-entity fields)
+      const customFields = cohortMembersUpdateDto.customFields;
+      const updateData: Partial<CohortMembers> = {};
+      
+      // Map only valid entity fields from DTO
+      if (cohortMembersUpdateDto.cohortId !== undefined) {
+        updateData.cohortId = cohortMembersUpdateDto.cohortId;
+      }
+      if (cohortMembersUpdateDto.userId !== undefined) {
+        updateData.userId = cohortMembersUpdateDto.userId;
+      }
+      if (cohortMembersUpdateDto.status !== undefined) {
+        updateData.status = cohortMembersUpdateDto.status as MemberStatus;
+      }
+      if (cohortMembersUpdateDto.statusReason !== undefined) {
+        updateData.statusReason = cohortMembersUpdateDto.statusReason;
+      }
+      if (cohortMembersUpdateDto.createdBy !== undefined) {
+        updateData.createdBy = cohortMembersUpdateDto.createdBy;
+      }
+      if (cohortMembersUpdateDto.updatedBy !== undefined) {
+        updateData.updatedBy = cohortMembersUpdateDto.updatedBy;
       }
 
+      // OPTIMIZED: Use repository.update() for partial updates instead of findOne + save
+      // This is more efficient and reduces database round trips
+      const updateResult = await this.cohortMembersRepository.update(
+        { cohortMembershipId: cohortMembershipId },
+        updateData
+      );
+
+      if (!updateResult.affected || updateResult.affected === 0) {
+        return APIResponse.error(
+          res,
+          apiId,
+          'Internal Server Error',
+          'Failed to update cohort member',
+          HttpStatus.INTERNAL_SERVER_ERROR
+        );
+      }
+
+      // Fetch updated record for subsequent operations (only if needed)
+      const updatedCohortMember = {
+        ...cohortMembershipToUpdate,
+        ...updateData,
+        status: status || cohortMembershipToUpdate.status,
+      };
+
+      // OPTIMIZED: Parallelize independent operations that don't depend on each other
+      const parallelOperations: Promise<any>[] = [];
+
+      // 1. Handle LMS enrollment/de-enrollment (non-blocking)
+      if (status === 'shortlisted') {
+        parallelOperations.push(
+          this.enrollShortlistedUserToLMSCourses(
+            updatedCohortMember.userId,
+            updatedCohortMember.cohortId
+          ).catch((error) => {
+            ShortlistingLogger.logShortlistingError(
+              `Failed to enroll user ${updatedCohortMember.userId} to LMS courses for cohort ${updatedCohortMember.cohortId}`,
+              error.message,
+              'LMSEnrollment'
+            );
+          })
+        );
+      } else if (status === 'rejected') {
+        parallelOperations.push(
+          this.deenrollRejectedUserFromLMSCourses(
+            updatedCohortMember.userId,
+            updatedCohortMember.cohortId
+          ).catch((error) => {
+            ShortlistingLogger.logShortlistingError(
+              `Failed to de-enroll user ${updatedCohortMember.userId} from LMS courses for cohort ${updatedCohortMember.cohortId}`,
+              error.message,
+              'LMSDeenrollment'
+            );
+          })
+        );
+      }
+
+      // 2. Update Elasticsearch (non-blocking, fire-and-forget)
+      if (isElasticsearchEnabled()) {
+        parallelOperations.push(
+          (async () => {
+            try {
+              const userDoc = await this.userElasticsearchService.getUser(
+                updatedCohortMember.userId
+              );
+
+              const source =
+                userDoc && userDoc._source
+                  ? (userDoc._source as { applications?: any[] })
+                  : undefined;
+              const existingApplication =
+                source && Array.isArray(source.applications)
+                  ? source.applications.find(
+                      (app) => app.cohortId === updatedCohortMember.cohortId
+                    )
+                  : undefined;
+
+              if (!existingApplication) {
+                const fullUserDoc =
+                  await this.formSubmissionService.buildUserDocumentForElasticsearch(
+                    updatedCohortMember.userId
+                  );
+                if (fullUserDoc) {
+                  await this.userElasticsearchService.updateUser(
+                    updatedCohortMember.userId,
+                    { doc: fullUserDoc },
+                    async (userId: string) => {
+                      return await this.formSubmissionService.buildUserDocumentForElasticsearch(
+                        userId
+                      );
+                    }
+                  );
+                }
+              } else {
+                await this.updateElasticsearchWithFieldSpecificChanges(
+                  updatedCohortMember.userId,
+                  updatedCohortMember.cohortId,
+                  {
+                    cohortmemberstatus: status || 'active',
+                    statusReason: statusReason,
+                    status: status,
+                  },
+                  existingApplication
+                );
+              }
+            } catch (elasticError) {
+              LoggerUtil.error(
+                'Failed to update Elasticsearch with cohort member status',
+                `Error: ${elasticError.message}`,
+                apiId
+              );
+            }
+          })()
+        );
+      }
+
+      // 3. Process custom fields (if any) - this needs to complete before response
+      let responseForCustomField;
+      if (customFields && customFields.length > 0) {
+        responseForCustomField = await this.processCustomFields(
+          customFields,
+          cohortMembershipId,
+          cohortMembersUpdateDto
+        );
+        if (!responseForCustomField.success) {
+          return APIResponse.error(
+            res,
+            apiId,
+            'Internal Server Error',
+            responseForCustomField.error || 'Failed to update custom fields',
+            HttpStatus.INTERNAL_SERVER_ERROR
+          );
+        }
+      }
+
+      // 4. Handle notifications (non-blocking, but we wait for user/cohort data)
+      const notifyStatuses: string[] =
+        previousStatus === 'applied' && status === 'submitted'
+          ? ['submitted']
+          : ['dropout', 'shortlisted', 'rejected'];
+
       if (notifyStatuses.includes(status)) {
+        // Fetch user and cohort data in parallel
         const [userData, cohortData] = await Promise.all([
           this.usersRepository.findOne({
-            where: { userId: cohortMembershipToUpdate.userId },
+            where: { userId: updatedCohortMember.userId },
+            select: ['userId', 'email', 'firstName', 'lastName'],
           }),
           this.cohortRepository.findOne({
-            where: { cohortId: cohortMembershipToUpdate.cohortId },
+            where: { cohortId: updatedCohortMember.cohortId },
+            select: ['cohortId', 'name'],
           }),
         ]);
 
@@ -1461,8 +1521,6 @@ export class PostgresCohortMembersService {
             rejected: 'onStudentRejected',
             submitted: 'onApplicationSubmission',
           };
-
-          //This is notification payload required to send
 
           const notificationPayload = {
             isQueue: false,
@@ -1484,94 +1542,74 @@ export class PostgresCohortMembersService {
             },
           };
 
-          const mailSend = await this.notificationRequest.sendNotification(
-            notificationPayload
-          );
+          // Send notification asynchronously (don't block response)
+          this.notificationRequest
+            .sendNotification(notificationPayload)
+            .then((mailSend) => {
+              if (mailSend?.result?.email?.errors?.length > 0) {
+                ShortlistingLogger.logEmailFailure({
+                  dateTime: new Date().toISOString(),
+                  userId: userData.userId,
+                  email: userData.email,
+                  shortlistedStatus: status as 'shortlisted' | 'rejected',
+                  failureReason: mailSend.result.email.errors.join(', '),
+                  cohortId: updatedCohortMember.cohortId,
+                });
+              } else {
+                ShortlistingLogger.logEmailSuccess({
+                  dateTime: new Date().toISOString(),
+                  userId: userData.userId,
+                  email: userData.email,
+                  shortlistedStatus: status as 'shortlisted' | 'rejected',
+                  cohortId: updatedCohortMember.cohortId,
+                });
 
-          if (mailSend?.result?.email?.errors?.length > 0) {
-            // Log email failure
-            ShortlistingLogger.logEmailFailure({
-              dateTime: new Date().toISOString(),
-              userId: userData.userId,
-              email: userData.email,
-              shortlistedStatus: status as 'shortlisted' | 'rejected',
-              failureReason: mailSend.result.email.errors.join(', '),
-              cohortId: cohortMembershipToUpdate.cohortId,
-            });
-          } else {
-            // Log email success
-            ShortlistingLogger.logEmailSuccess({
-              dateTime: new Date().toISOString(),
-              userId: userData.userId,
-              email: userData.email,
-              shortlistedStatus: status as 'shortlisted' | 'rejected',
-              cohortId: cohortMembershipToUpdate.cohortId,
-            });
-
-            // Update rejection_email_sent to true if status is rejected and email was sent successfully
-            if (status === 'rejected') {
-              await this.cohortMembersRepository.update(
-                { cohortMembershipId: cohortMembershipId },
-                { rejectionEmailSent: true }
+                // Update rejection_email_sent asynchronously if status is rejected
+                if (status === 'rejected') {
+                  this.cohortMembersRepository.update(
+                    { cohortMembershipId: cohortMembershipId },
+                    { rejectionEmailSent: true }
+                  ).catch((error) => {
+                    LoggerUtil.error(
+                      'Failed to update rejectionEmailSent',
+                      `Error: ${error.message}`,
+                      apiId
+                    );
+                  });
+                }
+              }
+            })
+            .catch((error) => {
+              LoggerUtil.error(
+                'Failed to send notification',
+                `Error: ${error.message}`,
+                apiId
               );
-            }
-          }
+            });
         } else {
-          // Log email failure for missing email
           ShortlistingLogger.logEmailFailure({
             dateTime: new Date().toISOString(),
-            userId: cohortMembershipToUpdate.userId,
+            userId: updatedCohortMember.userId,
             email: 'No email found',
             shortlistedStatus: status as 'shortlisted' | 'rejected',
-            failureReason: `No email found for user ${cohortMembershipToUpdate.userId}`,
-            cohortId: cohortMembershipToUpdate.cohortId,
+            failureReason: `No email found for user ${updatedCohortMember.userId}`,
+            cohortId: updatedCohortMember.cohortId,
           });
         }
       }
-      //update custom fields
-      let responseForCustomField;
-      if (
-        cohortMembersUpdateDto.customFields &&
-        cohortMembersUpdateDto.customFields.length > 0
-      ) {
-        const customFields = cohortMembersUpdateDto.customFields;
-        delete cohortMembersUpdateDto.customFields;
-        Object.assign(cohortMembershipToUpdate, cohortMembersUpdateDto);
 
-        responseForCustomField = await this.processCustomFields(
-          customFields,
-          cohortMembershipId,
-          cohortMembersUpdateDto
-        );
-        if (result && responseForCustomField.success) {
-          return APIResponse.success(
-            res,
-            apiId,
-            [],
-            HttpStatus.CREATED,
-            API_RESPONSES.COHORTMEMBER_UPDATE_SUCCESSFULLY
-          );
-        } else {
-          const errorMessage =
-            responseForCustomField.error || 'Internal server error';
-          return APIResponse.error(
-            res,
-            apiId,
-            'Internal Server Error',
-            errorMessage,
-            HttpStatus.INTERNAL_SERVER_ERROR
-          );
-        }
-      }
-      if (result) {
-        return APIResponse.success(
-          res,
-          apiId,
-          [],
-          HttpStatus.OK,
-          API_RESPONSES.COHORTMEMBER_UPDATE_SUCCESSFULLY
-        );
-      }
+      // Wait for critical parallel operations (LMS, Elasticsearch) but don't fail on errors
+      // These are already wrapped in try-catch, so we just wait for them to complete
+      await Promise.allSettled(parallelOperations);
+
+      // Return success response
+      return APIResponse.success(
+        res,
+        apiId,
+        [],
+        HttpStatus.OK,
+        API_RESPONSES.COHORTMEMBER_UPDATE_SUCCESSFULLY
+      );
     } catch (error) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
@@ -1580,7 +1618,7 @@ export class PostgresCohortMembersService {
       );
 
       return APIResponse.error(
-        response,
+        res,
         apiId,
         API_RESPONSES.INTERNAL_SERVER_ERROR,
         `Error : ${error.message}`,
