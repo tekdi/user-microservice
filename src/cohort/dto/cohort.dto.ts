@@ -128,14 +128,20 @@ export class ReturnResponseBody {
   tenantId: string;
   @Expose()
   academicYearId: string;
+  @Expose()
+  cohort_startDate: Date;
+  @Expose()
+  cohort_endDate: Date;
 
-  constructor(cohortDto: CohortCreateDto) {
-    this.cohortId = cohortDto.cohortId;
-    this.parentId = cohortDto.parentId;
-    this.name = cohortDto.name;
-    this.type = cohortDto.type;
-    this.status = cohortDto.status;
-    this.tenantId = cohortDto.tenantId;
-    this.academicYearId = cohortDto.academicYearId;
+  constructor(cohortData: any) {
+    this.cohortId = cohortData.cohortId;
+    this.parentId = cohortData.parentId;
+    this.name = cohortData.name;
+    this.type = cohortData.type;
+    this.status = cohortData.status;
+    this.tenantId = cohortData.tenantId;
+    this.academicYearId = cohortData.academicYearId;
+    this.cohort_startDate = cohortData.cohort_startDate;
+    this.cohort_endDate = cohortData.cohort_endDate;
   }
 }

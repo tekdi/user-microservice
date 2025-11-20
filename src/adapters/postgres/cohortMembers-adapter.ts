@@ -284,6 +284,9 @@ export class PostgresCohortMembersService {
       const options = [];
 
       const whereClause = {};
+      let cohortStartDateFilter = null;
+      let cohortEndDateFilter = null;
+
       if (filters && Object.keys(filters).length > 0) {
         Object.entries(filters).forEach(([key, value]) => {
           if (key === 'cohortId') {
@@ -299,6 +302,13 @@ export class PostgresCohortMembersService {
                 `Invalid cohortId format. Expected an array of UUIDs.`,
                 HttpStatus.BAD_REQUEST
               );
+            }
+          } else if (key === 'cohort_startDate' || key === 'cohort_endDate') {
+            // Store date filters separately - will be processed after fetching cohort details
+            if (key === 'cohort_startDate') {
+              cohortStartDateFilter = value;
+            } else {
+              cohortEndDateFilter = value;
             }
           } else {
             whereClause[key] = value;
@@ -455,7 +465,15 @@ export class PostgresCohortMembersService {
             // Get basic cohort information
             const cohort = await this.cohortRepository.findOne({
               where: { cohortId: cohortId },
-              select: ['cohortId', 'name', 'parentId', 'type', 'status'],
+              select: [
+                'cohortId',
+                'name',
+                'parentId',
+                'type',
+                'status',
+                'cohort_startDate',
+                'cohort_endDate',
+              ],
             });
 
             if (cohort) {
@@ -470,6 +488,8 @@ export class PostgresCohortMembersService {
                 parentId: cohort.parentId,
                 type: cohort.type,
                 status: cohort.status,
+                cohort_startDate: cohort.cohort_startDate,
+                cohort_endDate: cohort.cohort_endDate,
                 customFields: cohortCustomFields,
               });
             }
@@ -488,6 +508,216 @@ export class PostgresCohortMembersService {
           ...user,
           cohort: cohortDetailsMap.get(user.cohortId) || null,
         }));
+
+        // Apply cohort date filters AFTER fetching cohort details (similar to program_start_date/program_end_date)
+        if (cohortStartDateFilter || cohortEndDateFilter) {
+          const filteredUserDetails = results['userDetails'].filter((user) => {
+            const cohort = cohortDetailsMap.get(user.cohortId);
+            if (!cohort) {
+              return false;
+            }
+
+            let matchesStartDate = true;
+            let matchesEndDate = true;
+
+            // Filter by cohort_startDate
+            // If cohort has no start date (null/empty), allow it to pass (similar to empty custom fields)
+            if (cohortStartDateFilter && cohort.cohort_startDate) {
+              const cohortStartDate = new Date(cohort.cohort_startDate);
+
+              if (
+                typeof cohortStartDateFilter === 'object' &&
+                cohortStartDateFilter !== null &&
+                !Array.isArray(cohortStartDateFilter)
+              ) {
+                const operator = Object.keys(cohortStartDateFilter)[0];
+                const dateValue = cohortStartDateFilter[operator];
+                // Normalize date string (handle date-only format)
+                const normalizedDateValue = dateValue.includes('T')
+                  ? dateValue
+                  : `${dateValue}T00:00:00Z`;
+                const filterDate = new Date(normalizedDateValue);
+
+                if (isNaN(filterDate.getTime())) {
+                  matchesStartDate = false;
+                } else {
+                  // Compare dates at day level using UTC to avoid timezone issues
+                  const cohortDateUTC = new Date(
+                    Date.UTC(
+                      cohortStartDate.getUTCFullYear(),
+                      cohortStartDate.getUTCMonth(),
+                      cohortStartDate.getUTCDate()
+                    )
+                  );
+                  const filterDateUTC = new Date(
+                    Date.UTC(
+                      filterDate.getUTCFullYear(),
+                      filterDate.getUTCMonth(),
+                      filterDate.getUTCDate()
+                    )
+                  );
+
+                  switch (operator) {
+                    case 'gt':
+                      matchesStartDate = cohortDateUTC > filterDateUTC;
+                      break;
+                    case 'gte':
+                      matchesStartDate = cohortDateUTC >= filterDateUTC;
+                      break;
+                    case 'lt':
+                      matchesStartDate = cohortDateUTC < filterDateUTC;
+                      break;
+                    case 'lte':
+                      matchesStartDate = cohortDateUTC <= filterDateUTC;
+                      break;
+                    case 'eq':
+                      matchesStartDate =
+                        cohortDateUTC.getTime() === filterDateUTC.getTime();
+                      break;
+                    case 'ne':
+                      matchesStartDate =
+                        cohortDateUTC.getTime() !== filterDateUTC.getTime();
+                      break;
+                    default:
+                      matchesStartDate = false;
+                  }
+                }
+              } else {
+                const normalizedDateValue =
+                  typeof cohortStartDateFilter === 'string' &&
+                  !cohortStartDateFilter.includes('T')
+                    ? `${cohortStartDateFilter}T00:00:00Z`
+                    : cohortStartDateFilter;
+                const filterDate = new Date(normalizedDateValue);
+                if (!isNaN(filterDate.getTime())) {
+                  const cohortDateUTC = new Date(
+                    Date.UTC(
+                      cohortStartDate.getUTCFullYear(),
+                      cohortStartDate.getUTCMonth(),
+                      cohortStartDate.getUTCDate()
+                    )
+                  );
+                  const filterDateUTC = new Date(
+                    Date.UTC(
+                      filterDate.getUTCFullYear(),
+                      filterDate.getUTCMonth(),
+                      filterDate.getUTCDate()
+                    )
+                  );
+                  matchesStartDate =
+                    cohortDateUTC.getTime() === filterDateUTC.getTime();
+                } else {
+                  matchesStartDate = false;
+                }
+              }
+            } else if (cohortStartDateFilter && !cohort.cohort_startDate) {
+              // Filter specified but cohort has no start date - allow it (like empty custom fields)
+              matchesStartDate = true;
+            }
+
+            // Filter by cohort_endDate
+            // If cohort has no end date (null/empty), allow it to pass (similar to empty custom fields)
+            if (cohortEndDateFilter && cohort.cohort_endDate) {
+              const cohortEndDate = new Date(cohort.cohort_endDate);
+
+              if (
+                typeof cohortEndDateFilter === 'object' &&
+                cohortEndDateFilter !== null &&
+                !Array.isArray(cohortEndDateFilter)
+              ) {
+                const operator = Object.keys(cohortEndDateFilter)[0];
+                const dateValue = cohortEndDateFilter[operator];
+                // Normalize date string (handle date-only format)
+                const normalizedDateValue = dateValue.includes('T')
+                  ? dateValue
+                  : `${dateValue}T00:00:00Z`;
+                const filterDate = new Date(normalizedDateValue);
+
+                if (isNaN(filterDate.getTime())) {
+                  matchesEndDate = false;
+                } else {
+                  // Compare dates at day level using UTC to avoid timezone issues
+                  const cohortDateUTC = new Date(
+                    Date.UTC(
+                      cohortEndDate.getUTCFullYear(),
+                      cohortEndDate.getUTCMonth(),
+                      cohortEndDate.getUTCDate()
+                    )
+                  );
+                  const filterDateUTC = new Date(
+                    Date.UTC(
+                      filterDate.getUTCFullYear(),
+                      filterDate.getUTCMonth(),
+                      filterDate.getUTCDate()
+                    )
+                  );
+
+                  switch (operator) {
+                    case 'gt':
+                      matchesEndDate = cohortDateUTC > filterDateUTC;
+                      break;
+                    case 'gte':
+                      matchesEndDate = cohortDateUTC >= filterDateUTC;
+                      break;
+                    case 'lt':
+                      matchesEndDate = cohortDateUTC < filterDateUTC;
+                      break;
+                    case 'lte':
+                      matchesEndDate = cohortDateUTC <= filterDateUTC;
+                      break;
+                    case 'eq':
+                      matchesEndDate =
+                        cohortDateUTC.getTime() === filterDateUTC.getTime();
+                      break;
+                    case 'ne':
+                      matchesEndDate =
+                        cohortDateUTC.getTime() !== filterDateUTC.getTime();
+                      break;
+                    default:
+                      matchesEndDate = false;
+                  }
+                }
+              } else {
+                const normalizedDateValue =
+                  typeof cohortEndDateFilter === 'string' &&
+                  !cohortEndDateFilter.includes('T')
+                    ? `${cohortEndDateFilter}T00:00:00Z`
+                    : cohortEndDateFilter;
+                const filterDate = new Date(normalizedDateValue);
+                if (!isNaN(filterDate.getTime())) {
+                  const cohortDateUTC = new Date(
+                    Date.UTC(
+                      cohortEndDate.getUTCFullYear(),
+                      cohortEndDate.getUTCMonth(),
+                      cohortEndDate.getUTCDate()
+                    )
+                  );
+                  const filterDateUTC = new Date(
+                    Date.UTC(
+                      filterDate.getUTCFullYear(),
+                      filterDate.getUTCMonth(),
+                      filterDate.getUTCDate()
+                    )
+                  );
+                  matchesEndDate =
+                    cohortDateUTC.getTime() === filterDateUTC.getTime();
+                } else {
+                  matchesEndDate = false;
+                }
+              }
+            } else if (cohortEndDateFilter && !cohort.cohort_endDate) {
+              // Filter specified but cohort has no end date - allow it (like empty custom fields)
+              matchesEndDate = true;
+            }
+
+            const matches = matchesStartDate && matchesEndDate;
+            return matches;
+          });
+
+          // Update results with filtered data
+          results['userDetails'] = filteredUserDetails;
+          results['totalCount'] = filteredUserDetails.length;
+        }
       }
 
       // Check if CSV export is requested
@@ -876,10 +1106,18 @@ export class PostgresCohortMembersService {
             return `(U."auto_tags" && ARRAY[${escaped}]::text[])`;
           }
           case 'createdAt': {
-            return this.processDateFilterCondition('createdAt', value, 'COHORT_MEMBER_SEARCH');
+            return this.processDateFilterCondition(
+              'createdAt',
+              value,
+              'COHORT_MEMBER_SEARCH'
+            );
           }
           case 'updatedAt': {
-            return this.processDateFilterCondition('updatedAt', value, 'COHORT_MEMBER_SEARCH');
+            return this.processDateFilterCondition(
+              'updatedAt',
+              value,
+              'COHORT_MEMBER_SEARCH'
+            );
           }
           default: {
             return `CM."${key}"='${value}'`;
@@ -5228,10 +5466,7 @@ export class PostgresCohortMembersService {
       // Validate date is actually valid (e.g., rejects February 30, Month 13)
       const date = new Date(trimmed);
       if (isNaN(date.getTime())) {
-        LoggerUtil.warn(
-          `Invalid date value: ${trimmed}`,
-          'DateFilter'
-        );
+        LoggerUtil.warn(`Invalid date value: ${trimmed}`, 'DateFilter');
         return null;
       }
 
@@ -5252,10 +5487,7 @@ export class PostgresCohortMembersService {
       // Validate date part (e.g., rejects February 30, Month 13)
       const dateObj = new Date(date);
       if (isNaN(dateObj.getTime())) {
-        LoggerUtil.warn(
-          `Invalid date value: ${date}`,
-          'DateFilter'
-        );
+        LoggerUtil.warn(`Invalid date value: ${date}`, 'DateFilter');
         return null;
       }
 

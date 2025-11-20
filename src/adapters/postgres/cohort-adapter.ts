@@ -4,7 +4,7 @@ import { ReturnResponseBody } from 'src/cohort/dto/cohort.dto';
 import { CohortSearchDto } from 'src/cohort/dto/cohort-search.dto';
 import { CohortCreateDto } from 'src/cohort/dto/cohort-create.dto';
 import { CohortUpdateDto } from 'src/cohort/dto/cohort-update.dto';
-import { IsNull, Repository, In, ILike, DataSource } from 'typeorm';
+import { IsNull, Repository, In, ILike, DataSource, MoreThan, LessThan, MoreThanOrEqual, LessThanOrEqual, Equal, Not } from 'typeorm';
 import { Cohort } from 'src/cohort/entities/cohort.entity';
 import { Fields } from 'src/fields/entities/fields.entity';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -361,6 +361,38 @@ export class PostgresCohortService {
       cohortCreateDto.status = cohortCreateDto.status || 'active';
       cohortCreateDto.attendanceCaptureImage = false;
 
+      // Normalize and validate date strings to ensure correct timezone handling
+      if (cohortCreateDto.cohort_startDate) {
+        const normalizedStartDate = this.normalizeDateString(
+          cohortCreateDto.cohort_startDate
+        );
+        if (!normalizedStartDate) {
+          return APIResponse.error(
+            res,
+            apiId,
+            'Invalid cohort_startDate format. Please use valid date format (e.g., YYYY-MM-DD or YYYY-MM-DDTHH:mm:ssZ)',
+            'Invalid date format',
+            HttpStatus.BAD_REQUEST
+          );
+        }
+        cohortCreateDto.cohort_startDate = normalizedStartDate;
+      }
+      if (cohortCreateDto.cohort_endDate) {
+        const normalizedEndDate = this.normalizeDateString(
+          cohortCreateDto.cohort_endDate
+        );
+        if (!normalizedEndDate) {
+          return APIResponse.error(
+            res,
+            apiId,
+            'Invalid cohort_endDate format. Please use valid date format (e.g., YYYY-MM-DD or YYYY-MM-DDTHH:mm:ssZ)',
+            'Invalid date format',
+            HttpStatus.BAD_REQUEST
+          );
+        }
+        cohortCreateDto.cohort_endDate = normalizedEndDate;
+      }
+
       const existData = await this.cohortRepository.find({
         where: {
           name: cohortCreateDto.name,
@@ -552,6 +584,38 @@ export class PostgresCohortService {
               HttpStatus.CONFLICT
             );
           }
+        }
+
+        // Normalize and validate date strings to ensure correct timezone handling
+        if (cohortUpdateDto.cohort_startDate) {
+          const normalizedStartDate = this.normalizeDateString(
+            cohortUpdateDto.cohort_startDate
+          );
+          if (!normalizedStartDate) {
+            return APIResponse.error(
+              res,
+              apiId,
+              'Invalid cohort_startDate format. Please use valid date format (e.g., YYYY-MM-DD or YYYY-MM-DDTHH:mm:ssZ)',
+              'Invalid date format',
+              HttpStatus.BAD_REQUEST
+            );
+          }
+          cohortUpdateDto.cohort_startDate = normalizedStartDate;
+        }
+        if (cohortUpdateDto.cohort_endDate) {
+          const normalizedEndDate = this.normalizeDateString(
+            cohortUpdateDto.cohort_endDate
+          );
+          if (!normalizedEndDate) {
+            return APIResponse.error(
+              res,
+              apiId,
+              'Invalid cohort_endDate format. Please use valid date format (e.g., YYYY-MM-DD or YYYY-MM-DDTHH:mm:ssZ)',
+              'Invalid date format',
+              HttpStatus.BAD_REQUEST
+            );
+          }
+          cohortUpdateDto.cohort_endDate = normalizedEndDate;
         }
 
         // Iterate over all keys in cohortUpdateDto
@@ -853,6 +917,74 @@ export class PostgresCohortService {
             emptyKeysString += (emptyKeysString ? ', ' : '') + key;
           } else if (key === 'name') {
             whereClause[key] = ILike(`%${value}%`);
+          } else if (key === 'cohort_startDate' || key === 'cohort_endDate') {
+            // Handle date fields with operator support (gt, gte, lt, lte, eq, ne)
+            if (
+              typeof value === 'object' &&
+              value !== null &&
+              !Array.isArray(value)
+            ) {
+              const operator = Object.keys(value)[0];
+              const dateValue = value[operator];
+              const validOperators = ['lt', 'lte', 'gt', 'gte', 'eq', 'ne'];
+              
+              if (!validOperators.includes(operator)) {
+                return APIResponse.error(
+                  response,
+                  apiId,
+                  `Invalid operator: ${operator}. Valid operators are: ${validOperators.join(', ')}`,
+                  `Invalid filter operator`,
+                  HttpStatus.BAD_REQUEST
+                );
+              }
+
+              // Normalize the date value
+              const normalizedDate = this.normalizeDateString(dateValue);
+              if (!normalizedDate) {
+                return APIResponse.error(
+                  response,
+                  apiId,
+                  `Invalid date value for ${key}: ${dateValue}`,
+                  `Invalid date format`,
+                  HttpStatus.BAD_REQUEST
+                );
+              }
+
+              // Apply the appropriate TypeORM operator
+              switch (operator) {
+                case 'gt':
+                  whereClause[key] = MoreThan(normalizedDate);
+                  break;
+                case 'gte':
+                  whereClause[key] = MoreThanOrEqual(normalizedDate);
+                  break;
+                case 'lt':
+                  whereClause[key] = LessThan(normalizedDate);
+                  break;
+                case 'lte':
+                  whereClause[key] = LessThanOrEqual(normalizedDate);
+                  break;
+                case 'eq':
+                  whereClause[key] = Equal(normalizedDate);
+                  break;
+                case 'ne':
+                  whereClause[key] = Not(Equal(normalizedDate));
+                  break;
+              }
+            } else {
+              // Direct value (no operator) - normalize and use exact match
+              const normalizedDate = this.normalizeDateString(value);
+              if (!normalizedDate) {
+                return APIResponse.error(
+                  response,
+                  apiId,
+                  `Invalid date value for ${key}: ${value}`,
+                  `Invalid date format`,
+                  HttpStatus.BAD_REQUEST
+                );
+              }
+              whereClause[key] = normalizedDate;
+            }
           } else if (cohortAllKeys.includes(key)) {
             whereClause[key] = value;
           }
@@ -1312,6 +1444,120 @@ export class PostgresCohortService {
     }, {} as Record<string, string>);
   }
 
+  /**
+   * Normalizes date strings to ensure correct timezone handling.
+   * Handles multiple date formats similar to how customFields handle calendar dates:
+   * - YYYY-MM-DD (date-only) -> YYYY-MM-DDTHH:mm:ssZ
+   * - YYYY-MM-DD HH:mm:ss (space-separated) -> YYYY-MM-DDTHH:mm:ss (preserves timezone if present)
+   * - YYYY-MM-DDTHH:mm:ssZ (ISO 8601) -> validates and returns as-is
+   * This ensures dates are stored correctly without timezone shifts.
+   * Returns null if the date is invalid.
+   */
+  private normalizeDateString(dateString: string): string | null {
+    if (!dateString || typeof dateString !== 'string') {
+      return dateString || null;
+    }
+
+    const trimmed = dateString.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    // Normalize space-separated format to ISO 8601 format
+    let normalized = trimmed;
+    if (normalized.includes(' ') && !normalized.includes('T')) {
+      normalized = normalized.replace(' ', 'T');
+    }
+
+    // Check if it's a date-only string (YYYY-MM-DD format, no time component)
+    const dateOnlyPattern = /^\d{4}-\d{2}-\d{2}$/;
+    if (dateOnlyPattern.test(normalized)) {
+      // Validate the date is actually valid (e.g., rejects February 30, Month 13)
+      const testDate = new Date(normalized);
+      if (isNaN(testDate.getTime())) {
+        LoggerUtil.warn(
+          `Invalid date value: ${normalized}`,
+          'COHORT_DATE_NORMALIZATION'
+        );
+        return null;
+      }
+      // Only normalize date-only strings by appending UTC timezone
+      // This ensures the date is stored as the exact date intended
+      // Using T00:00:00Z ensures it's treated as UTC midnight
+      return `${normalized}T00:00:00Z`;
+    }
+
+    // For full datetime strings, validate the format and parseability
+    // First, try to parse it as a Date to ensure it's valid
+    let testDate = new Date(normalized);
+    
+    // If parsing fails, try to fix common issues
+    if (isNaN(testDate.getTime())) {
+      // If it doesn't have timezone info, try adding Z
+      if (!normalized.match(/[+-]\d{2}:?\d{2}$/) && !normalized.endsWith('Z')) {
+        // Check if it ends with just time (no timezone)
+        if (normalized.match(/T\d{2}:\d{2}:\d{2}$/)) {
+          const withZ = normalized + 'Z';
+          testDate = new Date(withZ);
+          if (!isNaN(testDate.getTime())) {
+            normalized = withZ;
+          }
+        }
+      }
+      
+      // If still invalid, check if it's a valid format but with invalid values
+      // Validate the format structure
+      const isoPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?(Z|[+-]\d{2}:?\d{2})?$/;
+      if (!isoPattern.test(normalized)) {
+        LoggerUtil.warn(
+          `Invalid date format: ${dateString}`,
+          'COHORT_DATE_NORMALIZATION'
+        );
+        return null;
+      }
+      
+      // Try parsing one more time
+      testDate = new Date(normalized);
+      if (isNaN(testDate.getTime())) {
+        LoggerUtil.warn(
+          `Invalid date value (unparseable): ${dateString}`,
+          'COHORT_DATE_NORMALIZATION'
+        );
+        return null;
+      }
+    }
+
+    // Additional validation: check if the date components are within valid ranges
+    // Extract date parts to validate manually
+    const dateMatch = normalized.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/);
+    if (dateMatch) {
+      const [, year, month, day, hour, minute, second] = dateMatch;
+      const monthNum = parseInt(month, 10);
+      const dayNum = parseInt(day, 10);
+      const hourNum = parseInt(hour, 10);
+      const minuteNum = parseInt(minute, 10);
+      const secondNum = parseInt(second, 10);
+
+      // Validate ranges
+      if (
+        monthNum < 1 || monthNum > 12 ||
+        dayNum < 1 || dayNum > 31 ||
+        hourNum < 0 || hourNum > 23 ||
+        minuteNum < 0 || minuteNum > 59 ||
+        secondNum < 0 || secondNum > 59
+      ) {
+        LoggerUtil.warn(
+          `Invalid date component values: ${dateString} (month: ${monthNum}, day: ${dayNum}, hour: ${hourNum}, minute: ${minuteNum}, second: ${secondNum})`,
+          'COHORT_DATE_NORMALIZATION'
+        );
+        return null;
+      }
+    }
+
+    // Return the normalized string (validated and ready for storage)
+    return normalized;
+  }
+
   public async updateCohortStatus(cohortId: string, response, userId: string) {
     const apiId = APIID.COHORT_DELETE;
     try {
@@ -1567,3 +1813,4 @@ export class PostgresCohortService {
     }
   }
 }
+

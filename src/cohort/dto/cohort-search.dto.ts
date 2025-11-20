@@ -142,6 +142,28 @@ export class filtersProperty {
   @IsDateString()
   updatedAt?: string;
 
+  @ApiPropertyOptional({
+    type: String,
+    format: 'date-time',
+    description: 'Cohort Start Date timestamp',
+    example: '2025-01-01T00:00:00Z',
+  })
+  @Expose()
+  @IsOptional()
+  @IsDateString()
+  cohort_startDate?: string;
+
+  @ApiPropertyOptional({
+    type: String,
+    format: 'date-time',
+    description: 'Cohort End Date timestamp',
+    example: '2025-12-31T23:59:59Z',
+  })
+  @Expose()
+  @IsOptional()
+  @IsDateString()
+  cohort_endDate?: string;
+
   //customFieldsName
   @ApiProperty({
     type: Object,

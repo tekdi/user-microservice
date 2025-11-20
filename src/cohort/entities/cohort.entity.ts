@@ -43,6 +43,18 @@ export class Cohort {
   @Column()
   attendanceCaptureImage: boolean;
 
+  @Column({
+    type: "timestamp with time zone",
+    nullable: true,
+  })
+  cohort_startDate: Date;
+
+  @Column({
+    type: "timestamp with time zone",
+    nullable: true,
+  })
+  cohort_endDate: Date;
+
   @CreateDateColumn({
     type: "timestamp with time zone",
     default: () => "CURRENT_TIMESTAMP",
