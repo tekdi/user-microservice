@@ -362,35 +362,13 @@ export class PostgresCohortService {
       cohortCreateDto.attendanceCaptureImage = false;
 
       // Normalize and validate date strings to ensure correct timezone handling
-      if (cohortCreateDto.cohort_startDate) {
-        const normalizedStartDate = this.normalizeDateString(
-          cohortCreateDto.cohort_startDate
-        );
-        if (!normalizedStartDate) {
-          return APIResponse.error(
-            res,
-            apiId,
-            'Invalid cohort_startDate format. Please use valid date format (e.g., YYYY-MM-DD or YYYY-MM-DDTHH:mm:ssZ)',
-            'Invalid date format',
-            HttpStatus.BAD_REQUEST
-          );
-        }
-        cohortCreateDto.cohort_startDate = normalizedStartDate;
-      }
-      if (cohortCreateDto.cohort_endDate) {
-        const normalizedEndDate = this.normalizeDateString(
-          cohortCreateDto.cohort_endDate
-        );
-        if (!normalizedEndDate) {
-          return APIResponse.error(
-            res,
-            apiId,
-            'Invalid cohort_endDate format. Please use valid date format (e.g., YYYY-MM-DD or YYYY-MM-DDTHH:mm:ssZ)',
-            'Invalid date format',
-            HttpStatus.BAD_REQUEST
-          );
-        }
-        cohortCreateDto.cohort_endDate = normalizedEndDate;
+      const dateValidationError = this.normalizeCohortDates(
+        cohortCreateDto,
+        res,
+        apiId
+      );
+      if (dateValidationError) {
+        return dateValidationError;
       }
 
       const existData = await this.cohortRepository.find({
@@ -587,35 +565,13 @@ export class PostgresCohortService {
         }
 
         // Normalize and validate date strings to ensure correct timezone handling
-        if (cohortUpdateDto.cohort_startDate) {
-          const normalizedStartDate = this.normalizeDateString(
-            cohortUpdateDto.cohort_startDate
-          );
-          if (!normalizedStartDate) {
-            return APIResponse.error(
-              res,
-              apiId,
-              'Invalid cohort_startDate format. Please use valid date format (e.g., YYYY-MM-DD or YYYY-MM-DDTHH:mm:ssZ)',
-              'Invalid date format',
-              HttpStatus.BAD_REQUEST
-            );
-          }
-          cohortUpdateDto.cohort_startDate = normalizedStartDate;
-        }
-        if (cohortUpdateDto.cohort_endDate) {
-          const normalizedEndDate = this.normalizeDateString(
-            cohortUpdateDto.cohort_endDate
-          );
-          if (!normalizedEndDate) {
-            return APIResponse.error(
-              res,
-              apiId,
-              'Invalid cohort_endDate format. Please use valid date format (e.g., YYYY-MM-DD or YYYY-MM-DDTHH:mm:ssZ)',
-              'Invalid date format',
-              HttpStatus.BAD_REQUEST
-            );
-          }
-          cohortUpdateDto.cohort_endDate = normalizedEndDate;
+        const dateValidationError = this.normalizeCohortDates(
+          cohortUpdateDto,
+          res,
+          apiId
+        );
+        if (dateValidationError) {
+          return dateValidationError;
         }
 
         // Iterate over all keys in cohortUpdateDto
@@ -1461,6 +1417,72 @@ export class PostgresCohortService {
       acc[user.userId] = `${user.firstName} ${user.lastName}`;
       return acc;
     }, {} as Record<string, string>);
+  }
+
+  /**
+   * Normalizes and validates cohort_startDate and cohort_endDate fields.
+   * Handles empty strings explicitly (treats as null/unset).
+   * Centralizes date normalization logic for both create and update operations.
+   *
+   * @param dto - Cohort DTO (create or update) with cohort_startDate and/or cohort_endDate
+   * @param res - Express response object
+   * @param apiId - API identifier for error responses
+   * @returns APIResponse.error if validation fails, null otherwise
+   */
+  private normalizeCohortDates(
+    dto: any,
+    res: any,
+    apiId: string
+  ): any | null {
+    // Handle cohort_startDate
+    if (dto.cohort_startDate !== undefined && dto.cohort_startDate !== null) {
+      // Treat empty strings as null (unset the date)
+      if (
+        typeof dto.cohort_startDate === 'string' &&
+        !dto.cohort_startDate.trim()
+      ) {
+        dto.cohort_startDate = null;
+      } else if (dto.cohort_startDate) {
+        const normalizedStartDate = this.normalizeDateString(
+          dto.cohort_startDate
+        );
+        if (!normalizedStartDate) {
+          return APIResponse.error(
+            res,
+            apiId,
+            'Invalid cohort_startDate format. Please use valid date format (e.g., YYYY-MM-DD or YYYY-MM-DDTHH:mm:ssZ)',
+            'Invalid date format',
+            HttpStatus.BAD_REQUEST
+          );
+        }
+        dto.cohort_startDate = normalizedStartDate;
+      }
+    }
+
+    // Handle cohort_endDate
+    if (dto.cohort_endDate !== undefined && dto.cohort_endDate !== null) {
+      // Treat empty strings as null (unset the date)
+      if (
+        typeof dto.cohort_endDate === 'string' &&
+        !dto.cohort_endDate.trim()
+      ) {
+        dto.cohort_endDate = null;
+      } else if (dto.cohort_endDate) {
+        const normalizedEndDate = this.normalizeDateString(dto.cohort_endDate);
+        if (!normalizedEndDate) {
+          return APIResponse.error(
+            res,
+            apiId,
+            'Invalid cohort_endDate format. Please use valid date format (e.g., YYYY-MM-DD or YYYY-MM-DDTHH:mm:ssZ)',
+            'Invalid date format',
+            HttpStatus.BAD_REQUEST
+          );
+        }
+        dto.cohort_endDate = normalizedEndDate;
+      }
+    }
+
+    return null; // No error
   }
 
   /**
