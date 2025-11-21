@@ -515,9 +515,31 @@ export class PostgresUserService implements IServicelocator {
     const parentTenantCustomFieldData = await this.fieldsService.getCustomFieldDetails(firstUser.userId, 'Users', false);
     firstUser.customFields = parentTenantCustomFieldData || [];
 
-    // Remove tenantId and total_count from the response
+    // Fetch tenant and role data grouped by tenant
+    const tenantRoleData = await this.userTenantRoleData(firstUser.userId);
+
+    // Transform tenantRoleData to match the required structure
+    // Filter out tenants without roles and map to the expected format
+    const tenantData = tenantRoleData
+      .filter((tenant: any) => tenant.roles && Array.isArray(tenant.roles) && tenant.roles.length > 0)
+      .map((tenant: any) => ({
+        tenantId: tenant.tenantId,
+        tenantName: tenant.tenantName,
+        tenantStatus: tenant.tenantStatus || null,
+        roleData: tenant.roles.map((role: any) => ({
+          roleId: role.roleId,
+          roleName: role.roleName
+        }))
+      }));
+
+    // Remove tenantId, total_count, old role field, and tenantStatus from the response
     delete firstUser.tenantId;
     delete firstUser.total_count;
+    delete firstUser.role;
+    delete firstUser.tenantStatus;
+
+    // Add tenantData to user object
+    firstUser.tenantData = tenantData;
 
     LoggerUtil.log(API_RESPONSES.USER_HIERARCHY_VIEW_SUCCESS, apiId);
     return await APIResponse.success(
@@ -1146,7 +1168,8 @@ export class PostgresUserService implements IServicelocator {
     T.name AS tenantName, 
     T.params,
     T."type",
-    UTM."Id" AS userTenantMappingId
+    UTM."Id" AS userTenantMappingId,
+    UTM."status" AS tenantStatus
   FROM 
     public."UserTenantMapping" UTM
   LEFT JOIN 
@@ -1195,6 +1218,7 @@ export class PostgresUserService implements IServicelocator {
           tenantMap.set(tenantId, {
             tenantName: data.tenantname,
             tenantId: tenantId,
+            tenantStatus: data.tenantstatus,
             templateId: data.templateId,
             contentFramework: data.contentFramework,
             collectionFramework: data.collectionFramework,
