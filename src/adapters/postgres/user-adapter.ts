@@ -3418,7 +3418,8 @@ export class PostgresUserService implements IServicelocator {
               "email",
               "createdAt",
               "updatedAt",
-              "status"
+              "status",
+              "enrollmentId"
             ]
           });
 
