@@ -18,6 +18,7 @@ import { PostgresAssignTenantService } from 'src/adapters/postgres/userTenantMap
 import { UserTenantMapping } from 'src/userTenantMapping/entities/user-tenant-mapping.entity';
 import { User } from 'src/user/entities/user-entity';
 import { Tenants } from 'src/userTenantMapping/entities/tenant.entity';
+import { KafkaModule } from 'src/kafka/kafka.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { Tenants } from 'src/userTenantMapping/entities/tenant.entity';
     ConfigModule,
     HttpModule,
     PostgresModule, // This includes all the required services and entities
+    KafkaModule, // Required for PostgresAssignTenantService dependency
     TypeOrmModule.forFeature([
       Role, 
       UserRoleMapping, 
