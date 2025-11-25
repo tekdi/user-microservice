@@ -33,3 +33,34 @@ lerna-debug.log*
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
+package-lock.json
+
+# Additional ignores
+# Env files
+.env.*
+!.env.example
+
+# Lockfiles (team policy)
+yarn.lock
+pnpm-lock.yaml
+
+# Build info
+*.tsbuildinfo
+
+# Caches and temp
+.eslintcache
+.cache/
+tmp/
+.tmp/
+
+# Reports
+junit.xml
+test-results.xml
+
+# Local logs and artifacts
+combined.log
+error.log
+
+# Project-specific artifacts
+shiksha-backend-v2@*
+NODE_ENV*

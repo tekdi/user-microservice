@@ -37,6 +37,7 @@ import { HealthController } from "./health.controller";
     ConfigModule.forRoot({
       load: [kafkaConfig], // Load the Kafka config
       isGlobal: true, // Makes config accessible globally
+      envFilePath: [`.env.${process.env.NODE_ENV}`, '.env'],
     }),
     // MulterModule.register({
     //   dest: "./uploads",
