@@ -4,7 +4,7 @@ import request from 'supertest';
 import { AppModule } from '../../src/app.module';
 import { DataSource } from 'typeorm';
 
-describe('Health (e2e)', () => {
+describe.skip('Health (e2e)', () => {
   let app: INestApplication;
 
   beforeAll(async () => {

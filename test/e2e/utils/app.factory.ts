@@ -14,7 +14,11 @@ export async function createTestApp(overrides?: {
     .overrideProvider(KeycloakService)
     .useValue({
       login: async () => ({
-        access_token: "fake.jwt.token",
+        // Valid-looking unsigned JWT so jwt-decode can parse it
+        access_token:
+          "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9." +
+          "eyJzdWIiOiJ0ZXN0LXN1YiIsInByZWZlcnJlZF91c2VybmFtZSI6InRlc3QtdXNlciJ9." +
+          "signature",
         refresh_token: "dummy-refresh",
         expires_in: 3600,
         refresh_expires_in: 7200,

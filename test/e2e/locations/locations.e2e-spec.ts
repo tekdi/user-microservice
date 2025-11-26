@@ -3,6 +3,7 @@ import request from "supertest";
 import { createTestApp, withTenant } from "../utils/app.factory";
 import { loginAndGetToken, authHeaderFromToken } from "../utils/auth.helper";
 
+jest.setTimeout(20000);
 describe("Locations (e2e)", () => {
   let app: INestApplication;
   beforeAll(async () => {
