@@ -1747,10 +1747,6 @@ export class PostgresUserService implements IServicelocator {
                   ? result.dob.toISOString()
                   : result.dob ?? '',
               country: result.country || '',
-              address: result.address || '',
-              state: result.state || '',
-              district: result.district || '',
-              pincode: result.pincode || '',
               status: result.status,
               customFields: elasticCustomFields,
             },
@@ -2993,21 +2989,18 @@ export class PostgresUserService implements IServicelocator {
         dob: formattedDob,
         country: user.country,
         gender: user.gender,
-        address: user.address || '',
-        district: user.district || '',
-        state: user.state || '',
-        pincode: user.pincode || '',
         status: user.status,
         customFields, // Now filtered to exclude form schema fields
       };
 
-      // Upsert (update or create) the user profile in Elasticsearch
+      // Upsert (update or create) the user profile in Elasticsearch.
       if (isElasticsearchEnabled()) {
         await this.userElasticsearchService.updateUserProfile(
           user.userId,
           profile,
           async (userId: string) => {
-            // Fetch the latest user from the database for upsert
+            // Fallback: fetch latest user and profile-only data from DB.
+            // Applications will be added later by form-submission flows.
             const dbUser = await this.usersRepository.findOne({
               where: { userId },
             });
@@ -3033,10 +3026,6 @@ export class PostgresUserService implements IServicelocator {
                 dob: formattedDob,
                 gender: dbUser.gender,
                 country: dbUser.country || '',
-                address: dbUser.address || '',
-                district: dbUser.district || '',
-                state: dbUser.state || '',
-                pincode: dbUser.pincode || '',
                 status: dbUser.status,
                 customFields,
               },

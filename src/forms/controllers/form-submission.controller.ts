@@ -137,4 +137,23 @@ export class FormSubmissionController {
   ) {
     return this.formSubmissionService.remove(id, mode);
   }
+
+  /**
+   * Sync a user's full Elasticsearch document (profile + profile.customFields + applications)
+   * from the database. This is useful when:
+   * 1. The ES document exists but is missing some data (e.g., applications),
+   * 2. The ES document is completely missing for the given userId.
+   */
+  @Post('elasticsearch/sync/:userId')
+  @UseFilters(new AllExceptionsFilter(APIID.FORM_SUBMISSION_UPDATE))
+  @ApiOperation({
+    summary:
+      'Sync full user document (profile + customFields + applications) into Elasticsearch',
+  })
+  @ApiParam({ name: 'userId', type: String })
+  async syncUserToElasticsearch(
+    @Param('userId') userId: string,
+  ) {
+    return this.formSubmissionService.syncUserToElasticsearch(userId);
+  }
 }
