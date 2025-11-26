@@ -56,26 +56,26 @@ export class UserElasticsearchService implements OnModuleInit {
                 mobile_country_code: { type: 'keyword' },
                 gender: { type: 'keyword' },
                 dob: { type: 'date', null_value: null },
-                address: { type: 'text' },
-                state: { type: 'keyword' },
-                district: { type: 'keyword' },
                 country: { type: 'keyword' },
-                pincode: { type: 'keyword' },
-                status: { type: 'keyword' },
                 customFields: {
                   type: 'nested',
                   properties: {
+                    // NOTE: We intentionally expose only the fields needed for search.
+                    // Any additional metadata coming from DB (fieldValuesId, context, state,
+                    // fieldParams, etc.) will either be stripped before indexing or stored
+                    // but *not* indexed.
                     fieldId: { type: 'keyword' },
-                    fieldValuesId: { type: 'keyword' },
-                    fieldname: { type: 'text' },
                     code: { type: 'keyword' }, // Always treat as string
                     label: { type: 'text' },
                     type: { type: 'keyword' },
                     value: { type: 'text' }, // Always treat as string for flexibility
-                    context: { type: 'keyword' },
-                    contextType: { type: 'keyword' },
-                    state: { type: 'keyword' },
-                    fieldParams: { type: 'object', dynamic: true },
+                    // Store fieldParams in _source only (any shape is accepted)
+                    // and do NOT index it so it can be any array/object without
+                    // causing mapping conflicts.
+                    fieldParams: {
+                      type: 'object',
+                      enabled: false,
+                    },
                   },
                 },
               },
@@ -166,28 +166,14 @@ export class UserElasticsearchService implements OnModuleInit {
       }
 
       // Ensure all required fields are present
+      const applications = user.applications || [];
       const elasticUser: IUser = {
         userId: user.userId,
-        profile: {
-          userId: user.profile.userId,
-          username: user.profile.username,
-          firstName: user.profile.firstName,
-          lastName: user.profile.lastName,
-          middleName: user.profile.middleName,
-          email: user.profile.email,
-          mobile: user.profile.mobile,
-          mobile_country_code: user.profile.mobile_country_code,
-          gender: user.profile.gender,
-          dob: user.profile.dob,
-          country: user.profile.country,
-          address: user.profile.address,
-          district: user.profile.district,
-          state: user.profile.state,
-          pincode: user.profile.pincode,
-          status: user.profile.status,
-          customFields: user.profile.customFields || {},
-        },
-        applications: user.applications || [],
+        profile: this.normalizeProfileForElasticsearch(
+          user.profile,
+          applications
+        ),
+        applications,
         courses: user.courses || [],
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
@@ -221,7 +207,10 @@ export class UserElasticsearchService implements OnModuleInit {
   ): Promise<any> {
     try {
       // Try to update the profile field in Elasticsearch
-      return await this.updateUser(userId, { doc: { profile } });
+      const normalizedProfile = this.normalizeProfileForElasticsearch(profile);
+      return await this.updateUser(userId, {
+        doc: { profile: normalizedProfile },
+      });
     } catch (error: any) {
       // If the document is missing, create it from DB
       if (
@@ -239,6 +228,105 @@ export class UserElasticsearchService implements OnModuleInit {
       // Rethrow other errors
       throw error;
     }
+  }
+
+  /**
+   * Normalize profile object before indexing/updating in Elasticsearch.
+   * Ensures `customFields` match the compact shape expected in the index
+   * and that internal DB-only fields (fieldValuesId, context, state, etc.)
+   * or heavy metadata (fieldParams.options) are not used for search.
+   */
+  private normalizeProfileForElasticsearch(
+    profile: any,
+    applications?: any[]
+  ): any {
+    if (!profile) {
+      return profile;
+    }
+
+    const normalized: any = {
+      userId: profile.userId,
+      username: profile.username,
+      firstName: profile.firstName,
+      lastName: profile.lastName,
+      middleName: profile.middleName,
+      email: profile.email,
+      mobile: profile.mobile,
+      mobile_country_code: profile.mobile_country_code,
+      gender: profile.gender,
+      dob: profile.dob,
+      country: profile.country,
+      status: profile.status,
+    };
+
+    const rawCustomFields = profile.customFields || [];
+
+    // Build a set of fieldIds that are clearly part of application forms,
+    // based on the application.progress.pages[*].fields maps. Any customField
+    // whose fieldId appears here will be treated as an application field
+    // and excluded from profile.customFields.
+    const applicationFieldIds = new Set<string>();
+    if (Array.isArray(applications)) {
+      for (const app of applications) {
+        const pages = app?.progress?.pages || {};
+        for (const page of Object.values(pages)) {
+          const fields = (page as any)?.fields || {};
+          for (const fieldId of Object.keys(fields)) {
+            if (fieldId) {
+              applicationFieldIds.add(fieldId);
+            }
+          }
+        }
+      }
+    }
+
+    normalized.customFields = Array.isArray(rawCustomFields)
+      ? rawCustomFields
+          .filter((field: any) => {
+            if (!field) return false;
+            const fieldId =
+              field.fieldId ?? field.fieldid ?? field.id ?? undefined;
+
+            // If context is present and is not USERS, treat this as a non-profile
+            // field (e.g., form/application field) and exclude it from
+            // profile.customFields. This ensures that only true profile-level
+            // custom fields remain under profile, even when applications array
+            // is empty or not yet populated.
+            const context = field.context ?? field.contextType;
+            if (context && context !== 'USERS') {
+              return false;
+            }
+
+            // If this fieldId is used inside any application.progress page,
+            // we consider it an application field and do NOT keep it under
+            // profile.customFields.
+            if (fieldId && applicationFieldIds.has(String(fieldId))) {
+              return false;
+            }
+            return true;
+          })
+          .map((field: any) => {
+            if (!field) {
+              return field;
+            }
+
+            const fieldId = field.fieldId ?? field.fieldid ?? field.id;
+            const label = field.label ?? field.fieldname ?? field.name ?? '';
+            const value = field.value ?? '';
+            const code = field.code ?? value ?? '';
+            const type = field.type ?? null;
+
+            return {
+              fieldId,
+              code,
+              label,
+              type,
+              value,
+            };
+          })
+      : [];
+
+    return normalized;
   }
 
   /**
@@ -580,14 +668,17 @@ export class UserElasticsearchService implements OnModuleInit {
                 // Check if value is an array (multiple countries)
                 if (Array.isArray(value) && value.length > 0) {
                   const countries = value
-                    .map(v => String(v).trim())
-                    .filter(v => v.length > 0);
+                    .map((v) => String(v).trim())
+                    .filter((v) => v.length > 0);
                   if (countries.length > 0) {
                     searchQuery.bool.filter.push({
                       bool: {
-                        should: countries.map(c => ({
+                        should: countries.map((c) => ({
                           term: {
-                            [`profile.${field}`]: { value: c, case_insensitive: true },
+                            [`profile.${field}`]: {
+                              value: c,
+                              case_insensitive: true,
+                            },
                           },
                         })),
                         minimum_should_match: 1,
@@ -599,7 +690,10 @@ export class UserElasticsearchService implements OnModuleInit {
                   if (country.length > 0) {
                     searchQuery.bool.filter.push({
                       term: {
-                        [`profile.${field}`]: { value: country, case_insensitive: true },
+                        [`profile.${field}`]: {
+                          value: country,
+                          case_insensitive: true,
+                        },
                       },
                     });
                   }

@@ -273,6 +273,26 @@ export class FormSubmissionService {
     }
   }
 
+  /**
+   * Sync a user's full document (profile + applications) into Elasticsearch.
+   * - If the ES document exists but is partial, it will be overwritten with the
+   *   full document from the database.
+   * - If the ES document is missing, it will be created from the database.
+   */
+  public async syncUserToElasticsearch(userId: string): Promise<IUser> {
+    const userDoc = await this.buildUserDocumentForElasticsearch(userId);
+    if (!userDoc) {
+      throw new BadRequestException(`User with ID ${userId} not found`);
+    }
+
+    if (!isElasticsearchEnabled()) {
+      return userDoc;
+    }
+
+    await this.userElasticsearchService.createUser(userDoc);
+    return userDoc;
+  }
+
   private async buildWhereClause(
     filters: FormSubmissionFilters,
     formSubmissionKeys: string[]
@@ -3153,10 +3173,6 @@ export class FormSubmissionService {
         gender: user.gender,
         dob: user.dob instanceof Date ? user.dob.toISOString() : user.dob || '',
         country: user.country,
-        address: user.address || '',
-        district: user.district || '',
-        state: user.state || '',
-        pincode: user.pincode || '',
         status: user.status,
         customFields: profileCustomFields, // Only user profile custom fields
       },
