@@ -5,6 +5,23 @@ import { createTestApp, withTenant } from "../utils/app.factory";
 import { loginAndGetToken, authHeaderFromToken } from "../utils/auth.helper";
 
 jest.setTimeout(20000);
+function logRes(label: string, res: request.Response, expected?: number[] | number) {
+  try {
+    const body = JSON.stringify(res.body);
+    const trimmed = body && body.length > 1200 ? body.slice(0, 1200) + "…(truncated)" : body;
+    // eslint-disable-next-line no-console
+    console.log(
+      JSON.stringify(
+        { label, status: res.status, expected, body: trimmed ? JSON.parse(trimmed) : undefined },
+        null,
+        2
+      )
+    );
+  } catch {
+    // eslint-disable-next-line no-console
+    console.log(`[e2e][${label}] status=${res.status} (body not JSON)`);
+  }
+}
 // --- Mock Data ---
 // Use a fixed mock tenant ID for the withTenant helper
 const MOCK_TENANT_ID = "test-tenant-12345"; 
@@ -35,6 +52,20 @@ describe("RBAC Privileges (e2e)", () => {
     if (!token) {
         throw new Error("Failed to get authentication token.");
     }
+    // Pre-create a privilege for subsequent GET/DELETE tests
+    const preCreate = await request(app.getHttpServer())
+      .post("/rbac/privileges/create")
+      .set(withTenant(authHeaderFromToken(token)))
+      .send({ privileges: [{ title: "E2E Privilege", code: `e2e_${Date.now()}` }] });
+    logRes("PRE CREATE /rbac/privileges/create", preCreate, [200, 201]);
+    expect([200, 201]).toContain(preCreate.status);
+    const created = preCreate.body?.result?.privileges?.[0];
+    if (!created?.privilegeId) {
+      throw new Error(`Pre-create did not return privilegeId: ${JSON.stringify(preCreate.body)}`);
+    }
+    createdPrivilegeId = created.privilegeId;
+    // eslint-disable-next-line no-console
+    console.log(`[e2e] pre-created privilegeId=${createdPrivilegeId}`);
   });
 
   afterAll(async () => {
@@ -50,6 +81,7 @@ describe("RBAC Privileges (e2e)", () => {
       .set(withTenant(authHeaderFromToken(token)));
       
     // Expect 200 (OK) or 204 (No Content)
+    logRes("GET /rbac/privileges?tenantId&roleId", res, [200, 204]);
     expect([200, 204]).toContain(res.status); 
   });
 
@@ -64,20 +96,13 @@ describe("RBAC Privileges (e2e)", () => {
         .send(MOCK_CREATE_PRIVILEGE_DTO);
         
       // Expect 201 (Created)
+      logRes("POST /rbac/privileges/create", res, [200, 201]);
       expect([200, 201]).toContain(res.status); 
       
-      // Assuming the response body contains the created privilege object with an 'id'
-      if (res.body.id) {
-          createdPrivilegeId = res.body.id;
-      } else {
-          // Fallback or error if the API doesn't return the ID, 
-          // but for e2e tests, we need a way to get the ID.
-          // For now, let's assume the ID is returned or fail if it's not.
-          // Alternatively, you could skip the subsequent tests if the ID is missing.
-          console.error("Privilege ID not returned after creation.");
-          // Use a mock UUID if your service returns it on a successful 201
-          createdPrivilegeId = uuidv4(); 
-      }
+      const newOne = res.body?.result?.privileges?.[0]?.privilegeId;
+      // Do not overwrite createdPrivilegeId used by subsequent tests; just log
+      // eslint-disable-next-line no-console
+      console.log(`[e2e] created extra privilege id=${newOne || "N/A"}`);
     });
   });
 
@@ -89,8 +114,9 @@ describe("RBAC Privileges (e2e)", () => {
       .get(`/rbac/privileges/${createdPrivilegeId}`)
       .set(withTenant(authHeaderFromToken(token)));
       
+    logRes(`GET /rbac/privileges/${createdPrivilegeId}`, res, 200);
     expect(res.status).toBe(200);
-    expect(res.body.id).toBe(createdPrivilegeId);
+    expect(res.body?.result?.privilegeId).toBe(createdPrivilegeId);
   });
 
   it("GET /rbac/privileges/:privilegeId invalid id returns 400/404", async () => {
@@ -99,6 +125,7 @@ describe("RBAC Privileges (e2e)", () => {
       .set(withTenant(authHeaderFromToken(token)));
       
     // Expected to fail validation (400) or not found (404)
+    logRes("GET /rbac/privileges/not-a-uuid", res, [400, 404]);
     expect([400, 404]).toContain(res.status);
   });
   
@@ -108,6 +135,7 @@ describe("RBAC Privileges (e2e)", () => {
       .get(`/rbac/privileges/${nonExistentId}`)
       .set(withTenant(authHeaderFromToken(token)));
       
+    logRes(`GET /rbac/privileges/${nonExistentId}`, res, 404);
     expect(res.status).toBe(404);
   });
 
@@ -119,6 +147,7 @@ describe("RBAC Privileges (e2e)", () => {
       .set(withTenant(authHeaderFromToken(token)));
       
     // Expected to fail validation (400) or not found (404)
+    logRes("DELETE /rbac/privileges/not-a-uuid", res, [400, 404]);
     expect([400, 404]).toContain(res.status);
   });
 
@@ -129,6 +158,7 @@ describe("RBAC Privileges (e2e)", () => {
       .set(withTenant(authHeaderFromToken(token)));
       
     // Expect 200 (OK) or 204 (No Content)
+    logRes(`DELETE /rbac/privileges/${createdPrivilegeId}`, res, [200, 204]);
     expect([200, 204]).toContain(res.status);
   });
   
@@ -138,6 +168,7 @@ describe("RBAC Privileges (e2e)", () => {
       .delete(`/rbac/privileges/${createdPrivilegeId}`)
       .set(withTenant(authHeaderFromToken(token)));
       
+    logRes(`DELETE-again /rbac/privileges/${createdPrivilegeId}`, res, 404);
     expect(res.status).toBe(404);
   });
 });

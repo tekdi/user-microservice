@@ -69,8 +69,7 @@ export async function loginAndGetToken(
 }
 
 export function authHeaderFromToken(accessToken?: string): Record<string, string> {
-  // AuthController.getUserByAuth expects the raw token in Authorization header, not "Bearer ..."
-  return accessToken ? { Authorization: accessToken } : {};
+  return accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
 }
 
 

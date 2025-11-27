@@ -26,7 +26,7 @@ describe("Tenant (e2e)", () => {
     const res = await request(app.getHttpServer())
       .post("/tenant/search")
       .set(withTenant(authHeaderFromToken(token)))
-      .send({});
+      .send({ limit: 10, offset: 0, filters: {} });
     expect([200, 204]).toContain(res.status);
   });
 

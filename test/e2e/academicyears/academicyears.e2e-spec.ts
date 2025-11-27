@@ -29,6 +29,7 @@ describe("AcademicYears (e2e)", () => {
     const res = await request(app.getHttpServer())
       .post("/academicyears/list")
       .set(withTenant(authHeaderFromToken(token)))
+      .set({ tenantid: "00000000-0000-0000-0000-000000000000" })
       .send({});
     expect([200, 204]).toContain(res.status);
   });

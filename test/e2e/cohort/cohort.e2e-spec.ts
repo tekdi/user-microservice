@@ -37,7 +37,8 @@ describe("Cohort (e2e)", () => {
     const res = await request(app.getHttpServer())
       .post("/cohort/search")
       .set(withTenant(authHeaderFromToken(token)))
-      .send({});
+      .set({ tenantid: "00000000-0000-0000-0000-000000000000", academicyearid: "00000000-0000-0000-0000-000000000000" })
+      .send({ limit: 10, offset: 0, filters: {} });
     expect([200, 204]).toContain(res.status);
   });
 

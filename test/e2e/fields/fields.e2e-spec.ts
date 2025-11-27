@@ -67,7 +67,7 @@ describe("Fields (e2e)", () => {
     const res = await request(app.getHttpServer())
       .post("/fields/options/read")
       .set(withTenant(authHeaderFromToken(token)))
-      .send({});
+      .send({ fieldName: "name" });
     expect([200, 204]).toContain(res.status);
   });
 
