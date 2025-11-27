@@ -3198,7 +3198,14 @@ export class FormSubmissionService {
     if (Array.isArray(value)) {
       return value.join(', ');
     }
-    // Return value as-is for non-array values
+    // For this ES sync path only: normalise "TRUE"/"FALSE" string values to booleans
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (/^(true|false)$/i.test(trimmed)) {
+        return trimmed.toLowerCase() === 'true';
+      }
+    }
+    // Return value as-is for other non-array values
     return value;
   }
 }
