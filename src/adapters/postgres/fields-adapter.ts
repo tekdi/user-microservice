@@ -25,7 +25,7 @@ import jwt_decode from "jwt-decode";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
 import { API_RESPONSES } from "@utils/response.messages";
 import { FieldValuesDeleteDto } from "src/fields/dto/field-values-delete.dto";
-import { check } from "prettier";
+// import { check } from "prettier"; // Removed - not used and prettier v3 API changed
 @Injectable()
 export class PostgresFieldsService implements IServicelocatorfields {
   constructor(

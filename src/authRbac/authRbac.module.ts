@@ -16,13 +16,16 @@ import { RolePrivilegeMapping } from "src/rbac/assign-privilege/entities/assign-
     TypeOrmModule.forFeature([Role, UserRoleMapping, RolePrivilegeMapping]),
     JwtModule.registerAsync({
       imports: [ConfigModule],
-      useFactory: async (configService: ConfigService) => ({
-        global: true,
-        secret: configService.get<string>("RBAC_JWT_SECRET"),
-        signOptions: {
-          expiresIn: configService.get<string>("RBAC_JWT_EXPIRES_IN"),
-        },
-      }),
+      useFactory: async (configService: ConfigService): Promise<any> => {
+        const expiresIn = configService.get<string>("RBAC_JWT_EXPIRES_IN") || "1h";
+        return {
+          global: true,
+          secret: configService.get<string>("RBAC_JWT_SECRET"),
+          signOptions: {
+            expiresIn: expiresIn,
+          },
+        };
+      },
       inject: [ConfigService],
     }),
     PostgresModule,
