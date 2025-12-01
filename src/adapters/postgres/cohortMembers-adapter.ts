@@ -987,7 +987,7 @@ ${whereCase}`;
                 cohortId: removeCohortId,
                 cohortAcademicYearId: cohortExists[0].cohortAcademicYearId,
               },
-              { status: MemberStatus.ARCHIVED }
+              { status: MemberStatus.REASSIGNED }
             );
             if (updateCohort.affected === 0) {
               results.push({
