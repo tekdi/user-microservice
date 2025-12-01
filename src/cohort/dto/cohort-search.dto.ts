@@ -34,15 +34,16 @@ export class filtersProperty {
 
   //cohortIdBy
   @ApiProperty({
-    type: String,
+    type: [String],
     description: "Cohort Id",
-    default: "",
+    default: [],
   })
   @Expose()
   @IsOptional()
-  @IsUUID()
-  @IsNotEmpty()
-  cohortId?: string;
+  @IsArray()
+  @IsNotEmpty({ each: true })
+  @IsUUID(undefined, { each: true })
+  cohortId?: string[];
 
   //academicYearId
   @ApiProperty({

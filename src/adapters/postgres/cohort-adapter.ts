@@ -789,6 +789,9 @@ export class PostgresCohortService {
       if (whereClause["status"]) {
         whereClause["status"] = In(whereClause["status"]);
       }
+      if (whereClause["cohortId"]) {
+        whereClause["cohortId"] = In(whereClause["cohortId"]);
+      }
 
       const results = {
         cohortDetails: [],
