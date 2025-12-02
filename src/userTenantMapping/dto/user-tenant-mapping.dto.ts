@@ -34,6 +34,21 @@ export class UserTenantMappingDto {
   roleId: string;
 
   @ApiProperty({
+    enum: ["active", "inactive", "archived", "pending"],
+    description: "Status of the user-tenant mapping",
+    default: "active",
+    required: false,
+    example: "pending"
+  })
+  @Expose()
+  @IsOptional()
+  @IsString({ message: "userTenantStatus must be a string" })
+  @IsIn(["active", "inactive", "archived", "pending"], { 
+    message: "userTenantStatus must be one of: active, inactive, archived, pending" 
+  })
+  userTenantStatus?: string;
+
+  @ApiProperty({
     type: Array,
     description: "Custom fields for the user-tenant mapping. Each field should have fieldId and value properties.",
     default: [],
@@ -58,15 +73,15 @@ export class UserTenantMappingDto {
 
 export class UpdateAssignTenantStatusDto {
   @ApiProperty({
-    enum: ["active", "inactive", "archived"],
+    enum: ["active", "inactive", "archived", "pending"],
     description: "Status of the user-tenant mapping",
     example: "active"
   })
   @Expose()
   @IsNotEmpty({ message: "Status is required" })
   @IsString({ message: "Status must be a string" })
-  @IsIn(["active", "inactive", "archived"], { 
-    message: "Status must be one of: active, inactive, archived" 
+  @IsIn(["active", "inactive", "archived", "pending"], { 
+    message: "Status must be one of: active, inactive, archived, pending" 
   })
   status: string;
 

@@ -108,7 +108,7 @@ export class PostgresAssignTenantService
     const apiId = APIID.ASSIGN_TENANT_CREATE;
     try {
 
-      const { userId, tenantId, roleId, customField = [] } = assignTenantMappingDto;
+      const { userId, tenantId, roleId, customField = [], userTenantStatus } = assignTenantMappingDto;
       const errors = [];
 
       // Step 2: Validate user-tenant-role mapping
@@ -138,7 +138,8 @@ export class PostgresAssignTenantService
         tenantRoleMapping: {
           tenantId: tenantId,
           roleId: roleId
-        }
+        },
+        userTenantStatus: userTenantStatus || "active" // Default to "active" if not provided
       };
 
       await this.postgresUserService.assignUserToTenantAndRoll(

@@ -20,7 +20,7 @@ import { isUUID } from "class-validator";
 import { ExistUserDto, SuggestUserDto, UserSearchDto } from "src/user/dto/user-search.dto";
 import { HierarchicalLocationFiltersDto } from "src/user/dto/user-hierarchical-search.dto";
 import { UserHierarchyViewDto } from "src/user/dto/user-hierarchy-view.dto";
-import { UserTenantMapping } from "src/userTenantMapping/entities/user-tenant-mapping.entity";
+import { UserTenantMapping, UserTenantMappingStatus } from "src/userTenantMapping/entities/user-tenant-mapping.entity";
 import { UserRoleMapping } from "src/rbac/assign-role/entities/assign-role.entity";
 import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
 import { Cohort } from "src/cohort/entities/cohort.entity";
@@ -2311,7 +2311,8 @@ export class PostgresUserService implements IServicelocator {
     userId: string,
     tenantId: string,
     createdBy: string,
-    shouldUpdateIfRoot: boolean
+    shouldUpdateIfRoot: boolean,
+    userTenantStatus?: string
   ): Promise<void> {
     const existingMapping = await this.userTenantMappingRepository.findOne({
       where: { userId }
@@ -2321,7 +2322,8 @@ export class PostgresUserService implements IServicelocator {
       await this.userTenantMappingRepository.save({
         userId,
         tenantId,
-        createdBy
+        createdBy,
+        status: (userTenantStatus as UserTenantMappingStatus) || UserTenantMappingStatus.ACTIVE
       });
       return;
     }
@@ -2331,23 +2333,26 @@ export class PostgresUserService implements IServicelocator {
     if (isRoot) {
       existingMapping.tenantId = tenantId;
       existingMapping.createdBy = createdBy;
+      existingMapping.status = (userTenantStatus as UserTenantMappingStatus) || existingMapping.status;
       await this.userTenantMappingRepository.save(existingMapping);
       LoggerUtil.log(`Updated tenant mapping for user ${userId} from root tenant to ${tenantId}`);
     } else {
       await this.userTenantMappingRepository.save({
         userId,
         tenantId,
-        createdBy
+        createdBy,
+        status : (userTenantStatus as UserTenantMappingStatus) || existingMapping.status
       });
     }
   }
 
   async assignUserToTenantAndRoll(tenantsData, createdBy, userType?: boolean) {
     try {
-      const { tenantId, userId, roleId } = {
+      const { tenantId, userId, roleId, userTenantStatus } = {
         tenantId: tenantsData?.tenantRoleMapping?.tenantId,
         userId: tenantsData?.userId,
-        roleId: tenantsData?.tenantRoleMapping?.roleId
+        roleId: tenantsData?.tenantRoleMapping?.roleId,
+        userTenantStatus: tenantsData?.userTenantStatus
       };
 
       if (roleId) {
@@ -2355,7 +2360,7 @@ export class PostgresUserService implements IServicelocator {
       }
 
       if (tenantId) {
-        await this.handleTenantMappingForUser(userId, tenantId, createdBy, userType);
+        await this.handleTenantMappingForUser(userId, tenantId, createdBy, userType, userTenantStatus);
       }
 
       LoggerUtil.log(API_RESPONSES.USER_TENANT);
