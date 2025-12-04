@@ -30,11 +30,10 @@ import {
 } from "src/userTenantMapping/entities/user-tenant-mapping.entity";
 import { UserRoleMapping } from "src/rbac/assign-role/entities/assign-role.entity";
 import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
-import { Cohort } from "src/cohort/entities/cohort.entity";
 import { Role } from "src/rbac/role/entities/role.entity";
 import { UserData } from "./user.controller";
 import APIResponse from "src/common/responses/response";
-import { Request, Response, query } from "express";
+import { Request, Response } from "express";
 import { APIID } from "src/common/utils/api-id.config";
 import { FieldsService } from "src/fields/fields.service";
 import { RoleService } from "src/rbac/role/role.service";
@@ -52,8 +51,8 @@ import { AuthUtils } from "@utils/auth-util";
 import { OtpSendDTO } from "./dto/otpSend.dto";
 import { OtpVerifyDTO } from "./dto/otpVerify.dto";
 import { SendPasswordResetOTPDto } from "./dto/passwordReset.dto";
-import { ActionType, UserUpdateDTO } from "./dto/user-update.dto";
-import { randomInt } from "crypto";
+import { ActionType } from "./dto/user-update.dto";
+import { randomInt } from "node:crypto";
 import { UUID } from "aws-sdk/clients/cloudtrail";
 import { AutomaticMemberService } from "src/automatic-member/automatic-member.service";
 import { KafkaService } from "src/kafka/kafka.service";
@@ -83,23 +82,23 @@ export class UserService {
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
     @InjectRepository(FieldValues)
-    private fieldsValueRepository: Repository<FieldValues>,
+    private readonly fieldsValueRepository: Repository<FieldValues>,
     @InjectRepository(CohortMembers)
-    private cohortMemberRepository: Repository<CohortMembers>,
+    private readonly cohortMemberRepository: Repository<CohortMembers>,
     @InjectRepository(UserTenantMapping)
-    private userTenantMappingRepository: Repository<UserTenantMapping>,
+    private readonly userTenantMappingRepository: Repository<UserTenantMapping>,
     @InjectRepository(Tenants)
-    private tenantsRepository: Repository<Tenants>,
+    private readonly tenantsRepository: Repository<Tenants>,
     @InjectRepository(UserRoleMapping)
-    private userRoleMappingRepository: Repository<UserRoleMapping>,
+    private readonly userRoleMappingRepository: Repository<UserRoleMapping>,
     @InjectRepository(Role)
-    private roleRepository: Repository<Role>,
-    private fieldsService: FieldsService,
+    private readonly roleRepository: Repository<Role>,
+    private readonly fieldsService: FieldsService,
     private readonly roleService: RoleService,
     private readonly notificationRequest: NotificationRequest,
     private readonly jwtUtil: JwtUtil,
-    private configService: ConfigService,
-    private academicYearService: AcademicYearService,
+    private readonly configService: ConfigService,
+    private readonly academicYearService: AcademicYearService,
     private readonly cohortAcademicYearService: CohortAcademicYearService,
     private readonly authUtils: AuthUtils,
     private readonly automaticMemberService: AutomaticMemberService,
@@ -760,7 +759,7 @@ export class UserService {
   //   const userDetails = await this.usersRepository.query(query);
 
   //   if (userDetails.length > 0) {
-  //     result.totalCount = parseInt(userDetails[0].total_count, 10);
+  //     result.totalCount = Number.parseInt(userDetails[0].total_count, 10);
 
   //     // OPTIMIZED: Conditionally fetch custom fields only when requested
   //     if (includeCustomFields) {
@@ -849,7 +848,7 @@ export class UserService {
     // --- Filters ---
     if (filters && Object.keys(filters).length > 0) {
       const coreFields = await this.getCoreColumnNames();
-      const allCoreField = [
+      const allCoreField = new Set([
         ...coreFields,
         "fromDate",
         "toDate",
@@ -857,10 +856,10 @@ export class UserService {
         "tenantId",
         "name",
         "tenantStatus",
-      ];
+      ]);
 
       for (const [key, avalue] of Object.entries(filters)) {
-        if (allCoreField.includes(key)) {
+        if (allCoreField.has(key)) {
           const value = avalue;
 
           switch (key) {
@@ -995,15 +994,15 @@ export class UserService {
     }
 
     // --- Pagination ---
-    if (offset) queryBuilder.offset(parseInt(offset, 10));
-    if (limit) queryBuilder.limit(parseInt(limit, 10));
+    if (offset) queryBuilder.offset(Number.parseInt(offset, 10));
+    if (limit) queryBuilder.limit(Number.parseInt(limit, 10));
 
     // --- Execute ---
     const userDetails = await queryBuilder.getRawMany();
 
     if (userDetails.length === 0) return false;
 
-    result.totalCount = parseInt(userDetails[0].total_count, 10);
+    result.totalCount = Number.parseInt(userDetails[0].total_count, 10);
 
     // --- Fetch & attach custom fields ---
     if (includeCustomFields) {
@@ -1099,8 +1098,6 @@ export class UserService {
       let customFields;
 
       if (userData && userData?.fieldValue) {
-        const context = "USERS";
-        const contextType = roleInUpper;
         // customFields = await this.fieldsService.getFieldValuesData(userData.userId, context, contextType, ['All'], true);
         customFields = await this.fieldsService.getCustomFieldDetails(
           userData.userId,
@@ -1756,8 +1753,12 @@ export class UserService {
       await Object.assign(user, userData);
       return this.usersRepository.save(user);
     } catch (error) {
-      // Re-throw or handle the error as needed
-      throw new Error("An error occurred while updating user details");
+      LoggerUtil.error(
+        "Error updating user details",
+        error instanceof Error ? error.message : String(error),
+        APIID.USER_UPDATE
+      );
+      throw error;
     }
   }
 
@@ -2041,21 +2042,13 @@ export class UserService {
               updatedBy: userCreateDto.updatedBy,
             };
 
-            const res = await this.fieldsService.updateUserCustomFields(
+            await this.fieldsService.updateUserCustomFields(
               userId,
               fieldData,
               customFieldAttributes[fieldData.fieldId],
               additionalData
             );
 
-            // if (res.correctValue) {
-            //   if (!result["customFields"]) result["customFields"] = [];
-            //   result["customFields"].push(res);
-            // } else {
-            //   createFailures.push(
-            //     `${fieldData.fieldId}: ${res?.valueIssue} - ${res.fieldName}`
-            //   );
-            // }
           }
         }
       }
@@ -2300,15 +2293,15 @@ export class UserService {
     response?: Response
   ): Promise<User> {
     const user = new User();
-    (user.userId = userCreateDto?.userId),
-      (user.username = userCreateDto?.username),
-      (user.firstName = userCreateDto?.firstName),
-      (user.middleName = userCreateDto?.middleName),
-      (user.lastName = userCreateDto?.lastName),
-      (user.gender = userCreateDto?.gender),
-      (user.email = userCreateDto?.email),
-      (user.mobile = Number(userCreateDto?.mobile) || null),
-      (user.createdBy = userCreateDto?.createdBy || userCreateDto?.createdBy);
+    user.userId = userCreateDto?.userId;
+    user.username = userCreateDto?.username;
+    user.firstName = userCreateDto?.firstName;
+    user.middleName = userCreateDto?.middleName;
+    user.lastName = userCreateDto?.lastName;
+    user.gender = userCreateDto?.gender;
+    user.email = userCreateDto?.email;
+    user.mobile = Number(userCreateDto?.mobile) || null;
+    user.createdBy = userCreateDto?.createdBy;
 
     if (userCreateDto?.dob) {
       user.dob = new Date(userCreateDto.dob);
@@ -2440,7 +2433,7 @@ export class UserService {
     const tenant = await this.tenantsRepository.findOne({
       where: { tenantId },
     });
-    return tenant && tenant.parentId === null;
+    return tenant?.parentId === null;
   }
 
   private async handleRoleMappingForUser(
@@ -2974,12 +2967,6 @@ export class UserService {
         },
       });
 
-      // Prepare and format user data for Kafka event
-      const kafkaUserData = {
-        userId: userId,
-        deletedAt: new Date().toISOString(),
-      };
-
       // Send response to the client
       const apiResponse = await APIResponse.success(
         response,
@@ -3127,7 +3114,7 @@ export class UserService {
 
       // Validate hash format
       const [hashValue, expires] = hash.split(".");
-      if (!hashValue || !expires || isNaN(parseInt(expires))) {
+      if (!hashValue || !expires || Number.isNaN(Number.parseInt(expires))) {
         return APIResponse.error(
           response,
           apiId,
@@ -3138,7 +3125,7 @@ export class UserService {
       }
 
       // Check for OTP expiration
-      if (Date.now() > parseInt(expires)) {
+      if (Date.now() > Number.parseInt(expires)) {
         return APIResponse.error(
           response,
           apiId,
@@ -3577,7 +3564,7 @@ export class UserService {
   sanitizeInput(value) {
     if (typeof value === "string") {
       // Escape special characters for SQL
-      return value.replace(/[%_\\]/g, "\\$&");
+      return value.replace(/[%_\\]/g, (match) => `\\${match}`);
     }
     // For other types, return the value as is or implement specific sanitization logic
     return value;
@@ -4395,7 +4382,7 @@ export class UserService {
         queryBuilder.params
       );
       const totalCount =
-        result.length > 0 ? parseInt(result[0].total_count) : 0;
+        result.length > 0 ? Number.parseInt(result[0].total_count) : 0;
 
       // Get custom fields data if requested
       let customFieldsData = {};
@@ -4856,7 +4843,7 @@ export class UserService {
         userIds,
         tenantId,
       ]);
-      const count = parseInt(result[0]?.total || "0");
+      const count = Number.parseInt(result[0]?.total || "0");
 
       LoggerUtil.log(`User count query returned ${count} active users`, apiId);
       return count;
@@ -5007,7 +4994,7 @@ export class UserService {
       const result = await this.usersRepository.query(query, queryParams);
 
       const totalCount =
-        result.length > 0 ? parseInt(result[0].total_count) : 0;
+        result.length > 0 ? Number.parseInt(result[0].total_count) : 0;
 
       return { totalCount, users: result };
     } catch (error) {
@@ -5196,9 +5183,9 @@ export class UserService {
         return {};
       }
 
-      const foundFields = fieldsResult.map((f) => f.name);
+      const foundFields = new Set(fieldsResult.map((f) => f.name));
       const missingFields = regularCustomFields.filter(
-        (name) => !foundFields.includes(name)
+        (name) => !foundFields.has(name)
       );
 
       if (missingFields.length > 0) {
@@ -5269,7 +5256,7 @@ export class UserService {
   private async resolveLocationFieldNames(customFieldsData: any) {
     // Define location fields that need ID-to-name resolution
     // Note: batch and center are now handled separately via getBatchAndCenterNames function
-    const locationFields = ["state", "district", "block", "village"];
+    const locationFields = new Set(["state", "district", "block", "village"]);
     const locationTableMap = {
       state: { table: "state", idColumn: "state_id", nameColumn: "state_name" },
       district: {
@@ -5289,7 +5276,7 @@ export class UserService {
     const locationIds = {};
     Object.keys(customFieldsData).forEach((userId) => {
       Object.keys(customFieldsData[userId]).forEach((fieldName) => {
-        if (locationFields.includes(fieldName)) {
+        if (locationFields.has(fieldName)) {
           if (!locationIds[fieldName]) {
             locationIds[fieldName] = new Set();
           }
@@ -5355,7 +5342,7 @@ export class UserService {
       Object.keys(customFieldsData[userId]).forEach((fieldName) => {
         const fieldValue = customFieldsData[userId][fieldName];
 
-        if (locationFields.includes(fieldName) && locationNameMaps[fieldName]) {
+        if (locationFields.has(fieldName) && locationNameMaps[fieldName]) {
           // Replace ID(s) with name(s) for location fields (state, district, block, village)
           if (Array.isArray(fieldValue) && fieldValue.length > 0) {
             // Handle multiple IDs by resolving each one and joining with commas

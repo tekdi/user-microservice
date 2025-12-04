@@ -941,11 +941,7 @@ export class CohortService {
         cohortId: id,
       },
     });
-    if (existData.length !== 0) {
-      return true;
-    } else {
-      return false;
-    }
+    return existData.length !== 0;
   }
 
   private async getCohortHierarchy(
@@ -1152,13 +1148,16 @@ export class CohortService {
             ],
           });
 
-          if (!cohort) {
+          if (cohort) {
+            // Cohort found, continue processing
+          } else {
             LoggerUtil.error(
               `Failed to fetch cohort data for Kafka event`,
               `Cohort with ID ${cohortId} not found`
             );
             cohortData = { cohortId };
-          } else {
+          }
+          if (cohort) {
             // Get custom fields for the cohort
             let customFields = [];
             try {
