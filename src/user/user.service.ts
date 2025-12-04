@@ -861,7 +861,7 @@ export class UserService {
 
       for (const [key, avalue] of Object.entries(filters)) {
         if (allCoreField.includes(key)) {
-          const value = Array.isArray(avalue) ? avalue : avalue;
+          const value = avalue;
 
           switch (key) {
             case "firstName":
@@ -1871,7 +1871,6 @@ export class UserService {
 
       // Step 5: Prepare username and check Keycloak
       const keycloakCheckStartTime = Date.now();
-      userCreateDto.username = userCreateDto.username;
       const userSchema = new UserCreateDto(userCreateDto);
 
       const keycloakResponse = await getKeycloakAdminToken();
@@ -2174,7 +2173,7 @@ export class UserService {
     }
 
     if (userCreateDto.tenantCohortRoleMapping) {
-      for (const tenantCohortRoleMapping of userCreateDto?.tenantCohortRoleMapping) {
+      for (const tenantCohortRoleMapping of userCreateDto.tenantCohortRoleMapping) {
         const { tenantId, cohortIds, roleId } = tenantCohortRoleMapping;
 
         if (!academicYearId && cohortIds) {
@@ -2196,6 +2195,8 @@ export class UserService {
 
         if (duplicateTenet.includes(tenantId)) {
           errorCollector.addError(API_RESPONSES.DUPLICAT_TENANTID);
+        } else {
+          duplicateTenet.push(tenantId);
         }
 
         // if ((tenantId && !roleId) || (!tenantId && roleId)) {
@@ -2228,7 +2229,7 @@ export class UserService {
           errorCollector.addError(`Role Id '${roleId}' does not exist.`);
         } else if (roleExists) {
           if (
-            (roleExists[0].tenantId || roleExists[0].tenantId !== null) &&
+            roleExists[0].tenantId != null &&
             roleExists[0].tenantId !== tenantId
           ) {
             errorCollector.addError(

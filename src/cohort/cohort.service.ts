@@ -1112,7 +1112,7 @@ export class CohortService {
     }
     const {
       condition: { value, fieldId },
-    } = requiredData?.rules;
+    } = rules;
 
     // Pass fieldId to getSearchFieldValueData
     const filledValues = await this.fieldsService.getSearchFieldValueData(
