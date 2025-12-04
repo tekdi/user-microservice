@@ -46,7 +46,7 @@ import { FieldValuesDeleteDto } from "./dto/field-values-delete.dto";
 @ApiTags("Fields")
 @Controller("fields")
 export class FieldsController {
-  constructor(private fieldsService: FieldsService) {}
+  constructor(private readonly fieldsService: FieldsService) {}
 
   //fields
   //create fields

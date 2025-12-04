@@ -1,21 +1,16 @@
 import {
-  BadRequestException,
-  ConsoleLogger,
   HttpStatus,
   Injectable,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { In, Repository } from "typeorm";
-import { SuccessResponse } from "src/success-response";
-import { ErrorResponseTypeOrm } from "src/error-response-typeorm";
 import {
   CreateAssignRoleDto,
   ResponseAssignRoleDto,
 } from "src/rbac/assign-role/dto/create-assign-role.dto";
 import { UserRoleMapping } from "src/rbac/assign-role/entities/assign-role.entity";
 import { Role } from "src/rbac/role/entities/role.entity";
-import { IsAlpha, IsUUID, isUUID } from "class-validator";
-import { executionAsyncResource } from "async_hooks";
+import { isUUID } from "class-validator";
 import { DeleteAssignRoleDto } from "src/rbac/assign-role/dto/delete-assign-role.dto";
 import { Response, Request } from "express";
 import { APIID } from "src/common/utils/api-id.config";
@@ -25,9 +20,9 @@ import APIResponse from "src/common/responses/response";
 export class AssignRoleService {
   constructor(
     @InjectRepository(UserRoleMapping)
-    private userRoleMappingRepository: Repository<UserRoleMapping>,
+    private readonly userRoleMappingRepository: Repository<UserRoleMapping>,
     @InjectRepository(Role)
-    private roleRepository: Repository<Role>
+    private readonly roleRepository: Repository<Role>
   ) {}
   public async createAssignRole(
     request: any,

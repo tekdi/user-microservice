@@ -1,13 +1,10 @@
 import { HttpStatus, Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { In, Repository } from "typeorm";
+import { Repository } from "typeorm";
 import { UserTenantMapping } from "src/userTenantMapping/entities/user-tenant-mapping.entity";
 import {
   UserTenantMappingDto,
-  ResponseAssignTenantDto,
 } from "src/userTenantMapping/dto/user-tenant-mapping.dto";
-import { ErrorResponseTypeOrm } from "src/error-response-typeorm";
-import { SuccessResponse } from "src/success-response";
 import { User } from "src/user/entities/user-entity";
 import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
 import { Role } from "src/rbac/role/entities/role.entity";
@@ -25,18 +22,18 @@ import { KafkaService } from "src/kafka/kafka.service";
 export class UserTenantMappingService {
   constructor(
     @InjectRepository(UserTenantMapping)
-    private userTenantMappingRepository: Repository<UserTenantMapping>,
+    private readonly userTenantMappingRepository: Repository<UserTenantMapping>,
     @InjectRepository(User)
-    private userRepository: Repository<User>,
+    private readonly userRepository: Repository<User>,
     @InjectRepository(Tenants)
-    private tenantsRepository: Repository<Tenants>,
+    private readonly tenantsRepository: Repository<Tenants>,
     @InjectRepository(Role)
-    private roleRepository: Repository<Role>,
+    private readonly roleRepository: Repository<Role>,
     @InjectRepository(UserRoleMapping)
-    private userRoleMappingRepository: Repository<UserRoleMapping>,
-    private userService: UserService,
-    private fieldsService: FieldsService,
-    private kafkaService: KafkaService
+    private readonly userRoleMappingRepository: Repository<UserRoleMapping>,
+    private readonly userService: UserService,
+    private readonly fieldsService: FieldsService,
+    private readonly kafkaService: KafkaService
   ) {}
 
   public async validateUserTenantMapping(

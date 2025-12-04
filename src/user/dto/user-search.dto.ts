@@ -273,7 +273,7 @@ export class ExistUserDto {
   @Expose()
   @IsOptional()
   @IsString({ message: "Mobile number must be a string" })
-  @Matches(/^[0-9]{10}$/, {
+  @Matches(/^\d{10}$/, {
     message: "Mobile number must be between 10 digits and contain only numbers",
   })
   mobile?: string;

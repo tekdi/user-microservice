@@ -66,7 +66,7 @@ export class AcademicYearService {
         where: { isActive: true, tenantId: tenantId },
       });
       if (getCurrentActiveYear) {
-        const updateStatus = await this.academicYearRespository.update(
+        await this.academicYearRespository.update(
           { id: getCurrentActiveYear.id },
           { isActive: false }
         );

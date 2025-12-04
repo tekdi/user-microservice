@@ -17,7 +17,7 @@ import { validate as uuidValidate } from "uuid";
 export class RoleService {
   constructor(
     @InjectRepository(Role)
-    private roleRepository: Repository<Role>,
+    private readonly roleRepository: Repository<Role>,
     @InjectRepository(UserRoleMapping)
     private readonly userRoleMappingRepository: Repository<UserRoleMapping>,
     @InjectRepository(RolePrivilegeMapping)
@@ -64,7 +64,7 @@ export class RoleService {
 
         // Check if role name already exists
         const existingRole = await this.roleRepository.findOne({
-          where: { code: code, tenantId: tenantId ? tenantId : IsNull() },
+          where: { code: code, tenantId: tenantId ?? IsNull() },
         });
         if (existingRole) {
           errors.push({
@@ -80,7 +80,7 @@ export class RoleService {
           updatedAt: new Date(),
           createdBy: request.user.userId, // Assuming you have a user object in the request
           updatedBy: request.user.userId,
-          tenantId: tenantId ? tenantId : null, // Add the tenantId to the RoleDto
+          tenantId: tenantId ?? null, // Add the tenantId to the RoleDto
         });
         // Convert roleDto to lowercase
         // const response = await this.roleRepository.save(roleDto);
@@ -167,17 +167,9 @@ export class RoleService {
   public async searchRole(roleSearchDto: RoleSearchDto, response: Response) {
     const apiId = APIID.ROLE_SEARCH;
     try {
-      let { limit } = roleSearchDto;
-      const { page, filters } = roleSearchDto;
-
-      let offset = 0;
-      if (page > 1) {
-        offset = parseInt(limit) * (page - 1);
-      }
-
-      if (limit.trim() === "") {
-        limit = "0";
-      }
+      const { limit, page, filters } = roleSearchDto;
+      const offset = page > 1 ? Number.parseInt(limit) * (page - 1) : 0;
+      const finalLimit = limit.trim() === "" ? "0" : limit;
 
       const whereClause: any = {};
       if (filters && Object.keys(filters).length > 0) {
@@ -224,7 +216,7 @@ export class RoleService {
             roleId: data.roleid,
             title: data.title,
             code: data.code,
-            privileges: roleResult ? roleResult : [],
+            privileges: roleResult ?? [],
           };
         });
         return APIResponse.success(
@@ -337,10 +329,9 @@ export class RoleService {
         roleId: roleId,
       });
 
-      const userRoleDeleteResponse =
-        await this.userRoleMappingRepository.delete({
-          roleId: roleId,
-        });
+      await this.userRoleMappingRepository.delete({
+        roleId: roleId,
+      });
       return APIResponse.success(
         res,
         apiId,

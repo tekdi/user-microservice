@@ -130,7 +130,7 @@ export class CohortMembersController {
         "academicyearId is required and academicyearId must be a valid UUID."
       );
     }
-    const result = await this.cohortMembersService.getCohortMembers(
+    await this.cohortMembersService.getCohortMembers(
       cohortId,
       tenantId,
       fieldvalue,
@@ -173,7 +173,7 @@ export class CohortMembersController {
         "academicyearId is required and must be a valid UUID."
       );
     }
-    const result = await this.cohortMembersService.searchCohortMembers(
+    await this.cohortMembersService.searchCohortMembers(
       cohortMembersSearchDto,
       tenantId,
       academicyearId,
@@ -204,7 +204,7 @@ export class CohortMembersController {
     if (!loginUser || !isUUID(loginUser)) {
       throw new BadRequestException("unauthorized!");
     }
-    const result = await this.cohortMembersService.updateCohortMembers(
+    await this.cohortMembersService.updateCohortMembers(
       cohortMembersId,
       loginUser,
       cohortMemberUpdateDto,
@@ -232,7 +232,7 @@ export class CohortMembersController {
   ) {
     const tenantid = headers["tenantid"];
 
-    const result = await this.cohortMembersService.deleteCohortMemberById(
+    await this.cohortMembersService.deleteCohortMemberById(
       tenantid,
       cohortMembershipId,
       response

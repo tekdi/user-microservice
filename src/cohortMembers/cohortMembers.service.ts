@@ -1,11 +1,13 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, HttpStatus } from "@nestjs/common";
 import { CohortMembersDto } from "src/cohortMembers/dto/cohortMembers.dto";
 import { CohortMembersSearchDto } from "src/cohortMembers/dto/cohortMembers-search.dto";
-import { CohortMembers } from "src/cohortMembers/entities/cohort-member.entity";
+import {
+  CohortMembers,
+  MemberStatus,
+} from "src/cohortMembers/entities/cohort-member.entity";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { FieldsService } from "src/fields/fields.service";
-import { HttpStatus } from "@nestjs/common";
 import { User } from "src/user/entities/user-entity";
 import { CohortMembersUpdateDto } from "src/cohortMembers/dto/cohortMember-update.dto";
 import { Fields } from "src/fields/entities/fields.entity";
@@ -14,7 +16,6 @@ import { Cohort } from "src/cohort/entities/cohort.entity";
 import APIResponse from "src/common/responses/response";
 import { response, Response } from "express";
 import { APIID } from "src/common/utils/api-id.config";
-import { MemberStatus } from "src/cohortMembers/entities/cohort-member.entity";
 import { NotificationRequest } from "@utils/notification.axios";
 import { CohortAcademicYear } from "src/cohortAcademicYear/entities/cohortAcademicYear.entity";
 import { AcademicYearService } from "src/academicyears/academicyears.service";
@@ -29,19 +30,19 @@ import { KafkaService } from "src/kafka/kafka.service";
 export class CohortMembersService {
   constructor(
     @InjectRepository(CohortMembers)
-    private cohortMembersRepository: Repository<CohortMembers>,
+    private readonly cohortMembersRepository: Repository<CohortMembers>,
     @InjectRepository(Fields)
-    private fieldsRepository: Repository<Fields>,
+    private readonly fieldsRepository: Repository<Fields>,
     @InjectRepository(User)
-    private usersRepository: Repository<User>,
+    private readonly usersRepository: Repository<User>,
     @InjectRepository(Cohort)
-    private cohortRepository: Repository<Cohort>,
+    private readonly cohortRepository: Repository<Cohort>,
     @InjectRepository(CohortAcademicYear)
     private readonly cohortAcademicYearRespository: Repository<CohortAcademicYear>,
     private readonly academicyearService: AcademicYearService,
     private readonly notificationRequest: NotificationRequest,
     private readonly fieldsService: FieldsService,
-    private userService: UserService,
+    private readonly userService: UserService,
     private readonly kafkaService: KafkaService
   ) {}
 
@@ -452,7 +453,7 @@ ON CM."userId" = U."userId" ${whereCase}`;
     const getUserDetails = await this.getUsers(where, options, order, tenantId);
 
     if (getUserDetails.length > 0) {
-      results.totalCount = parseInt(getUserDetails[0].total_count, 10);
+      results.totalCount = Number.parseInt(getUserDetails[0].total_count, 10);
 
       for (const data of getUserDetails) {
         if (fieldShowHide === "false") {
@@ -1047,8 +1048,6 @@ ${whereCase}`;
               cohortExists[0].cohortAcademicYearId
             );
             if (mappingExists) {
-              // if (mappingExists.status === MemberStatus.ACTIVE) {
-              // errors.push(`Mapping already exists for userId ${userId} and cohortId ${cohortId} for this academic year`);
               errors.push(
                 API_RESPONSES.MAPPING_EXIST_BW_USER_AND_COHORT(userId, cohortId)
               );

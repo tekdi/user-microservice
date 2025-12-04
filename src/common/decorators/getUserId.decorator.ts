@@ -17,7 +17,7 @@ export const GetUserId = createParamDecorator(
     try {
       const token = authHeader.split(" ")[1]; // Extract JWT token
       const decoded: any = jwt_decode(token); // Decode token
-      return decoded?.sub; // Assuming `sub` is where userId is stored
+      return decoded?.sub ?? null; // Assuming `sub` is where userId is stored
     } catch (error) {
       throw new UnauthorizedException("Invalid token");
     }

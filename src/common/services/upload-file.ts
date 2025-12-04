@@ -3,7 +3,7 @@ import {
   BadRequestException,
   InternalServerErrorException,
 } from "@nestjs/common";
-import { extname } from "path";
+import { extname } from "node:path";
 import { v4 as uuidv4 } from "uuid";
 import {
   HeadObjectCommand,
@@ -18,7 +18,7 @@ export class FilesUploadService {
   private readonly bucketName: string =
     this.configService.get<string>("AWS_BUCKET_NAME");
 
-  constructor(private configService: ConfigService) {
+  constructor(private readonly configService: ConfigService) {
     this.s3Client = new S3Client({
       region: this.configService.get<string>("AWS_REGION"),
       credentials: {

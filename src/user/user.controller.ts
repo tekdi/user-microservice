@@ -72,7 +72,7 @@ export interface UserData {
 @Controller()
 export class UserController {
   constructor(
-    private userService: UserService,
+    private readonly userService: UserService,
     private readonly uploadS3Service: UploadS3Service
   ) {}
 

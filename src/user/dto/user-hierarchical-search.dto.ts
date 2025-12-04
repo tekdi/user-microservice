@@ -45,7 +45,7 @@ export class AtLeastOneFilterConstraint
  */
 @ValidatorConstraint({ name: "validSortConfig", async: false })
 export class ValidSortConfigConstraint implements ValidatorConstraintInterface {
-  private allowedSortFields = [
+  private readonly allowedSortFields = [
     "name",
     "firstName",
     "lastName",
@@ -53,7 +53,7 @@ export class ValidSortConfigConstraint implements ValidatorConstraintInterface {
     "email",
     "createdAt",
   ];
-  private allowedSortDirections = ["asc", "desc"];
+  private readonly allowedSortDirections = ["asc", "desc"];
 
   validate(sortArray: any): boolean {
     if (!Array.isArray(sortArray) || sortArray.length !== 2) {

@@ -21,14 +21,14 @@ function IsValidOtp(validationOptions?: ValidationOptions) {
       validator: {
         validate(value: any, args: ValidationArguments) {
           const otpDigits = process.env.OTP_DIGITS
-            ? parseInt(process.env.OTP_DIGITS)
+            ? Number.parseInt(process.env.OTP_DIGITS)
             : 6;
           const regex = new RegExp(`^\\d{${otpDigits}}$`);
           return typeof value === "string" && regex.test(value);
         },
         defaultMessage(args: ValidationArguments) {
           const otpDigits = process.env.OTP_DIGITS
-            ? parseInt(process.env.OTP_DIGITS)
+            ? Number.parseInt(process.env.OTP_DIGITS)
             : 6;
           return `OTP must be exactly ${otpDigits} digits.`;
         },

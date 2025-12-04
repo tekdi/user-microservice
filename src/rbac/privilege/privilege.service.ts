@@ -1,7 +1,6 @@
 import { HttpStatus, Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
-import { SuccessResponse } from "src/success-response";
 import { ErrorResponseTypeOrm } from "src/error-response-typeorm";
 import { Privilege } from "src/rbac/privilege/entities/privilege.entity";
 import {
@@ -19,11 +18,11 @@ import { APIID } from "src/common/utils/api-id.config";
 export class PrivilegeService {
   constructor(
     @InjectRepository(Privilege)
-    private privilegeRepository: Repository<Privilege>,
+    private readonly privilegeRepository: Repository<Privilege>,
     @InjectRepository(RolePrivilegeMapping)
-    private rolePrivilegeMappingRepository: Repository<RolePrivilegeMapping>,
+    private readonly rolePrivilegeMappingRepository: Repository<RolePrivilegeMapping>,
     @InjectRepository(Role)
-    private roleRepository: Repository<Role>
+    private readonly roleRepository: Repository<Role>
   ) {}
 
   public async createPrivilege(
@@ -146,30 +145,6 @@ export class PrivilegeService {
   // public async updatePrivilege(privilegeId: string, request: any, privilegeDto: PrivilegeDto) {
   //     try {
   //         // Get the privilege using the getPrivilege method
-  //         const existingPrivilegeResponse = await this.getPrivilege(privilegeId, request);
-
-  //         if (existingPrivilegeResponse instanceof ErrorResponseTypeOrm) {
-  //             return existingPrivilegeResponse;
-  //         }
-  //         // Cast the data property of the SuccessResponse to a Privilege object
-  //         const existingPrivilege: Privilege = existingPrivilegeResponse.data as Privilege;
-
-  //         const newLabel = privilegeDto.privilegeName.split(' ').join('');
-
-  //         const result = await this.checkExistingPrivilege(newLabel)
-
-  //         if (result) {
-  //             return new ErrorResponseTypeOrm({
-  //                 statusCode: HttpStatus.CONFLICT,
-  //                 errorMessage: "Privilege with the same name already exists.",
-  //             });
-  //         }
-  //         // Merge the updated data into the existing privilege
-  //         const mergedPrivilege = this.privilegeRepository.merge(existingPrivilege, privilegeDto);
-
-  //         mergedPrivilege.label = newLabel;
-  //         // Save the updated privilege record
-  //         const updatedPrivilegeRecord = await this.privilegeRepository.save(mergedPrivilege);
 
   //         return new SuccessResponse({
   //             statusCode: HttpStatus.OK,

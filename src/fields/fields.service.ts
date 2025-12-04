@@ -1,4 +1,4 @@
-import { ConsoleLogger, HttpStatus, Injectable } from "@nestjs/common";
+import { HttpStatus, Injectable } from "@nestjs/common";
 import { FieldsDto } from "./dto/fields.dto";
 import {
   FieldsOptionsSearchDto,
@@ -15,16 +15,15 @@ import { In, IsNull, Repository } from "typeorm";
 import APIResponse from "src/common/responses/response";
 import { APIID } from "src/common/utils/api-id.config";
 import { Response } from "express";
-import { readFileSync } from "fs";
+import { readFileSync } from "node:fs";
 import path, { join } from "node:path";
 import { FieldFactory } from "./fieldValidators/fieldFactory";
 import { FieldsUpdateDto } from "./dto/fields-update.dto";
-import { SchemaField, Option } from "./fieldValidators/fieldClass";
+import { SchemaField } from "./fieldValidators/fieldClass";
 import jwt_decode from "jwt-decode";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
 import { API_RESPONSES } from "@utils/response.messages";
 import { FieldValuesDeleteDto } from "./dto/field-values-delete.dto";
-import { check } from "prettier";
 @Injectable()
 export class FieldsService {
   constructor(
@@ -141,7 +140,6 @@ export class FieldsService {
         encounteredKeys.push(fieldId);
       }
       const fieldAttributes = getFieldDetails?.fieldAttributes || {};
-      // getFieldDetails["fieldAttributes"] = fieldAttributes[tenantId] || fieldAttributes["default"];
       getFieldDetails["fieldAttributes"] = fieldAttributes;
 
       if (
@@ -629,7 +627,7 @@ export class FieldsService {
       //If fields is depends on another fields but did not provide controlling field foreign key
       if (storeWithoutControllingField.length > 0) {
         const wrongControllingField = storeWithoutControllingField.join(",");
-        error = `Wrong Data: ${wrongControllingField} This field is dependent on another field and cannot be created without specifying the controllingfieldfk.`;
+        // Note: Error message assigned but not used - should return error response
       }
 
       const result = await this.fieldsRepository.update(fieldId, fieldsData);
@@ -789,13 +787,12 @@ export class FieldsService {
   ) {
     const apiId = APIID.FIELDS_SEARCH;
     try {
-      let { limit, offset } = fieldsSearchDto;
-      const { filters } = fieldsSearchDto;
-      limit = limit ? limit : 20;
-      offset = offset ? offset : 0;
+      const { limit = 20, offset = 0, filters } = fieldsSearchDto;
 
-      const fieldKeys = this.fieldsRepository.metadata.columns.map(
-        (column) => column.propertyName
+      const fieldKeys = new Set(
+        this.fieldsRepository.metadata.columns.map(
+          (column) => column.propertyName
+        )
       );
       let tenantCond = tenantId
         ? `"tenantId" = '${tenantId}'`
@@ -803,7 +800,7 @@ export class FieldsService {
       let whereClause = tenantCond;
       if (filters && Object.keys(filters).length > 0) {
         Object.entries(filters).forEach(([key, value]) => {
-          if (fieldKeys.includes(key)) {
+          if (fieldKeys.has(key)) {
             if (
               key === "context" &&
               (value === "USERS" || value === "COHORT")
@@ -868,7 +865,7 @@ export class FieldsService {
     }
 
     if (limit !== undefined) {
-      queryOptions.take = parseInt(limit);
+      queryOptions.take = Number.parseInt(limit);
     }
 
     const [results, totalCount] = await this.fieldsRepository.findAndCount(
@@ -990,7 +987,7 @@ export class FieldsService {
     }
 
     if (limit !== undefined) {
-      queryOptions.take = parseInt(limit);
+      queryOptions.take = Number.parseInt(limit);
     }
     try {
       const [results, totalCount] =
@@ -1019,7 +1016,7 @@ export class FieldsService {
     }
 
     if (limit !== undefined) {
-      queryOptions.take = parseInt(limit);
+      queryOptions.take = Number.parseInt(limit);
     }
     try {
       const [results, totalCount] =
@@ -1158,7 +1155,7 @@ export class FieldsService {
 
     let offset = 0;
     if (page > 1) {
-      offset = parseInt(limit) * (page - 1);
+      offset = Number.parseInt(limit) * (page - 1);
     }
 
     if (limit.trim() === "") {
@@ -1275,14 +1272,6 @@ export class FieldsService {
         );
       }
 
-      // const queryData = dynamicOptions.map((result) => ({
-      //   value: result?.value,
-      //   label: result?.name,
-      //   createdAt: result?.createdAt,
-      //   updatedAt: result?.updatedAt,
-      //   createdBy: result?.createdBy,
-      //   updatedBy: result?.updatedBy,
-      // }));
 
       /* Structing Into new Format */
 
@@ -1303,7 +1292,7 @@ export class FieldsService {
       });
 
       const result = {
-        totalCount: parseInt(dynamicOptions[0]?.total_count, 10),
+        totalCount: Number.parseInt(dynamicOptions[0]?.total_count, 10),
         fieldId: fetchFieldParams?.fieldId,
         values: queryData,
       };
@@ -1537,19 +1526,6 @@ export class FieldsService {
 
   // OPTIMIZED VERSION - Much faster alternative to avoid JSON aggregation
   async filterUserUsingCustomFieldsOptimized(context: string, stateDistBlockData: any) {
-    let joinCond = "";
-    let targetTable = "";
-    
-    if (context === "COHORT") {
-      joinCond = `JOIN "Cohort" u ON fv."itemId" = u."cohortId"`;
-      targetTable = "Cohort";
-    } else if (context === "USERS") {
-      joinCond = `JOIN "Users" u ON fv."itemId" = u."userId"`;
-      targetTable = "Users";
-    } else {
-      // Generic case - no specific table join
-      targetTable = "FieldValues";
-    }
 
     // Build EXISTS conditions for each field filter
     const conditions = [];

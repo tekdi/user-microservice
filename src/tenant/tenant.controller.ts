@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -8,7 +7,6 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
-  Query,
   Req,
   Res,
   SerializeOptions,
@@ -21,7 +19,6 @@ import { TenantService } from "./tenant.service";
 import {
   ApiCreatedResponse,
   ApiForbiddenResponse,
-  ApiQuery,
   ApiTags,
 } from "@nestjs/swagger";
 import { TenantCreateDto } from "./dto/tenant-create.dto";
@@ -31,7 +28,6 @@ import { TenantUpdateDto } from "./dto/tenant-update.dto";
 import { Request, Response } from "express";
 import { TenantSearchDTO } from "./dto/tenant-search.dto";
 import { API_RESPONSES } from "@utils/response.messages";
-import { isUUID } from "class-validator";
 import { GetUserId } from "src/common/decorators/getUserId.decorator";
 
 @ApiTags("Tenant")

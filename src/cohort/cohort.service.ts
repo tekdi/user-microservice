@@ -1,7 +1,6 @@
-import { ConsoleLogger, HttpStatus, Injectable } from "@nestjs/common";
-import { ReturnResponseBody } from "./dto/cohort-create.dto";
+import { HttpStatus, Injectable } from "@nestjs/common";
+import { ReturnResponseBody, CohortCreateDto } from "./dto/cohort-create.dto";
 import { CohortSearchDto } from "./dto/cohort-search.dto";
-import { CohortCreateDto } from "./dto/cohort-create.dto";
 import { CohortUpdateDto } from "./dto/cohort-update.dto";
 import { IsNull, Repository, In, ILike, Not } from "typeorm";
 import { Cohort } from "./entities/cohort.entity";
@@ -30,16 +29,16 @@ import { KafkaService } from "src/kafka/kafka.service";
 export class CohortService {
   constructor(
     @InjectRepository(Cohort)
-    private cohortRepository: Repository<Cohort>,
+    private readonly cohortRepository: Repository<Cohort>,
     @InjectRepository(CohortMembers)
-    private cohortMembersRepository: Repository<CohortMembers>,
+    private readonly cohortMembersRepository: Repository<CohortMembers>,
     @InjectRepository(FieldValues)
-    private fieldValuesRepository: Repository<FieldValues>,
+    private readonly fieldValuesRepository: Repository<FieldValues>,
     @InjectRepository(Fields)
-    private fieldsRepository: Repository<Fields>,
+    private readonly fieldsRepository: Repository<Fields>,
     @InjectRepository(UserTenantMapping)
-    private UserTenantMappingRepository: Repository<UserTenantMapping>,
-    private fieldsService: FieldsService,
+    private readonly UserTenantMappingRepository: Repository<UserTenantMapping>,
+    private readonly fieldsService: FieldsService,
     private readonly cohortAcademicYearService: CohortAcademicYearService,
     private readonly academicYearService: AcademicYearService,
     private readonly cohortMembersService: CohortMembersService,
@@ -49,22 +48,6 @@ export class CohortService {
 
   public async getCohortsDetails(requiredData, res) {
     const apiId = APIID.COHORT_READ;
-
-    // const cohortAcademicYear: any[] =
-    //   await this.cohortMembersService.isCohortExistForYear(
-    //     requiredData.academicYearId,
-    //     requiredData.cohortId
-    //   );
-
-    // if (cohortAcademicYear.length !== 1) {
-    //   return APIResponse.error(
-    //     res,
-    //     apiId,
-    //     "BAD_REQUEST",
-    //     API_RESPONSES.COHORT_NOT_IN_ACADEMIC_YEAR,
-    //     HttpStatus.BAD_REQUEST
-    //   );
-    // }
 
     try {
       const cohorts = await this.cohortRepository.find({
@@ -232,72 +215,6 @@ export class CohortService {
   //         result.value = data.value;
   //         results.push(result);
   //     }
-  //     return results;
-  // }
-
-  // public async getCohortCustomFieldDetails(
-  //   cohortId: string,
-  //   fieldOption?: boolean
-  // ) {
-  //   const query = `
-  //   SELECT DISTINCT
-  //     f."fieldId",
-  //     f."label",
-  //     fv."value",
-  //     f."type",
-  //     f."fieldParams",
-  //     f."sourceDetails"
-  //   FROM public."Cohort" c
-  //   LEFT JOIN (
-  //     SELECT DISTINCT ON (fv."fieldId", fv."itemId") fv.*
-  //     FROM public."FieldValues" fv
-  //   ) fv ON fv."itemId" = c."cohortId"
-  //   INNER JOIN public."Fields" f ON fv."fieldId" = f."fieldId"
-  //   WHERE c."cohortId" = $1;
-  // `;
-  //   let result = await this.cohortMembersRepository.query(query, [cohortId]);
-  //   result = result.map(async (data) => {
-  //     const originalValue = data.value;
-  //     let processedValue = data.value;
-
-  //     if (data?.sourceDetails) {
-  //       if (data.sourceDetails.source === "fieldparams") {
-  //         data.fieldParams.options.forEach((option) => {
-  //           if (data.value === option.value) {
-  //             processedValue = option.label;
-  //           }
-  //         });
-  //       } else if (data.sourceDetails.source === "table") {
-  //         const labels = await this.fieldsService.findDynamicOptions(
-  //           data.sourceDetails.table,
-  //           `${data.sourceDetails.table}_id='${data.value}'`
-  //         );
-  //         if (labels && labels.length > 0) {
-  //           const nameKey = Object.keys(labels[0]).find(key => key.endsWith("name"));
-  //           if (nameKey) {
-  //             processedValue = labels[0][nameKey]?.toLowerCase();
-  //           }
-  //         }
-  //       }
-  //     }
-  //     delete data.fieldParams;
-  //     delete data.sourceDetails;
-
-  //     return {
-  //       ...data,
-  //       value: processedValue,
-  //       code: originalValue,
-  //     };
-  //   });
-
-  //   LoggerUtil.log(
-  //     API_RESPONSES.COHORT_FIELD_DETAILS,
-  //   )
-
-  //   result = await Promise.all(result);
-  //   return result;
-  // }
-
   public async validateFieldValues(field_value_array: string[]) {
     const encounteredKeys = [];
     for (const fieldValue of field_value_array) {
@@ -379,8 +296,6 @@ export class CohortService {
       }
       const response = await this.cohortRepository.save(cohortCreateDto);
 
-      const createFailures = [];
-
       //SAVE  in fieldValues table
       if (
         response &&
@@ -414,10 +329,6 @@ export class CohortService {
               if (!response["customFieldsValue"])
                 response["customFieldsValue"] = [];
               response["customFieldsValue"].push(resfields);
-            } else {
-              createFailures.push(
-                `${fieldData.fieldId}: ${resfields?.valueIssue} - ${resfields.fieldName}`
-              );
             }
           }
         }

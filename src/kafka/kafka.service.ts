@@ -275,7 +275,7 @@ export class KafkaService implements OnModuleInit, OnModuleDestroy {
       this.logger.log(`Topic ${topicName} created successfully`);
     } catch (error) {
       // Topic might already exist, check if it's a "topic already exists" error
-      if (error.message && error.message.includes("already exists")) {
+      if (error?.message?.includes("already exists")) {
         this.topicsCreated.add(topicName);
         this.logger.debug(`Topic ${topicName} already exists`);
         return;

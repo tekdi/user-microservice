@@ -4,7 +4,6 @@ import { Privilege } from "./entities/privilege.entity";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { HttpModule } from "@nestjs/axios";
 import { PrivilegeService } from "./privilege.service";
-import { RoleService } from "../role/role.service";
 import { Role } from "../role/entities/role.entity";
 import { Repository } from "typeorm";
 import { RolePrivilegeMapping } from "../assign-privilege/entities/assign-privilege.entity";

@@ -9,7 +9,6 @@ import { AutomaticMember } from "./entity/automatic-member.entity";
 import { CreateAutomaticMemberDto } from "./dto/create-automatic-member.dto";
 import { UpdateAutomaticMemberDto } from "./dto/update-automatic-member.dto";
 import { User } from "src/user/entities/user-entity";
-import { String } from "aws-sdk/clients/apigateway";
 import { UUID } from "aws-sdk/clients/cloudtrail";
 
 @Injectable()
