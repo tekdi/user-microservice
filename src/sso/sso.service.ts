@@ -74,8 +74,15 @@ export class SsoService {
     try {
       this.logger.log(`Starting SSO authentication for provider: ${ssoRequestDto.ssoProvider}`, 'SSO_SERVICE');
       
-      // Step 1: Apply default values if not provided
-      if (!ssoRequestDto.tenantId) {
+      // Step 1: Validate tenantId if provided, otherwise apply default
+      if (ssoRequestDto.tenantId) {
+        // Validate UUID format
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (!uuidRegex.test(ssoRequestDto.tenantId)) {
+          throw new HttpException('Please enter valid Tenant UUID In URL', HttpStatus.BAD_REQUEST);
+        }
+        this.logger.log(`Using provided tenant ID: ${ssoRequestDto.tenantId}`, 'SSO_SERVICE');
+      } else {
         ssoRequestDto.tenantId = SSO_DEFAULTS.DEFAULT_TENANT_ID;
         this.logger.log(`Using default tenant ID: ${SSO_DEFAULTS.DEFAULT_TENANT_ID}`, 'SSO_SERVICE');
       }
@@ -304,6 +311,9 @@ export class SsoService {
 
       //Map User to Role and Tenant
 
+      // Sanitize userId for use in custom fields
+      const sanitizedNewtonUserId = this.sanitizeUUID(newtonResponse.userId) || createdUser.userId;
+
       // Update custom fields if newtonData is available
       if (newtonResponse.newtonData && Object.keys(newtonResponse.newtonData).length > 0) {
         for (const [fieldLabel, fieldValue] of Object.entries(newtonResponse.newtonData)) {
@@ -318,8 +328,8 @@ export class SsoService {
                 {
                   tenantId: ssoRequestDto.tenantId,
                   contextType: "USER",
-                  createdBy: newtonResponse.userId,
-                  updatedBy: newtonResponse.userId
+                  createdBy: sanitizedNewtonUserId,
+                  updatedBy: sanitizedNewtonUserId
                 }
               );
             }
@@ -355,6 +365,45 @@ export class SsoService {
   }
 
   /**
+   * Sanitize and validate UUID by removing invalid characters
+   * @param uuid - UUID string that may contain invalid characters
+   * @returns Sanitized UUID string or null if invalid
+   */
+  private sanitizeUUID(uuid: string | undefined | null): string | null {
+    if (!uuid || typeof uuid !== 'string') {
+      return null;
+    }
+
+    // Remove any trailing/leading whitespace and invalid characters
+    // UUID format: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
+    // Remove any characters that are not valid UUID characters (hex digits and hyphens)
+    let sanitized = uuid.trim();
+    
+    // Remove any trailing special characters (like asterisks, spaces, etc.)
+    sanitized = sanitized.replace(/[^a-fA-F0-9-]+$/, '');
+    
+    // Remove any leading special characters
+    sanitized = sanitized.replace(/^[^a-fA-F0-9]+/, '');
+    
+    // Remove any invalid characters within the UUID (keep only hex digits and hyphens)
+    sanitized = sanitized.replace(/[^a-fA-F0-9-]/g, '');
+    
+    // Validate UUID format: should be 8-4-4-4-12 hex digits separated by hyphens
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    
+    if (uuidRegex.test(sanitized)) {
+      return sanitized;
+    }
+    
+    this.logger.warn(
+      `Invalid UUID format after sanitization: ${uuid} -> ${sanitized}`,
+      'SSO_SERVICE'
+    );
+    
+    return null;
+  }
+
+  /**
    * Map Newton API response to UserCreateDto with name parsing
    * @param newtonResponse - Newton API response
    * @param ssoRequestDto - Original SSO request
@@ -374,8 +423,31 @@ export class SsoService {
       EMAIL: newtonResponse.email || ''
     };
 
+    // Sanitize userId from Newton response or userData
+    const rawUserId = newtonResponse.userId || userData.USER_ID;
+    const sanitizedUserId = this.sanitizeUUID(rawUserId);
+    
+    if (!sanitizedUserId) {
+      this.logger.error(
+        `Invalid userId received from Newton API: ${rawUserId}. Cannot create user.`,
+        'SSO_SERVICE'
+      );
+      throw new HttpException(
+        `Invalid user ID format received from authentication service: ${rawUserId}`,
+        HttpStatus.BAD_REQUEST
+      );
+    }
+
+    // Log if sanitization changed the value
+    if (rawUserId !== sanitizedUserId) {
+      this.logger.warn(
+        `UserId sanitized: "${rawUserId}" -> "${sanitizedUserId}"`,
+        'SSO_SERVICE'
+      );
+    }
+
     return {
-      userId: newtonResponse.userId || userData.USER_ID,
+      userId: sanitizedUserId,
       username: newtonResponse.email || userData.EMAIL,
       firstName: firstName,
       middleName: undefined,
@@ -391,8 +463,8 @@ export class SsoService {
       password: undefined, // No password for SSO users
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      createdBy: newtonResponse.userId, // Use the Newton user ID as creator
-      updatedBy: newtonResponse.userId, // Use the Newton user ID as updater
+      createdBy: sanitizedUserId, // Use the sanitized Newton user ID as creator
+      updatedBy: sanitizedUserId, // Use the sanitized Newton user ID as updater
       customFields: [],
       automaticMember: undefined,
       tenantCohortRoleMapping: [{
@@ -527,9 +599,9 @@ export class SsoService {
       
 
       // Use decoded userId if available, otherwise fallback to newtonResponse.userId or ssoRequestDto.userId
-      const userId = newtonResponse.userId || ssoRequestDto.userId;
+      const rawUserId = newtonResponse.userId || ssoRequestDto.userId;
       
-      if (!userId) {
+      if (!rawUserId) {
         this.logger.error('No userId available for existing user', 'SSO_SERVICE');
         throw new HttpException(
           'Unable to determine user ID for existing user',
@@ -537,8 +609,30 @@ export class SsoService {
         );
       }
 
+      // Sanitize userId to remove any invalid characters
+      const userId = this.sanitizeUUID(rawUserId);
+      
+      if (!userId) {
+        this.logger.error(
+          `Invalid userId format for existing user: ${rawUserId}`,
+          'SSO_SERVICE'
+        );
+        throw new HttpException(
+          `Invalid user ID format: ${rawUserId}`,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      // Log if sanitization changed the value
+      if (rawUserId !== userId) {
+        this.logger.warn(
+          `UserId sanitized for existing user: "${rawUserId}" -> "${userId}"`,
+          'SSO_SERVICE'
+        );
+      }
+
       this.logger.log(
-        `Processing existing user: ${userId})`,
+        `Processing existing user: ${userId}`,
         'SSO_SERVICE'
       );
 
