@@ -4,7 +4,7 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from "@nestjs/common";
-import { UserAdapter } from "src/user/useradapter";
+import { UserService } from "src/user/user.service";
 import axios from "axios";
 import jwt_decode from "jwt-decode";
 import APIResponse from "src/common/responses/response";
@@ -14,7 +14,6 @@ import { Response } from "express";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { User } from "src/user/entities/user-entity";
-import { PostgresUserService } from "src/adapters/postgres/user-adapter";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
 
 type LoginResponse = {
@@ -26,7 +25,7 @@ type LoginResponse = {
 @Injectable()
 export class AuthService {
   constructor(
-    private readonly useradapter: UserAdapter,
+    private readonly userService: UserService,
     private readonly keycloakService: KeycloakService,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>
@@ -80,8 +79,7 @@ export class AuthService {
     try {
       const decoded: any = jwt_decode(request.headers.authorization);
       const username = decoded.preferred_username;
-      const data = await this.useradapter
-        .buildUserAdapter()
+      const data = await this.userService
         .findUserDetails(null, username, tenantId);
 
       // Update lastLogin timestamp for the user (stored in UTC/GMT)
@@ -104,7 +102,7 @@ export class AuthService {
       // Publish user login event to Kafka asynchronously - after response is sent to client
       // Using 'login' event type which only sends lastLogin timestamp (lightweight)
       if (data && data.userId) {
-        (this.useradapter.buildUserAdapter() as PostgresUserService)
+        this.userService
           .publishUserEvent('login', data.userId, apiId)
           .catch(error => {
             // Log error but don't block - Kafka failures shouldn't affect auth flow

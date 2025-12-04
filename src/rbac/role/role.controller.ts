@@ -32,14 +32,14 @@ import { CreateRolesDto, RoleDto } from "./dto/role.dto";
 import { RoleSearchDto } from "./dto/role-search.dto";
 import { Response } from "express";
 import { JwtAuthGuard } from "src/common/guards/keycloak.guard";
-import { RoleAdapter } from "./roleadapter";
+import { RoleService } from "./role.service";
 import { AllExceptionsFilter } from "src/common/filters/exception.filter";
 import { APIID } from "src/common/utils/api-id.config";
 @ApiTags("rbac")
 @Controller("rbac/roles")
 @UseGuards(JwtAuthGuard)
 export class RoleController {
-  constructor(private readonly roleAdapter: RoleAdapter) {}
+  constructor(private readonly roleService: RoleService) {}
 
   //Get role
   @UseFilters(new AllExceptionsFilter(APIID.ROLE_GET))
@@ -54,8 +54,7 @@ export class RoleController {
     @Req() request: Request,
     @Res() response: Response
   ) {
-    return await this.roleAdapter
-      .buildRbacAdapter()
+    return await this.roleService
       .getRole(roleId, request, response);
   }
 
@@ -73,8 +72,7 @@ export class RoleController {
     @Body() createRolesDto: CreateRolesDto,
     @Res() response: Response
   ) {
-    return await this.roleAdapter
-      .buildRbacAdapter()
+    return await this.roleService
       .createRole(request, createRolesDto, response);
   }
 
@@ -92,8 +90,7 @@ export class RoleController {
     @Body() roleDto: RoleDto,
     @Res() response: Response
   ) {
-    return await this.roleAdapter
-      .buildRbacAdapter()
+    return await this.roleService
       .updateRole(roleId, request, roleDto, response);
   }
 
@@ -114,8 +111,7 @@ export class RoleController {
     @Res() response: Response
   ) {
     // let tenantid = headers["tenantid"];
-    return await this.roleAdapter
-      .buildRbacAdapter()
+    return await this.roleService
       .searchRole(roleSearchDto, response);
   }
 
@@ -131,8 +127,7 @@ export class RoleController {
     @Param("roleId") roleId: string,
     @Res() response: Response
   ) {
-    return await this.roleAdapter
-      .buildRbacAdapter()
+    return await this.roleService
       .deleteRole(roleId, response);
   }
 }

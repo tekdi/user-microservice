@@ -3,12 +3,11 @@ import { ConfigService } from '@nestjs/config';
 import { HttpService } from '../common/utils/http-service';
 import { SsoRequestDto } from './dto/sso-request.dto';
 import { UserCreateDto } from '../user/dto/user-create.dto';
-import { UserAdapter } from '../user/useradapter';
-import { PostgresRoleService } from '../adapters/postgres/rbac/role-adapter';
-import { PostgresUserService } from '../adapters/postgres/user-adapter';
-import { PostgresFieldsService } from '../adapters/postgres/fields-adapter';
+import { UserService } from '../user/user.service';
+import { RoleService } from '../rbac/role/role.service';
+import { FieldsService } from '../fields/fields.service';
 import { SSO_DEFAULTS } from '../constants/sso.constants';
-import { PostgresAssignTenantService } from 'src/adapters/postgres/userTenantMapping-adapter';
+import { UserTenantMappingService } from 'src/userTenantMapping/user-tenant-mapping.service';
 
 
 interface NewtonApiResponse {
@@ -54,11 +53,10 @@ export class SsoService {
   constructor(
     private readonly httpService: HttpService,
     private readonly configService: ConfigService,
-    private readonly userAdapter: UserAdapter,
-    private readonly postgresRoleService: PostgresRoleService,
-    private readonly postgresUserService: PostgresUserService,
-    private readonly postgresFieldsService: PostgresFieldsService,
-    private readonly postgresAssignTenantService: PostgresAssignTenantService
+    private readonly userService: UserService,
+    private readonly roleService: RoleService,
+    private readonly fieldsService: FieldsService,
+    private readonly userTenantMappingService: UserTenantMappingService
   ) {
     // Configuration from environment variables
     this.newtonApiEndpoint =this.configService.get<string>('KEYCLOAK')
@@ -153,7 +151,7 @@ export class SsoService {
   private async getRoleNameDirectly(roleId: string): Promise<string> {
     try {
       const query = `SELECT "name" FROM public."Roles" WHERE "roleId" = $1`;
-      const response = await this.postgresRoleService['roleRepository'].query(query, [roleId]);
+      const response = await this.roleService['roleRepository'].query(query, [roleId]);
       
       if (response.length > 0) {
         return response[0].name || '';
@@ -297,7 +295,7 @@ export class SsoService {
         headers: { authorization: null } // No JWT token for SSO users
       } as any;
       
-      const createdUser = await this.postgresUserService.createUserInDatabase(
+      const createdUser = await this.userService.createUserInDatabase(
         mockRequest,
         userCreateDto
       );
@@ -308,10 +306,10 @@ export class SsoService {
       if (newtonResponse.newtonData && Object.keys(newtonResponse.newtonData).length > 0) {
         for (const [fieldLabel, fieldValue] of Object.entries(newtonResponse.newtonData)) {
           if (fieldValue) {
-            const fieldId = await this.postgresFieldsService.getFieldIdByLabel(fieldLabel, ssoRequestDto.tenantId);
+            const fieldId = await this.fieldsService.getFieldIdByLabel(fieldLabel, ssoRequestDto.tenantId);
             console.log("fieldId", fieldId);
             if (fieldId) {
-              await this.postgresFieldsService.updateUserCustomFields(
+              await this.fieldsService.updateUserCustomFields(
                 createdUser.userId, 
                 { fieldId, value: fieldValue }, 
                 null,
@@ -335,11 +333,11 @@ export class SsoService {
             roleId: SSO_DEFAULTS.MANAGER_ROLE_ID
           }
         };
-        await this.postgresUserService.assignUserToTenantAndRoll(tenantsData,tenantsData.userId, true)
+        await this.userService.assignUserToTenantAndRoll(tenantsData,tenantsData.userId, true)
       }
-      this.postgresUserService.publishUserEvent('created', createdUser.userId, 'api.sso.service')
+      this.userService.publishUserEvent('created', createdUser.userId, 'api.sso.service')
       this.logger.log(`New user created successfully: ${newtonResponse.name} with ID: ${createdUser.userId}`, 'SSO_SERVICE');
-      this.postgresUserService.publishUserEvent('created', createdUser.userId, 'api.sso.service')
+      this.userService.publishUserEvent('created', createdUser.userId, 'api.sso.service')
     } catch (error) {
       this.logger.error(
         `Failed to create new user: ${error.message}`,
@@ -469,14 +467,14 @@ export class SsoService {
 
       for (const [fieldLabel, fieldValue] of Object.entries(newtonData)) {
         if (fieldValue) {
-          const fieldId = await this.postgresFieldsService.getFieldIdByLabel(
+          const fieldId = await this.fieldsService.getFieldIdByLabel(
             fieldLabel,
             effectiveTenantId
           );
           
           if (fieldId) {
             // Use updateCustomFields which handles both update and create (upsert behavior)
-            await this.postgresFieldsService.updateCustomFields(
+            await this.fieldsService.updateCustomFields(
               userId,
               { fieldId, value: fieldValue },
               null, // fieldAttributesAndParams not needed for simple updates
@@ -554,7 +552,7 @@ export class SsoService {
       );
 
       // Publish user updated event to Kafka
-      this.postgresUserService.publishUserEvent('updated', userId, 'api.sso.service')
+      this.userService.publishUserEvent('updated', userId, 'api.sso.service')
         .catch(error => {
           // Log error but don't block - Kafka failures shouldn't affect SSO flow
           this.logger.error(

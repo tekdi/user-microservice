@@ -35,7 +35,7 @@ import {
 } from "@nestjs/common";
 import { Request } from "@nestjs/common";
 import { Response, response } from "express";
-import { AssignTenantAdapter } from "./user-tenant-mapping.adapter";
+import { UserTenantMappingService } from "./user-tenant-mapping.service";
 import { UserTenantMappingDto, UpdateAssignTenantStatusDto } from "./dto/user-tenant-mapping.dto";
 import { JwtAuthGuard } from "src/common/guards/keycloak.guard";
 import { AllExceptionsFilter } from "src/common/filters/exception.filter";
@@ -45,7 +45,7 @@ import { APIID } from "src/common/utils/api-id.config";
 @Controller("user-tenant")
 @UseGuards(JwtAuthGuard)
 export class AssignTenantController {
-  constructor(private readonly assignTenantAdapter: AssignTenantAdapter) {}
+  constructor(private readonly userTenantMappingService: UserTenantMappingService) {}
 
   @UseFilters(new AllExceptionsFilter(APIID.ASSIGN_TENANT_CREATE))
   @Post()
@@ -66,8 +66,7 @@ export class AssignTenantController {
     @Body() userTenantMappingDto: UserTenantMappingDto,
     @Res() response: Response
   ) {
-    return await this.assignTenantAdapter
-      .buildAssignTenantAdapter()
+    return await this.userTenantMappingService
       .userTenantMapping(request, userTenantMappingDto, response);
   }
 
@@ -95,8 +94,7 @@ export class AssignTenantController {
     @Query("includeArchived") includeArchived: string,
     @Res() response: Response
   ) {
-    return await this.assignTenantAdapter
-      .buildAssignTenantAdapter()
+    return await this.userTenantMappingService
       .getUserTenantMappings(userId, includeArchived === "true", response);
   }
 
@@ -133,8 +131,7 @@ export class AssignTenantController {
     @Body() updateStatusDto: UpdateAssignTenantStatusDto,
     @Res() response: Response
   ) {
-    return await this.assignTenantAdapter
-      .buildAssignTenantAdapter()
+    return await this.userTenantMappingService
       .updateAssignTenantStatus(request, userId, tenantId, updateStatusDto, response);
   }
 }

@@ -2,20 +2,19 @@ import { HttpStatus, Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { CohortAcademicYear } from "src/cohortAcademicYear/entities/cohortAcademicYear.entity";
 import { Repository } from "typeorm";
-import { IServiceLocatorCohortAcademicYear } from "../cohortacademicyearservicelocator";
 import { Request, Response } from "express";
 import { CohortAcademicYearDto } from "src/cohortAcademicYear/dto/cohort-academicyear.dto";
 import { APIID } from "@utils/api-id.config";
 import APIResponse from "src/common/responses/response";
 import { API_RESPONSES } from "@utils/response.messages";
-import { PostgresAcademicYearService } from "./academicyears-adapter";
+import { AcademicYearService } from "src/academicyears/academicyears.service";
 import { Cohort } from "src/cohort/entities/cohort.entity";
 
 @Injectable()
-export class CohortAcademicYearService implements IServiceLocatorCohortAcademicYear {
+export class CohortAcademicYearService {
 
   constructor(
-    private readonly postgresAcademicYearService: PostgresAcademicYearService,
+    private readonly academicYearService: AcademicYearService,
     @InjectRepository(Cohort)
     private readonly cohortRepository: Repository<Cohort>,
     @InjectRepository(CohortAcademicYear)
@@ -51,7 +50,7 @@ export class CohortAcademicYearService implements IServiceLocatorCohortAcademicY
 
       // verify if the academic year id is valid
       const academicYear =
-        await this.postgresAcademicYearService.getActiveAcademicYear(
+        await this.academicYearService.getActiveAcademicYear(
           cohortAcademicYearDto.academicYearId,
           tenantId
         );

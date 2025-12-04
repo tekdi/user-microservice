@@ -17,12 +17,12 @@ import { Role } from "src/rbac/role/entities/role.entity";
 import { IsAlpha, IsUUID, isUUID } from "class-validator";
 import { executionAsyncResource } from "async_hooks";
 import { DeleteAssignRoleDto } from "src/rbac/assign-role/dto/delete-assign-role.dto";
-import { Response } from "express";
+import { Response, Request } from "express";
 import { APIID } from "src/common/utils/api-id.config";
 import APIResponse from "src/common/responses/response";
 
 @Injectable()
-export class PostgresAssignroleService {
+export class AssignRoleService {
   constructor(
     @InjectRepository(UserRoleMapping)
     private userRoleMappingRepository: Repository<UserRoleMapping>,
@@ -30,7 +30,7 @@ export class PostgresAssignroleService {
     private roleRepository: Repository<Role>
   ) {}
   public async createAssignRole(
-    request: Request,
+    request: any,
     createAssignRoleDto: CreateAssignRoleDto,
     response: Response
   ) {

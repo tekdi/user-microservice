@@ -13,7 +13,7 @@ import {
   SerializeOptions,
   UseGuards,
 } from "@nestjs/common";
-import { AssignPrivilegeAdapter } from "./assign-privilege.apater";
+// Service will be added when available
 import { CreatePrivilegeRoleDto } from "./dto/create-assign-privilege.dto";
 import { Response, Request } from "express";
 import {
@@ -32,7 +32,7 @@ import { JwtAuthGuard } from "src/common/guards/keycloak.guard";
 @UseGuards(JwtAuthGuard)
 export class AssignPrivilegeController {
   constructor(
-    private readonly assignPrivilegeAdpater: AssignPrivilegeAdapter
+    // Service will be added when available
   ) {}
 
   @Post()
@@ -49,9 +49,8 @@ export class AssignPrivilegeController {
     @Body() createAssignPrivilegeDto: CreatePrivilegeRoleDto,
     @Res() response: Response
   ) {
-    return await this.assignPrivilegeAdpater
-      .buildPrivilegeRoleAdapter()
-      .createPrivilegeRole(request, createAssignPrivilegeDto, response);
+    // TODO: Implement service method
+    throw new Error("Service not yet implemented");
   }
 
   @Get("/:roleid")
@@ -65,9 +64,8 @@ export class AssignPrivilegeController {
     @Req() request: Request,
     @Res() response: Response
   ) {
-    return await this.assignPrivilegeAdpater
-      .buildPrivilegeRoleAdapter()
-      .getPrivilegeRole(roleId, request, response);
+    // TODO: Implement service method
+    throw new Error("Service not yet implemented");
   }
 
   // @Delete("/:id")

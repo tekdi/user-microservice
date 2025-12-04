@@ -24,7 +24,7 @@ import {
 } from "@nestjs/swagger";
 import { Response } from "express";
 import { AcademicYearDto } from "./dto/academicyears-create.dto";
-import { AcademicYearAdapter } from "./academicyearsadaptor";
+import { AcademicYearService } from "./academicyears.service";
 import { AllExceptionsFilter } from "src/common/filters/exception.filter";
 import { APIID } from "@utils/api-id.config";
 import { API_RESPONSES } from "@utils/response.messages";
@@ -37,7 +37,7 @@ import { JwtAuthGuard } from "src/common/guards/keycloak.guard";
 @Controller("academicyears")
 @UseGuards(JwtAuthGuard)
 export class AcademicyearsController {
-  constructor(private readonly academicYearAdapter: AcademicYearAdapter) {}
+  constructor(private readonly academicYearService: AcademicYearService) {}
 
   @UseFilters(new AllExceptionsFilter(APIID.ACADEMICYEAR_CREATE))
   @Post("/create")
@@ -55,8 +55,7 @@ export class AcademicyearsController {
     if (!tenantId || !isUUID(tenantId)) {
       throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
     }
-    const result = await this.academicYearAdapter
-      .buildAcademicYears()
+    const result = await this.academicYearService
       .createAcademicYear(academicyearsService, tenantId, response);
     return response.status(result.statusCode).json(result);
   }
@@ -77,8 +76,7 @@ export class AcademicyearsController {
     if (!tenantId || !isUUID(tenantId)) {
       throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
     }
-    const result = await this.academicYearAdapter
-      .buildAcademicYears()
+    const result = await this.academicYearService
       .getAcademicYearList(academicYearSearchDto, tenantId, response);
     return response.status(result.statusCode).json(result);
   }
@@ -97,8 +95,7 @@ export class AcademicyearsController {
     @Param("id", new ParseUUIDPipe()) id: string,
     @Res() response: Response
   ) {
-    const result = await this.academicYearAdapter
-      .buildAcademicYears()
+    const result = await this.academicYearService
       .getAcademicYearById(id, response);
     return response.status(result.statusCode).json(result);
   }

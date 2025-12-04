@@ -35,7 +35,7 @@ import {
 import { Request } from "@nestjs/common";
 import { Response, response } from "express";
 import { JwtAuthGuard } from "src/common/guards/keycloak.guard";
-import { PrivilegeAdapter } from "./privilegeadapter";
+import { PrivilegeService } from "./privilege.service";
 import { v4 as uuidv4 } from "uuid";
 import { AllExceptionsFilter } from "src/common/filters/exception.filter";
 import { APIID } from "src/common/utils/api-id.config";
@@ -44,7 +44,7 @@ import { APIID } from "src/common/utils/api-id.config";
 @ApiTags("rbac")
 @Controller("rbac/privileges")
 export class PrivilegeController {
-  constructor(private readonly privilegeAdapter: PrivilegeAdapter) {}
+  constructor(private readonly privilegeService: PrivilegeService) {}
 
   @UseFilters(new AllExceptionsFilter(APIID.PRIVILEGE_BYROLEID))
   @Get()
@@ -59,8 +59,7 @@ export class PrivilegeController {
     @Req() request: Request,
     @Res() response: Response
   ) {
-    return await this.privilegeAdapter
-      .buildPrivilegeAdapter()
+    return await this.privilegeService
       .getPrivilegebyRoleId(tenantId, roleId, request, response);
   }
 
@@ -77,8 +76,7 @@ export class PrivilegeController {
     @Req() request: Request,
     @Res() response: Response
   ) {
-    return await this.privilegeAdapter
-      .buildPrivilegeAdapter()
+    return await this.privilegeService
       .getPrivilege(privilegeId, request, response);
   }
 
@@ -99,8 +97,7 @@ export class PrivilegeController {
     @Body() createPrivilegesDto: CreatePrivilegesDto,
     @Res() response: Response
   ) {
-    return await this.privilegeAdapter
-      .buildPrivilegeAdapter()
+    return await this.privilegeService
       .createPrivilege(request.user.userId, createPrivilegesDto, response);
   }
 
@@ -150,8 +147,7 @@ export class PrivilegeController {
     @Param("privilegeId", ParseUUIDPipe) privilegeId: string,
     @Res() response: Response
   ) {
-    return await this.privilegeAdapter
-      .buildPrivilegeAdapter()
+    return await this.privilegeService
       .deletePrivilege(privilegeId, response);
   }
 }

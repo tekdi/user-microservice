@@ -4,7 +4,7 @@ import { CohortMembersSearchDto } from "src/cohortMembers/dto/cohortMembers-sear
 import { CohortMembers } from "src/cohortMembers/entities/cohort-member.entity";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
-import { PostgresFieldsService } from "./fields-adapter";
+import { FieldsService } from "src/fields/fields.service";
 import { HttpStatus } from "@nestjs/common";
 import { User } from "src/user/entities/user-entity";
 import { CohortMembersUpdateDto } from "src/cohortMembers/dto/cohortMember-update.dto";
@@ -17,16 +17,16 @@ import { APIID } from "src/common/utils/api-id.config";
 import { MemberStatus } from "src/cohortMembers/entities/cohort-member.entity";
 import { NotificationRequest } from "@utils/notification.axios";
 import { CohortAcademicYear } from "src/cohortAcademicYear/entities/cohortAcademicYear.entity";
-import { PostgresAcademicYearService } from "./academicyears-adapter";
+import { AcademicYearService } from "src/academicyears/academicyears.service";
 import { API_RESPONSES } from "@utils/response.messages";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
-import { PostgresUserService } from "./user-adapter";
+import { UserService } from "src/user/user.service";
 import { isValid } from "date-fns";
 import { FieldValuesOptionDto } from "src/user/dto/user-create.dto";
 import { KafkaService } from "src/kafka/kafka.service";
 
 @Injectable()
-export class PostgresCohortMembersService {
+export class CohortMembersService {
   constructor(
     @InjectRepository(CohortMembers)
     private cohortMembersRepository: Repository<CohortMembers>,
@@ -38,10 +38,10 @@ export class PostgresCohortMembersService {
     private cohortRepository: Repository<Cohort>,
     @InjectRepository(CohortAcademicYear)
     private readonly cohortAcademicYearRespository: Repository<CohortAcademicYear>,
-    private readonly academicyearService: PostgresAcademicYearService,
+    private readonly academicyearService: AcademicYearService,
     private readonly notificationRequest: NotificationRequest,
-    private fieldsService: PostgresFieldsService,
-    private userService: PostgresUserService,
+    private fieldsService: FieldsService,
+    private userService: UserService,
     private readonly kafkaService: KafkaService
   ) { }
 

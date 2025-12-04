@@ -35,7 +35,7 @@ import { FieldsUpdateDto } from "./dto/fields-update.dto";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { diskStorage } from "multer";
 import { Response } from "express";
-import { FieldsAdapter } from "./fieldsadapter";
+import { FieldsService } from "./fields.service";
 import { FieldValuesDto } from "./dto/field-values.dto";
 import { FieldValuesSearchDto } from "./dto/field-values-search.dto";
 import { JwtAuthGuard } from "src/common/guards/keycloak.guard";
@@ -46,7 +46,7 @@ import { FieldValuesDeleteDto } from "./dto/field-values-delete.dto";
 @ApiTags("Fields")
 @Controller("fields")
 export class FieldsController {
-  constructor(private fieldsAdapter: FieldsAdapter) {}
+  constructor(private fieldsService: FieldsService) {}
 
   //fields
   //create fields
@@ -63,8 +63,7 @@ export class FieldsController {
     @Body() fieldsDto: FieldsDto,
     @Res() response: Response
   ) {
-    return await this.fieldsAdapter
-      .buildFieldsAdapter()
+    return await this.fieldsService
       .createFields(request, fieldsDto, response);
   }
 
@@ -82,8 +81,7 @@ export class FieldsController {
     @Body() fieldsUpdateDto: FieldsUpdateDto,
     @Res() response: Response
   ) {
-    return await this.fieldsAdapter
-      .buildFieldsAdapter()
+    return await this.fieldsService
       .updateFields(fieldId, request, fieldsUpdateDto, response);
   }
 
@@ -107,8 +105,7 @@ export class FieldsController {
     @Res() response: Response
   ) {
     const tenantid = headers["tenantid"];
-    return await this.fieldsAdapter
-      .buildFieldsAdapter()
+    return await this.fieldsService
       .searchFields(tenantid, request, fieldsSearchDto, response);
   }
 
@@ -129,8 +126,7 @@ export class FieldsController {
     @Body() fieldValuesDto: FieldValuesDto,
     @Res() response: Response
   ) {
-    return await this.fieldsAdapter
-      .buildFieldsAdapter()
+    return await this.fieldsService
       .createFieldValues(request, fieldValuesDto, response);
   }
 
@@ -150,8 +146,7 @@ export class FieldsController {
     @Body() fieldValuesSearchDto: FieldValuesSearchDto,
     @Res() response: Response
   ) {
-    return await this.fieldsAdapter
-      .buildFieldsAdapter()
+    return await this.fieldsService
       .searchFieldValues(request, fieldValuesSearchDto, response);
   }
 
@@ -171,8 +166,7 @@ export class FieldsController {
     @Body() fieldsOptionsSearchDto: FieldsOptionsSearchDto,
     @Res() response: Response
   ) {
-    return await this.fieldsAdapter
-      .buildFieldsAdapter()
+    return await this.fieldsService
       .getFieldOptions(fieldsOptionsSearchDto, response);
   }
 
@@ -203,8 +197,7 @@ export class FieldsController {
       context: context || null,
       contextType: contextType || null,
     };
-    return await this.fieldsAdapter
-      .buildFieldsAdapter()
+    return await this.fieldsService
       .deleteFieldOptions(requiredData, response);
   }
 
@@ -227,8 +220,7 @@ export class FieldsController {
       context: context || false,
       contextType: contextType || false,
     };
-    return await this.fieldsAdapter
-      .buildFieldsAdapter()
+    return await this.fieldsService
       .getFormCustomField(requiredData, response);
   }
   //delete field values
@@ -242,8 +234,7 @@ export class FieldsController {
     @Body() fieldValuesDeleteDto: FieldValuesDeleteDto,
     @Res() response: Response
   ) {
-    return await this.fieldsAdapter
-      .buildFieldsAdapter()
+    return await this.fieldsService
       .deleteFieldValues(fieldValuesDeleteDto, response);
   }
 }
