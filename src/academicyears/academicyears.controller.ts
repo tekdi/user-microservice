@@ -55,8 +55,11 @@ export class AcademicyearsController {
     if (!tenantId || !isUUID(tenantId)) {
       throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
     }
-    const result = await this.academicYearService
-      .createAcademicYear(academicyearsService, tenantId, response);
+    const result = await this.academicYearService.createAcademicYear(
+      academicyearsService,
+      tenantId,
+      response
+    );
     return response.status(result.statusCode).json(result);
   }
 
@@ -76,8 +79,11 @@ export class AcademicyearsController {
     if (!tenantId || !isUUID(tenantId)) {
       throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
     }
-    const result = await this.academicYearService
-      .getAcademicYearList(academicYearSearchDto, tenantId, response);
+    const result = await this.academicYearService.getAcademicYearList(
+      academicYearSearchDto,
+      tenantId,
+      response
+    );
     return response.status(result.statusCode).json(result);
   }
 
@@ -95,8 +101,10 @@ export class AcademicyearsController {
     @Param("id", new ParseUUIDPipe()) id: string,
     @Res() response: Response
   ) {
-    const result = await this.academicYearService
-      .getAcademicYearById(id, response);
+    const result = await this.academicYearService.getAcademicYearById(
+      id,
+      response
+    );
     return response.status(result.statusCode).json(result);
   }
 }

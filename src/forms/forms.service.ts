@@ -16,11 +16,11 @@ export class FormsService {
     private readonly fieldsService: FieldsService,
     @InjectRepository(Form)
     private readonly formRepository: Repository<Form>
-  ) { }
+  ) {}
 
   async getForm(requiredData, response) {
-    let apiId = APIID.FORM_GET;
-    try {      
+    const apiId = APIID.FORM_GET;
+    try {
       if (!requiredData.context && !requiredData.contextType) {
         return APIResponse.error(
           response,
@@ -30,7 +30,6 @@ export class FormsService {
           HttpStatus.BAD_REQUEST
         );
       }
-
 
       const { context, contextType, tenantId } = requiredData;
       const validationResult = await this.validateFormInput(requiredData);
@@ -68,17 +67,17 @@ export class FormsService {
       }
 
       // console.log(formData);
-      
+
       const mappedResponse = await Promise.all(
         formData.fields.result.map(async (data) => {
           if (!data.coreField) {
-            const whereClause = `"fieldId" = '${data.fieldId}'`;            
+            const whereClause = `"fieldId" = '${data.fieldId}'`;
             const [customFieldData] = await this.fieldsService.getFieldData(
               whereClause,
               tenantId
             );
             customFieldData.validation = data.validation;
-            customFieldData.order = data.order;            
+            customFieldData.order = data.order;
             return { ...data, ...customFieldData };
           }
           return data;
@@ -184,7 +183,6 @@ export class FormsService {
     return { error: null };
   }
 
-
   private async getValidContextTypes(context: string): Promise<string[]> {
     switch (context.toLowerCase()) {
       case "users":
@@ -201,7 +199,7 @@ export class FormsService {
   }
 
   public async createForm(request, formCreateDto: FormCreateDto, response) {
-    let apiId = APIID.FORM_CREATE;
+    const apiId = APIID.FORM_CREATE;
 
     try {
       formCreateDto.contextType = formCreateDto.contextType.toUpperCase();

@@ -63,8 +63,7 @@ export class FieldsController {
     @Body() fieldsDto: FieldsDto,
     @Res() response: Response
   ) {
-    return await this.fieldsService
-      .createFields(request, fieldsDto, response);
+    return await this.fieldsService.createFields(request, fieldsDto, response);
   }
 
   //create fields
@@ -81,8 +80,12 @@ export class FieldsController {
     @Body() fieldsUpdateDto: FieldsUpdateDto,
     @Res() response: Response
   ) {
-    return await this.fieldsService
-      .updateFields(fieldId, request, fieldsUpdateDto, response);
+    return await this.fieldsService.updateFields(
+      fieldId,
+      request,
+      fieldsUpdateDto,
+      response
+    );
   }
 
   //search
@@ -105,8 +108,12 @@ export class FieldsController {
     @Res() response: Response
   ) {
     const tenantid = headers["tenantid"];
-    return await this.fieldsService
-      .searchFields(tenantid, request, fieldsSearchDto, response);
+    return await this.fieldsService.searchFields(
+      tenantid,
+      request,
+      fieldsSearchDto,
+      response
+    );
   }
 
   //field values
@@ -126,8 +133,11 @@ export class FieldsController {
     @Body() fieldValuesDto: FieldValuesDto,
     @Res() response: Response
   ) {
-    return await this.fieldsService
-      .createFieldValues(request, fieldValuesDto, response);
+    return await this.fieldsService.createFieldValues(
+      request,
+      fieldValuesDto,
+      response
+    );
   }
 
   //search fields values
@@ -146,8 +156,11 @@ export class FieldsController {
     @Body() fieldValuesSearchDto: FieldValuesSearchDto,
     @Res() response: Response
   ) {
-    return await this.fieldsService
-      .searchFieldValues(request, fieldValuesSearchDto, response);
+    return await this.fieldsService.searchFieldValues(
+      request,
+      fieldValuesSearchDto,
+      response
+    );
   }
 
   //Get Field Option
@@ -166,8 +179,10 @@ export class FieldsController {
     @Body() fieldsOptionsSearchDto: FieldsOptionsSearchDto,
     @Res() response: Response
   ) {
-    return await this.fieldsService
-      .getFieldOptions(fieldsOptionsSearchDto, response);
+    return await this.fieldsService.getFieldOptions(
+      fieldsOptionsSearchDto,
+      response
+    );
   }
 
   //Delete Field Option
@@ -197,8 +212,7 @@ export class FieldsController {
       context: context || null,
       contextType: contextType || null,
     };
-    return await this.fieldsService
-      .deleteFieldOptions(requiredData, response);
+    return await this.fieldsService.deleteFieldOptions(requiredData, response);
   }
 
   @Get("/formFields")
@@ -220,8 +234,7 @@ export class FieldsController {
       context: context || false,
       contextType: contextType || false,
     };
-    return await this.fieldsService
-      .getFormCustomField(requiredData, response);
+    return await this.fieldsService.getFormCustomField(requiredData, response);
   }
   //delete field values
   @Delete("/values/delete")
@@ -234,7 +247,9 @@ export class FieldsController {
     @Body() fieldValuesDeleteDto: FieldValuesDeleteDto,
     @Res() response: Response
   ) {
-    return await this.fieldsService
-      .deleteFieldValues(fieldValuesDeleteDto, response);
+    return await this.fieldsService.deleteFieldValues(
+      fieldValuesDeleteDto,
+      response
+    );
   }
 }

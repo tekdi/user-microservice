@@ -1,10 +1,6 @@
 import { Expose, Type } from "class-transformer";
 import { ApiProperty } from "@nestjs/swagger";
-import {
-  IsNotEmpty,
-  IsOptional,
-  ValidateNested,
-} from "class-validator";
+import { IsNotEmpty, IsOptional, ValidateNested } from "class-validator";
 
 export class RoleDto {
   @Expose()

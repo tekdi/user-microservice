@@ -36,7 +36,10 @@ import {
 import { Request } from "@nestjs/common";
 import { Response, response } from "express";
 import { UserTenantMappingService } from "./user-tenant-mapping.service";
-import { UserTenantMappingDto, UpdateAssignTenantStatusDto } from "./dto/user-tenant-mapping.dto";
+import {
+  UserTenantMappingDto,
+  UpdateAssignTenantStatusDto,
+} from "./dto/user-tenant-mapping.dto";
 import { JwtAuthGuard } from "src/common/guards/keycloak.guard";
 import { AllExceptionsFilter } from "src/common/filters/exception.filter";
 import { APIID } from "src/common/utils/api-id.config";
@@ -45,7 +48,9 @@ import { APIID } from "src/common/utils/api-id.config";
 @Controller("user-tenant")
 @UseGuards(JwtAuthGuard)
 export class AssignTenantController {
-  constructor(private readonly userTenantMappingService: UserTenantMappingService) {}
+  constructor(
+    private readonly userTenantMappingService: UserTenantMappingService
+  ) {}
 
   @UseFilters(new AllExceptionsFilter(APIID.ASSIGN_TENANT_CREATE))
   @Post()
@@ -66,8 +71,11 @@ export class AssignTenantController {
     @Body() userTenantMappingDto: UserTenantMappingDto,
     @Res() response: Response
   ) {
-    return await this.userTenantMappingService
-      .userTenantMapping(request, userTenantMappingDto, response);
+    return await this.userTenantMappingService.userTenantMapping(
+      request,
+      userTenantMappingDto,
+      response
+    );
   }
 
   @Get("/:userId")
@@ -79,23 +87,26 @@ export class AssignTenantController {
     type: String,
     format: "uuid",
     description: "User ID (UUID format) - Required",
-    example: "13946cb5-daee-410e-9174-25f73357f8cb"
+    example: "13946cb5-daee-410e-9174-25f73357f8cb",
   })
   @ApiOkResponse({ description: "User tenant mappings retrieved successfully" })
   @ApiNotFoundResponse({ description: "No mappings found" })
-  @ApiQuery({ 
-    name: "includeArchived", 
-    required: false, 
+  @ApiQuery({
+    name: "includeArchived",
+    required: false,
     type: Boolean,
-    description: "Include archived mappings" 
+    description: "Include archived mappings",
   })
   public async getUserTenantMappings(
     @Param("userId", ParseUUIDPipe) userId: string,
     @Query("includeArchived") includeArchived: string,
     @Res() response: Response
   ) {
-    return await this.userTenantMappingService
-      .getUserTenantMappings(userId, includeArchived === "true", response);
+    return await this.userTenantMappingService.getUserTenantMappings(
+      userId,
+      includeArchived === "true",
+      response
+    );
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.ASSIGN_TENANT_UPDATE_STATUS))
@@ -106,14 +117,14 @@ export class AssignTenantController {
     required: true,
     type: String,
     description: "User ID (UUID format) - Required",
-    example: "13946cb5-daee-410e-9174-25f73357f8cb"
+    example: "13946cb5-daee-410e-9174-25f73357f8cb",
   })
   @ApiQuery({
     name: "tenantId",
     required: true,
     type: String,
     description: "Tenant ID (UUID format) - Required",
-    example: "914ca990-9b45-4385-a06b-05054f35d0b9"
+    example: "914ca990-9b45-4385-a06b-05054f35d0b9",
   })
   @ApiOkResponse({
     description: "User-Tenant mapping status updated successfully.",
@@ -131,7 +142,12 @@ export class AssignTenantController {
     @Body() updateStatusDto: UpdateAssignTenantStatusDto,
     @Res() response: Response
   ) {
-    return await this.userTenantMappingService
-      .updateAssignTenantStatus(request, userId, tenantId, updateStatusDto, response);
+    return await this.userTenantMappingService.updateAssignTenantStatus(
+      request,
+      userId,
+      tenantId,
+      updateStatusDto,
+      response
+    );
   }
 }

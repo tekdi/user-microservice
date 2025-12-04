@@ -45,7 +45,6 @@ export class NumericField extends Field {
   }
 }
 
-
 export class JsonField extends Field {
   validate(value: any): boolean {
     if (!(typeof value === "object")) {

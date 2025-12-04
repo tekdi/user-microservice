@@ -12,20 +12,24 @@ import { Cohort } from "src/cohort/entities/cohort.entity";
 
 @Injectable()
 export class CohortAcademicYearService {
-
   constructor(
     private readonly academicYearService: AcademicYearService,
     @InjectRepository(Cohort)
     private readonly cohortRepository: Repository<Cohort>,
     @InjectRepository(CohortAcademicYear)
-    private readonly cohortAcademicYearRepository: Repository<CohortAcademicYear>,
-  ) { }
+    private readonly cohortAcademicYearRepository: Repository<CohortAcademicYear>
+  ) {}
 
-  async createCohortAcademicYear(tenantId: string, request: Request, cohortAcademicYearDto: CohortAcademicYearDto, response: Response) {
+  async createCohortAcademicYear(
+    tenantId: string,
+    request: Request,
+    cohortAcademicYearDto: CohortAcademicYearDto,
+    response: Response
+  ) {
     const apiId = APIID.ADD_COHORT_TO_ACADEMIC_YEAR;
     try {
       const existingCohort = await this.cohortRepository.findOne({
-        where: { cohortId: cohortAcademicYearDto.cohortId, status: 'active' },
+        where: { cohortId: cohortAcademicYearDto.cohortId, status: "active" },
       });
 
       if (!existingCohort) {
@@ -49,11 +53,10 @@ export class CohortAcademicYearService {
       }
 
       // verify if the academic year id is valid
-      const academicYear =
-        await this.academicYearService.getActiveAcademicYear(
-          cohortAcademicYearDto.academicYearId,
-          tenantId
-        );
+      const academicYear = await this.academicYearService.getActiveAcademicYear(
+        cohortAcademicYearDto.academicYearId,
+        tenantId
+      );
 
       if (!academicYear) {
         return APIResponse.error(
@@ -65,7 +68,12 @@ export class CohortAcademicYearService {
         );
       }
 
-      const createdAcademicYear = await this.insertCohortAcademicYear(cohortAcademicYearDto.cohortId, cohortAcademicYearDto.academicYearId, cohortAcademicYearDto.createdBy, cohortAcademicYearDto.updatedBy);
+      const createdAcademicYear = await this.insertCohortAcademicYear(
+        cohortAcademicYearDto.cohortId,
+        cohortAcademicYearDto.academicYearId,
+        cohortAcademicYearDto.createdBy,
+        cohortAcademicYearDto.updatedBy
+      );
 
       if (createdAcademicYear) {
         return APIResponse.success(
@@ -76,7 +84,6 @@ export class CohortAcademicYearService {
           API_RESPONSES.ADD_COHORT_TO_ACADEMIC_YEAR
         );
       }
-
     } catch (error) {
       const errorMessage = error.message || "Internal server error";
       return APIResponse.error(
@@ -126,5 +133,4 @@ export class CohortAcademicYearService {
       where: { academicYearId: yearId, cohortId: cohortId },
     });
   }
-
 }

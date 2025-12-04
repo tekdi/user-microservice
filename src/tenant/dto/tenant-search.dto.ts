@@ -16,7 +16,10 @@ import { Expose } from "class-transformer";
 import { TenantStatus } from "../entities/tenent.entity";
 
 export class TenantFilters {
-  @ApiPropertyOptional({ type: () => String, description: 'Tenant Id must be a (UUID)' })
+  @ApiPropertyOptional({
+    type: () => String,
+    description: "Tenant Id must be a (UUID)",
+  })
   @IsString()
   @IsUUID()
   @IsOptional()
@@ -47,18 +50,26 @@ export class TenantFilters {
   @IsArray()
   @IsOptional()
   @ArrayNotEmpty() // Ensures the array is not empty (if provided)
-  @IsIn([TenantStatus.ACTIVE, TenantStatus.INACTIVE, TenantStatus.ARCHIVED], { each: true }) // Validates each array element
+  @IsIn([TenantStatus.ACTIVE, TenantStatus.INACTIVE, TenantStatus.ARCHIVED], {
+    each: true,
+  }) // Validates each array element
   @IsNotEmpty({ each: true }) // Ensures no empty strings in the array
   @Expose()
   status?: TenantStatus[];
 
-  @ApiPropertyOptional({ type: () => String, description: 'The ID of the creator (UUID)' })
+  @ApiPropertyOptional({
+    type: () => String,
+    description: "The ID of the creator (UUID)",
+  })
   @IsString()
   @IsUUID()
   @IsOptional()
   createdBy?: string;
 
-  @ApiPropertyOptional({ type: () => String, description: 'The ID of the updater (UUID)' })
+  @ApiPropertyOptional({
+    type: () => String,
+    description: "The ID of the updater (UUID)",
+  })
   @IsString()
   @IsUUID()
   @IsOptional()
@@ -69,7 +80,10 @@ export class TenantFilters {
   @IsOptional()
   programHead?: string;
 
-  @ApiPropertyOptional({ type: () => String, description: 'Parent Tenant ID (UUID)' })
+  @ApiPropertyOptional({
+    type: () => String,
+    description: "Parent Tenant ID (UUID)",
+  })
   @IsString()
   @IsUUID()
   @IsOptional()

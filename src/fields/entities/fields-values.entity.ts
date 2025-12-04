@@ -30,7 +30,6 @@ export class FieldValues {
   @Column("varchar", { nullable: true })
   contextType?: string;
 
-
   @CreateDateColumn({
     type: "timestamptz",
     default: () => "now()",

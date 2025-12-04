@@ -45,8 +45,7 @@ export class AuthRbacService {
     response: Response
   ): Promise<any> {
     const apiId = APIID.RBAC_TOKEN;
-    const userData = await this.userService
-      .findUserDetails(null, username);
+    const userData = await this.userService.findUserDetails(null, username);
 
     if (!userData || !tenantId) {
       return APIResponse.error(

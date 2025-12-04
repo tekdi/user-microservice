@@ -17,10 +17,17 @@ import { ErrorResponse } from "src/error-response";
 import { SuccessResponse } from "src/success-response";
 import { CohortMembers } from "src/cohortMembers/entities/cohort-member.entity";
 import { isUUID } from "class-validator";
-import { ExistUserDto, SuggestUserDto, UserSearchDto } from "./dto/user-search.dto";
+import {
+  ExistUserDto,
+  SuggestUserDto,
+  UserSearchDto,
+} from "./dto/user-search.dto";
 import { HierarchicalLocationFiltersDto } from "./dto/user-hierarchical-search.dto";
 import { UserHierarchyViewDto } from "./dto/user-hierarchy-view.dto";
-import { UserTenantMapping, UserTenantMappingStatus } from "src/userTenantMapping/entities/user-tenant-mapping.entity";
+import {
+  UserTenantMapping,
+  UserTenantMappingStatus,
+} from "src/userTenantMapping/entities/user-tenant-mapping.entity";
 import { UserRoleMapping } from "src/rbac/assign-role/entities/assign-role.entity";
 import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
 import { Cohort } from "src/cohort/entities/cohort.entity";
@@ -46,7 +53,7 @@ import { OtpSendDTO } from "./dto/otpSend.dto";
 import { OtpVerifyDTO } from "./dto/otpVerify.dto";
 import { SendPasswordResetOTPDto } from "./dto/passwordReset.dto";
 import { ActionType, UserUpdateDTO } from "./dto/user-update.dto";
-import { randomInt } from 'crypto';
+import { randomInt } from "crypto";
 import { UUID } from "aws-sdk/clients/cloudtrail";
 import { AutomaticMemberService } from "src/automatic-member/automatic-member.service";
 import { KafkaService } from "src/kafka/kafka.service";
@@ -74,7 +81,7 @@ export class UserService {
   constructor(
     // private axiosInstance: AxiosInstance,
     @InjectRepository(User)
-    private usersRepository: Repository<User>,
+    private readonly usersRepository: Repository<User>,
     @InjectRepository(FieldValues)
     private fieldsValueRepository: Repository<FieldValues>,
     @InjectRepository(CohortMembers)
@@ -105,20 +112,21 @@ export class UserService {
     );
     this.reset_frontEnd_url =
       this.configService.get<string>("RESET_FRONTEND_URL");
-    this.otpExpiry = this.configService.get<number>('OTP_EXPIRY') || 10; // default: 10 minutes
-    this.otpDigits = this.configService.get<number>('OTP_DIGITS') || 6;
-    this.smsKey = this.configService.get<string>('SMS_KEY');
-    this.msg91TemplateKey = this.configService.get<string>('MSG91_TEMPLATE_KEY');
+    this.otpExpiry = this.configService.get<number>("OTP_EXPIRY") || 10; // default: 10 minutes
+    this.otpDigits = this.configService.get<number>("OTP_DIGITS") || 6;
+    this.smsKey = this.configService.get<string>("SMS_KEY");
+    this.msg91TemplateKey =
+      this.configService.get<string>("MSG91_TEMPLATE_KEY");
     this.dataSource = dataSource; // Store dataSource in class property
   }
 
-
   public async getCoreColumnNames() {
     const userMetadata = this.dataSource.getMetadata(User);
-    const columnNames = userMetadata.columns.map((column) => column.propertyName);
+    const columnNames = userMetadata.columns.map(
+      (column) => column.propertyName
+    );
     return columnNames;
   }
-
 
   public async sendPasswordResetLink(
     request: any,
@@ -357,11 +365,15 @@ export class UserService {
     request: any,
     response: any,
     userSearchDto: UserSearchDto,
-    includeCustomFields: boolean = true
+    includeCustomFields = true
   ) {
     const apiId = APIID.USER_LIST;
     try {
-      const findData = await this.findAllUserDetails(userSearchDto, tenantId, includeCustomFields);
+      const findData = await this.findAllUserDetails(
+        userSearchDto,
+        tenantId,
+        includeCustomFields
+      );
 
       if (findData === false) {
         LoggerUtil.error(
@@ -404,9 +416,9 @@ export class UserService {
   }
 
   /**
- * Multi-tenant user list service function
- * Fetches user hierarchy by email
- */
+   * Multi-tenant user list service function
+   * Fetches user hierarchy by email
+   */
   async searchUserMultiTenant(
     tenantId: string,
     request: any,
@@ -418,7 +430,7 @@ export class UserService {
 
     // Step 1: Fetch tenant from Tenants table
     const tenant = await this.tenantsRepository.findOne({
-      where: { tenantId: tenantId }
+      where: { tenantId: tenantId },
     });
 
     if (!tenant) {
@@ -443,7 +455,7 @@ export class UserService {
     }
 
     const parentTenant = await this.tenantsRepository.findOne({
-      where: { tenantId: tenant.parentId }
+      where: { tenantId: tenant.parentId },
     });
 
     if (!parentTenant) {
@@ -457,8 +469,8 @@ export class UserService {
     }
 
     // Step 3: Extract domain from email
-    const emailDomain = email.split('@')[1];
-    
+    const emailDomain = email.split("@")[1];
+
     if (!emailDomain) {
       return APIResponse.error(
         response,
@@ -484,18 +496,24 @@ export class UserService {
       );
     }
 
-    LoggerUtil.log(`Domain validation passed for tenant ${tenantId} with parent tenant ${parentTenant.tenantId} (domain: ${parentTenant.domain})`);
+    LoggerUtil.log(
+      `Domain validation passed for tenant ${tenantId} with parent tenant ${parentTenant.tenantId} (domain: ${parentTenant.domain})`
+    );
 
     // Create search DTO with email filter
     const userSearchDto: UserSearchDto = {
       limit: 0,
       offset: 0,
       filters: {
-        email: [email]
-      }
+        email: [email],
+      },
     } as any;
 
-    let searchUserData = await this.findAllUserDetails(userSearchDto, null, false);
+    const searchUserData = await this.findAllUserDetails(
+      userSearchDto,
+      null,
+      false
+    );
 
     if (!(searchUserData && searchUserData.getUserDetails?.length)) {
       return APIResponse.error(
@@ -511,7 +529,12 @@ export class UserService {
     const firstUser = searchUserData.getUserDetails[0];
 
     // Fetch and assign custom fields
-    const parentTenantCustomFieldData = await this.fieldsService.getCustomFieldDetails(firstUser.userId, 'Users', false);
+    const parentTenantCustomFieldData =
+      await this.fieldsService.getCustomFieldDetails(
+        firstUser.userId,
+        "Users",
+        false
+      );
     firstUser.customFields = parentTenantCustomFieldData || [];
 
     // Fetch tenant and role data grouped by tenant
@@ -520,15 +543,18 @@ export class UserService {
     // Transform tenantRoleData to match the required structure
     // Filter out tenants without roles and map to the expected format
     const tenantData = tenantRoleData
-      .filter((tenant: any) => tenant.roles && Array.isArray(tenant.roles) && tenant.roles.length > 0)
+      .filter(
+        (tenant: any) =>
+          tenant.roles && Array.isArray(tenant.roles) && tenant.roles.length > 0
+      )
       .map((tenant: any) => ({
         tenantId: tenant.tenantId,
         tenantName: tenant.tenantName,
         tenantStatus: tenant.tenantStatus || null,
         roleData: tenant.roles.map((role: any) => ({
           roleId: role.roleId,
-          roleName: role.roleName
-        }))
+          roleName: role.roleName,
+        })),
       }));
 
     // Remove tenantId, total_count, old role field, and tenantStatus from the response
@@ -549,7 +575,6 @@ export class UserService {
       API_RESPONSES.USER_HIERARCHY_VIEW_SUCCESS
     );
   }
-
 
   // async findAllUserDetails1(userSearchDto, tenantId?: string, includeCustomFields: boolean = true) {
   //   let { limit, offset, filters, exclude, sort } = userSearchDto;
@@ -722,9 +747,9 @@ export class UserService {
   //   }
 
   //   //Get user core fields data
-  //   const query = `SELECT U."userId",U."enrollmentId", U."username",U."email", U."firstName", U."name",UTM."tenantId", U."middleName", U."lastName", U."gender", U."dob", R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", U."status", UTM."status" AS "tenantStatus", COUNT(*) OVER() AS total_count 
+  //   const query = `SELECT U."userId",U."enrollmentId", U."username",U."email", U."firstName", U."name",UTM."tenantId", U."middleName", U."lastName", U."gender", U."dob", R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", U."status", UTM."status" AS "tenantStatus", COUNT(*) OVER() AS total_count
   //     FROM  public."Users" U
-  //     LEFT JOIN public."CohortMembers" CM 
+  //     LEFT JOIN public."CohortMembers" CM
   //     ON CM."userId" = U."userId"
   //     LEFT JOIN public."UserRolesMapping" UR
   //     ON UR."userId" = U."userId"
@@ -772,201 +797,239 @@ export class UserService {
   //   }
   //   return result;
   // }
-  async findAllUserDetails(userSearchDto, tenantId?: string, includeCustomFields: boolean = true) {
-  let { limit, offset, filters, exclude, sort } = userSearchDto;
-  let excludeCohortIdes;
-  let excludeUserIdes;
+  async findAllUserDetails(
+    userSearchDto,
+    tenantId?: string,
+    includeCustomFields = true
+  ) {
+    const { limit, offset, filters, exclude, sort } = userSearchDto;
+    let excludeCohortIdes;
+    let excludeUserIdes;
 
-  const result = {
-    totalCount: 0,
-    getUserDetails: [],
-  };
+    const result = {
+      totalCount: 0,
+      getUserDetails: [],
+    };
 
-  const searchCustomFields: any = {};
+    const searchCustomFields: any = {};
 
-  const queryBuilder = this.usersRepository
-    .createQueryBuilder("U")
-    .leftJoin("CohortMembers", "CM", "CM.userId = U.userId")
-    .leftJoin("UserRolesMapping", "UR", "UR.userId = U.userId")
-    .leftJoin("UserTenantMapping", "UTM", "UTM.userId = U.userId")
-    .leftJoin("Roles", "R", "R.roleId = UR.roleId")
-    .select([
-      'U.userId AS "userId"',
-      'U.enrollmentId AS "enrollmentId"',
-      'U.username AS "username"',
-      'U.email AS "email"',
-      'U.firstName AS "firstName"',
-      'U.name AS "name"',
-      'UTM.tenantId AS "tenantId"',
-      'U.middleName AS "middleName"',
-      'U.lastName AS "lastName"',
-      'U.gender AS "gender"',
-      'U.dob AS "dob"',
-      'R.name AS "role"',
-      'U.mobile AS "mobile"',
-      'U.createdBy AS "createdBy"',
-      'U.updatedBy AS "updatedBy"',
-      'U.createdAt AS "createdAt"',
-      'U.updatedAt AS "updatedAt"',
-      'U.status AS "status"',
-      'UTM.status AS "tenantStatus"',
-      'COUNT(*) OVER() AS "total_count"',
-    ])
-    .groupBy('U.userId')
-    .addGroupBy('UTM.tenantId')
-    .addGroupBy('UTM.status')
-    .addGroupBy('R.name');
+    const queryBuilder = this.usersRepository
+      .createQueryBuilder("U")
+      .leftJoin("CohortMembers", "CM", "CM.userId = U.userId")
+      .leftJoin("UserRolesMapping", "UR", "UR.userId = U.userId")
+      .leftJoin("UserTenantMapping", "UTM", "UTM.userId = U.userId")
+      .leftJoin("Roles", "R", "R.roleId = UR.roleId")
+      .select([
+        'U.userId AS "userId"',
+        'U.enrollmentId AS "enrollmentId"',
+        'U.username AS "username"',
+        'U.email AS "email"',
+        'U.firstName AS "firstName"',
+        'U.name AS "name"',
+        'UTM.tenantId AS "tenantId"',
+        'U.middleName AS "middleName"',
+        'U.lastName AS "lastName"',
+        'U.gender AS "gender"',
+        'U.dob AS "dob"',
+        'R.name AS "role"',
+        'U.mobile AS "mobile"',
+        'U.createdBy AS "createdBy"',
+        'U.updatedBy AS "updatedBy"',
+        'U.createdAt AS "createdAt"',
+        'U.updatedAt AS "updatedAt"',
+        'U.status AS "status"',
+        'UTM.status AS "tenantStatus"',
+        'COUNT(*) OVER() AS "total_count"',
+      ])
+      .groupBy("U.userId")
+      .addGroupBy("UTM.tenantId")
+      .addGroupBy("UTM.status")
+      .addGroupBy("R.name");
 
-  // --- Filters ---
-  if (filters && Object.keys(filters).length > 0) {
-    const coreFields = await this.getCoreColumnNames();
-    const allCoreField = [...coreFields, 'fromDate', 'toDate', 'role', 'tenantId', 'name', 'tenantStatus'];
+    // --- Filters ---
+    if (filters && Object.keys(filters).length > 0) {
+      const coreFields = await this.getCoreColumnNames();
+      const allCoreField = [
+        ...coreFields,
+        "fromDate",
+        "toDate",
+        "role",
+        "tenantId",
+        "name",
+        "tenantStatus",
+      ];
 
-    for (const [key, avalue] of Object.entries(filters)) {
-      if (allCoreField.includes(key)) {
-        const value = Array.isArray(avalue) ? avalue : avalue;
+      for (const [key, avalue] of Object.entries(filters)) {
+        if (allCoreField.includes(key)) {
+          const value = Array.isArray(avalue) ? avalue : avalue;
 
-        switch (key) {
-          case "firstName":
-          case "name":
-            const nameValue = Array.isArray(value) ? value[0] : value;
-            queryBuilder.andWhere(`U.${key} ILIKE :${key}`, {
-              [key]: `%${nameValue}%`,
-            });
-            break;
-
-          case "status":
-          case "email":
-          case "username":
-          case "userId":
-            if (Array.isArray(value) && value.every((item) => typeof item === "string")) {
-              queryBuilder.andWhere(`U.${key} IN (:...${key})`, {
-                [key]: value.map((item) => item.trim().toLowerCase()),
+          switch (key) {
+            case "firstName":
+            case "name":
+              const nameValue = Array.isArray(value) ? value[0] : value;
+              queryBuilder.andWhere(`U.${key} ILIKE :${key}`, {
+                [key]: `%${nameValue}%`,
               });
-            } else {
-              if (key === "username") {
-                queryBuilder.andWhere(`U.${key} ILIKE :${key}`, { [key]: String(value) });
+              break;
+
+            case "status":
+            case "email":
+            case "username":
+            case "userId":
+              if (
+                Array.isArray(value) &&
+                value.every((item) => typeof item === "string")
+              ) {
+                queryBuilder.andWhere(`U.${key} IN (:...${key})`, {
+                  [key]: value.map((item) => item.trim().toLowerCase()),
+                });
               } else {
-                queryBuilder.andWhere(`U.${key} = :${key}`, { [key]: String(value) });
+                if (key === "username") {
+                  queryBuilder.andWhere(`U.${key} ILIKE :${key}`, {
+                    [key]: String(value),
+                  });
+                } else {
+                  queryBuilder.andWhere(`U.${key} = :${key}`, {
+                    [key]: String(value),
+                  });
+                }
               }
-            }
-            break;
+              break;
 
-          case "tenantStatus":
-            if (Array.isArray(value) && value.every((item) => typeof item === "string")) {
-              queryBuilder.andWhere(`UTM.status IN (:...tenantStatus)`, {
-                tenantStatus: value.map((item) => item.trim().toLowerCase()),
+            case "tenantStatus":
+              if (
+                Array.isArray(value) &&
+                value.every((item) => typeof item === "string")
+              ) {
+                queryBuilder.andWhere(`UTM.status IN (:...tenantStatus)`, {
+                  tenantStatus: value.map((item) => item.trim().toLowerCase()),
+                });
+              } else {
+                queryBuilder.andWhere(`UTM.status = :tenantStatus`, {
+                  tenantStatus: String(value).toLowerCase(),
+                });
+              }
+              break;
+
+            case "role":
+              queryBuilder.andWhere(`R.name = :role`, { role: String(value) });
+              break;
+
+            case "fromDate":
+              queryBuilder.andWhere(`DATE(U.createdAt) >= :fromDate`, {
+                fromDate: String(value),
               });
-            } else {
-              queryBuilder.andWhere(`UTM.status = :tenantStatus`, { tenantStatus: String(value).toLowerCase() });
-            }
-            break;
+              break;
 
-          case "role":
-            queryBuilder.andWhere(`R.name = :role`, { role: String(value) });
-            break;
+            case "toDate":
+              queryBuilder.andWhere(`DATE(U.createdAt) <= :toDate`, {
+                toDate: String(value),
+              });
+              break;
 
-          case "fromDate":
-            queryBuilder.andWhere(`DATE(U.createdAt) >= :fromDate`, { fromDate: String(value) });
-            break;
+            case "tenantId":
+              queryBuilder.andWhere(`UTM.tenantId = :tenantId`, {
+                tenantId: String(value),
+              });
+              break;
 
-          case "toDate":
-            queryBuilder.andWhere(`DATE(U.createdAt) <= :toDate`, { toDate: String(value) });
-            break;
-
-          case "tenantId":
-            queryBuilder.andWhere(`UTM.tenantId = :tenantId`, { tenantId: String(value) });
-            break;
-
-          default:
-            queryBuilder.andWhere(`U.${key} = :${key}`, { [key]: String(value) });
-            break;
+            default:
+              queryBuilder.andWhere(`U.${key} = :${key}`, {
+                [key]: String(value),
+              });
+              break;
+          }
+        } else {
+          searchCustomFields[key] = avalue;
         }
-      } else {
-        searchCustomFields[key] = avalue;
       }
     }
-  }
 
-  // --- Exclusions ---
-  if (exclude && Object.keys(exclude).length > 0) {
-    Object.entries(exclude).forEach(([key, value]) => {
-      if (key == "cohortIds") excludeCohortIdes = value;
-      if (key == "userIds") excludeUserIdes = value;
-    });
-  }
-
-  // --- Custom Field Filtering ---
-  if (Object.keys(searchCustomFields).length > 0) {
-    const context = "USERS";
-    const customUserIds = await this.fieldsService.filterUserUsingCustomFieldsOptimized(context, searchCustomFields);
-    if (!customUserIds) return false;
-
-    queryBuilder.andWhere(`U.userId IN (:...customFieldUserIds)`, {
-      customFieldUserIds: customUserIds,
-    });
-  }
-
-  if (excludeUserIdes?.length > 0) {
-    queryBuilder.andWhere(`U.userId NOT IN (:...excludeUserIds)`, {
-      excludeUserIds: excludeUserIdes,
-    });
-  }
-
-  if (excludeCohortIdes?.length > 0) {
-    queryBuilder.andWhere(`CM.cohortId NOT IN (:...excludeCohortIds)`, {
-      excludeCohortIds: excludeCohortIdes,
-    });
-  }
-
-  // --- Tenant filter ---
-  if (tenantId && tenantId.trim() !== "") {
-    queryBuilder.andWhere(`UTM.tenantId = :headerTenantId`, { headerTenantId: tenantId });
-  }
-
-  // --- Sorting ---
-  if (sort && Array.isArray(sort) && sort.length === 2) {
-    const [column, direction] = sort;
-    const order = direction.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
-    queryBuilder.orderBy(`U.${column}`, order as 'ASC' | 'DESC');
-  }
-
-  // --- Pagination ---
-  if (offset) queryBuilder.offset(parseInt(offset, 10));
-  if (limit) queryBuilder.limit(parseInt(limit, 10));
-
-  // --- Execute ---
-  const userDetails = await queryBuilder.getRawMany();
-
-  if (userDetails.length === 0) return false;
-
-  result.totalCount = parseInt(userDetails[0].total_count, 10);
-
-  // --- Fetch & attach custom fields ---
-  if (includeCustomFields) {
-    const userIds = userDetails.map((u) => u.userId);
-    const bulkCustomFields = await this.fieldsService.getBulkCustomFieldDetails(userIds, 'Users');
-
-    for (const userData of userDetails) {
-      const customFields = bulkCustomFields[userData.userId] || [];
-      userData["customFields"] = customFields.map((data) => ({
-        fieldId: data?.fieldId,
-        label: data?.label,
-        selectedValues: data?.selectedValues,
-        type: data?.type,
-      }));
-      result.getUserDetails.push(userData);
+    // --- Exclusions ---
+    if (exclude && Object.keys(exclude).length > 0) {
+      Object.entries(exclude).forEach(([key, value]) => {
+        if (key == "cohortIds") excludeCohortIdes = value;
+        if (key == "userIds") excludeUserIdes = value;
+      });
     }
-  } else {
-    for (const userData of userDetails) {
-      userData["customFields"] = [];
-      result.getUserDetails.push(userData);
+
+    // --- Custom Field Filtering ---
+    if (Object.keys(searchCustomFields).length > 0) {
+      const context = "USERS";
+      const customUserIds =
+        await this.fieldsService.filterUserUsingCustomFieldsOptimized(
+          context,
+          searchCustomFields
+        );
+      if (!customUserIds) return false;
+
+      queryBuilder.andWhere(`U.userId IN (:...customFieldUserIds)`, {
+        customFieldUserIds: customUserIds,
+      });
     }
+
+    if (excludeUserIdes?.length > 0) {
+      queryBuilder.andWhere(`U.userId NOT IN (:...excludeUserIds)`, {
+        excludeUserIds: excludeUserIdes,
+      });
+    }
+
+    if (excludeCohortIdes?.length > 0) {
+      queryBuilder.andWhere(`CM.cohortId NOT IN (:...excludeCohortIds)`, {
+        excludeCohortIds: excludeCohortIdes,
+      });
+    }
+
+    // --- Tenant filter ---
+    if (tenantId && tenantId.trim() !== "") {
+      queryBuilder.andWhere(`UTM.tenantId = :headerTenantId`, {
+        headerTenantId: tenantId,
+      });
+    }
+
+    // --- Sorting ---
+    if (sort && Array.isArray(sort) && sort.length === 2) {
+      const [column, direction] = sort;
+      const order = direction.toUpperCase() === "DESC" ? "DESC" : "ASC";
+      queryBuilder.orderBy(`U.${column}`, order as "ASC" | "DESC");
+    }
+
+    // --- Pagination ---
+    if (offset) queryBuilder.offset(parseInt(offset, 10));
+    if (limit) queryBuilder.limit(parseInt(limit, 10));
+
+    // --- Execute ---
+    const userDetails = await queryBuilder.getRawMany();
+
+    if (userDetails.length === 0) return false;
+
+    result.totalCount = parseInt(userDetails[0].total_count, 10);
+
+    // --- Fetch & attach custom fields ---
+    if (includeCustomFields) {
+      const userIds = userDetails.map((u) => u.userId);
+      const bulkCustomFields =
+        await this.fieldsService.getBulkCustomFieldDetails(userIds, "Users");
+
+      for (const userData of userDetails) {
+        const customFields = bulkCustomFields[userData.userId] || [];
+        userData["customFields"] = customFields.map((data) => ({
+          fieldId: data?.fieldId,
+          label: data?.label,
+          selectedValues: data?.selectedValues,
+          type: data?.type,
+        }));
+        result.getUserDetails.push(userData);
+      }
+    } else {
+      for (const userData of userDetails) {
+        userData["customFields"] = [];
+        result.getUserDetails.push(userData);
+      }
+    }
+
+    return result;
   }
-
-  return result;
-}
-
 
   async getUsersDetailsById(userData: UserData, response: any) {
     const apiId = APIID.USER_GET;
@@ -1040,7 +1103,8 @@ export class UserService {
         const contextType = roleInUpper;
         // customFields = await this.fieldsService.getFieldValuesData(userData.userId, context, contextType, ['All'], true);
         customFields = await this.fieldsService.getCustomFieldDetails(
-          userData.userId, 'Users'
+          userData.userId,
+          "Users"
         );
       }
 
@@ -1103,8 +1167,7 @@ export class UserService {
     if (!getRole) {
       return false;
     }
-    let role;
-    role = await this.roleRepository.findOne({
+    const role = await this.roleRepository.findOne({
       where: {
         roleId: getRole.roleId,
       },
@@ -1195,10 +1258,10 @@ export class UserService {
         // If tenant already exists in map, just add roles to existing entry
         if (tenantMap.has(tenantId)) {
           const existingTenant = tenantMap.get(tenantId);
-          roleData.forEach(role => {
+          roleData.forEach((role) => {
             // Avoid duplicate roles
-            const roleExists = existingTenant.roles.some(existingRole =>
-              existingRole.roleId === role.roleid
+            const roleExists = existingTenant.roles.some(
+              (existingRole) => existingRole.roleId === role.roleid
             );
             if (!roleExists) {
               existingTenant.roles.push({
@@ -1209,7 +1272,7 @@ export class UserService {
           });
         } else {
           // Create new tenant entry with all roles
-          const roles = roleData.map(role => ({
+          const roles = roleData.map((role) => ({
             roleId: role.roleid,
             roleName: role.title,
           }));
@@ -1240,7 +1303,9 @@ export class UserService {
       const updatedData = {};
       const editIssues = {};
 
-      const user = await this.usersRepository.findOne({ where: { userId: userDto.userId } });
+      const user = await this.usersRepository.findOne({
+        where: { userId: userDto.userId },
+      });
       if (!user) {
         return APIResponse.error(
           response,
@@ -1256,12 +1321,19 @@ export class UserService {
         let deviceIds: any;
         if (userDto.userData.action === ActionType.ADD) {
           // add deviceId
-          deviceIds = await this.loginDeviceIdAction(userDto.userData.deviceId, userDto.userId, user.deviceId)
+          deviceIds = await this.loginDeviceIdAction(
+            userDto.userData.deviceId,
+            userDto.userId,
+            user.deviceId
+          );
           userDto.userData.deviceId = deviceIds;
-
         } else if (userDto.userData.action === ActionType.REMOVE) {
           //remove deviceId
-          deviceIds = await this.onLogoutDeviceId(userDto.userData.deviceId, userDto.userId, user.deviceId)
+          deviceIds = await this.onLogoutDeviceId(
+            userDto.userData.deviceId,
+            userDto.userId,
+            user.deviceId
+          );
           userDto.userData.deviceId = deviceIds;
         }
       }
@@ -1273,9 +1345,11 @@ export class UserService {
       //Update userdetails on keycloak
       if (username || firstName || lastName || email) {
         try {
-          const keycloakUpdateResult = await this.updateUsernameInKeycloak(keycloakReqBody);
+          const keycloakUpdateResult = await this.updateUsernameInKeycloak(
+            keycloakReqBody
+          );
 
-          if (keycloakUpdateResult === 'exists') {
+          if (keycloakUpdateResult === "exists") {
             return APIResponse.error(
               response,
               apiId,
@@ -1321,30 +1395,36 @@ export class UserService {
         userDto?.userId
       );
 
-
       // Synchronize user status with Keycloak
       if (userDto.userData?.status) {
-        const isUserActive = userDto.userData.status === 'active';
+        const isUserActive = userDto.userData.status === "active";
 
         // Async Keycloak status synchronization - non-blocking
-        this.syncUserStatusWithKeycloak(userDto.userId, isUserActive, apiId)
-          .catch(error => LoggerUtil.error(
-            'Keycloak user status sync failed',
+        this.syncUserStatusWithKeycloak(
+          userDto.userId,
+          isUserActive,
+          apiId
+        ).catch((error) =>
+          LoggerUtil.error(
+            "Keycloak user status sync failed",
             `Error: ${error.message}`,
             apiId
-          ));
+          )
+        );
       }
 
       if (userDto?.customFields?.length > 0) {
         // additionalData?: { tenantId?: string, contextType?: string, createdBy?: string, updatedBy?: string }
-        let additionalData = {
+        const additionalData = {
           tenantId: userDto.userData?.tenantId,
           contextType: "USER",
           createdBy: userDto.userData?.createdBy,
-          updatedBy: userDto.userData?.updatedBy
-        }
+          updatedBy: userDto.userData?.updatedBy,
+        };
         const getFieldsAttributes =
-          await this.fieldsService.getEditableFieldsAttributes(userDto.userData.tenantId);
+          await this.fieldsService.getEditableFieldsAttributes(
+            userDto.userData.tenantId
+          );
 
         const isEditableFieldId = [];
         const fieldIdAndAttributes = {};
@@ -1360,7 +1440,8 @@ export class UserService {
             const result = await this.fieldsService.updateCustomFields(
               userDto.userId,
               data,
-              fieldIdAndAttributes[data.fieldId], additionalData
+              fieldIdAndAttributes[data.fieldId],
+              additionalData
             );
             if (result.correctValue) {
               if (!updatedData["customFields"])
@@ -1384,18 +1465,27 @@ export class UserService {
       }
 
       if (userDto.automaticMember && userDto?.automaticMember?.value === true) {
-
         let assignTo;
         //Find Assign field value from custom fields
-        let foundField = userDto.customFields.find(field => field.fieldId === userDto.automaticMember.fieldId);
+        const foundField = userDto.customFields.find(
+          (field) => field.fieldId === userDto.automaticMember.fieldId
+        );
         if (foundField) {
           assignTo = foundField.value;
         }
 
         // Check if an active automated member exists for the given userId, tenantId, and assigned ID.
-        const checkAutomaticMemberExists = await this.automaticMemberService.checkAutomaticMemberExists(userId, userDto.userData.tenantId, foundField.value[0]);
+        const checkAutomaticMemberExists =
+          await this.automaticMemberService.checkAutomaticMemberExists(
+            userId,
+            userDto.userData.tenantId,
+            foundField.value[0]
+          );
 
-        if (checkAutomaticMemberExists.length > 0 && checkAutomaticMemberExists[0].isActive === true) {
+        if (
+          checkAutomaticMemberExists.length > 0 &&
+          checkAutomaticMemberExists[0].isActive === true
+        ) {
           return APIResponse.error(
             response,
             apiId,
@@ -1405,17 +1495,33 @@ export class UserService {
           );
         }
 
-
-        if (checkAutomaticMemberExists.length > 0 && checkAutomaticMemberExists[0].isActive === false) {
+        if (
+          checkAutomaticMemberExists.length > 0 &&
+          checkAutomaticMemberExists[0].isActive === false
+        ) {
           // deactivate the current active automatic membership for the user in tenantId.
-          const getActiveAutomaticMembershipId = await this.automaticMemberService.getUserbyUserIdAndTenantId(userId, userDto.userData.tenantId, true);
+          const getActiveAutomaticMembershipId =
+            await this.automaticMemberService.getUserbyUserIdAndTenantId(
+              userId,
+              userDto.userData.tenantId,
+              true
+            );
 
-          if (getActiveAutomaticMembershipId && getActiveAutomaticMembershipId.isActive === true) {
-            await this.automaticMemberService.update(getActiveAutomaticMembershipId.id, { isActive: false })
+          if (
+            getActiveAutomaticMembershipId &&
+            getActiveAutomaticMembershipId.isActive === true
+          ) {
+            await this.automaticMemberService.update(
+              getActiveAutomaticMembershipId.id,
+              { isActive: false }
+            );
           }
 
           // Activate the old inactive automatic membership for the user in tenantId and assigned ID.
-          await this.automaticMemberService.update(checkAutomaticMemberExists[0].id, { isActive: true })
+          await this.automaticMemberService.update(
+            checkAutomaticMemberExists[0].id,
+            { isActive: true }
+          );
           return await APIResponse.success(
             response,
             apiId,
@@ -1425,7 +1531,12 @@ export class UserService {
           );
         }
 
-        await this.updateAutomaticMemberMapping(userDto.automaticMember, assignTo, userId, userDto.userData.tenantId)
+        await this.updateAutomaticMemberMapping(
+          userDto.automaticMember,
+          assignTo,
+          userId,
+          userDto.userData.tenantId
+        );
       }
 
       LoggerUtil.log(
@@ -1444,12 +1555,13 @@ export class UserService {
       );
 
       // Produce user updated event to Kafka asynchronously - after response is sent to client
-      this.publishUserEvent('updated', userDto.userId, apiId)
-        .catch(error => LoggerUtil.error(
+      this.publishUserEvent("updated", userDto.userId, apiId).catch((error) =>
+        LoggerUtil.error(
           `Failed to publish user updated event to Kafka`,
           `Error: ${error.message}`,
           apiId
-        ));
+        )
+      );
 
       return apiResponse;
     } catch (e) {
@@ -1472,17 +1584,32 @@ export class UserService {
     throw new Error("Method not implemented.");
   }
 
-  async updateAutomaticMemberMapping(automaticMember: any, fieldValue: any, userId: UUID, tenantId: UUID) {
-
+  async updateAutomaticMemberMapping(
+    automaticMember: any,
+    fieldValue: any,
+    userId: UUID,
+    tenantId: UUID
+  ) {
     try {
       // deactivate the current active automatic membership for the user in tenantId.
-      const getActiveAutomaticMembershipId = await this.automaticMemberService.getUserbyUserIdAndTenantId(userId, tenantId, true);
+      const getActiveAutomaticMembershipId =
+        await this.automaticMemberService.getUserbyUserIdAndTenantId(
+          userId,
+          tenantId,
+          true
+        );
 
-      if (getActiveAutomaticMembershipId && getActiveAutomaticMembershipId.isActive === true) {
-        await this.automaticMemberService.update(getActiveAutomaticMembershipId.id, { isActive: false })
+      if (
+        getActiveAutomaticMembershipId &&
+        getActiveAutomaticMembershipId.isActive === true
+      ) {
+        await this.automaticMemberService.update(
+          getActiveAutomaticMembershipId.id,
+          { isActive: false }
+        );
       }
 
-      let createAutomaticMember = {
+      const createAutomaticMember = {
         userId: userId,
         rules: {
           condition: {
@@ -1497,12 +1624,11 @@ export class UserService {
           // }
         },
         tenantId: tenantId,
-        isActive: true
-      }
+        isActive: true,
+      };
 
       //Assgn member to sdb
-      await this.automaticMemberService.create(createAutomaticMember)
-
+      await this.automaticMemberService.create(createAutomaticMember);
     } catch (error) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
@@ -1512,36 +1638,41 @@ export class UserService {
     }
   }
 
-  async updateUsernameInKeycloak(updateField: UpdateField): Promise<'exists' | false | true> {
+  async updateUsernameInKeycloak(
+    updateField: UpdateField
+  ): Promise<"exists" | false | true> {
     try {
-
       const keycloakResponse = await getKeycloakAdminToken();
       const token = keycloakResponse.data.access_token;
 
       //Check user is exist in keycloakDB or not
-      const checkUserinKeyCloakandDb = await this.checkUserinKeyCloakandDb(updateField);
+      const checkUserinKeyCloakandDb = await this.checkUserinKeyCloakandDb(
+        updateField
+      );
       if (checkUserinKeyCloakandDb) {
-        return 'exists';
+        return "exists";
       }
 
       //Update user in keyCloakService
-      let updateResult = await updateUserInKeyCloak(updateField, token)
+      const updateResult = await updateUserInKeyCloak(updateField, token);
       if (updateResult.success === false) {
         return false;
       }
       return true;
-
     } catch (error) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
-        `KeyCloak Error: ${error.message}`,
+        `KeyCloak Error: ${error.message}`
       );
       return false;
     }
   }
 
-
-  private async syncUserStatusWithKeycloak(userId: string, isActive: boolean, apiId: string): Promise<void> {
+  private async syncUserStatusWithKeycloak(
+    userId: string,
+    isActive: boolean,
+    apiId: string
+  ): Promise<void> {
     try {
       const keycloakResponse = await getKeycloakAdminToken();
       const token = keycloakResponse.data.access_token;
@@ -1553,20 +1684,22 @@ export class UserService {
 
       if (result.success) {
         LoggerUtil.log(
-          `Keycloak user status synchronized successfully: ${isActive ? 'enabled' : 'disabled'}`,
+          `Keycloak user status synchronized successfully: ${
+            isActive ? "enabled" : "disabled"
+          }`,
           apiId,
           userId
         );
       } else {
         LoggerUtil.error(
-          'Keycloak user status synchronization failed',
+          "Keycloak user status synchronization failed",
           `Status: ${result.statusCode}, Message: ${result.message}`,
           apiId
         );
       }
     } catch (error) {
       LoggerUtil.error(
-        'Keycloak user status synchronization error',
+        "Keycloak user status synchronization error",
         `Failed to sync user status: ${error.message}`,
         apiId
       );
@@ -1574,8 +1707,12 @@ export class UserService {
     }
   }
 
-  async loginDeviceIdAction(userDeviceId: string, userId: string, existingDeviceId: string[]): Promise<string[]> {
-    let deviceIds = existingDeviceId || [];
+  async loginDeviceIdAction(
+    userDeviceId: string,
+    userId: string,
+    existingDeviceId: string[]
+  ): Promise<string[]> {
+    const deviceIds = existingDeviceId || [];
     // Check if the device ID already exists
     if (deviceIds.includes(userDeviceId)) {
       return deviceIds; // No action if device ID already exists
@@ -1589,18 +1726,25 @@ export class UserService {
     return deviceIds; // Return the updated device list
   }
 
-  async onLogoutDeviceId(deviceIdforRemove: string, userId: string, existingDeviceId: string[]) {
+  async onLogoutDeviceId(
+    deviceIdforRemove: string,
+    userId: string,
+    existingDeviceId: string[]
+  ) {
     let deviceIds = existingDeviceId || [];
     // Check if the device ID exists
     if (!deviceIds.includes(deviceIdforRemove)) {
       return deviceIds; // No action if device ID does not exist
     }
     // Remove the device ID
-    deviceIds = deviceIds.filter(id => id !== deviceIdforRemove);
+    deviceIds = deviceIds.filter((id) => id !== deviceIdforRemove);
     return deviceIds;
   }
 
-  async updateBasicUserDetails(userId: string, userData: Partial<User>): Promise<User | null> {
+  async updateBasicUserDetails(
+    userId: string,
+    userData: Partial<User>
+  ): Promise<User | null> {
     try {
       // Fetch the user by ID
       const user = await this.usersRepository.findOne({ where: { userId } });
@@ -1611,13 +1755,11 @@ export class UserService {
 
       await Object.assign(user, userData);
       return this.usersRepository.save(user);
-
     } catch (error) {
       // Re-throw or handle the error as needed
-      throw new Error('An error occurred while updating user details');
+      throw new Error("An error occurred while updating user details");
     }
   }
-
 
   async createUser(
     request: any,
@@ -1633,7 +1775,7 @@ export class UserService {
       username: userCreateDto?.username,
       email: userCreateDto?.email,
       firstName: userCreateDto?.firstName,
-      lastName: userCreateDto?.lastName
+      lastName: userCreateDto?.lastName,
     };
 
     // Log user creation attempt with context
@@ -1651,7 +1793,7 @@ export class UserService {
         userCreateDto.createdBy = decoded?.sub;
         userCreateDto.updatedBy = decoded?.sub;
       }
-      stepTimings['jwt_extraction'] = Date.now() - jwtStartTime;
+      stepTimings["jwt_extraction"] = Date.now() - jwtStartTime;
 
       // Step 2: Validate custom fields
       const customFieldStartTime = Date.now();
@@ -1673,7 +1815,8 @@ export class UserService {
           );
         }
       }
-      stepTimings['custom_field_validation'] = Date.now() - customFieldStartTime;
+      stepTimings["custom_field_validation"] =
+        Date.now() - customFieldStartTime;
 
       // Step 3: Validate request body and roles
       const validationStartTime = Date.now();
@@ -1701,11 +1844,14 @@ export class UserService {
           HttpStatus.BAD_REQUEST
         );
       }
-      stepTimings['request_validation'] = Date.now() - validationStartTime;
+      stepTimings["request_validation"] = Date.now() - validationStartTime;
 
       // Step 4: Validate automatic member vs cohort assignment
       const businessLogicStartTime = Date.now();
-      if (userCreateDto.automaticMember?.value === true && userCreateDto.tenantCohortRoleMapping?.[0]?.cohortIds?.length > 0) {
+      if (
+        userCreateDto.automaticMember?.value === true &&
+        userCreateDto.tenantCohortRoleMapping?.[0]?.cohortIds?.length > 0
+      ) {
         LoggerUtil.error(
           `Invalid operation for ${userContext.username}: Cannot assign automatic member with cohort`,
           `User cannot be assigned as automatic member while also being assigned to a center`,
@@ -1720,7 +1866,8 @@ export class UserService {
           HttpStatus.BAD_REQUEST
         );
       }
-      stepTimings['business_logic_validation'] = Date.now() - businessLogicStartTime;
+      stepTimings["business_logic_validation"] =
+        Date.now() - businessLogicStartTime;
 
       // Step 5: Prepare username and check Keycloak
       const keycloakCheckStartTime = Date.now();
@@ -1748,7 +1895,7 @@ export class UserService {
           HttpStatus.BAD_REQUEST
         );
       }
-      stepTimings['keycloak_user_check'] = Date.now() - keycloakCheckStartTime;
+      stepTimings["keycloak_user_check"] = Date.now() - keycloakCheckStartTime;
 
       // Step 6: Create user in Keycloak
       const keycloakCreateStartTime = Date.now();
@@ -1758,13 +1905,18 @@ export class UserService {
         userContext.username
       );
 
-      const resKeycloak = await createUserInKeyCloak(userSchema, token, validatedRoles[0]?.title)
+      const resKeycloak = await createUserInKeyCloak(
+        userSchema,
+        token,
+        validatedRoles[0]?.title
+      );
 
       // Capture Keycloak creation timing immediately after the call
-      stepTimings['keycloak_user_creation'] = Date.now() - keycloakCreateStartTime;
+      stepTimings["keycloak_user_creation"] =
+        Date.now() - keycloakCreateStartTime;
 
       // Handle the case where createUserInKeyCloak returns a string (error)
-      if (typeof resKeycloak === 'string') {
+      if (typeof resKeycloak === "string") {
         LoggerUtil.error(
           `Keycloak user creation failed for ${userContext.username}`,
           resKeycloak,
@@ -1835,7 +1987,7 @@ export class UserService {
         academicYearId,
         response
       );
-      stepTimings['database_user_creation'] = Date.now() - dbCreateStartTime;
+      stepTimings["database_user_creation"] = Date.now() - dbCreateStartTime;
 
       LoggerUtil.log(
         `User ${userContext.username} created successfully in database`,
@@ -1869,14 +2021,13 @@ export class UserService {
               fieldDetail[`${fieldId}`]
                 ? fieldDetail
                 : {
-                  ...fieldDetail,
-                  [`${fieldId}`]: { fieldAttributes, fieldParams, name },
-                },
+                    ...fieldDetail,
+                    [`${fieldId}`]: { fieldAttributes, fieldParams, name },
+                  },
             {}
           );
 
           for (const fieldValues of userCreateDto.customFields) {
-
             const fieldData = {
               fieldId: fieldValues["fieldId"],
               value: fieldValues["value"],
@@ -1884,7 +2035,8 @@ export class UserService {
 
             // Prepare additional data for FieldValues table
             const additionalData = {
-              tenantId: userCreateDto.tenantCohortRoleMapping?.[0]?.tenantId || null,
+              tenantId:
+                userCreateDto.tenantCohortRoleMapping?.[0]?.tenantId || null,
               contextType: "USER",
               createdBy: userCreateDto.createdBy,
               updatedBy: userCreateDto.updatedBy,
@@ -1908,7 +2060,8 @@ export class UserService {
           }
         }
       }
-      stepTimings['custom_fields_processing'] = Date.now() - customFieldsStartTime;
+      stepTimings["custom_fields_processing"] =
+        Date.now() - customFieldsStartTime;
 
       // Step 9: Log performance metrics
       const totalTime = Date.now() - startTime;
@@ -1920,7 +2073,7 @@ export class UserService {
 
       // Log performance breakdown
       LoggerUtil.log(
-        `Performance breakdown for user creation (${userContext.username}): Total: ${totalTime}ms | JWT: ${stepTimings['jwt_extraction']}ms | Custom Fields Validation: ${stepTimings['custom_field_validation']}ms | Request Validation: ${stepTimings['request_validation']}ms | Business Logic: ${stepTimings['business_logic_validation']}ms | Keycloak Check: ${stepTimings['keycloak_user_check']}ms | Keycloak Creation: ${stepTimings['keycloak_user_creation']}ms | Database Creation: ${stepTimings['database_user_creation']}ms | Custom Fields Processing: ${stepTimings['custom_fields_processing']}ms`,
+        `Performance breakdown for user creation (${userContext.username}): Total: ${totalTime}ms | JWT: ${stepTimings["jwt_extraction"]}ms | Custom Fields Validation: ${stepTimings["custom_field_validation"]}ms | Request Validation: ${stepTimings["request_validation"]}ms | Business Logic: ${stepTimings["business_logic_validation"]}ms | Keycloak Check: ${stepTimings["keycloak_user_check"]}ms | Keycloak Creation: ${stepTimings["keycloak_user_creation"]}ms | Database Creation: ${stepTimings["database_user_creation"]}ms | Custom Fields Processing: ${stepTimings["custom_fields_processing"]}ms`,
         apiId,
         userContext.username
       );
@@ -1935,15 +2088,15 @@ export class UserService {
       );
 
       // Produce user created event to Kafka asynchronously - after response is sent to client
-      this.publishUserEvent('created', result.userId, apiId)
-        .catch(error => LoggerUtil.error(
+      this.publishUserEvent("created", result.userId, apiId).catch((error) =>
+        LoggerUtil.error(
           `Failed to publish user created event to Kafka for ${userContext.username}`,
           `Error: ${error.message}`,
           apiId,
           userContext.username
-        ));
+        )
+      );
     } catch (e) {
-
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
         `Error: ${e.message}`,
@@ -2071,14 +2224,13 @@ export class UserService {
           );
         }
 
-
-
         if (roleExists && roleExists?.length === 0) {
-          errorCollector.addError(
-            `Role Id '${roleId}' does not exist.`
-          );
+          errorCollector.addError(`Role Id '${roleId}' does not exist.`);
         } else if (roleExists) {
-          if ((roleExists[0].tenantId || roleExists[0].tenantId !== null) && roleExists[0].tenantId !== tenantId) {
+          if (
+            (roleExists[0].tenantId || roleExists[0].tenantId !== null) &&
+            roleExists[0].tenantId !== tenantId
+          ) {
             errorCollector.addError(
               `Role Id '${roleId}' does not exist for this tenant '${tenantId}'.`
             );
@@ -2114,7 +2266,6 @@ export class UserService {
     return notExistCohort.length > 0 ? notExistCohort : [];
   }
 
-
   // Can be Implemented after we know what are the unique entities
   async checkUserinKeyCloakandDb(userDto) {
     const keycloakResponse = await getKeycloakAdminToken();
@@ -2148,15 +2299,15 @@ export class UserService {
     response?: Response
   ): Promise<User> {
     const user = new User();
-    user.userId = userCreateDto?.userId,
-      user.username = userCreateDto?.username,
-      user.firstName = userCreateDto?.firstName,
-      user.middleName = userCreateDto?.middleName,
-      user.lastName = userCreateDto?.lastName,
-      user.gender = userCreateDto?.gender,
-      user.email = userCreateDto?.email,
-      user.mobile = Number(userCreateDto?.mobile) || null,
-      user.createdBy = userCreateDto?.createdBy || userCreateDto?.createdBy;
+    (user.userId = userCreateDto?.userId),
+      (user.username = userCreateDto?.username),
+      (user.firstName = userCreateDto?.firstName),
+      (user.middleName = userCreateDto?.middleName),
+      (user.lastName = userCreateDto?.lastName),
+      (user.gender = userCreateDto?.gender),
+      (user.email = userCreateDto?.email),
+      (user.mobile = Number(userCreateDto?.mobile) || null),
+      (user.createdBy = userCreateDto?.createdBy || userCreateDto?.createdBy);
 
     if (userCreateDto?.dob) {
       user.dob = new Date(userCreateDto.dob);
@@ -2165,28 +2316,47 @@ export class UserService {
     const createdBy = request.user?.userId || result.userId;
 
     if (userCreateDto.tenantCohortRoleMapping) {
-      if (userCreateDto.automaticMember && userCreateDto?.automaticMember?.value === true) {
-        await this.automaticMemberMapping(userCreateDto.automaticMember, userCreateDto.customFields, userCreateDto.tenantCohortRoleMapping, result.userId, createdBy)
+      if (
+        userCreateDto.automaticMember &&
+        userCreateDto?.automaticMember?.value === true
+      ) {
+        await this.automaticMemberMapping(
+          userCreateDto.automaticMember,
+          userCreateDto.customFields,
+          userCreateDto.tenantCohortRoleMapping,
+          result.userId,
+          createdBy
+        );
       } else {
-        await this.tenantCohortRollMapping(userCreateDto.tenantCohortRoleMapping, academicYearId, result.userId, createdBy);
+        await this.tenantCohortRollMapping(
+          userCreateDto.tenantCohortRoleMapping,
+          academicYearId,
+          result.userId,
+          createdBy
+        );
       }
     }
     return result;
   }
 
-  async tenantCohortRollMapping(tenantCohortRoleMapping: tenantRoleMappingDto[], academicYearId: UUID, userId: UUID, createdBy: UUID): Promise<void> {
+  async tenantCohortRollMapping(
+    tenantCohortRoleMapping: tenantRoleMappingDto[],
+    academicYearId: UUID,
+    userId: UUID,
+    createdBy: UUID
+  ): Promise<void> {
     try {
       for (const mapData of tenantCohortRoleMapping) {
         if (mapData.cohortIds) {
           for (const cohortIds of mapData.cohortIds) {
-            let query = `SELECT * FROM public."CohortAcademicYear" WHERE "cohortId"= '${cohortIds}' AND "academicYearId" = '${academicYearId}'`;
+            const query = `SELECT * FROM public."CohortAcademicYear" WHERE "cohortId"= '${cohortIds}' AND "academicYearId" = '${academicYearId}'`;
 
-            let getCohortAcademicYearId = await this.usersRepository.query(
+            const getCohortAcademicYearId = await this.usersRepository.query(
               query
             );
 
             // will add data only if cohort is found with academic year
-            let cohortData = {
+            const cohortData = {
               userId: userId,
               cohortId: cohortIds,
               cohortAcademicYearId:
@@ -2212,9 +2382,13 @@ export class UserService {
     }
   }
 
-
-  async automaticMemberMapping(automaticMember: any, customFields: any, tenantCohortRoleMapping: tenantRoleMappingDto[], userId: UUID, createdBy: UUID): Promise<void> {
-
+  async automaticMemberMapping(
+    automaticMember: any,
+    customFields: any,
+    tenantCohortRoleMapping: tenantRoleMappingDto[],
+    userId: UUID,
+    createdBy: UUID
+  ): Promise<void> {
     try {
       // Tenant and role mapping
       for (const mapData of tenantCohortRoleMapping) {
@@ -2225,12 +2399,14 @@ export class UserService {
         await this.assignUserToTenantAndRoll(tenantRoleMappingData, createdBy);
       }
       let fieldValue;
-      let foundField = customFields.find(field => field.fieldId === automaticMember.fieldId);
+      const foundField = customFields.find(
+        (field) => field.fieldId === automaticMember.fieldId
+      );
       if (foundField) {
         fieldValue = foundField.value;
       }
 
-      let createAutomaticMember = {
+      const createAutomaticMember = {
         userId: userId,
         rules: {
           condition: {
@@ -2245,11 +2421,11 @@ export class UserService {
           // }
         },
         tenantId: tenantCohortRoleMapping[0].tenantId,
-        isActive: true
-      }
+        isActive: true,
+      };
 
       //Assgn member to sdb
-      await this.automaticMemberService.create(createAutomaticMember)
+      await this.automaticMemberService.create(createAutomaticMember);
     } catch (error) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
@@ -2259,10 +2435,9 @@ export class UserService {
     }
   }
 
-
   private async isRootTenant(tenantId: string): Promise<boolean> {
     const tenant = await this.tenantsRepository.findOne({
-      where: { tenantId }
+      where: { tenantId },
     });
     return tenant && tenant.parentId === null;
   }
@@ -2275,7 +2450,7 @@ export class UserService {
     shouldUpdateIfRoot: boolean
   ): Promise<void> {
     const existingMapping = await this.userRoleMappingRepository.findOne({
-      where: { userId }
+      where: { userId },
     });
 
     if (!shouldUpdateIfRoot || !existingMapping) {
@@ -2283,25 +2458,27 @@ export class UserService {
         userId,
         tenantId,
         roleId,
-        createdBy
+        createdBy,
       });
       return;
     }
 
     const isRoot = await this.isRootTenant(existingMapping.tenantId);
-    
+
     if (isRoot) {
       existingMapping.tenantId = tenantId;
       existingMapping.roleId = roleId;
       existingMapping.createdBy = createdBy;
       await this.userRoleMappingRepository.save(existingMapping);
-      LoggerUtil.log(`Updated role mapping for user ${userId} from root tenant to ${tenantId}`);
+      LoggerUtil.log(
+        `Updated role mapping for user ${userId} from root tenant to ${tenantId}`
+      );
     } else {
       await this.userRoleMappingRepository.save({
         userId,
         tenantId,
         roleId,
-        createdBy
+        createdBy,
       });
     }
   }
@@ -2314,7 +2491,7 @@ export class UserService {
     userTenantStatus?: string
   ): Promise<void> {
     const existingMapping = await this.userTenantMappingRepository.findOne({
-      where: { userId }
+      where: { userId },
     });
 
     if (!shouldUpdateIfRoot || !existingMapping) {
@@ -2322,25 +2499,32 @@ export class UserService {
         userId,
         tenantId,
         createdBy,
-        status: (userTenantStatus as UserTenantMappingStatus) || UserTenantMappingStatus.ACTIVE
+        status:
+          (userTenantStatus as UserTenantMappingStatus) ||
+          UserTenantMappingStatus.ACTIVE,
       });
       return;
     }
 
     const isRoot = await this.isRootTenant(existingMapping.tenantId);
-    
+
     if (isRoot) {
       existingMapping.tenantId = tenantId;
       existingMapping.createdBy = createdBy;
-      existingMapping.status = (userTenantStatus as UserTenantMappingStatus) || existingMapping.status;
+      existingMapping.status =
+        (userTenantStatus as UserTenantMappingStatus) || existingMapping.status;
       await this.userTenantMappingRepository.save(existingMapping);
-      LoggerUtil.log(`Updated tenant mapping for user ${userId} from root tenant to ${tenantId}`);
+      LoggerUtil.log(
+        `Updated tenant mapping for user ${userId} from root tenant to ${tenantId}`
+      );
     } else {
       await this.userTenantMappingRepository.save({
         userId,
         tenantId,
         createdBy,
-        status : (userTenantStatus as UserTenantMappingStatus) || existingMapping.status
+        status:
+          (userTenantStatus as UserTenantMappingStatus) ||
+          existingMapping.status,
       });
     }
   }
@@ -2351,15 +2535,27 @@ export class UserService {
         tenantId: tenantsData?.tenantRoleMapping?.tenantId,
         userId: tenantsData?.userId,
         roleId: tenantsData?.tenantRoleMapping?.roleId,
-        userTenantStatus: tenantsData?.userTenantStatus
+        userTenantStatus: tenantsData?.userTenantStatus,
       };
 
       if (roleId) {
-        await this.handleRoleMappingForUser(userId, tenantId, roleId, createdBy, userType);
+        await this.handleRoleMappingForUser(
+          userId,
+          tenantId,
+          roleId,
+          createdBy,
+          userType
+        );
       }
 
       if (tenantId) {
-        await this.handleTenantMappingForUser(userId, tenantId, createdBy, userType, userTenantStatus);
+        await this.handleTenantMappingForUser(
+          userId,
+          tenantId,
+          createdBy,
+          userType,
+          userTenantStatus
+        );
       }
 
       LoggerUtil.log(API_RESPONSES.USER_TENANT);
@@ -2545,7 +2741,7 @@ export class UserService {
             "{username}": userData?.name,
             "{programName}": userData?.tenantData?.[0]?.tenantName
               ? userData.tenantData[0].tenantName.charAt(0).toUpperCase() +
-              userData.tenantData[0].tenantName.slice(1)
+                userData.tenantData[0].tenantName.slice(1)
               : "",
           },
           email: {
@@ -2612,10 +2808,10 @@ export class UserService {
           getFieldDetails.type == "radio") &&
         getFieldDetails?.sourceDetails?.source == "table"
       ) {
-        let fieldValue = fieldsData["value"][0];
+        const fieldValue = fieldsData["value"][0];
         const getOption = await this.fieldsService.findDynamicOptions(
           getFieldDetails.sourceDetails.table,
-          `"${getFieldDetails?.sourceDetails?.table}_id"='${fieldValue}'`,
+          `"${getFieldDetails?.sourceDetails?.table}_id"='${fieldValue}'`
         );
         if (!getOption?.length) {
           return APIResponse.error(
@@ -2673,8 +2869,8 @@ export class UserService {
     const roleIds =
       userCreateDto && userCreateDto.tenantCohortRoleMapping
         ? userCreateDto.tenantCohortRoleMapping.map(
-          (userRole) => userRole.roleId
-        )
+            (userRole) => userRole.roleId
+          )
         : [];
 
     let contextType;
@@ -2704,7 +2900,11 @@ export class UserService {
       // Log the invalid field validation error with role context
       LoggerUtil.error(
         `Invalid custom fields provided for role`,
-        `Role: ${contextType || 'Unknown'}, Invalid Field IDs: ${invalidFieldIds.join(", ")}, User: ${userCreateDto.username || 'Unknown'}`,
+        `Role: ${
+          contextType || "Unknown"
+        }, Invalid Field IDs: ${invalidFieldIds.join(", ")}, User: ${
+          userCreateDto.username || "Unknown"
+        }`,
         apiId,
         userCreateDto.username
       );
@@ -2752,8 +2952,7 @@ export class UserService {
       });
 
       // Delete from UserTenantMapping table
-      const userTenantMappingResult =
-        await this.userTenantMappingRepository.delete({ userId: userId });
+      await this.userTenantMappingRepository.delete({ userId: userId });
 
       // Delete from UserRoleMapping table
       const userRoleMappingResult = await this.userRoleMappingRepository.delete(
@@ -2777,7 +2976,7 @@ export class UserService {
       // Prepare and format user data for Kafka event
       const kafkaUserData = {
         userId: userId,
-        deletedAt: new Date().toISOString()
+        deletedAt: new Date().toISOString(),
       };
 
       // Send response to the client
@@ -2790,12 +2989,13 @@ export class UserService {
       );
 
       // Produce user deleted event to Kafka asynchronously - after response is sent to client
-      this.publishUserEvent('deleted', userId, apiId)
-        .catch(error => LoggerUtil.error(
+      this.publishUserEvent("deleted", userId, apiId).catch((error) =>
+        LoggerUtil.error(
           `Failed to publish user deleted event to Kafka`,
           `Error: ${error.message}`,
           apiId
-        ));
+        )
+      );
       return apiResponse;
     } catch (e) {
       LoggerUtil.error(
@@ -2817,7 +3017,11 @@ export class UserService {
   }
 
   //Generate Has code as per username or mobile Number
-  private generateOtpHash(mobileOrUsername: string, otp: string, reason: string) {
+  private generateOtpHash(
+    mobileOrUsername: string,
+    otp: string,
+    reason: string
+  ) {
     const ttl = this.otpExpiry * 60 * 1000; // Expiration in milliseconds
     const expires = Date.now() + ttl;
     const expiresInMinutes = ttl / (60 * 1000);
@@ -2841,15 +3045,18 @@ export class UserService {
         );
       }
       // Step 1: Prepare data for OTP generation and send on Mobile
-      const { notificationPayload, hash, expires } = await this.sendOTPOnMobile(mobile, reason);
+      const { notificationPayload, hash, expires } = await this.sendOTPOnMobile(
+        mobile,
+        reason
+      );
       // Step 2: Send success response
       const result = {
         data: {
           message: `OTP sent to ${mobile}`,
           hash: `${hash}.${expires}`,
-          sendStatus: notificationPayload.result?.sms?.data[0]
+          sendStatus: notificationPayload.result?.sms?.data[0],
           // sid: message.sid, // Twilio Message SID
-        }
+        },
       };
       return await APIResponse.success(
         response,
@@ -2858,8 +3065,7 @@ export class UserService {
         HttpStatus.OK,
         API_RESPONSES.OTP_SEND_SUCCESSFULLY
       );
-    }
-    catch (e) {
+    } catch (e) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error: ${e.message}`,
@@ -2880,16 +3086,24 @@ export class UserService {
       // Step 1: Format mobile number and generate OTP
       const mobileWithCode = this.formatMobileNumber(mobile);
       const otp = this.authUtils.generateOtp(this.otpDigits).toString();
-      const { hash, expires, expiresInMinutes } = this.generateOtpHash(mobileWithCode, otp, reason);
+      const { hash, expires, expiresInMinutes } = this.generateOtpHash(
+        mobileWithCode,
+        otp,
+        reason
+      );
       const replacements = {
         "{OTP}": otp,
-        "{otpExpiry}": expiresInMinutes
+        "{otpExpiry}": expiresInMinutes,
       };
       // Step 2:send SMS notification
-      const notificationPayload = await this.smsNotification("OTP", "SEND_OTP", replacements, [mobile]);
+      const notificationPayload = await this.smsNotification(
+        "OTP",
+        "SEND_OTP",
+        replacements,
+        [mobile]
+      );
       return { notificationPayload, hash, expires, expiresInMinutes };
-    }
-    catch (error) {
+    } catch (error) {
       throw new Error(`Failed to send OTP: ${error.message}`);
     }
   }
@@ -2911,7 +3125,7 @@ export class UserService {
       }
 
       // Validate hash format
-      const [hashValue, expires] = hash.split('.');
+      const [hashValue, expires] = hash.split(".");
       if (!hashValue || !expires || isNaN(parseInt(expires))) {
         return APIResponse.error(
           response,
@@ -2937,7 +3151,7 @@ export class UserService {
       let resetToken: string | null = null;
 
       // Process based on reason
-      if (reason === 'signup') {
+      if (reason === "signup") {
         if (!mobile) {
           return APIResponse.error(
             response,
@@ -2948,8 +3162,7 @@ export class UserService {
           );
         }
         identifier = this.formatMobileNumber(mobile);
-      }
-      else if (reason === 'forgot') {
+      } else if (reason === "forgot") {
         if (!username) {
           return APIResponse.error(
             response,
@@ -2984,8 +3197,7 @@ export class UserService {
           this.jwt_password_reset_expires_In,
           this.jwt_secret
         );
-      }
-      else {
+      } else {
         return APIResponse.error(
           response,
           apiId,
@@ -3001,8 +3213,8 @@ export class UserService {
       if (calculatedHash === hashValue) {
         // For forgot password flow, include the reset token in response
         const responseData = { success: true };
-        if (reason === 'forgot' && resetToken) {
-          responseData['token'] = resetToken;
+        if (reason === "forgot" && resetToken) {
+          responseData["token"] = resetToken;
         }
 
         return APIResponse.success(
@@ -3038,9 +3250,13 @@ export class UserService {
     }
   }
 
-
   // send Mobile Notification
-  async smsNotification(context: string, key: string, replacements: object, receipients: string[]) {
+  async smsNotification(
+    context: string,
+    key: string,
+    replacements: object,
+    receipients: string[]
+  ) {
     try {
       //sms notification Body
       const notificationPayload = {
@@ -3057,26 +3273,35 @@ export class UserService {
         notificationPayload
       );
       // Check for errors in the response
-      if (mailSend?.result?.sms?.errors && mailSend.result.sms.errors.length > 0) {
-        const errorMessages = mailSend.result.sms.errors.map((error: { error: string; }) => error.error);
+      if (
+        mailSend?.result?.sms?.errors &&
+        mailSend.result.sms.errors.length > 0
+      ) {
+        const errorMessages = mailSend.result.sms.errors.map(
+          (error: { error: string }) => error.error
+        );
         const combinedErrorMessage = errorMessages.join(", "); // Combine all error messages into one string
         throw new Error(`${API_RESPONSES.SMS_ERROR} :${combinedErrorMessage}`);
       }
       return mailSend;
-    }
-    catch (error) {
+    } catch (error) {
       LoggerUtil.error(API_RESPONSES.SMS_ERROR, error.message);
-      throw new Error(`${API_RESPONSES.SMS_NOTIFICATION_ERROR}:  ${error.message}`);
+      throw new Error(
+        `${API_RESPONSES.SMS_NOTIFICATION_ERROR}:  ${error.message}`
+      );
     }
   }
 
   //send OTP on mobile and email for forgot password reset
-  async sendPasswordResetOTP(body: SendPasswordResetOTPDto, response: Response): Promise<any> {
+  async sendPasswordResetOTP(
+    body: SendPasswordResetOTPDto,
+    response: Response
+  ): Promise<any> {
     const apiId = APIID.SEND_RESET_OTP;
     try {
       const username = body.username;
-      let error = [];
-      let success = [];
+      const error = [];
+      const success = [];
       const userData: any = await this.findUserDetails(null, username);
       if (!userData) {
         return APIResponse.error(
@@ -3098,20 +3323,29 @@ export class UserService {
         );
       }
 
-      const programName = userData?.tenantData[0]?.tenantName ?? '';
+      const programName = userData?.tenantData[0]?.tenantName ?? "";
       const reason = "forgot";
       const otp = this.authUtils.generateOtp(this.otpDigits).toString();
-      const { hash, expires, expiresInMinutes } = this.generateOtpHash(username, otp, reason);
+      const { hash, expires, expiresInMinutes } = this.generateOtpHash(
+        username,
+        otp,
+        reason
+      );
       if (userData.mobile) {
         const replacements = {
           "{OTP}": otp,
-          "{otpExpiry}": expiresInMinutes
+          "{otpExpiry}": expiresInMinutes,
         };
         try {
-          await this.smsNotification("OTP", "Reset_OTP", replacements, [userData.mobile]);
-          success.push({ type: 'SMS', message: API_RESPONSES.MOBILE_SENT_OTP });
+          await this.smsNotification("OTP", "Reset_OTP", replacements, [
+            userData.mobile,
+          ]);
+          success.push({ type: "SMS", message: API_RESPONSES.MOBILE_SENT_OTP });
         } catch (e) {
-          error.push({ type: 'SMS', message: `${API_RESPONSES.MOBILE_OTP_SEND_FAILED} ${e.message}` })
+          error.push({
+            type: "SMS",
+            message: `${API_RESPONSES.MOBILE_OTP_SEND_FAILED} ${e.message}`,
+          });
         }
       }
 
@@ -3120,23 +3354,38 @@ export class UserService {
           "{OTP}": otp,
           "{otpExpiry}": expiresInMinutes,
           "{programName}": programName,
-          "{username}": username
+          "{username}": username,
         };
         try {
-          await this.sendEmailNotification("OTP", "Reset_OTP", replacements, [userData.email]);
-          success.push({ type: 'Email', message: API_RESPONSES.EMAIL_SENT_OTP })
+          await this.sendEmailNotification("OTP", "Reset_OTP", replacements, [
+            userData.email,
+          ]);
+          success.push({
+            type: "Email",
+            message: API_RESPONSES.EMAIL_SENT_OTP,
+          });
         } catch (e) {
-          error.push({ type: 'Email', message: `${API_RESPONSES.EMAIL_OTP_SEND_FAILED}: ${e.message}` })
+          error.push({
+            type: "Email",
+            message: `${API_RESPONSES.EMAIL_OTP_SEND_FAILED}: ${e.message}`,
+          });
         }
       }
-      // Error 
-      if (error.length === 2) { // if both SMS and Email notification fail to sent
-        let errorMessage = '';
-        if (error.some(e => e.type === 'SMS')) {
-          errorMessage += `SMS Error: ${error.filter(e => e.type === 'SMS').map(e => e.message).join(", ")}. `;
+      // Error
+      if (error.length === 2) {
+        // if both SMS and Email notification fail to sent
+        let errorMessage = "";
+        if (error.some((e) => e.type === "SMS")) {
+          errorMessage += `SMS Error: ${error
+            .filter((e) => e.type === "SMS")
+            .map((e) => e.message)
+            .join(", ")}. `;
         }
-        if (error.some(e => e.type === 'Email')) {
-          errorMessage += `Email Error: ${error.filter(e => e.type === 'Email').map(e => e.message).join(", ")}.`;
+        if (error.some((e) => e.type === "Email")) {
+          errorMessage += `Email Error: ${error
+            .filter((e) => e.type === "Email")
+            .map((e) => e.message)
+            .join(", ")}.`;
         }
 
         return APIResponse.error(
@@ -3150,8 +3399,8 @@ export class UserService {
       const result = {
         hash: `${hash}.${expires}`,
         success: success,
-        Error: error
-      }
+        Error: error,
+      };
       return await APIResponse.success(
         response,
         apiId,
@@ -3159,8 +3408,7 @@ export class UserService {
         HttpStatus.OK,
         API_RESPONSES.SEND_OTP
       );
-    }
-    catch (e) {
+    } catch (e) {
       return APIResponse.error(
         response,
         apiId,
@@ -3169,11 +3417,15 @@ export class UserService {
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
-
   }
 
   //send Email Notification
-  async sendEmailNotification(context: string, key: string, replacements: object, emailReceipt) {
+  async sendEmailNotification(
+    context: string,
+    key: string,
+    replacements: object,
+    emailReceipt
+  ) {
     try {
       //Send Notification
       const notificationPayload = {
@@ -3190,16 +3442,22 @@ export class UserService {
       const mailSend = await this.notificationRequest.sendNotification(
         notificationPayload
       );
-      if (mailSend?.result?.email?.errors && mailSend.result.email.errors.length > 0) {
-        const errorMessages = mailSend.result.email.errors.map((error: { error: string; }) => error.error);
+      if (
+        mailSend?.result?.email?.errors &&
+        mailSend.result.email.errors.length > 0
+      ) {
+        const errorMessages = mailSend.result.email.errors.map(
+          (error: { error: string }) => error.error
+        );
         const combinedErrorMessage = errorMessages.join(", "); // Combine all error messages into one string
         throw new Error(`error :${combinedErrorMessage}`);
       }
       return mailSend;
-    }
-    catch (e) {
+    } catch (e) {
       LoggerUtil.error(API_RESPONSES.EMAIL_ERROR, e.message);
-      throw new Error(`${API_RESPONSES.EMAIL_NOTIFICATION_ERROR}:  ${e.message}`);
+      throw new Error(
+        `${API_RESPONSES.EMAIL_NOTIFICATION_ERROR}:  ${e.message}`
+      );
     }
   }
 
@@ -3207,11 +3465,16 @@ export class UserService {
     try {
       // Step 1: Generate OTP and hash
       const otp = this.authUtils.generateOtp(this.otpDigits).toString();
-      const { hash, expires, expiresInMinutes } = this.generateOtpHash(email, otp, reason);
+      const { hash, expires, expiresInMinutes } = this.generateOtpHash(
+        email,
+        otp,
+        reason
+      );
 
       // Step 2: Get program name from user's tenant data
       const userData: any = await this.findUserDetails(null, username);
-      const programName = userData?.tenantData?.[0]?.tenantName ?? 'Shiksha Graha';
+      const programName =
+        userData?.tenantData?.[0]?.tenantName ?? "Shiksha Graha";
 
       // Step 3: Prepare email replacements
       const replacements = {
@@ -3220,25 +3483,25 @@ export class UserService {
         "{programName}": programName,
         "{username}": username,
         "{eventName}": "Shiksha Graha OTP",
-        "{action}": "register"
+        "{action}": "register",
       };
       // console.log("hii",replacements,email)
 
       // Step 4: Send email notification
-      const notificationPayload = await this.sendEmailNotification("OTP", "SendOtpOnMail", replacements, [email]);
+      const notificationPayload = await this.sendEmailNotification(
+        "OTP",
+        "SendOtpOnMail",
+        replacements,
+        [email]
+      );
 
       return { notificationPayload, hash, expires, expiresInMinutes };
-    }
-    catch (error) {
+    } catch (error) {
       throw new Error(`Failed to send OTP via email: ${error.message}`);
     }
   }
 
-  async checkUser(
-    request: any,
-    response: any,
-    filters: ExistUserDto
-  ) {
+  async checkUser(request: any, response: any, filters: ExistUserDto) {
     const apiId = APIID.USER_LIST;
     try {
       const whereClause: any = {};
@@ -3246,10 +3509,15 @@ export class UserService {
       if (filters && Object.keys(filters).length > 0) {
         Object.entries(filters).forEach(([key, value]) => {
           if (value !== undefined && value !== null) {
-            if (key === 'firstName' || key === 'name' || key === 'middleName' || key === 'lastName') {
+            if (
+              key === "firstName" ||
+              key === "name" ||
+              key === "middleName" ||
+              key === "lastName"
+            ) {
               const sanitizedValue = this.sanitizeInput(value);
               whereClause[key] = ILike(`%${sanitizedValue}%`);
-            } else if (key === 'username') {
+            } else if (key === "username") {
               const sanitizedValue = this.sanitizeInput(value);
               whereClause[key] = ILike(sanitizedValue);
             } else {
@@ -3261,7 +3529,14 @@ export class UserService {
       // Use the dynamic where clause to fetch matching data
       const findData = await this.usersRepository.find({
         where: whereClause,
-        select: ['username', 'firstName', 'name', 'middleName', 'lastName', 'mobile'], // Select only these fields
+        select: [
+          "username",
+          "firstName",
+          "name",
+          "middleName",
+          "lastName",
+          "mobile",
+        ], // Select only these fields
       });
 
       if (findData.length === 0) {
@@ -3299,16 +3574,19 @@ export class UserService {
     }
   }
   sanitizeInput(value) {
-    if (typeof value === 'string') {
+    if (typeof value === "string") {
       // Escape special characters for SQL
-      return value.replace(/[%_\\]/g, '\\$&');
+      return value.replace(/[%_\\]/g, "\\$&");
     }
     // For other types, return the value as is or implement specific sanitization logic
     return value;
   }
 
-
-  async suggestUsername(request: Request, response: Response, suggestUserDto: SuggestUserDto) {
+  async suggestUsername(
+    request: Request,
+    response: Response,
+    suggestUserDto: SuggestUserDto
+  ) {
     const apiId = APIID.USER_LIST;
     try {
       // Fetch user data from the database to check if the username already exists
@@ -3317,7 +3595,7 @@ export class UserService {
       });
 
       if (findData) {
-        // Define a function to generate a username  
+        // Define a function to generate a username
         const generateUsername = (): string => {
           const randomNum = randomInt(100, 1000); // Secure random 3-digit number
           return `${suggestUserDto.firstName}${suggestUserDto.lastName}${randomNum}`;
@@ -3358,7 +3636,6 @@ export class UserService {
         API_RESPONSES.NOT_FOUND,
         HttpStatus.NOT_FOUND
       );
-
     } catch (error) {
       // Handle errors gracefully
       const errorMessage = error.message || API_RESPONSES.SERVER_ERROR;
@@ -3379,7 +3656,7 @@ export class UserService {
    * @param apiId API ID for logging
    */
   public async publishUserEvent(
-    eventType: 'created' | 'updated' | 'deleted' | 'login',
+    eventType: "created" | "updated" | "deleted" | "login",
     userId: string,
     apiId: string
   ): Promise<void> {
@@ -3387,21 +3664,23 @@ export class UserService {
       // For delete events, we may want to include just basic information since the user might already be removed
       let userData: any;
 
-      if (eventType === 'deleted') {
+      if (eventType === "deleted") {
         userData = {
           userId: userId,
-          deletedAt: new Date().toISOString()
+          deletedAt: new Date().toISOString(),
         };
-      } else if (eventType === 'login') {
+      } else if (eventType === "login") {
         // For login events, only send lastLogin timestamp (lightweight)
         const user = await this.usersRepository.findOne({
           where: { userId: userId },
-          select: ['userId', 'lastLogin']
+          select: ["userId", "lastLogin"],
         });
 
         userData = {
           userId: userId,
-          lastLogin: user?.lastLogin ? user.lastLogin.toISOString() : new Date().toISOString()
+          lastLogin: user?.lastLogin
+            ? user.lastLogin.toISOString()
+            : new Date().toISOString(),
         };
       } else {
         // For create and update, fetch complete data from DB
@@ -3423,20 +3702,25 @@ export class UserService {
               "createdAt",
               "updatedAt",
               "status",
-              "enrollmentId"
-            ]
+              "enrollmentId",
+            ],
           });
 
           if (!user) {
-            LoggerUtil.error(`Failed to fetch user data for Kafka event`, `User with ID ${userId} not found`);
+            LoggerUtil.error(
+              `Failed to fetch user data for Kafka event`,
+              `User with ID ${userId} not found`
+            );
             userData = { userId };
           } else {
             // Get tenant and role information
             const tenantRoleData = await this.userTenantRoleData(userId);
 
             // Get custom fields if any
-            const customFields = await this.fieldsService.getCustomFieldDetails(userId, 'Users');
-
+            const customFields = await this.fieldsService.getCustomFieldDetails(
+              userId,
+              "Users"
+            );
 
             // Get cohort information for the user
             let cohorts = [];
@@ -3470,9 +3754,12 @@ export class UserService {
                 LEFT JOIN public."AcademicYears" ay ON cay."academicYearId" = ay."id"
               `;
 
-              const cohortResults = await this.usersRepository.query(cohortQuery, [userId]);
+              const cohortResults = await this.usersRepository.query(
+                cohortQuery,
+                [userId]
+              );
               if (cohortResults && cohortResults.length > 0) {
-                cohorts = cohortResults.map(result => ({
+                cohorts = cohortResults.map((result) => ({
                   // Batch details
                   batchId: result.batchId,
                   batchName: result.batchName,
@@ -3489,7 +3776,7 @@ export class UserService {
 
                   // Academic Year details
                   academicYearId: result.academicYearId,
-                  academicYearSession: result.academicYearSession
+                  academicYearSession: result.academicYearSession,
                 }));
               }
             } catch (cohortError) {
@@ -3508,7 +3795,7 @@ export class UserService {
               tenantData: tenantRoleData,
               customFields: customFields || [],
               cohorts: cohorts,
-              eventTimestamp: new Date().toISOString()
+              eventTimestamp: new Date().toISOString(),
             };
           }
         } catch (error) {
@@ -3521,7 +3808,10 @@ export class UserService {
         }
       }
       await this.kafkaService.publishUserEvent(eventType, userData, userId);
-      LoggerUtil.log(`User ${eventType} event published to Kafka for user ${userId}`, apiId);
+      LoggerUtil.log(
+        `User ${eventType} event published to Kafka for user ${userId}`,
+        apiId
+      );
     } catch (error) {
       LoggerUtil.error(
         `Failed to publish user ${eventType} event to Kafka`,
@@ -3544,7 +3834,14 @@ export class UserService {
     const apiId = APIID.USER_LIST;
 
     try {
-      const { limit, offset, sort: [sortField, sortDirection], role, filters, customfields } = hierarchicalFiltersDto;
+      const {
+        limit,
+        offset,
+        sort: [sortField, sortDirection],
+        role,
+        filters,
+        customfields,
+      } = hierarchicalFiltersDto;
 
       // Extract filter parameters
       const filterResult = this.findDeepestFilter(filters);
@@ -3552,14 +3849,20 @@ export class UserService {
       const statusFilter = filters?.status;
 
       // Filter out center and batch from customfields request (they belong in cohortData)
-      const filteredCustomFields = customfields ? customfields.filter(field =>
-        !this.isExcludedFromCustomFields(field)
-      ) : undefined;
-      if (customfields && customfields.length !== (filteredCustomFields?.length || 0)) {
-        const excludedFields = this.getCohortFilterLevels().join('/');
+      const filteredCustomFields = customfields
+        ? customfields.filter(
+            (field) => !this.isExcludedFromCustomFields(field)
+          )
+        : undefined;
+      if (
+        customfields &&
+        customfields.length !== (filteredCustomFields?.length || 0)
+      ) {
+        const excludedFields = this.getCohortFilterLevels().join("/");
       }
 
-      const normalizedSortDirection = sortDirection.toLowerCase() === 'desc' ? 'DESC' : 'ASC';
+      const normalizedSortDirection =
+        sortDirection.toLowerCase() === "desc" ? "DESC" : "ASC";
       const userData = await this.getOptimizedFilteredUsers(
         tenantId,
         limit,
@@ -3576,31 +3879,50 @@ export class UserService {
       // Return early if no users found
       if (userData.totalCount === 0) {
         const noUsersMessage = this.getNoUsersFoundMessage(filters, role || []);
-        return APIResponse.success(response, apiId, {
-          users: [],
-          totalCount: 0,
-          currentPageCount: 0,
-          limit,
-          offset,
-          sort: { field: sortField, direction: sortDirection.toLowerCase() }
-        }, HttpStatus.OK, noUsersMessage);
+        return APIResponse.success(
+          response,
+          apiId,
+          {
+            users: [],
+            totalCount: 0,
+            currentPageCount: 0,
+            limit,
+            offset,
+            sort: { field: sortField, direction: sortDirection.toLowerCase() },
+          },
+          HttpStatus.OK,
+          noUsersMessage
+        );
       }
 
-
       // Return successful response
-      return APIResponse.success(response, apiId, {
-        users: userData.users,
-        totalCount: userData.totalCount,
-        currentPageCount: userData.users.length,
-        limit,
-        offset,
-        sort: { field: sortField, direction: sortDirection.toLowerCase() }
-      }, HttpStatus.OK, "Users retrieved successfully");
-
+      return APIResponse.success(
+        response,
+        apiId,
+        {
+          users: userData.users,
+          totalCount: userData.totalCount,
+          currentPageCount: userData.users.length,
+          limit,
+          offset,
+          sort: { field: sortField, direction: sortDirection.toLowerCase() },
+        },
+        HttpStatus.OK,
+        "Users retrieved successfully"
+      );
     } catch (error) {
-      LoggerUtil.error(`Error in getUsersByHierarchicalLocation: ${error.message}`, error.stack, apiId);
-      return APIResponse.error(response, apiId, "Failed to retrieve users",
-        `Error processing hierarchical filters: ${error.message}`, HttpStatus.INTERNAL_SERVER_ERROR);
+      LoggerUtil.error(
+        `Error in getUsersByHierarchicalLocation: ${error.message}`,
+        error.stack,
+        apiId
+      );
+      return APIResponse.error(
+        response,
+        apiId,
+        "Failed to retrieve users",
+        `Error processing hierarchical filters: ${error.message}`,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
     }
   }
 
@@ -3609,14 +3931,20 @@ export class UserService {
    * @deprecated This function is deprecated and should not be used for new implementations.
    * Use getOptimizedFilteredUsers() instead for better performance with database-level filtering.
    */
-  private async getLocationFilteredUsers(filterResult: { level: string; ids: string[] }, tenantId: string): Promise<string[]> {
+  private async getLocationFilteredUsers(
+    filterResult: { level: string; ids: string[] },
+    tenantId: string
+  ): Promise<string[]> {
     const apiId = APIID.USER_LIST;
     const { level, ids } = filterResult;
 
     try {
       // Handle batch filtering through direct cohort membership
       if (this.isBatchFilter(level)) {
-        const result = await this.usersRepository.query(this.SQL_QUERIES.BATCH_USERS, [ids]);
+        const result = await this.usersRepository.query(
+          this.SQL_QUERIES.BATCH_USERS,
+          [ids]
+        );
         const userIds: string[] = result.map((row: any) => String(row.userId));
         LoggerUtil.log(`Batch filter returned ${userIds.length} users`, apiId);
         return userIds;
@@ -3627,18 +3955,24 @@ export class UserService {
       }
 
       // Handle other location fields (state, district, block, village) through custom fields
-      const fieldResult = await this.usersRepository.query(this.SQL_QUERIES.FIELD_BY_NAME, [level]);
+      const fieldResult = await this.usersRepository.query(
+        this.SQL_QUERIES.FIELD_BY_NAME,
+        [level]
+      );
       if (fieldResult.length === 0) {
         throw new Error(`Configuration error: Field '${level}' not found`);
       }
 
       const fieldId = fieldResult[0].fieldId;
-      const result = await this.usersRepository.query(this.SQL_QUERIES.USERS_BY_FIELD_VALUES, [fieldId, ids, tenantId]);
+      const result = await this.usersRepository.query(
+        this.SQL_QUERIES.USERS_BY_FIELD_VALUES,
+        [fieldId, ids, tenantId]
+      );
 
       const userIds: string[] = result.map((row: any) => String(row.itemId));
 
       // Debug: Check which centers these state users belong to
-      if (level === 'state') {
+      if (level === "state") {
         const centerCheckQuery = `
           SELECT DISTINCT 
             u."userId",
@@ -3652,18 +3986,26 @@ export class UserService {
           ORDER BY center."name"
         `;
 
-        const centerCheck = await this.usersRepository.query(centerCheckQuery, [userIds]);
+        const centerCheck = await this.usersRepository.query(centerCheckQuery, [
+          userIds,
+        ]);
 
         const centerCounts = {};
-        centerCheck.forEach(row => {
-          const centerKey = `${row.centerId || 'null'} (${row.centerName || 'No Center'})`;
+        centerCheck.forEach((row) => {
+          const centerKey = `${row.centerId || "null"} (${
+            row.centerName || "No Center"
+          })`;
           centerCounts[centerKey] = (centerCounts[centerKey] || 0) + 1;
         });
       }
 
       return userIds;
     } catch (error) {
-      LoggerUtil.error(`Error in location filter '${level}': ${error.message}`, error.stack, apiId);
+      LoggerUtil.error(
+        `Error in location filter '${level}': ${error.message}`,
+        error.stack,
+        apiId
+      );
       throw new Error(`Failed to filter users by ${level}: ${error.message}`);
     }
   }
@@ -3672,11 +4014,19 @@ export class UserService {
    * Get user IDs by center through cohort relationships
    * Flow: Center IDs → Cohort table (parentId) → CohortMembers table → User IDs
    */
-  private async getUserIdsByCenter(centerIds: string[], tenantId: string): Promise<string[]> {
+  private async getUserIdsByCenter(
+    centerIds: string[],
+    tenantId: string
+  ): Promise<string[]> {
     const apiId = APIID.USER_LIST;
 
     try {
-      LoggerUtil.log(`Filtering by center through cohort relationships: ${centerIds.length} centers: [${centerIds.join(', ')}]`, apiId);
+      LoggerUtil.log(
+        `Filtering by center through cohort relationships: ${
+          centerIds.length
+        } centers: [${centerIds.join(", ")}]`,
+        apiId
+      );
 
       // Step 1: Get all cohort IDs where parentId matches the center IDs
       // Using string comparison to avoid type casting issues
@@ -3686,13 +4036,23 @@ export class UserService {
         WHERE "parentId"::text = ANY($1::text[])
       `;
 
-      const cohortResult = await this.usersRepository.query(cohortQuery, [centerIds]);
+      const cohortResult = await this.usersRepository.query(cohortQuery, [
+        centerIds,
+      ]);
       const cohortIds = cohortResult.map((row: any) => String(row.cohortId));
 
-      LoggerUtil.log(`Found ${cohortIds.length} cohorts under ${centerIds.length} centers: [${cohortIds.join(', ')}]`, apiId);
+      LoggerUtil.log(
+        `Found ${cohortIds.length} cohorts under ${
+          centerIds.length
+        } centers: [${cohortIds.join(", ")}]`,
+        apiId
+      );
 
       if (cohortIds.length === 0) {
-        LoggerUtil.warn(`No cohorts found for center IDs: ${centerIds.join(', ')}`, apiId);
+        LoggerUtil.warn(
+          `No cohorts found for center IDs: ${centerIds.join(", ")}`,
+          apiId
+        );
         return [];
       }
 
@@ -3709,10 +4069,15 @@ export class UserService {
         WHERE cm."cohortId"::text = ANY($1::text[])
       `;
 
-      const debugResult = await this.usersRepository.query(debugQuery, [cohortIds]);
+      const debugResult = await this.usersRepository.query(debugQuery, [
+        cohortIds,
+      ]);
       const stats = debugResult[0];
 
-      LoggerUtil.log(`Debug breakdown - Total: ${stats.total_memberships}, Active: ${stats.active_memberships}, Inactive: ${stats.inactive_memberships}, Archived users: ${stats.archived_users_memberships}, Unique all users: ${stats.unique_all_users}`, apiId);
+      LoggerUtil.log(
+        `Debug breakdown - Total: ${stats.total_memberships}, Active: ${stats.active_memberships}, Inactive: ${stats.inactive_memberships}, Archived users: ${stats.archived_users_memberships}, Unique all users: ${stats.unique_all_users}`,
+        apiId
+      );
 
       // Step 2: Get all user IDs from CohortMembers for those cohort IDs (no status filtering)
       const userQuery = `
@@ -3722,15 +4087,28 @@ export class UserService {
         WHERE cm."cohortId"::text = ANY($1::text[])
       `;
 
-      const userResult = await this.usersRepository.query(userQuery, [cohortIds]);
-      const userIds: string[] = userResult.map((row: any) => String(row.userId));
+      const userResult = await this.usersRepository.query(userQuery, [
+        cohortIds,
+      ]);
+      const userIds: string[] = userResult.map((row: any) =>
+        String(row.userId)
+      );
 
-      LoggerUtil.log(`Center filter final result: ${userIds.length} unique users (all statuses) from ${cohortIds.length} cohorts`, apiId);
-      LoggerUtil.log(`Next: These ${userIds.length} users will be filtered by tenant (${tenantId}) only - no status filtering`, apiId);
+      LoggerUtil.log(
+        `Center filter final result: ${userIds.length} unique users (all statuses) from ${cohortIds.length} cohorts`,
+        apiId
+      );
+      LoggerUtil.log(
+        `Next: These ${userIds.length} users will be filtered by tenant (${tenantId}) only - no status filtering`,
+        apiId
+      );
       return userIds;
-
     } catch (error) {
-      LoggerUtil.error(`Error in center filter: ${error.message}`, error.stack, apiId);
+      LoggerUtil.error(
+        `Error in center filter: ${error.message}`,
+        error.stack,
+        apiId
+      );
       throw new Error(`Failed to filter users by center: ${error.message}`);
     }
   }
@@ -3740,15 +4118,25 @@ export class UserService {
    * @deprecated This function is deprecated and should not be used for new implementations.
    * Use getOptimizedFilteredUsers() instead for better performance with database-level filtering.
    */
-  private async getRoleFilteredUsers(roles: string[], tenantId: string): Promise<string[]> {
+  private async getRoleFilteredUsers(
+    roles: string[],
+    tenantId: string
+  ): Promise<string[]> {
     const apiId = APIID.USER_LIST;
 
     try {
-      const result = await this.usersRepository.query(this.SQL_QUERIES.USERS_BY_ROLES, [roles, tenantId]);
+      const result = await this.usersRepository.query(
+        this.SQL_QUERIES.USERS_BY_ROLES,
+        [roles, tenantId]
+      );
       const userIds: string[] = result.map((row: any) => String(row.userId));
       return userIds;
     } catch (error) {
-      LoggerUtil.error(`Error in role filter: ${error.message}`, error.stack, apiId);
+      LoggerUtil.error(
+        `Error in role filter: ${error.message}`,
+        error.stack,
+        apiId
+      );
       throw new Error(`Failed to filter users by roles: ${error.message}`);
     }
   }
@@ -3758,15 +4146,20 @@ export class UserService {
    * @deprecated This function is deprecated and should not be used for new implementations.
    * Use getOptimizedFilteredUsers() instead for better performance with database-level filtering.
    */
-  private combineFilterResults(locationUserIds: string[], roleUserIds: string[]): string[] {
+  private combineFilterResults(
+    locationUserIds: string[],
+    roleUserIds: string[]
+  ): string[] {
     if (locationUserIds.length === 0 && roleUserIds.length === 0) {
-      throw new Error('No valid filters provided. Please provide at least one location or role filter');
+      throw new Error(
+        "No valid filters provided. Please provide at least one location or role filter"
+      );
     }
 
     if (locationUserIds.length > 0 && roleUserIds.length > 0) {
       // Use Set intersection for O(n) performance
       const roleUserIdsSet = new Set(roleUserIds);
-      return locationUserIds.filter(id => roleUserIdsSet.has(id));
+      return locationUserIds.filter((id) => roleUserIdsSet.has(id));
     }
 
     return locationUserIds.length > 0 ? locationUserIds : roleUserIds;
@@ -3775,18 +4168,32 @@ export class UserService {
   /**
    * Create empty response when no users found
    */
-  private createEmptyResponse(response: Response, apiId: string, filters: any, roles: string[], limit: number, offset: number, sortField: string, sortDirection: string) {
+  private createEmptyResponse(
+    response: Response,
+    apiId: string,
+    filters: any,
+    roles: string[],
+    limit: number,
+    offset: number,
+    sortField: string,
+    sortDirection: string
+  ) {
     const noUsersMessage = this.getNoUsersFoundMessage(filters, roles);
-    return APIResponse.success(response, apiId, {
-      users: [],
-      totalCount: 0,
-      currentPageCount: 0,
-      limit,
-      offset,
-      sort: { field: sortField, direction: sortDirection.toLowerCase() }
-    }, HttpStatus.OK, noUsersMessage);
+    return APIResponse.success(
+      response,
+      apiId,
+      {
+        users: [],
+        totalCount: 0,
+        currentPageCount: 0,
+        limit,
+        offset,
+        sort: { field: sortField, direction: sortDirection.toLowerCase() },
+      },
+      HttpStatus.OK,
+      noUsersMessage
+    );
   }
-
 
   /**
    * Generate contextual message when no users are found
@@ -3795,12 +4202,21 @@ export class UserService {
     const appliedFilters: string[] = [];
 
     if (filters) {
-      Object.keys(filters).forEach(key => {
+      Object.keys(filters).forEach((key) => {
         const value = filters[key];
-        if (key === 'name' && value && typeof value === 'string' && value.trim()) {
+        if (
+          key === "name" &&
+          value &&
+          typeof value === "string" &&
+          value.trim()
+        ) {
           appliedFilters.push(`name: "${value.trim()}"`);
-        } else if (key === 'status' && Array.isArray(value) && value.length > 0) {
-          appliedFilters.push(`status: [${value.join(', ')}]`);
+        } else if (
+          key === "status" &&
+          Array.isArray(value) &&
+          value.length > 0
+        ) {
+          appliedFilters.push(`status: [${value.join(", ")}]`);
         } else if (Array.isArray(value) && value.length > 0) {
           appliedFilters.push(`${key}: ${value.length} value(s)`);
         }
@@ -3808,24 +4224,26 @@ export class UserService {
     }
 
     if (roles && roles.length > 0) {
-      appliedFilters.push(`roles: ${roles.join(', ')}`);
+      appliedFilters.push(`roles: ${roles.join(", ")}`);
     }
 
     return appliedFilters.length > 0
-      ? `No users found matching the applied filters: ${appliedFilters.join(', ')}`
-      : 'No users found matching the given criteria';
+      ? `No users found matching the applied filters: ${appliedFilters.join(
+          ", "
+        )}`
+      : "No users found matching the given criteria";
   }
 
   /**
    * Constants for hierarchical filter levels - organized by specificity (most to least)
    */
   private readonly HIERARCHICAL_FILTER_LEVELS = {
-    BATCH: 'batch',      // Most specific - educational cohort membership
-    CENTER: 'center',    // Learning center level
-    VILLAGE: 'village',  // Village administrative level
-    BLOCK: 'block',      // Block administrative level  
-    DISTRICT: 'district', // District administrative level
-    STATE: 'state'       // State administrative level (least specific)
+    BATCH: "batch", // Most specific - educational cohort membership
+    CENTER: "center", // Learning center level
+    VILLAGE: "village", // Village administrative level
+    BLOCK: "block", // Block administrative level
+    DISTRICT: "district", // District administrative level
+    STATE: "state", // State administrative level (least specific)
   } as const;
 
   /**
@@ -3837,7 +4255,7 @@ export class UserService {
     this.HIERARCHICAL_FILTER_LEVELS.VILLAGE,
     this.HIERARCHICAL_FILTER_LEVELS.BLOCK,
     this.HIERARCHICAL_FILTER_LEVELS.DISTRICT,
-    this.HIERARCHICAL_FILTER_LEVELS.STATE
+    this.HIERARCHICAL_FILTER_LEVELS.STATE,
   ] as const;
 
   /**
@@ -3858,21 +4276,30 @@ export class UserService {
    * Helper method to check if a field should be excluded from customfields (batch/center)
    */
   private isExcludedFromCustomFields(fieldName: string): boolean {
-    return [this.HIERARCHICAL_FILTER_LEVELS.BATCH as string, this.HIERARCHICAL_FILTER_LEVELS.CENTER as string].includes(fieldName);
+    return [
+      this.HIERARCHICAL_FILTER_LEVELS.BATCH as string,
+      this.HIERARCHICAL_FILTER_LEVELS.CENTER as string,
+    ].includes(fieldName);
   }
 
   /**
    * Helper method to get cohort-related filter levels
    */
   private getCohortFilterLevels(): string[] {
-    return [this.HIERARCHICAL_FILTER_LEVELS.BATCH as string, this.HIERARCHICAL_FILTER_LEVELS.CENTER as string];
+    return [
+      this.HIERARCHICAL_FILTER_LEVELS.BATCH as string,
+      this.HIERARCHICAL_FILTER_LEVELS.CENTER as string,
+    ];
   }
 
   /**
    * Find the most specific (deepest) filter provided in the hierarchy
    */
-  private findDeepestFilter(filters: Record<string, any>): { level: string | null, ids: string[] } {
-    if (!filters || typeof filters !== 'object') {
+  private findDeepestFilter(filters: Record<string, any>): {
+    level: string | null;
+    ids: string[];
+  } {
+    if (!filters || typeof filters !== "object") {
       return { level: null, ids: [] };
     }
 
@@ -3881,7 +4308,9 @@ export class UserService {
       const filterIds = filters[level];
       if (filterIds && Array.isArray(filterIds) && filterIds.length > 0) {
         // Filter out empty strings and null values
-        const validIds = filterIds.filter(id => id && typeof id === 'string' && id.trim().length > 0);
+        const validIds = filterIds.filter(
+          (id) => id && typeof id === "string" && id.trim().length > 0
+        );
         if (validIds.length > 0) {
           return { level, ids: validIds };
         }
@@ -3925,7 +4354,7 @@ export class UserService {
       JOIN "Users" u ON urm."userId" = u."userId"
       WHERE r."name" = ANY($1) 
         AND urm."tenantId" = $2
-    `
+    `,
   } as const;
 
   /**
@@ -3960,14 +4389,26 @@ export class UserService {
         offset
       );
 
-      const result = await this.usersRepository.query(queryBuilder.query, queryBuilder.params);
-      const totalCount = result.length > 0 ? parseInt(result[0].total_count) : 0;
+      const result = await this.usersRepository.query(
+        queryBuilder.query,
+        queryBuilder.params
+      );
+      const totalCount =
+        result.length > 0 ? parseInt(result[0].total_count) : 0;
 
       // Get custom fields data if requested
       let customFieldsData = {};
-      if (customFieldNames && customFieldNames.length > 0 && result.length > 0) {
+      if (
+        customFieldNames &&
+        customFieldNames.length > 0 &&
+        result.length > 0
+      ) {
         const userIds = result.map((row: any) => row.userId);
-        customFieldsData = await this.getCustomFieldsData(userIds, customFieldNames, tenantId);
+        customFieldsData = await this.getCustomFieldsData(
+          userIds,
+          customFieldNames,
+          tenantId
+        );
       }
 
       // Get batch and center data
@@ -3986,18 +4427,19 @@ export class UserService {
 
       return {
         totalCount,
-        users: processedUsers
+        users: processedUsers,
       };
-
     } catch (error) {
-      LoggerUtil.error(`Error in optimized filtered users query: ${error.message}`, error.stack, apiId);
-      throw new Error(`Failed to get optimized filtered users: ${error.message}`);
+      LoggerUtil.error(
+        `Error in optimized filtered users query: ${error.message}`,
+        error.stack,
+        apiId
+      );
+      throw new Error(
+        `Failed to get optimized filtered users: ${error.message}`
+      );
     }
   }
-
-
-
-
 
   /**
    * Build optimized user query with conditional filters and pagination
@@ -4008,12 +4450,11 @@ export class UserService {
     roleFilter?: string[],
     nameFilter?: string,
     statusFilter?: string[],
-    sortField: string = 'name',
-    sortDirection: string = 'ASC',
-    limit: number = 10,
-    offset: number = 0
+    sortField = "name",
+    sortDirection = "ASC",
+    limit = 10,
+    offset = 0
   ): { query: string; params: any[] } {
-
     const conditions: string[] = [];
     const params: any[] = [];
     let paramIndex = 1;
@@ -4034,7 +4475,11 @@ export class UserService {
     paramIndex++;
 
     // Add location filter if provided
-    if (locationFilter && locationFilter.level && locationFilter.ids.length > 0) {
+    if (
+      locationFilter &&
+      locationFilter.level &&
+      locationFilter.ids.length > 0
+    ) {
       if (this.isBatchFilter(locationFilter.level)) {
         // Batch filtering through cohort membership
         baseQuery += `
@@ -4089,7 +4534,7 @@ export class UserService {
     }
 
     // Add name filter if provided
-    if (nameFilter && nameFilter.trim()) {
+    if (nameFilter?.trim()) {
       conditions.push(`u."name" ILIKE $${paramIndex}`);
       params.push(`%${nameFilter.trim()}%`);
       paramIndex++;
@@ -4104,7 +4549,7 @@ export class UserService {
 
     // Complete the base query
     baseQuery += `
-        WHERE ${conditions.join(' AND ')}
+        WHERE ${conditions.join(" AND ")}
       ),
       paginated_users AS (
         SELECT *, (SELECT COUNT(*) FROM filtered_users) as total_count
@@ -4155,7 +4600,7 @@ export class UserService {
           tenantId: row.tenantId,
           roles: [],
           customfield: customFieldsData[userId] || [],
-          cohortData: batchCenterData[userId] || []
+          cohortData: batchCenterData[userId] || [],
         });
       }
 
@@ -4191,35 +4636,55 @@ export class UserService {
       }
 
       // Optimize queries by combining count and details in a single query
-      const [combinedUserData, customFieldsData, batchCenterData] = await Promise.allSettled([
-        // Step 1: Get user details with total count in single query (optimized)
-        this.getUserDetailsWithCount(userIds, tenantId, limit, offset, sortField, sortDirection, nameFilter, statusFilter),
+      const [combinedUserData, customFieldsData, batchCenterData] =
+        await Promise.allSettled([
+          // Step 1: Get user details with total count in single query (optimized)
+          this.getUserDetailsWithCount(
+            userIds,
+            tenantId,
+            limit,
+            offset,
+            sortField,
+            sortDirection,
+            nameFilter,
+            statusFilter
+          ),
 
-        // Step 2: Get custom fields data (if requested)
-        customFieldNames && customFieldNames.length > 0
-          ? this.getCustomFieldsData(userIds, customFieldNames, tenantId)
-          : Promise.resolve({}),
+          // Step 2: Get custom fields data (if requested)
+          customFieldNames && customFieldNames.length > 0
+            ? this.getCustomFieldsData(userIds, customFieldNames, tenantId)
+            : Promise.resolve({}),
 
-        // Step 3: Get all cohort associations (batch and center data)
-        this.getBatchAndCenterNames(userIds)
-      ]);
+          // Step 3: Get all cohort associations (batch and center data)
+          this.getBatchAndCenterNames(userIds),
+        ]);
 
       // Handle any failed promises
-      if (combinedUserData.status === 'rejected') {
-        throw new Error(`Failed to get user data: ${combinedUserData.reason?.message || 'Unknown error'}`);
+      if (combinedUserData.status === "rejected") {
+        throw new Error(
+          `Failed to get user data: ${
+            combinedUserData.reason?.message || "Unknown error"
+          }`
+        );
       }
 
       // Custom fields and batch center data are optional - log warnings if they fail
       let finalCustomFieldsData = {};
-      if (customFieldsData.status === 'rejected') {
-        LoggerUtil.warn(`Failed to fetch custom fields data: ${customFieldsData.reason?.message}`, apiId);
+      if (customFieldsData.status === "rejected") {
+        LoggerUtil.warn(
+          `Failed to fetch custom fields data: ${customFieldsData.reason?.message}`,
+          apiId
+        );
       } else {
         finalCustomFieldsData = customFieldsData.value;
       }
 
       let finalCohortData = {};
-      if (batchCenterData.status === 'rejected') {
-        LoggerUtil.warn(`Failed to fetch cohort data: ${batchCenterData.reason?.message}`, apiId);
+      if (batchCenterData.status === "rejected") {
+        LoggerUtil.warn(
+          `Failed to fetch cohort data: ${batchCenterData.reason?.message}`,
+          apiId
+        );
       } else {
         finalCohortData = batchCenterData.value;
       }
@@ -4235,7 +4700,11 @@ export class UserService {
 
       return { totalCount, users: finalUsers };
     } catch (error) {
-      LoggerUtil.error(`Error in getPaginatedUsers: ${error.message}`, error.stack, apiId);
+      LoggerUtil.error(
+        `Error in getPaginatedUsers: ${error.message}`,
+        error.stack,
+        apiId
+      );
       throw error;
     }
   }
@@ -4246,18 +4715,23 @@ export class UserService {
   /**
    * Get all cohort associations for users with complete details for cohortData structure
    */
-  private async getBatchAndCenterNames(userIds: string[]): Promise<Record<string, Array<{
-    centerId: string | null;
-    centerName: string | null;
-    centerStatus: string | null;
-    batchId: string;
-    batchName: string | null;
-    batchStatus: string | null;
-    cohortMember: {
-      status: string;
-      membershipId: string;
-    };
-  }>>> {
+  private async getBatchAndCenterNames(userIds: string[]): Promise<
+    Record<
+      string,
+      Array<{
+        centerId: string | null;
+        centerName: string | null;
+        centerStatus: string | null;
+        batchId: string;
+        batchName: string | null;
+        batchStatus: string | null;
+        cohortMember: {
+          status: string;
+          membershipId: string;
+        };
+      }>
+    >
+  > {
     const apiId = APIID.USER_LIST;
 
     if (!userIds || userIds.length === 0) {
@@ -4288,22 +4762,28 @@ export class UserService {
     try {
       const result = await this.usersRepository.query(query, [userIds]);
       if (result.length === 0) {
-        LoggerUtil.warn(`No cohort memberships found for any of the ${userIds.length} users`, apiId);
+        LoggerUtil.warn(
+          `No cohort memberships found for any of the ${userIds.length} users`,
+          apiId
+        );
       }
 
       // Group all associations by userId (not just the most recent)
-      const cohortDataMap: Record<string, Array<{
-        centerId: string | null;
-        centerName: string | null;
-        centerStatus: string | null;
-        batchId: string;
-        batchName: string | null;
-        batchStatus: string | null;
-        cohortMember: {
-          status: string;
-          membershipId: string;
-        };
-      }>> = {};
+      const cohortDataMap: Record<
+        string,
+        Array<{
+          centerId: string | null;
+          centerName: string | null;
+          centerStatus: string | null;
+          batchId: string;
+          batchName: string | null;
+          batchStatus: string | null;
+          cohortMember: {
+            status: string;
+            membershipId: string;
+          };
+        }>
+      > = {};
 
       result.forEach((row: any) => {
         const {
@@ -4315,7 +4795,7 @@ export class UserService {
           batchStatus,
           centerId,
           centerName,
-          centerStatus
+          centerStatus,
         } = row;
 
         if (!cohortDataMap[userId]) {
@@ -4331,9 +4811,9 @@ export class UserService {
           batchName: batchName || null,
           batchStatus: batchStatus || null,
           cohortMember: {
-            status: membershipStatus || 'unknown',
-            membershipId: String(membershipId)
-          }
+            status: membershipStatus || "unknown",
+            membershipId: String(membershipId),
+          },
         };
 
         cohortDataMap[userId].push(cohortEntry);
@@ -4349,7 +4829,10 @@ export class UserService {
   /**
    * Get count of users with proper error handling and validation
    */
-  private async getUserCount(userIds: string[], tenantId: string): Promise<number> {
+  private async getUserCount(
+    userIds: string[],
+    tenantId: string
+  ): Promise<number> {
     const apiId = APIID.USER_LIST;
 
     try {
@@ -4368,13 +4851,20 @@ export class UserService {
           AND u."status" != 'archived'
       `;
 
-      const result = await this.usersRepository.query(query, [userIds, tenantId]);
-      const count = parseInt(result[0]?.total || '0');
+      const result = await this.usersRepository.query(query, [
+        userIds,
+        tenantId,
+      ]);
+      const count = parseInt(result[0]?.total || "0");
 
       LoggerUtil.log(`User count query returned ${count} active users`, apiId);
       return count;
     } catch (error) {
-      LoggerUtil.error(`Error in getUserCount: ${error.message}`, error.stack, apiId);
+      LoggerUtil.error(
+        `Error in getUserCount: ${error.message}`,
+        error.stack,
+        apiId
+      );
       throw new Error(`Failed to get user count: ${error.message}`);
     }
   }
@@ -4415,13 +4905,28 @@ export class UserService {
         LIMIT $3 OFFSET $4
       `;
 
-      LoggerUtil.log(`Executing user details query with sort: ${sortField} ${sortDirection}, limit: ${limit}, offset: ${offset}`, apiId);
-      const result = await this.usersRepository.query(query, [userIds, tenantId, limit, offset]);
+      LoggerUtil.log(
+        `Executing user details query with sort: ${sortField} ${sortDirection}, limit: ${limit}, offset: ${offset}`,
+        apiId
+      );
+      const result = await this.usersRepository.query(query, [
+        userIds,
+        tenantId,
+        limit,
+        offset,
+      ]);
 
-      LoggerUtil.log(`User details query returned ${result.length} rows`, apiId);
+      LoggerUtil.log(
+        `User details query returned ${result.length} rows`,
+        apiId
+      );
       return result;
     } catch (error) {
-      LoggerUtil.error(`Error in getUserDetails: ${error.message}`, error.stack, apiId);
+      LoggerUtil.error(
+        `Error in getUserDetails: ${error.message}`,
+        error.stack,
+        apiId
+      );
       throw new Error(`Failed to get user details: ${error.message}`);
     }
   }
@@ -4464,9 +4969,10 @@ export class UserService {
       }
 
       // Build the WHERE clause
-      const whereClause = additionalConditions.length > 0
-        ? `AND ${additionalConditions.join(' AND ')}`
-        : '';
+      const whereClause =
+        additionalConditions.length > 0
+          ? `AND ${additionalConditions.join(" AND ")}`
+          : "";
 
       // Single optimized query that gets both count and paginated results
       // Fixed: Apply pagination to unique users first, then get their roles
@@ -4477,7 +4983,7 @@ export class UserService {
             u."status", u."createdAt", utm."tenantId"
           FROM "Users" u
           LEFT JOIN "UserTenantMapping" utm ON u."userId" = utm."userId"
-          WHERE ${userIds.length > 0 ? 'u."userId" = ANY($1)' : '1=1'} 
+          WHERE ${userIds.length > 0 ? 'u."userId" = ANY($1)' : "1=1"} 
             AND utm."tenantId" = $2
             ${whereClause}
         ),
@@ -4499,12 +5005,19 @@ export class UserService {
 
       const result = await this.usersRepository.query(query, queryParams);
 
-      const totalCount = result.length > 0 ? parseInt(result[0].total_count) : 0;
+      const totalCount =
+        result.length > 0 ? parseInt(result[0].total_count) : 0;
 
       return { totalCount, users: result };
     } catch (error) {
-      LoggerUtil.error(`Error in getUserDetailsWithCount: ${error.message}`, error.stack, apiId);
-      throw new Error(`Failed to get user details with count: ${error.message}`);
+      LoggerUtil.error(
+        `Error in getUserDetailsWithCount: ${error.message}`,
+        error.stack,
+        apiId
+      );
+      throw new Error(
+        `Failed to get user details with count: ${error.message}`
+      );
     }
   }
 
@@ -4515,18 +5028,21 @@ export class UserService {
     userDetails: any[],
     customFieldsData: Record<string, any> = {},
     requestedCustomFields: string[] = [],
-    cohortDataMap: Record<string, Array<{
-      centerId: string | null;
-      centerName: string | null;
-      centerStatus: string | null;
-      batchId: string;
-      batchName: string | null;
-      batchStatus: string | null;
-      cohortMember: {
-        status: string;
-        membershipId: string;
-      };
-    }>> = {}
+    cohortDataMap: Record<
+      string,
+      Array<{
+        centerId: string | null;
+        centerName: string | null;
+        centerStatus: string | null;
+        batchId: string;
+        batchName: string | null;
+        batchStatus: string | null;
+        cohortMember: {
+          status: string;
+          membershipId: string;
+        };
+      }>
+    > = {}
   ): any[] {
     const apiId = APIID.USER_LIST;
 
@@ -4537,18 +5053,22 @@ export class UserService {
 
       const usersMap = new Map<string, any>();
 
-      userDetails.forEach(user => {
+      userDetails.forEach((user) => {
         const { userId, roleName, ...userData } = user;
 
         if (!userId) {
-          LoggerUtil.warn('Skipping user record without userId', apiId);
+          LoggerUtil.warn("Skipping user record without userId", apiId);
           return;
         }
 
         if (usersMap.has(userId)) {
           // User already exists, just add role if new
           const existingUser = usersMap.get(userId);
-          if (roleName && typeof roleName === 'string' && !existingUser.roles.includes(roleName)) {
+          if (
+            roleName &&
+            typeof roleName === "string" &&
+            !existingUser.roles.includes(roleName)
+          ) {
             existingUser.roles.push(roleName);
           }
         } else {
@@ -4556,7 +5076,7 @@ export class UserService {
           const userObject: any = {
             ...userData,
             userId,
-            roles: roleName && typeof roleName === 'string' ? [roleName] : []
+            roles: roleName && typeof roleName === "string" ? [roleName] : [],
           };
 
           // Only add customfield property if custom fields were requested (location fields only)
@@ -4565,7 +5085,7 @@ export class UserService {
             const processedCustomFields: Record<string, any> = {};
 
             // Initialize ONLY location-based custom fields, completely exclude center and batch
-            requestedCustomFields.forEach(fieldName => {
+            requestedCustomFields.forEach((fieldName) => {
               // Skip center and batch completely - they belong in cohortData only
               if (this.isExcludedFromCustomFields(fieldName)) {
                 return; // Skip processing these fields entirely
@@ -4582,8 +5102,11 @@ export class UserService {
                 if (Array.isArray(rawValue)) {
                   if (rawValue.length > 0) {
                     // Filter out null/undefined/empty values and join with comma and space
-                    const validValues = rawValue.filter(val => val !== null && val !== undefined && val !== '');
-                    fieldValue = validValues.length > 0 ? validValues.join(', ') : null;
+                    const validValues = rawValue.filter(
+                      (val) => val !== null && val !== undefined && val !== ""
+                    );
+                    fieldValue =
+                      validValues.length > 0 ? validValues.join(", ") : null;
                   } else {
                     fieldValue = null;
                   }
@@ -4610,7 +5133,11 @@ export class UserService {
       const result = Array.from(usersMap.values());
       return result;
     } catch (error) {
-      LoggerUtil.error(`Error in aggregateUserRoles: ${error.message}`, error.stack, apiId);
+      LoggerUtil.error(
+        `Error in aggregateUserRoles: ${error.message}`,
+        error.stack,
+        apiId
+      );
       throw new Error(`Failed to aggregate user data: ${error.message}`);
     }
   }
@@ -4635,13 +5162,16 @@ export class UserService {
       }
 
       // Filter out batch and center as they're now handled in cohortData
-      const regularCustomFields = customFieldNames.filter(name =>
-        !this.isExcludedFromCustomFields(name)
+      const regularCustomFields = customFieldNames.filter(
+        (name) => !this.isExcludedFromCustomFields(name)
       );
 
       if (regularCustomFields.length === 0) {
-        const excludedFields = this.getCohortFilterLevels().join(' and ');
-        LoggerUtil.log(`Only ${excludedFields} fields requested - skipping custom fields query`, apiId);
+        const excludedFields = this.getCohortFilterLevels().join(" and ");
+        LoggerUtil.log(
+          `Only ${excludedFields} fields requested - skipping custom fields query`,
+          apiId
+        );
         return {};
       }
 
@@ -4651,21 +5181,33 @@ export class UserService {
         FROM "Fields" 
         WHERE "name" = ANY($1)
       `;
-      const fieldsResult = await this.usersRepository.query(fieldsQuery, [regularCustomFields]);
+      const fieldsResult = await this.usersRepository.query(fieldsQuery, [
+        regularCustomFields,
+      ]);
 
       if (fieldsResult.length === 0) {
-        LoggerUtil.warn(`No fields found for requested names: ${regularCustomFields.join(', ')}`, apiId);
+        LoggerUtil.warn(
+          `No fields found for requested names: ${regularCustomFields.join(
+            ", "
+          )}`,
+          apiId
+        );
         return {};
       }
 
-      const foundFields = fieldsResult.map(f => f.name);
-      const missingFields = regularCustomFields.filter(name => !foundFields.includes(name));
+      const foundFields = fieldsResult.map((f) => f.name);
+      const missingFields = regularCustomFields.filter(
+        (name) => !foundFields.includes(name)
+      );
 
       if (missingFields.length > 0) {
-        LoggerUtil.warn(`Some requested fields not found: ${missingFields.join(', ')}`, apiId);
+        LoggerUtil.warn(
+          `Some requested fields not found: ${missingFields.join(", ")}`,
+          apiId
+        );
       }
 
-      const fieldIds = fieldsResult.map(field => field.fieldId);
+      const fieldIds = fieldsResult.map((field) => field.fieldId);
       const fieldNameMap = fieldsResult.reduce((acc, field) => {
         acc[field.fieldId] = field.name;
         return acc;
@@ -4681,12 +5223,15 @@ export class UserService {
           AND "value" IS NOT NULL
       `;
 
-      const customFieldsResult = await this.usersRepository.query(customFieldsQuery, [fieldIds, userIds, tenantId]);
+      const customFieldsResult = await this.usersRepository.query(
+        customFieldsQuery,
+        [fieldIds, userIds, tenantId]
+      );
 
       // Structure the data by userId and fieldName
       const customFieldsData: Record<string, Record<string, any>> = {};
 
-      customFieldsResult.forEach(row => {
+      customFieldsResult.forEach((row) => {
         const { itemId: userId, fieldId, value } = row;
         const fieldName = fieldNameMap[fieldId];
 
@@ -4703,13 +5248,18 @@ export class UserService {
         customFieldsData[userId][fieldName] = value || [];
       });
 
-
       // Resolve location field IDs to names for state, district, block, village
-      const resolvedCustomFieldsData = await this.resolveLocationFieldNames(customFieldsData);
+      const resolvedCustomFieldsData = await this.resolveLocationFieldNames(
+        customFieldsData
+      );
 
       return resolvedCustomFieldsData;
     } catch (error) {
-      LoggerUtil.error(`Error in getCustomFieldsData: ${error.message}`, error.stack, apiId);
+      LoggerUtil.error(
+        `Error in getCustomFieldsData: ${error.message}`,
+        error.stack,
+        apiId
+      );
       // Return empty object rather than throwing to avoid breaking the main operation
       return {};
     }
@@ -4718,18 +5268,26 @@ export class UserService {
   private async resolveLocationFieldNames(customFieldsData: any) {
     // Define location fields that need ID-to-name resolution
     // Note: batch and center are now handled separately via getBatchAndCenterNames function
-    const locationFields = ['state', 'district', 'block', 'village'];
+    const locationFields = ["state", "district", "block", "village"];
     const locationTableMap = {
-      'state': { table: 'state', idColumn: 'state_id', nameColumn: 'state_name' },
-      'district': { table: 'district', idColumn: 'district_id', nameColumn: 'district_name' },
-      'block': { table: 'block', idColumn: 'block_id', nameColumn: 'block_name' },
-      'village': { table: 'village', idColumn: 'village_id', nameColumn: 'village_name' }
+      state: { table: "state", idColumn: "state_id", nameColumn: "state_name" },
+      district: {
+        table: "district",
+        idColumn: "district_id",
+        nameColumn: "district_name",
+      },
+      block: { table: "block", idColumn: "block_id", nameColumn: "block_name" },
+      village: {
+        table: "village",
+        idColumn: "village_id",
+        nameColumn: "village_name",
+      },
     };
-    
+
     // Collect all unique IDs for each location field type
     const locationIds = {};
-    Object.keys(customFieldsData).forEach(userId => {
-      Object.keys(customFieldsData[userId]).forEach(fieldName => {
+    Object.keys(customFieldsData).forEach((userId) => {
+      Object.keys(customFieldsData[userId]).forEach((fieldName) => {
         if (locationFields.includes(fieldName)) {
           if (!locationIds[fieldName]) {
             locationIds[fieldName] = new Set();
@@ -4737,7 +5295,7 @@ export class UserService {
 
           const fieldValue = customFieldsData[userId][fieldName];
           if (Array.isArray(fieldValue)) {
-            fieldValue.forEach(id => {
+            fieldValue.forEach((id) => {
               if (id) locationIds[fieldName].add(id);
             });
           }
@@ -4762,14 +5320,22 @@ export class UserService {
         const queryParams = [idsArray];
 
         try {
-          const nameResult = await this.usersRepository.query(nameQuery, queryParams);
+          const nameResult = await this.usersRepository.query(
+            nameQuery,
+            queryParams
+          );
 
           // Standard ID to name mapping for all location fields
           locationNameMaps[fieldName] = nameResult.reduce((acc, row) => {
             const id = row[tableInfo.idColumn];
             const name = row[tableInfo.nameColumn];
             // Explicitly check for null/undefined to allow 0 as valid ID
-            if (id !== null && id !== undefined && name !== null && name !== undefined) {
+            if (
+              id !== null &&
+              id !== undefined &&
+              name !== null &&
+              name !== undefined
+            ) {
               acc[id] = name;
             }
             return acc;
@@ -4783,9 +5349,9 @@ export class UserService {
     // Replace IDs with names in the custom fields data
     // Note: batch and center are now handled separately, so they're excluded from this logic
     const resolvedData = {};
-    Object.keys(customFieldsData).forEach(userId => {
+    Object.keys(customFieldsData).forEach((userId) => {
       resolvedData[userId] = {};
-      Object.keys(customFieldsData[userId]).forEach(fieldName => {
+      Object.keys(customFieldsData[userId]).forEach((fieldName) => {
         const fieldValue = customFieldsData[userId][fieldName];
 
         if (locationFields.includes(fieldName) && locationNameMaps[fieldName]) {
@@ -4793,8 +5359,8 @@ export class UserService {
           if (Array.isArray(fieldValue) && fieldValue.length > 0) {
             // Handle multiple IDs by resolving each one and joining with commas
             const resolvedNames = fieldValue
-              .filter(id => id !== null && id !== undefined && id !== '') // Filter out invalid IDs, but allow 0
-              .map(id => {
+              .filter((id) => id !== null && id !== undefined && id !== "") // Filter out invalid IDs, but allow 0
+              .map((id) => {
                 const resolvedName = locationNameMaps[fieldName][id];
                 // Explicitly check if resolvedName exists (not undefined/null) to handle 0 as valid value
                 // If resolvedName is 0 or "0", it should be used, not fallback to id
@@ -4803,9 +5369,12 @@ export class UserService {
                 }
                 return id; // Fallback to original ID if not found in map
               })
-              .filter(name => name !== null && name !== undefined && name !== ''); // Filter out empty results, but allow 0 and "0"
+              .filter(
+                (name) => name !== null && name !== undefined && name !== ""
+              ); // Filter out empty results, but allow 0 and "0"
 
-            resolvedData[userId][fieldName] = resolvedNames.length > 0 ? resolvedNames.join(', ') : null;
+            resolvedData[userId][fieldName] =
+              resolvedNames.length > 0 ? resolvedNames.join(", ") : null;
           } else {
             resolvedData[userId][fieldName] = fieldValue;
           }
@@ -4813,8 +5382,11 @@ export class UserService {
           // Keep original value for non-location fields (including batch and center which are handled elsewhere)
           // For non-location fields that are arrays, join them with commas
           if (Array.isArray(fieldValue) && fieldValue.length > 0) {
-            const validValues = fieldValue.filter(val => val !== null && val !== undefined && val !== '');
-            resolvedData[userId][fieldName] = validValues.length > 0 ? validValues.join(', ') : null;
+            const validValues = fieldValue.filter(
+              (val) => val !== null && val !== undefined && val !== ""
+            );
+            resolvedData[userId][fieldName] =
+              validValues.length > 0 ? validValues.join(", ") : null;
           } else {
             resolvedData[userId][fieldName] = fieldValue;
           }

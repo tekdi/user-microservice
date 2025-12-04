@@ -23,10 +23,7 @@ import { RoleModule } from "../role/role.module";
     RoleModule,
   ],
   controllers: [PrivilegeController],
-  providers: [
-    PrivilegeService,
-    Repository,
-  ],
+  providers: [PrivilegeService, Repository],
   exports: [PrivilegeService],
 })
 export class PrivilegeModule {}

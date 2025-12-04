@@ -63,8 +63,11 @@ export class AssignRoleController {
     @Res() response: Response,
     @Headers() headers
   ) {
-    return await this.assignRoleService
-      .createAssignRole(request, createAssignRoleDto, response);
+    return await this.assignRoleService.createAssignRole(
+      request,
+      createAssignRoleDto,
+      response
+    );
     // return response.status(result.statusCode).json(result);
   }
 
@@ -80,8 +83,11 @@ export class AssignRoleController {
     @Req() request: Request,
     @Res() response: Response
   ) {
-    return await this.assignRoleService
-      .getAssignedRole(userId, request, response);
+    return await this.assignRoleService.getAssignedRole(
+      userId,
+      request,
+      response
+    );
     // return response.status(result.statusCode).json(result);
   }
 
@@ -96,8 +102,10 @@ export class AssignRoleController {
     @Body() deleteAssignRoleDto: DeleteAssignRoleDto, // Modify this line to accept DeleteAssignRoleDto
     @Res() response: Response
   ) {
-    return await this.assignRoleService
-      .deleteAssignedRole(deleteAssignRoleDto, response);
+    return await this.assignRoleService.deleteAssignedRole(
+      deleteAssignRoleDto,
+      response
+    );
     // return response.status(result.statusCode).json(result);
   }
 }

@@ -59,8 +59,12 @@ export class PrivilegeController {
     @Req() request: Request,
     @Res() response: Response
   ) {
-    return await this.privilegeService
-      .getPrivilegebyRoleId(tenantId, roleId, request, response);
+    return await this.privilegeService.getPrivilegebyRoleId(
+      tenantId,
+      roleId,
+      request,
+      response
+    );
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.PRIVILEGE_BYPRIVILEGEID))
@@ -76,8 +80,11 @@ export class PrivilegeController {
     @Req() request: Request,
     @Res() response: Response
   ) {
-    return await this.privilegeService
-      .getPrivilege(privilegeId, request, response);
+    return await this.privilegeService.getPrivilege(
+      privilegeId,
+      request,
+      response
+    );
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.PRIVILEGE_CREATE))
@@ -97,8 +104,11 @@ export class PrivilegeController {
     @Body() createPrivilegesDto: CreatePrivilegesDto,
     @Res() response: Response
   ) {
-    return await this.privilegeService
-      .createPrivilege(request.user.userId, createPrivilegesDto, response);
+    return await this.privilegeService.createPrivilege(
+      request.user.userId,
+      createPrivilegesDto,
+      response
+    );
   }
 
   // @Put("/:id")
@@ -147,7 +157,6 @@ export class PrivilegeController {
     @Param("privilegeId", ParseUUIDPipe) privilegeId: string,
     @Res() response: Response
   ) {
-    return await this.privilegeService
-      .deletePrivilege(privilegeId, response);
+    return await this.privilegeService.deletePrivilege(privilegeId, response);
   }
 }

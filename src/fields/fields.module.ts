@@ -7,10 +7,7 @@ import { TypeOrmModule } from "@nestjs/typeorm";
 import { FieldsService } from "./fields.service";
 
 @Module({
-  imports: [
-    TypeOrmModule.forFeature([Fields, FieldValues]),
-    HttpModule,
-  ],
+  imports: [TypeOrmModule.forFeature([Fields, FieldValues]), HttpModule],
   controllers: [FieldsController],
   providers: [FieldsService],
   exports: [FieldsService],

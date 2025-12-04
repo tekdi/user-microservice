@@ -37,7 +37,7 @@ export class UserTenantMappingService {
     private userService: UserService,
     private fieldsService: FieldsService,
     private kafkaService: KafkaService
-  ) { }
+  ) {}
 
   public async validateUserTenantMapping(
     userId: string,
@@ -48,12 +48,15 @@ export class UserTenantMappingService {
     response: Response,
     errors: any[]
   ) {
-    const [userExist, tenantExist, existingMapping, roleExist] = await Promise.all([
-      this.userRepository.findOne({ where: { userId } }),
-      this.tenantsRepository.findOne({ where: { tenantId } }),
-      this.userTenantMappingRepository.findOne({ where: { userId, tenantId } }),
-      this.roleRepository.findOne({ where: { roleId } }),
-    ]);
+    const [userExist, tenantExist, existingMapping, roleExist] =
+      await Promise.all([
+        this.userRepository.findOne({ where: { userId } }),
+        this.tenantsRepository.findOne({ where: { tenantId } }),
+        this.userTenantMappingRepository.findOne({
+          where: { userId, tenantId },
+        }),
+        this.roleRepository.findOne({ where: { roleId } }),
+      ]);
 
     if (!userExist) {
       errors.push({ errorMessage: `User ${userId} does not exist.` });
@@ -66,7 +69,9 @@ export class UserTenantMappingService {
     }
 
     if (existingMapping) {
-      errors.push({ errorMessage: `User already exists in Tenant ${tenantId}.` });
+      errors.push({
+        errorMessage: `User already exists in Tenant ${tenantId}.`,
+      });
       return false;
     }
 
@@ -80,7 +85,7 @@ export class UserTenantMappingService {
       // Transform DTO to match the structure expected by UserService.validateCustomField
       const transformedDto = {
         customFields: customField, // Note: UserService expects 'customFields' not 'customField'
-        tenantCohortRoleMapping: [{ tenantId }, { roleId }] // Provide tenantId in expected structure
+        tenantCohortRoleMapping: [{ tenantId }, { roleId }], // Provide tenantId in expected structure
       };
 
       // Use existing validateCustomField from UserService
@@ -105,8 +110,13 @@ export class UserTenantMappingService {
   ) {
     const apiId = APIID.ASSIGN_TENANT_CREATE;
     try {
-
-      const { userId, tenantId, roleId, customField = [], userTenantStatus } = assignTenantMappingDto;
+      const {
+        userId,
+        tenantId,
+        roleId,
+        customField = [],
+        userTenantStatus,
+      } = assignTenantMappingDto;
       const errors = [];
 
       // Step 2: Validate user-tenant-role mapping
@@ -135,9 +145,9 @@ export class UserTenantMappingService {
         userId: userId,
         tenantRoleMapping: {
           tenantId: tenantId,
-          roleId: roleId
+          roleId: roleId,
         },
-        userTenantStatus: userTenantStatus || "active" // Default to "active" if not provided
+        userTenantStatus: userTenantStatus || "active", // Default to "active" if not provided
       };
 
       await this.userService.assignUserToTenantAndRoll(
@@ -177,9 +187,9 @@ export class UserTenantMappingService {
               fieldDetail[`${fieldId}`]
                 ? fieldDetail
                 : {
-                  ...fieldDetail,
-                  [`${fieldId}`]: { fieldAttributes, fieldParams, name },
-                },
+                    ...fieldDetail,
+                    [`${fieldId}`]: { fieldAttributes, fieldParams, name },
+                  },
             {}
           );
 
@@ -213,7 +223,7 @@ export class UserTenantMappingService {
         tenantId: tenantId,
         roleId: roleId,
         message: `User is successfully added to the Tenant with role.`,
-        createFailures: createFailures.length > 0 ? createFailures : undefined
+        createFailures: createFailures.length > 0 ? createFailures : undefined,
       };
 
       const apiResponse = await APIResponse.success(
@@ -225,17 +235,23 @@ export class UserTenantMappingService {
       );
 
       // Publish user-tenant mapping event to Kafka asynchronously - after response is sent to client
-      this.publishUserTenantMappingEvent('created', userId, tenantId, apiId)
-        .catch(error => LoggerUtil.error(
+      this.publishUserTenantMappingEvent(
+        "created",
+        userId,
+        tenantId,
+        apiId
+      ).catch((error) =>
+        LoggerUtil.error(
           `Failed to publish user-tenant created event to Kafka for user ${userId}`,
           `Error: ${error.message}`,
           apiId,
           userId
-        ));
+        )
+      );
 
       return apiResponse;
     } catch (error) {
-      console.log('error', error);
+      console.log("error", error);
       const errorMessage = error?.message || "Something went wrong";
       LoggerUtil.error(
         `Error in userTenantMapping for user ${assignTenantMappingDto.userId}`,
@@ -298,7 +314,9 @@ export class UserTenantMappingService {
 
       query += ` ORDER BY UTM."createdAt" DESC`;
 
-      const mappings = await this.userTenantMappingRepository.query(query, [userId]);
+      const mappings = await this.userTenantMappingRepository.query(query, [
+        userId,
+      ]);
 
       if (mappings.length === 0) {
         return APIResponse.error(
@@ -317,13 +335,8 @@ export class UserTenantMappingService {
         HttpStatus.OK,
         "User tenant mappings retrieved successfully"
       );
-
     } catch (error) {
-      LoggerUtil.error(
-        "SERVER_ERROR",
-        `Error: ${error.message}`,
-        apiId
-      );
+      LoggerUtil.error("SERVER_ERROR", `Error: ${error.message}`, apiId);
       return APIResponse.error(
         response,
         apiId,
@@ -342,7 +355,7 @@ export class UserTenantMappingService {
     response: Response
   ) {
     const apiId = APIID.ASSIGN_TENANT_UPDATE_STATUS;
-    
+
     try {
       // Check if the mapping exists
       const existingMapping = await this.userTenantMappingRepository.findOne({
@@ -363,7 +376,7 @@ export class UserTenantMappingService {
       existingMapping.status = updateStatusDto.status;
       existingMapping.updatedBy = request["user"].userId;
       existingMapping.updatedAt = new Date();
-      
+
       // Update reason if provided
       if (updateStatusDto.reason) {
         existingMapping.reason = updateStatusDto.reason;
@@ -395,17 +408,23 @@ export class UserTenantMappingService {
       );
 
       // Publish user-tenant status update event to Kafka asynchronously - after response is sent to client
-      this.publishUserTenantMappingEvent('updated_status', userId, tenantId, apiId)
-        .catch(error => LoggerUtil.error(
+      this.publishUserTenantMappingEvent(
+        "updated_status",
+        userId,
+        tenantId,
+        apiId
+      ).catch((error) =>
+        LoggerUtil.error(
           `Failed to publish user-tenant updated event to Kafka for user ${userId}`,
           `Error: ${error.message}`,
           apiId,
           userId
-        ));
+        )
+      );
 
       return apiResponse;
     } catch (error) {
-      console.log('error', error);
+      console.log("error", error);
       const errorMessage = error?.message || "Something went wrong";
       LoggerUtil.error(
         `Error in updateAssignTenantStatus for user ${userId} and tenant ${tenantId}`,
@@ -431,7 +450,7 @@ export class UserTenantMappingService {
    * @param apiId API ID for logging
    */
   public async publishUserTenantMappingEvent(
-    eventType: 'created' | 'updated_status' | 'deleted',
+    eventType: "created" | "updated_status" | "deleted",
     userId: string,
     tenantId: string,
     apiId: string
@@ -440,18 +459,28 @@ export class UserTenantMappingService {
       // For delete events, we may want to include just basic information since the mapping might already be removed
       let userTenantData: any;
 
-      if (eventType === 'deleted') {
+      if (eventType === "deleted") {
         userTenantData = {
           userId: userId,
           tenantId: tenantId,
-          deletedAt: new Date().toISOString()
+          deletedAt: new Date().toISOString(),
         };
-      } else if (eventType === 'updated_status') {
+      } else if (eventType === "updated_status") {
         // For USER_TENANT_STATUS_UPDATE, fetch only UserTenantMapping table data
         try {
           const mapping = await this.userTenantMappingRepository.findOne({
             where: { userId, tenantId },
-            select: ["Id", "userId", "tenantId", "status", "reason", "createdAt", "updatedAt", "createdBy", "updatedBy"]
+            select: [
+              "Id",
+              "userId",
+              "tenantId",
+              "status",
+              "reason",
+              "createdAt",
+              "updatedAt",
+              "createdBy",
+              "updatedBy",
+            ],
           });
 
           if (!mapping) {
@@ -472,7 +501,7 @@ export class UserTenantMappingService {
               createdAt: mapping.createdAt,
               updatedAt: mapping.updatedAt,
               createdBy: mapping.createdBy,
-              updatedBy: mapping.updatedBy
+              updatedBy: mapping.updatedBy,
             };
           }
         } catch (error) {
@@ -503,30 +532,38 @@ export class UserTenantMappingService {
             // Get user information
             const user = await this.userRepository.findOne({
               where: { userId },
-              select: ["userId", "username", "firstName", "lastName", "email", "mobile"]
+              select: [
+                "userId",
+                "username",
+                "firstName",
+                "lastName",
+                "email",
+                "mobile",
+              ],
             });
 
             // Get tenant information
             const tenant = await this.tenantsRepository.findOne({
               where: { tenantId },
-              select: ["tenantId", "name", "domain"]
+              select: ["tenantId", "name", "domain"],
             });
 
             // Get role information for this user in this tenant
-            const userRoleMapping = await this.userRoleMappingRepository.findOne({
-              where: { userId, tenantId }
-            });
+            const userRoleMapping =
+              await this.userRoleMappingRepository.findOne({
+                where: { userId, tenantId },
+              });
 
             let roleInfo = null;
             if (userRoleMapping) {
               const role = await this.roleRepository.findOne({
-                where: { roleId: userRoleMapping.roleId }
+                where: { roleId: userRoleMapping.roleId },
               });
               if (role) {
                 roleInfo = {
                   roleId: role.roleId,
                   code: role.code,
-                  title: role.title
+                  title: role.title,
                 };
               }
             }
@@ -534,7 +571,10 @@ export class UserTenantMappingService {
             // Get custom fields for this user-tenant mapping
             let customFields = [];
             try {
-              customFields = await this.fieldsService.getCustomFieldDetails(userId, 'Users');
+              customFields = await this.fieldsService.getCustomFieldDetails(
+                userId,
+                "Users"
+              );
             } catch (error) {
               LoggerUtil.error(
                 `Failed to fetch custom fields for Kafka event`,
@@ -552,20 +592,24 @@ export class UserTenantMappingService {
               status: mapping.status,
               createdAt: mapping.createdAt,
               updatedAt: mapping.updatedAt,
-              user: user ? {
-                username: user.username,
-                firstName: user.firstName,
-                lastName: user.lastName,
-                email: user.email,
-                mobile: user.mobile
-              } : null,
-              tenant: tenant ? {
-                name: tenant.name,
-                domain: tenant.domain
-              } : null,
+              user: user
+                ? {
+                    username: user.username,
+                    firstName: user.firstName,
+                    lastName: user.lastName,
+                    email: user.email,
+                    mobile: user.mobile,
+                  }
+                : null,
+              tenant: tenant
+                ? {
+                    name: tenant.name,
+                    domain: tenant.domain,
+                  }
+                : null,
               role: roleInfo,
               customFields: customFields || [],
-              eventTimestamp: new Date().toISOString()
+              eventTimestamp: new Date().toISOString(),
             };
           }
         } catch (error) {
@@ -578,7 +622,11 @@ export class UserTenantMappingService {
           userTenantData = { userId, tenantId };
         }
       }
-      await this.kafkaService.publishUserTenantEvent(eventType, userTenantData, userId);
+      await this.kafkaService.publishUserTenantEvent(
+        eventType,
+        userTenantData,
+        userId
+      );
       LoggerUtil.log(
         `User-tenant ${eventType} event published to Kafka for user ${userId} and tenant ${tenantId}`,
         apiId
@@ -592,5 +640,4 @@ export class UserTenantMappingService {
       // Don't throw the error to avoid affecting the main operation
     }
   }
-
 }

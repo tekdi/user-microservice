@@ -33,7 +33,11 @@ import {
   ApiConflictResponse,
 } from "@nestjs/swagger";
 
-import { ExistUserDto, SuggestUserDto, UserSearchDto } from "./dto/user-search.dto";
+import {
+  ExistUserDto,
+  SuggestUserDto,
+  UserSearchDto,
+} from "./dto/user-search.dto";
 import { HierarchicalLocationFiltersDto } from "./dto/user-hierarchical-search.dto";
 import { UserHierarchyViewDto } from "./dto/user-hierarchy-view.dto";
 import { UserService } from "./user.service";
@@ -114,8 +118,10 @@ export class UserController {
       userId: userId,
       fieldValue: fieldValueBoolean,
     };
-    const result = await this.userService
-      .getUsersDetailsById(userData, response);
+    const result = await this.userService.getUsersDetailsById(
+      userData,
+      response
+    );
 
     return response.status(result.statusCode).json(result);
   }
@@ -147,8 +153,12 @@ export class UserController {
     //     "academicYearId is required and academicYearId must be a valid UUID."
     //   );
     // }
-    return await this.userService
-      .createUser(request, userCreateDto, academicYearId, response);
+    return await this.userService.createUser(
+      request,
+      userCreateDto,
+      academicYearId,
+      response
+    );
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.USER_UPDATE))
@@ -174,8 +184,7 @@ export class UserController {
     const tenantId = headers["tenantid"];
     userUpdateDto.userData.tenantId = tenantId ? tenantId : null;
 
-    return await this.userService
-      .updateUser(userUpdateDto, response);
+    return await this.userService.updateUser(userUpdateDto, response);
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.USER_LIST))
@@ -198,9 +207,15 @@ export class UserController {
     @Body() userSearchDto: UserSearchDto
   ) {
     const tenantId = headers["tenantid"];
-    const shouldIncludeCustomFields = userSearchDto.includeCustomFields !== "false";
-    return await this.userService
-      .searchUser(tenantId, request, response, userSearchDto, shouldIncludeCustomFields);
+    const shouldIncludeCustomFields =
+      userSearchDto.includeCustomFields !== "false";
+    return await this.userService.searchUser(
+      tenantId,
+      request,
+      response,
+      userSearchDto,
+      shouldIncludeCustomFields
+    );
   }
 
   @Post("/password-reset-link")
@@ -212,13 +227,12 @@ export class UserController {
     @Res() response: Response,
     @Body() reqBody: SendPasswordResetLinkDto
   ) {
-    return await this.userService
-      .sendPasswordResetLink(
-        request,
-        reqBody.username,
-        reqBody.redirectUrl,
-        response
-      );
+    return await this.userService.sendPasswordResetLink(
+      request,
+      reqBody.username,
+      reqBody.redirectUrl,
+      response
+    );
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.USER_HIERARCHY_VIEW))
@@ -242,10 +256,14 @@ export class UserController {
     @Res() response: Response,
     @Body() userHierarchyViewDto: UserHierarchyViewDto
   ) {
-    return await this.userService
-      .searchUserMultiTenant(tenantId, request, response, userHierarchyViewDto);
+    return await this.userService.searchUserMultiTenant(
+      tenantId,
+      request,
+      response,
+      userHierarchyViewDto
+    );
   }
-  
+
   @Post("/forgot-password")
   @ApiOkResponse({ description: "Forgot password reset successfully." })
   @ApiBody({ type: ForgotPasswordDto })
@@ -255,8 +273,7 @@ export class UserController {
     @Res() response: Response,
     @Body() reqBody: ForgotPasswordDto
   ) {
-    return await this.userService
-      .forgotPassword(request, reqBody, response);
+    return await this.userService.forgotPassword(request, reqBody, response);
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.USER_RESET_PASSWORD))
@@ -272,13 +289,12 @@ export class UserController {
     @Res() response: Response,
     @Body() reqBody: ResetUserPasswordDto
   ) {
-    return await this.userService
-      .resetUserPassword(
-        request,
-        reqBody.userName,
-        reqBody.newPassword,
-        response
-      );
+    return await this.userService.resetUserPassword(
+      request,
+      reqBody.userName,
+      reqBody.newPassword,
+      response
+    );
   }
 
   // required for FTL
@@ -291,11 +307,13 @@ export class UserController {
     @Body() existUserDto: ExistUserDto,
     @Res() response: Response
   ) {
-    const result = await this.userService
-      .checkUser(request, response, existUserDto);
+    const result = await this.userService.checkUser(
+      request,
+      response,
+      existUserDto
+    );
     return response.status(result.statusCode).json(result);
   }
-
 
   // required for FTL
   @UseFilters(new AllExceptionsFilter(APIID.SUGGEST_USERNAME))
@@ -309,11 +327,13 @@ export class UserController {
     @Body() suggestUserDto: SuggestUserDto,
     @Res() response: Response
   ) {
-    const result = await this.userService
-      .suggestUsername(request, response, suggestUserDto);
+    const result = await this.userService.suggestUsername(
+      request,
+      response,
+      suggestUserDto
+    );
     return response.status(result.statusCode).json(result);
   }
-
 
   //delete
   @UseFilters(new AllExceptionsFilter(APIID.USER_DELETE))
@@ -331,8 +351,7 @@ export class UserController {
     @Req() request: Request,
     @Res() response: Response
   ) {
-    return await this.userService
-      .deleteUserById(userId, response);
+    return await this.userService.deleteUserById(userId, response);
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.SEND_OTP))
@@ -362,8 +381,7 @@ export class UserController {
     @Res() response: Response,
     @Body() reqBody: SendPasswordResetOTPDto
   ) {
-    return await this.userService
-      .sendPasswordResetOTP(reqBody, response);
+    return await this.userService.sendPasswordResetOTP(reqBody, response);
   }
   @Get("presigned-url")
   async getPresignedUrl(
@@ -385,25 +403,29 @@ export class UserController {
   @Post("hierarchical-search")
   @UseGuards(JwtAuthGuard)
   @ApiBasicAuth("access-token")
-  @ApiCreatedResponse({ 
-    description: "User list based on hierarchical location filters with pagination and sorting.",
+  @ApiCreatedResponse({
+    description:
+      "User list based on hierarchical location filters with pagination and sorting.",
   })
   @ApiForbiddenResponse({ description: "Forbidden" })
-  @ApiBody({ 
-    type: HierarchicalLocationFiltersDto
+  @ApiBody({
+    type: HierarchicalLocationFiltersDto,
   })
-  @UsePipes(new ValidationPipe({ 
-    whitelist: true,
-    forbidNonWhitelisted: true,
-    transform: true
-  }))
+  @UsePipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    })
+  )
   @SerializeOptions({
     strategy: "excludeAll",
   })
   @ApiHeader({
     name: "tenantid",
-    description: "Tenant ID for filtering users within specific tenant (Required)",
-    required: true
+    description:
+      "Tenant ID for filtering users within specific tenant (Required)",
+    required: true,
   })
   public async getUsersByHierarchicalLocation(
     @Headers() headers,
@@ -413,7 +435,7 @@ export class UserController {
   ) {
     const tenantId = headers["tenantid"];
     const apiId = APIID.USER_LIST;
-    
+
     // Comprehensive tenantId validation
     const tenantValidation = this.validateTenantId(tenantId);
     if (!tenantValidation.isValid) {
@@ -422,7 +444,7 @@ export class UserController {
         `Received tenantId: ${tenantId}`,
         apiId
       );
-      
+
       return response.status(400).json({
         id: apiId,
         ver: "1.0",
@@ -431,15 +453,19 @@ export class UserController {
           resmsgid: "",
           status: "failed",
           err: tenantValidation.error,
-          errmsg: "Invalid tenant information"
+          errmsg: "Invalid tenant information",
         },
         responseCode: 400,
-        result: {}
+        result: {},
       });
     }
-    
-    return await this.userService
-      .getUsersByHierarchicalLocation(tenantId, request, response, hierarchicalFiltersDto);
+
+    return await this.userService.getUsersByHierarchicalLocation(
+      tenantId,
+      request,
+      response,
+      hierarchicalFiltersDto
+    );
   }
 
   /**
@@ -447,20 +473,23 @@ export class UserController {
    * @param tenantId - Tenant ID from headers
    * @returns Validation result with error details
    */
-  private validateTenantId(tenantId: any): { isValid: boolean; error?: string } {
+  private validateTenantId(tenantId: any): {
+    isValid: boolean;
+    error?: string;
+  } {
     // Check if tenantId is present
     if (!tenantId) {
       return {
         isValid: false,
-        error: "tenantid header is required"
+        error: "tenantid header is required",
       };
     }
 
     // Check if tenantId is a non-empty string
-    if (typeof tenantId !== 'string' || tenantId.trim().length === 0) {
+    if (typeof tenantId !== "string" || tenantId.trim().length === 0) {
       return {
         isValid: false,
-        error: "tenantid must be a non-empty string"
+        error: "tenantid must be a non-empty string",
       };
     }
 
@@ -468,7 +497,7 @@ export class UserController {
     if (!isUUID(tenantId)) {
       return {
         isValid: false,
-        error: "tenantid must be a valid UUID format"
+        error: "tenantid must be a valid UUID format",
       };
     }
 

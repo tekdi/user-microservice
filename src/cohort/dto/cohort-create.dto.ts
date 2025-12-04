@@ -88,7 +88,7 @@ export class CohortCreateDto {
   //file path
   @ApiPropertyOptional({ type: () => [String] })
   @IsArray()
-  @IsString({ each: true })    
+  @IsString({ each: true })
   @IsOptional()
   image: string[];
 

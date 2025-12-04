@@ -1,6 +1,13 @@
 import { Expose } from "class-transformer";
 import { ApiProperty } from "@nestjs/swagger";
-import { IsNotEmpty, IsString, IsUUID, IsArray, IsOptional, IsIn } from "class-validator";
+import {
+  IsNotEmpty,
+  IsString,
+  IsUUID,
+  IsArray,
+  IsOptional,
+  IsIn,
+} from "class-validator";
 
 export class UserTenantMappingDto {
   @ApiProperty({
@@ -38,25 +45,27 @@ export class UserTenantMappingDto {
     description: "Status of the user-tenant mapping",
     default: "active",
     required: false,
-    example: "pending"
+    example: "pending",
   })
   @Expose()
   @IsOptional()
   @IsString({ message: "userTenantStatus must be a string" })
-  @IsIn(["active", "inactive", "archived", "pending"], { 
-    message: "userTenantStatus must be one of: active, inactive, archived, pending" 
+  @IsIn(["active", "inactive", "archived", "pending"], {
+    message:
+      "userTenantStatus must be one of: active, inactive, archived, pending",
   })
   userTenantStatus?: string;
 
   @ApiProperty({
     type: Array,
-    description: "Custom fields for the user-tenant mapping. Each field should have fieldId and value properties.",
+    description:
+      "Custom fields for the user-tenant mapping. Each field should have fieldId and value properties.",
     default: [],
     required: false,
     example: [
       { fieldId: "field-uuid-1", value: "sample value" },
-      { fieldId: "field-uuid-2", value: ["option1", "option2"] }
-    ]
+      { fieldId: "field-uuid-2", value: ["option1", "option2"] },
+    ],
   })
   @Expose()
   @IsOptional()
@@ -75,13 +84,13 @@ export class UpdateAssignTenantStatusDto {
   @ApiProperty({
     enum: ["active", "inactive", "archived", "pending"],
     description: "Status of the user-tenant mapping",
-    example: "active"
+    example: "active",
   })
   @Expose()
   @IsNotEmpty({ message: "Status is required" })
   @IsString({ message: "Status must be a string" })
-  @IsIn(["active", "inactive", "archived", "pending"], { 
-    message: "Status must be one of: active, inactive, archived, pending" 
+  @IsIn(["active", "inactive", "archived", "pending"], {
+    message: "Status must be one of: active, inactive, archived, pending",
   })
   status: string;
 
@@ -89,7 +98,7 @@ export class UpdateAssignTenantStatusDto {
     type: String,
     description: "Reason for status update",
     required: false,
-    example: "User requested account deactivation"
+    example: "User requested account deactivation",
   })
   @Expose()
   @IsOptional()

@@ -25,7 +25,7 @@ import { NotificationRequest } from "src/common/utils/notification.axios";
       Cohort,
       CohortAcademicYear,
       AcademicYear,
-      Tenants
+      Tenants,
     ]),
     HttpModule,
     FieldsModule,
@@ -34,10 +34,7 @@ import { NotificationRequest } from "src/common/utils/notification.axios";
     KafkaModule,
   ],
   controllers: [CohortMembersController],
-  providers: [
-    CohortMembersService,
-    NotificationRequest,
-  ],
-  exports: [CohortMembersService]
+  providers: [CohortMembersService, NotificationRequest],
+  exports: [CohortMembersService],
 })
-export class CohortMembersModule { }
+export class CohortMembersModule {}

@@ -14,8 +14,8 @@ import { FieldsModule } from "src/fields/fields.module";
 @Module({
   imports: [
     TypeOrmModule.forFeature([
-      UserTenantMapping, 
-      User, 
+      UserTenantMapping,
+      User,
       Tenants,
       Role,
       UserRoleMapping,

@@ -8,7 +8,6 @@ import { AcademicYear } from "src/academicyears/entities/academicyears-entity";
 import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
 import { AcademicyearsModule } from "src/academicyears/academicyears.module";
 
-
 @Module({
   imports: [
     AcademicyearsModule,
@@ -16,11 +15,11 @@ import { AcademicyearsModule } from "src/academicyears/academicyears.module";
       CohortAcademicYear,
       Cohort,
       AcademicYear,
-      Tenants
+      Tenants,
     ]),
   ],
   controllers: [CohortAcademicYearController],
   providers: [CohortAcademicYearService],
-  exports: [CohortAcademicYearService]
+  exports: [CohortAcademicYearService],
 })
-export class CohortAcademicYearModule { }
+export class CohortAcademicYearModule {}

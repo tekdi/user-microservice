@@ -80,8 +80,7 @@ export class CohortController {
       getChildData: getChildDataValueBoolean,
       customField: fieldValueBooelan,
     };
-    return await this.cohortService
-      .getCohortsDetails(requiredData, response);
+    return await this.cohortService.getCohortsDetails(requiredData, response);
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.COHORT_CREATE))
@@ -105,9 +104,8 @@ export class CohortController {
     @Body() cohortCreateDto: CohortCreateDto,
     @UploadedFile() image,
     @Res() response: Response,
-    @GetUserId("userId", ParseUUIDPipe) userId: string  
+    @GetUserId("userId", ParseUUIDPipe) userId: string
   ) {
-      
     const tenantId = headers["tenantid"];
     const academicYearId = headers["academicyearid"];
     if (!tenantId || !isUUID(tenantId)) {
@@ -123,8 +121,7 @@ export class CohortController {
     cohortCreateDto.tenantId = tenantId;
     cohortCreateDto.createdBy = userId;
     cohortCreateDto.updatedBy = userId;
-    return await this.cohortService
-      .createCohort(cohortCreateDto, response);
+    return await this.cohortService.createCohort(cohortCreateDto, response);
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.COHORT_LIST))
@@ -157,8 +154,12 @@ export class CohortController {
     if (!academicYearId || !isUUID(academicYearId)) {
       throw new BadRequestException(API_RESPONSES.ACADEMICYEARID_VALIDATION);
     }
-    return await this.cohortService
-      .searchCohort(tenantId, academicYearId, cohortSearchDto, response);
+    return await this.cohortService.searchCohort(
+      tenantId,
+      academicYearId,
+      cohortSearchDto,
+      response
+    );
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.COHORT_UPDATE))
@@ -186,8 +187,11 @@ export class CohortController {
     @GetUserId("userId", ParseUUIDPipe) userId: string
   ) {
     cohortUpdateDto.updatedBy = userId;
-    return await this.cohortService
-      .updateCohort(cohortId, cohortUpdateDto, response);
+    return await this.cohortService.updateCohort(
+      cohortId,
+      cohortUpdateDto,
+      response
+    );
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.COHORT_DELETE))
@@ -200,8 +204,11 @@ export class CohortController {
     @Res() response: Response,
     @GetUserId("userId", ParseUUIDPipe) userId: string
   ) {
-    return await this.cohortService
-      .updateCohortStatus(cohortId, response, userId);
+    return await this.cohortService.updateCohortStatus(
+      cohortId,
+      response,
+      userId
+    );
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.COHORT_READ))
@@ -239,7 +246,9 @@ export class CohortController {
       getChildData: getChildDataValueBoolean,
       customField: fieldValueBooelan,
     };
-    return await this.cohortService
-      .getCohortHierarchyData(requiredData, response);
+    return await this.cohortService.getCohortHierarchyData(
+      requiredData,
+      response
+    );
   }
 }

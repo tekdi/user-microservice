@@ -48,7 +48,14 @@ import { AuthUtils } from "src/common/utils/auth-util";
     KafkaModule,
   ],
   controllers: [UserController],
-  providers: [UserService, UploadS3Service, AutomaticMemberService, NotificationRequest, JwtUtil, AuthUtils],
+  providers: [
+    UserService,
+    UploadS3Service,
+    AutomaticMemberService,
+    NotificationRequest,
+    JwtUtil,
+    AuthUtils,
+  ],
   exports: [UserService], // Export UserService so it can be used in other modules
 })
 export class UserModule {}

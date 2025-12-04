@@ -26,7 +26,6 @@ import { CohortAcademicYearModule } from "../cohortAcademicYear/cohortAcademicYe
 import { AcademicyearsModule } from "../academicyears/academicyears.module";
 import { KafkaModule } from "../kafka/kafka.module";
 
-
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -40,7 +39,7 @@ import { KafkaModule } from "../kafka/kafka.module";
       AcademicYear,
       User,
       Tenants,
-      AutomaticMember
+      AutomaticMember,
     ]),
     HttpModule,
     FieldsModule,
@@ -50,10 +49,7 @@ import { KafkaModule } from "../kafka/kafka.module";
     KafkaModule,
   ],
   controllers: [CohortController],
-  providers: [
-    CohortService,
-    AutomaticMemberService,
-  ],
+  providers: [CohortService, AutomaticMemberService],
   exports: [CohortService],
 })
-export class CohortModule { }
+export class CohortModule {}

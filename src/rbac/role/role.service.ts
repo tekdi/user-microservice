@@ -3,11 +3,7 @@ import { Role } from "./entities/role.entity";
 import { RolePrivilegeMapping } from "src/rbac/assign-privilege/entities/assign-privilege.entity";
 import { InjectRepository } from "@nestjs/typeorm";
 import { IsNull, Repository } from "typeorm";
-import {
-  CreateRolesDto,
-  RoleDto,
-  RolesResponseDto,
-} from "./dto/role.dto";
+import { CreateRolesDto, RoleDto, RolesResponseDto } from "./dto/role.dto";
 import { RoleSearchDto } from "./dto/role-search.dto";
 import { UserRoleMapping } from "src/rbac/assign-role/entities/assign-role.entity";
 import { Privilege } from "src/rbac/privilege/entities/privilege.entity";
@@ -15,8 +11,7 @@ import { isUUID } from "class-validator";
 import APIResponse from "src/common/responses/response";
 import { Response } from "express";
 import { APIID } from "src/common/utils/api-id.config";
-import { validate as uuidValidate } from 'uuid';
-
+import { validate as uuidValidate } from "uuid";
 
 @Injectable()
 export class RoleService {
@@ -27,7 +22,7 @@ export class RoleService {
     private readonly userRoleMappingRepository: Repository<UserRoleMapping>,
     @InjectRepository(RolePrivilegeMapping)
     private readonly roleprivilegeMappingRepository: Repository<RolePrivilegeMapping>
-  ) { }
+  ) {}
   public async createRole(
     request: any,
     createRolesDto: CreateRolesDto,
@@ -38,7 +33,10 @@ export class RoleService {
     const errors = [];
 
     try {
-      if (createRolesDto?.tenantId?.trim() !== '' && !uuidValidate(createRolesDto?.tenantId)) {
+      if (
+        createRolesDto?.tenantId?.trim() !== "" &&
+        !uuidValidate(createRolesDto?.tenantId)
+      ) {
         return APIResponse.error(
           response,
           apiId,
@@ -265,7 +263,7 @@ export class RoleService {
             roleId: data.roleId,
             title: data.title,
             code: data.code,
-            privileges: roleResult ? roleResult : [],
+            privileges: roleResult ?? [],
           };
         });
         return APIResponse.success(
@@ -335,10 +333,9 @@ export class RoleService {
       const response = await this.roleRepository.delete(roleId);
 
       // Delete entries from RolePrivilegesMapping table associated with the roleId
-      const rolePrivilegesDeleteResponse =
-        await this.roleprivilegeMappingRepository.delete({
-          roleId: roleId,
-        });
+      await this.roleprivilegeMappingRepository.delete({
+        roleId: roleId,
+      });
 
       const userRoleDeleteResponse =
         await this.userRoleMappingRepository.delete({

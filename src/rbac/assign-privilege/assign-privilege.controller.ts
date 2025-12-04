@@ -31,9 +31,7 @@ import { JwtAuthGuard } from "src/common/guards/keycloak.guard";
 @Controller("assignprivilege")
 @UseGuards(JwtAuthGuard)
 export class AssignPrivilegeController {
-  constructor(
-    // Service will be added when available
-  ) {}
+  constructor() {} // Service will be added when available
 
   @Post()
   @UsePipes(new ValidationPipe())

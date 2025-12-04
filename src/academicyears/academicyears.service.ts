@@ -17,7 +17,7 @@ export class AcademicYearService {
     private readonly academicYearRespository: Repository<AcademicYear>,
     @InjectRepository(Tenants)
     private readonly tenantRepository: Repository<Tenants>
-  ) { }
+  ) {}
 
   public async createAcademicYear(
     academicYearDto: AcademicYearDto,
@@ -33,7 +33,9 @@ export class AcademicYearService {
       academicYearDto.session = `${startSessionYear}-${endSessionYear}`;
       academicYearDto.tenantId = tenantId;
 
-      const tenantExist = await this.tenantRepository.findOne({ where: { tenantId: tenantId } })
+      const tenantExist = await this.tenantRepository.findOne({
+        where: { tenantId: tenantId },
+      });
       if (!tenantExist) {
         return APIResponse.error(
           response,
@@ -167,7 +169,9 @@ export class AcademicYearService {
   async getAcademicYearById(id, response) {
     const apiId = APIID.ACADEMICYEAR_GET;
     try {
-      const academicYearResult = await this.academicYearRespository.findOne({ where: { id: id } });
+      const academicYearResult = await this.academicYearRespository.findOne({
+        where: { id: id },
+      });
       if (!academicYearResult) {
         return APIResponse.error(
           response,
@@ -196,4 +200,3 @@ export class AcademicYearService {
     }
   }
 }
-

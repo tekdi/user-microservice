@@ -29,7 +29,7 @@ export class AuthService {
     private readonly keycloakService: KeycloakService,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>
-  ) { }
+  ) {}
 
   async login(authDto, response: Response) {
     const apiId = APIID.LOGIN;
@@ -79,8 +79,11 @@ export class AuthService {
     try {
       const decoded: any = jwt_decode(request.headers.authorization);
       const username = decoded.preferred_username;
-      const data = await this.userService
-        .findUserDetails(null, username, tenantId);
+      const data = await this.userService.findUserDetails(
+        null,
+        username,
+        tenantId
+      );
 
       // Update lastLogin timestamp for the user (stored in UTC/GMT)
       if (data && data.userId) {
@@ -103,8 +106,8 @@ export class AuthService {
       // Using 'login' event type which only sends lastLogin timestamp (lightweight)
       if (data && data.userId) {
         this.userService
-          .publishUserEvent('login', data.userId, apiId)
-          .catch(error => {
+          .publishUserEvent("login", data.userId, apiId)
+          .catch((error) => {
             // Log error but don't block - Kafka failures shouldn't affect auth flow
             LoggerUtil.error(
               `Failed to publish user login event to Kafka for ${username}`,

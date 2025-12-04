@@ -11,4 +11,4 @@ import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
   controllers: [AcademicyearsController],
   exports: [AcademicYearService],
 })
-export class AcademicyearsModule { }
+export class AcademicyearsModule {}

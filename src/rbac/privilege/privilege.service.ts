@@ -151,7 +151,6 @@ export class PrivilegeService {
   //         if (existingPrivilegeResponse instanceof ErrorResponseTypeOrm) {
   //             return existingPrivilegeResponse;
   //         }
-
   //         // Cast the data property of the SuccessResponse to a Privilege object
   //         const existingPrivilege: Privilege = existingPrivilegeResponse.data as Privilege;
 
@@ -227,10 +226,9 @@ export class PrivilegeService {
       const response = await this.privilegeRepository.delete(privilegeId);
 
       // Delete entries from RolePrivilegesMapping table associated with the privilegeId
-      const rolePrivilegesDeleteResponse =
-        await this.rolePrivilegeMappingRepository.delete({
-          privilegeId: privilegeId,
-        });
+      await this.rolePrivilegeMappingRepository.delete({
+        privilegeId: privilegeId,
+      });
       return APIResponse.success(
         res,
         APIID.PRIVILEGE_DELETE,

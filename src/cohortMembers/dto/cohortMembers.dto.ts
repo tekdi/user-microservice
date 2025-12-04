@@ -35,7 +35,9 @@ export class CohortMembersDto {
   })
   @Expose()
   @IsOptional()
-  @IsUUID(undefined, { message: "cohortAcademicYearId Id must be a valid UUID" })
+  @IsUUID(undefined, {
+    message: "cohortAcademicYearId Id must be a valid UUID",
+  })
   cohortAcademicYearId: string;
 
   //userId

@@ -134,7 +134,6 @@ export class filtersProperty {
   @IsNotEmpty({ each: true })
   block: string[];
 
-
   @ApiPropertyOptional({
     type: [String],
     description: "Block",

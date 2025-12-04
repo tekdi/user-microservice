@@ -16,7 +16,7 @@ import APIResponse from "src/common/responses/response";
 import { APIID } from "src/common/utils/api-id.config";
 import { Response } from "express";
 import { readFileSync } from "fs";
-import path, { join } from "path";
+import path, { join } from "node:path";
 import { FieldFactory } from "./fieldValidators/fieldFactory";
 import { FieldsUpdateDto } from "./dto/fields-update.dto";
 import { SchemaField, Option } from "./fieldValidators/fieldClass";
@@ -665,7 +665,7 @@ export class FieldsService {
 
       //get existing fields which are present in out database
       const existingOptions =
-        existingField.fieldParams !== null
+        existingField.fieldParams
           ? existingField.fieldParams["options"]
           : [];
       const newOption = newParams;
@@ -1257,14 +1257,12 @@ export class FieldsService {
         } else {
           dynamicOptions = getFieldValuesFromJson;
         }
-      } else {
-        if (fetchFieldParams.fieldParams["options"] && controllingfieldfk) {
-          dynamicOptions = fetchFieldParams?.fieldParams["options"].filter(
-            (option: any) => option?.controllingfieldfk === controllingfieldfk
-          );
-        } else {
-          dynamicOptions = fetchFieldParams?.fieldParams["options"];
-        }
+      } else if (fetchFieldParams.fieldParams["options"] && controllingfieldfk) {
+        dynamicOptions = fetchFieldParams?.fieldParams["options"].filter(
+          (option: any) => option?.controllingfieldfk === controllingfieldfk
+        );
+      } else if (fetchFieldParams.fieldParams["options"]) {
+        dynamicOptions = fetchFieldParams?.fieldParams["options"];
       }
 
       if (dynamicOptions.length === 0) {
@@ -1690,7 +1688,7 @@ export class FieldsService {
         };
 
         if (
-          requiredFieldOptions == true &&
+          requiredFieldOptions &&
           (data?.dependsOn == "" || data?.dependsOn == undefined)
         ) {
           if (data?.sourceDetails?.source === "table") {
@@ -1718,7 +1716,6 @@ export class FieldsService {
   }
 
   async getEditableFieldsAttributes(tenantId: string) {
-    let tenantData = tenantId ? tenantId : 'default'
     const getFieldsAttributesQuery = `
           SELECT * 
           FROM "public"."Fields" 

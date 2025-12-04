@@ -54,8 +54,7 @@ export class RoleController {
     @Req() request: Request,
     @Res() response: Response
   ) {
-    return await this.roleService
-      .getRole(roleId, request, response);
+    return await this.roleService.getRole(roleId, request, response);
   }
 
   //Create role
@@ -72,8 +71,7 @@ export class RoleController {
     @Body() createRolesDto: CreateRolesDto,
     @Res() response: Response
   ) {
-    return await this.roleService
-      .createRole(request, createRolesDto, response);
+    return await this.roleService.createRole(request, createRolesDto, response);
   }
 
   //Update Role
@@ -90,8 +88,12 @@ export class RoleController {
     @Body() roleDto: RoleDto,
     @Res() response: Response
   ) {
-    return await this.roleService
-      .updateRole(roleId, request, roleDto, response);
+    return await this.roleService.updateRole(
+      roleId,
+      request,
+      roleDto,
+      response
+    );
   }
 
   // search Role
@@ -111,8 +113,7 @@ export class RoleController {
     @Res() response: Response
   ) {
     // let tenantid = headers["tenantid"];
-    return await this.roleService
-      .searchRole(roleSearchDto, response);
+    return await this.roleService.searchRole(roleSearchDto, response);
   }
 
   //delete role
@@ -127,7 +128,6 @@ export class RoleController {
     @Param("roleId") roleId: string,
     @Res() response: Response
   ) {
-    return await this.roleService
-      .deleteRole(roleId, response);
+    return await this.roleService.deleteRole(roleId, response);
   }
 }

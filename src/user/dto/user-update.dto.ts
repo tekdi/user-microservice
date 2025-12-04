@@ -12,11 +12,11 @@ import {
 import { Expose, Type } from "class-transformer";
 import { UserStatus } from "../entities/user-entity";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import {AutomaticMemberDto} from "src/user/dto/user-create.dto";
+import { AutomaticMemberDto } from "src/user/dto/user-create.dto";
 
 export enum ActionType {
-  ADD = 'add',
-  REMOVE = 'remove',
+  ADD = "add",
+  REMOVE = "remove",
 }
 
 class UserDataDTO {
@@ -25,21 +25,34 @@ class UserDataDTO {
   @IsOptional()
   username: string;
 
-  @ApiProperty({ type: String, description: 'First name of the user', maxLength: 50 })
+  @ApiProperty({
+    type: String,
+    description: "First name of the user",
+    maxLength: 50,
+  })
   @Expose()
   @IsOptional()
   @IsString()
   @Length(1, 50)
   firstName?: string;
 
-  @ApiProperty({ type: String, description: 'Middle name of the user (optional)', maxLength: 50, required: false })
+  @ApiProperty({
+    type: String,
+    description: "Middle name of the user (optional)",
+    maxLength: 50,
+    required: false,
+  })
   @Expose()
   @IsOptional()
   @IsString()
   @Length(0, 50)
   middleName?: string;
 
-  @ApiProperty({ type: String, description: 'Last name of the user', maxLength: 50 })
+  @ApiProperty({
+    type: String,
+    description: "Last name of the user",
+    maxLength: 50,
+  })
   @Expose()
   @IsOptional()
   @IsString()
@@ -48,11 +61,11 @@ class UserDataDTO {
 
   @ApiProperty({
     type: String,
-    description: 'Gender of the user',
-    enum: ['male', 'female', 'transgender']
+    description: "Gender of the user",
+    enum: ["male", "female", "transgender"],
   })
   @Expose()
-  @IsEnum(['male', 'female', 'transgender'])
+  @IsEnum(["male", "female", "transgender"])
   @IsOptional()
   gender?: string;
 
@@ -61,7 +74,11 @@ class UserDataDTO {
   @IsOptional()
   role: string;
 
-  @ApiProperty({ type: () => String, format: 'date-time', example: '1990-01-01' })
+  @ApiProperty({
+    type: () => String,
+    format: "date-time",
+    example: "1990-01-01",
+  })
   @IsOptional()
   @Type(() => Date) // Ensures validation correctly parses strings into Date objects
   @IsDate()
@@ -92,13 +109,13 @@ class UserDataDTO {
   @IsString()
   pincode: string | null;
 
-  @ApiProperty({ type: () => Date, format: 'date-time' })
+  @ApiProperty({ type: () => Date, format: "date-time" })
   @IsOptional()
   @Type(() => Date)
   @IsDate()
   createdAt: Date;
 
-  @ApiProperty({ type: () => Date, format: 'date-time' })
+  @ApiProperty({ type: () => Date, format: "date-time" })
   @IsOptional()
   @Type(() => Date)
   @IsDate()
@@ -122,7 +139,10 @@ class UserDataDTO {
   @ApiProperty({ type: () => String })
   @IsString()
   @IsOptional()
-  @IsEnum(UserStatus, { message: 'Invalid status value. Allowed values are: active, inactive, archived.' })
+  @IsEnum(UserStatus, {
+    message:
+      "Invalid status value. Allowed values are: active, inactive, archived.",
+  })
   status: UserStatus;
 
   @ApiProperty({ type: () => String })
@@ -134,12 +154,14 @@ class UserDataDTO {
   @IsString()
   @IsOptional()
   @ValidateIf((o) => o.action)
-  @IsNotEmpty({ message: 'deviceId is required when action is provided' })
+  @IsNotEmpty({ message: "deviceId is required when action is provided" })
   deviceId: string;
 
   @ApiProperty({ enum: ActionType, required: false })
   @ValidateIf((o) => o.deviceId)
-  @IsEnum(ActionType, { message: `Action must be either ${Object.values(ActionType).join(' or ')}` }) // Restrict to "add" or "remove"
+  @IsEnum(ActionType, {
+    message: `Action must be either ${Object.values(ActionType).join(" or ")}`,
+  }) // Restrict to "add" or "remove"
   action: ActionType;
 }
 class CustomFieldDTO {
@@ -156,7 +178,6 @@ class CustomFieldDTO {
   value: string | string[];
 }
 
-
 export class UserUpdateDTO {
   userId: string;
 
@@ -167,7 +188,10 @@ export class UserUpdateDTO {
   @Type(() => UserDataDTO)
   userData: UserDataDTO;
 
-  @ApiPropertyOptional({ type: () => AutomaticMemberDto, description: 'Details of automatic membership' })
+  @ApiPropertyOptional({
+    type: () => AutomaticMemberDto,
+    description: "Details of automatic membership",
+  })
   @Expose()
   automaticMember?: AutomaticMemberDto;
 

@@ -48,7 +48,7 @@ import { GetUserId } from "src/common/decorators/getUserId.decorator";
 @Controller("cohortmember")
 @UseGuards(JwtAuthGuard)
 export class CohortMembersController {
-  constructor(private readonly cohortMembersService: CohortMembersService) { }
+  constructor(private readonly cohortMembersService: CohortMembersService) {}
 
   //create cohort members
   @UseFilters(new AllExceptionsFilter(APIID.COHORT_MEMBER_CREATE))
@@ -88,15 +88,14 @@ export class CohortMembersController {
       );
     }
 
-    const result = await this.cohortMembersService
-      .createCohortMembers(
-        loginUser,
-        cohortMembersDto,
-        response,
-        tenantId,
-        deviceId,
-        academicyearId
-      );
+    const result = await this.cohortMembersService.createCohortMembers(
+      loginUser,
+      cohortMembersDto,
+      response,
+      tenantId,
+      deviceId,
+      academicyearId
+    );
     return response.status(result.statusCode).json(result);
   }
 
@@ -131,14 +130,13 @@ export class CohortMembersController {
         "academicyearId is required and academicyearId must be a valid UUID."
       );
     }
-    const result = await this.cohortMembersService
-      .getCohortMembers(
-        cohortId,
-        tenantId,
-        fieldvalue,
-        academicyearId,
-        response
-      );
+    const result = await this.cohortMembersService.getCohortMembers(
+      cohortId,
+      tenantId,
+      fieldvalue,
+      academicyearId,
+      response
+    );
   }
 
   // search;
@@ -175,13 +173,12 @@ export class CohortMembersController {
         "academicyearId is required and must be a valid UUID."
       );
     }
-    const result = await this.cohortMembersService
-      .searchCohortMembers(
-        cohortMembersSearchDto,
-        tenantId,
-        academicyearId,
-        response
-      );
+    const result = await this.cohortMembersService.searchCohortMembers(
+      cohortMembersSearchDto,
+      tenantId,
+      academicyearId,
+      response
+    );
   }
 
   //update
@@ -194,7 +191,7 @@ export class CohortMembersController {
   @ApiNotFoundResponse({ description: "Data not found" })
   @ApiBadRequestResponse({ description: "Bad request" })
   @ApiBody({ type: CohortMembersUpdateDto })
-  @UsePipes(new ValidationPipe()) 
+  @UsePipes(new ValidationPipe())
   public async updateCohortMembers(
     @Param("cohortmembershipid") cohortMembersId: string,
     @Req() request,
@@ -205,17 +202,14 @@ export class CohortMembersController {
   ) {
     const loginUser = userId;
     if (!loginUser || !isUUID(loginUser)) {
-      throw new BadRequestException(
-        "unauthorized!"
-      );
+      throw new BadRequestException("unauthorized!");
     }
-    const result = await this.cohortMembersService
-      .updateCohortMembers(
-        cohortMembersId,
-        loginUser,
-        cohortMemberUpdateDto,
-        response
-      );
+    const result = await this.cohortMembersService.updateCohortMembers(
+      cohortMembersId,
+      loginUser,
+      cohortMemberUpdateDto,
+      response
+    );
   }
 
   //delete
@@ -238,8 +232,11 @@ export class CohortMembersController {
   ) {
     const tenantid = headers["tenantid"];
 
-    const result = await this.cohortMembersService
-      .deleteCohortMemberById(tenantid, cohortMembershipId, response);
+    const result = await this.cohortMembersService.deleteCohortMemberById(
+      tenantid,
+      cohortMembershipId,
+      response
+    );
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.COHORT_MEMBER_CREATE))
@@ -248,14 +245,19 @@ export class CohortMembersController {
   @UsePipes(new ValidationPipe())
   // @ApiBasicAuth("access-token")
   @ApiHeader({
-    name: "tenantid", required: true
+    name: "tenantid",
+    required: true,
   })
   @ApiHeader({
-    name: "academicyearid", required: true
+    name: "academicyearid",
+    required: true,
   })
   @ApiQuery({
-    name: 'userId', required: true, type: 'string', description: 'userId required',
-    example: '123e4567-e89b-12d3-a456-426614174000',
+    name: "userId",
+    required: true,
+    type: "string",
+    description: "userId required",
+    example: "123e4567-e89b-12d3-a456-426614174000",
   })
   @ApiCreatedResponse({
     description: "Cohort Member has been created successfully.",
@@ -271,9 +273,7 @@ export class CohortMembersController {
     const tenantId = headers["tenantid"];
     const academicyearId = headers["academicyearid"];
     if (!loginUser || !isUUID(loginUser)) {
-      throw new BadRequestException(
-        "unauthorized!"
-      );
+      throw new BadRequestException("unauthorized!");
     }
     if (!tenantId || !isUUID(tenantId)) {
       throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
@@ -283,14 +283,13 @@ export class CohortMembersController {
         "academicyearId is required and must be a valid UUID."
       );
     }
-    const result = await this.cohortMembersService
-      .createBulkCohortMembers(
-        loginUser,
-        bulkCohortMembersDto,
-        response,
-        tenantId,
-        academicyearId
-      );
+    const result = await this.cohortMembersService.createBulkCohortMembers(
+      loginUser,
+      bulkCohortMembersDto,
+      response,
+      tenantId,
+      academicyearId
+    );
     return result;
   }
 }
