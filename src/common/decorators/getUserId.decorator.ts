@@ -10,7 +10,7 @@ export const GetUserId = createParamDecorator(
     const request = ctx.switchToHttp().getRequest();
     const authHeader = request.headers.authorization;
 
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    if (!authHeader?.startsWith("Bearer ")) {
       throw new UnauthorizedException("Invalid or missing token");
     }
 

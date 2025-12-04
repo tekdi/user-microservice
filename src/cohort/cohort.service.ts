@@ -201,20 +201,6 @@ export class CohortService {
     return result;
   }
 
-  //   public async getCohortCustomFieldDetails(cohortId: string) {
-  //     let context = 'COHORT';
-  //     let fieldValue = await this.fieldsService.getFieldValuesData(cohortId, context, "COHORT", null, true, true);
-  //     let results = [];
-
-  //     for (let data of fieldValue) {
-  //         let result = {
-  //             name: '',
-  //             value: ''
-  //         };
-  //         result.name = data.name;
-  //         result.value = data.value;
-  //         results.push(result);
-  //     }
   public async validateFieldValues(field_value_array: string[]) {
     const encounteredKeys = [];
     for (const fieldValue of field_value_array) {
@@ -411,7 +397,6 @@ export class CohortService {
         );
       }
 
-      // const checkData = await this.checkIfCohortExist(cohortId);
       const existingCohorDetails = await this.cohortRepository.findOne({
         where: { cohortId: cohortId },
       });
@@ -647,7 +632,7 @@ export class CohortService {
       );
 
       // Combine the arrays
-      const allowedKeys = ["userId", ...cohortAllKeys, ...customFieldsKeys];
+      const allowedKeys = new Set(["userId", ...cohortAllKeys, ...customFieldsKeys]);
 
       const whereClause = {};
       const searchCustomFields = {};
@@ -678,7 +663,7 @@ export class CohortService {
           });
         }
         Object.entries(filters).forEach(([key, value]) => {
-          if (!allowedKeys.includes(key) && key !== "customFieldsName") {
+          if (!allowedKeys.has(key) && key !== "customFieldsName") {
             return APIResponse.error(
               response,
               apiId,

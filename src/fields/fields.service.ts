@@ -116,7 +116,6 @@ export class FieldsService {
 
   //validate cohort Create/update API Custom field
   public async validateCustomField(cohortCreateDto, contextType) {
-    const tenantId = cohortCreateDto?.tenantId;
     const fieldValues = cohortCreateDto ? cohortCreateDto.customFields : [];
     const encounteredKeys = [];
     const invalidateFields = [];
@@ -626,8 +625,7 @@ export class FieldsService {
 
       //If fields is depends on another fields but did not provide controlling field foreign key
       if (storeWithoutControllingField.length > 0) {
-        const wrongControllingField = storeWithoutControllingField.join(",");
-        // Note: Error message assigned but not used - should return error response
+        // Note: Error should be returned but currently not handled
       }
 
       const result = await this.fieldsRepository.update(fieldId, fieldsData);
@@ -750,7 +748,7 @@ export class FieldsService {
       // Condition from function parameters
       {
         context: context,
-        contextType: contextType ? contextType : IsNull(),
+        contextType: contextType ?? IsNull(),
       },
       // Always include this condition to fetch  Values with context and contextType as Null
       {

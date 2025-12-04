@@ -167,9 +167,7 @@ export class RoleService {
   public async searchRole(roleSearchDto: RoleSearchDto, response: Response) {
     const apiId = APIID.ROLE_SEARCH;
     try {
-      const { limit, page, filters } = roleSearchDto;
-      const offset = page > 1 ? Number.parseInt(limit) * (page - 1) : 0;
-      const finalLimit = limit.trim() === "" ? "0" : limit;
+      const { filters } = roleSearchDto;
 
       const whereClause: any = {};
       if (filters && Object.keys(filters).length > 0) {
