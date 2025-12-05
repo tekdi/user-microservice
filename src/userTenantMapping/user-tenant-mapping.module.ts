@@ -1,4 +1,5 @@
-import { HttpModule, Module } from "@nestjs/common";
+import { Module } from "@nestjs/common";
+import { HttpModule } from "@nestjs/axios";
 import { AssignTenantController } from "./user-tenant-mapping.controller";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { UserTenantMapping } from "./entities/user-tenant-mapping.entity";

@@ -1,7 +1,6 @@
 // src/s3.service.ts
 import { HttpStatus, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { S3 } from "aws-sdk";
 import { S3Client } from "@aws-sdk/client-s3";
 import APIResponse from "../responses/response";
 import { API_RESPONSES } from "@utils/response.messages";
@@ -12,7 +11,6 @@ import { createPresignedPost } from "@aws-sdk/s3-presigned-post";
 
 @Injectable()
 export class UploadS3Service {
-  private s3: S3;
   private s3Client: S3Client;
   private bucketName: string;
 
