@@ -194,7 +194,7 @@ async function updateUserInKeyCloak(
     // Extract error details
     const axiosError: AxiosError = error;
     const errorMessage =
-      axiosError.response?.data?.errorMessage || "Failed to update user in Keycloak";
+      (axiosError.response?.data as any)?.errorMessage || "Failed to update user in Keycloak";
 
     return {
       success: false,
@@ -312,7 +312,7 @@ async function updateUserEnabledStatusInKeycloak(
     // Extract error details
     const axiosError: AxiosError = error;
     const errorMessage =
-      axiosError.response?.data?.errorMessage || `Failed to ${query.enabled ? 'enable' : 'disable'} user in Keycloak`;
+      (axiosError.response?.data as any)?.errorMessage || `Failed to ${query.enabled ? 'enable' : 'disable'} user in Keycloak`;
 
     return {
       success: false,

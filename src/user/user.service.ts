@@ -47,7 +47,8 @@ import { OtpVerifyDTO } from "./dto/otpVerify.dto";
 import { SendPasswordResetOTPDto } from "./dto/passwordReset.dto";
 import { ActionType, UserUpdateDTO } from "./dto/user-update.dto";
 import { randomInt } from 'crypto';
-import { UUID } from "aws-sdk/clients/cloudtrail";
+// UUID type - avoiding deprecated AWS SDK v2 types
+type UUID = string;
 import { AutomaticMemberService } from "src/automatic-member/automatic-member.service";
 import { KafkaService } from "src/kafka/kafka.service";
 
