@@ -1,5 +1,5 @@
 import { HttpStatus, Injectable } from "@nestjs/common";
-import { Role } from "src/rbac/role/entities/role.entity";
+import { Role } from "./entities/role.entity";
 import { RolePrivilegeMapping } from "src/rbac/assign-privilege/entities/assign-privilege.entity";
 import { InjectRepository } from "@nestjs/typeorm";
 import { IsNull, Repository } from "typeorm";
@@ -7,8 +7,8 @@ import {
   CreateRolesDto,
   RoleDto,
   RolesResponseDto,
-} from "../../../rbac/role/dto/role.dto";
-import { RoleSearchDto } from "../../../rbac/role/dto/role-search.dto";
+} from "./dto/role.dto";
+import { RoleSearchDto } from "./dto/role-search.dto";
 import { UserRoleMapping } from "src/rbac/assign-role/entities/assign-role.entity";
 import { Privilege } from "src/rbac/privilege/entities/privilege.entity";
 import { isUUID } from "class-validator";
@@ -19,7 +19,7 @@ import { validate as uuidValidate } from 'uuid';
 
 
 @Injectable()
-export class PostgresRoleService {
+export class RoleService {
   constructor(
     @InjectRepository(Role)
     private roleRepository: Repository<Role>,

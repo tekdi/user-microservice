@@ -12,19 +12,17 @@ import { User } from "src/user/entities/user-entity";
 import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
 import { Role } from "src/rbac/role/entities/role.entity";
 import { UserRoleMapping } from "src/rbac/assign-role/entities/assign-role.entity";
-import { IServicelocatorAssignTenant } from "../usertenantmappinglocator";
 import APIResponse from "src/common/responses/response";
 import { Response } from "express";
 import { APIID } from "src/common/utils/api-id.config";
 import { isUUID } from "class-validator";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
-import { PostgresUserService } from "./user-adapter";
-import { PostgresFieldsService } from "./fields-adapter";
+import { UserService } from "src/user/user.service";
+import { FieldsService } from "src/fields/fields.service";
 import { KafkaService } from "src/kafka/kafka.service";
 
 @Injectable()
-export class PostgresAssignTenantService
-  implements IServicelocatorAssignTenant {
+export class UserTenantMappingService {
   constructor(
     @InjectRepository(UserTenantMapping)
     private userTenantMappingRepository: Repository<UserTenantMapping>,
@@ -36,8 +34,8 @@ export class PostgresAssignTenantService
     private roleRepository: Repository<Role>,
     @InjectRepository(UserRoleMapping)
     private userRoleMappingRepository: Repository<UserRoleMapping>,
-    private postgresUserService: PostgresUserService,
-    private fieldsService: PostgresFieldsService,
+    private userService: UserService,
+    private fieldsService: FieldsService,
     private kafkaService: KafkaService
   ) { }
 
@@ -79,14 +77,14 @@ export class PostgresAssignTenantService
 
     // Validate custom fields if provided
     if (customField && customField.length > 0) {
-      // Transform DTO to match the structure expected by PostgresUserService.validateCustomField
+      // Transform DTO to match the structure expected by UserService.validateCustomField
       const transformedDto = {
-        customFields: customField, // Note: PostgresUserService expects 'customFields' not 'customField'
+        customFields: customField, // Note: UserService expects 'customFields' not 'customField'
         tenantCohortRoleMapping: [{ tenantId }, { roleId }] // Provide tenantId in expected structure
       };
 
-      // Use existing validateCustomField from PostgresUserService
-      const customFieldError = await this.postgresUserService.validateCustomField(
+      // Use existing validateCustomField from UserService
+      const customFieldError = await this.userService.validateCustomField(
         transformedDto,
         response,
         apiId
@@ -142,7 +140,7 @@ export class PostgresAssignTenantService
         userTenantStatus: userTenantStatus || "active" // Default to "active" if not provided
       };
 
-      await this.postgresUserService.assignUserToTenantAndRoll(
+      await this.userService.assignUserToTenantAndRoll(
         tenantsData,
         request["user"].userId,
         true

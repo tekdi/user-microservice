@@ -16,7 +16,7 @@ import { Response } from "express";
 import APIResponse from "src/common/responses/response";
 import { APIID } from "src/common/utils/api-id.config";
 @Injectable()
-export class PostgresPrivilegeService {
+export class PrivilegeService {
   constructor(
     @InjectRepository(Privilege)
     private privilegeRepository: Repository<Privilege>,

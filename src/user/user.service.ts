@@ -1,9 +1,9 @@
 import { HttpStatus, Injectable } from "@nestjs/common";
-import { User } from "../../user/entities/user-entity";
+import { User } from "./entities/user-entity";
 import { FieldValues } from "src/fields/entities/fields-values.entity";
 import { InjectRepository } from "@nestjs/typeorm";
 import { DataSource, ILike, In, Repository } from "typeorm";
-import { tenantRoleMappingDto, UserCreateDto } from "../../user/dto/user-create.dto";
+import { tenantRoleMappingDto, UserCreateDto } from "./dto/user-create.dto";
 import jwt_decode from "jwt-decode";
 import {
   getKeycloakAdminToken,
@@ -12,26 +12,25 @@ import {
   checkIfUsernameExistsInKeycloak,
   updateUserEnabledStatusInKeycloak,
   checkIfEmailExistsInKeycloak,
-} from "../../common/utils/keycloak.adapter.util";
+} from "src/common/utils/keycloak.adapter.util";
 import { ErrorResponse } from "src/error-response";
 import { SuccessResponse } from "src/success-response";
 import { CohortMembers } from "src/cohortMembers/entities/cohort-member.entity";
 import { isUUID } from "class-validator";
-import { ExistUserDto, SuggestUserDto, UserSearchDto } from "src/user/dto/user-search.dto";
-import { HierarchicalLocationFiltersDto } from "src/user/dto/user-hierarchical-search.dto";
-import { UserHierarchyViewDto } from "src/user/dto/user-hierarchy-view.dto";
+import { ExistUserDto, SuggestUserDto, UserSearchDto } from "./dto/user-search.dto";
+import { HierarchicalLocationFiltersDto } from "./dto/user-hierarchical-search.dto";
+import { UserHierarchyViewDto } from "./dto/user-hierarchy-view.dto";
 import { UserTenantMapping, UserTenantMappingStatus } from "src/userTenantMapping/entities/user-tenant-mapping.entity";
 import { UserRoleMapping } from "src/rbac/assign-role/entities/assign-role.entity";
 import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
 import { Cohort } from "src/cohort/entities/cohort.entity";
 import { Role } from "src/rbac/role/entities/role.entity";
-import { UserData } from "src/user/user.controller";
+import { UserData } from "./user.controller";
 import APIResponse from "src/common/responses/response";
 import { Request, Response, query } from "express";
 import { APIID } from "src/common/utils/api-id.config";
-import { IServicelocator } from "../userservicelocator";
-import { PostgresFieldsService } from "./fields-adapter";
-import { PostgresRoleService } from "./rbac/role-adapter";
+import { FieldsService } from "src/fields/fields.service";
+import { RoleService } from "src/rbac/role/role.service";
 import { CustomFieldsValidation } from "@utils/custom-field-validation";
 import { NotificationRequest } from "@utils/notification.axios";
 import { JwtUtil } from "@utils/jwt-token";
@@ -39,14 +38,14 @@ import { ConfigService } from "@nestjs/config";
 import { formatTime } from "@utils/formatTimeConversion";
 import { API_RESPONSES } from "@utils/response.messages";
 import { TokenExpiredError, JsonWebTokenError } from "jsonwebtoken";
-import { CohortAcademicYearService } from "./cohortAcademicYear-adapter";
-import { PostgresAcademicYearService } from "./academicyears-adapter";
+import { CohortAcademicYearService } from "src/cohortAcademicYear/cohortAcademicYear.service";
+import { AcademicYearService } from "src/academicyears/academicyears.service";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
 import { AuthUtils } from "@utils/auth-util";
-import { OtpSendDTO } from "src/user/dto/otpSend.dto";
-import { OtpVerifyDTO } from "src/user/dto/otpVerify.dto";
-import { SendPasswordResetOTPDto } from "src/user/dto/passwordReset.dto";
-import { ActionType, UserUpdateDTO } from "src/user/dto/user-update.dto";
+import { OtpSendDTO } from "./dto/otpSend.dto";
+import { OtpVerifyDTO } from "./dto/otpVerify.dto";
+import { SendPasswordResetOTPDto } from "./dto/passwordReset.dto";
+import { ActionType, UserUpdateDTO } from "./dto/user-update.dto";
 import { randomInt } from 'crypto';
 // UUID type - avoiding deprecated AWS SDK v2 types
 type UUID = string;
@@ -61,7 +60,7 @@ interface UpdateField {
   email?: string; // Optional
 }
 @Injectable()
-export class PostgresUserService implements IServicelocator {
+export class UserService {
   axios = require("axios");
   jwt_password_reset_expires_In: any;
   jwt_secret: any;
@@ -89,12 +88,12 @@ export class PostgresUserService implements IServicelocator {
     private userRoleMappingRepository: Repository<UserRoleMapping>,
     @InjectRepository(Role)
     private roleRepository: Repository<Role>,
-    private fieldsService: PostgresFieldsService,
-    private readonly postgresRoleService: PostgresRoleService,
+    private fieldsService: FieldsService,
+    private readonly roleService: RoleService,
     private readonly notificationRequest: NotificationRequest,
     private readonly jwtUtil: JwtUtil,
     private configService: ConfigService,
-    private postgresAcademicYearService: PostgresAcademicYearService,
+    private academicYearService: AcademicYearService,
     private readonly cohortAcademicYearService: CohortAcademicYearService,
     private readonly authUtils: AuthUtils,
     private readonly automaticMemberService: AutomaticMemberService,
@@ -1186,7 +1185,7 @@ export class PostgresUserService implements IServicelocator {
     const tenantMap = new Map();
 
     for (const data of result) {
-      const roleData = await this.postgresRoleService.findUserRoleData(
+      const roleData = await this.roleService.findUserRoleData(
         userId,
         data.tenantId
       );
@@ -2034,7 +2033,7 @@ export class PostgresUserService implements IServicelocator {
 
         // check academic year exists for tenant
         const checkAcadmicYear =
-          await this.postgresAcademicYearService.getActiveAcademicYear(
+          await this.academicYearService.getActiveAcademicYear(
             academicYearId,
             tenantId
           );

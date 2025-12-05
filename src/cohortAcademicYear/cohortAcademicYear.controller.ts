@@ -12,14 +12,14 @@ import { isUUID } from 'class-validator';
 import { Response, Request } from 'express';
 import { AllExceptionsFilter } from 'src/common/filters/exception.filter';
 import { CohortAcademicYearDto } from './dto/cohort-academicyear.dto';
-import { CohortAcademicYearAdapter } from './cohortacademicyearsadaptor';
+import { CohortAcademicYearService } from './cohortAcademicYear.service';
 import { GetUserId } from 'src/common/decorators/getUserId.decorator';
 
 @ApiTags("CohortAcademicYear")
 @Controller('cohort-academic-year')
 export class CohortAcademicYearController {
 
-  constructor(private readonly cohortAcademicYearAdapter: CohortAcademicYearAdapter) { }
+  constructor(private readonly cohortAcademicYearService: CohortAcademicYearService) { }
 
   @UseFilters(new AllExceptionsFilter(APIID.ADD_COHORT_TO_ACADEMIC_YEAR))
   @Post("/create")
@@ -44,6 +44,6 @@ export class CohortAcademicYearController {
       throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
     }
     cohortAcademicYearDto.createdBy = userId;
-    return this.cohortAcademicYearAdapter.buildAcademicYears().createCohortAcademicYear(tenantId, request, cohortAcademicYearDto, response);
+    return this.cohortAcademicYearService.createCohortAcademicYear(tenantId, request, cohortAcademicYearDto, response);
   }
 }

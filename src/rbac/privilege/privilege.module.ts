@@ -3,14 +3,13 @@ import { PrivilegeController } from "./privilege.controller";
 import { Privilege } from "./entities/privilege.entity";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { HttpModule } from "@nestjs/axios";
-import { PostgresModule } from "src/adapters/postgres/postgres-module";
-import { PrivilegeAdapter } from "./privilegeadapter";
-import { PostgresRoleService } from "src/adapters/postgres/rbac/role-adapter";
-import { PostgresPrivilegeService } from "src/adapters/postgres/rbac/privilege-adapter";
+import { PrivilegeService } from "./privilege.service";
+import { RoleService } from "../role/role.service";
 import { Role } from "../role/entities/role.entity";
 import { Repository } from "typeorm";
 import { RolePrivilegeMapping } from "../assign-privilege/entities/assign-privilege.entity";
 import { UserRoleMapping } from "../assign-role/entities/assign-role.entity";
+import { RoleModule } from "../role/role.module";
 
 @Module({
   imports: [
@@ -20,16 +19,14 @@ import { UserRoleMapping } from "../assign-role/entities/assign-role.entity";
       UserRoleMapping,
       RolePrivilegeMapping,
     ]),
-    TypeOrmModule.forFeature([Privilege, Role, RolePrivilegeMapping]),
     HttpModule,
-    PostgresModule,
+    RoleModule,
   ],
   controllers: [PrivilegeController],
   providers: [
-    PrivilegeAdapter,
-    PostgresPrivilegeService,
-    PostgresRoleService,
+    PrivilegeService,
     Repository,
   ],
+  exports: [PrivilegeService],
 })
 export class PrivilegeModule {}
