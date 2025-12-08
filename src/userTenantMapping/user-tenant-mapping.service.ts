@@ -20,6 +20,7 @@ import { LoggerUtil } from "src/common/logger/LoggerUtil";
 import { UserService } from "src/user/user.service";
 import { FieldsService } from "src/fields/fields.service";
 import { KafkaService } from "src/kafka/kafka.service";
+import { API_RESPONSES } from "src/common/utils/response.messages";
 
 @Injectable()
 export class UserTenantMappingService {
@@ -48,30 +49,31 @@ export class UserTenantMappingService {
     response: Response,
     errors: any[]
   ) {
-    const [userExist, tenantExist, existingMapping, roleExist] = await Promise.all([
+    const [userExist, tenantExist, existingRoleMapping, roleExist] = await Promise.all([
       this.userRepository.findOne({ where: { userId } }),
       this.tenantsRepository.findOne({ where: { tenantId } }),
-      this.userTenantMappingRepository.findOne({ where: { userId, tenantId } }),
+      this.userRoleMappingRepository.findOne({ where: { userId, tenantId, roleId } }),
       this.roleRepository.findOne({ where: { roleId } }),
     ]);
 
     if (!userExist) {
-      errors.push({ errorMessage: `User ${userId} does not exist.` });
+      errors.push({ errorMessage: API_RESPONSES.USER_DOES_NOT_EXIST(userId) });
       return false;
     }
 
     if (!tenantExist) {
-      errors.push({ errorMessage: `Tenant ${tenantId} does not exist.` });
+      errors.push({ errorMessage: API_RESPONSES.TENANT_DOES_NOT_EXIST(tenantId) });
       return false;
     }
 
-    if (existingMapping) {
-      errors.push({ errorMessage: `User already exists in Tenant ${tenantId}.` });
+    // Check if user already has the same role in the same tenant
+    if (existingRoleMapping) {
+      errors.push({ errorMessage: API_RESPONSES.USER_ALREADY_HAS_ROLE_IN_TENANT(roleId, tenantId) });
       return false;
     }
 
     if (!roleExist) {
-      errors.push({ errorMessage: `Role ${roleId} does not exist.` });
+      errors.push({ errorMessage: API_RESPONSES.ROLE_DOES_NOT_EXIST(roleId) });
       return false;
     }
 
@@ -147,7 +149,7 @@ export class UserTenantMappingService {
       );
 
       LoggerUtil.log(
-        `User ${userId} assigned role ${roleId} in tenant ${tenantId}`,
+        API_RESPONSES.LOG_USER_ASSIGNED_ROLE_IN_TENANT(userId, roleId, tenantId),
         apiId,
         userId
       );
@@ -156,7 +158,7 @@ export class UserTenantMappingService {
       const createFailures = [];
       if (customField && customField.length > 0) {
         LoggerUtil.log(
-          `Processing ${customField.length} custom fields for user ${userId} in tenant ${tenantId}`,
+          API_RESPONSES.LOG_PROCESSING_CUSTOM_FIELDS(customField.length, userId, tenantId),
           apiId,
           userId
         );
@@ -212,7 +214,7 @@ export class UserTenantMappingService {
         userId: userId,
         tenantId: tenantId,
         roleId: roleId,
-        message: `User is successfully added to the Tenant with role.`,
+        message: API_RESPONSES.USER_ADDED_TO_TENANT_WITH_ROLE,
         createFailures: createFailures.length > 0 ? createFailures : undefined
       };
 
@@ -221,13 +223,13 @@ export class UserTenantMappingService {
         apiId,
         result,
         HttpStatus.OK,
-        "User added to tenant with role successfully."
+        API_RESPONSES.USER_ADDED_TO_TENANT_WITH_ROLE_SUCCESS
       );
 
       // Publish user-tenant mapping event to Kafka asynchronously - after response is sent to client
       this.publishUserTenantMappingEvent('created', userId, tenantId, apiId)
         .catch(error => LoggerUtil.error(
-          `Failed to publish user-tenant created event to Kafka for user ${userId}`,
+          API_RESPONSES.ERROR_FAILED_PUBLISH_USER_TENANT_CREATED(userId),
           `Error: ${error.message}`,
           apiId,
           userId
@@ -238,7 +240,7 @@ export class UserTenantMappingService {
       console.log('error', error);
       const errorMessage = error?.message || "Something went wrong";
       LoggerUtil.error(
-        `Error in userTenantMapping for user ${assignTenantMappingDto.userId}`,
+        API_RESPONSES.ERROR_IN_USER_TENANT_MAPPING(assignTenantMappingDto.userId),
         `Error: ${errorMessage}`,
         apiId,
         assignTenantMappingDto.userId
@@ -305,7 +307,7 @@ export class UserTenantMappingService {
           response,
           apiId,
           "NOT_FOUND",
-          "No tenant mappings found for this user",
+          API_RESPONSES.NO_TENANT_MAPPINGS_FOUND,
           HttpStatus.NOT_FOUND
         );
       }
@@ -315,12 +317,12 @@ export class UserTenantMappingService {
         apiId,
         { mappings, totalCount: mappings.length },
         HttpStatus.OK,
-        "User tenant mappings retrieved successfully"
+        API_RESPONSES.USER_TENANT_MAPPINGS_RETRIEVED
       );
 
     } catch (error) {
       LoggerUtil.error(
-        "SERVER_ERROR",
+        API_RESPONSES.ERROR_GET_USER_TENANT_MAPPINGS,
         `Error: ${error.message}`,
         apiId
       );
@@ -354,7 +356,7 @@ export class UserTenantMappingService {
           response,
           apiId,
           "NOT_FOUND",
-          `User-Tenant mapping not found for userId: ${userId} and tenantId: ${tenantId}`,
+          API_RESPONSES.USER_TENANT_MAPPING_NOT_FOUND(userId, tenantId),
           HttpStatus.NOT_FOUND
         );
       }
@@ -372,7 +374,7 @@ export class UserTenantMappingService {
       await this.userTenantMappingRepository.save(existingMapping);
 
       LoggerUtil.log(
-        `Successfully updated status for user ${userId} in tenant ${tenantId}`,
+        API_RESPONSES.LOG_STATUS_UPDATED_FOR_USER_TENANT(userId, tenantId),
         apiId,
         userId
       );
@@ -383,7 +385,7 @@ export class UserTenantMappingService {
         tenantId: tenantId,
         status: existingMapping.status,
         reason: existingMapping.reason,
-        message: `User-Tenant mapping status updated successfully.`,
+        message: API_RESPONSES.USER_TENANT_MAPPING_STATUS_UPDATED,
       };
 
       const apiResponse = await APIResponse.success(
@@ -391,13 +393,13 @@ export class UserTenantMappingService {
         apiId,
         result,
         HttpStatus.OK,
-        "User-Tenant mapping status updated successfully."
+        API_RESPONSES.USER_TENANT_MAPPING_STATUS_UPDATED
       );
 
       // Publish user-tenant status update event to Kafka asynchronously - after response is sent to client
       this.publishUserTenantMappingEvent('updated_status', userId, tenantId, apiId)
         .catch(error => LoggerUtil.error(
-          `Failed to publish user-tenant updated event to Kafka for user ${userId}`,
+          API_RESPONSES.ERROR_FAILED_PUBLISH_USER_TENANT_UPDATED(userId),
           `Error: ${error.message}`,
           apiId,
           userId
@@ -408,7 +410,7 @@ export class UserTenantMappingService {
       console.log('error', error);
       const errorMessage = error?.message || "Something went wrong";
       LoggerUtil.error(
-        `Error in updateAssignTenantStatus for user ${userId} and tenant ${tenantId}`,
+        API_RESPONSES.ERROR_IN_UPDATE_TENANT_STATUS(userId, tenantId),
         `Error: ${errorMessage}`,
         apiId,
         userId
@@ -456,7 +458,7 @@ export class UserTenantMappingService {
 
           if (!mapping) {
             LoggerUtil.error(
-              `Failed to fetch user-tenant mapping data for Kafka event`,
+              API_RESPONSES.ERROR_FAILED_FETCH_MAPPING_DATA,
               `Mapping not found for userId: ${userId}, tenantId: ${tenantId}`,
               apiId
             );
@@ -477,7 +479,7 @@ export class UserTenantMappingService {
           }
         } catch (error) {
           LoggerUtil.error(
-            `Failed to fetch user-tenant mapping data for Kafka event`,
+            API_RESPONSES.ERROR_FAILED_FETCH_MAPPING_DATA,
             `Error: ${error.message}`,
             apiId
           );
@@ -494,7 +496,7 @@ export class UserTenantMappingService {
 
           if (!mapping) {
             LoggerUtil.error(
-              `Failed to fetch user-tenant mapping data for Kafka event`,
+              API_RESPONSES.ERROR_FAILED_FETCH_MAPPING_DATA,
               `Mapping not found for userId: ${userId}, tenantId: ${tenantId}`,
               apiId
             );
@@ -537,7 +539,7 @@ export class UserTenantMappingService {
               customFields = await this.fieldsService.getCustomFieldDetails(userId, 'Users');
             } catch (error) {
               LoggerUtil.error(
-                `Failed to fetch custom fields for Kafka event`,
+                API_RESPONSES.ERROR_FAILED_FETCH_CUSTOM_FIELDS,
                 `Error: ${error.message}`,
                 apiId
               );
@@ -570,7 +572,7 @@ export class UserTenantMappingService {
           }
         } catch (error) {
           LoggerUtil.error(
-            `Failed to fetch user-tenant data for Kafka event`,
+            API_RESPONSES.ERROR_FAILED_FETCH_USER_TENANT_DATA,
             `Error: ${error.message}`,
             apiId
           );
@@ -580,12 +582,12 @@ export class UserTenantMappingService {
       }
       await this.kafkaService.publishUserTenantEvent(eventType, userTenantData, userId);
       LoggerUtil.log(
-        `User-tenant ${eventType} event published to Kafka for user ${userId} and tenant ${tenantId}`,
+        API_RESPONSES.LOG_USER_TENANT_EVENT_PUBLISHED(eventType, userId, tenantId),
         apiId
       );
     } catch (error) {
       LoggerUtil.error(
-        `Failed to publish user-tenant ${eventType} event to Kafka`,
+        API_RESPONSES.ERROR_FAILED_PUBLISH_USER_TENANT_EVENT(eventType),
         `Error: ${error.message}`,
         apiId
       );

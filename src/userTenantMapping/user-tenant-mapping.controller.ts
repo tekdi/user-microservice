@@ -40,6 +40,7 @@ import { UserTenantMappingDto, UpdateAssignTenantStatusDto } from "./dto/user-te
 import { JwtAuthGuard } from "src/common/guards/keycloak.guard";
 import { AllExceptionsFilter } from "src/common/filters/exception.filter";
 import { APIID } from "src/common/utils/api-id.config";
+import { API_RESPONSES } from "src/common/utils/response.messages";
 
 @ApiTags("UserTenant")
 @Controller("user-tenant")
@@ -51,12 +52,12 @@ export class AssignTenantController {
   @Post()
   @ApiBasicAuth("access-token")
   @ApiCreatedResponse({
-    description: "Tenant assigned successfully to the user.",
+    description: API_RESPONSES.TENANT_ASSIGNED_SUCCESSFULLY,
   })
   @ApiBadRequestResponse({ description: "Bad request." })
   @ApiInternalServerErrorResponse({ description: "Internal Server Error." })
   @ApiConflictResponse({
-    description: "Tenant is already assigned to this user.",
+    description: API_RESPONSES.CONFLICT_USER_ROLE_IN_TENANT,
   })
   @UsePipes(new ValidationPipe())
   @ApiBody({ type: UserTenantMappingDto })
@@ -81,7 +82,7 @@ export class AssignTenantController {
     description: "User ID (UUID format) - Required",
     example: "13946cb5-daee-410e-9174-25f73357f8cb"
   })
-  @ApiOkResponse({ description: "User tenant mappings retrieved successfully" })
+  @ApiOkResponse({ description: API_RESPONSES.USER_TENANT_MAPPINGS_RETRIEVED })
   @ApiNotFoundResponse({ description: "No mappings found" })
   @ApiQuery({ 
     name: "includeArchived", 
@@ -116,7 +117,7 @@ export class AssignTenantController {
     example: "914ca990-9b45-4385-a06b-05054f35d0b9"
   })
   @ApiOkResponse({
-    description: "User-Tenant mapping status updated successfully.",
+    description: API_RESPONSES.USER_TENANT_MAPPING_STATUS_UPDATED,
   })
   @ApiBadRequestResponse({ description: "Bad request." })
   @ApiNotFoundResponse({ description: "User-Tenant mapping not found." })
