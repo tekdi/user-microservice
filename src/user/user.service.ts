@@ -946,7 +946,6 @@ export class UserService {
   // --- Fetch & attach custom fields ---
   if (includeCustomFields) {
     const userIds = userDetails.map((u) => u.userId);
-    console.log("userIds");
     const bulkCustomFields = await this.fieldsService.getBulkCustomFieldDetails(userIds, 'Users');
 
     for (const userData of userDetails) {
