@@ -1994,7 +1994,6 @@ export class FieldsService {
     if (!itemIds || itemIds.length === 0) {
       return {};
     }
-
     let joinCond: string;
     if (tableName === "Users") {
       joinCond = `fv."itemId" = u."userId"`;
@@ -2083,7 +2082,20 @@ export class FieldsService {
               processedValue = data?.value;
             }
           } else {
-            processedValue = selectedValues;
+            // Parse JSON values if the field type is json
+            if (data.type === "json") {
+              processedValue = selectedValues.map((value) => {
+                try {
+                  return typeof value === 'string' ? JSON.parse(value) : value;
+                } catch (error) {
+                  // If parsing fails, return the raw value
+                  return value;
+                }
+              });
+            } else {
+              processedValue = selectedValues;
+            }
+            // processedValue = selectedValues;
           }
 
           return {
