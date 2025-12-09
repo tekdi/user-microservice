@@ -4,7 +4,19 @@ import { ReturnResponseBody } from 'src/cohort/dto/cohort.dto';
 import { CohortSearchDto } from 'src/cohort/dto/cohort-search.dto';
 import { CohortCreateDto } from 'src/cohort/dto/cohort-create.dto';
 import { CohortUpdateDto } from 'src/cohort/dto/cohort-update.dto';
-import { IsNull, Repository, In, ILike, DataSource, MoreThan, LessThan, MoreThanOrEqual, LessThanOrEqual, Equal, Not } from 'typeorm';
+import {
+  IsNull,
+  Repository,
+  In,
+  ILike,
+  DataSource,
+  MoreThan,
+  LessThan,
+  MoreThanOrEqual,
+  LessThanOrEqual,
+  Equal,
+  Not,
+} from 'typeorm';
 import { Cohort } from 'src/cohort/entities/cohort.entity';
 import { Fields } from 'src/fields/entities/fields.entity';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -673,27 +685,27 @@ export class PostgresCohortService {
         }
 
         //Update status in cohortMember table if exist record corresponding cohortId
-        if (
-          validTransitions[cohortUpdateDto.status]?.includes(
-            existingCohorDetails.status
-          )
-        ) {
-          let memberStatus;
-          if (cohortUpdateDto.status === 'archived') {
-            memberStatus = MemberStatus.ARCHIVED;
-          } else if (cohortUpdateDto.status === 'active') {
-            memberStatus = MemberStatus.ACTIVE;
-          } else if (cohortUpdateDto.status === 'inactive') {
-            memberStatus = MemberStatus.INACTIVE;
-          }
+        // if (
+        //   validTransitions[cohortUpdateDto.status]?.includes(
+        //     existingCohorDetails.status
+        //   )
+        // ) {
+        //   let memberStatus;
+        //   if (cohortUpdateDto.status === 'archived') {
+        //     memberStatus = MemberStatus.ARCHIVED;
+        //   } else if (cohortUpdateDto.status === 'active') {
+        //     memberStatus = MemberStatus.ACTIVE;
+        //   } else if (cohortUpdateDto.status === 'inactive') {
+        //     memberStatus = MemberStatus.INACTIVE;
+        //   }
 
-          if (memberStatus) {
-            await this.cohortMembersRepository.update(
-              { cohortId },
-              { status: memberStatus, updatedBy: cohortUpdateDto.updatedBy }
-            );
-          }
-        }
+        //   if (memberStatus) {
+        //     await this.cohortMembersRepository.update(
+        //       { cohortId },
+        //       { status: memberStatus, updatedBy: cohortUpdateDto.updatedBy }
+        //     );
+        //   }
+        // }
 
         LoggerUtil.log(API_RESPONSES.COHORT_UPDATED_SUCCESSFULLY);
         return APIResponse.success(
@@ -894,7 +906,9 @@ export class PostgresCohortService {
                 return APIResponse.error(
                   response,
                   apiId,
-                  `Invalid ${key} filter format. Only one operator is allowed. Found: ${operatorKeys.join(', ')}`,
+                  `Invalid ${key} filter format. Only one operator is allowed. Found: ${operatorKeys.join(
+                    ', '
+                  )}`,
                   'Invalid filter format',
                   HttpStatus.BAD_REQUEST
                 );
@@ -907,7 +921,9 @@ export class PostgresCohortService {
                 return APIResponse.error(
                   response,
                   apiId,
-                  `Invalid operator: ${operator}. Valid operators are: ${validOperators.join(', ')}`,
+                  `Invalid operator: ${operator}. Valid operators are: ${validOperators.join(
+                    ', '
+                  )}`,
                   'Invalid filter operator',
                   HttpStatus.BAD_REQUEST
                 );
@@ -1429,11 +1445,7 @@ export class PostgresCohortService {
    * @param apiId - API identifier for error responses
    * @returns APIResponse.error if validation fails, null otherwise
    */
-  private normalizeCohortDates(
-    dto: any,
-    res: any,
-    apiId: string
-  ): any | null {
+  private normalizeCohortDates(dto: any, res: any, apiId: string): any | null {
     // Handle cohort_startDate
     if (dto.cohort_startDate !== undefined && dto.cohort_startDate !== null) {
       // Treat empty strings as null (unset the date)
@@ -1531,7 +1543,7 @@ export class PostgresCohortService {
     // For full datetime strings, validate the format and parseability
     // First, try to parse it as a Date to ensure it's valid
     let testDate = new Date(normalized);
-    
+
     // If parsing fails, try to fix common issues
     if (isNaN(testDate.getTime())) {
       // If it doesn't have timezone info, try adding Z
@@ -1545,10 +1557,11 @@ export class PostgresCohortService {
           }
         }
       }
-      
+
       // If still invalid, check if it's a valid format but with invalid values
       // Validate the format structure
-      const isoPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?(Z|[+-]\d{2}:?\d{2})?$/;
+      const isoPattern =
+        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?(Z|[+-]\d{2}:?\d{2})?$/;
       if (!isoPattern.test(normalized)) {
         LoggerUtil.warn(
           `Invalid date format: ${dateString}`,
@@ -1556,7 +1569,7 @@ export class PostgresCohortService {
         );
         return null;
       }
-      
+
       // Try parsing one more time
       testDate = new Date(normalized);
       if (isNaN(testDate.getTime())) {
@@ -1570,7 +1583,9 @@ export class PostgresCohortService {
 
     // Additional validation: check if the date components are within valid ranges
     // Extract date parts to validate manually
-    const dateMatch = normalized.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/);
+    const dateMatch = normalized.match(
+      /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/
+    );
     if (dateMatch) {
       const [, year, month, day, hour, minute, second] = dateMatch;
       const monthNum = parseInt(month, 10);
@@ -1581,11 +1596,16 @@ export class PostgresCohortService {
 
       // Validate ranges
       if (
-        monthNum < 1 || monthNum > 12 ||
-        dayNum < 1 || dayNum > 31 ||
-        hourNum < 0 || hourNum > 23 ||
-        minuteNum < 0 || minuteNum > 59 ||
-        secondNum < 0 || secondNum > 59
+        monthNum < 1 ||
+        monthNum > 12 ||
+        dayNum < 1 ||
+        dayNum > 31 ||
+        hourNum < 0 ||
+        hourNum > 23 ||
+        minuteNum < 0 ||
+        minuteNum > 59 ||
+        secondNum < 0 ||
+        secondNum > 59
       ) {
         LoggerUtil.warn(
           `Invalid date component values: ${dateString} (month: ${monthNum}, day: ${dayNum}, hour: ${hourNum}, minute: ${minuteNum}, second: ${secondNum})`,
@@ -1854,4 +1874,3 @@ export class PostgresCohortService {
     }
   }
 }
-
