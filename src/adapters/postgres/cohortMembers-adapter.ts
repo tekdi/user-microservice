@@ -1261,10 +1261,10 @@ export class PostgresCohortMembersService {
     const additionalJoins = includesZeroRange
       ? `
       LEFT JOIN public."formSubmissions" FS
-      ON FS."itemId" = U."userId" AND FS."formId" = '${formId}'`
+      ON FS."itemId" = U."userId"`
       : `
       INNER JOIN public."formSubmissions" FS
-      ON FS."itemId" = U."userId" AND FS."formId" = '${formId}'`;
+      ON FS."itemId" = U."userId"`;
 
     return this.buildBaseQuery(
       where,
