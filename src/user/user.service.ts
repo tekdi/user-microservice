@@ -2337,12 +2337,29 @@ export class UserService {
       await this.userTenantMappingRepository.save(existingMapping);
       LoggerUtil.log(`Updated tenant mapping for user ${userId} from root tenant to ${tenantId}`);
     } else {
-      await this.userTenantMappingRepository.save({
-        userId,
-        tenantId,
-        createdBy,
-        status : (userTenantStatus as UserTenantMappingStatus) || existingMapping.status
+      // Check if mapping already exists for this userId and tenantId combination
+      const existingUserTenantMapping = await this.userTenantMappingRepository.findOne({
+        where: { userId, tenantId }
       });
+
+      if (existingUserTenantMapping) {
+        // If status is active, skip the save operation//
+        if (existingUserTenantMapping.status === UserTenantMappingStatus.ACTIVE) {
+          return;
+        }
+        // For statuses (active,inactive, archived, pending), update with provided status or keep existing
+        existingUserTenantMapping.status = (userTenantStatus as UserTenantMappingStatus) || existingUserTenantMapping.status;
+        existingUserTenantMapping.createdBy = createdBy;
+        await this.userTenantMappingRepository.save(existingUserTenantMapping);
+      } else {
+        // No data exists, create new record
+        await this.userTenantMappingRepository.save({
+          userId,
+          tenantId,
+          createdBy,
+          status: (userTenantStatus as UserTenantMappingStatus) || UserTenantMappingStatus.ACTIVE
+        });
+      }
     }
   }
 

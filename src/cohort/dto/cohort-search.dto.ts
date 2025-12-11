@@ -13,11 +13,12 @@ import {
   IsString,
   IsUUID,
   ValidateIf,
+  ValidateNested,
   ValidationArguments,
   ValidationOptions,
   registerDecorator,
 } from "class-validator";
-import { Expose } from "class-transformer";
+import { Exclude, Expose, Transform, Type } from "class-transformer";
 
 export class filtersProperty {
   //userIdBy
@@ -34,37 +35,75 @@ export class filtersProperty {
 
   //cohortIdBy
   @ApiProperty({
-    type: [String],
-    description: "Cohort Id",
+    oneOf: [
+      { type: 'string' },
+      { type: 'array', items: { type: 'string' } }
+    ],
+    description: "Cohort Id - accepts both string (single UUID or empty string) or array (multiple UUIDs or empty array)",
     default: [],
+    example: ["", []],
   })
   @Expose()
   @IsOptional()
-  @IsArray()
-  @IsNotEmpty({ each: true })
-  @IsUUID(undefined, { each: true })
+  @Transform(({ value }) => {
+    // Handle undefined/null - return undefined for optional field
+    if (value === undefined || value === null) {
+      return undefined;
+    }
+
+    // If already an array, return as is (preserve empty arrays)
+    if (Array.isArray(value)) {
+      // Filter out null/undefined but keep empty strings in array
+      const filtered = value.filter(v => v !== null && v !== undefined);
+      return filtered;
+    }
+
+    // If single string → convert to array (preserve empty string as empty array)
+    if (typeof value === "string") {
+      // Empty string → return empty array
+      if (value.trim() === "") {
+        return [];
+      }
+      // Non-empty string → wrap in array
+      return [value];
+    }
+
+    // For any other type, return undefined
+    return undefined;
+  })
+  @ValidateIf((o) => o.cohortId !== undefined && o.cohortId !== null)
+  @IsArray({ message: "cohortId must be an array or a string" })
+  @ValidateIf((o) => Array.isArray(o.cohortId) && o.cohortId.length > 0)
+  @IsNotEmpty({ each: true, message: "Each cohortId must not be empty" })
+  @ValidateIf((o) => Array.isArray(o.cohortId) && o.cohortId.length > 0)
+  @IsUUID(undefined, { each: true, message: "Each cohortId must be a valid UUID" })
   cohortId?: string[];
 
-  //academicYearId
-  @ApiProperty({
+  //academicYearId - Note: This comes from headers, not filters. Excluded from processing.
+  @ApiPropertyOptional({
     type: String,
-    description: "Academic Year Id",
-    default: "",
+    description: "Academic Year Id (comes from headers, not filters)",
+    required: false,
   })
-  @Expose()
+  @Exclude()
   @IsOptional()
-  @IsUUID()
-  @IsNotEmpty()
   academicYearId?: string;
 
   //name
-  @ApiProperty({
+  @ApiPropertyOptional({
     type: String,
     description: "The name of the cohort",
-    default: "",
+  })
+  @IsOptional()
+  @Transform(({ value }) => {
+    // Exclude undefined, null, or empty string values
+    if (!value || (typeof value === "string" && value.trim() === "")) {
+      return undefined;
+    }
+    return value;
   })
   @Expose()
-  @IsOptional()
+  @ValidateIf((o) => o.name !== undefined && o.name !== null)
   @IsString()
   @IsNotEmpty()
   name?: string;
@@ -178,7 +217,23 @@ export class CohortSearchDto {
     type: filtersProperty,
     description: "Filters",
   })
+  @Type(() => filtersProperty)
+  @Transform(({ value }) => {
+    // Remove undefined/null properties from filters object
+    // This runs after nested transforms via @Type(), so value is already a filtersProperty instance
+    if (value && typeof value === 'object') {
+      // Delete undefined/null properties in place to preserve the instance
+      Object.keys(value).forEach(key => {
+        const val = value[key];
+        if (val === undefined || val === null) {
+          delete value[key];
+        }
+      });
+    }
+    return value;
+  })
   @IsObject()
+  @ValidateNested()
   filters: filtersProperty;
 
   @ApiPropertyOptional({

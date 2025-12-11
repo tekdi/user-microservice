@@ -206,7 +206,6 @@ export class CohortService {
                   JOIN public."Cohort" AS c ON cm."cohortId" = c."cohortId"
                   ${joins}
                 `;
-
     const params = academicYearId ? [userId, academicYearId] : [userId];
 
     const result = await this.cohortMembersRepository.query(query, params);
@@ -927,7 +926,6 @@ export class CohortService {
           results.cohortDetails.push(data);
         }
       }
-
       if (results.cohortDetails.length > 0) {
         return APIResponse.success(
           response,
