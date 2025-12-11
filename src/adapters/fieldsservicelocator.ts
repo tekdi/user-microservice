@@ -42,7 +42,8 @@ export interface IServicelocatorfields {
   updateFieldValues(id: string, request: any, fieldValuesDto: FieldValuesDto);
   getFieldOptions(
     fieldsOptionsSearchDto: FieldsOptionsSearchDto,
-    response: Response
+    response: Response,
+    tenantId: string
   );
   deleteFieldOptions(requiredData, response);
   getFormCustomField(requiredData, response);

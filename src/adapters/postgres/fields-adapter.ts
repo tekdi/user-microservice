@@ -1176,7 +1176,8 @@ export class PostgresFieldsService implements IServicelocatorfields {
   //Get all fields options
   public async getFieldOptions(
     fieldsOptionsSearchDto: FieldsOptionsSearchDto,
-    response: Response
+    response: Response,
+    tenantId: string
   ) {
     const apiId = APIID.FIELDVALUES_SEARCH;
     try {
@@ -1205,6 +1206,9 @@ export class PostgresFieldsService implements IServicelocatorfields {
       if (contextType) {
         condition.contextType = contextType;
       }
+      if (tenantId) {
+        condition.tenantId = tenantId;
+      }
       const fetchFieldParams = await this.fieldsRepository.findOne({
         where: condition,
       });
@@ -1221,7 +1225,6 @@ export class PostgresFieldsService implements IServicelocatorfields {
         fetchFieldParams.sourceDetails.source
       );
       if (fetchFieldParams?.sourceDetails?.source === "table") {
-        console.log("1");
         let whereClause;
         if (controllingfieldfk) {
           if (!fetchFieldParams.dependsOn) {

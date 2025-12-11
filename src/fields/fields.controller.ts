@@ -24,6 +24,7 @@ import {
   ValidationPipe,
   Patch,
   Delete,
+  BadRequestException,
 } from "@nestjs/common";
 import {
   FieldsOptionsSearchDto,
@@ -42,6 +43,8 @@ import { JwtAuthGuard } from "src/common/guards/keycloak.guard";
 import { AllExceptionsFilter } from "src/common/filters/exception.filter";
 import { APIID } from "src/common/utils/api-id.config";
 import { FieldValuesDeleteDto } from "./dto/field-values-delete.dto";
+import { isUUID } from "class-validator";
+import { API_RESPONSES } from "@utils/response.messages";
 
 @ApiTags("Fields")
 @Controller("fields")
@@ -171,9 +174,13 @@ export class FieldsController {
     @Body() fieldsOptionsSearchDto: FieldsOptionsSearchDto,
     @Res() response: Response
   ) {
+    const tenantId = headers["tenantid"];
+    if (!tenantId || !isUUID(tenantId)) {
+      throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
+    }
     return await this.fieldsAdapter
       .buildFieldsAdapter()
-      .getFieldOptions(fieldsOptionsSearchDto, response);
+      .getFieldOptions(fieldsOptionsSearchDto, response, tenantId);
   }
 
   //Delete Field Option
