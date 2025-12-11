@@ -325,7 +325,9 @@ export class PostgresCohortMembersService {
                   res,
                   apiId,
                   API_RESPONSES.BAD_REQUEST,
-                  `Invalid ${key} filter format. Only one operator is allowed. Found: ${operatorKeys.join(', ')}`,
+                  `Invalid ${key} filter format. Only one operator is allowed. Found: ${operatorKeys.join(
+                    ', '
+                  )}`,
                   HttpStatus.BAD_REQUEST
                 );
               }
@@ -336,7 +338,9 @@ export class PostgresCohortMembersService {
                   res,
                   apiId,
                   API_RESPONSES.BAD_REQUEST,
-                  `Invalid operator for ${key}: ${operator}. Valid operators are: ${validOperators.join(', ')}`,
+                  `Invalid operator for ${key}: ${operator}. Valid operators are: ${validOperators.join(
+                    ', '
+                  )}`,
                   HttpStatus.BAD_REQUEST
                 );
               }
@@ -1229,20 +1233,38 @@ export class PostgresCohortMembersService {
     completionPercentageRanges: { min: number; max: number }[],
     formId: string
   ): { query: string; parameters: any[]; limit: number; offset: number } {
+    // Check if any range includes 0 (to include users without form submissions)
+    const includesZeroRange = completionPercentageRanges.some(
+      (range) => range.min === 0
+    );
+
     // Build completion percentage filter conditions with proper casting
+    // Use COALESCE to treat NULL (no form submission) as 0.00 when range includes 0
     const completionConditions = completionPercentageRanges
-      .map(
-        (range) =>
-          `(CAST(FS."completionPercentage" AS DECIMAL(5,2)) >= ${range.min} AND CAST(FS."completionPercentage" AS DECIMAL(5,2)) <= ${range.max})`
-      )
+      .map((range) => {
+        if (includesZeroRange) {
+          // Include users with NULL completionPercentage (no form submission) as 0.00
+          return `(COALESCE(CAST(FS."completionPercentage" AS DECIMAL(5,2)), 0.00) >= ${range.min} AND COALESCE(CAST(FS."completionPercentage" AS DECIMAL(5,2)), 0.00) <= ${range.max})`;
+        } else {
+          return `(CAST(FS."completionPercentage" AS DECIMAL(5,2)) >= ${range.min} AND CAST(FS."completionPercentage" AS DECIMAL(5,2)) <= ${range.max})`;
+        }
+      })
       .join(' OR ');
 
-    // Add completion percentage filter to WHERE clause (removed status filter to match original behavior)
-    const completionFilter = `(FS."formId" = '${formId}' AND (${completionConditions}))`;
+    // Add completion percentage filter to WHERE clause
+    // When range includes 0, use LEFT JOIN and include users without form submissions
+    // When range doesn't include 0, only include users with form submissions matching the formId
+    const completionFilter = includesZeroRange
+      ? `((FS."formId" = '${formId}' AND (${completionConditions})) OR (FS."formId" IS NULL AND (${completionConditions})))`
+      : `(FS."formId" = '${formId}' AND (${completionConditions}))`;
 
-    const additionalJoins = `
+    const additionalJoins = includesZeroRange
+      ? `
+      LEFT JOIN public."formSubmissions" FS
+      ON FS."itemId" = U."userId" AND FS."formId" = '${formId}'`
+      : `
       INNER JOIN public."formSubmissions" FS
-      ON FS."itemId" = U."userId"`;
+      ON FS."itemId" = U."userId" AND FS."formId" = '${formId}'`;
 
     return this.buildBaseQuery(
       where,
@@ -1281,7 +1303,7 @@ export class PostgresCohortMembersService {
     const apiId = APIID.COHORT_MEMBER_UPDATE;
     try {
       cohortMembersUpdateDto.updatedBy = loginUser;
-      
+
       // Early validation: Check UUID format
       if (!isUUID(cohortMembershipId)) {
         return APIResponse.error(
@@ -1320,7 +1342,13 @@ export class PostgresCohortMembersService {
       const cohortMembershipToUpdate =
         await this.cohortMembersRepository.findOne({
           where: { cohortMembershipId: cohortMembershipId },
-          select: ['cohortMembershipId', 'userId', 'cohortId', 'status', 'updatedAt'],
+          select: [
+            'cohortMembershipId',
+            'userId',
+            'cohortId',
+            'status',
+            'updatedAt',
+          ],
         });
 
       if (!cohortMembershipToUpdate) {
@@ -1340,7 +1368,7 @@ export class PostgresCohortMembersService {
       // Prepare update data (exclude customFields and non-entity fields)
       const customFields = cohortMembersUpdateDto.customFields;
       const updateData: Partial<CohortMembers> = {};
-      
+
       // Map only valid entity fields from DTO
       if (cohortMembersUpdateDto.cohortId !== undefined) {
         updateData.cohortId = cohortMembersUpdateDto.cohortId;
@@ -1566,16 +1594,18 @@ export class PostgresCohortMembersService {
 
                 // Update rejection_email_sent asynchronously if status is rejected
                 if (status === 'rejected') {
-                  this.cohortMembersRepository.update(
-                    { cohortMembershipId: cohortMembershipId },
-                    { rejectionEmailSent: true }
-                  ).catch((error) => {
-                    LoggerUtil.error(
-                      'Failed to update rejectionEmailSent',
-                      `Error: ${error.message}`,
-                      apiId
-                    );
-                  });
+                  this.cohortMembersRepository
+                    .update(
+                      { cohortMembershipId: cohortMembershipId },
+                      { rejectionEmailSent: true }
+                    )
+                    .catch((error) => {
+                      LoggerUtil.error(
+                        'Failed to update rejectionEmailSent',
+                        `Error: ${error.message}`,
+                        apiId
+                      );
+                    });
                 }
               }
             })
@@ -2488,7 +2518,7 @@ export class PostgresCohortMembersService {
                 formSubmissionStatus: null,
                 formSubmissionCreatedAt: null,
                 formSubmissionUpdatedAt: null,
-                completionPercentage: null,
+                completionPercentage: '0.00' as unknown as number,
               };
 
               // Get form submission details for this user - directly query to avoid TypeORM In() operator issues
@@ -2515,7 +2545,7 @@ export class PostgresCohortMembersService {
                   ? new Date(submission.updatedAt).toISOString().slice(0, 10)
                   : null;
                 formInfo.completionPercentage =
-                  submission.completionPercentage ?? 0;
+                  submission.completionPercentage ?? 0.0;
               }
 
               // Get custom fields
@@ -5525,7 +5555,7 @@ export class PostgresCohortMembersService {
 
     // Check if it's a date-only string (YYYY-MM-DD format)
     const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(dateValue);
-    
+
     // Normalize date string (handle date-only format)
     const normalizedDateValue = dateValue.includes('T')
       ? dateValue
@@ -5547,10 +5577,10 @@ export class PostgresCohortMembersService {
     const hour = String(filterDate.getUTCHours()).padStart(2, '0');
     const minute = String(filterDate.getUTCMinutes()).padStart(2, '0');
     const second = String(filterDate.getUTCSeconds()).padStart(2, '0');
-    
+
     // Build SQL condition based on operator
     let condition: string;
-    
+
     if (isDateOnly) {
       // For date-only strings, compare at day level for all operators
       const dateStr = `${year}-${month}-${day}`;
