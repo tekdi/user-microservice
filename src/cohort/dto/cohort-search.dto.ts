@@ -3,25 +3,19 @@ import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
-  IsBoolean,
   IsEnum,
   IsNotEmpty,
   IsNumber,
-  IsNumberString,
   IsObject,
   IsOptional,
   IsString,
   IsUUID,
   ValidateIf,
   ValidateNested,
-  ValidationArguments,
-  ValidationOptions,
-  registerDecorator,
 } from "class-validator";
 import { Exclude, Expose, Transform, Type } from "class-transformer";
 
 export class filtersProperty {
-  //userIdBy
   @ApiProperty({
     type: String,
     description: "User Id",
@@ -30,56 +24,35 @@ export class filtersProperty {
   @Expose()
   @IsOptional()
   @IsUUID()
-  @IsNotEmpty()
   userId?: string;
 
-  //cohortIdBy
   @ApiProperty({
     oneOf: [
       { type: 'string' },
       { type: 'array', items: { type: 'string' } }
     ],
-    description: "Cohort Id - accepts both string (single UUID or empty string) or array (multiple UUIDs or empty array)",
-    default: [],
-    example: ["", []],
+    description: "Cohort Id - accepts both string or array of UUIDs",
+    example: "a4bbca12-35ca-405d-84f5-8622986fdfd2",
   })
   @Expose()
   @IsOptional()
   @Transform(({ value }) => {
-    // Handle undefined/null - return undefined for optional field
-    if (value === undefined || value === null) {
-      return undefined;
-    }
-
-    // If already an array, return as is (preserve empty arrays)
-    if (Array.isArray(value)) {
-      // Filter out null/undefined but keep empty strings in array
-      const filtered = value.filter(v => v !== null && v !== undefined);
-      return filtered;
-    }
-
-    // If single string → convert to array (preserve empty string as empty array)
+    if (!value) return undefined;
+    
+    // Convert string to array
     if (typeof value === "string") {
-      // Empty string → return empty array
-      if (value.trim() === "") {
-        return [];
-      }
-      // Non-empty string → wrap in array
-      return [value];
+      return value.trim() === "" ? undefined : [value];
     }
-
-    // For any other type, return undefined
+    
+    // Keep array as is
+    if (Array.isArray(value)) {
+      return value.length === 0 ? undefined : value;
+    }
+    
     return undefined;
   })
-  @ValidateIf((o) => o.cohortId !== undefined && o.cohortId !== null)
-  @IsArray({ message: "cohortId must be an array or a string" })
-  @ValidateIf((o) => Array.isArray(o.cohortId) && o.cohortId.length > 0)
-  @IsNotEmpty({ each: true, message: "Each cohortId must not be empty" })
-  @ValidateIf((o) => Array.isArray(o.cohortId) && o.cohortId.length > 0)
-  @IsUUID(undefined, { each: true, message: "Each cohortId must be a valid UUID" })
   cohortId?: string[];
 
-  //academicYearId - Note: This comes from headers, not filters. Excluded from processing.
   @ApiPropertyOptional({
     type: String,
     description: "Academic Year Id (comes from headers, not filters)",
@@ -89,26 +62,15 @@ export class filtersProperty {
   @IsOptional()
   academicYearId?: string;
 
-  //name
   @ApiPropertyOptional({
     type: String,
     description: "The name of the cohort",
   })
   @IsOptional()
-  @Transform(({ value }) => {
-    // Exclude undefined, null, or empty string values
-    if (!value || (typeof value === "string" && value.trim() === "")) {
-      return undefined;
-    }
-    return value;
-  })
   @Expose()
-  @ValidateIf((o) => o.name !== undefined && o.name !== null)
   @IsString()
-  @IsNotEmpty()
   name?: string;
 
-  //parentId
   @ApiProperty({
     type: [String],
     description: "Parent Id",
@@ -117,11 +79,8 @@ export class filtersProperty {
   @Expose()
   @IsOptional()
   @IsArray()
-  @IsNotEmpty({ each: true })
-  @IsUUID(undefined, { each: true })
   parentId?: string[];
 
-  //type
   @ApiProperty({
     type: String,
     description: "The type of the cohort",
@@ -130,10 +89,8 @@ export class filtersProperty {
   @Expose()
   @IsOptional()
   @IsString()
-  @IsNotEmpty()
   type?: string;
 
-  //type
   @ApiProperty({
     type: [String],
     description: "The status of the cohort",
@@ -142,8 +99,6 @@ export class filtersProperty {
   @Expose()
   @IsOptional()
   @IsArray()
-  @IsNotEmpty({ each: true })
-  @IsUUID(undefined, { each: true })
   status?: string[];
 
   @ApiPropertyOptional({
@@ -152,8 +107,7 @@ export class filtersProperty {
   })
   @IsOptional()
   @IsArray()
-  @IsNotEmpty({ each: true })
-  state: string[];
+  state?: string[];
 
   @ApiPropertyOptional({
     type: [String],
@@ -161,8 +115,7 @@ export class filtersProperty {
   })
   @IsOptional()
   @IsArray()
-  @IsNotEmpty({ each: true })
-  district: string[];
+  district?: string[];
 
   @ApiPropertyOptional({
     type: [String],
@@ -170,20 +123,16 @@ export class filtersProperty {
   })
   @IsOptional()
   @IsArray()
-  @IsNotEmpty({ each: true })
-  block: string[];
-
+  block?: string[];
 
   @ApiPropertyOptional({
     type: [String],
-    description: "Block",
+    description: "Village",
   })
   @IsOptional()
   @IsArray()
-  @IsNotEmpty({ each: true })
-  village: string[];
+  village?: string[];
 
-  //customFieldsName
   @ApiProperty({
     type: Object,
     description: "The customFieldsName of the cohort",
@@ -191,13 +140,14 @@ export class filtersProperty {
   @Expose()
   @IsOptional()
   @IsObject()
-  @IsNotEmpty({ each: true })
   customFieldsName?: {};
 }
+
 enum SortDirection {
   ASC = "asc",
   DESC = "desc",
 }
+
 export class CohortSearchDto {
   @ApiProperty({
     type: Number,
@@ -218,20 +168,6 @@ export class CohortSearchDto {
     description: "Filters",
   })
   @Type(() => filtersProperty)
-  @Transform(({ value }) => {
-    // Remove undefined/null properties from filters object
-    // This runs after nested transforms via @Type(), so value is already a filtersProperty instance
-    if (value && typeof value === 'object') {
-      // Delete undefined/null properties in place to preserve the instance
-      Object.keys(value).forEach(key => {
-        const val = value[key];
-        if (val === undefined || val === null) {
-          delete value[key];
-        }
-      });
-    }
-    return value;
-  })
   @IsObject()
   @ValidateNested()
   filters: filtersProperty;
@@ -242,9 +178,9 @@ export class CohortSearchDto {
   })
   @IsArray()
   @IsOptional()
-  @ArrayMinSize(2, { message: "Sort array must contain exactly two elements" })
-  @ArrayMaxSize(2, { message: "Sort array must contain exactly two elements" })
-  sort: [string, string];
+  @ArrayMinSize(2)
+  @ArrayMaxSize(2)
+  sort?: [string, string];
 
   @ValidateIf((o) => o.sort !== undefined)
   @IsEnum(SortDirection, {
