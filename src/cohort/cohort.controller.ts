@@ -133,7 +133,7 @@ export class CohortController {
   @ApiOkResponse({ description: "Cohort list" })
   @ApiBadRequestResponse({ description: "Bad request." })
   @ApiInternalServerErrorResponse({ description: "Internal Server Error." })
-  @UsePipes(new ValidationPipe())
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   @SerializeOptions({
     strategy: "excludeAll",
   })

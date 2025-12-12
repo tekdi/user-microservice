@@ -25,6 +25,7 @@ import { CohortMembersService } from "src/cohortMembers/cohortMembers.service";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
 import { AutomaticMemberService } from "src/automatic-member/automatic-member.service";
 import { KafkaService } from "src/kafka/kafka.service";
+import { Console } from "console";
 
 @Injectable()
 export class CohortService {
@@ -206,7 +207,6 @@ export class CohortService {
                   JOIN public."Cohort" AS c ON cm."cohortId" = c."cohortId"
                   ${joins}
                 `;
-
     const params = academicYearId ? [userId, academicYearId] : [userId];
 
     const result = await this.cohortMembersRepository.query(query, params);
@@ -753,14 +753,20 @@ export class CohortService {
         }
       }
       if (filters && Object.keys(filters).length > 0) {
-        if (filters?.customFieldsName) {
-          Object.entries(filters.customFieldsName).forEach(([key, value]) => {
+        // Clean up filters: remove undefined, null properties before processing
+        const cleanedFilters = Object.fromEntries(
+          Object.entries(filters).filter(([_, value]) => value !== undefined && value !== null)
+        );
+        
+        if (cleanedFilters?.customFieldsName) {
+          Object.entries(cleanedFilters.customFieldsName).forEach(([key, value]) => {
             if (customFieldsKeys.includes(key)) {
               searchCustomFields[key] = value;
             }
           });
         }
-        Object.entries(filters).forEach(([key, value]) => {
+
+        Object.entries(cleanedFilters).forEach(([key, value]) => {
           if (!allowedKeys.includes(key) && key !== "customFieldsName") {
             return APIResponse.error(
               response,
@@ -927,7 +933,6 @@ export class CohortService {
           results.cohortDetails.push(data);
         }
       }
-
       if (results.cohortDetails.length > 0) {
         return APIResponse.success(
           response,
