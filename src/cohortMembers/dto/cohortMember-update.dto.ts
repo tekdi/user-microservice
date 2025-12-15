@@ -80,6 +80,10 @@ export class CohortMembersUpdateDto {
   @Type(() => FieldValuesOptionDto)
   customFields?: FieldValuesOptionDto[];
 
+  @IsOptional()
+  @Expose()
+  params?: Object;
+
   constructor(obj: any) {
     Object.assign(this, obj);
   }
