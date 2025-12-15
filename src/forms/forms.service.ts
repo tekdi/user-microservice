@@ -684,7 +684,11 @@ export class FormsService {
       const sourceForm = await this.getFormById(formCopyDto.formId);
 
       // Check for existing form conflict
-      const conflictCheck = await this.checkForExistingFormConflict(formCopyDto.cohortId, response, apiId);
+      const conflictCheck = await this.checkForExistingFormConflict(
+        formCopyDto.cohortId,
+        response,
+        apiId
+      );
       if (conflictCheck) {
         return conflictCheck;
       }
@@ -719,7 +723,6 @@ export class FormsService {
         HttpStatus.OK,
         'Form copied successfully to the new cohort.'
       );
-
     } catch (error) {
       const errorMessage = error.message || 'Internal server error';
       return APIResponse.error(
@@ -739,12 +742,16 @@ export class FormsService {
    * @param apiId The API ID for error responses
    * @returns Conflict error response if form exists, null otherwise
    */
-  private async checkForExistingFormConflict(cohortId: string, response: any, apiId: string): Promise<any> {
+  private async checkForExistingFormConflict(
+    cohortId: string,
+    response: any,
+    apiId: string
+  ): Promise<any> {
     const existingForm = await this.formRepository.findOne({
       where: {
         contextId: cohortId,
-        status: In([FormStatus.DRAFT, FormStatus.ACTIVE])
-      }
+        status: In([FormStatus.DRAFT, FormStatus.ACTIVE]),
+      },
     });
 
     if (existingForm) {
@@ -775,7 +782,10 @@ export class FormsService {
     updatedBy: string
   ): Promise<Map<string, string>> {
     const fieldIdMapping = new Map<string, string>();
-    const foundFieldIds = this.extractFieldIdsFromJson(sourceForm.fields, sourceForm.rules);
+    const foundFieldIds = this.extractFieldIdsFromJson(
+      sourceForm.fields,
+      sourceForm.rules
+    );
 
     if (foundFieldIds.size === 0) {
       Logger.warn('No fieldIds found in source form');
@@ -798,7 +808,9 @@ export class FormsService {
       fieldIdMapping.set(oldId, newId);
     }
 
-    Logger.log(`Field mapping completed: ${fieldIdMapping.size} fields processed`);
+    Logger.log(
+      `Field mapping completed: ${fieldIdMapping.size} fields processed`
+    );
     return fieldIdMapping;
   }
 
@@ -822,7 +834,10 @@ export class FormsService {
     const originalFields = await this.bulkFetchFields(fieldIdsArray);
 
     // Check for existing fields in target cohort in bulk
-    const existingFields = await this.bulkCheckExistingFields(formCopyDto.cohortId, fieldIdsArray);
+    const existingFields = await this.bulkCheckExistingFields(
+      formCopyDto.cohortId,
+      fieldIdsArray
+    );
 
     // Prepare fields for bulk creation
     const fieldsToCreate = [];
@@ -860,7 +875,9 @@ export class FormsService {
         const createdField = createdFields[i];
         if (createdField?.fieldId) {
           fieldsToMap.set(originalFieldId, createdField.fieldId);
-          Logger.log(`Successfully created field ${createdField.fieldId} for field ${originalFieldId}`);
+          Logger.log(
+            `Successfully created field ${createdField.fieldId} for field ${originalFieldId}`
+          );
         }
       }
     }
@@ -889,10 +906,13 @@ export class FormsService {
     response: any
   ): Promise<any> {
     // Update field IDs in both fields and rules JSON
-    const updatedFields = this.updateFieldIdsInJson(sourceForm.fields, fieldIdMapping);
-    const updatedRules = sourceForm.rules ? 
-      this.updateFieldIdsInJson(sourceForm.rules, fieldIdMapping) : 
-      sourceForm.rules;
+    const updatedFields = this.updateFieldIdsInJson(
+      sourceForm.fields,
+      fieldIdMapping
+    );
+    const updatedRules = sourceForm.rules
+      ? this.updateFieldIdsInJson(sourceForm.rules, fieldIdMapping)
+      : sourceForm.rules;
 
     // Create the new form data with updated field IDs
     const newFormData: FormCreateDto = {
@@ -919,17 +939,21 @@ export class FormsService {
    * @param updatedBy The user who last updated the field
    * @returns The created field entity
    */
-  private async createFieldDirectly(fieldData: FieldsDto, createdBy: string, updatedBy: string): Promise<any> {
+  private async createFieldDirectly(
+    fieldData: FieldsDto,
+    createdBy: string,
+    updatedBy: string
+  ): Promise<any> {
     try {
       // Extract and exclude all database metadata fields to prevent primary key reuse
       const {
-        fieldId,        // Primary key - exclude
-        id,             // Primary key - exclude
-        createdAt,      // Auto-generated timestamp - exclude
-        updatedAt,      // Auto-generated timestamp - exclude
-        deletedAt,      // Soft delete timestamp - exclude
-        version,        // Optimistic locking version - exclude
-        fieldValues,    // Relationship - exclude
+        fieldId, // Primary key - exclude
+        id, // Primary key - exclude
+        createdAt, // Auto-generated timestamp - exclude
+        updatedAt, // Auto-generated timestamp - exclude
+        deletedAt, // Soft delete timestamp - exclude
+        version, // Optimistic locking version - exclude
+        fieldValues, // Relationship - exclude
         ...businessData // All other fields are business data
       } = fieldData as any;
 
@@ -945,10 +969,13 @@ export class FormsService {
         // Ensure ordering is not null (required field)
         ordering: fieldData.ordering || 0,
         // Ensure required field has a default value
-        required: (fieldData as any).required === undefined ? true : (fieldData as any).required,
+        required:
+          (fieldData as any).required === undefined
+            ? true
+            : (fieldData as any).required,
         // Ensure dependsOn is not undefined
         dependsOn: fieldData.dependsOn || null,
-        // Handle JSON fields - convert objects to strings for database storage
+        // Handle JSON fields - sanitize for jsonb/json columns (TypeORM expects objects, not strings)
         fieldParams: this.sanitizeJsonField(fieldData.fieldParams),
         fieldAttributes: this.sanitizeJsonField(fieldData.fieldAttributes),
         sourceDetails: this.sanitizeJsonField(fieldData.sourceDetails),
@@ -970,7 +997,10 @@ export class FormsService {
    * @param rulesJson The rules JSON object (optional)
    * @returns Set of unique fieldIds found
    */
-  private extractFieldIdsFromJson(fieldsJson: any, rulesJson?: any): Set<string> {
+  private extractFieldIdsFromJson(
+    fieldsJson: any,
+    rulesJson?: any
+  ): Set<string> {
     const fieldIds = new Set<string>();
 
     const extractFromObject = (obj: any): void => {
@@ -1025,7 +1055,11 @@ export class FormsService {
 
       return fieldMap;
     } catch (error) {
-      Logger.error(`bulkFetchFields failed for fieldIds: ${fieldIds.join(',')} - Error: ${error.message}`);
+      Logger.error(
+        `bulkFetchFields failed for fieldIds: ${fieldIds.join(',')} - Error: ${
+          error.message
+        }`
+      );
       throw error; // Rethrow to allow copy workflow to abort cleanly
     }
   }
@@ -1036,14 +1070,25 @@ export class FormsService {
    * @param fieldIds Array of field IDs to check
    * @returns Set of fieldIds that already exist in target cohort
    */
-  private async bulkCheckExistingFields(cohortId: string, fieldIds: string[]): Promise<Set<string>> {
+  private async bulkCheckExistingFields(
+    cohortId: string,
+    fieldIds: string[]
+  ): Promise<Set<string>> {
     if (fieldIds.length === 0) return new Set();
 
     try {
-      const existingFields = await this.fieldsService.getFieldsByContextIdAndFieldIds(cohortId, fieldIds);
-      return new Set(existingFields.map(field => field.fieldId));
+      const existingFields =
+        await this.fieldsService.getFieldsByContextIdAndFieldIds(
+          cohortId,
+          fieldIds
+        );
+      return new Set(existingFields.map((field) => field.fieldId));
     } catch (error) {
-      Logger.error(`bulkCheckExistingFields failed for cohortId: ${cohortId}, fieldIds: ${fieldIds.join(',')} - Error: ${error.message}`);
+      Logger.error(
+        `bulkCheckExistingFields failed for cohortId: ${cohortId}, fieldIds: ${fieldIds.join(
+          ','
+        )} - Error: ${error.message}`
+      );
       throw error; // Rethrow to allow copy workflow to abort cleanly
     }
   }
@@ -1057,16 +1102,22 @@ export class FormsService {
    * @param tenantId The tenant ID for the new field
    * @returns Prepared field data for bulk creation
    */
-  private prepareFieldDataForCopy(originalField: any, cohortId: string, createdBy: string, updatedBy: string, tenantId?: string): any {
+  private prepareFieldDataForCopy(
+    originalField: any,
+    cohortId: string,
+    createdBy: string,
+    updatedBy: string,
+    tenantId?: string
+  ): any {
     // Extract and exclude all database metadata fields to prevent primary key reuse
     const {
-      fieldId,        // Primary key - exclude
-      id,             // Primary key - exclude
-      createdAt,      // Auto-generated timestamp - exclude
-      updatedAt,      // Auto-generated timestamp - exclude
-      deletedAt,      // Soft delete timestamp - exclude
-      version,        // Optimistic locking version - exclude
-      fieldValues,    // Relationship - exclude
+      fieldId, // Primary key - exclude
+      id, // Primary key - exclude
+      createdAt, // Auto-generated timestamp - exclude
+      updatedAt, // Auto-generated timestamp - exclude
+      deletedAt, // Soft delete timestamp - exclude
+      version, // Optimistic locking version - exclude
+      fieldValues, // Relationship - exclude
       ...businessData // All other fields are business data
     } = originalField;
 
@@ -1081,9 +1132,10 @@ export class FormsService {
       status: 'active',
       // Ensure critical fields have proper values
       ordering: originalField.ordering || 0,
-      required: originalField.required === undefined ? true : originalField.required,
+      required:
+        originalField.required === undefined ? true : originalField.required,
       dependsOn: originalField.dependsOn || null,
-      // Handle JSON fields - convert objects to strings for database storage
+      // Handle JSON fields - sanitize for jsonb/json columns (TypeORM expects objects, not strings)
       fieldParams: this.sanitizeJsonField(originalField.fieldParams),
       fieldAttributes: this.sanitizeJsonField(originalField.fieldAttributes),
       sourceDetails: this.sanitizeJsonField(originalField.sourceDetails),
@@ -1103,26 +1155,57 @@ export class FormsService {
     try {
       return await this.fieldsService.bulkCreateFields(fieldsData);
     } catch (error) {
-      Logger.error(`bulkCreateFields failed for ${fieldsData.length} fields - Error: ${error.message}`);
+      Logger.error(
+        `bulkCreateFields failed for ${fieldsData.length} fields - Error: ${error.message}`
+      );
       throw error; // Rethrow to allow copy workflow to abort cleanly
     }
   }
 
   /**
-   * Sanitizes JSON fields by converting objects to strings for database storage
+   * Sanitizes JSON fields for jsonb/json columns
+   * For jsonb columns, TypeORM expects an object, not a string
    * @param fieldValue The field value to sanitize
-   * @returns Sanitized field value (string or null)
+   * @returns Sanitized field value (object, string, or null)
    */
-  private sanitizeJsonField(fieldValue: any): string | null {
+  private sanitizeJsonField(fieldValue: any): any {
     if (!fieldValue) {
       return null;
     }
 
+    // If it's already a string, try to parse it (might be from previous double-encoding)
     if (typeof fieldValue === 'string') {
-      return fieldValue;
+      try {
+        const parsed = JSON.parse(fieldValue);
+        // If parsing succeeds, return the parsed object (TypeORM will handle jsonb serialization)
+        Logger.log('Parsed JSON string to object:', parsed);
+        return parsed;
+      } catch (e) {
+        // If parsing fails, it's not a JSON string, return as-is
+        return fieldValue;
+      }
     }
 
-    return JSON.stringify(fieldValue);
+    // Handle array case - if fieldParams is an array, unwrap it to get the object
+    // This fixes the issue where fieldParams comes as [{...}] but should be {...}
+    if (Array.isArray(fieldValue)) {
+      if (fieldValue.length === 1) {
+        // Unwrap single-element array to get the object
+        Logger.log('Unwrapped array to object in fieldParams');
+        return fieldValue[0];
+      } else if (fieldValue.length > 1) {
+        // Multiple elements - log warning but keep as array
+        Logger.warn('fieldParams is an array with multiple elements, keeping as array');
+        return fieldValue;
+      } else {
+        // Empty array
+        return null;
+      }
+    }
+
+    // If it's already an object, return it directly (TypeORM will handle jsonb serialization)
+    Logger.log('Sanitizing JSON field (object):', JSON.stringify(fieldValue));
+    return fieldValue;
   }
 
   /**
@@ -1131,7 +1214,10 @@ export class FormsService {
    * @param fieldIdMapping Map of old fieldId to new fieldId
    * @returns Updated object with new field IDs
    */
-  private updateFieldIdsInJson(obj: any, fieldIdMapping: Map<string, string>): any {
+  private updateFieldIdsInJson(
+    obj: any,
+    fieldIdMapping: Map<string, string>
+  ): any {
     if (obj === null || obj === undefined) {
       return obj;
     }
@@ -1141,7 +1227,7 @@ export class FormsService {
     }
 
     if (Array.isArray(obj)) {
-      return obj.map(item => this.updateFieldIdsInJson(item, fieldIdMapping));
+      return obj.map((item) => this.updateFieldIdsInJson(item, fieldIdMapping));
     }
 
     if (typeof obj === 'object') {
@@ -1155,7 +1241,10 @@ export class FormsService {
       // Recursively update all properties
       for (const key in updatedObj) {
         if (updatedObj.hasOwnProperty(key)) {
-          updatedObj[key] = this.updateFieldIdsInJson(updatedObj[key], fieldIdMapping);
+          updatedObj[key] = this.updateFieldIdsInJson(
+            updatedObj[key],
+            fieldIdMapping
+          );
         }
       }
 
