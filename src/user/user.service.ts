@@ -789,7 +789,7 @@ export class UserService {
     .createQueryBuilder("U")
     .leftJoin("CohortMembers", "CM", "CM.userId = U.userId")
     .leftJoin("UserRolesMapping", "UR", "UR.userId = U.userId")
-    .leftJoin("UserTenantMapping", "UTM", "UTM.userId = U.userId")
+    .leftJoin("UserTenantMapping", "UTM", "UTM.userId = U.userId AND UR.tenantId = UTM.tenantId" )
     .leftJoin("Roles", "R", "R.roleId = UR.roleId")
     .select([
       'U.userId AS "userId"',
