@@ -4259,62 +4259,122 @@ export class UserService {
   }
 
   /**
-   * Get batch and center names for users using cohort membership
-   */
-  /**
    * Get all cohort associations for users with complete details for cohortData structure
    */
-  private async getBatchAndCenterNames(userIds: string[]): Promise<Record<string, Array<{
-    centerId: string | null;
-    centerName: string | null;
-    centerStatus: string | null;
-    batchId: string;
-    batchName: string | null;
-    batchStatus: string | null;
-    cohortMember: {
-      status: string;
-      membershipId: string;
-    };
-  }>>> {
+  private async getBatchAndCenterNames(userIds: string[]): Promise<any> {
     const apiId = APIID.USER_LIST;
-
+  
     if (!userIds || userIds.length === 0) {
       return {};
     }
-
-    const query = `
-      SELECT 
-        cm."userId",
-        cm."cohortMembershipId" as "membershipId",
-        cm."status" as "membershipStatus",
-        cm."cohortId" as "batchId",
-        batch."name" AS "batchName",
-        batch."status" AS "batchStatus",
-        batch."parentId" as "centerId",
-        center."name" AS "centerName",
-        center."status" AS "centerStatus",
-        cm."createdAt"
-      FROM 
-        public."CohortMembers" cm
-        LEFT JOIN public."Cohort" batch ON cm."cohortId" = batch."cohortId"
-        LEFT JOIN public."Cohort" center ON batch."parentId"::uuid = center."cohortId"
-      WHERE 
-        cm."userId" = ANY($1::uuid[])
-      ORDER BY cm."createdAt" DESC
-    `;
-
+  
     try {
-      const result = await this.usersRepository.query(query, [userIds]);
+      // Get all user assignments with cohort info
+      const assignmentQuery = `
+        SELECT 
+          cm."userId",
+          cm."cohortId",
+          cm."cohortMembershipId" as "membershipId",
+          cm."status" as "membershipStatus",
+          cohort."type",
+          cohort."parentId"
+        FROM public."CohortMembers" cm
+        LEFT JOIN public."Cohort" cohort ON cm."cohortId" = cohort."cohortId"
+        WHERE cm."userId" = ANY($1::uuid[])
+      `;
+  
+      const assignments = await this.usersRepository.query(assignmentQuery, [userIds]);
+      
+      if (assignments.length === 0) {
+        LoggerUtil.warn(`No cohort memberships found for any of the ${userIds.length} users`, apiId);
+        return {};
+      }
+  
+      // Build query based on type (batch or center)
+      const buildQuery = (isBatch: boolean) => {
+        const selectedItem = isBatch
+          ? `batch."cohortId" as "batchId",
+             batch."name" AS "batchName",
+             batch."status" AS "batchStatus",
+             batch."parentId" as "centerId",
+             center."name" AS "centerName",
+             center."status" AS "centerStatus"`
+          : `NULL as "batchId",
+             NULL AS "batchName",
+             NULL AS "batchStatus",
+             cohort."cohortId" as "centerId",
+             cohort."name" AS "centerName",
+             cohort."status" AS "centerStatus"`;
+  
+        const condition = isBatch
+          ? `LEFT JOIN public."Cohort" batch ON cm."cohortId" = batch."cohortId"
+             LEFT JOIN public."Cohort" center ON batch."parentId"::uuid = center."cohortId"`
+          : `LEFT JOIN public."Cohort" cohort ON cm."cohortId" = cohort."cohortId"`;
+  
+        return `
+          SELECT 
+            cm."userId",
+            cm."cohortMembershipId" as "membershipId",
+            cm."status" as "membershipStatus",
+            ${selectedItem},
+            cm."createdAt"
+          FROM 
+            public."CohortMembers" cm
+            ${condition}
+          WHERE 
+            cm."userId" = ANY($1::uuid[])
+            AND cm."cohortId" = ANY($2::uuid[])
+          ORDER BY cm."createdAt" DESC
+        `;
+      };
+  
+      // Separate batch and center assignments
+      const batchData = { userIds: [], cohortIds: [] };
+      const centerData = { userIds: [], cohortIds: [] };
+  
+      assignments.forEach((row: any) => {
+        const isBatch = row.type === 'BATCH' && row.parentId !== null;
+        const isCenter = row.type === 'COHORT' && row.parentId === null;
+        
+        if (isBatch) {
+          batchData.userIds.push(row.userId);
+          batchData.cohortIds.push(row.cohortId);
+        } else if (isCenter) {
+          centerData.userIds.push(row.userId);
+          centerData.cohortIds.push(row.cohortId);
+        }
+      });
+  
+      // Run queries and combine results
+      const result = [];
+  
+      if (batchData.userIds.length > 0) {
+        const batchResult = await this.usersRepository.query(
+          buildQuery(true), 
+          [batchData.userIds, batchData.cohortIds]
+        );
+        result.push(...batchResult);
+      }
+  
+      if (centerData.userIds.length > 0) {
+        const centerResult = await this.usersRepository.query(
+          buildQuery(false), 
+          [centerData.userIds, centerData.cohortIds]
+        );
+        result.push(...centerResult);
+      }
+  
       if (result.length === 0) {
         LoggerUtil.warn(`No cohort memberships found for any of the ${userIds.length} users`, apiId);
+        return {};
       }
-
-      // Group all associations by userId (not just the most recent)
+  
+      // Group all results by userId
       const cohortDataMap: Record<string, Array<{
         centerId: string | null;
         centerName: string | null;
         centerStatus: string | null;
-        batchId: string;
+        batchId: string | null;
         batchName: string | null;
         batchStatus: string | null;
         cohortMember: {
@@ -4322,44 +4382,29 @@ export class UserService {
           membershipId: string;
         };
       }>> = {};
-
+  
       result.forEach((row: any) => {
-        const {
-          userId,
-          membershipId,
-          membershipStatus,
-          batchId,
-          batchName,
-          batchStatus,
-          centerId,
-          centerName,
-          centerStatus
-        } = row;
-
-        if (!cohortDataMap[userId]) {
-          cohortDataMap[userId] = [];
+        if (!cohortDataMap[row.userId]) {
+          cohortDataMap[row.userId] = [];
         }
-
-        // Add this cohort association to the user's cohort data (include all statuses)
-        const cohortEntry = {
-          centerId: centerId ? String(centerId) : null,
-          centerName: centerName || null,
-          centerStatus: centerStatus || null,
-          batchId: String(batchId),
-          batchName: batchName || null,
-          batchStatus: batchStatus || null,
+  
+        cohortDataMap[row.userId].push({
+          centerId: row.centerId ? String(row.centerId) : null,
+          centerName: row.centerName || null,
+          centerStatus: row.centerStatus || null,
+          batchId: row.batchId ? String(row.batchId) : null,
+          batchName: row.batchName || null,
+          batchStatus: row.batchStatus || null,
           cohortMember: {
-            status: membershipStatus || 'unknown',
-            membershipId: String(membershipId)
+            status: row.membershipStatus || 'unknown',
+            membershipId: String(row.membershipId)
           }
-        };
-
-        cohortDataMap[userId].push(cohortEntry);
+        });
       });
-
+  
       return cohortDataMap;
+  
     } catch (error) {
-      // Return empty object instead of throwing to avoid breaking the main operation
       return {};
     }
   }
@@ -4537,7 +4582,7 @@ export class UserService {
       centerId: string | null;
       centerName: string | null;
       centerStatus: string | null;
-      batchId: string;
+      batchId: string | null;
       batchName: string | null;
       batchStatus: string | null;
       cohortMember: {
