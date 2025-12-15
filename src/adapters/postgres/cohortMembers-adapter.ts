@@ -325,7 +325,9 @@ export class PostgresCohortMembersService {
                   res,
                   apiId,
                   API_RESPONSES.BAD_REQUEST,
-                  `Invalid ${key} filter format. Only one operator is allowed. Found: ${operatorKeys.join(', ')}`,
+                  `Invalid ${key} filter format. Only one operator is allowed. Found: ${operatorKeys.join(
+                    ', '
+                  )}`,
                   HttpStatus.BAD_REQUEST
                 );
               }
@@ -336,7 +338,9 @@ export class PostgresCohortMembersService {
                   res,
                   apiId,
                   API_RESPONSES.BAD_REQUEST,
-                  `Invalid operator for ${key}: ${operator}. Valid operators are: ${validOperators.join(', ')}`,
+                  `Invalid operator for ${key}: ${operator}. Valid operators are: ${validOperators.join(
+                    ', '
+                  )}`,
                   HttpStatus.BAD_REQUEST
                 );
               }
@@ -1229,28 +1233,61 @@ export class PostgresCohortMembersService {
     completionPercentageRanges: { min: number; max: number }[],
     formId: string
   ): { query: string; parameters: any[]; limit: number; offset: number } {
+    // Check if any range includes 0 (to include users without form submissions)
+    const includesZeroRange = completionPercentageRanges.some(
+      (range) => range.min === 0
+    );
+
     // Build completion percentage filter conditions with proper casting
     const completionConditions = completionPercentageRanges
-      .map(
-        (range) =>
-          `(CAST(FS."completionPercentage" AS DECIMAL(5,2)) >= ${range.min} AND CAST(FS."completionPercentage" AS DECIMAL(5,2)) <= ${range.max})`
-      )
+      .map((range) => {
+        return `(CAST(FS."completionPercentage" AS DECIMAL(5,2)) >= ${range.min} AND CAST(FS."completionPercentage" AS DECIMAL(5,2)) <= ${range.max})`;
+      })
       .join(' OR ');
 
-    // Add completion percentage filter to WHERE clause (removed status filter to match original behavior)
-    const completionFilter = `(FS."formId" = '${formId}' AND (${completionConditions}))`;
+    // Build completion filter with parameter placeholder for formId
+    // When range includes 0, allow NULL formId rows without re-evaluating completionConditions
+    // When range doesn't include 0, only include users with form submissions matching the formId
+    const completionFilterPlaceholder = includesZeroRange
+      ? `((FS."formId" = $FORM_ID_PARAM AND (${completionConditions})) OR FS."formId" IS NULL)`
+      : `(FS."formId" = $FORM_ID_PARAM AND (${completionConditions}))`;
 
-    const additionalJoins = `
+    const additionalJoins = includesZeroRange
+      ? `
+      LEFT JOIN public."formSubmissions" FS
+      ON FS."itemId" = U."userId"`
+      : `
       INNER JOIN public."formSubmissions" FS
       ON FS."itemId" = U."userId"`;
 
-    return this.buildBaseQuery(
+    // Build base query to get parameter count
+    const baseResult = this.buildBaseQuery(
       where,
       options,
       order,
       additionalJoins,
+      completionFilterPlaceholder
+    );
+
+    // Calculate the correct parameter index (parameters array length + 1)
+    const formIdParamIndex = baseResult.parameters.length + 1;
+
+    // Replace placeholder with actual parameter index
+    const completionFilter = completionFilterPlaceholder.replace(
+      '$FORM_ID_PARAM',
+      `$${formIdParamIndex}`
+    );
+
+    // Add formId to parameters array
+    const parameters = [...baseResult.parameters, formId];
+
+    // Replace placeholder in the final query
+    const query = baseResult.query.replace(
+      completionFilterPlaceholder,
       completionFilter
     );
+
+    return { query, parameters, limit: baseResult.limit, offset: baseResult.offset };
   }
 
   async getUsersWithCompletionFilter(
@@ -1320,7 +1357,13 @@ export class PostgresCohortMembersService {
       const cohortMembershipToUpdate =
         await this.cohortMembersRepository.findOne({
           where: { cohortMembershipId: cohortMembershipId },
-          select: ['cohortMembershipId', 'userId', 'cohortId', 'status', 'updatedAt'],
+          select: [
+            'cohortMembershipId',
+            'userId',
+            'cohortId',
+            'status',
+            'updatedAt',
+          ],
         });
 
       if (!cohortMembershipToUpdate) {
@@ -1566,10 +1609,12 @@ export class PostgresCohortMembersService {
 
                 // Update rejection_email_sent asynchronously if status is rejected
                 if (status === 'rejected') {
-                  this.cohortMembersRepository.update(
+                  this.cohortMembersRepository
+                    .update(
                     { cohortMembershipId: cohortMembershipId },
                     { rejectionEmailSent: true }
-                  ).catch((error) => {
+                    )
+                    .catch((error) => {
                     LoggerUtil.error(
                       'Failed to update rejectionEmailSent',
                       `Error: ${error.message}`,
@@ -2488,7 +2533,7 @@ export class PostgresCohortMembersService {
                 formSubmissionStatus: null,
                 formSubmissionCreatedAt: null,
                 formSubmissionUpdatedAt: null,
-                completionPercentage: null,
+                completionPercentage: '0.00' as unknown as number,
               };
 
               // Get form submission details for this user - directly query to avoid TypeORM In() operator issues
@@ -2515,7 +2560,7 @@ export class PostgresCohortMembersService {
                   ? new Date(submission.updatedAt).toISOString().slice(0, 10)
                   : null;
                 formInfo.completionPercentage =
-                  submission.completionPercentage ?? 0;
+                  submission.completionPercentage ?? 0.0;
               }
 
               // Get custom fields
