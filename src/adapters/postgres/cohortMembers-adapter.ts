@@ -1252,28 +1252,34 @@ export class PostgresCohortMembersService {
       ? `((FS."formId" = $FORM_ID_PARAM AND (${completionConditions})) OR FS."formId" IS NULL)`
       : `(FS."formId" = $FORM_ID_PARAM AND (${completionConditions}))`;
 
-    const additionalJoins = includesZeroRange
+    // Build base query first to get parameter count
+    // We'll add formId filter to JOIN condition after getting parameter index
+    const tempAdditionalJoins = includesZeroRange
       ? `
       LEFT JOIN public."formSubmissions" FS
-      ON FS."itemId" = U."userId"`
+      ON FS."itemId" = U."userId" AND FS."formId" = $FORM_ID_PARAM`
       : `
       INNER JOIN public."formSubmissions" FS
-      ON FS."itemId" = U."userId"`;
+      ON FS."itemId" = U."userId" AND FS."formId" = $FORM_ID_PARAM`;
 
     // Build base query to get parameter count
     const baseResult = this.buildBaseQuery(
       where,
       options,
       order,
-      additionalJoins,
+      tempAdditionalJoins,
       completionFilterPlaceholder
     );
 
     // Calculate the correct parameter index (parameters array length + 1)
     const formIdParamIndex = baseResult.parameters.length + 1;
 
-    // Replace placeholder with actual parameter index
+    // Replace placeholder with actual parameter index in both JOIN and WHERE conditions
     const completionFilter = completionFilterPlaceholder.replace(
+      '$FORM_ID_PARAM',
+      `$${formIdParamIndex}`
+    );
+    const additionalJoins = tempAdditionalJoins.replace(
       '$FORM_ID_PARAM',
       `$${formIdParamIndex}`
     );
@@ -1281,13 +1287,19 @@ export class PostgresCohortMembersService {
     // Add formId to parameters array
     const parameters = [...baseResult.parameters, formId];
 
-    // Replace placeholder in the final query
-    const query = baseResult.query.replace(
+    // Replace placeholders in the final query
+    let query = baseResult.query.replace(
       completionFilterPlaceholder,
       completionFilter
     );
+    query = query.replace(tempAdditionalJoins, additionalJoins);
 
-    return { query, parameters, limit: baseResult.limit, offset: baseResult.offset };
+    return {
+      query,
+      parameters,
+      limit: baseResult.limit,
+      offset: baseResult.offset,
+    };
   }
 
   async getUsersWithCompletionFilter(
@@ -1318,7 +1330,7 @@ export class PostgresCohortMembersService {
     const apiId = APIID.COHORT_MEMBER_UPDATE;
     try {
       cohortMembersUpdateDto.updatedBy = loginUser;
-      
+
       // Early validation: Check UUID format
       if (!isUUID(cohortMembershipId)) {
         return APIResponse.error(
@@ -1383,7 +1395,7 @@ export class PostgresCohortMembersService {
       // Prepare update data (exclude customFields and non-entity fields)
       const customFields = cohortMembersUpdateDto.customFields;
       const updateData: Partial<CohortMembers> = {};
-      
+
       // Map only valid entity fields from DTO
       if (cohortMembersUpdateDto.cohortId !== undefined) {
         updateData.cohortId = cohortMembersUpdateDto.cohortId;
@@ -1611,16 +1623,16 @@ export class PostgresCohortMembersService {
                 if (status === 'rejected') {
                   this.cohortMembersRepository
                     .update(
-                    { cohortMembershipId: cohortMembershipId },
-                    { rejectionEmailSent: true }
+                      { cohortMembershipId: cohortMembershipId },
+                      { rejectionEmailSent: true }
                     )
                     .catch((error) => {
-                    LoggerUtil.error(
-                      'Failed to update rejectionEmailSent',
-                      `Error: ${error.message}`,
-                      apiId
-                    );
-                  });
+                      LoggerUtil.error(
+                        'Failed to update rejectionEmailSent',
+                        `Error: ${error.message}`,
+                        apiId
+                      );
+                    });
                 }
               }
             })
@@ -2325,7 +2337,7 @@ export class PostgresCohortMembersService {
             let formSubmissionStatus = null;
             let formSubmissionCreatedAt = null;
             let formSubmissionUpdatedAt = null;
-            let completionPercentage = null; // Default to 0 if not available
+            let completionPercentage = '0.00'; // Default to 0.00 if not available
 
             if (submission) {
               formSubmissionId = submission.submissionId;
@@ -2336,7 +2348,12 @@ export class PostgresCohortMembersService {
               formSubmissionUpdatedAt = submission.updatedAt
                 ? new Date(submission.updatedAt).toISOString().slice(0, 10)
                 : null;
-              completionPercentage = submission.completionPercentage ?? 0; // Default to 0 if not available
+              const completionValue = submission.completionPercentage;
+              completionPercentage =
+                completionValue != null &&
+                !Number.isNaN(Number(completionValue))
+                  ? Number(completionValue).toFixed(2)
+                  : '0.00'; // Default to 0.00 if not available
             }
             formInfo = {
               title: form.title, //form title
@@ -2533,7 +2550,7 @@ export class PostgresCohortMembersService {
                 formSubmissionStatus: null,
                 formSubmissionCreatedAt: null,
                 formSubmissionUpdatedAt: null,
-                completionPercentage: '0.00' as unknown as number,
+                completionPercentage: '0.00',
               };
 
               // Get form submission details for this user - directly query to avoid TypeORM In() operator issues
@@ -2559,8 +2576,12 @@ export class PostgresCohortMembersService {
                 formInfo.formSubmissionUpdatedAt = submission.updatedAt
                   ? new Date(submission.updatedAt).toISOString().slice(0, 10)
                   : null;
+                const completionValue = submission.completionPercentage;
                 formInfo.completionPercentage =
-                  submission.completionPercentage ?? 0.0;
+                  completionValue != null &&
+                  !Number.isNaN(Number(completionValue))
+                    ? Number(completionValue).toFixed(2)
+                    : '0.00';
               }
 
               // Get custom fields
@@ -5570,7 +5591,7 @@ export class PostgresCohortMembersService {
 
     // Check if it's a date-only string (YYYY-MM-DD format)
     const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(dateValue);
-    
+
     // Normalize date string (handle date-only format)
     const normalizedDateValue = dateValue.includes('T')
       ? dateValue
@@ -5592,10 +5613,10 @@ export class PostgresCohortMembersService {
     const hour = String(filterDate.getUTCHours()).padStart(2, '0');
     const minute = String(filterDate.getUTCMinutes()).padStart(2, '0');
     const second = String(filterDate.getUTCSeconds()).padStart(2, '0');
-    
+
     // Build SQL condition based on operator
     let condition: string;
-    
+
     if (isDateOnly) {
       // For date-only strings, compare at day level for all operators
       const dateStr = `${year}-${month}-${day}`;
