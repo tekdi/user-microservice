@@ -2350,7 +2350,8 @@ export class PostgresCohortMembersService {
                 : null;
               const completionValue = submission.completionPercentage;
               completionPercentage =
-                completionValue != null && !isNaN(Number(completionValue))
+                completionValue != null &&
+                !Number.isNaN(Number(completionValue))
                   ? Number(completionValue).toFixed(2)
                   : '0.00'; // Default to 0.00 if not available
             }
@@ -2577,7 +2578,8 @@ export class PostgresCohortMembersService {
                   : null;
                 const completionValue = submission.completionPercentage;
                 formInfo.completionPercentage =
-                  completionValue != null && !isNaN(Number(completionValue))
+                  completionValue != null &&
+                  !Number.isNaN(Number(completionValue))
                     ? Number(completionValue).toFixed(2)
                     : '0.00';
               }
