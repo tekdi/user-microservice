@@ -1872,6 +1872,8 @@ export class PostgresFieldsService implements IServicelocatorfields {
       joinCond = `fv."itemId" = u."userId"`;
     } else if (tableName === "Cohort") {
       joinCond = `fv."itemId" = u."cohortId"`;
+    } else if (tableName === "CohortMembers") {
+      joinCond = `fv."itemId" = u."cohortMembershipId"`;
     }
     try {
       const query = `
