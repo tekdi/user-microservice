@@ -1,9 +1,9 @@
 import { HttpStatus, Injectable } from "@nestjs/common";
-import { User } from "../../user/entities/user-entity";
+import { User } from "./entities/user-entity";
 import { FieldValues } from "src/fields/entities/fields-values.entity";
 import { InjectRepository } from "@nestjs/typeorm";
 import { DataSource, ILike, In, Repository } from "typeorm";
-import { tenantRoleMappingDto, UserCreateDto } from "../../user/dto/user-create.dto";
+import { tenantRoleMappingDto, UserCreateDto } from "./dto/user-create.dto";
 import jwt_decode from "jwt-decode";
 import {
   getKeycloakAdminToken,
@@ -12,26 +12,25 @@ import {
   checkIfUsernameExistsInKeycloak,
   updateUserEnabledStatusInKeycloak,
   checkIfEmailExistsInKeycloak,
-} from "../../common/utils/keycloak.adapter.util";
+} from "src/common/utils/keycloak.adapter.util";
 import { ErrorResponse } from "src/error-response";
 import { SuccessResponse } from "src/success-response";
 import { CohortMembers } from "src/cohortMembers/entities/cohort-member.entity";
 import { isUUID } from "class-validator";
-import { ExistUserDto, SuggestUserDto, UserSearchDto } from "src/user/dto/user-search.dto";
-import { HierarchicalLocationFiltersDto } from "src/user/dto/user-hierarchical-search.dto";
-import { UserHierarchyViewDto } from "src/user/dto/user-hierarchy-view.dto";
-import { UserTenantMapping } from "src/userTenantMapping/entities/user-tenant-mapping.entity";
+import { ExistUserDto, SuggestUserDto, UserSearchDto } from "./dto/user-search.dto";
+import { HierarchicalLocationFiltersDto } from "./dto/user-hierarchical-search.dto";
+import { UserHierarchyViewDto } from "./dto/user-hierarchy-view.dto";
+import { UserTenantMapping, UserTenantMappingStatus } from "src/userTenantMapping/entities/user-tenant-mapping.entity";
 import { UserRoleMapping } from "src/rbac/assign-role/entities/assign-role.entity";
 import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
 import { Cohort } from "src/cohort/entities/cohort.entity";
 import { Role } from "src/rbac/role/entities/role.entity";
-import { UserData } from "src/user/user.controller";
+import { UserData } from "./user.controller";
 import APIResponse from "src/common/responses/response";
 import { Request, Response, query } from "express";
 import { APIID } from "src/common/utils/api-id.config";
-import { IServicelocator } from "../userservicelocator";
-import { PostgresFieldsService } from "./fields-adapter";
-import { PostgresRoleService } from "./rbac/role-adapter";
+import { FieldsService } from "src/fields/fields.service";
+import { RoleService } from "src/rbac/role/role.service";
 import { CustomFieldsValidation } from "@utils/custom-field-validation";
 import { NotificationRequest } from "@utils/notification.axios";
 import { JwtUtil } from "@utils/jwt-token";
@@ -39,16 +38,17 @@ import { ConfigService } from "@nestjs/config";
 import { formatTime } from "@utils/formatTimeConversion";
 import { API_RESPONSES } from "@utils/response.messages";
 import { TokenExpiredError, JsonWebTokenError } from "jsonwebtoken";
-import { CohortAcademicYearService } from "./cohortAcademicYear-adapter";
-import { PostgresAcademicYearService } from "./academicyears-adapter";
+import { CohortAcademicYearService } from "src/cohortAcademicYear/cohortAcademicYear.service";
+import { AcademicYearService } from "src/academicyears/academicyears.service";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
 import { AuthUtils } from "@utils/auth-util";
-import { OtpSendDTO } from "src/user/dto/otpSend.dto";
-import { OtpVerifyDTO } from "src/user/dto/otpVerify.dto";
-import { SendPasswordResetOTPDto } from "src/user/dto/passwordReset.dto";
-import { ActionType, UserUpdateDTO } from "src/user/dto/user-update.dto";
+import { OtpSendDTO } from "./dto/otpSend.dto";
+import { OtpVerifyDTO } from "./dto/otpVerify.dto";
+import { SendPasswordResetOTPDto } from "./dto/passwordReset.dto";
+import { ActionType, UserUpdateDTO } from "./dto/user-update.dto";
 import { randomInt } from 'crypto';
-import { UUID } from "aws-sdk/clients/cloudtrail";
+// UUID type - avoiding deprecated AWS SDK v2 types
+type UUID = string;
 import { AutomaticMemberService } from "src/automatic-member/automatic-member.service";
 import { KafkaService } from "src/kafka/kafka.service";
 
@@ -60,7 +60,7 @@ interface UpdateField {
   email?: string; // Optional
 }
 @Injectable()
-export class PostgresUserService implements IServicelocator {
+export class UserService {
   axios = require("axios");
   jwt_password_reset_expires_In: any;
   jwt_secret: any;
@@ -88,12 +88,12 @@ export class PostgresUserService implements IServicelocator {
     private userRoleMappingRepository: Repository<UserRoleMapping>,
     @InjectRepository(Role)
     private roleRepository: Repository<Role>,
-    private fieldsService: PostgresFieldsService,
-    private readonly postgresRoleService: PostgresRoleService,
+    private fieldsService: FieldsService,
+    private readonly roleService: RoleService,
     private readonly notificationRequest: NotificationRequest,
     private readonly jwtUtil: JwtUtil,
     private configService: ConfigService,
-    private postgresAcademicYearService: PostgresAcademicYearService,
+    private academicYearService: AcademicYearService,
     private readonly cohortAcademicYearService: CohortAcademicYearService,
     private readonly authUtils: AuthUtils,
     private readonly automaticMemberService: AutomaticMemberService,
@@ -789,7 +789,7 @@ export class PostgresUserService implements IServicelocator {
     .createQueryBuilder("U")
     .leftJoin("CohortMembers", "CM", "CM.userId = U.userId")
     .leftJoin("UserRolesMapping", "UR", "UR.userId = U.userId")
-    .leftJoin("UserTenantMapping", "UTM", "UTM.userId = U.userId")
+    .leftJoin("UserTenantMapping", "UTM", "UTM.userId = U.userId AND UR.tenantId = UTM.tenantId" )
     .leftJoin("Roles", "R", "R.roleId = UR.roleId")
     .select([
       'U.userId AS "userId"',
@@ -1185,7 +1185,7 @@ export class PostgresUserService implements IServicelocator {
     const tenantMap = new Map();
 
     for (const data of result) {
-      const roleData = await this.postgresRoleService.findUserRoleData(
+      const roleData = await this.roleService.findUserRoleData(
         userId,
         data.tenantId
       );
@@ -2033,7 +2033,7 @@ export class PostgresUserService implements IServicelocator {
 
         // check academic year exists for tenant
         const checkAcadmicYear =
-          await this.postgresAcademicYearService.getActiveAcademicYear(
+          await this.academicYearService.getActiveAcademicYear(
             academicYearId,
             tenantId
           );
@@ -2311,7 +2311,8 @@ export class PostgresUserService implements IServicelocator {
     userId: string,
     tenantId: string,
     createdBy: string,
-    shouldUpdateIfRoot: boolean
+    shouldUpdateIfRoot: boolean,
+    userTenantStatus?: string
   ): Promise<void> {
     const existingMapping = await this.userTenantMappingRepository.findOne({
       where: { userId }
@@ -2321,7 +2322,8 @@ export class PostgresUserService implements IServicelocator {
       await this.userTenantMappingRepository.save({
         userId,
         tenantId,
-        createdBy
+        createdBy,
+        status: (userTenantStatus as UserTenantMappingStatus) || UserTenantMappingStatus.ACTIVE
       });
       return;
     }
@@ -2331,23 +2333,43 @@ export class PostgresUserService implements IServicelocator {
     if (isRoot) {
       existingMapping.tenantId = tenantId;
       existingMapping.createdBy = createdBy;
+      existingMapping.status = (userTenantStatus as UserTenantMappingStatus) || existingMapping.status;
       await this.userTenantMappingRepository.save(existingMapping);
       LoggerUtil.log(`Updated tenant mapping for user ${userId} from root tenant to ${tenantId}`);
     } else {
-      await this.userTenantMappingRepository.save({
-        userId,
-        tenantId,
-        createdBy
+      // Check if mapping already exists for this userId and tenantId combination
+      const existingUserTenantMapping = await this.userTenantMappingRepository.findOne({
+        where: { userId, tenantId }
       });
+
+      if (existingUserTenantMapping) {
+        // If status is active, skip the save operation//
+        if (existingUserTenantMapping.status === UserTenantMappingStatus.ACTIVE) {
+          return;
+        }
+        // For statuses (active,inactive, archived, pending), update with provided status or keep existing
+        existingUserTenantMapping.status = (userTenantStatus as UserTenantMappingStatus) || existingUserTenantMapping.status;
+        existingUserTenantMapping.createdBy = createdBy;
+        await this.userTenantMappingRepository.save(existingUserTenantMapping);
+      } else {
+        // No data exists, create new record
+        await this.userTenantMappingRepository.save({
+          userId,
+          tenantId,
+          createdBy,
+          status: (userTenantStatus as UserTenantMappingStatus) || UserTenantMappingStatus.ACTIVE
+        });
+      }
     }
   }
 
   async assignUserToTenantAndRoll(tenantsData, createdBy, userType?: boolean) {
     try {
-      const { tenantId, userId, roleId } = {
+      const { tenantId, userId, roleId, userTenantStatus } = {
         tenantId: tenantsData?.tenantRoleMapping?.tenantId,
         userId: tenantsData?.userId,
-        roleId: tenantsData?.tenantRoleMapping?.roleId
+        roleId: tenantsData?.tenantRoleMapping?.roleId,
+        userTenantStatus: tenantsData?.userTenantStatus
       };
 
       if (roleId) {
@@ -2355,7 +2377,7 @@ export class PostgresUserService implements IServicelocator {
       }
 
       if (tenantId) {
-        await this.handleTenantMappingForUser(userId, tenantId, createdBy, userType);
+        await this.handleTenantMappingForUser(userId, tenantId, createdBy, userType, userTenantStatus);
       }
 
       LoggerUtil.log(API_RESPONSES.USER_TENANT);
@@ -4237,62 +4259,122 @@ export class PostgresUserService implements IServicelocator {
   }
 
   /**
-   * Get batch and center names for users using cohort membership
-   */
-  /**
    * Get all cohort associations for users with complete details for cohortData structure
    */
-  private async getBatchAndCenterNames(userIds: string[]): Promise<Record<string, Array<{
-    centerId: string | null;
-    centerName: string | null;
-    centerStatus: string | null;
-    batchId: string;
-    batchName: string | null;
-    batchStatus: string | null;
-    cohortMember: {
-      status: string;
-      membershipId: string;
-    };
-  }>>> {
+  private async getBatchAndCenterNames(userIds: string[]): Promise<any> {
     const apiId = APIID.USER_LIST;
-
+  
     if (!userIds || userIds.length === 0) {
       return {};
     }
-
-    const query = `
-      SELECT 
-        cm."userId",
-        cm."cohortMembershipId" as "membershipId",
-        cm."status" as "membershipStatus",
-        cm."cohortId" as "batchId",
-        batch."name" AS "batchName",
-        batch."status" AS "batchStatus",
-        batch."parentId" as "centerId",
-        center."name" AS "centerName",
-        center."status" AS "centerStatus",
-        cm."createdAt"
-      FROM 
-        public."CohortMembers" cm
-        LEFT JOIN public."Cohort" batch ON cm."cohortId" = batch."cohortId"
-        LEFT JOIN public."Cohort" center ON batch."parentId"::uuid = center."cohortId"
-      WHERE 
-        cm."userId" = ANY($1::uuid[])
-      ORDER BY cm."createdAt" DESC
-    `;
-
+  
     try {
-      const result = await this.usersRepository.query(query, [userIds]);
+      // Get all user assignments with cohort info
+      const assignmentQuery = `
+        SELECT 
+          cm."userId",
+          cm."cohortId",
+          cm."cohortMembershipId" as "membershipId",
+          cm."status" as "membershipStatus",
+          cohort."type",
+          cohort."parentId"
+        FROM public."CohortMembers" cm
+        LEFT JOIN public."Cohort" cohort ON cm."cohortId" = cohort."cohortId"
+        WHERE cm."userId" = ANY($1::uuid[])
+      `;
+  
+      const assignments = await this.usersRepository.query(assignmentQuery, [userIds]);
+      
+      if (assignments.length === 0) {
+        LoggerUtil.warn(`No cohort memberships found for any of the ${userIds.length} users`, apiId);
+        return {};
+      }
+  
+      // Build query based on type (batch or center)
+      const buildQuery = (isBatch: boolean) => {
+        const selectedItem = isBatch
+          ? `batch."cohortId" as "batchId",
+             batch."name" AS "batchName",
+             batch."status" AS "batchStatus",
+             batch."parentId" as "centerId",
+             center."name" AS "centerName",
+             center."status" AS "centerStatus"`
+          : `NULL as "batchId",
+             NULL AS "batchName",
+             NULL AS "batchStatus",
+             cohort."cohortId" as "centerId",
+             cohort."name" AS "centerName",
+             cohort."status" AS "centerStatus"`;
+  
+        const condition = isBatch
+          ? `LEFT JOIN public."Cohort" batch ON cm."cohortId" = batch."cohortId"
+             LEFT JOIN public."Cohort" center ON batch."parentId"::uuid = center."cohortId"`
+          : `LEFT JOIN public."Cohort" cohort ON cm."cohortId" = cohort."cohortId"`;
+  
+        return `
+          SELECT 
+            cm."userId",
+            cm."cohortMembershipId" as "membershipId",
+            cm."status" as "membershipStatus",
+            ${selectedItem},
+            cm."createdAt"
+          FROM 
+            public."CohortMembers" cm
+            ${condition}
+          WHERE 
+            cm."userId" = ANY($1::uuid[])
+            AND cm."cohortId" = ANY($2::uuid[])
+          ORDER BY cm."createdAt" DESC
+        `;
+      };
+  
+      // Separate batch and center assignments
+      const batchData = { userIds: [], cohortIds: [] };
+      const centerData = { userIds: [], cohortIds: [] };
+  
+      assignments.forEach((row: any) => {
+        const isBatch = row.type === 'BATCH' && row.parentId !== null;
+        const isCenter = row.type === 'COHORT' && row.parentId === null;
+        
+        if (isBatch) {
+          batchData.userIds.push(row.userId);
+          batchData.cohortIds.push(row.cohortId);
+        } else if (isCenter) {
+          centerData.userIds.push(row.userId);
+          centerData.cohortIds.push(row.cohortId);
+        }
+      });
+  
+      // Run queries and combine results
+      const result = [];
+  
+      if (batchData.userIds.length > 0) {
+        const batchResult = await this.usersRepository.query(
+          buildQuery(true), 
+          [batchData.userIds, batchData.cohortIds]
+        );
+        result.push(...batchResult);
+      }
+  
+      if (centerData.userIds.length > 0) {
+        const centerResult = await this.usersRepository.query(
+          buildQuery(false), 
+          [centerData.userIds, centerData.cohortIds]
+        );
+        result.push(...centerResult);
+      }
+  
       if (result.length === 0) {
         LoggerUtil.warn(`No cohort memberships found for any of the ${userIds.length} users`, apiId);
+        return {};
       }
-
-      // Group all associations by userId (not just the most recent)
+  
+      // Group all results by userId
       const cohortDataMap: Record<string, Array<{
         centerId: string | null;
         centerName: string | null;
         centerStatus: string | null;
-        batchId: string;
+        batchId: string | null;
         batchName: string | null;
         batchStatus: string | null;
         cohortMember: {
@@ -4300,44 +4382,29 @@ export class PostgresUserService implements IServicelocator {
           membershipId: string;
         };
       }>> = {};
-
+  
       result.forEach((row: any) => {
-        const {
-          userId,
-          membershipId,
-          membershipStatus,
-          batchId,
-          batchName,
-          batchStatus,
-          centerId,
-          centerName,
-          centerStatus
-        } = row;
-
-        if (!cohortDataMap[userId]) {
-          cohortDataMap[userId] = [];
+        if (!cohortDataMap[row.userId]) {
+          cohortDataMap[row.userId] = [];
         }
-
-        // Add this cohort association to the user's cohort data (include all statuses)
-        const cohortEntry = {
-          centerId: centerId ? String(centerId) : null,
-          centerName: centerName || null,
-          centerStatus: centerStatus || null,
-          batchId: String(batchId),
-          batchName: batchName || null,
-          batchStatus: batchStatus || null,
+  
+        cohortDataMap[row.userId].push({
+          centerId: row.centerId ? String(row.centerId) : null,
+          centerName: row.centerName || null,
+          centerStatus: row.centerStatus || null,
+          batchId: row.batchId ? String(row.batchId) : null,
+          batchName: row.batchName || null,
+          batchStatus: row.batchStatus || null,
           cohortMember: {
-            status: membershipStatus || 'unknown',
-            membershipId: String(membershipId)
+            status: row.membershipStatus || 'unknown',
+            membershipId: String(row.membershipId)
           }
-        };
-
-        cohortDataMap[userId].push(cohortEntry);
+        });
       });
-
+  
       return cohortDataMap;
+  
     } catch (error) {
-      // Return empty object instead of throwing to avoid breaking the main operation
       return {};
     }
   }
@@ -4515,7 +4582,7 @@ export class PostgresUserService implements IServicelocator {
       centerId: string | null;
       centerName: string | null;
       centerStatus: string | null;
-      batchId: string;
+      batchId: string | null;
       batchName: string | null;
       batchStatus: string | null;
       cohortMember: {

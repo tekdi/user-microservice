@@ -13,6 +13,7 @@ export enum UserTenantMappingStatus {
   ACTIVE = "active",
   INACTIVE = "inactive",
   ARCHIVED = "archived",
+  PENDING = "pending",
 }
 
 @Entity({ name: "UserTenantMapping" })

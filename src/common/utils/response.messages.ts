@@ -216,6 +216,46 @@ export const API_RESPONSES = {
   SIGNED_URL_SUCCESS: "Signed URL generated successfully",
   SIGNED_URL_FAILED: "Error while generating signed URL",
   INVALID_FILE_TYPE: "Invalid file type. Allowed file types are: '.jpg','.jpeg','.png','.webp','.pdf','.doc','.docx','.mp4','.mov','.txt','.csv','.mp3'",
-  FILE_SIZE_ERROR: "File too large. Maximum allowed file size is 10MB."
+  FILE_SIZE_ERROR: "File too large. Maximum allowed file size is 10MB.",
+
+  //User Tenant Mapping
+  TENANT_ASSIGNED_SUCCESSFULLY: "Tenant assigned successfully to the user.",
+  USER_ADDED_TO_TENANT_WITH_ROLE: "User is successfully added to the Tenant with role.",
+  USER_ADDED_TO_TENANT_WITH_ROLE_SUCCESS: "User added to tenant with role successfully.",
+  USER_TENANT_MAPPING_STATUS_UPDATED: "User-Tenant mapping status updated successfully.",
+  USER_TENANT_MAPPINGS_RETRIEVED: "User tenant mappings retrieved successfully",
+  USER_ALREADY_HAS_ROLE_IN_TENANT: (roleId, tenantId) =>
+    `User already has role ${roleId} in Tenant ${tenantId}. Each user can have different roles in the same tenant, but not the same role multiple times.`,
+  USER_DOES_NOT_EXIST: (userId) => `User ${userId} does not exist.`,
+  TENANT_DOES_NOT_EXIST: (tenantId) => `Tenant ${tenantId} does not exist.`,
+  ROLE_DOES_NOT_EXIST: (roleId) => `Role ${roleId} does not exist.`,
+  USER_TENANT_MAPPING_NOT_FOUND: (userId, tenantId) =>
+    `User-Tenant mapping not found for userId: ${userId} and tenantId: ${tenantId}`,
+  NO_TENANT_MAPPINGS_FOUND: "No tenant mappings found for this user",
+  CONFLICT_USER_ROLE_IN_TENANT: "User already has this role in the tenant. Users can have multiple roles in the same tenant, but not the same role multiple times.",
+  
+  //User Tenant Mapping Logger Messages
+  LOG_USER_ASSIGNED_ROLE_IN_TENANT: (userId, roleId, tenantId) =>
+    `User ${userId} assigned role ${roleId} in tenant ${tenantId}`,
+  LOG_PROCESSING_CUSTOM_FIELDS: (count, userId, tenantId) =>
+    `Processing ${count} custom fields for user ${userId} in tenant ${tenantId}`,
+  LOG_STATUS_UPDATED_FOR_USER_TENANT: (userId, tenantId) =>
+    `Successfully updated status for user ${userId} in tenant ${tenantId}`,
+  LOG_USER_TENANT_EVENT_PUBLISHED: (eventType, userId, tenantId) =>
+    `User-tenant ${eventType} event published to Kafka for user ${userId} and tenant ${tenantId}`,
+  ERROR_FAILED_PUBLISH_USER_TENANT_CREATED: (userId) =>
+    `Failed to publish user-tenant created event to Kafka for user ${userId}`,
+  ERROR_FAILED_PUBLISH_USER_TENANT_UPDATED: (userId) =>
+    `Failed to publish user-tenant updated event to Kafka for user ${userId}`,
+  ERROR_IN_USER_TENANT_MAPPING: (userId) =>
+    `Error in userTenantMapping for user ${userId}`,
+  ERROR_IN_UPDATE_TENANT_STATUS: (userId, tenantId) =>
+    `Error in updateAssignTenantStatus for user ${userId} and tenant ${tenantId}`,
+  ERROR_FAILED_FETCH_MAPPING_DATA: "Failed to fetch user-tenant mapping data for Kafka event",
+  ERROR_FAILED_FETCH_USER_TENANT_DATA: "Failed to fetch user-tenant data for Kafka event",
+  ERROR_FAILED_FETCH_CUSTOM_FIELDS: "Failed to fetch custom fields for Kafka event",
+  ERROR_FAILED_PUBLISH_USER_TENANT_EVENT: (eventType) =>
+    `Failed to publish user-tenant ${eventType} event to Kafka`,
+  ERROR_GET_USER_TENANT_MAPPINGS: "Error retrieving user tenant mappings"
 };
 

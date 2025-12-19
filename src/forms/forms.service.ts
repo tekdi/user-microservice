@@ -3,19 +3,21 @@ import jwt_decode from "jwt-decode";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Form } from "./entities/form.entity";
 import { IsNull, Repository } from "typeorm";
-import { PostgresFieldsService } from "../adapters/postgres/fields-adapter";
+import { FieldsService } from "../fields/fields.service";
 import APIResponse from "src/common/responses/response";
 import { CohortContextType } from "./utils/form-class";
 import { FormCreateDto } from "./dto/form-create.dto";
 import { APIID } from "@utils/api-id.config";
 import { API_RESPONSES } from "@utils/response.messages";
+import { ConfigService } from "@nestjs/config";
 
 @Injectable()
 export class FormsService {
   constructor(
-    private readonly fieldsService: PostgresFieldsService,
+    private readonly fieldsService: FieldsService,
     @InjectRepository(Form)
-    private readonly formRepository: Repository<Form>
+    private readonly formRepository: Repository<Form>,
+    private readonly configService: ConfigService
   ) { }
 
   async getForm(requiredData, response) {
@@ -85,10 +87,15 @@ export class FormsService {
         })
       );
 
+      // Replace {{interfaceUrl}} and {{middlewareUrl}} with environment variable values
+      const interfaceUrl = this.configService.get<string>("INTERFACE_URL") || "";
+      const middlewareUrl = this.configService.get<string>("MIDDLEWARE_URL") || "";
+      const processedResponse = this.replaceUrlPlaceholders(mappedResponse, interfaceUrl, middlewareUrl);
+
       const result = {
         formid: formData.formid,
         title: formData.title,
-        fields: mappedResponse,
+        fields: processedResponse,
       };
 
       return APIResponse.success(
@@ -321,5 +328,42 @@ export class FormsService {
         tenantId: tenantId || IsNull(),
       },
     });
+  }
+
+  /**
+   * Recursively replace {{interfaceUrl}} and {{middlewareUrl}} placeholders with actual environment variable values
+   * @param data - The data object or array to process
+   * @param interfaceUrl - The INTERFACE_URL value from environment variable
+   * @param middlewareUrl - The MIDDLEWARE_URL value from environment variable
+   * @returns Processed data with replaced values
+   */
+  private replaceUrlPlaceholders(data: any, interfaceUrl: string, middlewareUrl: string): any {
+    if (Array.isArray(data)) {
+      return data.map((item) => this.replaceUrlPlaceholders(item, interfaceUrl, middlewareUrl));
+    } else if (data !== null && typeof data === "object") {
+      const processed: any = {};
+      for (const key in data) {
+        if (data.hasOwnProperty(key)) {
+          if (typeof data[key] === "string") {
+            // Replace {{interfaceUrl}} and {{middlewareUrl}} in string values
+            let processedValue = data[key];
+            processedValue = processedValue.replace(/\{\{interfaceUrl\}\}/g, interfaceUrl);
+            processedValue = processedValue.replace(/\{\{middlewareUrl\}\}/g, middlewareUrl);
+            processed[key] = processedValue;
+          } else {
+            // Recursively process nested objects
+            processed[key] = this.replaceUrlPlaceholders(data[key], interfaceUrl, middlewareUrl);
+          }
+        }
+      }
+      return processed;
+    } else if (typeof data === "string") {
+      // Replace {{interfaceUrl}} and {{middlewareUrl}} in string values
+      let processedValue = data;
+      processedValue = processedValue.replace(/\{\{interfaceUrl\}\}/g, interfaceUrl);
+      processedValue = processedValue.replace(/\{\{middlewareUrl\}\}/g, middlewareUrl);
+      return processedValue;
+    }
+    return data;
   }
 }

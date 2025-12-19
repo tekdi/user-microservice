@@ -17,7 +17,7 @@ import { CohortMembersModule } from "./cohortMembers/cohortMembers.module";
 import { FieldsModule } from "./fields/fields.module";
 import { UserModule } from "./user/user.module";
 import { RbacModule } from "./rbac/rbac.module";
-import { AssignTenantModule } from "./userTenantMapping/user-tenant-mapping.module";
+import { UserTenantMappingModule } from "./userTenantMapping/user-tenant-mapping.module";
 import { FormsModule } from "./forms/forms.module";
 import { HttpService } from "@utils/http-service";
 import { TenantModule } from "./tenant/tenant.module";
@@ -44,7 +44,7 @@ import { HealthController } from "./health.controller";
     UserModule,
     CohortModule,
     CohortMembersModule,
-    AssignTenantModule,
+    UserTenantMappingModule,
     FieldsModule,
     AuthModule,
     AuthRbacModule,

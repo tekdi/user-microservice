@@ -1,8 +1,8 @@
 import { Module } from "@nestjs/common";
 import { UserController } from "./user.controller";
 import { HttpModule } from "@nestjs/axios";
-import { UserAdapter } from "./useradapter";
-import { PostgresModule } from "src/adapters/postgres/postgres-module";
+import { UserService } from "./user.service";
+import { FieldsModule } from "src/fields/fields.module";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { User } from "./entities/user-entity";
 import { FieldValues } from "../fields/entities/fields-values.entity";
@@ -13,11 +13,17 @@ import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
 import { UserRoleMapping } from "src/rbac/assign-role/entities/assign-role.entity";
 import { Cohort } from "src/cohort/entities/cohort.entity";
 import { Role } from "src/rbac/role/entities/role.entity";
-import { CohortMembersModule } from "src/cohortMembers/cohortMembers.module";
 import { UploadS3Service } from "src/common/services/upload-S3.service";
 import { AutomaticMemberService } from "src/automatic-member/automatic-member.service";
 import { AutomaticMember } from "src/automatic-member/entity/automatic-member.entity";
 import { KafkaModule } from "src/kafka/kafka.module";
+import { RoleModule } from "src/rbac/role/role.module";
+import { AcademicyearsModule } from "src/academicyears/academicyears.module";
+import { CohortAcademicYearModule } from "src/cohortAcademicYear/cohortAcademicYear.module";
+import { NotificationRequest } from "src/common/utils/notification.axios";
+import { JwtUtil } from "src/common/utils/jwt-token";
+import { JwtModule } from "@nestjs/jwt";
+import { AuthUtils } from "src/common/utils/auth-util";
 
 @Module({
   imports: [
@@ -34,12 +40,15 @@ import { KafkaModule } from "src/kafka/kafka.module";
       AutomaticMember,
     ]),
     HttpModule,
-    PostgresModule,
-    CohortMembersModule,
+    JwtModule,
+    FieldsModule,
+    RoleModule,
+    AcademicyearsModule,
+    CohortAcademicYearModule,
     KafkaModule,
   ],
   controllers: [UserController],
-  providers: [UserAdapter, UploadS3Service, AutomaticMemberService],
-  exports: [UserAdapter], // Export UserAdapter so it can be used in other modules
+  providers: [UserService, UploadS3Service, AutomaticMemberService, NotificationRequest, JwtUtil, AuthUtils],
+  exports: [UserService], // Export UserService so it can be used in other modules
 })
 export class UserModule {}

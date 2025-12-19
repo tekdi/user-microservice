@@ -2,18 +2,18 @@ import { Test, TestingModule } from "@nestjs/testing";
 import { HttpStatus } from "@nestjs/common";
 import { FormsService } from "./forms.service";
 import APIResponse from "src/common/responses/response";
-import { PostgresFieldsService } from "../adapters/postgres/fields-adapter";
+import { FieldsService } from "../fields/fields.service";
 
 describe("Formservice", () => {
   let service: FormsService;
-  let fieldsService: PostgresFieldsService;
+  let fieldsService: FieldsService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         FormsService,
         {
-          provide: PostgresFieldsService,
+          provide: FieldsService,
           useValue: {
             getFieldData: jest.fn(),
           },
@@ -22,7 +22,7 @@ describe("Formservice", () => {
     }).compile();
 
     service = module.get<FormsService>(FormsService);
-    fieldsService = module.get<PostgresFieldsService>(PostgresFieldsService);
+    fieldsService = module.get<FieldsService>(FieldsService);
   });
 
   describe("getForm", () => {

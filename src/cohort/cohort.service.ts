@@ -1,14 +1,14 @@
 import { ConsoleLogger, HttpStatus, Injectable } from "@nestjs/common";
-import { ReturnResponseBody } from "src/cohort/dto/cohort-create.dto";
-import { CohortSearchDto } from "src/cohort/dto/cohort-search.dto";
-import { CohortCreateDto } from "src/cohort/dto/cohort-create.dto";
-import { CohortUpdateDto } from "src/cohort/dto/cohort-update.dto";
+import { ReturnResponseBody } from "./dto/cohort-create.dto";
+import { CohortSearchDto } from "./dto/cohort-search.dto";
+import { CohortCreateDto } from "./dto/cohort-create.dto";
+import { CohortUpdateDto } from "./dto/cohort-update.dto";
 import { IsNull, Repository, In, ILike, Not } from "typeorm";
-import { Cohort } from "src/cohort/entities/cohort.entity";
+import { Cohort } from "./entities/cohort.entity";
 import { Fields } from "src/fields/entities/fields.entity";
 import { InjectRepository } from "@nestjs/typeorm";
-import { PostgresFieldsService } from "./fields-adapter";
-import { FieldValues } from "../../fields/entities/fields-values.entity";
+import { FieldsService } from "src/fields/fields.service";
+import { FieldValues } from "src/fields/entities/fields-values.entity";
 import {
   CohortMembers,
   MemberStatus,
@@ -17,17 +17,18 @@ import { isUUID } from "class-validator";
 import { UserTenantMapping } from "src/userTenantMapping/entities/user-tenant-mapping.entity";
 import APIResponse from "src/common/responses/response";
 import { APIID } from "src/common/utils/api-id.config";
-import { CohortAcademicYearService } from "./cohortAcademicYear-adapter";
-import { PostgresAcademicYearService } from "./academicyears-adapter";
+import { CohortAcademicYearService } from "src/cohortAcademicYear/cohortAcademicYear.service";
+import { AcademicYearService } from "src/academicyears/academicyears.service";
 import { API_RESPONSES } from "@utils/response.messages";
 import { CohortAcademicYear } from "src/cohortAcademicYear/entities/cohortAcademicYear.entity";
-import { PostgresCohortMembersService } from "./cohortMembers-adapter";
+import { CohortMembersService } from "src/cohortMembers/cohortMembers.service";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
 import { AutomaticMemberService } from "src/automatic-member/automatic-member.service";
-import { KafkaService } from "../../kafka/kafka.service";
+import { KafkaService } from "src/kafka/kafka.service";
+import { Console } from "console";
 
 @Injectable()
-export class PostgresCohortService {
+export class CohortService {
   constructor(
     @InjectRepository(Cohort)
     private cohortRepository: Repository<Cohort>,
@@ -39,10 +40,10 @@ export class PostgresCohortService {
     private fieldsRepository: Repository<Fields>,
     @InjectRepository(UserTenantMapping)
     private UserTenantMappingRepository: Repository<UserTenantMapping>,
-    private fieldsService: PostgresFieldsService,
+    private fieldsService: FieldsService,
     private readonly cohortAcademicYearService: CohortAcademicYearService,
-    private readonly postgresAcademicYearService: PostgresAcademicYearService,
-    private readonly postgresCohortMembersService: PostgresCohortMembersService,
+    private readonly academicYearService: AcademicYearService,
+    private readonly cohortMembersService: CohortMembersService,
     private readonly automaticMemberService: AutomaticMemberService,
     private readonly kafkaService: KafkaService
   ) { }
@@ -51,7 +52,7 @@ export class PostgresCohortService {
     const apiId = APIID.COHORT_READ;
 
     // const cohortAcademicYear: any[] =
-    //   await this.postgresCohortMembersService.isCohortExistForYear(
+    //   await this.cohortMembersService.isCohortExistForYear(
     //     requiredData.academicYearId,
     //     requiredData.cohortId
     //   );
@@ -206,7 +207,6 @@ export class PostgresCohortService {
                   JOIN public."Cohort" AS c ON cm."cohortId" = c."cohortId"
                   ${joins}
                 `;
-
     const params = academicYearId ? [userId, academicYearId] : [userId];
 
     const result = await this.cohortMembersRepository.query(query, params);
@@ -318,7 +318,7 @@ export class PostgresCohortService {
       cohortCreateDto.name = cohortCreateDto?.name.toLowerCase()
       // verify if the academic year id is valid
       const academicYear =
-        await this.postgresAcademicYearService.getActiveAcademicYear(
+        await this.academicYearService.getActiveAcademicYear(
           cohortCreateDto.academicYearId,
           tenantId
         );
@@ -753,14 +753,20 @@ export class PostgresCohortService {
         }
       }
       if (filters && Object.keys(filters).length > 0) {
-        if (filters?.customFieldsName) {
-          Object.entries(filters.customFieldsName).forEach(([key, value]) => {
+        // Clean up filters: remove undefined, null properties before processing
+        const cleanedFilters = Object.fromEntries(
+          Object.entries(filters).filter(([_, value]) => value !== undefined && value !== null)
+        );
+        
+        if (cleanedFilters?.customFieldsName) {
+          Object.entries(cleanedFilters.customFieldsName).forEach(([key, value]) => {
             if (customFieldsKeys.includes(key)) {
               searchCustomFields[key] = value;
             }
           });
         }
-        Object.entries(filters).forEach(([key, value]) => {
+
+        Object.entries(cleanedFilters).forEach(([key, value]) => {
           if (!allowedKeys.includes(key) && key !== "customFieldsName") {
             return APIResponse.error(
               response,
@@ -788,6 +794,9 @@ export class PostgresCohortService {
       }
       if (whereClause["status"]) {
         whereClause["status"] = In(whereClause["status"]);
+      }
+      if (whereClause["cohortId"]) {
+        whereClause["cohortId"] = In(whereClause["cohortId"]);
       }
 
       const results = {
@@ -924,7 +933,6 @@ export class PostgresCohortService {
           results.cohortDetails.push(data);
         }
       }
-
       if (results.cohortDetails.length > 0) {
         return APIResponse.success(
           response,

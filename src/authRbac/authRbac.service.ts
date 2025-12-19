@@ -6,9 +6,9 @@ import {
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
-import { PostgresRoleService } from "src/adapters/postgres/rbac/role-adapter";
+import { RoleService } from "src/rbac/role/role.service";
 import APIResponse from "src/common/responses/response";
-import { UserAdapter } from "src/user/useradapter";
+import { UserService } from "src/user/user.service";
 import { Response } from "express";
 import { APIID } from "src/common/utils/api-id.config";
 
@@ -21,8 +21,8 @@ export class AuthRbacService {
   constructor(
     private jwtService: JwtService,
     private configService: ConfigService,
-    private readonly userAdapter: UserAdapter,
-    private readonly postgresRoleService: PostgresRoleService
+    private readonly userService: UserService,
+    private readonly roleService: RoleService
   ) {
     this.issuer = this.configService.get<string>("ISSUER");
     this.audience = this.configService.get<string>("AUDIENCE");
@@ -45,8 +45,7 @@ export class AuthRbacService {
     response: Response
   ): Promise<any> {
     const apiId = APIID.RBAC_TOKEN;
-    const userData = await this.userAdapter
-      .buildUserAdapter()
+    const userData = await this.userService
       .findUserDetails(null, username);
 
     if (!userData || !tenantId) {
@@ -59,7 +58,7 @@ export class AuthRbacService {
       );
     }
 
-    const userRoles = await this.postgresRoleService.findUserRoleData(
+    const userRoles = await this.roleService.findUserRoleData(
       userData?.userId,
       tenantId
     );
@@ -104,7 +103,7 @@ export class AuthRbacService {
     if (!roleIds.length) {
       return [];
     }
-    const privilegesData = await this.postgresRoleService.findPrivilegeByRoleId(
+    const privilegesData = await this.roleService.findPrivilegeByRoleId(
       roleIds
     );
 

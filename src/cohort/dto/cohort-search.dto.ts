@@ -3,24 +3,19 @@ import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
-  IsBoolean,
   IsEnum,
   IsNotEmpty,
   IsNumber,
-  IsNumberString,
   IsObject,
   IsOptional,
   IsString,
   IsUUID,
   ValidateIf,
-  ValidationArguments,
-  ValidationOptions,
-  registerDecorator,
+  ValidateNested,
 } from "class-validator";
-import { Expose } from "class-transformer";
+import { Exclude, Expose, Transform, Type } from "class-transformer";
 
 export class filtersProperty {
-  //userIdBy
   @ApiProperty({
     type: String,
     description: "User Id",
@@ -29,46 +24,53 @@ export class filtersProperty {
   @Expose()
   @IsOptional()
   @IsUUID()
-  @IsNotEmpty()
   userId?: string;
 
-  //cohortIdBy
   @ApiProperty({
-    type: String,
-    description: "Cohort Id",
-    default: "",
+    oneOf: [
+      { type: 'string' },
+      { type: 'array', items: { type: 'string' } }
+    ],
+    description: "Cohort Id - accepts both string or array of UUIDs",
+    example: "a4bbca12-35ca-405d-84f5-8622986fdfd2",
   })
   @Expose()
   @IsOptional()
-  @IsUUID()
-  @IsNotEmpty()
-  cohortId?: string;
+  @Transform(({ value }) => {
+    if (!value) return undefined;
+    
+    // Convert string to array
+    if (typeof value === "string") {
+      return value.trim() === "" ? undefined : [value];
+    }
+    
+    // Keep array as is
+    if (Array.isArray(value)) {
+      return value.length === 0 ? undefined : value;
+    }
+    
+    return undefined;
+  })
+  cohortId?: string[];
 
-  //academicYearId
-  @ApiProperty({
+  @ApiPropertyOptional({
     type: String,
-    description: "Academic Year Id",
-    default: "",
+    description: "Academic Year Id (comes from headers, not filters)",
+    required: false,
   })
-  @Expose()
+  @Exclude()
   @IsOptional()
-  @IsUUID()
-  @IsNotEmpty()
   academicYearId?: string;
 
-  //name
-  @ApiProperty({
+  @ApiPropertyOptional({
     type: String,
     description: "The name of the cohort",
-    default: "",
   })
-  @Expose()
   @IsOptional()
+  @Expose()
   @IsString()
-  @IsNotEmpty()
   name?: string;
 
-  //parentId
   @ApiProperty({
     type: [String],
     description: "Parent Id",
@@ -77,11 +79,8 @@ export class filtersProperty {
   @Expose()
   @IsOptional()
   @IsArray()
-  @IsNotEmpty({ each: true })
-  @IsUUID(undefined, { each: true })
   parentId?: string[];
 
-  //type
   @ApiProperty({
     type: String,
     description: "The type of the cohort",
@@ -90,10 +89,8 @@ export class filtersProperty {
   @Expose()
   @IsOptional()
   @IsString()
-  @IsNotEmpty()
   type?: string;
 
-  //type
   @ApiProperty({
     type: [String],
     description: "The status of the cohort",
@@ -102,8 +99,6 @@ export class filtersProperty {
   @Expose()
   @IsOptional()
   @IsArray()
-  @IsNotEmpty({ each: true })
-  @IsUUID(undefined, { each: true })
   status?: string[];
 
   @ApiPropertyOptional({
@@ -112,8 +107,7 @@ export class filtersProperty {
   })
   @IsOptional()
   @IsArray()
-  @IsNotEmpty({ each: true })
-  state: string[];
+  state?: string[];
 
   @ApiPropertyOptional({
     type: [String],
@@ -121,8 +115,7 @@ export class filtersProperty {
   })
   @IsOptional()
   @IsArray()
-  @IsNotEmpty({ each: true })
-  district: string[];
+  district?: string[];
 
   @ApiPropertyOptional({
     type: [String],
@@ -130,20 +123,16 @@ export class filtersProperty {
   })
   @IsOptional()
   @IsArray()
-  @IsNotEmpty({ each: true })
-  block: string[];
-
+  block?: string[];
 
   @ApiPropertyOptional({
     type: [String],
-    description: "Block",
+    description: "Village",
   })
   @IsOptional()
   @IsArray()
-  @IsNotEmpty({ each: true })
-  village: string[];
+  village?: string[];
 
-  //customFieldsName
   @ApiProperty({
     type: Object,
     description: "The customFieldsName of the cohort",
@@ -151,13 +140,14 @@ export class filtersProperty {
   @Expose()
   @IsOptional()
   @IsObject()
-  @IsNotEmpty({ each: true })
   customFieldsName?: {};
 }
+
 enum SortDirection {
   ASC = "asc",
   DESC = "desc",
 }
+
 export class CohortSearchDto {
   @ApiProperty({
     type: Number,
@@ -177,7 +167,9 @@ export class CohortSearchDto {
     type: filtersProperty,
     description: "Filters",
   })
+  @Type(() => filtersProperty)
   @IsObject()
+  @ValidateNested()
   filters: filtersProperty;
 
   @ApiPropertyOptional({
@@ -186,9 +178,9 @@ export class CohortSearchDto {
   })
   @IsArray()
   @IsOptional()
-  @ArrayMinSize(2, { message: "Sort array must contain exactly two elements" })
-  @ArrayMaxSize(2, { message: "Sort array must contain exactly two elements" })
-  sort: [string, string];
+  @ArrayMinSize(2)
+  @ArrayMaxSize(2)
+  sort?: [string, string];
 
   @ValidateIf((o) => o.sort !== undefined)
   @IsEnum(SortDirection, {

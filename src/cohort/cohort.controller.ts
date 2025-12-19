@@ -38,7 +38,7 @@ import { FileInterceptor } from "@nestjs/platform-express";
 import { editFileName, imageFileFilter } from "./utils/file-upload.utils";
 import { diskStorage } from "multer";
 import { Response } from "express";
-import { CohortAdapter } from "./cohortadapter";
+import { CohortService } from "./cohort.service";
 import { CohortCreateDto } from "./dto/cohort-create.dto";
 import { CohortUpdateDto } from "./dto/cohort-update.dto";
 import { JwtAuthGuard } from "src/common/guards/keycloak.guard";
@@ -53,7 +53,7 @@ import { GetUserId } from "src/common/decorators/getUserId.decorator";
 @Controller("cohort")
 @UseGuards(JwtAuthGuard)
 export class CohortController {
-  constructor(private readonly cohortAdapter: CohortAdapter) {}
+  constructor(private readonly cohortService: CohortService) {}
 
   @UseFilters(new AllExceptionsFilter(APIID.COHORT_READ))
   @Get("/cohortHierarchy/:cohortId")
@@ -80,8 +80,7 @@ export class CohortController {
       getChildData: getChildDataValueBoolean,
       customField: fieldValueBooelan,
     };
-    return await this.cohortAdapter
-      .buildCohortAdapter()
+    return await this.cohortService
       .getCohortsDetails(requiredData, response);
   }
 
@@ -124,8 +123,7 @@ export class CohortController {
     cohortCreateDto.tenantId = tenantId;
     cohortCreateDto.createdBy = userId;
     cohortCreateDto.updatedBy = userId;
-    return await this.cohortAdapter
-      .buildCohortAdapter()
+    return await this.cohortService
       .createCohort(cohortCreateDto, response);
   }
 
@@ -135,7 +133,7 @@ export class CohortController {
   @ApiOkResponse({ description: "Cohort list" })
   @ApiBadRequestResponse({ description: "Bad request." })
   @ApiInternalServerErrorResponse({ description: "Internal Server Error." })
-  @UsePipes(new ValidationPipe())
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   @SerializeOptions({
     strategy: "excludeAll",
   })
@@ -159,8 +157,7 @@ export class CohortController {
     if (!academicYearId || !isUUID(academicYearId)) {
       throw new BadRequestException(API_RESPONSES.ACADEMICYEARID_VALIDATION);
     }
-    return await this.cohortAdapter
-      .buildCohortAdapter()
+    return await this.cohortService
       .searchCohort(tenantId, academicYearId, cohortSearchDto, response);
   }
 
@@ -189,8 +186,7 @@ export class CohortController {
     @GetUserId("userId", ParseUUIDPipe) userId: string
   ) {
     cohortUpdateDto.updatedBy = userId;
-    return await this.cohortAdapter
-      .buildCohortAdapter()
+    return await this.cohortService
       .updateCohort(cohortId, cohortUpdateDto, response);
   }
 
@@ -204,8 +200,7 @@ export class CohortController {
     @Res() response: Response,
     @GetUserId("userId", ParseUUIDPipe) userId: string
   ) {
-    return await this.cohortAdapter
-      .buildCohortAdapter()
+    return await this.cohortService
       .updateCohortStatus(cohortId, response, userId);
   }
 
@@ -244,8 +239,7 @@ export class CohortController {
       getChildData: getChildDataValueBoolean,
       customField: fieldValueBooelan,
     };
-    return await this.cohortAdapter
-      .buildCohortAdapter()
+    return await this.cohortService
       .getCohortHierarchyData(requiredData, response);
   }
 }

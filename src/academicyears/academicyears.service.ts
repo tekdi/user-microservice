@@ -1,19 +1,17 @@
 import { HttpStatus, Injectable } from "@nestjs/common";
 import { Response } from "express";
-import { AcademicYearDto } from "src/academicyears/dto/academicyears-create.dto";
-import { IServicelocatorAcademicyear } from "../academicyearsservicelocater";
+import { AcademicYearDto } from "./dto/academicyears-create.dto";
 import { InjectRepository } from "@nestjs/typeorm";
-import { AcademicYear } from "src/academicyears/entities/academicyears-entity";
+import { AcademicYear } from "./entities/academicyears-entity";
 import { Repository } from "typeorm";
 import { API_RESPONSES } from "@utils/response.messages";
 import { APIID } from "@utils/api-id.config";
 import APIResponse from "src/common/responses/response";
-import { AcademicYearSearchDto } from "src/academicyears/dto/academicyears-search.dto";
+import { AcademicYearSearchDto } from "./dto/academicyears-search.dto";
 import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
 
 @Injectable()
-export class PostgresAcademicYearService
-  implements IServicelocatorAcademicyear {
+export class AcademicYearService {
   constructor(
     @InjectRepository(AcademicYear)
     private readonly academicYearRespository: Repository<AcademicYear>,
