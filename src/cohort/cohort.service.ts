@@ -1128,6 +1128,7 @@ export class CohortService {
       let findCohortId;
       if (checkAutomaticMember) {
         findCohortId = await this.automaticMemberCohortHierarchy(checkAutomaticMember, requiredData?.academicYearId);
+       
       } else {
         findCohortId = await this.findCohortName(requiredData.userId, requiredData?.academicYearId);
         if (!findCohortId.length) {
@@ -1140,7 +1141,7 @@ export class CohortService {
           );
         }
       }
-
+      console.log(findCohortId,checkAutomaticMember)
       const resultDataList = [];
 
       for (const cohort of findCohortId) {
