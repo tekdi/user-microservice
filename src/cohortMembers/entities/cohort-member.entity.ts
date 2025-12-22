@@ -48,4 +48,7 @@ export class CohortMembers {
     default: MemberStatus.ACTIVE,
   })
   status: MemberStatus;
+
+  @Column({ type: "json", nullable: true })
+  params: Object;
 }

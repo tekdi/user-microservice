@@ -41,7 +41,7 @@ export class PostgresCohortMembersService {
     private readonly notificationRequest: NotificationRequest,
     private fieldsService: PostgresFieldsService,
     private userService: PostgresUserService
-  ) { }
+  ) {}
 
   //Get cohort member
   async getCohortMembers(
@@ -128,7 +128,7 @@ export class PostgresCohortMembersService {
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error: ${e.message}`,
         apiId
-      )
+      );
       const errorMessage = e.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
       return APIResponse.error(
         res,
@@ -384,7 +384,7 @@ export class PostgresCohortMembersService {
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error: ${e.message}`,
         apiId
-      )
+      );
       const errorMessage = e.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
       return APIResponse.error(
         res,
@@ -450,8 +450,10 @@ export class PostgresCohortMembersService {
         if (fieldShowHide === "false") {
           results.userDetails.push(data);
         } else {
-          const fieldValues =
-            await this.fieldsService.getCustomFieldDetails(data.userId, 'Users');
+          const fieldValues = await this.fieldsService.getCustomFieldDetails(
+            data.userId,
+            "Users"
+          );
           //get data by cohort membership Id
           let fieldValuesForCohort =
             await this.fieldsService.getFieldsAndFieldsValues(
@@ -567,7 +569,7 @@ export class PostgresCohortMembersService {
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error: ${e.message}`,
         apiId
-      )
+      );
       const errorMessage = e.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
       return APIResponse.error(
         res,
@@ -623,7 +625,7 @@ export class PostgresCohortMembersService {
     }
 
     let query = `SELECT U."userId", U."enrollmentId", U."username", "firstName", "middleName", "lastName", R."name" AS role, U."mobile",U."deviceId",
-      CM."status", CM."statusReason",CM."cohortMembershipId",CM."status",CM."createdAt", CM."updatedAt",U."createdBy",U."updatedBy", COUNT(*) OVER() AS total_count  FROM public."CohortMembers" CM
+      CM."status", CM."statusReason",CM."cohortMembershipId",CM."params",CM."status",CM."createdAt", CM."updatedAt",U."createdBy",U."updatedBy", COUNT(*) OVER() AS total_count  FROM public."CohortMembers" CM
       INNER JOIN public."Users" U
       ON CM."userId" = U."userId"
       INNER JOIN public."UserRolesMapping" UR
@@ -700,9 +702,11 @@ export class PostgresCohortMembersService {
         }
       }
 
-      let cohortMembershipToUpdate = await this.cohortMembersRepository.findOne({
-        where: { cohortMembershipId: cohortMembershipId },
-      });
+      let cohortMembershipToUpdate = await this.cohortMembersRepository.findOne(
+        {
+          where: { cohortMembershipId: cohortMembershipId },
+        }
+      );
 
       if (!cohortMembershipToUpdate) {
         return APIResponse.error(
@@ -766,7 +770,7 @@ export class PostgresCohortMembersService {
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error: ${error.message}`,
         apiId
-      )
+      );
 
       return APIResponse.error(
         response,
@@ -776,8 +780,6 @@ export class PostgresCohortMembersService {
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
-
-
   }
 
   public async deleteCohortMemberById(
@@ -820,7 +822,7 @@ export class PostgresCohortMembersService {
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error: ${e.message}`,
         apiId
-      )
+      );
       const errorMessage = e.message || API_RESPONSES.SERVER_ERROR;
       return APIResponse.error(
         res,
@@ -954,7 +956,7 @@ export class PostgresCohortMembersService {
               `${API_RESPONSES.SERVER_ERROR}`,
               `Error: ${error.message}`,
               apiId
-            )
+            );
             errors.push(
               API_RESPONSES.ERROR_UPDATE_COHORTMEMBER(
                 userId,
@@ -967,10 +969,7 @@ export class PostgresCohortMembersService {
       }
 
       // Handling of Addition of User in Cohort
-      if (
-        cohortMembersDto?.cohortId &&
-        cohortMembersDto?.cohortId.length > 0
-      ) {
+      if (cohortMembersDto?.cohortId && cohortMembersDto?.cohortId.length > 0) {
         for (const cohortId of cohortMembersDto.cohortId) {
           const cohortMembers = {
             ...cohortMembersBase,
@@ -1038,7 +1037,7 @@ export class PostgresCohortMembersService {
               `${API_RESPONSES.SERVER_ERROR}`,
               `Error: ${error.message}`,
               apiId
-            )
+            );
             errors.push(
               API_RESPONSES.ERROR_SAVING_COHORTMEMBER(
                 userId,
