@@ -1167,6 +1167,11 @@ export class PostgresCohortService {
             cohort.cohortId,
             "Cohort"
           ),
+          cohortMemberCustomField:
+            await this.fieldsService.getCustomFieldDetails(
+              cohort.cohortMembershipId,
+              "CohortMembers"
+            ),
           childData: requiredData.getChildData
             ? await this.getCohortHierarchy(
                 cohort.cohortId,
