@@ -72,8 +72,15 @@ export class SsoService {
     try {
       this.logger.log(`Starting SSO authentication for provider: ${ssoRequestDto.ssoProvider}`, 'SSO_SERVICE');
       
-      // Step 1: Apply default values if not provided
-      if (!ssoRequestDto.tenantId) {
+      // Step 1: Validate tenantId if provided, otherwise apply default
+      if (ssoRequestDto.tenantId) {
+        // Validate UUID format
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (!uuidRegex.test(ssoRequestDto.tenantId)) {
+          throw new HttpException('Please enter valid Tenant UUID In URL', HttpStatus.BAD_REQUEST);
+        }
+        this.logger.log(`Using provided tenant ID: ${ssoRequestDto.tenantId}`, 'SSO_SERVICE');
+      } else {
         ssoRequestDto.tenantId = SSO_DEFAULTS.DEFAULT_TENANT_ID;
         this.logger.log(`Using default tenant ID: ${SSO_DEFAULTS.DEFAULT_TENANT_ID}`, 'SSO_SERVICE');
       }
@@ -316,8 +323,8 @@ export class SsoService {
                 {
                   tenantId: ssoRequestDto.tenantId,
                   contextType: "USER",
-                  createdBy: newtonResponse.userId,
-                  updatedBy: newtonResponse.userId
+                  createdBy: createdUser.userId,
+                  updatedBy: createdUser.userId
                 }
               );
             }
@@ -372,8 +379,22 @@ export class SsoService {
       EMAIL: newtonResponse.email || ''
     };
 
+    // Get userId from Newton response or userData
+    const userId = newtonResponse.userId || userData.USER_ID;
+    
+    if (!userId) {
+      this.logger.error(
+        `No userId received from Newton API. Cannot create user.`,
+        'SSO_SERVICE'
+      );
+      throw new HttpException(
+        `User ID not found in authentication response`,
+        HttpStatus.BAD_REQUEST
+      );
+    }
+
     return {
-      userId: newtonResponse.userId || userData.USER_ID,
+      userId: userId,
       username: newtonResponse.email || userData.EMAIL,
       firstName: firstName,
       middleName: undefined,
@@ -389,8 +410,8 @@ export class SsoService {
       password: undefined, // No password for SSO users
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      createdBy: newtonResponse.userId, // Use the Newton user ID as creator
-      updatedBy: newtonResponse.userId, // Use the Newton user ID as updater
+      createdBy: userId, // Use the Newton user ID as creator
+      updatedBy: userId, // Use the Newton user ID as updater
       customFields: [],
       automaticMember: undefined,
       tenantCohortRoleMapping: [{
@@ -536,7 +557,7 @@ export class SsoService {
       }
 
       this.logger.log(
-        `Processing existing user: ${userId})`,
+        `Processing existing user: ${userId}`,
         'SSO_SERVICE'
       );
 

@@ -31,7 +31,7 @@ export class SsoRequestDto {
   })
   @Expose()
   @IsOptional()
-  @IsUUID()
+  @IsUUID(undefined, { message: 'Please enter valid Tenant UUID' })
   tenantId?: string;
 
   @ApiPropertyOptional({

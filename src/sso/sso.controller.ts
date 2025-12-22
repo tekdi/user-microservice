@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Res, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Body, Res, HttpStatus, HttpException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
 import { Response } from 'express';
 import { SsoService } from './sso.service';
@@ -74,12 +74,30 @@ export class SsoController {
       return response.status(HttpStatus.OK).json(result);
       
     } catch (error) {
+      // Properly handle HttpException to preserve status codes
+      if (error instanceof HttpException) {
+        const status = error.getStatus();
+        const errorResponse = error.getResponse();
+        const message = typeof errorResponse === 'string' 
+          ? errorResponse 
+          : (errorResponse as any)?.message || error.message;
+        
+        return APIResponse.error(
+          response,
+          APIID.SSO_AUTHENTICATE,
+          message || 'SSO authentication failed',
+          error.name || 'BAD_REQUEST',
+          status
+        );
+      }
+      
+      // Fallback for non-HttpException errors
       return APIResponse.error(
         response,
         APIID.SSO_AUTHENTICATE,
         error.message || 'SSO authentication failed',
-        error.error || 'INTERNAL_SERVER_ERROR',
-        error.statusCode || HttpStatus.INTERNAL_SERVER_ERROR
+        'INTERNAL_SERVER_ERROR',
+        HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }
