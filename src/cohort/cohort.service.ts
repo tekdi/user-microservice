@@ -1123,8 +1123,9 @@ export class CohortService {
     const apiId = APIID.COHORT_LIST;
 
     try {
+      console.log()
       const checkAutomaticMember = await this.automaticMemberService.checkMemberById(requiredData.userId);
-
+      console.log(checkAutomaticMember);
       let findCohortId;
       if (checkAutomaticMember) {
         findCohortId = await this.automaticMemberCohortHierarchy(checkAutomaticMember, requiredData?.academicYearId);
