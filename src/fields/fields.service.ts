@@ -1083,11 +1083,6 @@ export class FieldsService {
   }
 
   public async mappedResponse(result: any) {
-    LoggerUtil.log(
-      `mappedResponse called with ${result?.length} raw records`,
-      "api.fieldvalues.mapping"
-    );
-
     const fieldValueResponse = result.map((item: any) => {
       const fieldValueMapping = {
         value: item?.value ? `${item.value}` : "",
@@ -1102,11 +1097,6 @@ export class FieldsService {
 
       return new FieldValuesDto(fieldValueMapping);
     });
-
-    LoggerUtil.log(
-      `mappedResponse returning ${fieldValueResponse?.length} mapped records`,
-      "api.fieldvalues.mapping"
-    );
 
     return fieldValueResponse;
   }
