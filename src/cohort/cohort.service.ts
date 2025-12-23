@@ -1120,7 +1120,21 @@ export class CohortService {
       APIID.COHORT_LIST
     );
 
-    const cohortIds = filledValues.mappedResponse.map(item => item.itemId);
+    // Check if mappedResponse is empty despite having totalCount > 0
+    if (filledValues?.mappedResponse?.length === 0 && filledValues?.totalCount > 0) {
+      LoggerUtil.error(
+        `MAPPING ISSUE: Database found ${filledValues.totalCount} records but mappedResponse is empty`,
+        `Check fieldsService.mappedResponse() method for filtering logic`,
+        APIID.COHORT_LIST
+      );
+    }
+
+    const cohortIds = filledValues.mappedResponse.map(item => item.itemId).filter(id => id && id !== "");
+
+    LoggerUtil.log(
+      `Extracted ${cohortIds.length} valid cohort IDs from ${filledValues?.mappedResponse?.length} mapped records`,
+      APIID.COHORT_LIST
+    );
 
     if (cohortIds.length === 0) {
       LoggerUtil.error(
