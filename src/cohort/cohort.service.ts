@@ -1103,7 +1103,7 @@ export class CohortService {
     // Pass fieldId to getSearchFieldValueData
     let filledValues = await this.fieldsService.getSearchFieldValueData(
       0,
-      "0",
+      0,
       {
         fieldId: fieldId,
         value: value

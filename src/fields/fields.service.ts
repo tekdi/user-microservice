@@ -970,7 +970,7 @@ export class FieldsService {
 
   async getSearchFieldValueData(
     offset: number,
-    limit: string,
+    limit: number,
     searchData: any
   ) {
 
@@ -990,7 +990,7 @@ export class FieldsService {
     }
 
     if (limit !== undefined) {
-      queryOptions.take = parseInt(limit);
+      queryOptions.take = (limit);
     }
     try {
       const [results, totalCount] =
