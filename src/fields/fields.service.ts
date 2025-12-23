@@ -985,11 +985,11 @@ export class FieldsService {
       where: searchData,
     };
 
-    if (offset !== undefined) {
+    if (offset !== undefined && offset > 0) {
       queryOptions.skip = offset;
     }
 
-    if (limit !== undefined) {
+    if (limit !== undefined && limit > 0) {
       queryOptions.take = (limit);
     }
     try {
