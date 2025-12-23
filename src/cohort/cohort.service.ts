@@ -1100,6 +1100,11 @@ export class CohortService {
   public async automaticMemberCohortHierarchy(requiredData, academicYearId) {
     const { condition: { value, fieldId } } = requiredData?.rules;
 
+    LoggerUtil.log(
+      `Automatic Member Rules - fieldId: ${fieldId}, value: ${JSON.stringify(value)}, academicYearId: ${academicYearId}`,
+      APIID.COHORT_LIST
+    );
+
     // Pass fieldId to getSearchFieldValueData
     let filledValues = await this.fieldsService.getSearchFieldValueData(
       0,
@@ -1109,13 +1114,35 @@ export class CohortService {
         value: value
       }  // Passing extracted fieldId
     );
+
+    LoggerUtil.log(
+      `Field values search result - totalCount: ${filledValues?.totalCount}, mappedResponse length: ${filledValues?.mappedResponse?.length}`,
+      APIID.COHORT_LIST
+    );
+
     const cohortIds = filledValues.mappedResponse.map(item => item.itemId);
 
     if (cohortIds.length === 0) {
+      LoggerUtil.error(
+        `No cohort IDs found for fieldId: ${fieldId} and value: ${JSON.stringify(value)}`,
+        `AutomaticMember rules might not match any field values in the database`,
+        APIID.COHORT_LIST
+      );
       throw new Error("No cohort IDs found for the given fieldId and value.");
     }
 
+    LoggerUtil.log(
+      `Found cohort IDs: ${JSON.stringify(cohortIds)}`,
+      APIID.COHORT_LIST
+    );
+
     const existingCohortIds = await this.getCohortDetailsByIds(cohortIds, academicYearId);
+
+    LoggerUtil.log(
+      `Cohorts matching academic year: ${existingCohortIds?.length}`,
+      APIID.COHORT_LIST
+    );
+
     return existingCohortIds;
   }
 
@@ -1123,9 +1150,25 @@ export class CohortService {
     const apiId = APIID.COHORT_LIST;
 
     try {
-      console.log()
+      LoggerUtil.log(
+        `getCohortHierarchyData called for userId: ${requiredData.userId}, academicYearId: ${requiredData?.academicYearId}`,
+        apiId
+      );
+
       const checkAutomaticMember = await this.automaticMemberService.checkMemberById(requiredData.userId);
-      console.log(checkAutomaticMember);
+      
+      LoggerUtil.log(
+        `Automatic member check result: ${checkAutomaticMember ? 'Found' : 'Not found'}`,
+        apiId
+      );
+
+      if (checkAutomaticMember) {
+        LoggerUtil.log(
+          `Automatic member rules: ${JSON.stringify(checkAutomaticMember.rules)}`,
+          apiId
+        );
+      }
+
       let findCohortId;
       if (checkAutomaticMember) {
         findCohortId = await this.automaticMemberCohortHierarchy(checkAutomaticMember, requiredData?.academicYearId);
@@ -1133,6 +1176,10 @@ export class CohortService {
       } else {
         findCohortId = await this.findCohortName(requiredData.userId, requiredData?.academicYearId);
         if (!findCohortId.length) {
+          LoggerUtil.warn(
+            `No cohort found for userId: ${requiredData.userId}`,
+            apiId
+          );
           return APIResponse.error(
             res,
             apiId,
@@ -1142,7 +1189,11 @@ export class CohortService {
           );
         }
       }
-      console.log(findCohortId,checkAutomaticMember)
+      
+      LoggerUtil.log(
+        `Found ${findCohortId?.length} cohort(s) for user`,
+        apiId
+      );
       const resultDataList = [];
 
       for (const cohort of findCohortId) {
