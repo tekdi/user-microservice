@@ -289,8 +289,17 @@ export class PostgresUserService implements IServicelocator {
         body.token,
         jwtSecretKey
       );
+      // Optimized: Fetch only required fields in a single query
       const userDetail = await this.usersRepository.findOne({
         where: { userId: decoded.sub },
+        select: [
+          'userId',
+          'username',
+          'email',
+          'firstName',
+          'temporaryPassword',
+          'status',
+        ],
       });
       if (!userDetail) {
         LoggerUtil.error(
@@ -306,12 +315,27 @@ export class PostgresUserService implements IServicelocator {
           HttpStatus.NOT_FOUND
         );
       }
-      const userData: any = await this.findUserDetails(
-        null,
-        userDetail.username
-      );
+
+      // Optimized: Get Keycloak token (can be cached in future)
       const keycloakResponse = await getKeycloakAdminToken();
       const keyClocktoken = keycloakResponse.data.access_token;
+
+      // Prepare userData object with only required fields for resetKeycloakPassword
+      // Only fetch tenant name if email exists (needed for notification)
+      const tenantData = userDetail.email ? await this.getFirstTenantName(userDetail.userId) : null;
+      
+      const userData: any = {
+        userId: userDetail.userId,
+        username: userDetail.username,
+        email: userDetail.email,
+        firstName: userDetail.firstName,
+        // Construct name field for notification (used in resetKeycloakPassword)
+        name: userDetail.firstName || userDetail.username,
+        temporaryPassword: userDetail.temporaryPassword,
+        status: userDetail.status,
+        tenantData: tenantData,
+      };
+
       let apiResponse: any;
       try {
         apiResponse = await this.resetKeycloakPassword(
@@ -321,25 +345,25 @@ export class PostgresUserService implements IServicelocator {
           body.newPassword,
           userDetail.userId
         );
-        console.log('InForgotPassApiResponse', apiResponse);
+
         // Update tempPassword and user status
         if (apiResponse?.statusCode === 204) {
           // Initialize an empty object to collect fields that need to be updated
           const updatePayload: any = {};
 
           // If the user's temporary password is still enabled, set it to false
-          if (userData.temporaryPassword) {
+          if (userDetail.temporaryPassword) {
             updatePayload.temporaryPassword = false;
           }
 
           // If the user account is currently inactive, activate it by updating the status
-          if (userData.status === 'inactive') {
+          if (userDetail.status === 'inactive') {
             updatePayload.status = 'active';
           }
-          console.log('InForgotPassuserData===>', updatePayload);
+
           // Only call the update function if there is at least one field to update
           if (Object.keys(updatePayload).length > 0) {
-            await this.usersRepository.update(userData.userId, updatePayload);
+            await this.usersRepository.update(userDetail.userId, updatePayload);
           }
         }
       } catch (e) {
@@ -937,6 +961,34 @@ export class PostgresUserService implements IServicelocator {
     userDetails['tenantData'] = tenantData;
 
     return userDetails;
+  }
+
+  /**
+   * Optimized: Get only the first tenant name for a user (lightweight query)
+   * Used for notifications where only tenant name is needed
+   */
+  async getFirstTenantName(userId: string): Promise<Array<{ tenantName: string }> | null> {
+    const query = `
+      SELECT 
+        DISTINCT ON (T."tenantId") 
+        T.name AS "tenantName"
+      FROM 
+        public."UserTenantMapping" UTM
+      LEFT JOIN 
+        public."Tenants" T 
+      ON 
+        T."tenantId" = UTM."tenantId" 
+      WHERE 
+        UTM."userId" = $1
+      ORDER BY 
+        T."tenantId", UTM."Id"
+      LIMIT 1;`;
+
+    const result = await this.usersRepository.query(query, [userId]);
+    if (result && result.length > 0 && result[0].tenantName) {
+      return [{ tenantName: result[0].tenantName }];
+    }
+    return null;
   }
 
   async userTenantRoleData(userId: string) {
