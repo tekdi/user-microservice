@@ -19,34 +19,35 @@ export class CohortMembers {
   @PrimaryGeneratedColumn("uuid")
   cohortMembershipId: string;
 
-  @Column({ type: "uuid" })
-  cohortId: string;
+  @CreateDateColumn({ type: "date", default: () => "now()", nullable: true })
+  createdAt: Date | null;
 
-  @Column({ type: "uuid" })
-  cohortAcademicYearId: string;
-
-  @Column({ type: "uuid" })
-  userId: string;
-
-  @CreateDateColumn({ type: "date", default: () => "CURRENT_DATE" })
-  createdAt: Date;
-
-  @UpdateDateColumn({ type: "date", default: () => "CURRENT_DATE" })
-  updatedAt: Date;
+  @UpdateDateColumn({ type: "date", default: () => "now()", nullable: true })
+  updatedAt: Date | null;
 
   @Column({ type: "uuid", nullable: true })
-  createdBy: string;
+  cohortId: string | null;
 
   @Column({ type: "uuid", nullable: true })
-  updatedBy: string;
+  userId: string | null;
 
-  @Column({ type: "varchar" })
-  statusReason: string;
+  @Column({ type: "uuid", nullable: true })
+  createdBy: string | null;
+
+  @Column({ type: "uuid", nullable: true })
+  updatedBy: string | null;
 
   @Column({
     type: "enum",
     enum: MemberStatus,
     default: MemberStatus.ACTIVE,
+    nullable: true,
   })
-  status: MemberStatus;
+  status: MemberStatus | null;
+
+  @Column({ type: "text", nullable: true })
+  statusReason: string | null;
+
+  @Column({ type: "uuid", nullable: true })
+  cohortAcademicYearId: string | null;
 }

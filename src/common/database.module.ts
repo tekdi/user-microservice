@@ -17,6 +17,12 @@ import { User } from "src/user/entities/user-entity";
         //   User
         // ],
         autoLoadEntities: true,
+        // Both synchronize and migrations enabled
+        // - synchronize: Auto-syncs entity changes (will error if structure differs - that's expected)
+        // - migrations: Used for creating new tables via migration scripts
+        synchronize: true,
+        migrations: ['dist/migrations/*.js'],
+        migrationsRun: true, // Auto-run migrations on startup
         extra: {
           max: 20, // Number of connections in the pool (default is 10)
           idleTimeoutMillis: 30000, // 30 seconds

@@ -20,14 +20,19 @@ export class FieldValuesUpdateDto {
 
   //value
   @ApiProperty({
-    type: String,
-    description: "The value of the field values",
+    type: [String],
+    description: "The value of the field values (can be string or array of strings)",
     default: "",
   })
   @Expose()
-  value: string;
+  value: string[];
 
   constructor(obj: any) {
     Object.assign(this, obj);
+    // Normalize value: convert string to array, keep array as is
+    const originalValue = obj?.value;
+    if (originalValue !== undefined && originalValue !== null && originalValue !== "") {
+      this.value = Array.isArray(originalValue) ? originalValue : [originalValue];
+    }
   }
 }

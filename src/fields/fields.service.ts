@@ -1675,7 +1675,6 @@ export class FieldsService {
           fieldId: data?.fieldId,
           name: data?.name,
           label: data?.label,
-          order: data?.ordering,
           isRequired: data?.fieldAttributes?.isRequired,
           isEditable: data?.fieldAttributes?.isEditable,
           isHidden: data?.fieldAttributes?.isHidden,

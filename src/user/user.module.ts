@@ -9,7 +9,7 @@ import { FieldValues } from "../fields/entities/fields-values.entity";
 import { Fields } from "src/fields/entities/fields.entity";
 import { CohortMembers } from "src/cohortMembers/entities/cohort-member.entity";
 import { UserTenantMapping } from "src/userTenantMapping/entities/user-tenant-mapping.entity";
-import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
+import { Tenant } from "src/tenant/entities/tenent.entity";
 import { UserRoleMapping } from "src/rbac/assign-role/entities/assign-role.entity";
 import { Cohort } from "src/cohort/entities/cohort.entity";
 import { Role } from "src/rbac/role/entities/role.entity";
@@ -33,7 +33,7 @@ import { AuthUtils } from "src/common/utils/auth-util";
       Fields,
       CohortMembers,
       UserTenantMapping,
-      Tenants,
+      Tenant,
       UserRoleMapping,
       Cohort,
       Role,

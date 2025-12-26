@@ -13,51 +13,53 @@ export class Cohort {
   @PrimaryGeneratedColumn("uuid")
   cohortId: string;
 
-  @Column({ nullable: true })
-  parentId: string;
-
-  @Column({ nullable: true })
-  name: string;
-
-  @Column({ nullable: true })
-  type: string;
-
-  @Column()
-  status: string;
-
-  @Column({ type: "json", nullable: true })
-  image: string[]; // JSON field to store array of program images
-
-  @Column({ nullable: true })
-  referenceId: string;
-
-  @Column({ nullable: true })
-  metadata: string;
-
-  @Column({ nullable: true })
-  tenantId: string;
-
-  @Column({ nullable: true })
-  programId: string;
-
-  @Column()
-  attendanceCaptureImage: boolean;
-
   @CreateDateColumn({
-    type: "timestamp with time zone",
-    default: () => "CURRENT_TIMESTAMP",
+    type: "timestamptz",
+    default: () => "now()",
+    nullable: false,
   })
   createdAt: Date;
 
   @UpdateDateColumn({
-    type: "timestamp with time zone",
-    default: () => "CURRENT_TIMESTAMP",
+    type: "timestamptz",
+    default: () => "now()",
+    nullable: false,
   })
   updatedAt: Date;
 
-  @Column()
-  createdBy: string;
+  @Column({ type: "bool", nullable: false })
+  attendanceCaptureImage: boolean;
 
-  @Column()
-  updatedBy: string;
+  @Column({ type: "varchar", nullable: true })
+  parentId: string | null;
+
+  @Column({ type: "varchar", length: 255, nullable: true })
+  name: string | null;
+
+  @Column({ type: "varchar", length: 255, nullable: true })
+  type: string | null;
+
+  @Column({ type: "jsonb", nullable: true })
+  image: any;
+
+  @Column({ type: "varchar", nullable: true })
+  referenceId: string | null;
+
+  @Column({ type: "varchar", nullable: true })
+  metadata: string | null;
+
+  @Column({ type: "uuid", nullable: false })
+  tenantId: string;
+
+  @Column({ type: "varchar", nullable: true })
+  programId: string | null;
+
+  @Column({ type: "uuid", nullable: true })
+  createdBy: string | null;
+
+  @Column({ type: "uuid", nullable: true })
+  updatedBy: string | null;
+
+  @Column({ type: "varchar", nullable: true })
+  status: string | null;
 }

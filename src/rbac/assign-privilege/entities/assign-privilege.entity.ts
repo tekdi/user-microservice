@@ -12,11 +12,8 @@ export class RolePrivilegeMapping {
   @PrimaryGeneratedColumn("uuid", { name: "rolePrivilegesId" })
   rolePrivilegesId: string;
 
-  @Column("uuid", { name: "roleId" })
+  @Column("uuid", { name: "roleId", nullable: false })
   roleId: string;
-
-  @Column("uuid", { name: "tenantId" })
-  tenantId: string;
 
   @Column("uuid", { name: "createdBy", nullable: true })
   createdBy: string | null;
@@ -26,18 +23,23 @@ export class RolePrivilegeMapping {
 
   @CreateDateColumn({
     name: "createdAt",
-    type: "timestamp with time zone",
-    default: () => "CURRENT_TIMESTAMP",
+    type: "timestamptz",
+    default: () => "now()",
+    nullable: true,
   })
-  createdAt: Date;
+  createdAt: Date | null;
 
   @UpdateDateColumn({
     name: "updatedAt",
-    type: "timestamp with time zone",
-    default: () => "CURRENT_TIMESTAMP",
+    type: "timestamptz",
+    default: () => "now()",
+    nullable: true,
   })
-  updatedAt: Date;
+  updatedAt: Date | null;
 
   @Column("uuid", { name: "privilegeId", nullable: true })
   privilegeId: string | null;
+
+  @Column("uuid", { name: "tenantId", nullable: true })
+  tenantId: string | null;
 }

@@ -5,7 +5,7 @@ import { TypeOrmModule } from "@nestjs/typeorm";
 import { UserTenantMapping } from "./entities/user-tenant-mapping.entity";
 import { UserTenantMappingService } from "./user-tenant-mapping.service";
 import { User } from "src/user/entities/user-entity";
-import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
+import { Tenant } from "src/tenant/entities/tenent.entity";
 import { Role } from "src/rbac/role/entities/role.entity";
 import { UserRoleMapping } from "src/rbac/assign-role/entities/assign-role.entity";
 import { KafkaModule } from "src/kafka/kafka.module";
@@ -17,7 +17,7 @@ import { FieldsModule } from "src/fields/fields.module";
     TypeOrmModule.forFeature([
       UserTenantMapping, 
       User, 
-      Tenants,
+      Tenant,
       Role,
       UserRoleMapping,
     ]),

@@ -12,27 +12,29 @@ export class Privilege {
   @PrimaryGeneratedColumn("uuid")
   privilegeId: string;
 
-  @Column({ name: "name" })
+  @Column({ type: "varchar", length: 255, nullable: false, name: "name"  })
   title: string;
 
-  @Column()
-  code: string;
+  @Column({ type: "varchar", length: 255, nullable: true })
+  code: string | null;
+
+  @Column("uuid", { nullable: true })
+  createdBy: string | null;
+
+  @Column("uuid", { nullable: true })
+  updatedBy: string | null;
 
   @CreateDateColumn({
-    type: "timestamp with time zone",
-    default: () => "CURRENT_TIMESTAMP",
+    type: "timestamptz",
+    default: () => "now()",
+    nullable: true,
   })
-  createdAt: Date;
+  createdAt: Date | null;
 
   @UpdateDateColumn({
-    type: "timestamp with time zone",
-    default: () => "CURRENT_TIMESTAMP",
+    type: "timestamptz",
+    default: () => "now()",
+    nullable: true,
   })
-  updatedAt: Date;
-
-  @Column()
-  createdBy: string;
-
-  @Column()
-  updatedBy: string;
+  updatedAt: Date | null;
 }

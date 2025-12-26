@@ -25,22 +25,13 @@ export class Fields {
   fieldId: string;
 
   @Column("varchar", { nullable: true })
-  assetId?: string;
-
-  @Column("varchar", { nullable: false })
-  context: string;
-
-  @Column("varchar", { nullable: true })
-  groupId?: string;
+  context: string | null;
 
   @Column("varchar", { nullable: false })
   name: string;
 
   @Column("varchar", { nullable: false })
   label: string;
-
-  @Column("varchar", { nullable: true })
-  defaultValue?: string;
 
   @Column({
     type: "enum",
@@ -50,32 +41,11 @@ export class Fields {
   })
   type: FieldType;
 
-  @Column("varchar", { nullable: true })
-  note?: string;
-
-  @Column("text", { nullable: true })
-  description?: string;
-
-  @Column("text", { nullable: false })
-  state: string;
-
   @Column("bool", { nullable: false })
   required: boolean;
 
-  @Column("int4", { nullable: false })
-  ordering: number;
-
-  @Column("varchar", { nullable: true })
-  metadata?: string;
-
-  @Column("varchar", { nullable: true })
-  access?: string;
-
-  @Column("bool", { nullable: false })
-  onlyUseInSubform: boolean;
-
-  @Column("uuid", { nullable: false })
-  tenantId: string;
+  @Column("uuid", { nullable: true })
+  tenantId: string | null;
 
   @CreateDateColumn({
     type: "timestamptz",
@@ -92,19 +62,13 @@ export class Fields {
   updatedAt: Date;
 
   @Column("varchar", { nullable: true })
-  createdBy?: string;
+  createdBy: string | null;
 
   @Column("varchar", { nullable: true })
-  updatedBy?: string;
-
-  @Column("uuid", { nullable: true })
-  contextId?: string;
+  updatedBy: string | null;
 
   @Column("varchar", { nullable: true })
-  render?: string;
-
-  @Column("varchar", { nullable: true })
-  contextType?: string;
+  contextType: string | null;
 
   @Column("jsonb", { nullable: true })
   fieldParams?: object;
@@ -119,6 +83,6 @@ export class Fields {
   @Column({ type: "jsonb", nullable: true })
   sourceDetails: any;
 
-  @Column({ type: "varchar" })
-  dependsOn: string;
+  @Column({ type: "varchar", nullable: true })
+  dependsOn: string | null;
 }

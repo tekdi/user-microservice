@@ -14,32 +14,34 @@ export class UserRoleMapping {
   @PrimaryGeneratedColumn("uuid")
   userRolesId: string;
 
-  @Column("uuid")
+  @Column("uuid", { nullable: false })
   userId: string;
 
-  @Column("uuid")
-  tenantId: string;
-
-  @Column("uuid")
+  @Column("uuid", { nullable: false })
   roleId: string;
+
+  @Column("uuid", { nullable: true })
+  tenantId: string | null;
+
+  @Column("uuid", { nullable: true })
+  createdBy: string | null;
+
+  @Column("uuid", { nullable: true })
+  updatedBy: string | null;
 
   @CreateDateColumn({
     type: "timestamp with time zone",
-    default: () => "CURRENT_TIMESTAMP",
+    default: () => "now()",
+    nullable: true,
   })
-  createdAt: Date;
+  createdAt: Date | null;
 
   @UpdateDateColumn({
     type: "timestamp with time zone",
-    default: () => "CURRENT_TIMESTAMP",
+    default: () => "now()",
+    nullable: true,
   })
-  updatedAt: Date;
-
-  @Column()
-  createdBy: string;
-
-  @Column()
-  updatedBy: string;
+  updatedAt: Date | null;
 
   // @ManyToOne(() => User, (user) => user.userRoleMappings)
   // @JoinColumn({ name: "userId" })

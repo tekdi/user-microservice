@@ -40,20 +40,22 @@ export class UserTenantMapping {
   @CreateDateColumn({
     type: "timestamp with time zone",
     default: () => "CURRENT_TIMESTAMP",
+    nullable: true,
   })
-  createdAt: Date;
+  createdAt: Date | null;
 
   @UpdateDateColumn({
     type: "timestamp with time zone",
     default: () => "CURRENT_TIMESTAMP",
+    nullable: true,
   })
-  updatedAt: Date;
+  updatedAt: Date | null;
 
-  @Column()
-  createdBy: string;
+  @Column({ type: "uuid", nullable: true })
+  createdBy: string | null;
 
-  @Column()
-  updatedBy: string;
+  @Column({ type: "uuid", nullable: true })
+  updatedBy: string | null;
 
   @ManyToOne(() => User, (user) => user.userTenantMapping)
   @JoinColumn({ name: "userId" })
