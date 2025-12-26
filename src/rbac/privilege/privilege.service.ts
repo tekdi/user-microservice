@@ -51,13 +51,8 @@ export class PrivilegeService {
         privilegeDto.createdBy = loggedinUser;
         privilegeDto.updatedBy = loggedinUser;
 
-        // Create new privilege - map title to name for entity
-        const entityData = {
-          ...privilegeDto,
-          name: privilegeDto.title, // Map title to name for database
-        };
-        delete entityData.title; // Remove title as entity uses name
-        const privilege = this.privilegeRepository.create(entityData);
+        // Create new privilege - DTO already uses 'name' which matches entity
+        const privilege = this.privilegeRepository.create(privilegeDto);
         const response = await this.privilegeRepository.save(privilege);
         privileges.push(new PrivilegeResponseDto(response));
       }

@@ -17,11 +17,8 @@ export class PrivilegeDto {
     description: "Privilege title",
     default: "",
   })
-  @Expose({name: "title"})
+  @Expose()
   @IsNotEmpty()
-  name: string;
-
-  // 'title' property for service compatibility - always synced with 'name'
   title: string;
 
   @ApiProperty({
@@ -47,12 +44,6 @@ export class PrivilegeDto {
 
   constructor(obj: any) {
     Object.assign(this, obj);
-    // Map 'title' from API to 'name' for database, or use 'name' if present
-    if (obj) {
-      this.name = obj.name || obj.title;
-      // Keep 'title' in sync with 'name' for service compatibility
-      this.title = this.name;
-    }
   }
 }
 
@@ -67,16 +58,15 @@ export class PrivilegeResponseDto {
   @Expose()
   privilegeId: string;
 
-  @Expose({name: "title"})
-  name: string;
+  @Expose()
+  title: string;
 
   @Expose()
   code: string;
 
   constructor(privilegeDto: PrivilegeDto | any) {
     this.privilegeId = privilegeDto.privilegeId;
-    // Handle both DTO (with name) and Entity (with name) - both map to 'name' internally
-    this.name = privilegeDto.name || (privilegeDto as any).title;
+    this.title = privilegeDto.title;
     this.code = privilegeDto.code;
   }
 }
