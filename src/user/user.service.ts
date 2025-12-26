@@ -4740,11 +4740,10 @@ export class UserService {
         FROM "FieldValues" 
         WHERE "fieldId" = ANY($1) 
           AND "itemId" = ANY($2) 
-          AND "tenantId" = $3
           AND "value" IS NOT NULL
       `;
 
-      const customFieldsResult = await this.usersRepository.query(customFieldsQuery, [fieldIds, userIds, tenantId]);
+      const customFieldsResult = await this.usersRepository.query(customFieldsQuery, [fieldIds, userIds]);
 
       // Structure the data by userId and fieldName
       const customFieldsData: Record<string, Record<string, any>> = {};
