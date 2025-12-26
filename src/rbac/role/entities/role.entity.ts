@@ -12,30 +12,32 @@ export class Role {
   @PrimaryGeneratedColumn("uuid")
   roleId: string;
 
-  @Column({ name: "name" })
+  @Column({ type: "varchar", length: 255, nullable: false, name:"name" })
   title: string;
 
-  @Column()
-  code: string;
+  @Column({ type: "varchar", length: 255, nullable: true })
+  code: string | null;
 
-  @Column("uuid")
-  tenantId: string;
+  @Column("uuid", { nullable: true })
+  tenantId: string | null;
 
   @CreateDateColumn({
-    type: "timestamp with time zone",
-    default: () => "CURRENT_TIMESTAMP",
+    type: "timestamptz",
+    default: () => "now()",
+    nullable: true,
   })
-  createdAt: Date;
+  createdAt: Date | null;
 
   @UpdateDateColumn({
-    type: "timestamp with time zone",
-    default: () => "CURRENT_TIMESTAMP",
+    type: "timestamptz",
+    default: () => "now()",
+    nullable: true,
   })
-  updatedAt: Date;
+  updatedAt: Date | null;
 
-  @Column()
-  createdBy: string;
+  @Column("uuid", { nullable: true })
+  createdBy: string | null;
 
-  @Column()
-  updatedBy: string;
+  @Column("uuid", { nullable: true })
+  updatedBy: string | null;
 }

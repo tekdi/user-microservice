@@ -11,38 +11,40 @@ export class AcademicYear {
   @PrimaryGeneratedColumn("uuid")
   id: string;
 
-  @Column({ type: "date", name: "startDate" })
+  @Column({ type: "date", name: "startDate", nullable: false })
   startDate: string;
 
-  @Column({ type: "date", name: "endDate" })
+  @Column({ type: "date", name: "endDate", nullable: false })
   endDate: string;
 
-  @Column({ type: "varchar", length: 15, name: "session" })
-  session: string;
+  @Column({ type: "varchar", length: 15, name: "session", nullable: true })
+  session: string | null;
 
   @CreateDateColumn({
-    type: "timestamp",
+    type: "timestamptz",
     name: "createdAt",
-    default: () => "CURRENT_TIMESTAMP",
+    default: () => "now()",
+    nullable: true,
   })
-  createdAt: Date;
+  createdAt: Date | null;
 
   @UpdateDateColumn({
-    type: "timestamp",
+    type: "timestamptz",
     name: "updatedAt",
-    default: () => "CURRENT_TIMESTAMP",
+    default: () => "now()",
+    nullable: true,
   })
-  updatedAt: Date;
+  updatedAt: Date | null;
 
-  @Column({ type: "uuid", nullable: true })
-  createdBy: string;
+  @Column({ type: "boolean", name: "isActive", default: true, nullable: true })
+  isActive: boolean | null;
 
-  @Column({ type: "uuid", nullable: true })
-  updatedBy: string;
+  @Column({ type: "uuid", name: "tenantId", nullable: true })
+  tenantId: string | null;
 
-  @Column({ type: "boolean", name: "isActive", default: true })
-  isActive: boolean;
+  @Column({ type: "uuid", name: "updatedBy", nullable: true })
+  updatedBy: string | null;
 
-  @Column("uuid", { nullable: false })
-  tenantId: string;
+  @Column({ type: "uuid", name: "createdBy", nullable: true })
+  createdBy: string | null;
 }

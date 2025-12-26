@@ -8,15 +8,15 @@ import { API_RESPONSES } from "@utils/response.messages";
 import { APIID } from "@utils/api-id.config";
 import APIResponse from "src/common/responses/response";
 import { AcademicYearSearchDto } from "./dto/academicyears-search.dto";
-import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
+import { Tenant } from "src/tenant/entities/tenent.entity";
 
 @Injectable()
 export class AcademicYearService {
   constructor(
     @InjectRepository(AcademicYear)
     private readonly academicYearRespository: Repository<AcademicYear>,
-    @InjectRepository(Tenants)
-    private readonly tenantRepository: Repository<Tenants>
+    @InjectRepository(Tenant)
+    private readonly tenantRepository: Repository<Tenant>
   ) { }
 
   public async createAcademicYear(

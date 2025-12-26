@@ -66,7 +66,7 @@ export class RolePermissionService {
       let result = await this.rolePermissionRepository.save({
         roleTitle: permissionCreateDto.roleTitle,
         apiPath: permissionCreateDto.apiPath,
-        requestType: permissionCreateDto.requestType,
+        requestType: permissionCreateDto.requestType, // Already normalized in DTO constructor
         module: permissionCreateDto.module,
       });
       return APIResponse.success(
@@ -99,7 +99,7 @@ export class RolePermissionService {
         {
           roleTitle: rolePermissionCreateDto.roleTitle,
           apiPath: rolePermissionCreateDto.apiPath,
-          requestType: rolePermissionCreateDto.requestType,
+          requestType: rolePermissionCreateDto.requestType, // Already normalized in DTO constructor
           module: rolePermissionCreateDto.module,
         }
       );

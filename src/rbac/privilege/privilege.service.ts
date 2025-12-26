@@ -51,8 +51,13 @@ export class PrivilegeService {
         privilegeDto.createdBy = loggedinUser;
         privilegeDto.updatedBy = loggedinUser;
 
-        // Create new privilege
-        const privilege = this.privilegeRepository.create(privilegeDto);
+        // Create new privilege - map title to name for entity
+        const entityData = {
+          ...privilegeDto,
+          name: privilegeDto.title, // Map title to name for database
+        };
+        delete entityData.title; // Remove title as entity uses name
+        const privilege = this.privilegeRepository.create(entityData);
         const response = await this.privilegeRepository.save(privilege);
         privileges.push(new PrivilegeResponseDto(response));
       }
@@ -290,8 +295,8 @@ export class PrivilegeService {
       const result = await this.privilegeRepository.query(query, [roleId]);
       const privilegeResponseArray: PrivilegeResponseDto[] = result.map(
         (item: any) => {
+          // Map 'name' from database to 'title' in DTO (handled in constructor)
           const privilegeDto = new PrivilegeDto(item);
-          privilegeDto.title = item.name;
           return new PrivilegeResponseDto(privilegeDto);
         }
       );

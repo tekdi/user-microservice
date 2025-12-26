@@ -5,7 +5,7 @@ import { CohortAcademicYearController } from "./cohortAcademicYear.controller";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { Cohort } from "src/cohort/entities/cohort.entity";
 import { AcademicYear } from "src/academicyears/entities/academicyears-entity";
-import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
+import { Tenant } from "src/tenant/entities/tenent.entity";
 import { AcademicyearsModule } from "src/academicyears/academicyears.module";
 
 
@@ -16,7 +16,7 @@ import { AcademicyearsModule } from "src/academicyears/academicyears.module";
       CohortAcademicYear,
       Cohort,
       AcademicYear,
-      Tenants
+      Tenant
     ]),
   ],
   controllers: [CohortAcademicYearController],

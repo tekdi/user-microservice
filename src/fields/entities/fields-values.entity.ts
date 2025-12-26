@@ -15,21 +15,14 @@ export class FieldValues {
   @PrimaryGeneratedColumn("uuid", { name: "fieldValuesId" })
   fieldValuesId: string = uuidv4();
 
-  @Column("varchar", { length: 255, nullable: false })
-  value: string;
+  @Column("text", { array: true, nullable: false })
+  value: string[];
 
   @Column("uuid", { nullable: false })
   itemId: string;
 
   @Column("uuid", { nullable: false })
   fieldId: string;
-
-  @Column("uuid", { nullable: true })
-  tenantId?: string;
-
-  @Column("varchar", { nullable: true })
-  contextType?: string;
-
 
   @CreateDateColumn({
     type: "timestamptz",
@@ -46,10 +39,16 @@ export class FieldValues {
   updatedAt: Date;
 
   @Column("uuid", { nullable: true })
-  createdBy?: string;
+  createdBy: string | null;
 
   @Column("uuid", { nullable: true })
-  updatedBy?: string;
+  updatedBy: string | null;
+
+  @Column("text", { nullable: true })
+  contextType: string | null;
+
+  @Column("uuid", { nullable: true })
+  tenantId: string | null;
 
   @ManyToOne(() => Fields, (field) => field.fieldValues)
   @JoinColumn({ name: "fieldId" })
