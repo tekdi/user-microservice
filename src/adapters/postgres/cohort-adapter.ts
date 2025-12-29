@@ -41,6 +41,16 @@ import { FieldValueConverter } from 'src/utils/field-value-converter';
 
 @Injectable()
 export class PostgresCohortService {
+  // Cache for repository column names (static data)
+  private cachedCohortColumnNames: string[] | null = null;
+  
+  // Cache for custom fields metadata (with TTL)
+  private customFieldsCache: {
+    data: any[];
+    timestamp: number;
+  } | null = null;
+  private readonly CUSTOM_FIELDS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
   constructor(
     @InjectRepository(Cohort)
     private cohortRepository: Repository<Cohort>,
@@ -310,6 +320,189 @@ export class PostgresCohortService {
 
     result = await Promise.all(result);
     return result;
+  }
+
+  /**
+   * Batch load custom fields for multiple cohortIds in a single query
+   * Optimizes N+1 query problem
+   */
+  private async getBatchCohortCustomFieldDetails(
+    cohortIds: string[]
+  ): Promise<Map<string, any[]>> {
+    if (!cohortIds || cohortIds.length === 0) {
+      return new Map();
+    }
+
+    const query = `
+      SELECT DISTINCT 
+        fv."itemId",
+        f."fieldId",
+        f."label", 
+        COALESCE(
+          CASE f."type"
+            WHEN 'text' THEN fv."textValue"::text
+            WHEN 'number' THEN fv."numberValue"::text
+            WHEN 'calendar' THEN fv."calendarValue"::text
+            WHEN 'dropdown' THEN fv."dropdownValue"::text
+            WHEN 'radio' THEN fv."radioValue"
+            WHEN 'checkbox' THEN fv."checkboxValue"::text
+            WHEN 'textarea' THEN fv."textareaValue"
+            WHEN 'file' THEN fv."fileValue"
+          END,
+          fv."value"
+        ) as "value",
+        f."type", 
+        f."fieldParams",
+        f."sourceDetails"
+      FROM public."Cohort" c
+      LEFT JOIN (
+        SELECT DISTINCT ON (fv."fieldId", fv."itemId") fv.*
+        FROM public."FieldValues" fv
+      ) fv ON fv."itemId" = c."cohortId"
+      INNER JOIN public."Fields" f ON fv."fieldId" = f."fieldId"
+      WHERE c."cohortId" = ANY($1);
+    `;
+
+    let results = await this.cohortMembersRepository.query(query, [cohortIds]);
+    
+    // Process results for dynamic options
+    results = await Promise.all(
+      results.map(async (data) => {
+        const originalValue = data.value;
+        let processedValue = data.value;
+
+        if (data?.sourceDetails) {
+          if (data.sourceDetails.source === 'fieldparams') {
+            data.fieldParams.options.forEach((option) => {
+              if (data.value === option.value) {
+                processedValue = option.label;
+              }
+            });
+          } else if (data.sourceDetails.source === 'table') {
+            const labels = await this.fieldsService.findDynamicOptions(
+              data.sourceDetails.table,
+              `value='${data.value}'`
+            );
+            if (labels && labels.length > 0) {
+              processedValue = labels[0].name;
+            }
+          }
+        }
+
+        const itemId = data.itemId;
+        delete data.itemId;
+        delete data.fieldParams;
+        delete data.sourceDetails;
+
+        return {
+          ...data,
+          value: processedValue,
+          code: originalValue,
+          _cohortId: itemId, // Temporary field for grouping, will be removed
+        };
+      })
+    );
+
+    // Group by cohortId (using itemId which equals cohortId)
+    const customFieldsMap = new Map<string, any[]>();
+    for (const result of results) {
+      const cohortId = result._cohortId;
+      delete result._cohortId; // Remove temporary field
+      if (!customFieldsMap.has(cohortId)) {
+        customFieldsMap.set(cohortId, []);
+      }
+      customFieldsMap.get(cohortId)!.push(result);
+    }
+
+    // Ensure all cohortIds have an entry (even if empty)
+    for (const cohortId of cohortIds) {
+      if (!customFieldsMap.has(cohortId)) {
+        customFieldsMap.set(cohortId, []);
+      }
+    }
+
+    return customFieldsMap;
+  }
+
+  /**
+   * Batch count active members for multiple cohortIds in a single query
+   * Optimizes N+1 query problem
+   */
+  private async getBatchCohortMemberCounts(
+    cohortIds: string[]
+  ): Promise<Map<string, number>> {
+    if (!cohortIds || cohortIds.length === 0) {
+      return new Map();
+    }
+
+    const query = `
+      SELECT 
+        "cohortId",
+        COUNT(*) as count
+      FROM public."CohortMembers"
+      WHERE "cohortId" = ANY($1)
+        AND "status" = $2
+      GROUP BY "cohortId"
+    `;
+
+    const results = await this.cohortMembersRepository.query(query, [
+      cohortIds,
+      MemberStatus.ACTIVE,
+    ]);
+
+    const countMap = new Map<string, number>();
+    for (const result of results) {
+      countMap.set(result.cohortId, parseInt(result.count, 10));
+    }
+
+    // Ensure all cohortIds have an entry (even if 0)
+    for (const cohortId of cohortIds) {
+      if (!countMap.has(cohortId)) {
+        countMap.set(cohortId, 0);
+      }
+    }
+
+    return countMap;
+  }
+
+  /**
+   * Get cached or fetch custom fields metadata
+   */
+  private async getCachedCustomFields() {
+    const now = Date.now();
+    if (
+      this.customFieldsCache &&
+      now - this.customFieldsCache.timestamp < this.CUSTOM_FIELDS_CACHE_TTL
+    ) {
+      return this.customFieldsCache.data;
+    }
+
+    const customFields = await this.fieldsRepository.find({
+      where: [
+        { context: In(['COHORT', null, 'null', 'NULL']), contextType: null },
+        { context: IsNull(), contextType: IsNull() },
+      ],
+      select: ['fieldId', 'name', 'label', 'contextType', 'type'],
+    });
+
+    this.customFieldsCache = {
+      data: customFields,
+      timestamp: now,
+    };
+
+    return customFields;
+  }
+
+  /**
+   * Get cached cohort column names
+   */
+  private getCachedCohortColumnNames(): string[] {
+    if (this.cachedCohortColumnNames === null) {
+      this.cachedCohortColumnNames = this.cohortRepository.metadata.columns.map(
+        (column) => column.propertyName
+      );
+    }
+    return this.cachedCohortColumnNames;
   }
 
   public async validateFieldValues(field_value_array: string[]) {
@@ -757,9 +950,6 @@ export class PostgresCohortService {
       offset = offset || 0;
       limit = limit || 200;
 
-      const emptyValueKeys = {};
-      let emptyKeysString = '';
-
       const MAX_LIMIT = 200;
 
       // Validate the limit parameter
@@ -773,19 +963,11 @@ export class PostgresCohortService {
         );
       }
 
-      //Get all cohorts fields
-      const cohortAllKeys = this.cohortRepository.metadata.columns.map(
-        (column) => column.propertyName
-      );
+      //Get all cohorts fields (cached)
+      const cohortAllKeys = this.getCachedCohortColumnNames();
 
-      //Get custom fields
-      const getCustomFields = await this.fieldsRepository.find({
-        where: [
-          { context: In(['COHORT', null, 'null', 'NULL']), contextType: null },
-          { context: IsNull(), contextType: IsNull() },
-        ],
-        select: ['fieldId', 'name', 'label', 'contextType', 'type'],
-      });
+      //Get custom fields (cached)
+      const getCustomFields = await this.getCachedCustomFields();
 
       // Extract custom field names
       const customFieldsKeys = getCustomFields.map(
@@ -816,10 +998,15 @@ export class PostgresCohortService {
           );
         }
 
-        academicYearMap = new Map();
-        cohortsByAcademicYear?.forEach((item) => {
-          academicYearMap.set(`${item.cohortId}|${item.academicYearId}`, item);
-        });
+        // Only create map if we have data
+        if (cohortsByAcademicYear && cohortsByAcademicYear.length > 0) {
+          academicYearMap = new Map(
+            cohortsByAcademicYear.map((item) => [
+              `${item.cohortId}|${item.academicYearId}`,
+              item,
+            ])
+          );
+        }
       }
 
       if (filters && Object.keys(filters).length > 0) {
@@ -880,10 +1067,7 @@ export class PostgresCohortService {
               HttpStatus.BAD_REQUEST
             );
           }
-          if (value === '') {
-            emptyValueKeys[key] = value;
-            emptyKeysString += (emptyKeysString ? ', ' : '') + key;
-          } else if (key === 'name') {
+          if (key === 'name') {
             whereClause[key] = ILike(`%${value}%`);
           } else if (key === 'cohort_startDate' || key === 'cohort_endDate') {
             // Handle date fields with operator support (gt, gte, lt, lte, eq, ne)
@@ -1037,13 +1221,22 @@ export class PostgresCohortService {
         const [data, totalCount] =
           await this.cohortMembersRepository.findAndCount({
             where: whereClause,
+            skip: offset,
+            take: limit,
           });
-        const userExistCohortGroup = data.slice(offset, offset + limit);
         count = totalCount;
 
-        const cohortIds = userExistCohortGroup.map(
-          (cohortId) => cohortId.cohortId
-        );
+        const cohortIds = data.map((item) => item.cohortId);
+
+        if (cohortIds.length === 0) {
+          return APIResponse.error(
+            response,
+            apiId,
+            `No data found.`,
+            'No data found.',
+            HttpStatus.NOT_FOUND
+          );
+        }
 
         const cohortAllData = await this.cohortRepository.find({
           where: {
@@ -1052,11 +1245,13 @@ export class PostgresCohortService {
           order,
         });
 
+        // Batch load custom fields for all cohorts
+        const customFieldsMap = await this.getBatchCohortCustomFieldDetails(
+          cohortIds
+        );
+
         for (const data of cohortAllData) {
-          const customFieldsData = await this.getCohortDataWithCustomfield(
-            data.cohortId
-          );
-          data['customFields'] = customFieldsData;
+          data['customFields'] = customFieldsMap.get(data.cohortId) || [];
           const academicYearInfo = academicYearMap.get(
             `${data.cohortId}|${academicYearId}`
           );
@@ -1276,13 +1471,24 @@ export class PostgresCohortService {
           whereClause['cohortId'] = In(cohortIds);
         }
 
-        const [data, totalCount] = await this.cohortRepository.findAndCount({
+        const [cohortData, totalCount] = await this.cohortRepository.findAndCount({
           where: whereClause,
           order,
+          skip: offset,
+          take: limit,
         });
 
-        const cohortData = data.slice(offset, offset + limit);
         count = totalCount;
+
+        if (cohortData.length === 0) {
+          return APIResponse.error(
+            response,
+            apiId,
+            `No data found.`,
+            'No data found.',
+            HttpStatus.NOT_FOUND
+          );
+        }
 
         // Step 1: Get cohortIds for checking form existence
         const cohortIds = cohortData.map((c) => c.cohortId);
@@ -1292,20 +1498,26 @@ export class PostgresCohortService {
           publishedFormIds: formPublishedCohortIds,
         } = await this.getCohortMappedFormId(cohortIds, apiId);
 
+        // Batch load custom fields for all cohorts
+        const customFieldsMap = await this.getBatchCohortCustomFieldDetails(
+          cohortIds
+        );
+
+        // Batch load user counts for COHORT type cohorts
+        const cohortTypeCohortIds = cohortData
+          .filter((c) => c.type === 'COHORT')
+          .map((c) => c.cohortId);
+        const userCountMap =
+          cohortTypeCohortIds.length > 0
+            ? await this.getBatchCohortMemberCounts(cohortTypeCohortIds)
+            : new Map<string, number>();
+
         for (const data of cohortData) {
-          const customFieldsData = await this.getCohortDataWithCustomfield(
-            data.cohortId,
-            data.type
-          );
+          data['customFields'] = customFieldsMap.get(data.cohortId) || [];
 
           if (data.type === 'COHORT') {
-            const userCount = await this.cohortMembersRepository.count({
-              where: { cohortId: data.cohortId, status: MemberStatus.ACTIVE },
-            });
-            data['youthCount'] = userCount;
+            data['youthCount'] = userCountMap.get(data.cohortId) || 0;
           }
-
-          data['customFields'] = customFieldsData || [];
 
           const academicYearInfo = academicYearMap.get(
             `${data.cohortId}|${academicYearId}`

@@ -509,58 +509,15 @@ export class PostgresCohortMembersService {
         );
       }
 
-      // NEW: Add cohort details to each user
+      // NEW: Add cohort details to each user (optimized with batch loading)
       if (results['userDetails'] && results['userDetails'].length > 0) {
         // Get unique cohort IDs from the results
         const cohortIds = [
           ...new Set(results['userDetails'].map((user) => user.cohortId)),
         ].filter((id) => id) as string[];
 
-        // Fetch cohort details for all unique cohort IDs
-        const cohortDetailsMap = new Map<string, any>();
-
-        for (const cohortId of cohortIds) {
-          try {
-            // Get basic cohort information
-            const cohort = await this.cohortRepository.findOne({
-              where: { cohortId: cohortId },
-              select: [
-                'cohortId',
-                'name',
-                'parentId',
-                'type',
-                'status',
-                'cohort_startDate',
-                'cohort_endDate',
-              ],
-            });
-
-            if (cohort) {
-              // Get cohort custom fields using local method
-              const cohortCustomFields = await this.getCohortCustomFieldDetails(
-                cohortId
-              );
-
-              cohortDetailsMap.set(cohortId, {
-                cohortId: cohort.cohortId,
-                name: cohort.name,
-                parentId: cohort.parentId,
-                type: cohort.type,
-                status: cohort.status,
-                cohort_startDate: cohort.cohort_startDate,
-                cohort_endDate: cohort.cohort_endDate,
-                customFields: cohortCustomFields,
-              });
-            }
-          } catch (error) {
-            LoggerUtil.error(
-              `Failed to fetch cohort details for cohortId: ${cohortId}`,
-              `Error: ${error.message}`,
-              apiId
-            );
-            // Continue with other cohorts even if one fails
-          }
-        }
+        // Batch load cohort details for all unique cohort IDs
+        const cohortDetailsMap = await this.getBatchCohortDetails(cohortIds);
 
         // Add cohort details to each user
         results['userDetails'] = results['userDetails'].map((user) => ({
@@ -707,29 +664,31 @@ export class PostgresCohortMembersService {
 
     if (getUserDetails.length > 0) {
       results.totalCount = parseInt(getUserDetails[0].total_count, 10);
-      for (const data of getUserDetails) {
-        if (fieldShowHide === 'false') {
-          results.userDetails.push(data);
-        } else {
-          const fieldValues =
-            await this.fieldsService.getUserCustomFieldDetails(data.userId);
-          //get data by cohort membership Id
-          let fieldValuesForCohort =
-            await this.fieldsService.getFieldsAndFieldsValues(
-              data.cohortMembershipId
-            );
+      
+      if (fieldShowHide === 'false') {
+        // No custom fields needed, just push all data
+        results.userDetails = getUserDetails;
+      } else {
+        // Batch load custom fields for all users
+        const userIds = getUserDetails.map((data) => data.userId);
+        const cohortMembershipIds = getUserDetails.map(
+          (data) => data.cohortMembershipId
+        );
 
-          fieldValuesForCohort = fieldValuesForCohort.map((field) => {
-            return {
-              fieldId: field.fieldId,
-              label: field.label,
-              value: field.value,
-              type: field.type,
-              code: field.code,
-            };
-          });
+        // Batch load user custom fields and cohort member custom fields
+        const [userCustomFieldsMap, cohortMemberCustomFieldsMap] =
+          await Promise.all([
+            this.getBatchUserCustomFields(userIds),
+            this.getBatchCohortMemberCustomFields(cohortMembershipIds),
+          ]);
 
-          data['customField'] = fieldValues.concat(fieldValuesForCohort);
+        // Combine custom fields for each user
+        for (const data of getUserDetails) {
+          const userFieldValues = userCustomFieldsMap.get(data.userId) || [];
+          const cohortFieldValues =
+            cohortMemberCustomFieldsMap.get(data.cohortMembershipId) || [];
+
+          data['customField'] = userFieldValues.concat(cohortFieldValues);
           results.userDetails.push(data);
         }
       }
@@ -748,12 +707,20 @@ export class PostgresCohortMembersService {
   ) {
     const apiId = APIID.COHORT_MEMBER_CREATE;
     try {
-      const existUser = await this.usersRepository.find({
-        where: {
-          userId: cohortMembers.userId,
-        },
-      });
-      if (existUser.length === 0) {
+      // Parallelize independent validation queries for better performance
+      const [existUser, academicYear] = await Promise.all([
+        this.usersRepository.findOne({
+          where: {
+            userId: cohortMembers.userId,
+          },
+        }),
+        this.academicyearService.getActiveAcademicYear(
+          academicyearId,
+          tenantId
+        ),
+      ]);
+
+      if (!existUser) {
         return APIResponse.error(
           res,
           apiId,
@@ -762,11 +729,6 @@ export class PostgresCohortMembersService {
           HttpStatus.BAD_REQUEST
         );
       }
-      // check year is live or not
-      const academicYear = await this.academicyearService.getActiveAcademicYear(
-        academicyearId,
-        tenantId
-      );
 
       if (!academicYear) {
         return APIResponse.error(
@@ -793,14 +755,14 @@ export class PostgresCohortMembersService {
       }
       const cohortacAdemicyearId = isExistAcademicYear.cohortAcademicYearId;
       //check user is already exist in this cohort for this year or not
-      const existrole = await this.cohortMembersRepository.find({
+      const existrole = await this.cohortMembersRepository.findOne({
         where: {
           userId: cohortMembers.userId,
           cohortId: cohortMembers.cohortId,
           cohortAcademicYearId: cohortacAdemicyearId,
         },
       });
-      if (existrole.length > 0) {
+      if (existrole) {
         return APIResponse.error(
           res,
           apiId,
@@ -1916,6 +1878,155 @@ export class PostgresCohortMembersService {
       null,
       true
     );
+  }
+
+  /**
+   * Batch load cohort details (basic info + custom fields) for multiple cohortIds
+   * Optimizes N+1 query problem
+   */
+  private async getBatchCohortDetails(
+    cohortIds: string[]
+  ): Promise<Map<string, any>> {
+    if (!cohortIds || cohortIds.length === 0) {
+      return new Map();
+    }
+
+    // Batch load basic cohort information
+    const cohorts = await this.cohortRepository.find({
+      where: {
+        cohortId: In(cohortIds),
+      },
+      select: [
+        'cohortId',
+        'name',
+        'parentId',
+        'type',
+        'status',
+        'cohort_startDate',
+        'cohort_endDate',
+      ],
+    });
+
+    // Batch load custom fields for all cohorts
+    const customFieldsPromises = cohorts.map((cohort) =>
+      this.getCohortCustomFieldDetails(cohort.cohortId).then((fields) => ({
+        cohortId: cohort.cohortId,
+        customFields: fields,
+      }))
+    );
+
+    const customFieldsResults = await Promise.all(customFieldsPromises);
+    const customFieldsMap = new Map(
+      customFieldsResults.map((result) => [
+        result.cohortId,
+        result.customFields,
+      ])
+    );
+
+    // Combine cohort info with custom fields
+    const cohortDetailsMap = new Map<string, any>();
+    for (const cohort of cohorts) {
+      cohortDetailsMap.set(cohort.cohortId, {
+        cohortId: cohort.cohortId,
+        name: cohort.name,
+        parentId: cohort.parentId,
+        type: cohort.type,
+        status: cohort.status,
+        cohort_startDate: cohort.cohort_startDate,
+        cohort_endDate: cohort.cohort_endDate,
+        customFields: customFieldsMap.get(cohort.cohortId) || [],
+      });
+    }
+
+    // Ensure all cohortIds have an entry (even if not found)
+    for (const cohortId of cohortIds) {
+      if (!cohortDetailsMap.has(cohortId)) {
+        cohortDetailsMap.set(cohortId, null);
+      }
+    }
+
+    return cohortDetailsMap;
+  }
+
+  /**
+   * Batch load user custom fields for multiple userIds
+   * Optimizes N+1 query problem
+   */
+  private async getBatchUserCustomFields(
+    userIds: string[]
+  ): Promise<Map<string, any[]>> {
+    if (!userIds || userIds.length === 0) {
+      return new Map();
+    }
+
+    // Batch load all user custom fields
+    const customFieldsPromises = userIds.map((userId) =>
+      this.fieldsService
+        .getUserCustomFieldDetails(userId)
+        .then((fields) => ({ userId, fields }))
+        .catch(() => ({ userId, fields: [] }))
+    );
+
+    const results = await Promise.all(customFieldsPromises);
+    const customFieldsMap = new Map<string, any[]>();
+
+    for (const result of results) {
+      customFieldsMap.set(result.userId, result.fields);
+    }
+
+    // Ensure all userIds have an entry
+    for (const userId of userIds) {
+      if (!customFieldsMap.has(userId)) {
+        customFieldsMap.set(userId, []);
+      }
+    }
+
+    return customFieldsMap;
+  }
+
+  /**
+   * Batch load cohort member custom fields for multiple cohortMembershipIds
+   * Optimizes N+1 query problem
+   */
+  private async getBatchCohortMemberCustomFields(
+    cohortMembershipIds: string[]
+  ): Promise<Map<string, any[]>> {
+    if (!cohortMembershipIds || cohortMembershipIds.length === 0) {
+      return new Map();
+    }
+
+    // Batch load all cohort member custom fields
+    const customFieldsPromises = cohortMembershipIds.map((membershipId) =>
+      this.fieldsService
+        .getFieldsAndFieldsValues(membershipId)
+        .then((fields) =>
+          fields.map((field) => ({
+            fieldId: field.fieldId,
+            label: field.label,
+            value: field.value,
+            type: field.type,
+            code: field.code,
+          }))
+        )
+        .then((fields) => ({ membershipId, fields }))
+        .catch(() => ({ membershipId, fields: [] }))
+    );
+
+    const results = await Promise.all(customFieldsPromises);
+    const customFieldsMap = new Map<string, any[]>();
+
+    for (const result of results) {
+      customFieldsMap.set(result.membershipId, result.fields);
+    }
+
+    // Ensure all membershipIds have an entry
+    for (const membershipId of cohortMembershipIds) {
+      if (!customFieldsMap.has(membershipId)) {
+        customFieldsMap.set(membershipId, []);
+      }
+    }
+
+    return customFieldsMap;
   }
 
   public async cohortUserMapping(userId, cohortId, cohortAcademicYearId) {
