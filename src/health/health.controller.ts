@@ -1,4 +1,4 @@
-import { Controller, Get, HttpStatus, HttpException, Res } from '@nestjs/common';
+import { Controller, Get, HttpStatus, Res } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { DataSource } from 'typeorm';
 import { InjectDataSource } from '@nestjs/typeorm';
