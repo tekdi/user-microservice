@@ -218,39 +218,40 @@ export class AuthService {
       const errorMessage = e?.message || 'Something went wrong';
       const errorStack = e?.stack || 'No stack trace available';
       
-      // Determine error type and status code
-      let httpStatus = HttpStatus.INTERNAL_SERVER_ERROR;
+      // Determine error type for logging purposes (but keep API response consistent)
+      let detectedStatus = HttpStatus.INTERNAL_SERVER_ERROR;
       let failureReason = 'INTERNAL_SERVER_ERROR';
       let issueType = 'SERVER_ERROR';
 
       if (e.name === 'JsonWebTokenError' || e.message?.includes('token') || e.message?.includes('jwt')) {
-        httpStatus = HttpStatus.UNAUTHORIZED;
+        detectedStatus = HttpStatus.UNAUTHORIZED;
         failureReason = 'INVALID_TOKEN';
         issueType = 'CLIENT_ERROR';
       } else if (e.message?.includes('not found') || e.message?.includes('does not exist')) {
-        httpStatus = HttpStatus.NOT_FOUND;
+        detectedStatus = HttpStatus.NOT_FOUND;
         failureReason = 'USER_NOT_FOUND';
         issueType = 'CLIENT_ERROR';
       } else if (e.message?.includes('unauthorized') || e.message?.includes('forbidden')) {
-        httpStatus = HttpStatus.FORBIDDEN;
+        detectedStatus = HttpStatus.FORBIDDEN;
         failureReason = 'UNAUTHORIZED';
         issueType = 'CLIENT_ERROR';
       }
 
-      // Log failed attempt with comprehensive details
+      // Log failed attempt with comprehensive details (including detected status for monitoring)
       LoggerUtil.error(
-        `GetUserByAuth failed - Username: ${username}, UserId: ${userId}, IP: ${clientIp}, StatusCode: ${httpStatus}, Reason: ${failureReason}, Message: ${errorMessage}, IssueType: ${issueType}, TenantId: ${tenantId || 'Not provided'}`,
+        `GetUserByAuth failed - Username: ${username}, UserId: ${userId}, IP: ${clientIp}, DetectedStatusCode: ${detectedStatus}, Reason: ${failureReason}, Message: ${errorMessage}, IssueType: ${issueType}, TenantId: ${tenantId || 'Not provided'}`,
         errorStack,
         'AuthService',
         username
       );
 
+      // Keep original API response behavior - always return INTERNAL_SERVER_ERROR
       return APIResponse.error(
         response,
         apiId,
         'Internal Server Error',
         `Error : ${errorMessage}`,
-        httpStatus
+        HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }

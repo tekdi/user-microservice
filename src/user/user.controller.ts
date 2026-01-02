@@ -56,6 +56,7 @@ import { OtpSendDTO } from './dto/otpSend.dto';
 import { OtpVerifyDTO } from './dto/otpVerify.dto';
 import { UserCreateSsoDto } from './dto/user-create-sso.dto';
 import { RecaptchaService } from './recaptcha.service';
+import jwt_decode from 'jwt-decode';
 
 export interface UserData {
   context: string;
@@ -105,13 +106,16 @@ export class UserController {
     try {
       // Extract requester info from JWT token if available
       if (request.headers.authorization) {
-        const jwt_decode = require('jwt-decode');
         const decoded: any = jwt_decode(request.headers.authorization);
         requesterUsername = decoded.preferred_username || 'Unknown';
         requesterUserId = decoded.sub || 'Unknown';
       }
     } catch (e) {
-      // If token decode fails, continue with Unknown values
+      // If token decode fails, log the error and continue with Unknown values
+      LoggerUtil.warn(
+        `Failed to decode JWT token for getUser request - IP: ${clientIp}, Error: ${e?.message || 'Unknown error'}`,
+        'UserController'
+      );
     }
 
     const tenantId = headers['tenantid'];

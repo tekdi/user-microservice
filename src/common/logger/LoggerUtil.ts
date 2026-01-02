@@ -30,20 +30,23 @@ export class LoggerUtil {
                     new winston.transports.File({ 
                         filename: 'error.log', 
                         level: 'error',
-                        // Optimize file writes for performance
-                        maxsize: 5242880, // 5MB
-                        maxFiles: 5,
-                        tailable: true,
+                        // Log rotation configuration for performance and disk space management
+                        // When log file reaches 5MB, it will be rotated (renamed) and a new file created
+                        maxsize: 5242880, // 5MB - maximum size before rotation
+                        maxFiles: 5, // Keep maximum 5 rotated log files (error.log, error.log.1, error.log.2, etc.)
+                        tailable: true, // Oldest logs are deleted when maxFiles is reached
                     }),
                     new winston.transports.File({ 
                         filename: 'combined.log',
-                        // Optimize file writes for performance
-                        maxsize: 5242880, // 5MB
-                        maxFiles: 5,
-                        tailable: true,
+                        // Log rotation configuration for performance and disk space management
+                        // When log file reaches 5MB, it will be rotated (renamed) and a new file created
+                        maxsize: 5242880, // 5MB - maximum size before rotation
+                        maxFiles: 5, // Keep maximum 5 rotated log files (combined.log, combined.log.1, combined.log.2, etc.)
+                        tailable: true, // Oldest logs are deleted when maxFiles is reached
                     }),
                 ],
-                // Exit on error to prevent logging failures from crashing the app
+                // Prevent Winston from exiting the process when logging errors occur
+                // This ensures logging failures don't crash the application
                 exitOnError: false,
             });
         }
