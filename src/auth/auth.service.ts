@@ -37,8 +37,8 @@ export class AuthService {
     // Log login attempt start (username and IP excluded for legal compliance)
     LoggerUtil.log(
       `Login attempt initiated - User-Agent: ${userAgent}`,
-      'AuthService',
-      undefined, // Username excluded for legal compliance
+        'AuthService',
+        undefined,
       'info'
     );
 
@@ -54,14 +54,13 @@ export class AuthService {
           ? 'User details not found for user'
           : 'User is inactive, please verify your email';
 
-        const failureReason = !userData ? 'USER_NOT_FOUND' : 'USER_INACTIVE';
+        const failureReason = userData ? 'USER_INACTIVE' : 'USER_NOT_FOUND';
 
         // Log failed login attempt with reason and status code (username and IP excluded for legal compliance)
         LoggerUtil.error(
           `Login failed - StatusCode: ${HttpStatus.BAD_REQUEST}, Reason: ${failureReason}, Message: ${errorMessage}, IssueType: CLIENT_ERROR`,
           errorMessage,
-          'AuthService',
-          undefined
+          'AuthService'
         );
 
         return APIResponse.error(
@@ -94,7 +93,7 @@ export class AuthService {
       LoggerUtil.log(
         `Login successful - User-Agent: ${userAgent}, StatusCode: ${HttpStatus.OK}`,
         'AuthService',
-        undefined, // Username excluded for legal compliance
+        undefined,
         'info'
       );
 
@@ -111,8 +110,7 @@ export class AuthService {
         LoggerUtil.error(
           `Login failed - StatusCode: ${HttpStatus.UNAUTHORIZED}, Reason: INVALID_CREDENTIALS, Message: Invalid username or password, IssueType: CLIENT_ERROR`,
           'Invalid username or password',
-          'AuthService',
-          undefined
+          'AuthService'
         );
         throw new NotFoundException('Invalid username or password');
       } else {
@@ -151,8 +149,7 @@ export class AuthService {
         LoggerUtil.error(
           `Login failed - StatusCode: ${httpStatus}, Reason: ${failureReason}, Message: ${errorMessage}, IssueType: ${issueType}`,
           errorStack,
-          'AuthService',
-          undefined
+          'AuthService'
         );
 
         return APIResponse.error(
@@ -171,8 +168,6 @@ export class AuthService {
 
     // Extract request information for logging
     const userAgent = request.headers['user-agent'] || 'Unknown';
-    let username = 'Unknown';
-    let userId = 'Unknown';
 
     try {
       // Log API call attempt (username and IP excluded for legal compliance)
@@ -181,20 +176,19 @@ export class AuthService {
           tenantId || 'Not provided'
         }`,
         'AuthService',
-        undefined, // Username excluded for legal compliance
+        undefined,
         'info'
       );
 
       // Decode JWT token to get username
       const decoded: any = jwt_decode(request.headers.authorization);
-      username = decoded.preferred_username || 'Unknown';
-      userId = decoded.sub || 'Unknown';
+      const username = decoded.preferred_username || 'Unknown';
 
       // Log with username after decoding (username, userId, and IP excluded for legal compliance)
       LoggerUtil.log(
         `GetUserByAuth processing - TenantId: ${tenantId || 'Not provided'}`,
         'AuthService',
-        undefined, // Username excluded for legal compliance
+        undefined,
         'info'
       );
 
@@ -206,7 +200,7 @@ export class AuthService {
       LoggerUtil.log(
         `GetUserByAuth successful - StatusCode: ${HttpStatus.OK}`,
         'AuthService',
-        undefined, // Username excluded for legal compliance
+        undefined,
         'info'
       );
 
@@ -257,7 +251,7 @@ export class AuthService {
         }`,
         errorStack,
         'AuthService',
-        undefined // Username excluded for legal compliance
+        undefined
       );
 
       // Keep original API response behavior - always return INTERNAL_SERVER_ERROR
