@@ -44,7 +44,11 @@ async function bootstrap() {
     express.static(join(__dirname, '..', 'uploads'))
   );
   app.setGlobalPrefix('user/v1', {
-    exclude: [{ path: 'health', method: RequestMethod.GET }],
+    exclude: [
+      { path: 'health', method: RequestMethod.GET },
+      { path: 'health/live', method: RequestMethod.GET },
+      { path: 'health/ready', method: RequestMethod.GET },
+    ],
   });
 
   const config = new DocumentBuilder()
@@ -61,6 +65,10 @@ async function bootstrap() {
   SwaggerModule.setup('swagger-docs', app, document);
   app.useGlobalFilters(new AllExceptionsFilter());
   app.enableCors();
-  await app.listen(3000);
+  
+  // Use environment variable for port, default to 3002
+  const port = process.env.PORT || 3002;
+  await app.listen(port);
+  console.log(`Application is running on port: ${port}`);
 }
 bootstrap();
