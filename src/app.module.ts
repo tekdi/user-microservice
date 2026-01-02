@@ -27,6 +27,9 @@ import { CohortAcademicYearModule } from './cohortAcademicYear/cohortAcademicYea
 import { storageConfig } from './config/storage.config';
 import { ElasticsearchModule } from './elasticsearch/elasticsearch.module';
 import { BulkImportModule } from './bulk-import/bulk-import.module';
+import { TerminusModule } from '@nestjs/terminus';
+import { HealthController } from './health/health.controller';
+import { HealthService } from './health/health.service';
 
 /**
  * Main Application Module
@@ -79,11 +82,13 @@ import { BulkImportModule } from './bulk-import/bulk-import.module';
     CohortAcademicYearModule,
     ElasticsearchModule,
     BulkImportModule,
+    TerminusModule,
   ],
-  controllers: [AppController],
+  controllers: [AppController, HealthController],
   providers: [
     AppService,
     HttpService,
+    HealthService,
     {
       provide: 'STORAGE_CONFIG',
       useValue: storageConfig,
