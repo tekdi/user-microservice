@@ -13,6 +13,7 @@ import { APIID } from 'src/common/utils/api-id.config';
 import { Response } from 'express';
 import { Request } from 'express';
 import { LoggerUtil } from 'src/common/logger/LoggerUtil';
+import { AuthDto } from './dto/auth-dto';
 
 type LoginResponse = {
   access_token: string;
@@ -27,7 +28,7 @@ export class AuthService {
     private readonly keycloakService: KeycloakService
   ) {}
 
-  async login(authDto, request: Request, response: Response) {
+  async login(authDto: AuthDto, request: Request, response: Response) {
     const apiId = APIID.LOGIN;
     const { username, password } = authDto;
     
@@ -123,9 +124,35 @@ export class AuthService {
         const httpStatus = error?.response?.status || HttpStatus.INTERNAL_SERVER_ERROR;
         const issueType = httpStatus >= 500 ? 'SERVER_ERROR' : 'CLIENT_ERROR';
         
+        // Determine failure reason based on httpStatus
+        let failureReason = 'INTERNAL_SERVER_ERROR';
+        if (httpStatus >= 400 && httpStatus < 500) {
+          if (httpStatus === 400) {
+            failureReason = 'BAD_REQUEST';
+          } else if (httpStatus === 403) {
+            failureReason = 'FORBIDDEN';
+          } else if (httpStatus === 404) {
+            failureReason = 'NOT_FOUND';
+          } else if (httpStatus === 429) {
+            failureReason = 'RATE_LIMIT_EXCEEDED';
+          } else {
+            failureReason = 'CLIENT_ERROR';
+          }
+        } else if (httpStatus >= 500) {
+          if (httpStatus === 502) {
+            failureReason = 'BAD_GATEWAY';
+          } else if (httpStatus === 503) {
+            failureReason = 'SERVICE_UNAVAILABLE';
+          } else if (httpStatus === 504) {
+            failureReason = 'GATEWAY_TIMEOUT';
+          } else {
+            failureReason = 'INTERNAL_SERVER_ERROR';
+          }
+        }
+        
         // Log error with status code and issue type (username and IP excluded for legal compliance)
         LoggerUtil.error(
-          `Login failed - StatusCode: ${httpStatus}, Reason: INTERNAL_SERVER_ERROR, Message: ${errorMessage}, IssueType: ${issueType}`,
+          `Login failed - StatusCode: ${httpStatus}, Reason: ${failureReason}, Message: ${errorMessage}, IssueType: ${issueType}`,
           errorStack,
           'AuthService',
           undefined // Username excluded for legal compliance
@@ -140,27 +167,6 @@ export class AuthService {
         );
       }
     }
-  }
-
-  /**
-   * Extract client IP address from request
-   * Handles proxy headers (X-Forwarded-For, X-Real-IP)
-   */
-  private getClientIp(request: Request): string {
-    const forwarded = request.headers['x-forwarded-for'];
-    if (forwarded) {
-      // X-Forwarded-For can contain multiple IPs, take the first one
-      const ips = Array.isArray(forwarded) ? forwarded[0] : forwarded;
-      return ips.split(',')[0].trim();
-    }
-    
-    const realIp = request.headers['x-real-ip'];
-    if (realIp) {
-      return Array.isArray(realIp) ? realIp[0] : realIp;
-    }
-    
-    // Fallback to request IP or socket remote address
-    return request.ip || request.socket?.remoteAddress || 'Unknown';
   }
 
   public async getUserByAuth(request: any, tenantId, response: Response) {
