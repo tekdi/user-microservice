@@ -250,8 +250,7 @@ export class AuthService {
           tenantId || 'Not provided'
         }`,
         errorStack,
-        'AuthService',
-        undefined
+        'AuthService'
       );
 
       // Keep original API response behavior - always return INTERNAL_SERVER_ERROR

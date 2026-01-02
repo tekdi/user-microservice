@@ -56,7 +56,6 @@ import { OtpSendDTO } from './dto/otpSend.dto';
 import { OtpVerifyDTO } from './dto/otpVerify.dto';
 import { UserCreateSsoDto } from './dto/user-create-sso.dto';
 import { RecaptchaService } from './recaptcha.service';
-import jwt_decode from 'jwt-decode';
 
 export interface UserData {
   context: string;
@@ -114,8 +113,7 @@ export class UserController {
       LoggerUtil.error(
         `GetUser failed - StatusCode: 400, Reason: MISSING_TENANT_ID, Message: Missing tenantId in request headers, IssueType: CLIENT_ERROR`,
         'Missing tenantId in request headers',
-        'UserController',
-        undefined
+        'UserController'
       );
       return response
         .status(400)
@@ -172,8 +170,7 @@ export class UserController {
             result.message || result.error || 'Unknown error'
           }, IssueType: ${issueType}, TenantId: ${tenantId}`,
           result.error || result.message || 'Unknown error',
-          'UserController',
-          undefined
+          'UserController'
         );
       }
 
@@ -188,8 +185,7 @@ export class UserController {
       LoggerUtil.error(
         `GetUser exception - StatusCode: ${httpStatus}, Reason: EXCEPTION, Message: ${errorMessage}, IssueType: ${issueType}, TenantId: ${tenantId}`,
         errorStack,
-        'UserController',
-        undefined
+        'UserController'
       );
 
       return response.status(httpStatus).json({
