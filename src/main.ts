@@ -29,38 +29,46 @@
 //   await app.listen(3000);
 // }
 // bootstrap();
-import { NestFactory } from "@nestjs/core";
-import { AppModule } from "./app.module";
-import { SwaggerModule, DocumentBuilder } from "@nestjs/swagger";
-import { RequestMethod } from "@nestjs/common";
-import { join } from "path";
-import express = require("express");
-import { AllExceptionsFilter } from "./common/filters/exception.filter";
+import { NestFactory } from '@nestjs/core';
+import { AppModule } from './app.module';
+import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { RequestMethod } from '@nestjs/common';
+import { join } from 'path';
+import express = require('express');
+import { AllExceptionsFilter } from './common/filters/exception.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.use(
     process.env.IMAGEPATH,
-    express.static(join(__dirname, "..", "uploads"))
+    express.static(join(__dirname, '..', 'uploads'))
   );
-  app.setGlobalPrefix("user/v1", {
-    exclude: [{ path: "health", method: RequestMethod.GET }],
+  app.setGlobalPrefix('user/v1', {
+    exclude: [
+      { path: 'health', method: RequestMethod.GET },
+      { path: 'health/live', method: RequestMethod.GET },
+      { path: 'health/ready', method: RequestMethod.GET },
+    ],
   });
 
   const config = new DocumentBuilder()
-    .setTitle("Shiksha Platform")
-    .setDescription("CRUD API")
-    .setVersion("1.0")
-    .addTag("V1")
+    .setTitle('Shiksha Platform')
+    .setDescription('CRUD API')
+    .setVersion('1.0')
+    .addTag('V1')
     .addApiKey(
-      { type: "apiKey", name: "Authorization", in: "header" },
-      "access-token"
+      { type: 'apiKey', name: 'Authorization', in: 'header' },
+      'access-token'
     )
     .build();
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup("swagger-docs", app, document);
+  SwaggerModule.setup('swagger-docs', app, document);
   app.useGlobalFilters(new AllExceptionsFilter());
   app.enableCors();
-  await app.listen(3000);
+  
+  // Use environment variable for port, default to 3002
+  const port = process.env.PORT || 3002;
+  await app.listen(port);
+  console.log(`Application is running on port: ${port}`);
 }
 bootstrap();
