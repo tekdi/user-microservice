@@ -98,10 +98,12 @@ export class UserController {
     @Query('fieldvalue') fieldvalue: string | null = null
   ) {
     const tenantId = headers['tenantid'];
-    
+
     // Log API call attempt (username, userId, and IP excluded for legal compliance)
     LoggerUtil.log(
-      `GetUser attempt - TenantId: ${tenantId || 'Not provided'}, FieldValue: ${fieldvalue || 'false'}`,
+      `GetUser attempt - TenantId: ${tenantId || 'Not provided'}, FieldValue: ${
+        fieldvalue || 'false'
+      }`,
       'UserController',
       undefined,
       'info'
@@ -112,8 +114,8 @@ export class UserController {
       LoggerUtil.error(
         `GetUser failed - StatusCode: 400, Reason: MISSING_TENANT_ID, Message: Missing tenantId in request headers, IssueType: CLIENT_ERROR`,
         'Missing tenantId in request headers',
-      'UserController',
-      undefined
+        'UserController',
+        undefined
       );
       return response
         .status(400)
@@ -135,7 +137,7 @@ export class UserController {
         .getUsersDetailsById(userData, response);
 
       const statusCode = result.statusCode || 200;
-      
+
       // Determine if successful or failed based on status code
       if (statusCode >= 200 && statusCode < 300) {
         // Log successful response (username, userId, and IP excluded for legal compliance)
@@ -149,7 +151,7 @@ export class UserController {
         // Log failed response with reason
         let failureReason = 'UNKNOWN_ERROR';
         let issueType = 'SERVER_ERROR';
-        
+
         if (statusCode === 400) {
           failureReason = 'BAD_REQUEST';
           issueType = 'CLIENT_ERROR';
@@ -166,7 +168,9 @@ export class UserController {
 
         // Log failed response (username, userId, and IP excluded for legal compliance)
         LoggerUtil.error(
-          `GetUser failed - StatusCode: ${statusCode}, Reason: ${failureReason}, Message: ${result.message || result.error || 'Unknown error'}, IssueType: ${issueType}, TenantId: ${tenantId}`,
+          `GetUser failed - StatusCode: ${statusCode}, Reason: ${failureReason}, Message: ${
+            result.message || result.error || 'Unknown error'
+          }, IssueType: ${issueType}, TenantId: ${tenantId}`,
           result.error || result.message || 'Unknown error',
           'UserController',
           undefined
@@ -179,13 +183,13 @@ export class UserController {
       const errorStack = error?.stack || 'No stack trace available';
       const httpStatus = error?.status || HttpStatus.INTERNAL_SERVER_ERROR;
       const issueType = httpStatus >= 500 ? 'SERVER_ERROR' : 'CLIENT_ERROR';
-      
+
       // Log exception with comprehensive details (username, userId, and IP excluded for legal compliance)
       LoggerUtil.error(
         `GetUser exception - StatusCode: ${httpStatus}, Reason: EXCEPTION, Message: ${errorMessage}, IssueType: ${issueType}, TenantId: ${tenantId}`,
         errorStack,
-      'UserController',
-      undefined
+        'UserController',
+        undefined
       );
 
       return response.status(httpStatus).json({
@@ -194,27 +198,6 @@ export class UserController {
         message: 'An error occurred while fetching user details',
       });
     }
-  }
-
-  /**
-   * Extract client IP address from request
-   * Handles proxy headers (X-Forwarded-For, X-Real-IP)
-   */
-  private getClientIp(request: Request): string {
-    const forwarded = request.headers['x-forwarded-for'];
-    if (forwarded) {
-      // X-Forwarded-For can contain multiple IPs, take the first one
-      const ips = Array.isArray(forwarded) ? forwarded[0] : forwarded;
-      return ips.split(',')[0].trim();
-    }
-    
-    const realIp = request.headers['x-real-ip'];
-    if (realIp) {
-      return Array.isArray(realIp) ? realIp[0] : realIp;
-    }
-    
-    // Fallback to request IP or socket remote address
-    return request.ip || request.socket?.remoteAddress || 'Unknown';
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.USER_CREATE))
