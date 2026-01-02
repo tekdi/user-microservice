@@ -10,8 +10,7 @@ import jwt_decode from 'jwt-decode';
 import APIResponse from 'src/common/responses/response';
 import { KeycloakService } from 'src/common/utils/keycloak.service';
 import { APIID } from 'src/common/utils/api-id.config';
-import { Response } from 'express';
-import { Request } from 'express';
+import { Response, Request } from 'express';
 import { LoggerUtil } from 'src/common/logger/LoggerUtil';
 import { AuthDto } from './dto/auth-dto';
 
@@ -31,7 +30,7 @@ export class AuthService {
   async login(authDto: AuthDto, request: Request, response: Response) {
     const apiId = APIID.LOGIN;
     const { username, password } = authDto;
-    
+
     // Extract request information for logging
     const userAgent = request.headers['user-agent'] || 'Unknown';
 
@@ -55,16 +54,14 @@ export class AuthService {
           ? 'User details not found for user'
           : 'User is inactive, please verify your email';
 
-        const failureReason = !userData
-          ? 'USER_NOT_FOUND'
-          : 'USER_INACTIVE';
+        const failureReason = !userData ? 'USER_NOT_FOUND' : 'USER_INACTIVE';
 
         // Log failed login attempt with reason and status code (username and IP excluded for legal compliance)
         LoggerUtil.error(
           `Login failed - StatusCode: ${HttpStatus.BAD_REQUEST}, Reason: ${failureReason}, Message: ${errorMessage}, IssueType: CLIENT_ERROR`,
           errorMessage,
           'AuthService',
-          undefined // Username excluded for legal compliance
+          undefined
         );
 
         return APIResponse.error(
@@ -115,15 +112,16 @@ export class AuthService {
           `Login failed - StatusCode: ${HttpStatus.UNAUTHORIZED}, Reason: INVALID_CREDENTIALS, Message: Invalid username or password, IssueType: CLIENT_ERROR`,
           'Invalid username or password',
           'AuthService',
-          undefined // Username excluded for legal compliance
+          undefined
         );
         throw new NotFoundException('Invalid username or password');
       } else {
         const errorMessage = error?.message || 'Something went wrong';
         const errorStack = error?.stack || 'No stack trace available';
-        const httpStatus = error?.response?.status || HttpStatus.INTERNAL_SERVER_ERROR;
+        const httpStatus =
+          error?.response?.status || HttpStatus.INTERNAL_SERVER_ERROR;
         const issueType = httpStatus >= 500 ? 'SERVER_ERROR' : 'CLIENT_ERROR';
-        
+
         // Determine failure reason based on httpStatus
         let failureReason = 'INTERNAL_SERVER_ERROR';
         if (httpStatus >= 400 && httpStatus < 500) {
@@ -145,17 +143,16 @@ export class AuthService {
             failureReason = 'SERVICE_UNAVAILABLE';
           } else if (httpStatus === 504) {
             failureReason = 'GATEWAY_TIMEOUT';
-          } else {
-            failureReason = 'INTERNAL_SERVER_ERROR';
           }
+          // failureReason already defaults to 'INTERNAL_SERVER_ERROR' for other 5xx errors
         }
-        
+
         // Log error with status code and issue type (username and IP excluded for legal compliance)
         LoggerUtil.error(
           `Login failed - StatusCode: ${httpStatus}, Reason: ${failureReason}, Message: ${errorMessage}, IssueType: ${issueType}`,
           errorStack,
           'AuthService',
-          undefined // Username excluded for legal compliance
+          undefined
         );
 
         return APIResponse.error(
@@ -171,16 +168,18 @@ export class AuthService {
 
   public async getUserByAuth(request: any, tenantId, response: Response) {
     const apiId = APIID.USER_AUTH;
-    
+
     // Extract request information for logging
     const userAgent = request.headers['user-agent'] || 'Unknown';
     let username = 'Unknown';
     let userId = 'Unknown';
-    
+
     try {
       // Log API call attempt (username and IP excluded for legal compliance)
       LoggerUtil.log(
-        `GetUserByAuth attempt - User-Agent: ${userAgent}, TenantId: ${tenantId || 'Not provided'}`,
+        `GetUserByAuth attempt - User-Agent: ${userAgent}, TenantId: ${
+          tenantId || 'Not provided'
+        }`,
         'AuthService',
         undefined, // Username excluded for legal compliance
         'info'
@@ -221,21 +220,31 @@ export class AuthService {
     } catch (e) {
       const errorMessage = e?.message || 'Something went wrong';
       const errorStack = e?.stack || 'No stack trace available';
-      
+
       // Determine error type for logging purposes (but keep API response consistent)
       let detectedStatus = HttpStatus.INTERNAL_SERVER_ERROR;
       let failureReason = 'INTERNAL_SERVER_ERROR';
       let issueType = 'SERVER_ERROR';
 
-      if (e.name === 'JsonWebTokenError' || e.message?.includes('token') || e.message?.includes('jwt')) {
+      if (
+        e.name === 'JsonWebTokenError' ||
+        e.message?.includes('token') ||
+        e.message?.includes('jwt')
+      ) {
         detectedStatus = HttpStatus.UNAUTHORIZED;
         failureReason = 'INVALID_TOKEN';
         issueType = 'CLIENT_ERROR';
-      } else if (e.message?.includes('not found') || e.message?.includes('does not exist')) {
+      } else if (
+        e.message?.includes('not found') ||
+        e.message?.includes('does not exist')
+      ) {
         detectedStatus = HttpStatus.NOT_FOUND;
         failureReason = 'USER_NOT_FOUND';
         issueType = 'CLIENT_ERROR';
-      } else if (e.message?.includes('unauthorized') || e.message?.includes('forbidden')) {
+      } else if (
+        e.message?.includes('unauthorized') ||
+        e.message?.includes('forbidden')
+      ) {
         detectedStatus = HttpStatus.FORBIDDEN;
         failureReason = 'UNAUTHORIZED';
         issueType = 'CLIENT_ERROR';
@@ -243,7 +252,9 @@ export class AuthService {
 
       // Log failed attempt with comprehensive details (username, userId, and IP excluded for legal compliance)
       LoggerUtil.error(
-        `GetUserByAuth failed - DetectedStatusCode: ${detectedStatus}, Reason: ${failureReason}, Message: ${errorMessage}, IssueType: ${issueType}, TenantId: ${tenantId || 'Not provided'}`,
+        `GetUserByAuth failed - DetectedStatusCode: ${detectedStatus}, Reason: ${failureReason}, Message: ${errorMessage}, IssueType: ${issueType}, TenantId: ${
+          tenantId || 'Not provided'
+        }`,
         errorStack,
         'AuthService',
         undefined // Username excluded for legal compliance

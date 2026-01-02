@@ -98,17 +98,13 @@ export class UserController {
     @Query('fieldvalue') fieldvalue: string | null = null
   ) {
     // Extract request information for logging
-    const clientIp = this.getClientIp(request);
-    const userAgent = request.headers['user-agent'] || 'Unknown';
     let requesterUsername = 'Unknown';
-    let requesterUserId = 'Unknown';
     
     try {
       // Extract requester info from JWT token if available
       if (request.headers.authorization) {
         const decoded: any = jwt_decode(request.headers.authorization);
         requesterUsername = decoded.preferred_username || 'Unknown';
-        requesterUserId = decoded.sub || 'Unknown';
       }
     } catch (e) {
       // If token decode fails, log the error and continue with Unknown values (IP excluded for legal compliance)
@@ -190,7 +186,7 @@ export class UserController {
           `GetUser failed - StatusCode: ${statusCode}, Reason: ${failureReason}, Message: ${result.message || result.error || 'Unknown error'}, IssueType: ${issueType}, TenantId: ${tenantId}`,
           result.error || result.message || 'Unknown error',
           'UserController',
-          undefined // Username excluded for legal compliance
+          undefined
         );
       }
 
