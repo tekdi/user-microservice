@@ -11,6 +11,8 @@ import APIResponse from 'src/common/responses/response';
 import { KeycloakService } from 'src/common/utils/keycloak.service';
 import { APIID } from 'src/common/utils/api-id.config';
 import { Response } from 'express';
+import { Request } from 'express';
+import { LoggerUtil } from 'src/common/logger/LoggerUtil';
 
 type LoginResponse = {
   access_token: string;
@@ -25,9 +27,22 @@ export class AuthService {
     private readonly keycloakService: KeycloakService
   ) {}
 
-  async login(authDto, response: Response) {
+  async login(authDto, request: Request, response: Response) {
     const apiId = APIID.LOGIN;
     const { username, password } = authDto;
+    
+    // Extract request information for logging
+    const clientIp = this.getClientIp(request);
+    const userAgent = request.headers['user-agent'] || 'Unknown';
+
+    // Log login attempt start
+    LoggerUtil.log(
+      `Login attempt initiated - Username: ${username}, IP: ${clientIp}, User-Agent: ${userAgent}`,
+      'AuthService',
+      username,
+      'info'
+    );
+
     try {
       // Fetch user details by username
       const userData = await this.useradapter
@@ -39,6 +54,18 @@ export class AuthService {
         const errorMessage = !userData
           ? 'User details not found for user'
           : 'User is inactive, please verify your email';
+
+        const failureReason = !userData
+          ? 'USER_NOT_FOUND'
+          : 'USER_INACTIVE';
+
+        // Log failed login attempt with reason and status code
+        LoggerUtil.error(
+          `Login failed - Username: ${username}, IP: ${clientIp}, StatusCode: ${HttpStatus.BAD_REQUEST}, Reason: ${failureReason}, Message: ${errorMessage}, IssueType: CLIENT_ERROR`,
+          errorMessage,
+          'AuthService',
+          username
+        );
 
         return APIResponse.error(
           response,
@@ -66,6 +93,14 @@ export class AuthService {
         token_type,
       };
 
+      // Log successful login with status code
+      LoggerUtil.log(
+        `Login successful - Username: ${username}, IP: ${clientIp}, User-Agent: ${userAgent}, StatusCode: ${HttpStatus.OK}`,
+        'AuthService',
+        username,
+        'info'
+      );
+
       return APIResponse.success(
         response,
         apiId,
@@ -75,9 +110,28 @@ export class AuthService {
       );
     } catch (error) {
       if (error.response && error.response.status === 401) {
+        // Log invalid credentials with status code
+        LoggerUtil.error(
+          `Login failed - Username: ${username}, IP: ${clientIp}, StatusCode: ${HttpStatus.UNAUTHORIZED}, Reason: INVALID_CREDENTIALS, Message: Invalid username or password, IssueType: CLIENT_ERROR`,
+          'Invalid username or password',
+          'AuthService',
+          username
+        );
         throw new NotFoundException('Invalid username or password');
       } else {
         const errorMessage = error?.message || 'Something went wrong';
+        const errorStack = error?.stack || 'No stack trace available';
+        const httpStatus = error?.response?.status || HttpStatus.INTERNAL_SERVER_ERROR;
+        const issueType = httpStatus >= 500 ? 'SERVER_ERROR' : 'CLIENT_ERROR';
+        
+        // Log error with status code and issue type
+        LoggerUtil.error(
+          `Login failed - Username: ${username}, IP: ${clientIp}, StatusCode: ${httpStatus}, Reason: INTERNAL_SERVER_ERROR, Message: ${errorMessage}, IssueType: ${issueType}`,
+          errorStack,
+          'AuthService',
+          username
+        );
+
         return APIResponse.error(
           response,
           apiId,
@@ -89,14 +143,69 @@ export class AuthService {
     }
   }
 
+  /**
+   * Extract client IP address from request
+   * Handles proxy headers (X-Forwarded-For, X-Real-IP)
+   */
+  private getClientIp(request: Request): string {
+    const forwarded = request.headers['x-forwarded-for'];
+    if (forwarded) {
+      // X-Forwarded-For can contain multiple IPs, take the first one
+      const ips = Array.isArray(forwarded) ? forwarded[0] : forwarded;
+      return ips.split(',')[0].trim();
+    }
+    
+    const realIp = request.headers['x-real-ip'];
+    if (realIp) {
+      return Array.isArray(realIp) ? realIp[0] : realIp;
+    }
+    
+    // Fallback to request IP or socket remote address
+    return request.ip || request.socket?.remoteAddress || 'Unknown';
+  }
+
   public async getUserByAuth(request: any, tenantId, response: Response) {
     const apiId = APIID.USER_AUTH;
+    
+    // Extract request information for logging
+    const clientIp = this.getClientIp(request);
+    const userAgent = request.headers['user-agent'] || 'Unknown';
+    let username = 'Unknown';
+    let userId = 'Unknown';
+    
     try {
+      // Log API call attempt
+      LoggerUtil.log(
+        `GetUserByAuth attempt - IP: ${clientIp}, User-Agent: ${userAgent}, TenantId: ${tenantId || 'Not provided'}`,
+        'AuthService',
+        username,
+        'info'
+      );
+
+      // Decode JWT token to get username
       const decoded: any = jwt_decode(request.headers.authorization);
-      const username = decoded.preferred_username;
+      username = decoded.preferred_username || 'Unknown';
+      userId = decoded.sub || 'Unknown';
+
+      // Log with username after decoding
+      LoggerUtil.log(
+        `GetUserByAuth processing - Username: ${username}, UserId: ${userId}, IP: ${clientIp}, TenantId: ${tenantId || 'Not provided'}`,
+        'AuthService',
+        username,
+        'info'
+      );
+
       const data = await this.useradapter
         .buildUserAdapter()
         .findUserDetails(null, username, tenantId);
+
+      // Log successful response
+      LoggerUtil.log(
+        `GetUserByAuth successful - Username: ${username}, UserId: ${userId}, IP: ${clientIp}, StatusCode: ${HttpStatus.OK}`,
+        'AuthService',
+        username,
+        'info'
+      );
 
       return APIResponse.success(
         response,
@@ -107,12 +216,41 @@ export class AuthService {
       );
     } catch (e) {
       const errorMessage = e?.message || 'Something went wrong';
+      const errorStack = e?.stack || 'No stack trace available';
+      
+      // Determine error type and status code
+      let httpStatus = HttpStatus.INTERNAL_SERVER_ERROR;
+      let failureReason = 'INTERNAL_SERVER_ERROR';
+      let issueType = 'SERVER_ERROR';
+
+      if (e.name === 'JsonWebTokenError' || e.message?.includes('token') || e.message?.includes('jwt')) {
+        httpStatus = HttpStatus.UNAUTHORIZED;
+        failureReason = 'INVALID_TOKEN';
+        issueType = 'CLIENT_ERROR';
+      } else if (e.message?.includes('not found') || e.message?.includes('does not exist')) {
+        httpStatus = HttpStatus.NOT_FOUND;
+        failureReason = 'USER_NOT_FOUND';
+        issueType = 'CLIENT_ERROR';
+      } else if (e.message?.includes('unauthorized') || e.message?.includes('forbidden')) {
+        httpStatus = HttpStatus.FORBIDDEN;
+        failureReason = 'UNAUTHORIZED';
+        issueType = 'CLIENT_ERROR';
+      }
+
+      // Log failed attempt with comprehensive details
+      LoggerUtil.error(
+        `GetUserByAuth failed - Username: ${username}, UserId: ${userId}, IP: ${clientIp}, StatusCode: ${httpStatus}, Reason: ${failureReason}, Message: ${errorMessage}, IssueType: ${issueType}, TenantId: ${tenantId || 'Not provided'}`,
+        errorStack,
+        'AuthService',
+        username
+      );
+
       return APIResponse.error(
         response,
         apiId,
         'Internal Server Error',
         `Error : ${errorMessage}`,
-        HttpStatus.INTERNAL_SERVER_ERROR
+        httpStatus
       );
     }
   }

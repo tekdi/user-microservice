@@ -18,6 +18,7 @@ import {
   UseFilters,
   BadRequestException,
   UnauthorizedException,
+  HttpStatus,
 } from '@nestjs/common';
 
 import {
@@ -95,16 +96,47 @@ export class UserController {
     @Param('userId', ParseUUIDPipe) userId: string,
     @Query('fieldvalue') fieldvalue: string | null = null
   ) {
+    // Extract request information for logging
+    const clientIp = this.getClientIp(request);
+    const userAgent = request.headers['user-agent'] || 'Unknown';
+    let requesterUsername = 'Unknown';
+    let requesterUserId = 'Unknown';
+    
+    try {
+      // Extract requester info from JWT token if available
+      if (request.headers.authorization) {
+        const jwt_decode = require('jwt-decode');
+        const decoded: any = jwt_decode(request.headers.authorization);
+        requesterUsername = decoded.preferred_username || 'Unknown';
+        requesterUserId = decoded.sub || 'Unknown';
+      }
+    } catch (e) {
+      // If token decode fails, continue with Unknown values
+    }
+
     const tenantId = headers['tenantid'];
+    
+    // Log API call attempt
+    LoggerUtil.log(
+      `GetUser attempt - RequestedUserId: ${userId}, RequesterUsername: ${requesterUsername}, RequesterUserId: ${requesterUserId}, IP: ${clientIp}, TenantId: ${tenantId || 'Not provided'}, FieldValue: ${fieldvalue || 'false'}`,
+      'UserController',
+      requesterUsername,
+      'info'
+    );
+
     if (!tenantId) {
-      LoggerUtil.warn(
-        `${API_RESPONSES.BAD_REQUEST}`,
-        `Error: Missing tenantId in request headers for user ${userId}`
+      // Log missing tenantId error
+      LoggerUtil.error(
+        `GetUser failed - RequestedUserId: ${userId}, RequesterUsername: ${requesterUsername}, IP: ${clientIp}, StatusCode: 400, Reason: MISSING_TENANT_ID, Message: Missing tenantId in request headers, IssueType: CLIENT_ERROR`,
+        'Missing tenantId in request headers',
+        'UserController',
+        requesterUsername
       );
       return response
         .status(400)
         .json({ statusCode: 400, error: 'Please provide a tenantId.' });
     }
+
     const fieldValueBoolean = fieldvalue === 'true';
     // Context and ContextType can be taken from .env later
     const userData: UserData = {
@@ -113,11 +145,92 @@ export class UserController {
       userId: userId,
       fieldValue: fieldValueBoolean,
     };
-    const result = await this.userAdapter
-      .buildUserAdapter()
-      .getUsersDetailsById(userData, response);
 
-    return response.status(result.statusCode).json(result);
+    try {
+      const result = await this.userAdapter
+        .buildUserAdapter()
+        .getUsersDetailsById(userData, response);
+
+      const statusCode = result.statusCode || 200;
+      
+      // Determine if successful or failed based on status code
+      if (statusCode >= 200 && statusCode < 300) {
+        // Log successful response
+        LoggerUtil.log(
+          `GetUser successful - RequestedUserId: ${userId}, RequesterUsername: ${requesterUsername}, IP: ${clientIp}, StatusCode: ${statusCode}, TenantId: ${tenantId}`,
+          'UserController',
+          requesterUsername,
+          'info'
+        );
+      } else {
+        // Log failed response with reason
+        let failureReason = 'UNKNOWN_ERROR';
+        let issueType = 'SERVER_ERROR';
+        
+        if (statusCode === 400) {
+          failureReason = 'BAD_REQUEST';
+          issueType = 'CLIENT_ERROR';
+        } else if (statusCode === 404) {
+          failureReason = 'USER_NOT_FOUND';
+          issueType = 'CLIENT_ERROR';
+        } else if (statusCode === 401 || statusCode === 403) {
+          failureReason = 'UNAUTHORIZED';
+          issueType = 'CLIENT_ERROR';
+        } else if (statusCode >= 500) {
+          failureReason = 'INTERNAL_SERVER_ERROR';
+          issueType = 'SERVER_ERROR';
+        }
+
+        LoggerUtil.error(
+          `GetUser failed - RequestedUserId: ${userId}, RequesterUsername: ${requesterUsername}, IP: ${clientIp}, StatusCode: ${statusCode}, Reason: ${failureReason}, Message: ${result.message || result.error || 'Unknown error'}, IssueType: ${issueType}, TenantId: ${tenantId}`,
+          result.error || result.message || 'Unknown error',
+          'UserController',
+          requesterUsername
+        );
+      }
+
+      return response.status(statusCode).json(result);
+    } catch (error) {
+      const errorMessage = error?.message || 'Something went wrong';
+      const errorStack = error?.stack || 'No stack trace available';
+      const httpStatus = error?.status || HttpStatus.INTERNAL_SERVER_ERROR;
+      const issueType = httpStatus >= 500 ? 'SERVER_ERROR' : 'CLIENT_ERROR';
+      
+      // Log exception with comprehensive details
+      LoggerUtil.error(
+        `GetUser exception - RequestedUserId: ${userId}, RequesterUsername: ${requesterUsername}, IP: ${clientIp}, StatusCode: ${httpStatus}, Reason: EXCEPTION, Message: ${errorMessage}, IssueType: ${issueType}, TenantId: ${tenantId}`,
+        errorStack,
+        'UserController',
+        requesterUsername
+      );
+
+      return response.status(httpStatus).json({
+        statusCode: httpStatus,
+        error: errorMessage,
+        message: 'An error occurred while fetching user details',
+      });
+    }
+  }
+
+  /**
+   * Extract client IP address from request
+   * Handles proxy headers (X-Forwarded-For, X-Real-IP)
+   */
+  private getClientIp(request: Request): string {
+    const forwarded = request.headers['x-forwarded-for'];
+    if (forwarded) {
+      // X-Forwarded-For can contain multiple IPs, take the first one
+      const ips = Array.isArray(forwarded) ? forwarded[0] : forwarded;
+      return ips.split(',')[0].trim();
+    }
+    
+    const realIp = request.headers['x-real-ip'];
+    if (realIp) {
+      return Array.isArray(realIp) ? realIp[0] : realIp;
+    }
+    
+    // Fallback to request IP or socket remote address
+    return request.ip || request.socket?.remoteAddress || 'Unknown';
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.USER_CREATE))
