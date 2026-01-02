@@ -337,9 +337,10 @@ export class CohortService {
         cohortCreateDto.customFields &&
         cohortCreateDto.customFields.length > 0
       ) {
+        console.log("cohortCreateDto.type", cohortCreateDto.type);
         const validationResponse = await this.fieldsService.validateCustomField(
           cohortCreateDto,
-          "COHORT"
+          cohortCreateDto.type || "COHORT"
         );
 
         // Check the validation response
@@ -390,7 +391,7 @@ export class CohortService {
         // Prepare additional data for FieldValues table
         const additionalData = {
           tenantId: tenantId || null,
-          contextType: "COHORT",
+          contextType: cohortCreateDto.type || "COHORT",
           createdBy: cohortCreateDto.createdBy || null,
           updatedBy: null,
         };
