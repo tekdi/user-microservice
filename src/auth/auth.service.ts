@@ -32,14 +32,13 @@ export class AuthService {
     const { username, password } = authDto;
     
     // Extract request information for logging
-    const clientIp = this.getClientIp(request);
     const userAgent = request.headers['user-agent'] || 'Unknown';
 
-    // Log login attempt start
+    // Log login attempt start (username and IP excluded for legal compliance)
     LoggerUtil.log(
-      `Login attempt initiated - Username: ${username}, IP: ${clientIp}, User-Agent: ${userAgent}`,
+      `Login attempt initiated - User-Agent: ${userAgent}`,
       'AuthService',
-      username,
+      undefined, // Username excluded for legal compliance
       'info'
     );
 
@@ -59,12 +58,12 @@ export class AuthService {
           ? 'USER_NOT_FOUND'
           : 'USER_INACTIVE';
 
-        // Log failed login attempt with reason and status code
+        // Log failed login attempt with reason and status code (username and IP excluded for legal compliance)
         LoggerUtil.error(
-          `Login failed - Username: ${username}, IP: ${clientIp}, StatusCode: ${HttpStatus.BAD_REQUEST}, Reason: ${failureReason}, Message: ${errorMessage}, IssueType: CLIENT_ERROR`,
+          `Login failed - StatusCode: ${HttpStatus.BAD_REQUEST}, Reason: ${failureReason}, Message: ${errorMessage}, IssueType: CLIENT_ERROR`,
           errorMessage,
           'AuthService',
-          username
+          undefined // Username excluded for legal compliance
         );
 
         return APIResponse.error(
@@ -93,11 +92,11 @@ export class AuthService {
         token_type,
       };
 
-      // Log successful login with status code
+      // Log successful login with status code (username and IP excluded for legal compliance)
       LoggerUtil.log(
-        `Login successful - Username: ${username}, IP: ${clientIp}, User-Agent: ${userAgent}, StatusCode: ${HttpStatus.OK}`,
+        `Login successful - User-Agent: ${userAgent}, StatusCode: ${HttpStatus.OK}`,
         'AuthService',
-        username,
+        undefined, // Username excluded for legal compliance
         'info'
       );
 
@@ -110,12 +109,12 @@ export class AuthService {
       );
     } catch (error) {
       if (error.response && error.response.status === 401) {
-        // Log invalid credentials with status code
+        // Log invalid credentials with status code (username and IP excluded for legal compliance)
         LoggerUtil.error(
-          `Login failed - Username: ${username}, IP: ${clientIp}, StatusCode: ${HttpStatus.UNAUTHORIZED}, Reason: INVALID_CREDENTIALS, Message: Invalid username or password, IssueType: CLIENT_ERROR`,
+          `Login failed - StatusCode: ${HttpStatus.UNAUTHORIZED}, Reason: INVALID_CREDENTIALS, Message: Invalid username or password, IssueType: CLIENT_ERROR`,
           'Invalid username or password',
           'AuthService',
-          username
+          undefined // Username excluded for legal compliance
         );
         throw new NotFoundException('Invalid username or password');
       } else {
@@ -124,12 +123,12 @@ export class AuthService {
         const httpStatus = error?.response?.status || HttpStatus.INTERNAL_SERVER_ERROR;
         const issueType = httpStatus >= 500 ? 'SERVER_ERROR' : 'CLIENT_ERROR';
         
-        // Log error with status code and issue type
+        // Log error with status code and issue type (username and IP excluded for legal compliance)
         LoggerUtil.error(
-          `Login failed - Username: ${username}, IP: ${clientIp}, StatusCode: ${httpStatus}, Reason: INTERNAL_SERVER_ERROR, Message: ${errorMessage}, IssueType: ${issueType}`,
+          `Login failed - StatusCode: ${httpStatus}, Reason: INTERNAL_SERVER_ERROR, Message: ${errorMessage}, IssueType: ${issueType}`,
           errorStack,
           'AuthService',
-          username
+          undefined // Username excluded for legal compliance
         );
 
         return APIResponse.error(
@@ -168,17 +167,16 @@ export class AuthService {
     const apiId = APIID.USER_AUTH;
     
     // Extract request information for logging
-    const clientIp = this.getClientIp(request);
     const userAgent = request.headers['user-agent'] || 'Unknown';
     let username = 'Unknown';
     let userId = 'Unknown';
     
     try {
-      // Log API call attempt
+      // Log API call attempt (username and IP excluded for legal compliance)
       LoggerUtil.log(
-        `GetUserByAuth attempt - IP: ${clientIp}, User-Agent: ${userAgent}, TenantId: ${tenantId || 'Not provided'}`,
+        `GetUserByAuth attempt - User-Agent: ${userAgent}, TenantId: ${tenantId || 'Not provided'}`,
         'AuthService',
-        username,
+        undefined, // Username excluded for legal compliance
         'info'
       );
 
@@ -187,11 +185,11 @@ export class AuthService {
       username = decoded.preferred_username || 'Unknown';
       userId = decoded.sub || 'Unknown';
 
-      // Log with username after decoding
+      // Log with username after decoding (username, userId, and IP excluded for legal compliance)
       LoggerUtil.log(
-        `GetUserByAuth processing - Username: ${username}, UserId: ${userId}, IP: ${clientIp}, TenantId: ${tenantId || 'Not provided'}`,
+        `GetUserByAuth processing - TenantId: ${tenantId || 'Not provided'}`,
         'AuthService',
-        username,
+        undefined, // Username excluded for legal compliance
         'info'
       );
 
@@ -199,11 +197,11 @@ export class AuthService {
         .buildUserAdapter()
         .findUserDetails(null, username, tenantId);
 
-      // Log successful response
+      // Log successful response (username, userId, and IP excluded for legal compliance)
       LoggerUtil.log(
-        `GetUserByAuth successful - Username: ${username}, UserId: ${userId}, IP: ${clientIp}, StatusCode: ${HttpStatus.OK}`,
+        `GetUserByAuth successful - StatusCode: ${HttpStatus.OK}`,
         'AuthService',
-        username,
+        undefined, // Username excluded for legal compliance
         'info'
       );
 
@@ -237,12 +235,12 @@ export class AuthService {
         issueType = 'CLIENT_ERROR';
       }
 
-      // Log failed attempt with comprehensive details (including detected status for monitoring)
+      // Log failed attempt with comprehensive details (username, userId, and IP excluded for legal compliance)
       LoggerUtil.error(
-        `GetUserByAuth failed - Username: ${username}, UserId: ${userId}, IP: ${clientIp}, DetectedStatusCode: ${detectedStatus}, Reason: ${failureReason}, Message: ${errorMessage}, IssueType: ${issueType}, TenantId: ${tenantId || 'Not provided'}`,
+        `GetUserByAuth failed - DetectedStatusCode: ${detectedStatus}, Reason: ${failureReason}, Message: ${errorMessage}, IssueType: ${issueType}, TenantId: ${tenantId || 'Not provided'}`,
         errorStack,
         'AuthService',
-        username
+        undefined // Username excluded for legal compliance
       );
 
       // Keep original API response behavior - always return INTERNAL_SERVER_ERROR

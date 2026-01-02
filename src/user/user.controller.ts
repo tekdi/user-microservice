@@ -111,30 +111,30 @@ export class UserController {
         requesterUserId = decoded.sub || 'Unknown';
       }
     } catch (e) {
-      // If token decode fails, log the error and continue with Unknown values
+      // If token decode fails, log the error and continue with Unknown values (IP excluded for legal compliance)
       LoggerUtil.warn(
-        `Failed to decode JWT token for getUser request - IP: ${clientIp}, Error: ${e?.message || 'Unknown error'}`,
+        `Failed to decode JWT token for getUser request - Error: ${e?.message || 'Unknown error'}`,
         'UserController'
       );
     }
 
     const tenantId = headers['tenantid'];
     
-    // Log API call attempt
+    // Log API call attempt (username, userId, and IP excluded for legal compliance)
     LoggerUtil.log(
-      `GetUser attempt - RequestedUserId: ${userId}, RequesterUsername: ${requesterUsername}, RequesterUserId: ${requesterUserId}, IP: ${clientIp}, TenantId: ${tenantId || 'Not provided'}, FieldValue: ${fieldvalue || 'false'}`,
+      `GetUser attempt - TenantId: ${tenantId || 'Not provided'}, FieldValue: ${fieldvalue || 'false'}`,
       'UserController',
-      requesterUsername,
+      undefined, // Username excluded for legal compliance
       'info'
     );
 
     if (!tenantId) {
-      // Log missing tenantId error
+      // Log missing tenantId error (username, userId, and IP excluded for legal compliance)
       LoggerUtil.error(
-        `GetUser failed - RequestedUserId: ${userId}, RequesterUsername: ${requesterUsername}, IP: ${clientIp}, StatusCode: 400, Reason: MISSING_TENANT_ID, Message: Missing tenantId in request headers, IssueType: CLIENT_ERROR`,
+        `GetUser failed - StatusCode: 400, Reason: MISSING_TENANT_ID, Message: Missing tenantId in request headers, IssueType: CLIENT_ERROR`,
         'Missing tenantId in request headers',
         'UserController',
-        requesterUsername
+        undefined // Username excluded for legal compliance
       );
       return response
         .status(400)
@@ -159,11 +159,11 @@ export class UserController {
       
       // Determine if successful or failed based on status code
       if (statusCode >= 200 && statusCode < 300) {
-        // Log successful response
+        // Log successful response (username, userId, and IP excluded for legal compliance)
         LoggerUtil.log(
-          `GetUser successful - RequestedUserId: ${userId}, RequesterUsername: ${requesterUsername}, IP: ${clientIp}, StatusCode: ${statusCode}, TenantId: ${tenantId}`,
+          `GetUser successful - StatusCode: ${statusCode}, TenantId: ${tenantId}`,
           'UserController',
-          requesterUsername,
+          undefined, // Username excluded for legal compliance
           'info'
         );
       } else {
@@ -185,11 +185,12 @@ export class UserController {
           issueType = 'SERVER_ERROR';
         }
 
+        // Log failed response (username, userId, and IP excluded for legal compliance)
         LoggerUtil.error(
-          `GetUser failed - RequestedUserId: ${userId}, RequesterUsername: ${requesterUsername}, IP: ${clientIp}, StatusCode: ${statusCode}, Reason: ${failureReason}, Message: ${result.message || result.error || 'Unknown error'}, IssueType: ${issueType}, TenantId: ${tenantId}`,
+          `GetUser failed - StatusCode: ${statusCode}, Reason: ${failureReason}, Message: ${result.message || result.error || 'Unknown error'}, IssueType: ${issueType}, TenantId: ${tenantId}`,
           result.error || result.message || 'Unknown error',
           'UserController',
-          requesterUsername
+          undefined // Username excluded for legal compliance
         );
       }
 
@@ -200,12 +201,12 @@ export class UserController {
       const httpStatus = error?.status || HttpStatus.INTERNAL_SERVER_ERROR;
       const issueType = httpStatus >= 500 ? 'SERVER_ERROR' : 'CLIENT_ERROR';
       
-      // Log exception with comprehensive details
+      // Log exception with comprehensive details (username, userId, and IP excluded for legal compliance)
       LoggerUtil.error(
-        `GetUser exception - RequestedUserId: ${userId}, RequesterUsername: ${requesterUsername}, IP: ${clientIp}, StatusCode: ${httpStatus}, Reason: EXCEPTION, Message: ${errorMessage}, IssueType: ${issueType}, TenantId: ${tenantId}`,
+        `GetUser exception - StatusCode: ${httpStatus}, Reason: EXCEPTION, Message: ${errorMessage}, IssueType: ${issueType}, TenantId: ${tenantId}`,
         errorStack,
         'UserController',
-        requesterUsername
+        undefined // Username excluded for legal compliance
       );
 
       return response.status(httpStatus).json({
