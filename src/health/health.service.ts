@@ -59,24 +59,24 @@ export class HealthService {
 
     try {
       const timeout = 3000;
-      let healthUrl: string;
-      let response;
 
       // Try health endpoint first
       try {
-        healthUrl = `${keycloakUrl}/health`;
-        response = await axios.get(healthUrl, {
+        await axios.get(`${keycloakUrl}/health`, {
           timeout,
           validateStatus: (status) => status < 500,
         });
+        const responseTime = Date.now() - startTime;
+        return { name: 'keycloak', status: 'up', responseTime };
       } catch {
         // If /health fails, try /realms/master as fallback
         try {
-          healthUrl = `${keycloakUrl}/realms/master`;
-          response = await axios.get(healthUrl, {
+          await axios.get(`${keycloakUrl}/realms/master`, {
             timeout,
             validateStatus: (status) => status < 500,
           });
+          const responseTime = Date.now() - startTime;
+          return { name: 'keycloak', status: 'up', responseTime };
         } catch {
           // If both fail, try base URL connectivity
           await axios.get(keycloakUrl, { timeout, validateStatus: () => true });
@@ -84,9 +84,6 @@ export class HealthService {
           return { name: 'keycloak', status: 'up', responseTime };
         }
       }
-
-      const responseTime = Date.now() - startTime;
-      return { name: 'keycloak', status: 'up', responseTime };
     } catch (error) {
       const responseTime = Date.now() - startTime;
       if (axios.isAxiosError(error)) {
