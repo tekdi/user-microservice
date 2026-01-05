@@ -1104,7 +1104,7 @@ export class CohortService {
     // Pass fieldId to getSearchFieldValueData
     let filledValues = await this.fieldsService.getSearchFieldValueData(
       0,
-      "0",
+      0,
       {
         fieldId: fieldId,
         value: value
@@ -1124,9 +1124,7 @@ export class CohortService {
     const apiId = APIID.COHORT_LIST;
 
     try {
-      console.log()
       const checkAutomaticMember = await this.automaticMemberService.checkMemberById(requiredData.userId);
-      console.log(checkAutomaticMember);
       let findCohortId;
       if (checkAutomaticMember) {
         findCohortId = await this.automaticMemberCohortHierarchy(checkAutomaticMember, requiredData?.academicYearId);
@@ -1143,7 +1141,6 @@ export class CohortService {
           );
         }
       }
-      console.log(findCohortId,checkAutomaticMember)
       const resultDataList = [];
 
       for (const cohort of findCohortId) {
