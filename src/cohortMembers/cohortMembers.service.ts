@@ -752,7 +752,11 @@ ${whereCase}`;
       let result = await this.cohortMembersRepository.save(
         cohortMembershipToUpdate
       );
-
+      await this.publishCohortMemberEvent(
+            "updated",
+            cohortMembershipToUpdate,
+            apiId
+          );
       if (!result) {
         return APIResponse.error(
           res,
@@ -787,10 +791,9 @@ ${whereCase}`;
             API_RESPONSES.COHORTMEMBER_UPDATE_SUCCESSFULLY
           );
 
-
           await this.publishCohortMemberEvent(
             "updated",
-            cohortMembershipId,
+            cohortMembershipToUpdate,
             apiId
           );
         } else {
@@ -1218,7 +1221,7 @@ ${whereCase}`;
    */
   public async publishCohortMemberEvent(
     eventType: "created" | "updated" | "deleted",
-    cohortMembershipId: string,
+    cohortMembershipToUpdate,
     apiId: string
   ): Promise<void> {
     try {
@@ -1227,7 +1230,7 @@ ${whereCase}`;
 
       if (eventType === "deleted") {
         cohortMemberData = {
-          cohortMembershipId,
+          cohortMembershipId : cohortMembershipToUpdate.cohortMembershipId,
           deletedAt: new Date().toISOString(),
         };
       } else {
@@ -1235,7 +1238,7 @@ ${whereCase}`;
         let membershipCustomFields = [] as any[];
         try {
           const fields = await this.fieldsService.getFieldsAndFieldsValues(
-            cohortMembershipId
+            cohortMemberData.cohortMembershipId
           );
           // Keep only 4 target fields by label (case-insensitive) with minimal shape { label, value }
           const wanted = new Set(["subject", "fees", "registration", "board"]);
@@ -1276,7 +1279,7 @@ ${whereCase}`;
         }
 
         cohortMemberData = {
-          cohortMembershipId,
+          cohortMembershipId : cohortMembershipToUpdate.cohortMembershipId,
           customFields: membershipCustomFields,
           eventTimestamp: new Date().toISOString(),
         };
@@ -1284,11 +1287,11 @@ ${whereCase}`;
 
       await this.kafkaService.publishCohortMemberEvent(
         eventType,
-        cohortMemberData,
-        cohortMembershipId
+        cohortMembershipToUpdate,
+        cohortMemberData.cohortMembershipId
       );
       LoggerUtil.log(
-        `Cohort member ${eventType} event published to Kafka for cohortMembershipId ${cohortMembershipId}`,
+        `Cohort member ${eventType} event published to Kafka for cohortMembershipId ${cohortMemberData.cohortMembershipId}`,
         apiId
       );
     } catch (error) {
