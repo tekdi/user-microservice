@@ -344,7 +344,7 @@ export class UserController {
   async sendOtpOnMail(@Body() body: OtpSendMailDTO, @Res() response: Response) {
     return await this.userAdapter
       .buildUserAdapter()
-      .sendEmailOTP(body, response);
+      .sendOtpOnMail(body, response);
   }
 
   @Post("password-reset-otp")

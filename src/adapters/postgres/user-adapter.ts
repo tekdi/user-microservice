@@ -3134,9 +3134,16 @@ export class PostgresUserService implements IServicelocator {
     }
   }
 
-  async sendOtpOnMail(email: string, username: string, reason: string) {
+  async sendOtpOnMail(body: any, response: Response) {
+    const apiId = APIID.SEND_OTP_MAIL;
+    const isForgotPassword = body.reason == "forgot";
+
     try {
-      // Step 1: Generate OTP and hash
+      // Common Step 1: Extract email and reason
+      const email = body.email;
+      const reason = body.reason || "register";
+
+      // Common Step 2: Generate OTP and hash (common for both flows)
       const otp = this.authUtils.generateOtp(this.otpDigits).toString();
       const { hash, expires, expiresInMinutes } = this.generateOtpHash(
         email,
@@ -3144,33 +3151,93 @@ export class PostgresUserService implements IServicelocator {
         reason
       );
 
-      // Step 2: Get program name from user's tenant data
-      const userData: any = await this.findUserDetails(null, username);
-      const programName =
-        userData?.tenantData?.[0]?.tenantName ?? "Shiksha Graha";
+      // Step 3: Prepare email key and replacements based on flow
+      let emailKey: string;
+      let userReplacements: any;
 
-      // Step 3: Prepare email replacements
-      const replacements = {
-        "{OTP}": otp,
-        "{otpExpiry}": expiresInMinutes,
-        "{programName}": programName,
-        "{username}": username,
-        "{eventName}": "Shiksha Graha OTP",
-        "{action}": "register",
-      };
-      // console.log("hii",replacements,email)
+      if (isForgotPassword) {
+        // Forgot password flow
+        const { firstName, replacements, key } = body;
+        const username = firstName || "User";
+        emailKey = key;
+        userReplacements = {
+          "{OTP}": otp,
+          "{username}": username,
+          "{otpExpiry}": expiresInMinutes,
+          "{action}": reason,
+          ...(replacements || {}),
+        };
+      } else {
+        // Regular registration flow
+        const username = body.username;
+        emailKey = "SendOtpOnMail";
 
-      // Step 4: Send email notification
+        // Get program name from user's tenant data
+        const userData: any = await this.findUserDetails(null, username);
+        const programName =
+          userData?.tenantData?.[0]?.tenantName ?? "Shiksha Graha";
+
+        userReplacements = {
+          "{OTP}": otp,
+          "{otpExpiry}": expiresInMinutes,
+          "{programName}": programName,
+          "{username}": username,
+          "{eventName}": "Shiksha Graha OTP",
+          "{action}": "register",
+        };
+      }
+
+      // Common Step 4: Send email notification (called once)
       const notificationPayload = await this.sendEmailNotification(
         "OTP",
-        "SendOtpOnMail",
-        replacements,
+        emailKey,
+        userReplacements,
         [email]
       );
 
-      return { notificationPayload, hash, expires, expiresInMinutes };
-    } catch (error) {
-      throw new Error(`Failed to send OTP via email: ${error.message}`);
+      const result = { notificationPayload, hash, expires, expiresInMinutes };
+
+      // Step 5: Return appropriate response based on flow
+      if (isForgotPassword && response) {
+        // Forgot password flow returns API response
+        const responseData = {
+          data: {
+            message: `OTP sent to ${email}`,
+            hash: `${result.hash}.${result.expires}`,
+            sendStatus: result.notificationPayload?.result?.email?.data?.[0],
+          },
+        };
+
+        return await APIResponse.success(
+          response,
+          apiId,
+          responseData,
+          HttpStatus.OK,
+          API_RESPONSES.OTP_SEND_SUCCESSFULLY
+        );
+      } else {
+        // Regular flow returns plain object
+        return result;
+      }
+    } catch (e) {
+      if (isForgotPassword && response) {
+        // Forgot password flow returns API error response
+        LoggerUtil.error(
+          `${API_RESPONSES.SERVER_ERROR}`,
+          `Error: ${e.message}`,
+          apiId
+        );
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.SERVER_ERROR,
+          `Error : ${e.message}`,
+          HttpStatus.INTERNAL_SERVER_ERROR
+        );
+      } else {
+        // Regular flow throws error
+        throw new Error(`Failed to send OTP via email: ${e.message}`);
+      }
     }
   }
 
@@ -3496,86 +3563,4 @@ export class PostgresUserService implements IServicelocator {
     }
   }
 
-  async sendEmailOTP(body: any, response: Response) {
-    const apiId = APIID.SEND_OTP_MAIL;
-    try {
-      const { email, firstName, replacements, reason, key } = body;
-
-      // Prepare body for the existing method (using firstName as username)
-      const mailBody = {
-        email,
-        username: firstName || "User",
-        replacements,
-        reason,
-        key,
-      };
-
-      // Call the existing sendOtpOnMailForgot method
-      const result = await this.sendOtpOnEmailNotification(mailBody);
-
-      // Prepare response data
-      const responseData = {
-        data: {
-          message: `OTP sent to ${email}`,
-          hash: `${result.hash}.${result.expires}`,
-          sendStatus: result.notificationPayload?.result?.email?.data?.[0],
-        },
-      };
-
-      return await APIResponse.success(
-        response,
-        apiId,
-        responseData,
-        HttpStatus.OK,
-        API_RESPONSES.OTP_SEND_SUCCESSFULLY
-      );
-    } catch (e) {
-      LoggerUtil.error(
-        `${API_RESPONSES.SERVER_ERROR}`,
-        `Error: ${e.message}`,
-        apiId
-      );
-      return APIResponse.error(
-        response,
-        apiId,
-        API_RESPONSES.SERVER_ERROR,
-        `Error : ${e.message}`,
-        HttpStatus.INTERNAL_SERVER_ERROR
-      );
-    }
-  }
-
-  private async sendOtpOnEmailNotification(body) {
-    const { email, username, replacements, reason, key } = body;
-    try {
-      // Step 1: Generate OTP and hash
-      const otp = this.authUtils.generateOtp(this.otpDigits).toString();
-      const { hash, expires, expiresInMinutes } = this.generateOtpHash(
-        email,
-        otp,
-        reason
-      );
-
-      // Step 2: Prepare email replacements
-      const userReplacements = {
-        "{OTP}": otp,
-        "{username}": username || "User",
-        "{otpExpiry}": expiresInMinutes,
-        "{action}": reason,
-        ...(replacements || {}),
-      };
-
-      // Step 3: Send email notification
-      const notificationPayload = await this.sendEmailNotification(
-        "OTP",
-        key,
-        userReplacements,
-        [email]
-      );
-
-      return { notificationPayload, hash, expires, expiresInMinutes };
-    } catch (error) {
-      throw new Error(`Failed to send OTP via email: ${error.message}`);
-    }
-  }
 }

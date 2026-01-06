@@ -62,6 +62,6 @@ export interface IServicelocator {
     body: SendPasswordResetOTPDto,
     response: Response
   ): Promise<any>;
-  sendEmailOTP(body: OtpSendMailDTO, response: Response): Promise<any>;
+  sendOtpOnMail(body: OtpSendMailDTO, response: Response): Promise<any>;
   findUserByIdentifier(identifier: string): Promise<any>;
 }
