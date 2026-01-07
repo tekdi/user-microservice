@@ -870,6 +870,19 @@
 					"packageName": "shiksha-user"
 				}
 			]
+		},
+		{
+			"sourceRoute": "/interface/v1/send-otp-mail",
+			"type": "POST",
+			"priority": "MUST_HAVE",
+			"inSequence": false,
+			"orchestrated": false,
+			"targetPackages": [
+				{
+					"basePackageName": "user",
+					"packageName": "shiksha-user"
+				}
+			]
 		}
 	]
   }
