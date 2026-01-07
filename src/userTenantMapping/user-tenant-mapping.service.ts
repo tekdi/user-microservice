@@ -9,7 +9,7 @@ import {
 import { ErrorResponseTypeOrm } from "src/error-response-typeorm";
 import { SuccessResponse } from "src/success-response";
 import { User } from "src/user/entities/user-entity";
-import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
+import { Tenant } from "src/tenant/entities/tenent.entity";
 import { Role } from "src/rbac/role/entities/role.entity";
 import { UserRoleMapping } from "src/rbac/assign-role/entities/assign-role.entity";
 import APIResponse from "src/common/responses/response";
@@ -29,8 +29,8 @@ export class UserTenantMappingService {
     private userTenantMappingRepository: Repository<UserTenantMapping>,
     @InjectRepository(User)
     private userRepository: Repository<User>,
-    @InjectRepository(Tenants)
-    private tenantsRepository: Repository<Tenants>,
+    @InjectRepository(Tenant)
+    private tenantsRepository: Repository<Tenant>,
     @InjectRepository(Role)
     private roleRepository: Repository<Role>,
     @InjectRepository(UserRoleMapping)

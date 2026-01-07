@@ -16,7 +16,7 @@ import { RoleModule } from '../rbac/role/role.module';
 import { UserTenantMappingModule } from '../userTenantMapping/user-tenant-mapping.module';
 import { UserTenantMapping } from 'src/userTenantMapping/entities/user-tenant-mapping.entity';
 import { User } from 'src/user/entities/user-entity';
-import { Tenants } from 'src/userTenantMapping/entities/tenant.entity';
+import { Tenant } from 'src/tenant/entities/tenent.entity';
 import { KafkaModule } from 'src/kafka/kafka.module';
 
 @Module({
@@ -36,7 +36,7 @@ import { KafkaModule } from 'src/kafka/kafka.module';
       FieldValues,
       UserTenantMapping,
       User,
-      Tenants
+      Tenant
     ])
   ],
   controllers: [SsoController],

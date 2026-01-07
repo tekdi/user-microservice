@@ -5,18 +5,22 @@ export class AutomaticMember {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column('uuid')
+  @Column('uuid', { nullable: false })
   userId: string;
 
-  @Column('jsonb')
+  @Column('jsonb', { nullable: false })
   rules: any;
 
-  @Column('uuid')
+  @Column('uuid', { nullable: false })
   tenantId: string;
 
-  @Column({ default: true })
+  @Column({ type: "bool", default: true, nullable: false })
   isActive: boolean;
 
-  @CreateDateColumn()
-  createdAt: Date;
+  @CreateDateColumn({
+    type: "timestamp",
+    default: () => "CURRENT_TIMESTAMP",
+    nullable: true,
+  })
+  createdAt: Date | null;
 }

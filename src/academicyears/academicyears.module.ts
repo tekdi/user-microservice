@@ -3,10 +3,10 @@ import { AcademicyearsController } from "./academicyears.controller";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { AcademicYear } from "./entities/academicyears-entity";
 import { AcademicYearService } from "./academicyears.service";
-import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
+import { Tenant } from "src/tenant/entities/tenent.entity";
 
 @Module({
-  imports: [TypeOrmModule.forFeature([AcademicYear, Tenants])],
+  imports: [TypeOrmModule.forFeature([AcademicYear, Tenant])],
   providers: [AcademicYearService],
   controllers: [AcademicyearsController],
   exports: [AcademicYearService],

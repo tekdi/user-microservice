@@ -11,21 +11,29 @@ export class CohortAcademicYear {
   @PrimaryGeneratedColumn("uuid")
   cohortAcademicYearId: string;
 
-  @Column({ type: "uuid" })
-  cohortId: string;
-
-  @Column({ type: "uuid" })
+  @Column({ type: "uuid", nullable: false })
   academicYearId: string;
 
-  @Column({ type: "uuid" })
+  @Column({ type: "uuid", nullable: false })
+  cohortId: string;
+
+  @CreateDateColumn({
+    type: "timestamptz",
+    default: () => "now()",
+    nullable: true,
+  })
+  createdAt: Date | null;
+
+  @UpdateDateColumn({
+    type: "timestamptz",
+    default: () => "now()",
+    nullable: true,
+  })
+  updatedAt: Date | null;
+
+  @Column({ type: "uuid", nullable: false })
   createdBy: string;
 
-  @Column({ type: "uuid" })
+  @Column({ type: "uuid", nullable: false })
   updatedBy: string;
-
-  @CreateDateColumn({ type: "date", default: () => "CURRENT_DATE" })
-  createdAt: Date;
-
-  @UpdateDateColumn({ type: "date", default: () => "CURRENT_DATE" })
-  updatedAt: Date;
 }

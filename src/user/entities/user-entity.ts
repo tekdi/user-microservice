@@ -19,59 +19,49 @@ export class User {
   @PrimaryColumn({ type: "uuid" })
   userId: string;
 
-  @Column({ unique: true })
+  @Column({ type: 'varchar', length: 255, unique: true, nullable: false })
   username: string;
 
-  @Column({ type: 'varchar', length: 50, nullable: false })
-  firstName: string;
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  firstName: string | null;
 
   @Column({ type: 'varchar', length: 50, nullable: true })
-  middleName: string;
+  middleName: string | null;
 
-  @Column({ type: 'varchar', length: 50, nullable: false })
-  lastName: string;
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  lastName: string | null;
 
-  @Column({ type: 'varchar', length: 100, nullable: true })
-  name: string;
+  @Column({ type: 'varchar', length: 400, nullable: true })
+  name: string | null;
 
-  @Column({ type: 'enum', enum: ['male', 'female', 'transgender'], nullable: false })
-  gender: string;
+  @Column({ type: 'enum', enum: ['male', 'female', 'transgender'], nullable: true })
+  gender: string | null;
 
-  @Column({ type: 'varchar', length: 50, nullable: false })
-  enrollmentId: string;
+  @Column({ type: 'varchar', length: 50, nullable: true, unique: true })
+  enrollmentId: string | null;
 
-  @Column({ type: "date", nullable: true })
-  dob: Date;
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  email: string | null;
 
-  @Column({ nullable: true })
-  email: string;
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  mobile: string | null;
 
-  // @Column({ nullable: true })
-  // district: string;
-
-  // @Column({ nullable: true })
-  // state: string;
-
-  @Column({ nullable: true })
-  address: string;
-
-  @Column({ nullable: true })
-  pincode: string;
+  @Column({ type: 'date', nullable: true })
+  dob: Date | null;
 
   @CreateDateColumn({
     type: "timestamp with time zone",
     default: () => "CURRENT_TIMESTAMP",
+    nullable: true,
   })
-  createdAt: Date;
+  createdAt: Date | null;
 
   @UpdateDateColumn({
     type: "timestamp with time zone",
     default: () => "CURRENT_TIMESTAMP",
+    nullable: true,
   })
-  updatedAt: Date;
-
-  @Column({ nullable: true })
-  mobile: number;
+  updatedAt: Date | null;
 
   @Column('text', { array: true, nullable: true })
   deviceId: string[];
@@ -79,21 +69,22 @@ export class User {
   @Column({ nullable: false, default: true })
   temporaryPassword: boolean;
 
-  @Column({ nullable: true })
-  createdBy: string;
+  @Column({ type: 'uuid', nullable: true })
+  createdBy: string | null;
 
-  @Column({ nullable: true })
-  updatedBy: string;
+  @Column({ type: 'uuid', nullable: true })
+  updatedBy: string | null;
 
   @Column({
     type: "enum",
     enum: UserStatus,
     default: UserStatus.ACTIVE,
+    nullable: true,
   })
-  status: UserStatus;
+  status: UserStatus | null;
 
-  @Column({ nullable: true })
-  reason: string;
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  reason: string | null;
 
   @Column({ type: "timestamptz", nullable: true })
   lastLogin: Date | null; // Timestamp for last login

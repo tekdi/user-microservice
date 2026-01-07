@@ -22,7 +22,7 @@ import { HierarchicalLocationFiltersDto } from "./dto/user-hierarchical-search.d
 import { UserHierarchyViewDto } from "./dto/user-hierarchy-view.dto";
 import { UserTenantMapping, UserTenantMappingStatus } from "src/userTenantMapping/entities/user-tenant-mapping.entity";
 import { UserRoleMapping } from "src/rbac/assign-role/entities/assign-role.entity";
-import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
+import { Tenant } from "src/tenant/entities/tenent.entity";
 import { Cohort } from "src/cohort/entities/cohort.entity";
 import { Role } from "src/rbac/role/entities/role.entity";
 import { UserData } from "./user.controller";
@@ -82,8 +82,8 @@ export class UserService {
     private cohortMemberRepository: Repository<CohortMembers>,
     @InjectRepository(UserTenantMapping)
     private userTenantMappingRepository: Repository<UserTenantMapping>,
-    @InjectRepository(Tenants)
-    private tenantsRepository: Repository<Tenants>,
+    @InjectRepository(Tenant)
+    private tenantsRepository: Repository<Tenant>,
     @InjectRepository(UserRoleMapping)
     private userRoleMappingRepository: Repository<UserRoleMapping>,
     @InjectRepository(Role)
@@ -2156,7 +2156,7 @@ export class UserService {
       user.lastName = userCreateDto?.lastName,
       user.gender = userCreateDto?.gender,
       user.email = userCreateDto?.email,
-      user.mobile = Number(userCreateDto?.mobile) || null,
+      user.mobile = userCreateDto?.mobile || null,
       user.createdBy = userCreateDto?.createdBy || userCreateDto?.createdBy;
 
     if (userCreateDto?.dob) {

@@ -11,34 +11,35 @@ export class RolePermission {
   @PrimaryGeneratedColumn("uuid")
   rolePermissionId: string;
 
-  @Column()
-  roleTitle: string;
-
-  @Column()
+  @Column({ type: "varchar", nullable: false })
   module: string;
 
-  @Column()
-  requestType: string;
-
-  @Column()
+  @Column({ type: "varchar", nullable: false })
   apiPath: string;
 
-  @Column({ type: "uuid" })
-  createdBy: string;
-
-  @Column({ type: "uuid" })
-  updatedBy: string;
   @CreateDateColumn({
     type: "timestamptz",
     default: () => "now()",
-    nullable: false,
+    nullable: true,
   })
-  createdAt: Date;
+  createdAt: Date | null;
 
   @UpdateDateColumn({
     type: "timestamptz",
     default: () => "now()",
-    nullable: false,
+    nullable: true,
   })
-  updatedAt: Date;
+  updatedAt: Date | null;
+
+  @Column({ type: "uuid", nullable: true })
+  createdBy: string | null;
+
+  @Column({ type: "uuid", nullable: true })
+  updatedBy: string | null;
+
+  @Column({ type: "varchar", nullable: true })
+  roleTitle: string | null;
+
+  @Column("text", { array: true, nullable: true })
+  requestType: string[] | null;
 }

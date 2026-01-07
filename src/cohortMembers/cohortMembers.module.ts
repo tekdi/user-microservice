@@ -9,7 +9,7 @@ import { User } from "src/user/entities/user-entity";
 import { Cohort } from "src/cohort/entities/cohort.entity";
 import { CohortAcademicYear } from "src/cohortAcademicYear/entities/cohortAcademicYear.entity";
 import { AcademicYear } from "src/academicyears/entities/academicyears-entity";
-import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
+import { Tenant } from "src/tenant/entities/tenent.entity";
 import { KafkaModule } from "src/kafka/kafka.module";
 import { FieldsModule } from "src/fields/fields.module";
 import { UserModule } from "src/user/user.module";
@@ -25,7 +25,7 @@ import { NotificationRequest } from "src/common/utils/notification.axios";
       Cohort,
       CohortAcademicYear,
       AcademicYear,
-      Tenants
+      Tenant
     ]),
     HttpModule,
     FieldsModule,
