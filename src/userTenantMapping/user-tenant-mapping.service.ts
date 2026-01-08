@@ -505,7 +505,7 @@ export class UserTenantMappingService {
             // Get user information
             const user = await this.userRepository.findOne({
               where: { userId },
-              select: ["userId", "username", "firstName", "lastName", "email", "mobile"]
+              select: ["userId", "username", "firstName", "lastName","middleName", "email", "mobile"]
             });
 
             // Get tenant information
@@ -557,6 +557,7 @@ export class UserTenantMappingService {
               user: user ? {
                 username: user.username,
                 firstName: user.firstName,
+                middleName: user.middleName,
                 lastName: user.lastName,
                 email: user.email,
                 mobile: user.mobile
