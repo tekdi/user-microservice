@@ -43,7 +43,7 @@ import { FieldValueConverter } from 'src/utils/field-value-converter';
 export class PostgresCohortService {
   // Cache for repository column names (static data)
   private cachedCohortColumnNames: string[] | null = null;
-  
+
   // Cache for custom fields metadata (with TTL)
   private customFieldsCache: {
     data: any[];
@@ -333,8 +333,10 @@ export class PostgresCohortService {
       return new Map();
     }
 
+    // Optimized query: Filter FieldValues first, then apply DISTINCT ON
+    // This avoids scanning the entire FieldValues table
     const query = `
-      SELECT DISTINCT 
+      SELECT 
         fv."itemId",
         f."fieldId",
         f."label", 
@@ -354,17 +356,29 @@ export class PostgresCohortService {
         f."type", 
         f."fieldParams",
         f."sourceDetails"
-      FROM public."Cohort" c
-      LEFT JOIN (
-        SELECT DISTINCT ON (fv."fieldId", fv."itemId") fv.*
+      FROM (
+        SELECT DISTINCT ON (fv."fieldId", fv."itemId") 
+          fv."fieldId",
+          fv."itemId",
+          fv."textValue",
+          fv."numberValue",
+          fv."calendarValue",
+          fv."dropdownValue",
+          fv."radioValue",
+          fv."checkboxValue",
+          fv."textareaValue",
+          fv."fileValue",
+          fv."value"
         FROM public."FieldValues" fv
-      ) fv ON fv."itemId" = c."cohortId"
+        WHERE fv."itemId" = ANY($1)
+        ORDER BY fv."fieldId", fv."itemId", fv."createdAt" DESC, fv."fieldValuesId" DESC
+      ) fv
       INNER JOIN public."Fields" f ON fv."fieldId" = f."fieldId"
-      WHERE c."cohortId" = ANY($1);
+      ORDER BY fv."itemId", f."fieldId";
     `;
 
     let results = await this.cohortMembersRepository.query(query, [cohortIds]);
-    
+
     // Process results for dynamic options
     results = await Promise.all(
       results.map(async (data) => {
@@ -1471,12 +1485,13 @@ export class PostgresCohortService {
           whereClause['cohortId'] = In(cohortIds);
         }
 
-        const [cohortData, totalCount] = await this.cohortRepository.findAndCount({
-          where: whereClause,
-          order,
-          skip: offset,
-          take: limit,
-        });
+        const [cohortData, totalCount] =
+          await this.cohortRepository.findAndCount({
+            where: whereClause,
+            order,
+            skip: offset,
+            take: limit,
+          });
 
         count = totalCount;
 
