@@ -2008,21 +2008,27 @@ export class PostgresFieldsService implements IServicelocatorfields {
     userId: string,
     fieldOption?: boolean
   ) {
+    // Optimized query: Filter FieldValues first, then apply DISTINCT ON
+    // This avoids scanning the entire FieldValues table
     const query = `
-        SELECT DISTINCT 
+        SELECT 
           f."fieldId",
           f."label", 
           fv."value", 
           f."type", 
           f."fieldParams",
           f."sourceDetails"
-        FROM public."Users" u
-        LEFT JOIN (
-          SELECT DISTINCT ON (fv."fieldId", fv."itemId") fv.*
+        FROM (
+          SELECT DISTINCT ON (fv."fieldId", fv."itemId") 
+            fv."fieldId",
+            fv."itemId",
+            fv."value"
           FROM public."FieldValues" fv
-        ) fv ON fv."itemId" = u."userId"
+          WHERE fv."itemId" = $1
+          ORDER BY fv."fieldId", fv."itemId", fv."createdAt" DESC, fv."fieldValuesId" DESC
+        ) fv
         INNER JOIN public."Fields" f ON fv."fieldId" = f."fieldId"
-        WHERE u."userId" = $1;
+        ORDER BY f."fieldId";
       `;
 
     let result = await this.fieldsRepository.query(query, [userId]);
