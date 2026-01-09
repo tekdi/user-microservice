@@ -108,12 +108,14 @@ export class FormsService {
           title: any;
           status: any;
           fields: any;
+          rules?: any;
           requiredFields?: string[] | null;
         } = {
           formid: formData.formid,
           title: formData.title,
           status: formData.status,
           fields: formData.fields,
+          rules: formData.rules || null,
         };
 
         // Conditionally include requiredFields only if fetchRequired === 'yes'
@@ -181,7 +183,7 @@ export class FormsService {
   async getFormData(whereClause): Promise<any> {
     let query = this.formRepository
       .createQueryBuilder('form')
-      .select(['form.formid', 'form.title', 'form.status', 'form.fields'])
+      .select(['form.formid', 'form.title', 'form.status', 'form.fields', 'form.rules'])
       .where('form.context = :context', { context: whereClause.context })
       .andWhere('form.status != :archivedStatus', {
         archivedStatus: FormStatus.ARCHIVED,
