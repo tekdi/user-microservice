@@ -115,7 +115,7 @@ export class FormsService {
           title: formData.title,
           status: formData.status,
           fields: formData.fields,
-          rules: formData.rules || null,
+          rules: formData.rules ?? null,
         };
 
         // Conditionally include requiredFields only if fetchRequired === 'yes'
