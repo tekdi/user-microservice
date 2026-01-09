@@ -2752,7 +2752,7 @@ export class PostgresUserService implements IServicelocator {
   async verifyOtp(body: OtpVerifyDTO, response: Response) {
     const apiId = APIID.VERIFY_OTP;
     try {
-      const { mobile, otp, hash, reason, username } = body;
+      const { mobile, otp, hash, reason, username, email } = body;
 
       // Validate required fields for all requests
       if (!otp || !hash || !reason) {
@@ -2813,8 +2813,11 @@ export class PostgresUserService implements IServicelocator {
             HttpStatus.BAD_REQUEST
           );
         }
-
-        identifier = this.formatMobileNumber(mobile);
+        if (email) {
+          identifier = email;
+        } else {
+          identifier = this.formatMobileNumber(mobile);
+        }
         const userData = await this.findUserDetails(null, username);
 
         if (!userData) {
@@ -3145,12 +3148,13 @@ export class PostgresUserService implements IServicelocator {
 
       // Common Step 2: Generate OTP and hash (common for both flows)
       const otp = this.authUtils.generateOtp(this.otpDigits).toString();
+
       const { hash, expires, expiresInMinutes } = this.generateOtpHash(
         email,
         otp,
         reason
       );
-
+      console.log("otp: ", otp, " hash: ", hash, " expires: ", expires);
       // Step 3: Prepare email key and replacements based on flow
       let emailKey: string;
       let userReplacements: any;
@@ -3562,5 +3566,4 @@ export class PostgresUserService implements IServicelocator {
       return null;
     }
   }
-
 }
