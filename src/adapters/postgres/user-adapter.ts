@@ -1010,26 +1010,110 @@ export class PostgresUserService implements IServicelocator {
     T."tenantId", UTM."Id";`;
 
     const result = await this.usersRepository.query(query, [userId]);
-    const combinedResult = [];
-    const roleArray = [];
-    for (const data of result) {
-      const roleData = await this.postgresRoleService.findUserRoleData(
-        userId,
-        data.tenantId
-      );
-      if (roleData.length > 0) {
-        roleArray.push(roleData[0].roleid);
-        const roleId = roleData[0].roleid;
-        const roleName = roleData[0].title;
+    
+    // Early return if no tenants found
+    if (!result || result.length === 0) {
+      return [];
+    }
 
-        const privilegeData =
-          await this.postgresRoleService.findPrivilegeByRoleId(roleArray);
-        const privileges = privilegeData.map((priv) => priv.name);
+    // Extract all tenantIds for batch loading (handle both camelCase and lowercase)
+    // PostgreSQL raw queries typically return lowercase property names
+    const tenantIds = result
+      .map((data) => data.tenantid || data.tenantId)
+      .filter(Boolean);
+    
+    // Batch load all roles for all tenants in a single query
+    const allRoleData =
+      tenantIds.length > 0
+        ? await this.postgresRoleService.findUserRoleDataBatch(userId, tenantIds)
+        : [];
+
+    // Create a map of tenantId -> role data for quick lookup
+    // TypeORM getRawMany() returns lowercase property names for aliases
+    const roleDataMap = new Map<string, any[]>();
+    for (const roleData of allRoleData) {
+      // Handle both camelCase and lowercase property names from TypeORM
+      // TypeORM getRawMany() typically returns lowercase: "tenantId" alias becomes "tenantid"
+      const tenantId = roleData.tenantid || roleData.tenantId;
+      if (tenantId) {
+        // Store with the actual tenantId value (don't normalize UUIDs)
+        if (!roleDataMap.has(tenantId)) {
+          roleDataMap.set(tenantId, []);
+        }
+        roleDataMap.get(tenantId).push(roleData);
+      }
+    }
+
+    // Collect all unique roleIds for batch privilege loading
+    const allRoleIds = [
+      ...new Set(allRoleData.map((rd) => rd.roleid || rd.roleId)),
+    ].filter(Boolean);
+
+    // Batch load all privileges in a single query
+    const allPrivilegeData =
+      allRoleIds.length > 0
+        ? await this.postgresRoleService.findPrivilegeByRoleId(allRoleIds)
+        : [];
+
+    // Create a map of roleId -> privileges for quick lookup
+    const privilegeMap = new Map<string, string[]>();
+    for (const privData of allPrivilegeData) {
+      // TypeORM getRawMany() returns lowercase: "roleId" alias becomes "roleid"
+      const roleId = privData.roleid || privData.roleId;
+      if (roleId) {
+        // Store with the actual roleId value (don't normalize UUIDs)
+        if (!privilegeMap.has(roleId)) {
+          privilegeMap.set(roleId, []);
+        }
+        privilegeMap.get(roleId).push(privData.name);
+      }
+    }
+
+    // Build the result array matching the original structure
+    const combinedResult = [];
+    for (const data of result) {
+      // Handle both camelCase and lowercase property names from PostgreSQL raw query
+      // PostgreSQL raw queries typically return lowercase property names
+      const tenantId = data.tenantid || data.tenantId;
+      const tenantName = data.tenantname || data.tenantName || data.name;
+      const userTenantMappingId =
+        data.usertenantmappingid ||
+        data.userTenantMappingId ||
+        data.id ||
+        data.Id;
+
+      if (!tenantId) {
+        continue; // Skip if no tenantId
+      }
+
+      // Lookup role data for this tenant
+      // Try both the exact tenantId and also check if it exists in the map with different casing
+      let tenantRoleData = roleDataMap.get(tenantId);
+      // Fallback: if not found, try to find by iterating (in case of property name mismatch)
+      if (!tenantRoleData && roleDataMap.size > 0) {
+        // Try to find matching tenantId in the map
+        for (const [mapTenantId, roles] of roleDataMap.entries()) {
+          if (mapTenantId === tenantId || String(mapTenantId).toLowerCase() === String(tenantId).toLowerCase()) {
+            tenantRoleData = roles;
+            break;
+          }
+        }
+      }
+      
+      if (tenantRoleData && tenantRoleData.length > 0) {
+        // Use the first role (matching original behavior)
+        const roleData = tenantRoleData[0];
+        const roleId = roleData.roleid || roleData.roleId;
+        const roleName = roleData.title;
+
+        // Get privileges for this role from the map
+        // Try both lowercase and camelCase property names
+        const privileges = privilegeMap.get(roleId) || [];
 
         combinedResult.push({
-          tenantName: data.tenantname,
-          tenantId: data.tenantId,
-          userTenantMappingId: data.usertenantmappingid,
+          tenantName: tenantName,
+          tenantId: tenantId,
+          userTenantMappingId: userTenantMappingId,
           roleId: roleId,
           roleName: roleName,
           privileges: privileges,

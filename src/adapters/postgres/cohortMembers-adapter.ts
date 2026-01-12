@@ -881,51 +881,78 @@ export class PostgresCohortMembersService {
   ) {
     let whereCase = ``;
     let limit, offset;
+    const queryParams: any[] = [];
+    let paramIndex = 1;
 
     if (where.length > 0) {
       whereCase = 'WHERE ';
 
       const processCondition = ([key, value]) => {
         switch (key) {
-          case 'role':
-            return `R."name"='${value}'`;
+          case 'role': {
+            // FIXED: Use parameterized query to prevent SQL injection
+            queryParams.push(value);
+            return `R."name"=$${paramIndex++}`;
+          }
           case 'status': {
-            const statusValues = Array.isArray(value)
-              ? value.map((status) => `'${status}'`).join(', ')
-              : `'${value}'`;
-            return `CM."status" IN (${statusValues})`;
+            // FIXED: Use parameterized query for array values
+            if (Array.isArray(value)) {
+              const placeholders = value.map(() => `$${paramIndex++}`).join(', ');
+              queryParams.push(...value);
+              return `CM."status" IN (${placeholders})`;
+            } else {
+              queryParams.push(value);
+              return `CM."status"=$${paramIndex++}`;
+            }
           }
           case 'firstName': {
-            return `U."firstName" ILIKE '%${value}%'`;
+            // FIXED: Use parameterized query to prevent SQL injection
+            queryParams.push(`%${value}%`);
+            return `U."firstName" ILIKE $${paramIndex++}`;
           }
           case 'email': {
-            return `U."email" ILIKE '%${value}%'`;
+            // FIXED: Use parameterized query to prevent SQL injection
+            queryParams.push(`%${value}%`);
+            return `U."email" ILIKE $${paramIndex++}`;
           }
           case 'country': {
-            const countryValues = Array.isArray(value)
-              ? value.map((country) => `'${country}'`).join(', ')
-              : `'${value}'`;
-            return `U."country" IN (${countryValues})`;
+            // FIXED: Use parameterized query for array values
+            if (Array.isArray(value)) {
+              const placeholders = value.map(() => `$${paramIndex++}`).join(', ');
+              queryParams.push(...value);
+              return `U."country" IN (${placeholders})`;
+            } else {
+              queryParams.push(value);
+              return `U."country"=$${paramIndex++}`;
+            }
           }
           case 'cohortAcademicYearId': {
-            const cohortIdAcademicYear = Array.isArray(value)
-              ? value.map((id) => `'${id}'`).join(', ')
-              : `'${value}'`;
-            return `CM."cohortAcademicYearId" IN (${cohortIdAcademicYear})`;
+            // FIXED: Use parameterized query for array values
+            if (Array.isArray(value)) {
+              const placeholders = value.map(() => `$${paramIndex++}`).join(', ');
+              queryParams.push(...value);
+              return `CM."cohortAcademicYearId" IN (${placeholders})`;
+            } else {
+              queryParams.push(value);
+              return `CM."cohortAcademicYearId"=$${paramIndex++}`;
+            }
           }
           case 'cohortId': {
-            //Handles UUID array properly
-            const formattedIds = Array.isArray(value)
-              ? value.map((id) => `'${id}'`).join(', ')
-              : `'${value}'`;
-            return `CM."${key}" IN (${formattedIds})`;
+            // FIXED: Use parameterized query for array values
+            if (Array.isArray(value)) {
+              const placeholders = value.map(() => `$${paramIndex++}`).join(', ');
+              queryParams.push(...value);
+              return `CM."cohortId" IN (${placeholders})`;
+            } else {
+              queryParams.push(value);
+              return `CM."cohortId"=$${paramIndex++}`;
+            }
           }
           case 'auto_tags': {
-            // Handle auto_tags with PostgreSQL array overlap operator
-            const escaped = value
-              .map((tag) => `'${tag.trim().replace(/'/g, "''")}'`)
-              .join(', ');
-            return `(U."auto_tags" && ARRAY[${escaped}]::text[])`;
+            // FIXED: Use parameterized query for array values
+            const escapedTags = value.map((tag) => tag.trim().replace(/'/g, "''"));
+            queryParams.push(escapedTags);
+            return `(U."auto_tags" && $${paramIndex++}::text[])`;
           }
           case 'createdAt': {
             return this.processDateFilterCondition(
@@ -933,7 +960,7 @@ export class PostgresCohortMembersService {
               value,
               'COHORT_MEMBER_SEARCH'
             );
-          }
+            }
           case 'updatedAt': {
             return this.processDateFilterCondition(
               'updatedAt',
@@ -941,8 +968,28 @@ export class PostgresCohortMembersService {
               'COHORT_MEMBER_SEARCH'
             );
           }
+          case 'userId': {
+            // FIXED: Handle userId as array (wrapped by searchCohortMembers logic) or single value
+            if (Array.isArray(value)) {
+              const placeholders = value.map(() => `$${paramIndex++}`).join(', ');
+              queryParams.push(...value);
+              return `CM."userId" IN (${placeholders})`;
+            } else {
+              queryParams.push(value);
+              return `CM."userId"=$${paramIndex++}`;
+            }
+          }
           default: {
-            return `CM."${key}"='${value}'`;
+            // FIXED: Use parameterized query to prevent SQL injection
+            // Handle both array and single value cases
+            if (Array.isArray(value)) {
+              const placeholders = value.map(() => `$${paramIndex++}`).join(', ');
+              queryParams.push(...value);
+              return `CM."${key}" IN (${placeholders})`;
+            } else {
+              queryParams.push(value);
+              return `CM."${key}"=$${paramIndex++}`;
+            }
           }
         }
       };
@@ -955,16 +1002,20 @@ export class PostgresCohortMembersService {
     }
 
     // Add searchtext filter if provided
+    // FIXED: buildSearchTextWhereClause now returns both SQL and parameters
     if (searchtext && searchtext.trim().length >= 2) {
       try {
-        const searchWhereClause = this.buildSearchTextWhereClause(searchtext);
-        if (searchWhereClause) {
-          const searchCondition = searchWhereClause.replace(/^AND\s+/, '');
+        const searchResult = this.buildSearchTextWhereClause(searchtext, paramIndex);
+        if (searchResult && searchResult.condition) {
+          const searchCondition = searchResult.condition.replace(/^AND\s+/, '');
           if (whereCase === 'WHERE ') {
             whereCase += searchCondition;
           } else {
             whereCase += ` AND ${searchCondition}`;
           }
+          // Add search parameters to query params
+          queryParams.push(...searchResult.params);
+          paramIndex += searchResult.params.length;
         }
       } catch (error) {
         console.error('Error building search text where clause:', error);
@@ -1013,14 +1064,25 @@ export class PostgresCohortMembersService {
       ? 'INNER JOIN public."Cohort" C ON CM."cohortId" = C."cohortId"'
       : '';
 
-    let query = `SELECT U."userId", U."username",U."email", U."firstName", U."middleName", U."lastName", R."name" AS role, U."district", U."state",U."mobile",U."deviceId",U."gender",U."dob",U."country",U."auto_tags",
-      CM."status", CM."statusReason",CM."cohortMembershipId",CM."cohortId",CM."status",CM."createdAt", CM."updatedAt",U."createdBy",U."updatedBy", COUNT(*) OVER() AS total_count  FROM public."CohortMembers" CM
-      INNER JOIN public."Users" U
-      ON CM."userId" = U."userId"
-      INNER JOIN public."UserRolesMapping" UR
-      ON UR."userId" = U."userId"
-      INNER JOIN public."Roles" R
-      ON R."roleId" = UR."roleId" ${cohortJoin} ${whereCase}`;
+    // FIXED: Use DISTINCT ON to prevent duplicate rows when users have multiple roles
+    // FIXED: Removed duplicate CM."status" column selection
+    // Using subquery to get first role per user to avoid duplicates
+    let query = `SELECT DISTINCT ON (U."userId", CM."cohortMembershipId") 
+      U."userId", U."username", U."email", U."firstName", U."middleName", U."lastName", 
+      R."name" AS role, U."district", U."state", U."mobile", U."deviceId", U."gender", 
+      U."dob", U."country", U."auto_tags",
+      CM."status", CM."statusReason", CM."cohortMembershipId", CM."cohortId", 
+      CM."createdAt", CM."updatedAt", U."createdBy", U."updatedBy", 
+      COUNT(*) OVER() AS total_count  
+      FROM public."CohortMembers" CM
+      INNER JOIN public."Users" U ON CM."userId" = U."userId"
+      INNER JOIN (
+        SELECT DISTINCT ON ("userId") "userId", "roleId"
+        FROM public."UserRolesMapping"
+        ORDER BY "userId", "roleId"
+      ) UR ON UR."userId" = U."userId"
+      INNER JOIN public."Roles" R ON R."roleId" = UR."roleId" 
+      ${cohortJoin} ${whereCase}`;
 
     // Debug logging for date filters
     if (
@@ -1046,18 +1108,25 @@ export class PostgresCohortMembersService {
       const orderField = Object.keys(order)[0];
       const orderDirection =
         order[orderField].toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
-      query += ` ORDER BY U."${orderField}" ${orderDirection}`;
+      // FIXED: Add DISTINCT ON columns to ORDER BY (required by PostgreSQL)
+      query += ` ORDER BY U."userId", CM."cohortMembershipId", U."${orderField}" ${orderDirection}`;
+    } else {
+      // FIXED: DISTINCT ON requires ORDER BY with distinct columns first
+      query += ` ORDER BY U."userId", CM."cohortMembershipId"`;
     }
 
     if (limit !== undefined) {
-      query += ` LIMIT ${limit}`;
+      queryParams.push(limit);
+      query += ` LIMIT $${paramIndex++}`;
     }
 
     if (offset !== undefined) {
-      query += ` OFFSET ${offset}`;
+      queryParams.push(offset);
+      query += ` OFFSET $${paramIndex++}`;
     }
 
-    const result = await this.usersRepository.query(query);
+    // FIXED: Use parameterized query to prevent SQL injection
+    const result = await this.usersRepository.query(query, queryParams);
 
     return result;
   }
@@ -5808,16 +5877,17 @@ export class PostgresCohortMembersService {
   /**
    * Builds WHERE clause for searchtext filtering across multiple columns
    * @param searchtext - The search text to filter by
-   * @returns SQL WHERE clause string for searchtext filtering
+   * @param startParamIndex - Starting parameter index for parameterized queries
+   * @returns Object with SQL WHERE clause string and parameters for searchtext filtering
    */
-  private buildSearchTextWhereClause(searchtext: string): string {
+  private buildSearchTextWhereClause(searchtext: string, startParamIndex: number = 1): { condition: string; params: any[] } {
     try {
       if (
         !searchtext ||
         typeof searchtext !== 'string' ||
         searchtext.trim().length < 2
       ) {
-        return '';
+        return { condition: '', params: [] };
       }
 
       // Split searchtext by spaces and process all words
@@ -5827,8 +5897,11 @@ export class PostgresCohortMembersService {
         .filter((term) => term && term.length > 0);
 
       if (searchTerms.length === 0) {
-        return '';
+        return { condition: '', params: [] };
       }
+
+      const params: any[] = [];
+      let paramIndex = startParamIndex;
 
       // Build ILIKE conditions for each search term with smart column prioritization
       const searchConditions = searchTerms
@@ -5837,7 +5910,11 @@ export class PostgresCohortMembersService {
             return '';
           }
 
-          const escapedTerm = term.replace(/%/g, '\\%').replace(/_/g, '\\_');
+          // FIXED: Use parameterized query to prevent SQL injection
+          const searchPattern = `%${term}%`;
+          params.push(searchPattern);
+          const currentParam = paramIndex;
+          paramIndex++; // Increment for next term
 
           // Check if this looks like an email
           const isEmail = term.includes('@');
@@ -5845,31 +5922,31 @@ export class PostgresCohortMembersService {
           if (isEmail) {
             // For email-like terms, prioritize email and username columns only
             return `(
-            U."email" ILIKE '%${escapedTerm}%' OR
-            U."username" ILIKE '%${escapedTerm}%'
+            U."email" ILIKE $${currentParam} OR
+            U."username" ILIKE $${currentParam}
           )`;
           } else {
             // For non-email terms, search across all columns
             return `(
-            U."username" ILIKE '%${escapedTerm}%' OR
-            U."email" ILIKE '%${escapedTerm}%' OR
-            U."firstName" ILIKE '%${escapedTerm}%' OR
-            U."middleName" ILIKE '%${escapedTerm}%' OR
-            U."lastName" ILIKE '%${escapedTerm}%'
+            U."username" ILIKE $${currentParam} OR
+            U."email" ILIKE $${currentParam} OR
+            U."firstName" ILIKE $${currentParam} OR
+            U."middleName" ILIKE $${currentParam} OR
+            U."lastName" ILIKE $${currentParam}
           )`;
           }
         })
         .filter((condition) => condition !== ''); // Filter out empty conditions
 
       if (searchConditions.length === 0) {
-        return '';
+        return { condition: '', params: [] };
       }
 
       // All terms must be found (AND logic between terms)
-      return `AND (${searchConditions.join(' AND ')})`;
+      return { condition: `AND (${searchConditions.join(' AND ')})`, params };
     } catch (error) {
       console.error('Error in buildSearchTextWhereClause:', error);
-      return '';
+      return { condition: '', params: [] };
     }
   }
 }

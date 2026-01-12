@@ -2032,7 +2032,58 @@ export class PostgresFieldsService implements IServicelocatorfields {
       `;
 
     let result = await this.fieldsRepository.query(query, [userId]);
-    result = result.map(async (data) => {
+
+    // OPTIMIZED: Batch load dynamic options for table source fields to prevent N+1 queries
+    const tableSourceFields = result.filter(
+      (data) => data?.sourceDetails?.source === 'table'
+    ).map((data) => {
+      // Handle multiple comma-separated values correctly (same logic as old code)
+      let whereCondition = `value='${data.value}'`;
+      
+      // Check if `data.value` contains multiple comma-separated values
+      if (data.value && data.value.includes(',')) {
+        const values = data.value
+          .split(',')
+          .map((val) => `'${val.trim()}'`)
+          .join(', ');
+        whereCondition = `"value" IN (${values})`;
+      }
+      
+      // Generate unique key for batching (must match lookup key exactly)
+      const key = `${data.sourceDetails.table}-${data.value ? data.value.split(',').map((val) => `'${val.trim()}'`).join(', ') : ''}`;
+      
+      return {
+        ...data,
+        key, // Unique key for batching
+        whereCondition,
+      };
+    });
+
+    const dynamicOptionsMap = new Map<string, any[]>();
+    const uniqueTableQueries = new Map<string, { table: string; whereCondition: string }>();
+
+    // Group unique table/whereCondition combinations
+    for (const field of tableSourceFields) {
+      if (!uniqueTableQueries.has(field.key)) {
+        uniqueTableQueries.set(field.key, {
+          table: field.sourceDetails.table,
+          whereCondition: field.whereCondition,
+        });
+      }
+    }
+
+    // Batch load all unique table queries in parallel
+    const batchQueryPromises = Array.from(uniqueTableQueries.entries()).map(
+      async ([key, { table, whereCondition }]) => {
+        const options = await this.findDynamicOptions(table, whereCondition);
+        dynamicOptionsMap.set(key, options);
+      }
+    );
+
+    await Promise.all(batchQueryPromises);
+
+    // Process results with pre-loaded dynamic options
+    result = result.map((data) => {
       const originalValue = data.value;
       let processedValue = data.value;
 
@@ -2044,22 +2095,10 @@ export class PostgresFieldsService implements IServicelocatorfields {
             }
           });
         } else if (data.sourceDetails.source === 'table') {
-          let whereCondition = `value='${data.value}'`;
-
-          // Check if `data.value` contains multiple comma-separated values
-          if (data.value.includes(',')) {
-            const values = data.value
-              .split(',')
-              .map((val) => `'${val.trim()}'`)
-              .join(', ');
-
-            whereCondition = `"value" IN (${values})`;
-          }
-
-          const labels = await this.findDynamicOptions(
-            data.sourceDetails.table,
-            whereCondition
-          );
+          // Use pre-loaded dynamic options from map
+          // Generate key exactly the same way as when storing (must match exactly)
+          const key = `${data.sourceDetails.table}-${data.value ? data.value.split(',').map((val) => `'${val.trim()}'`).join(', ') : ''}`;
+          const labels = dynamicOptionsMap.get(key);
 
           if (labels && labels.length > 0) {
             // Extract all names and join them into a string
@@ -2078,7 +2117,6 @@ export class PostgresFieldsService implements IServicelocatorfields {
       };
     });
 
-    result = await Promise.all(result);
     return result;
   }
 

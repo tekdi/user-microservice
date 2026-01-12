@@ -370,6 +370,29 @@ export class PostgresRoleService {
     return userRoleData;
   }
 
+  /**
+   * Batch load user role data for multiple tenants in a single query
+   * Optimizes N+1 query problem by fetching all roles at once
+   */
+  public async findUserRoleDataBatch(userId: string, tenantIds: string[]) {
+    if (!tenantIds || tenantIds.length === 0) {
+      return [];
+    }
+    const userRoleData = await this.userRoleMappingRepository
+      .createQueryBuilder("urp")
+      .innerJoin(Role, "r", "r.roleId=urp.roleId")
+      .select([
+        "urp.roleId as roleid",
+        "r.title as title",
+        "r.code as code",
+        "urp.tenantId as tenantId",
+      ])
+      .where("urp.userId = :userId", { userId })
+      .andWhere("urp.tenantId IN (:...tenantIds)", { tenantIds })
+      .getRawMany();
+    return userRoleData;
+  }
+
   public async findPrivilegeByRoleId(roleIds: string[]) {
     const privileges = await this.roleprivilegeMappingRepository
       .createQueryBuilder("rpm")
