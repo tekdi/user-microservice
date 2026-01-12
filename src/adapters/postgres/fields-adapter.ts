@@ -2000,6 +2000,18 @@ export class PostgresFieldsService implements IServicelocatorfields {
     return mappedFields;
   }
 
+  /**
+   * SECURITY: Escape SQL literals to prevent SQL injection
+   * Escapes single quotes by doubling them (PostgreSQL standard)
+   * @param value - The string value to escape
+   * @returns Escaped string safe for SQL interpolation
+   */
+  private escapeSqlLiteral(value: string): string {
+    if (!value || typeof value !== 'string') return '';
+    // Escape single quotes by doubling them (PostgreSQL standard)
+    return value.replace(/'/g, "''");
+  }
+
   /* This function Fetches the Custom Field Enteres By User. Here
        Here It convert the Value into Real Option.
        Used in getUserDetails API as of Now.
@@ -2034,23 +2046,48 @@ export class PostgresFieldsService implements IServicelocatorfields {
     let result = await this.fieldsRepository.query(query, [userId]);
 
     // OPTIMIZED: Batch load dynamic options for table source fields to prevent N+1 queries
+    // SECURITY FIX: Escape SQL literals to prevent SQL injection
+
     const tableSourceFields = result.filter(
       (data) => data?.sourceDetails?.source === 'table'
     ).map((data) => {
-      // Handle multiple comma-separated values correctly (same logic as old code)
-      let whereCondition = `value='${data.value}'`;
+      // SECURITY FIX: Properly escape values to prevent SQL injection
+      // Handle multiple comma-separated values correctly
+      let whereCondition: string;
       
-      // Check if `data.value` contains multiple comma-separated values
-      if (data.value && data.value.includes(',')) {
-        const values = data.value
+      if (!data.value) {
+        whereCondition = `value IS NULL`;
+      } else if (data.value.includes(',')) {
+        // Multiple comma-separated values - use IN clause with escaped values
+        const escapedValues = data.value
           .split(',')
-          .map((val) => `'${val.trim()}'`)
+          .map((val) => {
+            const trimmed = val.trim();
+            return trimmed ? `'${this.escapeSqlLiteral(trimmed)}'` : null;
+          })
+          .filter((v) => v !== null)
           .join(', ');
-        whereCondition = `"value" IN (${values})`;
+        
+        if (escapedValues) {
+          whereCondition = `"value" IN (${escapedValues})`;
+        } else {
+          whereCondition = `value IS NULL`;
+        }
+      } else {
+        // Single value - use equality with escaped value
+        const escapedValue = this.escapeSqlLiteral(data.value.trim());
+        whereCondition = `value='${escapedValue}'`;
       }
       
       // Generate unique key for batching (must match lookup key exactly)
-      const key = `${data.sourceDetails.table}-${data.value ? data.value.split(',').map((val) => `'${val.trim()}'`).join(', ') : ''}`;
+      // Key generation also needs escaping for consistency
+      const keyValue = data.value
+        ? data.value.split(',').map((val) => {
+            const trimmed = val.trim();
+            return trimmed ? `'${this.escapeSqlLiteral(trimmed)}'` : '';
+          }).filter((v) => v).join(', ')
+        : '';
+      const key = `${data.sourceDetails.table}-${keyValue}`;
       
       return {
         ...data,
@@ -2072,15 +2109,22 @@ export class PostgresFieldsService implements IServicelocatorfields {
       }
     }
 
-    // Batch load all unique table queries in parallel
-    const batchQueryPromises = Array.from(uniqueTableQueries.entries()).map(
-      async ([key, { table, whereCondition }]) => {
-        const options = await this.findDynamicOptions(table, whereCondition);
-        dynamicOptionsMap.set(key, options);
-      }
-    );
-
-    await Promise.all(batchQueryPromises);
+    // OPTIMIZED: Batch load all unique table queries with concurrency limiting
+    // SECURITY: Concurrency limit prevents thundering herd if uniqueTableQueries.size is large
+    const CONCURRENCY_LIMIT = 10; // Limit concurrent queries to prevent database overload
+    
+    const batchQueryPromises = Array.from(uniqueTableQueries.entries());
+    
+    // Process queries in batches to limit concurrency
+    for (let i = 0; i < batchQueryPromises.length; i += CONCURRENCY_LIMIT) {
+      const batch = batchQueryPromises.slice(i, i + CONCURRENCY_LIMIT);
+      await Promise.all(
+        batch.map(async ([key, { table, whereCondition }]) => {
+          const options = await this.findDynamicOptions(table, whereCondition);
+          dynamicOptionsMap.set(key, options);
+        })
+      );
+    }
 
     // Process results with pre-loaded dynamic options
     result = result.map((data) => {
@@ -2096,8 +2140,15 @@ export class PostgresFieldsService implements IServicelocatorfields {
           });
         } else if (data.sourceDetails.source === 'table') {
           // Use pre-loaded dynamic options from map
-          // Generate key exactly the same way as when storing (must match exactly)
-          const key = `${data.sourceDetails.table}-${data.value ? data.value.split(',').map((val) => `'${val.trim()}'`).join(', ') : ''}`;
+          // SECURITY FIX: Generate key exactly the same way as when storing (must match exactly)
+          // Use same escaping logic for key generation
+          const keyValue = data.value
+            ? data.value.split(',').map((val) => {
+                const trimmed = val.trim();
+                return trimmed ? `'${this.escapeSqlLiteral(trimmed)}'` : '';
+              }).filter((v) => v).join(', ')
+            : '';
+          const key = `${data.sourceDetails.table}-${keyValue}`;
           const labels = dynamicOptionsMap.get(key);
 
           if (labels && labels.length > 0) {
