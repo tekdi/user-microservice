@@ -15,6 +15,7 @@ import { MemberStatus } from "../cohortMembers/entities/cohort-member.entity";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
 import { format } from "date-fns";
 import { navapathamConfig } from "./navapatham.config";
+import { KafkaService } from "../kafka/kafka.service";
 
 @Injectable()
 export class CronService {
@@ -33,7 +34,8 @@ export class CronService {
     private readonly userService: UserService,
     private readonly fieldsService: FieldsService,
     private readonly cohortMembersService: CohortMembersService,
-    private readonly userTenantMappingService: UserTenantMappingService
+    private readonly userTenantMappingService: UserTenantMappingService,
+    private readonly kafkaService: KafkaService
   ) {}
 
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
@@ -251,6 +253,28 @@ export class CronService {
 
                   await this.cohortMembersRepository.save(newMember);
 
+                  // Publish Kafka event for cohort member creation
+                  try {
+                    await this.kafkaService.publishCohortMemberEvent(
+                      'created',
+                      {
+                        cohortId: batch.cohortId,
+                        userId: user.userId,
+                        cohortAcademicYearId: cohortAcademicYear.cohortAcademicYearId,
+                        status: MemberStatus.ACTIVE,
+                        statusReason: "Auto-assigned by Navapatham cron job",
+                        createdBy: systemUserId,
+                        updatedBy: systemUserId,
+                      },
+                      newMember.cohortMembershipId
+                    );
+                  } catch (kafkaError) {
+                    // Log error but don't fail the assignment
+                    this.logger.error(
+                      `Failed to publish cohort member Kafka event for user ${user.userId}: ${kafkaError.message}`
+                    );
+                  }
+
                   // Update UserTenantMapping status
                   await this.userTenantMappingRepository.update(
                     {
@@ -262,6 +286,21 @@ export class CronService {
                       updatedAt: new Date(),
                     }
                   );
+
+                  // Publish Kafka event for user tenant mapping status update
+                  try {
+                    await this.userTenantMappingService.publishUserTenantMappingEvent(
+                      'updated_status',
+                      user.userId,
+                      tenantId,
+                      this.apiId
+                    );
+                  } catch (kafkaError) {
+                    // Log error but don't fail the assignment
+                    this.logger.error(
+                      `Failed to publish user tenant mapping Kafka event for user ${user.userId}: ${kafkaError.message}`
+                    );
+                  }
 
                   assigned = true;
                   assignedCount++;
