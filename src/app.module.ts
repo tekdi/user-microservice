@@ -31,6 +31,7 @@ import { KafkaModule } from "./kafka/kafka.module";
 import { SsoModule } from "./sso/sso.module";
 import kafkaConfig from "./kafka/kafka.config";
 import { HealthController } from "./health.controller";
+import { CronModule } from "./cron/cron.module";
 @Module({
   imports: [
     RbacModule,
@@ -58,6 +59,7 @@ import { HealthController } from "./health.controller";
     LocationModule,
     KafkaModule,
     SsoModule,
+    CronModule,
   ],
   controllers: [AppController, HealthController],
   providers: [AppService, HttpService],
