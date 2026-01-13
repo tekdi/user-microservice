@@ -92,8 +92,55 @@ export class CronService {
       // Step 4: Process each user
       for (const user of users) {
         try {
-          // Step 4.1: Extract user's blockId
-          // Field name is always lowercase "block", format is always {id: 881, value: "Elamanchili"}
+          // Step 4.1: Extract user's districtId
+          const districtField = user.customFields?.find(
+            (field) => field.name?.toLowerCase() === "district" || field.label?.toLowerCase() === "district"
+          );
+
+          if (!districtField || !districtField.selectedValues || districtField.selectedValues.length === 0) {
+            skippedCount++;
+            this.logger.warn(
+              `User ${user.userId} does not have district field in customFields`
+            );
+            continue;
+          }
+
+          // Extract districtId - format is {id: <id>, value: "<name>"}
+          const firstValue = districtField.selectedValues[0];
+          if (!firstValue || typeof firstValue !== 'object' || !firstValue.id) {
+            skippedCount++;
+            this.logger.warn(`User ${user.userId} has invalid district field format`);
+            continue;
+          }
+
+          // districtId can be number or string, convert to string for comparison
+          const districtIdStr = String(firstValue.id).trim();
+          
+          if (!districtIdStr) {
+            skippedCount++;
+            this.logger.warn(`User ${user.userId} has empty districtId`);
+            continue;
+          }
+
+          // Step 4.2: Find cohorts by districtId
+          const cohortIds = await this.fieldsService.filterUserUsingCustomFieldsOptimized(
+            "COHORT",
+            { district: districtIdStr }
+          );
+
+          if (!cohortIds || cohortIds.length === 0) {
+            skippedCount++;
+            this.logger.warn(
+              `No cohorts found for user ${user.userId} with districtId ${districtIdStr}`
+            );
+            continue;
+          }
+
+          this.logger.log(
+            `Found ${cohortIds.length} cohort(s) for user ${user.userId} with districtId ${districtIdStr}: ${cohortIds.join(', ')}`
+          );
+
+          // Step 4.1b: Extract user's blockId for batch matching
           const blockField = user.customFields?.find(
             (field) => field.name?.toLowerCase() === "block" || field.label?.toLowerCase() === "block"
           );
@@ -101,45 +148,26 @@ export class CronService {
           if (!blockField || !blockField.selectedValues || blockField.selectedValues.length === 0) {
             skippedCount++;
             this.logger.warn(
-              `User ${user.userId} does not have block field in customFields`
+              `User ${user.userId} does not have block field in customFields for batch matching`
             );
             continue;
           }
 
-          // Extract blockId - format is always {id: 881, value: "Elamanchili"}
-          const firstValue = blockField.selectedValues[0];
-          if (!firstValue || typeof firstValue !== 'object' || !firstValue.id) {
+          // Extract blockId for batch matching
+          const blockFirstValue = blockField.selectedValues[0];
+          if (!blockFirstValue || typeof blockFirstValue !== 'object' || !blockFirstValue.id) {
             skippedCount++;
-            this.logger.warn(`User ${user.userId} has invalid block field format`);
+            this.logger.warn(`User ${user.userId} has invalid block field format for batch matching`);
             continue;
           }
 
-          // blockId can be number or string, convert to string for comparison
-          const blockIdStr = String(firstValue.id).trim();
+          const blockIdStr = String(blockFirstValue.id).trim();
           
           if (!blockIdStr) {
             skippedCount++;
-            this.logger.warn(`User ${user.userId} has empty blockId`);
+            this.logger.warn(`User ${user.userId} has empty blockId for batch matching`);
             continue;
           }
-
-          // Step 4.2: Find cohorts by blockId
-          const cohortIds = await this.fieldsService.filterUserUsingCustomFieldsOptimized(
-            "COHORT",
-            { block: blockIdStr }
-          );
-
-          if (!cohortIds || cohortIds.length === 0) {
-            skippedCount++;
-            this.logger.warn(
-              `No cohorts found for user ${user.userId} with blockId ${blockIdStr}`
-            );
-            continue;
-          }
-
-          this.logger.log(
-            `Found ${cohortIds.length} cohort(s) for user ${user.userId} with blockId ${blockIdStr}: ${cohortIds.join(', ')}`
-          );
 
           let assigned = false;
 
