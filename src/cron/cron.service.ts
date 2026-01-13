@@ -47,11 +47,10 @@ export class CronService {
       // Step 1: Get configuration
       const tenantId = navapathamConfig.tenantId;
       const academicYearId = navapathamConfig.academicYearId;
-      const systemUserId = navapathamConfig.systemUserId;
 
-      if (!tenantId || !academicYearId || !systemUserId) {
+      if (!tenantId || !academicYearId) {
         const errorMsg =
-          "Missing required configuration: tenantId, academicYearId, or systemUserId in navapatham.config.ts";
+          "Missing required configuration: tenantId or academicYearId in navapatham.config.ts";
         this.logger.error(errorMsg);
         LoggerUtil.error(errorMsg, "", this.apiId);
         return;
@@ -247,8 +246,8 @@ export class CronService {
                     userId: user.userId,
                     status: MemberStatus.ACTIVE,
                     statusReason: "Auto-assigned by Navapatham cron job",
-                    createdBy: systemUserId,
-                    updatedBy: systemUserId,
+                    createdBy: user.userId,
+                    updatedBy: user.userId,
                   });
 
                   await this.cohortMembersRepository.save(newMember);
@@ -263,8 +262,8 @@ export class CronService {
                         cohortAcademicYearId: cohortAcademicYear.cohortAcademicYearId,
                         status: MemberStatus.ACTIVE,
                         statusReason: "Auto-assigned by Navapatham cron job",
-                        createdBy: systemUserId,
-                        updatedBy: systemUserId,
+                        createdBy: user.userId,
+                        updatedBy: user.userId,
                       },
                       newMember.cohortMembershipId
                     );
