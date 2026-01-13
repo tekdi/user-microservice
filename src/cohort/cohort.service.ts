@@ -357,6 +357,11 @@ export class CohortService {
       cohortCreateDto.status = cohortCreateDto.status || "active";
       cohortCreateDto.attendanceCaptureImage = false;
 
+      // Ensure metadata is a JSON string if provided
+      if (cohortCreateDto.metadata && typeof cohortCreateDto.metadata === 'object') {
+        cohortCreateDto.metadata = JSON.stringify(cohortCreateDto.metadata);
+      }
+
       const existData = await this.cohortRepository.find({
         where: {
           name: cohortCreateDto.name,
