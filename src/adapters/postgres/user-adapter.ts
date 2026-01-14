@@ -943,18 +943,12 @@ export class PostgresUserService implements IServicelocator {
         'userId',
         'username',
         'firstName',
-        'middleName',
         'lastName',
         'gender',
         'dob',
-        'mobile',
         'email',
-        'temporaryPassword',
         'status',
         'createdAt',
-        'createdBy',
-        'deviceId',
-        'mobile_country_code',
         'country',
         'auto_tags',
       ],
@@ -2535,7 +2529,9 @@ export class PostgresUserService implements IServicelocator {
           // (e.g., if LoggerUtil.error itself throws)
           LoggerUtil.error(
             `${API_RESPONSES.SERVER_ERROR}: ${requestUrl}`,
-            `Unhandled error in password reset notification: ${error?.message || String(error)}`
+            `Unhandled error in password reset notification: ${
+              error?.message || String(error)
+            }`
           );
         }); // Arrow function preserves 'this' context automatically
       }
