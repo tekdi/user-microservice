@@ -2529,7 +2529,15 @@ export class PostgresUserService implements IServicelocator {
               `Failed to send password reset notification: ${error.message}`
             );
           }
-        })(); // Arrow function preserves 'this' context automatically
+        })().catch((error) => {
+          // Final catch handler to prevent unhandled promise rejections
+          // This catches any errors that might escape the inner try-catch
+          // (e.g., if LoggerUtil.error itself throws)
+          LoggerUtil.error(
+            `${API_RESPONSES.SERVER_ERROR}: ${requestUrl}`,
+            `Unhandled error in password reset notification: ${error?.message || String(error)}`
+          );
+        }); // Arrow function preserves 'this' context automatically
       }
 
       return new SuccessResponse({
