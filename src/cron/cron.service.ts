@@ -64,7 +64,7 @@ export class CronService {
 
         filters: {
           fromDate: todayDate,
-          state: ["28"], // Telangana state ID
+          state: ["36"], // Telangana state ID
           tenantStatus: ["pending"],
         },
         includeCustomFields: "true",
