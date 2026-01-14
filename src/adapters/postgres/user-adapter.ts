@@ -966,28 +966,9 @@ export class PostgresUserService implements IServicelocator {
       return false;
     }
 
-    // ============================================================================
-    // OPTIMIZATION: Tenant/Role data fetching commented out for performance
-    // This reduces database queries from 5-10 queries to 1 query per request
-    //
-    // TO ENABLE MULTI-TENANT SUPPORT IN FUTURE:
-    // 1. Uncomment the code below
-    // 2. This will fetch tenant and role data for the user
-    // 3. Note: This will add 200-500ms latency per request
-    // ============================================================================
-
-    // const tenentDetails = await this.userTenantRoleData(userDetails.userId);
-    // if (!tenentDetails) {
-    //   userDetails['tenantData'] = [];
-    //   return userDetails;
-    // }
-    // const tenantData = tenantId
-    //   ? tenentDetails.filter((item) => item.tenantId === tenantId)
-    //   : tenentDetails;
-    // userDetails['tenantData'] = tenantData;
-
-    // Set empty tenantData for now (can be uncommented above for multi-tenant support)
-    userDetails['tenantData'] = [];
+    // Fetch tenant/role data (optimized: only essential fields, no privileges/tenantName)
+    const tenantDetails = await this.userTenantRoleData(userDetails.userId, tenantId);
+    userDetails['tenantData'] = tenantDetails || [];
 
     return userDetails;
   }
@@ -1051,23 +1032,29 @@ export class PostgresUserService implements IServicelocator {
     return null;
   }
 
-  async userTenantRoleData(userId: string) {
+  /**
+   * Optimized: Get tenant/role data with only essential fields
+   * Returns: tenantId, userTenantMappingId, roleId, roleName
+   * Does NOT fetch: tenantName, privileges (for performance optimization)
+   * 
+   * TO ENABLE PRIVILEGES/TENANTNAME IN FUTURE:
+   * 1. Uncomment privilege fetching code below
+   * 2. Add tenantName to SELECT query
+   * 3. Add privileges field to combinedResult.push()
+   */
+  async userTenantRoleData(userId: string, tenantId?: string) {
+    // Optimized query: Only fetch tenantId and userTenantMappingId (skip tenantName for performance)
     const query = `
   SELECT 
-    DISTINCT ON (T."tenantId") 
-    T."tenantId", 
-    T.name AS tenantName, 
+    DISTINCT ON (UTM."tenantId") 
+    UTM."tenantId", 
     UTM."Id" AS userTenantMappingId
   FROM 
     public."UserTenantMapping" UTM
-  LEFT JOIN 
-    public."Tenants" T 
-  ON 
-    T."tenantId" = UTM."tenantId" 
   WHERE 
     UTM."userId" = $1
   ORDER BY 
-    T."tenantId", UTM."Id";`;
+    UTM."tenantId", UTM."Id";`;
 
     const result = await this.usersRepository.query(query, [userId]);
 
@@ -1107,38 +1094,49 @@ export class PostgresUserService implements IServicelocator {
       }
     }
 
-    // Collect all unique roleIds for batch privilege loading
-    const allRoleIds = [
-      ...new Set(allRoleData.map((rd) => rd.roleid || rd.roleId)),
-    ].filter(Boolean);
+    // ============================================================================
+    // OPTIMIZATION: Privilege fetching commented out for performance
+    // Frontend only needs: tenantId, userTenantMappingId, roleId, roleName
+    // Privileges are not needed and add 100-300ms latency per request
+    //
+    // TO ENABLE PRIVILEGES IN FUTURE:
+    // 1. Uncomment the code below
+    // 2. This will fetch privileges for all roles
+    // 3. Add 'privileges' field to the combinedResult.push() below
+    // ============================================================================
 
-    // Batch load all privileges in a single query
-    const allPrivilegeData =
-      allRoleIds.length > 0
-        ? await this.postgresRoleService.findPrivilegeByRoleId(allRoleIds)
-        : [];
+    // // Collect all unique roleIds for batch privilege loading
+    // const allRoleIds = [
+    //   ...new Set(allRoleData.map((rd) => rd.roleid || rd.roleId)),
+    // ].filter(Boolean);
 
-    // Create a map of roleId -> privileges for quick lookup
-    const privilegeMap = new Map<string, string[]>();
-    for (const privData of allPrivilegeData) {
-      // TypeORM getRawMany() returns lowercase: "roleId" alias becomes "roleid"
-      const roleId = privData.roleid || privData.roleId;
-      if (roleId) {
-        // Store with the actual roleId value (don't normalize UUIDs)
-        if (!privilegeMap.has(roleId)) {
-          privilegeMap.set(roleId, []);
-        }
-        privilegeMap.get(roleId).push(privData.name);
-      }
-    }
+    // // Batch load all privileges in a single query
+    // const allPrivilegeData =
+    //   allRoleIds.length > 0
+    //     ? await this.postgresRoleService.findPrivilegeByRoleId(allRoleIds)
+    //     : [];
 
-    // Build the result array matching the original structure
+    // // Create a map of roleId -> privileges for quick lookup
+    // const privilegeMap = new Map<string, string[]>();
+    // for (const privData of allPrivilegeData) {
+    //   // TypeORM getRawMany() returns lowercase: "roleId" alias becomes "roleid"
+    //   const roleId = privData.roleid || privData.roleId;
+    //   if (roleId) {
+    //     // Store with the actual roleId value (don't normalize UUIDs)
+    //     if (!privilegeMap.has(roleId)) {
+    //       privilegeMap.set(roleId, []);
+    //     }
+    //     privilegeMap.get(roleId).push(privData.name);
+    //   }
+    // }
+
+    // Build the result array with only required fields (optimized for frontend)
     const combinedResult = [];
     for (const data of result) {
       // Handle both camelCase and lowercase property names from PostgreSQL raw query
       // PostgreSQL raw queries typically return lowercase property names
       const tenantId = data.tenantid || data.tenantId;
-      const tenantName = data.tenantname || data.tenantName || data.name;
+      // tenantName removed from query for performance (not needed by frontend)
       const userTenantMappingId =
         data.usertenantmappingid ||
         data.userTenantMappingId ||
@@ -1170,19 +1168,22 @@ export class PostgresUserService implements IServicelocator {
         // Use the first role (matching original behavior)
         const roleData = tenantRoleData[0];
         const roleId = roleData.roleid || roleData.roleId;
-        const roleName = roleData.title;
+        // Handle both lowercase and camelCase property names from TypeORM
+        const roleName = roleData.title || roleData.Title;
 
-        // Get privileges for this role from the map
-        // Try both lowercase and camelCase property names
-        const privileges = privilegeMap.get(roleId) || [];
+        // ============================================================================
+        // OPTIMIZATION: Privileges commented out - not needed by frontend
+        // Uncomment below if privileges are needed in future
+        // ============================================================================
+        // const privileges = privilegeMap.get(roleId) || [];
 
         combinedResult.push({
-          tenantName: tenantName,
+          // tenantName: tenantName, // Commented out - not needed by frontend
           tenantId: tenantId,
           userTenantMappingId: userTenantMappingId,
           roleId: roleId,
           roleName: roleName,
-          privileges: privileges,
+          // privileges: privileges, // Commented out - not needed by frontend
         });
       }
     }
