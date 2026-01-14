@@ -3,6 +3,14 @@ import { API_RESPONSES } from './response.messages';
 import { LoggerUtil } from 'src/common/logger/LoggerUtil';
 const axios = require('axios');
 
+// Token cache to avoid fetching admin token on every request
+interface CachedToken {
+  token: string;
+  expiresAt: number;
+}
+
+let cachedAdminToken: CachedToken | null = null;
+
 function getUserRole(userRoles: string[]) {
   if (userRoles.includes('systemAdmin')) {
     return 'systemAdmin';
@@ -24,8 +32,29 @@ function getUserGroup(role: string) {
   }
 }
 
-async function getKeycloakAdminToken() {
+/**
+ * Get Keycloak admin token with caching mechanism
+ * Token is cached and reused until 5 minutes before expiry
+ * This significantly reduces load on Keycloak token endpoint
+ */
+async function getKeycloakAdminToken(): Promise<any> {
   try {
+    // Check if cached token exists and is still valid (refresh 5 minutes before expiry)
+    const now = Date.now();
+    const bufferTime = 5 * 60 * 1000; // 5 minutes buffer
+
+    if (cachedAdminToken && now < cachedAdminToken.expiresAt - bufferTime) {
+      LoggerUtil.log('Using cached Keycloak admin token');
+      return {
+        data: {
+          access_token: cachedAdminToken.token,
+          expires_in: Math.floor((cachedAdminToken.expiresAt - now) / 1000),
+        },
+      };
+    }
+
+    // Token expired or doesn't exist, fetch new one
+    LoggerUtil.log('Fetching new Keycloak admin token');
     const axios = require('axios');
     const qs = require('qs');
     const data = qs.stringify({
@@ -42,20 +71,40 @@ async function getKeycloakAdminToken() {
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       data: data,
+      timeout: 10000, // 10 second timeout to prevent hanging
     };
 
     let res;
     try {
       res = await axios(config);
+      
+      // Cache the token with expiration
+      if (res && res.data && res.data.access_token) {
+        const expiresIn = (res.data.expires_in || 60) * 1000; // Default to 60 seconds if not provided
+        cachedAdminToken = {
+          token: res.data.access_token,
+          expiresAt: now + expiresIn,
+        };
+        LoggerUtil.log(`Keycloak admin token cached, expires in ${Math.floor(expiresIn / 1000)} seconds`);
+      }
     } catch (error) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
-        `Error: ${error.message},`
+        `Error fetching Keycloak admin token: ${error.message}`
       );
+      // Clear cache on error to force refresh on next request
+      cachedAdminToken = null;
+      throw error;
     }
 
     return res;
-  } catch (error) {}
+  } catch (error) {
+    LoggerUtil.error(
+      `${API_RESPONSES.SERVER_ERROR}`,
+      `Error in getKeycloakAdminToken: ${error.message}`
+    );
+    throw error;
+  }
 }
 
 async function createUserInKeyCloak(query, token) {

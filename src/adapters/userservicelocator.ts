@@ -33,6 +33,7 @@ export interface IServicelocator {
   );
   ssoCallback(code: any, request: any, response: Response);
   findUserDetails(userID: any, username: string, tenantId?: string);
+  findUserStatusForLogin(username: string);
   searchUser(
     tenantId: string,
     request: any,

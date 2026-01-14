@@ -29,10 +29,10 @@ export class AuthService {
     const apiId = APIID.LOGIN;
     const { username, password } = authDto;
     try {
-      // Fetch user details by username
+      // Optimized: Only check user status (no tenant/role data needed for login)
       const userData = await this.useradapter
         .buildUserAdapter()
-        .findUserDetails(null, username);
+        .findUserStatusForLogin(username);
 
       // Handle case: user not found or user is inactive
       if (!userData || userData.status === 'inactive') {
@@ -49,7 +49,7 @@ export class AuthService {
         );
       }
 
-      // If user is found, proceed to login
+      // If user is found, proceed to login with retry logic
       const {
         access_token,
         expires_in,

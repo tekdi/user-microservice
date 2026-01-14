@@ -53,9 +53,46 @@ export class KeycloakService {
         "Content-Type": "application/x-www-form-urlencoded",
       },
       data: data,
+      timeout: 15000, // 15 second timeout to prevent hanging
     };
-    const res = await this.axios(axiosConfig);
-    return res.data;
+
+    // Retry logic for transient Keycloak errors
+    const maxRetries = 3;
+    let lastError;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const res = await this.axios(axiosConfig);
+        return res.data;
+      } catch (error) {
+        lastError = error;
+        const statusCode = error?.response?.status;
+        const isRetryable = 
+          statusCode === 503 || // Service Unavailable
+          statusCode === 504 || // Gateway Timeout
+          statusCode === 429 || // Too Many Requests
+          statusCode === 500 || // Internal Server Error
+          error.code === 'ECONNRESET' || // Connection reset
+          error.code === 'ETIMEDOUT' || // Timeout
+          error.code === 'ECONNREFUSED'; // Connection refused
+
+        // Don't retry on 401 (invalid credentials) or 400 (bad request)
+        if (statusCode === 401 || statusCode === 400) {
+          throw error; // Re-throw authentication errors immediately
+        }
+
+        if (!isRetryable || attempt === maxRetries) {
+          // Non-retryable error or max retries reached
+          throw error;
+        }
+
+        // Retry with exponential backoff
+        const backoffDelay = 1000 * Math.pow(2, attempt - 1); // 1s, 2s, 4s
+        await new Promise(resolve => setTimeout(resolve, backoffDelay));
+      }
+    }
+
+    throw lastError;
   }
 
   async getUserInfo(accessToken: string): Promise<UserInfoResponse> {
@@ -106,6 +143,7 @@ export class KeycloakService {
         "Content-Type": "application/x-www-form-urlencoded",
       },
       data: data,
+      timeout: 15000, // 15 second timeout
     };
 
     const res = await this.axios(axiosConfig);
@@ -127,6 +165,7 @@ export class KeycloakService {
         "Content-Type": "application/x-www-form-urlencoded",
       },
       data: data,
+      timeout: 10000, // 10 second timeout
     };
 
     const res = await this.axios(axiosConfig);
