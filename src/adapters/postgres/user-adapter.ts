@@ -2419,7 +2419,6 @@ export class PostgresUserService implements IServicelocator {
 
     // Retry logic for transient Keycloak errors
     const maxRetries = 3;
-    let lastError;
     let apiResponse;
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -2428,7 +2427,6 @@ export class PostgresUserService implements IServicelocator {
         // Success, break out of retry loop
         break;
       } catch (e) {
-        lastError = e;
         const statusCode = e?.response?.status;
         const isRetryable =
           statusCode === 503 || // Service Unavailable
@@ -2479,8 +2477,6 @@ export class PostgresUserService implements IServicelocator {
       // Send notification asynchronously (fire-and-forget) to not block response
       // Fetch tenant data asynchronously inside notification to avoid blocking password reset
       if (userData.email) {
-        // Store reference to 'this' for use in async function
-        const self = this;
         const userEmail = userData.email;
         const userName = userData?.name;
         const userId = userData.userId;
@@ -2491,7 +2487,7 @@ export class PostgresUserService implements IServicelocator {
         (async () => {
           try {
             // Fetch tenant data only when needed for notification (async, non-blocking)
-            const tenantData = await self.getFirstTenantName(userId);
+            const tenantData = await this.getFirstTenantName(userId);
             const programName = tenantData?.[0]?.tenantName
               ? tenantData[0].tenantName.charAt(0).toUpperCase() +
                 tenantData[0].tenantName.slice(1)
@@ -2511,7 +2507,7 @@ export class PostgresUserService implements IServicelocator {
             };
 
             // Send notification asynchronously without blocking the response
-            const mailSend = await self.notificationRequest.sendNotification(
+            const mailSend = await this.notificationRequest.sendNotification(
               notificationPayload
             );
             if (mailSend?.result?.email?.errors?.length > 0) {
@@ -2533,7 +2529,7 @@ export class PostgresUserService implements IServicelocator {
               `Failed to send password reset notification: ${error.message}`
             );
           }
-        })(); // Immediately invoked async function (fire-and-forget)
+        })(); // Arrow function preserves 'this' context automatically
       }
 
       return new SuccessResponse({

@@ -79,7 +79,7 @@ async function getKeycloakAdminToken(): Promise<any> {
       res = await axios(config);
       
       // Cache the token with expiration
-      if (res && res.data && res.data.access_token) {
+      if (res?.data?.access_token) {
         const expiresIn = (res.data.expires_in || 60) * 1000; // Default to 60 seconds if not provided
         cachedAdminToken = {
           token: res.data.access_token,
