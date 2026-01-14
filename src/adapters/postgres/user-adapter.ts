@@ -165,7 +165,9 @@ export class PostgresUserService implements IServicelocator {
 
       // Format expiration time
       const time = formatTime(jwtExpireTime);
-      const programName = userData?.tenantData[0]?.tenantName;
+      // Fetch tenant name only when needed (lightweight query, since tenantData is now empty)
+      const tenantData = await this.getFirstTenantName(userData.userId);
+      const programName = tenantData?.[0]?.tenantName;
       const capilatizeFirstLettterOfProgram = programName
         ? programName.charAt(0).toUpperCase() + programName.slice(1)
         : 'Learner Account';
@@ -195,7 +197,8 @@ export class PostgresUserService implements IServicelocator {
       // Use key accordingly to send notification (For account verification or password reset)
 
       // Determine redirect URL for reset password based on user role
-      const userRole = userData?.tenantData?.[0]?.roleName;
+      // Fetch role name only when needed for routing (lightweight query)
+      const userRole = await this.getFirstRoleName(userData.userId);
       let resetPasswordUrlPath = frontEndUrl;
 
       if (userRole === 'Admin' || userRole === 'Regional Admin') {
@@ -943,12 +946,18 @@ export class PostgresUserService implements IServicelocator {
         'userId',
         'username',
         'firstName',
+        'middleName',
         'lastName',
         'gender',
         'dob',
+        'mobile',
         'email',
+        'temporaryPassword',
         'status',
         'createdAt',
+        'createdBy',
+        'deviceId',
+        'mobile_country_code',
         'country',
         'auto_tags',
       ],
@@ -981,6 +990,35 @@ export class PostgresUserService implements IServicelocator {
     userDetails['tenantData'] = [];
 
     return userDetails;
+  }
+
+  /**
+   * Lightweight method to get the first role name for a user
+   * Used for role-based routing (e.g., Admin/Regional Admin get backend URL)
+   * Optimized to fetch only role name, not full tenant/role data
+   */
+  async getFirstRoleName(userId: string): Promise<string | null> {
+    const query = `
+      SELECT 
+        R.name AS "roleName"
+      FROM 
+        public."UserTenantMapping" UTM
+      INNER JOIN 
+        public."UserRolesMapping" URM ON URM."userId" = UTM."userId" AND URM."tenantId" = UTM."tenantId"
+      INNER JOIN 
+        public."Roles" R ON R."roleId" = URM."roleId"
+      WHERE 
+        UTM."userId" = $1
+      ORDER BY 
+        UTM."Id"
+      LIMIT 1;
+    `;
+
+    const result = await this.usersRepository.query(query, [userId]);
+    if (result && result.length > 0 && result[0].roleName) {
+      return result[0].roleName;
+    }
+    return null;
   }
 
   /**
@@ -2529,9 +2567,7 @@ export class PostgresUserService implements IServicelocator {
           // (e.g., if LoggerUtil.error itself throws)
           LoggerUtil.error(
             `${API_RESPONSES.SERVER_ERROR}: ${requestUrl}`,
-            `Unhandled error in password reset notification: ${
-              error?.message || String(error)
-            }`
+            `Unhandled error in password reset notification: ${error?.message || String(error)}`
           );
         }); // Arrow function preserves 'this' context automatically
       }
