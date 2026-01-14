@@ -93,8 +93,15 @@ export class CohortCreateDto {
   image: string[];
 
   //metadata
+  @ApiPropertyOptional({
+    type: String,
+    description: "Metadata as JSON string (e.g., '{\"blockId\": \"881\"}')",
+    example: '{"blockId": "881"}',
+  })
   @Expose()
-  metadata: string;
+  @IsOptional()
+  @IsString()
+  metadata?: string;
 
   //createdBy
   @Expose()
