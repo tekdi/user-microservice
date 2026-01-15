@@ -636,6 +636,19 @@
 			"packageName": "shiksha-user"
 		  }
 		]
+	  },
+	  {
+		"sourceRoute": "/interface/v1/cohort/geographical-hierarchy/:id",
+		"type": "GET",
+		"priority": "MUST_HAVE",
+		"inSequence": false,
+		"orchestrated": false,
+		"targetPackages": [
+		  {
+			"basePackageName": "user",
+			"packageName": "shiksha-user"
+		  }
+		]
 	  }
 	]
   }
