@@ -22,7 +22,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-user"
+					"packageName": "shiksha-updated-user"
 				}
 			]
 		},
