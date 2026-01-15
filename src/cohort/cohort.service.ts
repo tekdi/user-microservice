@@ -1279,4 +1279,255 @@ export class CohortService {
       // Don't throw the error to avoid affecting the main operation
     }
   }
+
+  /**
+   * Get reverse geographical hierarchy for a user based on their cohort assignments
+   * @param requiredData - Object containing userId and academicYearId
+   * @param res - Response object
+   * @returns APIResponse with geographical hierarchy: State -> District -> Block -> Center -> Batch
+   */
+  public async getUserGeographicalHierarchy(
+    requiredData,
+    res
+  ) {
+    const apiId = APIID.COHORT_READ;
+
+    try {
+      const { userId, academicYearId } = requiredData;
+
+      // Step 1: Get user cohorts (batches and centers)
+      const userCohorts = await this.findCohortName(userId, academicYearId);
+      if (!userCohorts || userCohorts.length === 0) {
+        return APIResponse.success(
+          res,
+          apiId,
+          [],
+          HttpStatus.OK,
+          "User geographical hierarchy fetched successfully"
+        );
+      }
+
+      // Step 2: Collect unique centers (from batches via parentId or direct center assignments)
+      const centerBatchMap = new Map<string, any[]>();
+      const centerIds = new Set<string>();
+
+      for (const cohort of userCohorts) {
+        let centerId: string;
+        
+        if (cohort.type?.toLowerCase() === 'batch' && cohort.parentId) {
+          // Batch: get parent center
+          centerId = cohort.parentId;
+          if (!centerBatchMap.has(centerId)) {
+            centerBatchMap.set(centerId, []);
+          }
+          centerBatchMap.get(centerId).push({
+            batchId: cohort.cohortId,
+            batchName: cohort.name
+          });
+        } else if (cohort.type?.toLowerCase() === 'center' || cohort.type?.toLowerCase() === 'cohort') {
+          // Direct center assignment
+          centerId = cohort.cohortId;
+          if (!centerBatchMap.has(centerId)) {
+            centerBatchMap.set(centerId, []);
+          }
+        } else {
+          continue;
+        }
+        
+        centerIds.add(centerId);
+      }
+
+      if (centerIds.size === 0) {
+        return APIResponse.success(
+          res,
+          apiId,
+          [],
+          HttpStatus.OK,
+          "User geographical hierarchy fetched successfully"
+        );
+      }
+
+      // Step 3: Get SDBV data for centers using existing getCustomFieldDetails method
+      const centerIdsArray = Array.from(centerIds);
+      const centers = await this.cohortRepository.find({
+        where: { cohortId: In(centerIdsArray) },
+        select: ['cohortId', 'name']
+      });
+
+      const centerGeoDataMap = new Map<string, any>();
+
+      // Process each center using existing method
+      for (const center of centers) {
+        // Use existing getCustomFieldDetails method (same as used in other APIs)
+        const customFields = await this.fieldsService.getCustomFieldDetails(
+          center.cohortId,
+          'Cohort'
+        );
+        
+        const geoData: any = {
+          stateId: null,
+          stateName: null,
+          districtId: null,
+          districtName: null,
+          blockId: null,
+          blockName: null
+        };
+
+        // Extract SDBV from custom fields (same pattern as used in cron.service.ts)
+        for (const field of customFields) {
+          const fieldLabel = field.label?.toLowerCase();
+          const fieldName = field.name?.toLowerCase();
+          
+          // Check both label and name (as done in other services)
+          if ((fieldLabel === 'state' || fieldName === 'state') && field.selectedValues?.[0]) {
+            const val = field.selectedValues[0];
+            if (val && typeof val === 'object') {
+              geoData.stateId = val.id || val.value || null;
+              geoData.stateName = val.label || val.value || null;
+            }
+          } else if ((fieldLabel === 'district' || fieldName === 'district') && field.selectedValues?.[0]) {
+            const val = field.selectedValues[0];
+            if (val && typeof val === 'object') {
+              geoData.districtId = val.id || val.value || null;
+              geoData.districtName = val.label || val.value || null;
+            }
+          } else if ((fieldLabel === 'block' || fieldName === 'block') && field.selectedValues?.[0]) {
+            const val = field.selectedValues[0];
+            if (val && typeof val === 'object') {
+              geoData.blockId = val.id || val.value || null;
+              geoData.blockName = val.label || val.value || null;
+            }
+          }
+        }
+
+        centerGeoDataMap.set(center.cohortId, {
+          centerId: center.cohortId,
+          centerName: center.name,
+          ...geoData,
+          batches: centerBatchMap.get(center.cohortId) || []
+        });
+      }
+
+      // Step 5: Build reverse geographical hierarchy
+      const hierarchyMap = new Map<string, Map<string, Map<string, any[]>>>(); // state -> district -> block -> centers
+
+      for (const [centerId, centerData] of centerGeoDataMap.entries()) {
+        const stateKey = centerData.stateId || 'unknown';
+        const districtKey = centerData.districtId || 'unknown';
+        const blockKey = centerData.blockId || 'unknown';
+
+        if (!hierarchyMap.has(stateKey)) {
+          hierarchyMap.set(stateKey, new Map());
+        }
+        const stateMap = hierarchyMap.get(stateKey);
+
+        if (!stateMap.has(districtKey)) {
+          stateMap.set(districtKey, new Map());
+        }
+        const districtMap = stateMap.get(districtKey);
+
+        if (!districtMap.has(blockKey)) {
+          districtMap.set(blockKey, []);
+        }
+        districtMap.get(blockKey).push({
+          centerId: centerData.centerId,
+          centerName: centerData.centerName,
+          batches: centerData.batches
+        });
+      }
+
+      // Step 6: Convert map structure to response format
+      const result = [];
+
+      for (const [stateId, districtMap] of hierarchyMap.entries()) {
+        const stateData: any = {
+          stateId: stateId === 'unknown' ? null : stateId,
+          stateName: 'Unknown',
+          districts: []
+        };
+
+        // Get state name from first center in this state
+        const firstCenter = Array.from(districtMap.values())[0]?.get(Array.from(Array.from(districtMap.values())[0].keys())[0])?.[0];
+        if (firstCenter) {
+          const centerGeo = centerGeoDataMap.get(firstCenter.centerId);
+          if (centerGeo && centerGeo.stateName) {
+            stateData.stateName = centerGeo.stateName;
+          }
+        }
+
+        for (const [districtId, blockMap] of districtMap.entries()) {
+          const districtData: any = {
+            districtId: districtId === 'unknown' ? null : districtId,
+            districtName: 'Unknown',
+            blocks: []
+          };
+
+          // Get district name from first center in this district
+          const firstBlockCenter = Array.from(blockMap.values())[0]?.[0];
+          if (firstBlockCenter) {
+            const centerGeo = centerGeoDataMap.get(firstBlockCenter.centerId);
+            if (centerGeo && centerGeo.districtName) {
+              districtData.districtName = centerGeo.districtName;
+            }
+          }
+
+          for (const [blockId, centers] of blockMap.entries()) {
+            const blockData: any = {
+              blockId: blockId === 'unknown' ? null : blockId,
+              blockName: 'Unknown',
+              centers: []
+            };
+
+            // Get block name from first center in this block
+            if (centers.length > 0) {
+              const centerGeo = centerGeoDataMap.get(centers[0].centerId);
+              if (centerGeo && centerGeo.blockName) {
+                blockData.blockName = centerGeo.blockName;
+              }
+            }
+
+            // Add centers (without batches in center object, batches are separate)
+            blockData.centers = centers.map(center => ({
+              centerId: center.centerId,
+              centerName: center.centerName,
+              batches: center.batches || []
+            }));
+
+            districtData.blocks.push(blockData);
+          }
+
+          stateData.districts.push(districtData);
+        }
+
+        result.push(stateData);
+      }
+
+      LoggerUtil.log(
+        "User geographical hierarchy fetched successfully",
+        apiId
+      );
+
+      return APIResponse.success(
+        res,
+        apiId,
+        result,
+        HttpStatus.OK,
+        "User geographical hierarchy fetched successfully"
+      );
+    } catch (error) {
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${error.message}`,
+        apiId
+      );
+      const errorMessage = error.message || API_RESPONSES.SERVER_ERROR;
+      return APIResponse.error(
+        res,
+        apiId,
+        API_RESPONSES.SERVER_ERROR,
+        errorMessage,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
 }
