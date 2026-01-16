@@ -56,43 +56,51 @@ export class KeycloakService {
       timeout: 15000, // 15 second timeout to prevent hanging
     };
 
-    // Retry logic for transient Keycloak errors
-    const maxRetries = 3;
-    let lastError;
+    // Retry logic for transient Keycloak errors - COMMENTED OUT TEMPORARILY
+    // const maxRetries = 3;
+    // let lastError;
 
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        const res = await this.axios(axiosConfig);
-        return res.data;
-      } catch (error) {
-        lastError = error;
-        const statusCode = error?.response?.status;
-        const isRetryable = 
-          statusCode === 503 || // Service Unavailable
-          statusCode === 504 || // Gateway Timeout
-          statusCode === 429 || // Too Many Requests
-          statusCode === 500 || // Internal Server Error
-          error.code === 'ECONNRESET' || // Connection reset
-          error.code === 'ETIMEDOUT' || // Timeout
-          error.code === 'ECONNREFUSED'; // Connection refused
+    // for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    //   try {
+    //     const res = await this.axios(axiosConfig);
+    //     return res.data;
+    //   } catch (error) {
+    //     lastError = error;
+    //     const statusCode = error?.response?.status;
+    //     const isRetryable = 
+    //       statusCode === 503 || // Service Unavailable
+    //       statusCode === 504 || // Gateway Timeout
+    //       statusCode === 429 || // Too Many Requests
+    //       statusCode === 500 || // Internal Server Error
+    //       error.code === 'ECONNRESET' || // Connection reset
+    //       error.code === 'ETIMEDOUT' || // Timeout
+    //       error.code === 'ECONNREFUSED'; // Connection refused
 
-        // Don't retry on 401 (invalid credentials) or 400 (bad request)
-        if (statusCode === 401 || statusCode === 400) {
-          throw error; // Re-throw authentication errors immediately
-        }
+    //     // Don't retry on 401 (invalid credentials) or 400 (bad request)
+    //     if (statusCode === 401 || statusCode === 400) {
+    //       throw error; // Re-throw authentication errors immediately
+    //     }
 
-        if (!isRetryable || attempt === maxRetries) {
-          // Non-retryable error or max retries reached
-          throw error;
-        }
+    //     if (!isRetryable || attempt === maxRetries) {
+    //       // Non-retryable error or max retries reached
+    //       throw error;
+    //     }
 
-        // Retry with exponential backoff
-        const backoffDelay = 1000 * Math.pow(2, attempt - 1); // 1s, 2s, 4s
-        await new Promise(resolve => setTimeout(resolve, backoffDelay));
-      }
+    //     // Retry with exponential backoff
+    //     const backoffDelay = 1000 * Math.pow(2, attempt - 1); // 1s, 2s, 4s
+    //     await new Promise(resolve => setTimeout(resolve, backoffDelay));
+    //   }
+    // }
+
+    // throw lastError;
+
+    // Simple try-catch without retry logic
+    try {
+      const res = await this.axios(axiosConfig);
+      return res.data;
+    } catch (error) {
+      throw error;
     }
-
-    throw lastError;
   }
 
   async getUserInfo(accessToken: string): Promise<UserInfoResponse> {

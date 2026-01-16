@@ -2450,59 +2450,78 @@ export class PostgresUserService implements IServicelocator {
       timeout: 30000, // 30 second timeout to prevent hanging
     };
 
-    // Retry logic for transient Keycloak errors
-    const maxRetries = 3;
+    // Retry logic for transient Keycloak errors - COMMENTED OUT TEMPORARILY
+    // const maxRetries = 3;
+    // let apiResponse;
+
+    // for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    //   try {
+    //     apiResponse = await this.axios(config);
+    //     // Success, break out of retry loop
+    //     break;
+    //   } catch (e) {
+    //     const statusCode = e?.response?.status;
+    //     const isRetryable =
+    //       statusCode === 503 || // Service Unavailable
+    //       statusCode === 504 || // Gateway Timeout
+    //       statusCode === 429 || // Too Many Requests
+    //       statusCode === 500 || // Internal Server Error
+    //       e.code === 'ECONNRESET' || // Connection reset
+    //       e.code === 'ETIMEDOUT' || // Timeout
+    //       e.code === 'ECONNREFUSED'; // Connection refused
+
+    //     if (!isRetryable || attempt === maxRetries) {
+    //       // Non-retryable error or max retries reached
+    //       LoggerUtil.error(
+    //         `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
+    //         `Error resetting Keycloak password (attempt ${attempt}/${maxRetries}): ${e.message}`
+    //       );
+    //       return new ErrorResponse({
+    //         errorCode: `${statusCode || 500}`,
+    //         errorMessage:
+    //           e?.response?.data?.error ||
+    //           e.message ||
+    //           'Failed to reset password in Keycloak',
+    //       });
+    //     }
+
+    //     // Retry with exponential backoff
+    //     const backoffDelay = 1000 * Math.pow(2, attempt - 1); // 1s, 2s, 4s
+    //     LoggerUtil.log(
+    //       `Keycloak password reset failed (attempt ${attempt}/${maxRetries}), retrying in ${backoffDelay}ms...`
+    //     );
+    //     await new Promise((resolve) => setTimeout(resolve, backoffDelay));
+    //   }
+    // }
+
+    // if (!apiResponse) {
+    //   LoggerUtil.error(
+    //     `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
+    //     `Failed to reset Keycloak password after ${maxRetries} attempts`
+    //   );
+    //   return new ErrorResponse({
+    //     errorCode: '500',
+    //     errorMessage:
+    //       'Failed to reset password in Keycloak after multiple attempts',
+    //   });
+    // }
+
+    // Simple try-catch without retry logic
     let apiResponse;
-
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        apiResponse = await this.axios(config);
-        // Success, break out of retry loop
-        break;
-      } catch (e) {
-        const statusCode = e?.response?.status;
-        const isRetryable =
-          statusCode === 503 || // Service Unavailable
-          statusCode === 504 || // Gateway Timeout
-          statusCode === 429 || // Too Many Requests
-          statusCode === 500 || // Internal Server Error
-          e.code === 'ECONNRESET' || // Connection reset
-          e.code === 'ETIMEDOUT' || // Timeout
-          e.code === 'ECONNREFUSED'; // Connection refused
-
-        if (!isRetryable || attempt === maxRetries) {
-          // Non-retryable error or max retries reached
-          LoggerUtil.error(
-            `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
-            `Error resetting Keycloak password (attempt ${attempt}/${maxRetries}): ${e.message}`
-          );
-          return new ErrorResponse({
-            errorCode: `${statusCode || 500}`,
-            errorMessage:
-              e?.response?.data?.error ||
-              e.message ||
-              'Failed to reset password in Keycloak',
-          });
-        }
-
-        // Retry with exponential backoff
-        const backoffDelay = 1000 * Math.pow(2, attempt - 1); // 1s, 2s, 4s
-        LoggerUtil.log(
-          `Keycloak password reset failed (attempt ${attempt}/${maxRetries}), retrying in ${backoffDelay}ms...`
-        );
-        await new Promise((resolve) => setTimeout(resolve, backoffDelay));
-      }
-    }
-
-    if (!apiResponse) {
+    try {
+      apiResponse = await this.axios(config);
+    } catch (e) {
+      const statusCode = e?.response?.status;
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
-        `Failed to reset Keycloak password after ${maxRetries} attempts`
+        `Error resetting Keycloak password: ${e.message}`
       );
       return new ErrorResponse({
-        errorCode: '500',
+        errorCode: `${statusCode || 500}`,
         errorMessage:
-          'Failed to reset password in Keycloak after multiple attempts',
+          e?.response?.data?.error ||
+          e.message ||
+          'Failed to reset password in Keycloak',
       });
     }
 
