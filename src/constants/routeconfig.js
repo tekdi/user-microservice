@@ -9,7 +9,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-updated-user"
+					"packageName": "shiksha-user"
 				}
 			]
 		},
@@ -22,7 +22,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-updated-user"
+					"packageName": "shiksha-user"
 				}
 			]
 		},
@@ -35,7 +35,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-updated-user"
+					"packageName": "shiksha-user"
 				}
 			]
 		},
@@ -48,7 +48,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-updated-user"
+					"packageName": "shiksha-user"
 				}
 			]
 		},
@@ -61,7 +61,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-updated-user"
+					"packageName": "shiksha-user"
 				}
 			]
 		},
@@ -74,7 +74,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-updated-user"
+					"packageName": "shiksha-user"
 				}
 			]
 		},
@@ -87,7 +87,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-updated-user"
+					"packageName": "shiksha-user"
 				}
 			]
 		},
@@ -100,7 +100,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-updated-user"
+					"packageName": "shiksha-user"
 				}
 			]
 		},
@@ -113,7 +113,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-updated-user"
+					"packageName": "shiksha-user"
 				}
 			]
 		},
@@ -126,7 +126,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-updated-user"
+					"packageName": "shiksha-user"
 				}
 			]
 		},
@@ -139,7 +139,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-updated-user"
+					"packageName": "shiksha-user"
 				}
 			]
 		},
@@ -152,7 +152,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-updated-user"
+					"packageName": "shiksha-user"
 				}
 			]
 		},
@@ -165,7 +165,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-updated-user"
+					"packageName": "shiksha-user"
 				}
 			]
 		},
@@ -178,7 +178,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-updated-user"
+					"packageName": "shiksha-user"
 				}
 			]
 		},
@@ -191,7 +191,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-updated-user"
+					"packageName": "shiksha-user"
 				}
 			]
 		},
@@ -204,7 +204,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-updated-user"
+					"packageName": "shiksha-user"
 				}
 			]
 		},
@@ -217,7 +217,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-updated-user"
+					"packageName": "shiksha-user"
 				}
 			]
 		},
@@ -230,7 +230,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-updated-user"
+					"packageName": "shiksha-user"
 				}
 			]
 		},
@@ -243,7 +243,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-updated-user"
+					"packageName": "shiksha-user"
 				}
 			]
 		},
@@ -256,7 +256,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-updated-user"
+					"packageName": "shiksha-user"
 				}
 			]
 		},
@@ -269,7 +269,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-updated-user"
+					"packageName": "shiksha-user"
 				}
 			]
 		},
@@ -282,7 +282,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-updated-user"
+					"packageName": "shiksha-user"
 				}
 			]
 		},
@@ -295,7 +295,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-updated-user"
+					"packageName": "shiksha-user"
 				}
 			]
 		},
@@ -308,7 +308,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-updated-user"
+					"packageName": "shiksha-user"
 				}
 			]
 		},
@@ -321,7 +321,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-updated-user"
+					"packageName": "shiksha-user"
 				}
 			]
 		},
@@ -334,7 +334,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-updated-user"
+					"packageName": "shiksha-user"
 				}
 			]
 		},
@@ -347,7 +347,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-updated-user"
+					"packageName": "shiksha-user"
 				}
 			]
 		},
@@ -360,7 +360,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-updated-user"
+					"packageName": "shiksha-user"
 				}
 			]
 		},
@@ -373,7 +373,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-updated-user"
+					"packageName": "shiksha-user"
 				}
 			]
 		},
@@ -386,7 +386,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-updated-user"
+					"packageName": "shiksha-user"
 				}
 			]
 		},
@@ -399,7 +399,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-updated-user"
+					"packageName": "shiksha-user"
 				}
 			]
 		},
@@ -412,7 +412,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-updated-user"
+					"packageName": "shiksha-user"
 				}
 			]
 		},
@@ -425,7 +425,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-updated-user"
+					"packageName": "shiksha-user"
 				}
 			]
 		},
@@ -438,7 +438,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-updated-user"
+					"packageName": "shiksha-user"
 				}
 			]
 		},
@@ -451,7 +451,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-updated-user"
+					"packageName": "shiksha-user"
 				}
 			]
 		},
@@ -464,7 +464,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-updated-user"
+					"packageName": "shiksha-user"
 				}
 			]
 		},
@@ -477,7 +477,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-updated-user"
+					"packageName": "shiksha-user"
 				}
 			]
 		},
@@ -490,7 +490,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-updated-user"
+					"packageName": "shiksha-user"
 				}
 			]
 		},
@@ -503,7 +503,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-updated-user"
+					"packageName": "shiksha-user"
 				}
 			]
 		},
@@ -516,7 +516,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-updated-user"
+					"packageName": "shiksha-user"
 				}
 			]
 		},
@@ -529,7 +529,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-updated-user"
+					"packageName": "shiksha-user"
 				}
 			]
 		},
@@ -542,7 +542,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-updated-user"
+					"packageName": "shiksha-user"
 				}
 			]
 		},
@@ -555,7 +555,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-updated-user"
+					"packageName": "shiksha-user"
 				}
 			]
 		},
@@ -568,7 +568,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-updated-user"
+					"packageName": "shiksha-user"
 				}
 			]
 		},
@@ -581,7 +581,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-updated-user"
+					"packageName": "shiksha-user"
 				}
 			]
 		},
@@ -594,7 +594,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-updated-user"
+					"packageName": "shiksha-user"
 				}
 			]
 		},
@@ -607,7 +607,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-updated-user"
+					"packageName": "shiksha-user"
 				}
 			]
 		},
@@ -620,7 +620,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-updated-user"
+					"packageName": "shiksha-user"
 				}
 			]
 		},
@@ -633,7 +633,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-updated-user"
+					"packageName": "shiksha-user"
 				}
 			]
 		},
@@ -646,7 +646,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-updated-user"
+					"packageName": "shiksha-user"
 				}
 			]
 		},
@@ -659,7 +659,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-updated-user"
+					"packageName": "shiksha-user"
 				}
 			]
 		},
@@ -672,7 +672,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-updated-user"
+					"packageName": "shiksha-user"
 				}
 			]
 		},
@@ -685,7 +685,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-updated-user"
+					"packageName": "shiksha-user"
 				}
 			]
 		},
@@ -698,7 +698,7 @@
 			"targetPackages": [
 				{
 					"basePackageName": "user",
-					"packageName": "shiksha-updated-user"
+					"packageName": "shiksha-user"
 				}
 			]
 		}
