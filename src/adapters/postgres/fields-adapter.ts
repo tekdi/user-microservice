@@ -2089,10 +2089,18 @@ export class PostgresFieldsService implements IServicelocatorfields {
         return false;
       }
       
-      // Heuristic 1: Starts with lowercase (strong indicator of continuation)
+      // Heuristic 1: Starts with lowercase AND contains grammatical words
+      // This prevents lowercase country names (like "bolivia") from being treated as suffixes
+      // Only treat as suffix if it has grammatical indicators
       if (firstChar === firstChar.toLowerCase() && firstChar !== firstChar.toUpperCase()) {
-        analysis.isSuffix = true;
-        return true;
+        // Check if it contains grammatical words - if not, it's likely a standalone country name
+        const hasGrammaticalWords = wordsLower.some(w => PostgresFieldsService.GRAMMATICAL_WORDS.has(w));
+        if (hasGrammaticalWords) {
+          analysis.isSuffix = true;
+          return true;
+        }
+        // If lowercase but no grammatical words, it's likely a country name (e.g., "bolivia")
+        // Don't treat as suffix
       }
       
       // Heuristic 2: Very short (1 word) and is a grammatical word
@@ -2142,6 +2150,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
     /**
      * Determines if a part looks like a standalone country name
      * Optimized: Uses pre-computed word arrays
+     * Note: Allows lowercase country names (e.g., "bolivia") if they don't have grammatical words
      */
     const isLikelyCountryName = (analysis: PartAnalysis): boolean => {
       if (analysis.isCountry !== null) return analysis.isCountry;
@@ -2152,8 +2161,17 @@ export class PostgresFieldsService implements IServicelocatorfields {
         return false;
       }
       
-      // Must start with uppercase
-      if (firstChar !== firstChar.toUpperCase()) {
+      // Check if it's a lowercase part with grammatical words - these are suffixes, not country names
+      if (firstChar === firstChar.toLowerCase() && firstChar !== firstChar.toUpperCase()) {
+        const hasGrammaticalWords = wordsLower.some(w => PostgresFieldsService.GRAMMATICAL_WORDS.has(w));
+        if (hasGrammaticalWords) {
+          analysis.isCountry = false;
+          return false;
+        }
+        // Lowercase without grammatical words could be a country name (e.g., "bolivia")
+        // Continue to check for substantial words
+      } else if (firstChar !== firstChar.toUpperCase()) {
+        // Not uppercase and not lowercase (e.g., numbers, special chars) - not a country name
         analysis.isCountry = false;
         return false;
       }
@@ -2347,9 +2365,8 @@ export class PostgresFieldsService implements IServicelocatorfields {
       let processedValue = data.value;
       let valueArray: string[] | null = null;
 
-      // Check if this is a country field (by label or name)
-      const isCountryField = data?.label?.toLowerCase().includes('country') || 
-                            data?.name?.toLowerCase().includes('country');
+      // Check if this is a country field (by label)
+      const isCountryField = data?.label?.toLowerCase().includes('country');
 
       if (data?.sourceDetails) {
         if (data.sourceDetails.source === 'fieldparams') {
