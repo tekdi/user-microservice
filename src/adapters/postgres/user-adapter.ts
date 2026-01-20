@@ -752,7 +752,7 @@ export class PostgresUserService implements IServicelocator {
           userData['customFields'] = customFields.map((data) => ({
             fieldId: data?.fieldId,
             label: data?.label,
-            value: data?.value,
+            value: data?.value, // Already an array for country fields
             code: data?.code,
             type: data?.type,
           }));
@@ -854,7 +854,14 @@ export class PostgresUserService implements IServicelocator {
 
       result.userData = userDetails;
 
-      result.userData['customFields'] = customFields;
+      // Map customFields - value is already an array for country fields
+      result.userData["customFields"] = customFields.map((data: any) => ({
+        fieldId: data?.fieldId,
+        label: data?.label,
+        value: data?.value, // Already an array for country fields
+        code: data?.code,
+        type: data?.type,
+      }));
 
       LoggerUtil.log(
         API_RESPONSES.USER_GET_SUCCESSFULLY,

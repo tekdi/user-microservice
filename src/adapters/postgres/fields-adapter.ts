@@ -2012,6 +2012,239 @@ export class PostgresFieldsService implements IServicelocatorfields {
     return value.replace(/'/g, "''");
   }
 
+  // Static grammatical words Set - created once, reused for all calls
+  private static readonly GRAMMATICAL_WORDS = new Set([
+    'of', 'the', 'and', 'in', 'on', 'at', 'for', 'with', 'from', 'to'
+  ]);
+
+  /**
+   * Intelligently parse comma-separated country names using heuristics.
+   * Handles cases like:
+   * - "India,bolivia,republic of" -> ["India", "bolivia, republic of"]
+   * - "Bolivia,India,Plurinational State of" -> ["Bolivia, Plurinational State of", "India"]
+   * 
+   * Strategy: Uses pattern-based heuristics instead of hardcoded lists:
+   * 1. Parts starting with lowercase are likely continuations
+   * 2. Short parts (1-3 words) with grammatical words are likely suffixes
+   * 3. Parts at the end that look like suffixes attach to the first country
+   * 4. Parts in the middle that look like suffixes attach to the previous country
+   * 
+   * Optimized: Caches word splits, reduces repeated operations, early exits
+   */
+  private parseCountryNames(value: string): string[] {
+    if (!value || typeof value !== 'string') return [];
+    
+    const trimmed = value.trim();
+    if (!trimmed) return [];
+    
+    const parts: string[] = [];
+    let start = 0;
+    // Optimized: Single pass split and trim
+    for (let i = 0; i <= trimmed.length; i++) {
+      if (i === trimmed.length || trimmed[i] === ',') {
+        const part = trimmed.substring(start, i).trim();
+        if (part) parts.push(part);
+        start = i + 1;
+      }
+    }
+    
+    if (parts.length === 0) return [trimmed];
+    if (parts.length === 1) return [parts[0]];
+    
+    // Pre-process parts: cache word splits and lowercase conversions
+    interface PartAnalysis {
+      part: string;
+      words: string[];
+      wordsLower: string[];
+      firstChar: string;
+      firstWordLower: string;
+      isSuffix: boolean | null; // null = not yet determined
+      isCountry: boolean | null;
+    }
+    
+    const analyses: PartAnalysis[] = parts.map(part => {
+      const words = part.split(/\s+/).filter(w => w.length > 0);
+      const wordsLower = words.map(w => w.toLowerCase());
+      return {
+        part,
+        words,
+        wordsLower,
+        firstChar: part[0] || '',
+        firstWordLower: words[0]?.toLowerCase() || '',
+        isSuffix: null,
+        isCountry: null,
+      };
+    });
+    
+    /**
+     * Determines if a part looks like a suffix/continuation using heuristics
+     * Optimized: Uses pre-computed word arrays
+     */
+    const isLikelySuffix = (analysis: PartAnalysis, index: number, totalParts: number): boolean => {
+      if (analysis.isSuffix !== null) return analysis.isSuffix;
+      
+      const { words, wordsLower, firstChar, firstWordLower } = analysis;
+      if (words.length === 0) {
+        analysis.isSuffix = false;
+        return false;
+      }
+      
+      // Heuristic 1: Starts with lowercase AND contains grammatical words
+      // This prevents lowercase country names (like "bolivia") from being treated as suffixes
+      // Only treat as suffix if it has grammatical indicators
+      if (firstChar === firstChar.toLowerCase() && firstChar !== firstChar.toUpperCase()) {
+        // Check if it contains grammatical words - if not, it's likely a standalone country name
+        const hasGrammaticalWords = wordsLower.some(w => PostgresFieldsService.GRAMMATICAL_WORDS.has(w));
+        if (hasGrammaticalWords) {
+          analysis.isSuffix = true;
+          return true;
+        }
+        // If lowercase but no grammatical words, it's likely a country name (e.g., "bolivia")
+        // Don't treat as suffix
+      }
+      
+      // Heuristic 2: Very short (1 word) and is a grammatical word
+      if (words.length === 1 && PostgresFieldsService.GRAMMATICAL_WORDS.has(firstWordLower)) {
+        analysis.isSuffix = true;
+        return true;
+      }
+      
+      // Heuristic 3: Short phrase (2-4 words) that starts with or contains grammatical words
+      if (words.length >= 2 && words.length <= 4) {
+        const hasGrammaticalStart = PostgresFieldsService.GRAMMATICAL_WORDS.has(firstWordLower);
+        
+        // Count grammatical words (optimized: single pass)
+        let grammaticalCount = 0;
+        for (let i = 0; i < wordsLower.length; i++) {
+          if (PostgresFieldsService.GRAMMATICAL_WORDS.has(wordsLower[i])) {
+            grammaticalCount++;
+            if (grammaticalCount >= 2) break; // Early exit
+          }
+        }
+        
+        if (hasGrammaticalStart || grammaticalCount >= 2) {
+          analysis.isSuffix = true;
+          return true;
+        }
+        
+        // Check if ends with "of" or contains "of"
+        if (wordsLower[wordsLower.length - 1] === 'of' || wordsLower.includes('of')) {
+          analysis.isSuffix = true;
+          return true;
+        }
+      }
+      
+      // Heuristic 4: Very short (1-2 words) at the end of the list
+      if (index === totalParts - 1 && words.length <= 2) {
+        if (PostgresFieldsService.GRAMMATICAL_WORDS.has(firstWordLower) ||
+            wordsLower.some(w => PostgresFieldsService.GRAMMATICAL_WORDS.has(w))) {
+          analysis.isSuffix = true;
+          return true;
+        }
+      }
+      
+      analysis.isSuffix = false;
+      return false;
+    };
+    
+    /**
+     * Determines if a part looks like a standalone country name
+     * Optimized: Uses pre-computed word arrays
+     * Note: Allows lowercase country names (e.g., "bolivia") if they don't have grammatical words
+     */
+    const isLikelyCountryName = (analysis: PartAnalysis): boolean => {
+      if (analysis.isCountry !== null) return analysis.isCountry;
+      
+      const { words, wordsLower, firstChar, firstWordLower } = analysis;
+      if (words.length === 0) {
+        analysis.isCountry = false;
+        return false;
+      }
+      
+      // Check if it's a lowercase part with grammatical words - these are suffixes, not country names
+      if (firstChar === firstChar.toLowerCase() && firstChar !== firstChar.toUpperCase()) {
+        const hasGrammaticalWords = wordsLower.some(w => PostgresFieldsService.GRAMMATICAL_WORDS.has(w));
+        if (hasGrammaticalWords) {
+          analysis.isCountry = false;
+          return false;
+        }
+        // Lowercase without grammatical words could be a country name (e.g., "bolivia")
+        // Continue to check for substantial words
+      } else if (firstChar !== firstChar.toUpperCase()) {
+        // Not uppercase and not lowercase (e.g., numbers, special chars) - not a country name
+        analysis.isCountry = false;
+        return false;
+      }
+      
+      // Not just grammatical words
+      if (words.length === 1 && PostgresFieldsService.GRAMMATICAL_WORDS.has(firstWordLower)) {
+        analysis.isCountry = false;
+        return false;
+      }
+      
+      // Has at least one non-grammatical word (optimized: early exit)
+      for (let i = 0; i < wordsLower.length; i++) {
+        const wordLower = wordsLower[i];
+        if (!PostgresFieldsService.GRAMMATICAL_WORDS.has(wordLower) && wordLower.length > 2) {
+          analysis.isCountry = true;
+          return true;
+        }
+      }
+      
+      analysis.isCountry = false;
+      return false;
+    };
+    
+    const merged: boolean[] = new Array(parts.length).fill(false);
+    
+    // Process from end to beginning to handle trailing suffixes
+    for (let i = parts.length - 1; i >= 0; i--) {
+      if (merged[i]) continue;
+      
+      const analysis = analyses[i];
+      
+      // Check if this part looks like a suffix
+      if (isLikelySuffix(analysis, i, parts.length) && i > 0) {
+        let targetIndex = -1;
+        
+        // Special case: suffix at the very end attaches to the FIRST country
+        if (i === parts.length - 1) {
+          // Find the first country name (not a suffix)
+          for (let j = 0; j < i; j++) {
+            if (!merged[j] && isLikelyCountryName(analyses[j])) {
+              targetIndex = j;
+              break;
+            }
+          }
+        } else {
+          // For suffixes in the middle, attach to the immediately previous country
+          for (let j = i - 1; j >= 0; j--) {
+            if (!merged[j] && isLikelyCountryName(analyses[j])) {
+              targetIndex = j;
+              break;
+            }
+          }
+        }
+        
+        // Attach the suffix to the target country
+        if (targetIndex >= 0) {
+          parts[targetIndex] = parts[targetIndex] + ', ' + analysis.part;
+          merged[i] = true;
+        }
+      }
+    }
+    
+    // Collect all unmerged parts as separate countries
+    const countries: string[] = [];
+    for (let i = 0; i < parts.length; i++) {
+      if (!merged[i]) {
+        countries.push(parts[i].trim());
+      }
+    }
+    
+    return countries.length > 0 ? countries : [trimmed];
+  }
+
   /* This function Fetches the Custom Field Enteres By User. Here
        Here It convert the Value into Real Option.
        Used in getUserDetails API as of Now.
@@ -2131,6 +2364,9 @@ export class PostgresFieldsService implements IServicelocatorfields {
       const originalValue = data.value;
       let processedValue = data.value;
 
+      // Check if this is a country field (by label)
+      const isCountryField = data?.label?.toLowerCase().includes('country');
+
       if (data?.sourceDetails) {
         if (data.sourceDetails.source === 'fieldparams') {
           data.fieldParams.options.forEach((option) => {
@@ -2160,6 +2396,25 @@ export class PostgresFieldsService implements IServicelocatorfields {
 
       delete data.fieldParams;
       delete data.sourceDetails;
+
+      // For country fields, convert value to array
+      if (isCountryField) {
+        const valueToParse = processedValue && processedValue !== originalValue 
+          ? processedValue 
+          : originalValue;
+        
+        if (valueToParse?.includes(',')) {
+          // Parse comma-separated country names into array
+          const countryArray = this.parseCountryNames(valueToParse);
+          processedValue = countryArray.length > 0 ? countryArray : processedValue;
+        } else if (valueToParse) {
+          // Single country value, convert to array
+          processedValue = [valueToParse];
+        } else {
+          // Empty value, set as empty array
+          processedValue = [];
+        }
+      }
 
       return {
         ...data,
