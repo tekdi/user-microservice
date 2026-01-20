@@ -2384,7 +2384,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
       }
 
       // For country fields with comma-separated values, parse into array
-      if (isCountryField && !valueArray && originalValue && originalValue.includes(',')) {
+      if (isCountryField && !valueArray && originalValue?.includes(',')) {
         // If we have processed value, use it; otherwise use original
         const valueToParse = processedValue && processedValue !== originalValue 
           ? processedValue 
