@@ -2363,7 +2363,6 @@ export class PostgresFieldsService implements IServicelocatorfields {
     result = result.map((data) => {
       const originalValue = data.value;
       let processedValue = data.value;
-      let valueArray: string[] | null = null;
 
       // Check if this is a country field (by label)
       const isCountryField = data?.label?.toLowerCase().includes('country');
@@ -2391,39 +2390,37 @@ export class PostgresFieldsService implements IServicelocatorfields {
           if (labels && labels.length > 0) {
             // Extract all names and join them into a string
             processedValue = labels.map((label) => label.name).join(', ');
-            
-            // For country fields, parse the processed value into an array
-            if (isCountryField && processedValue) {
-              valueArray = this.parseCountryNames(processedValue);
-            }
           }
         }
-      }
-
-      // For country fields with comma-separated values, parse into array
-      if (isCountryField && !valueArray && originalValue?.includes(',')) {
-        // If we have processed value, use it; otherwise use original
-        const valueToParse = processedValue && processedValue !== originalValue 
-          ? processedValue 
-          : originalValue;
-        valueArray = this.parseCountryNames(valueToParse);
       }
 
       delete data.fieldParams;
       delete data.sourceDetails;
 
-      const resultObj: any = {
+      // For country fields, convert value to array
+      if (isCountryField) {
+        const valueToParse = processedValue && processedValue !== originalValue 
+          ? processedValue 
+          : originalValue;
+        
+        if (valueToParse?.includes(',')) {
+          // Parse comma-separated country names into array
+          const countryArray = this.parseCountryNames(valueToParse);
+          processedValue = countryArray.length > 0 ? countryArray : processedValue;
+        } else if (valueToParse) {
+          // Single country value, convert to array
+          processedValue = [valueToParse];
+        } else {
+          // Empty value, set as empty array
+          processedValue = [];
+        }
+      }
+
+      return {
         ...data,
         value: processedValue,
         code: originalValue,
       };
-
-      // Add valueArray for country fields
-      if (isCountryField && valueArray && valueArray.length > 0) {
-        resultObj.valueArray = valueArray;
-      }
-
-      return resultObj;
     });
 
     return result;

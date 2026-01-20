@@ -749,20 +749,13 @@ export class PostgresUserService implements IServicelocator {
         if (includeCustomFields) {
           const customFields =
             await this.fieldsService.getUserCustomFieldDetails(userData.userId);
-          userData['customFields'] = customFields.map((data) => {
-            const fieldObj: any = {
-              fieldId: data?.fieldId,
-              label: data?.label,
-              value: data?.value,
-              code: data?.code,
-              type: data?.type,
-            };
-            // Include valueArray for country fields
-            if (data?.valueArray && Array.isArray(data.valueArray)) {
-              fieldObj.valueArray = data.valueArray;
-            }
-            return fieldObj;
-          });
+          userData['customFields'] = customFields.map((data) => ({
+            fieldId: data?.fieldId,
+            label: data?.label,
+            value: data?.value, // Already an array for country fields
+            code: data?.code,
+            type: data?.type,
+          }));
         } else {
           // Set empty array when customFields should be excluded
           userData['customFields'] = [];
@@ -861,21 +854,14 @@ export class PostgresUserService implements IServicelocator {
 
       result.userData = userDetails;
 
-      // Map customFields to include valueArray for country fields
-      result.userData['customFields'] = customFields.map((data: any) => {
-        const fieldObj: any = {
-          fieldId: data?.fieldId,
-          label: data?.label,
-          value: data?.value,
-          code: data?.code,
-          type: data?.type,
-        };
-        // Include valueArray for country fields
-        if (data?.valueArray && Array.isArray(data.valueArray)) {
-          fieldObj.valueArray = data.valueArray;
-        }
-        return fieldObj;
-      });
+      // Map customFields - value is already an array for country fields
+      result.userData['customFields'] = customFields.map((data: any) => ({
+        fieldId: data?.fieldId,
+        label: data?.label,
+        value: data?.value, // Already an array for country fields
+        code: data?.code,
+        type: data?.type,
+      }));
 
       LoggerUtil.log(
         API_RESPONSES.USER_GET_SUCCESSFULLY,
