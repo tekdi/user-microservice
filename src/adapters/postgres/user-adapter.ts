@@ -855,7 +855,7 @@ export class PostgresUserService implements IServicelocator {
       result.userData = userDetails;
 
       // Map customFields - value is already an array for country fields
-      result.userData['customFields'] = customFields.map((data: any) => ({
+      result.userData["customFields"] = customFields.map((data: any) => ({
         fieldId: data?.fieldId,
         label: data?.label,
         value: data?.value, // Already an array for country fields
