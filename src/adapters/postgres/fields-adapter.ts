@@ -2110,13 +2110,30 @@ export class PostgresFieldsService implements IServicelocatorfields {
       }
       
       // Heuristic 3: Short phrase (2-4 words) that starts with or contains grammatical words
+      // BUT: Special handling for "and" in the middle - it's often part of country names
+      // Example: "Sint Eustatius and Saba" - "and" is part of the country name, not a suffix
       if (words.length >= 2 && words.length <= 4) {
         const hasGrammaticalStart = PostgresFieldsService.GRAMMATICAL_WORDS.has(firstWordLower);
+        const andIndex = wordsLower.indexOf('and');
+        const hasAndInMiddle = andIndex > 0 && andIndex < wordsLower.length - 1;
+        
+        // If "and" is in the middle and part starts with uppercase, it's likely a country name component
+        // Example: "Sint Eustatius and Saba" should not be treated as a suffix
+        if (hasAndInMiddle && firstChar === firstChar.toUpperCase()) {
+          analysis.isSuffix = false;
+          return false;
+        }
         
         // Count grammatical words (optimized: single pass)
+        // Exclude "and" when it's in the middle (it's part of country name structure)
         let grammaticalCount = 0;
-        for (let i = 0; i < wordsLower.length; i++) {
-          if (PostgresFieldsService.GRAMMATICAL_WORDS.has(wordsLower[i])) {
+        for (let idx = 0; idx < wordsLower.length; idx++) {
+          const word = wordsLower[idx];
+          // Skip "and" if it's in the middle position
+          if (word === 'and' && idx > 0 && idx < wordsLower.length - 1) {
+            continue;
+          }
+          if (PostgresFieldsService.GRAMMATICAL_WORDS.has(word)) {
             grammaticalCount++;
             if (grammaticalCount >= 2) break; // Early exit
           }
@@ -2183,8 +2200,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
       }
       
       // Has at least one non-grammatical word (optimized: early exit)
-      for (let i = 0; i < wordsLower.length; i++) {
-        const wordLower = wordsLower[i];
+      for (const wordLower of wordsLower) {
         if (!PostgresFieldsService.GRAMMATICAL_WORDS.has(wordLower) && wordLower.length > 2) {
           analysis.isCountry = true;
           return true;
@@ -2197,7 +2213,48 @@ export class PostgresFieldsService implements IServicelocatorfields {
     
     const merged: boolean[] = new Array(parts.length).fill(false);
     
-    // Process from end to beginning to handle trailing suffixes
+    // First pass: Handle cases where a part with "and" in the middle should attach to previous part
+    // Example: "Bonaire" + "Sint Eustatius and Saba" -> "Bonaire, Sint Eustatius and Saba"
+    for (let i = 1; i < parts.length; i++) {
+      if (merged[i]) continue;
+      
+      const currentAnalysis = analyses[i];
+      const prevAnalysis = analyses[i - 1];
+      
+      // Check if current part has "and" in the middle and previous part is a country name
+      if (!merged[i - 1] && isLikelyCountryName(prevAnalysis)) {
+        const andIndex = currentAnalysis.wordsLower.indexOf('and');
+        const hasAndInMiddle = andIndex > 0 && andIndex < currentAnalysis.wordsLower.length - 1;
+        
+        // If current part has "and" in middle and starts with uppercase, it's likely a continuation
+        // Example: "Sint Eustatius and Saba" should attach to "Bonaire"
+        // Also check: if previous part is a single word or short (likely a country name prefix)
+        const prevIsShort = prevAnalysis.words.length <= 2;
+        
+        if (hasAndInMiddle && 
+            currentAnalysis.firstChar === currentAnalysis.firstChar.toUpperCase() &&
+            currentAnalysis.words.length >= 3 &&
+            prevIsShort) {
+          // Merge with previous country
+          parts[i - 1] = parts[i - 1] + ', ' + currentAnalysis.part;
+          merged[i] = true;
+          // Update the analysis for the merged part
+          const mergedPart = parts[i - 1];
+          const mergedWords = mergedPart.split(/\s+/).filter(w => w.length > 0);
+          analyses[i - 1] = {
+            part: mergedPart,
+            words: mergedWords,
+            wordsLower: mergedWords.map(w => w.toLowerCase()),
+            firstChar: mergedPart[0] || '',
+            firstWordLower: mergedWords[0]?.toLowerCase() || '',
+            isSuffix: null,
+            isCountry: true, // Mark as country since it's a merged country name
+          };
+        }
+      }
+    }
+    
+    // Second pass: Process from end to beginning to handle trailing suffixes
     for (let i = parts.length - 1; i >= 0; i--) {
       if (merged[i]) continue;
       
