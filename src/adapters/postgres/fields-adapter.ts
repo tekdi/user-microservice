@@ -1804,21 +1804,17 @@ export class PostgresFieldsService implements IServicelocatorfields {
     // First, let's check what fields exist with the given names
     const checkFieldsQuery = `SELECT f."name", f."context", f."fieldId" FROM "Fields" f WHERE f."name" IN (${searchKey})`;
 
-    const availableFields = await this.fieldsValuesRepository.query(
-      checkFieldsQuery
-    );
+    void this.fieldsValuesRepository.query(checkFieldsQuery);
 
     // If no fields found, let's check what fields exist that might be similar
     const similarFieldsQuery = `SELECT f."name", f."context", f."fieldId" FROM "Fields" f WHERE f."name" ILIKE '%country%' OR f."name" ILIKE '%COUNTRY%'`;
 
-    const similarFields = await this.fieldsValuesRepository.query(
-      similarFieldsQuery
-    );
+    void this.fieldsValuesRepository.query(similarFieldsQuery);
 
     // Let's also check what fields exist in the database
     const allFieldsQuery = `SELECT f."name", f."context", f."fieldId" FROM "Fields" f WHERE f.context IN('USERS', 'NULL', 'null', '') OR f.context IS NULL LIMIT 20`;
 
-    const allFields = await this.fieldsValuesRepository.query(allFieldsQuery);
+    void this.fieldsValuesRepository.query(allFieldsQuery);
 
     const query = `WITH user_fields AS (
         SELECT
