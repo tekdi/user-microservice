@@ -2066,7 +2066,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
     const parsed = this.normalizeLegacyCountries(value);
 
     if (parsed.length === 0) {
-      console.warn(`Invalid country value: "${value}"`);
+      LoggerUtil.warn(`Invalid country value: "${value}"`);
     }
 
     return parsed;
