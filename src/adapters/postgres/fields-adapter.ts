@@ -2242,10 +2242,10 @@ export class PostgresFieldsService implements IServicelocatorfields {
             ? processedValue
             : originalValue;
 
-        if (!valueToParse) {
-          processedValue = [];
-        } else {
+        if (valueToParse) {
           processedValue = this.parseCountries(valueToParse);
+        } else {
+          processedValue = [];
         }
       }
 
