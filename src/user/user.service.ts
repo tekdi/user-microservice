@@ -2433,17 +2433,12 @@ export class UserService {
         );
       }
 
-      // const data = JSON.stringify({
-      //   temporary: "false",
-      //   type: "password",
-      //   value: newPassword,
-      // });
-
       const keycloakResponse = await getKeycloakAdminToken();
       const resToken = keycloakResponse.data.access_token;
       let apiResponse;
 
       try {
+        // Step 1: Reset password in Keycloak
         apiResponse = await this.resetKeycloakPassword(
           request,
           userData,
@@ -2465,13 +2460,31 @@ export class UserService {
           HttpStatus.INTERNAL_SERVER_ERROR
         );
       }
-
       if (apiResponse.statusCode === 204) {
+        // Step 2: Enable password authentication ONLY if currently disabled
+        try {
+          const wasEnabled = await this.enablePasswordAuthenticationIfNeeded(userId, resToken);
+          if (wasEnabled) {
+            LoggerUtil.log(
+              `Password authentication enabled for Newton SSO user: ${userId}`,
+              apiId
+            );
+          }
+        } catch (e) {
+          // Log warning but don't fail the request
+          LoggerUtil.warn(
+            `Failed to check/enable password_auth_enabled attribute for user ${userId}: ${e.message}`,
+            apiId
+          );
+        }
+
+        // Step 3: Update temporary password flag if needed
         if (userData.temporaryPassword) {
           await this.usersRepository.update(userData.userId, {
             temporaryPassword: false,
           });
         }
+
         return await APIResponse.success(
           response,
           apiId,
@@ -2501,6 +2514,66 @@ export class UserService {
         `Error : ${e?.response?.data.error}`,
         HttpStatus.INTERNAL_SERVER_ERROR
       );
+    }
+  }
+
+  /**
+   * Enable password authentication ONLY if it's currently disabled
+   * Returns true if attribute was changed, false if already enabled
+   */
+  private async enablePasswordAuthenticationIfNeeded(
+    userId: string,
+    adminToken: string
+  ): Promise<boolean> {
+    const { KEYCLOAK, KEYCLOAK_ADMIN } = process.env;
+
+    try {
+      // Get current user data
+      const userResponse = await this.axios.get(
+        `${KEYCLOAK}${KEYCLOAK_ADMIN}/${userId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${adminToken}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      const currentUserData = userResponse.data;
+      const currentValue = currentUserData.attributes?.password_auth_enabled;
+
+      // Check if attribute is 'false' - only then we need to update
+      if (currentValue && currentValue[0] === 'false') {
+        // Update user with password_auth_enabled attribute
+        await this.axios.put(
+          `${KEYCLOAK}${KEYCLOAK_ADMIN}/${userId}`,
+          {
+            ...currentUserData,
+            attributes: {
+              ...currentUserData.attributes,
+              password_auth_enabled: ['true'],
+            },
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${adminToken}`,
+              'Content-Type': 'application/json',
+            },
+          }
+        );
+
+        return true; // Attribute was changed
+      }
+
+      // Already enabled or not set (meaning enabled by default)
+      return false; // No change needed
+    } catch (error) {
+      LoggerUtil.error(
+        `Failed to enable password authentication for user ${userId}`,
+        `Error: ${error.message}`,
+        APIID.USER_RESET_PASSWORD
+      );
+      throw error;
     }
   }
 
