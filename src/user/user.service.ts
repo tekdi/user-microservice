@@ -4050,7 +4050,6 @@ export class UserService {
         limit,
         offset
       );
-
       const result = await this.usersRepository.query(queryBuilder.query, queryBuilder.params);
       const totalCount = result.length > 0 ? parseInt(result[0].total_count) : 0;
 
@@ -4065,7 +4064,7 @@ export class UserService {
       let batchCenterData = {};
       if (result.length > 0) {
         const userIds = result.map((row: any) => row.userId);
-        batchCenterData = await this.getBatchAndCenterNames(userIds);
+        batchCenterData = await this.getBatchAndCenterNames(userIds,tenantId);
       }
 
       // Process and combine all data
@@ -4292,7 +4291,7 @@ export class UserService {
           : Promise.resolve({}),
 
         // Step 3: Get all cohort associations (batch and center data)
-        this.getBatchAndCenterNames(userIds)
+        this.getBatchAndCenterNames(userIds,tenantId)
       ]);
 
       // Handle any failed promises
@@ -4334,7 +4333,7 @@ export class UserService {
   /**
    * Get all cohort associations for users with complete details for cohortData structure
    */
-  private async getBatchAndCenterNames(userIds: string[]): Promise<any> {
+  private async getBatchAndCenterNames(userIds: string[],tenantId: string): Promise<any> {
     const apiId = APIID.USER_LIST;
   
     if (!userIds || userIds.length === 0) {
@@ -4354,9 +4353,10 @@ export class UserService {
         FROM public."CohortMembers" cm
         LEFT JOIN public."Cohort" cohort ON cm."cohortId" = cohort."cohortId"
         WHERE cm."userId" = ANY($1::uuid[])
+        AND cohort."tenantId" = $2::uuid
       `;
   
-      const assignments = await this.usersRepository.query(assignmentQuery, [userIds]);
+      const assignments = await this.usersRepository.query(assignmentQuery, [userIds,tenantId]);
       
       if (assignments.length === 0) {
         LoggerUtil.warn(`No cohort memberships found for any of the ${userIds.length} users`, apiId);
