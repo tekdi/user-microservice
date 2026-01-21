@@ -2017,7 +2017,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
     return value.replace(/'/g, "''");
   }
   private readonly COUNTRY_SEPARATOR = '|';
-
+  //COUNTRY_SET need to take from form table in future for TODO
   private normalizeLegacyCountries(value: string): string[] {
     if (!value) return [];
 
