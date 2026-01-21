@@ -2245,7 +2245,6 @@ export class PostgresFieldsService implements IServicelocatorfields {
           processedValue && processedValue !== originalValue
             ? processedValue
             : originalValue;
-        console.log('Parsing country field value:', valueToParse);
 
         if (!valueToParse) {
           processedValue = [];
