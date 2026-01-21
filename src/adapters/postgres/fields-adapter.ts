@@ -1759,7 +1759,9 @@ export class PostgresFieldsService implements IServicelocatorfields {
     }
 
     for (const [key, value] of Object.entries(stateDistBlockData)) {
-      searchKey.push(`'${key}'`);
+      // Escape key to prevent SQL injection
+      const escapedKey = this.escapeSqlLiteral(key);
+      searchKey.push(`'${escapedKey}'`);
       if (index > 0) {
         whereCondition += ` AND `;
       }
@@ -1780,15 +1782,19 @@ export class PostgresFieldsService implements IServicelocatorfields {
           if (searchTerms.length > 1) {
             // If multiple terms in one value, match any of them
             const termConditions = searchTerms.map((term) => {
+              // Escape SQL special characters to prevent SQL injection (e.g., "Côte d'Ivoire")
+              const escapedTerm = this.escapeSqlLiteral(term);
               // Handle comma-separated database values
-              return `(fields->>'${key}' ILIKE '%${term}%' OR fields->>'${key}' ILIKE '%${term},%' OR fields->>'${key}' ILIKE '%,${term}%' OR fields->>'${key}' ILIKE '%,${term},%')`;
+              return `(fields->>'${escapedKey}' ILIKE '%${escapedTerm}%' OR fields->>'${escapedKey}' ILIKE '%${escapedTerm},%' OR fields->>'${escapedKey}' ILIKE '%,${escapedTerm}%' OR fields->>'${escapedKey}' ILIKE '%,${escapedTerm},%')`;
             });
             allConditions.push(`(${termConditions.join(' OR ')})`);
           } else {
             // Single term - handle comma-separated database values
             const cleanValue = v.trim();
+            // Escape SQL special characters to prevent SQL injection (e.g., "Côte d'Ivoire")
+            const escapedValue = this.escapeSqlLiteral(cleanValue);
             allConditions.push(
-              `(fields->>'${key}' ILIKE '%${cleanValue}%' OR fields->>'${key}' ILIKE '%${cleanValue},%' OR fields->>'${key}' ILIKE '%,${cleanValue}%' OR fields->>'${key}' ILIKE '%,${cleanValue},%')`
+              `(fields->>'${escapedKey}' ILIKE '%${escapedValue}%' OR fields->>'${escapedKey}' ILIKE '%${escapedValue},%' OR fields->>'${escapedKey}' ILIKE '%,${escapedValue}%' OR fields->>'${escapedKey}' ILIKE '%,${escapedValue},%')`
             );
           }
         }
@@ -1796,7 +1802,9 @@ export class PostgresFieldsService implements IServicelocatorfields {
         whereCondition += `(${allConditions.join(' OR ')})`;
       } else {
         // For single values, use flexible matching (contains, not exact)
-        whereCondition += `fields->>'${key}' ILIKE '%${value}%'`;
+        // Escape SQL special characters to prevent SQL injection (e.g., "Côte d'Ivoire")
+        const escapedValue = this.escapeSqlLiteral(String(value));
+        whereCondition += `fields->>'${escapedKey}' ILIKE '%${escapedValue}%'`;
       }
       index++;
     }
