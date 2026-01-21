@@ -27,6 +27,7 @@ import { API_RESPONSES } from '@utils/response.messages';
 import { v4 as uuidv4 } from 'uuid';
 import { FieldValueConverter } from 'src/utils/field-value-converter';
 import { FieldStatus } from 'src/fields/dto/field-values-create.dto';
+import { COUNTRY_SET } from '../../common/country-registry';
 @Injectable()
 export class PostgresFieldsService implements IServicelocatorfields {
   constructor(
@@ -1762,20 +1763,23 @@ export class PostgresFieldsService implements IServicelocatorfields {
       if (index > 0) {
         whereCondition += ` AND `;
       }
-      
+
       // Handle different matching strategies based on field type
       if (Array.isArray(value)) {
         // For array values, create flexible matching for each value
         // This handles both: ["India,United States"] and ["India", "United States"]
         const allConditions = [];
-        
+
         for (const v of value) {
           // Handle comma-separated values by splitting and matching each part
-          const searchTerms = v.split(',').map(term => term.trim()).filter(term => term.length > 0);
-          
+          const searchTerms = v
+            .split(',')
+            .map((term) => term.trim())
+            .filter((term) => term.length > 0);
+
           if (searchTerms.length > 1) {
             // If multiple terms in one value, match any of them
-            const termConditions = searchTerms.map(term => {
+            const termConditions = searchTerms.map((term) => {
               // Handle comma-separated database values
               return `(fields->>'${key}' ILIKE '%${term}%' OR fields->>'${key}' ILIKE '%${term},%' OR fields->>'${key}' ILIKE '%,${term}%' OR fields->>'${key}' ILIKE '%,${term},%')`;
             });
@@ -1783,37 +1787,38 @@ export class PostgresFieldsService implements IServicelocatorfields {
           } else {
             // Single term - handle comma-separated database values
             const cleanValue = v.trim();
-            allConditions.push(`(fields->>'${key}' ILIKE '%${cleanValue}%' OR fields->>'${key}' ILIKE '%${cleanValue},%' OR fields->>'${key}' ILIKE '%,${cleanValue}%' OR fields->>'${key}' ILIKE '%,${cleanValue},%')`);
+            allConditions.push(
+              `(fields->>'${key}' ILIKE '%${cleanValue}%' OR fields->>'${key}' ILIKE '%${cleanValue},%' OR fields->>'${key}' ILIKE '%,${cleanValue}%' OR fields->>'${key}' ILIKE '%,${cleanValue},%')`
+            );
           }
         }
-        
+
         whereCondition += `(${allConditions.join(' OR ')})`;
-        
       } else {
         // For single values, use flexible matching (contains, not exact)
         whereCondition += `fields->>'${key}' ILIKE '%${value}%'`;
-        
       }
       index++;
     }
 
     // First, let's check what fields exist with the given names
     const checkFieldsQuery = `SELECT f."name", f."context", f."fieldId" FROM "Fields" f WHERE f."name" IN (${searchKey})`;
-    
-    const availableFields = await this.fieldsValuesRepository.query(checkFieldsQuery);
-    
-    
+
+    const availableFields = await this.fieldsValuesRepository.query(
+      checkFieldsQuery
+    );
+
     // If no fields found, let's check what fields exist that might be similar
     const similarFieldsQuery = `SELECT f."name", f."context", f."fieldId" FROM "Fields" f WHERE f."name" ILIKE '%country%' OR f."name" ILIKE '%COUNTRY%'`;
-   
-    const similarFields = await this.fieldsValuesRepository.query(similarFieldsQuery);
-    
-    
+
+    const similarFields = await this.fieldsValuesRepository.query(
+      similarFieldsQuery
+    );
+
     // Let's also check what fields exist in the database
     const allFieldsQuery = `SELECT f."name", f."context", f."fieldId" FROM "Fields" f WHERE f.context IN('USERS', 'NULL', 'null', '') OR f.context IS NULL LIMIT 20`;
-   
+
     const allFields = await this.fieldsValuesRepository.query(allFieldsQuery);
-    
 
     const query = `WITH user_fields AS (
         SELECT
@@ -2011,295 +2016,64 @@ export class PostgresFieldsService implements IServicelocatorfields {
     // Escape single quotes by doubling them (PostgreSQL standard)
     return value.replace(/'/g, "''");
   }
+  private readonly COUNTRY_SEPARATOR = '|';
 
-  // Static grammatical words Set - created once, reused for all calls
-  private static readonly GRAMMATICAL_WORDS = new Set([
-    'of', 'the', 'and', 'in', 'on', 'at', 'for', 'with', 'from', 'to'
-  ]);
+  private normalizeLegacyCountries(value: string): string[] {
+    if (!value) return [];
 
-  /**
-   * Intelligently parse comma-separated country names using heuristics.
-   * Handles cases like:
-   * - "India,bolivia,republic of" -> ["India", "bolivia, republic of"]
-   * - "Bolivia,India,Plurinational State of" -> ["Bolivia, Plurinational State of", "India"]
-   * 
-   * Strategy: Uses pattern-based heuristics instead of hardcoded lists:
-   * 1. Parts starting with lowercase are likely continuations
-   * 2. Short parts (1-3 words) with grammatical words are likely suffixes
-   * 3. Parts at the end that look like suffixes attach to the first country
-   * 4. Parts in the middle that look like suffixes attach to the previous country
-   * 
-   * Optimized: Caches word splits, reduces repeated operations, early exits
-   */
-  private parseCountryNames(value: string): string[] {
-    if (!value || typeof value !== 'string') return [];
-    
-    const trimmed = value.trim();
-    if (!trimmed) return [];
-    
-    const parts: string[] = [];
-    let start = 0;
-    // Optimized: Single pass split and trim
-    for (let i = 0; i <= trimmed.length; i++) {
-      if (i === trimmed.length || trimmed[i] === ',') {
-        const part = trimmed.substring(start, i).trim();
-        if (part) parts.push(part);
-        start = i + 1;
-      }
+    const input = value.trim();
+
+    // Fast path: already pipe-separated
+    if (input.includes(this.COUNTRY_SEPARATOR)) {
+      return input
+        .split(this.COUNTRY_SEPARATOR)
+        .map((v) => v.trim())
+        .filter((v) => COUNTRY_SET.has(v));
     }
-    
-    if (parts.length === 0) return [trimmed];
-    if (parts.length === 1) return [parts[0]];
-    
-    // Pre-process parts: cache word splits and lowercase conversions
-    interface PartAnalysis {
-      part: string;
-      words: string[];
-      wordsLower: string[];
-      firstChar: string;
-      firstWordLower: string;
-      isSuffix: boolean | null; // null = not yet determined
-      isCountry: boolean | null;
-    }
-    
-    const analyses: PartAnalysis[] = parts.map(part => {
-      const words = part.split(/\s+/).filter(w => w.length > 0);
-      const wordsLower = words.map(w => w.toLowerCase());
-      return {
-        part,
-        words,
-        wordsLower,
-        firstChar: part[0] || '',
-        firstWordLower: words[0]?.toLowerCase() || '',
-        isSuffix: null,
-        isCountry: null,
-      };
-    });
-    
-    /**
-     * Determines if a part looks like a suffix/continuation using heuristics
-     * Optimized: Uses pre-computed word arrays
-     */
-    const isLikelySuffix = (analysis: PartAnalysis, index: number, totalParts: number): boolean => {
-      if (analysis.isSuffix !== null) return analysis.isSuffix;
-      
-      const { words, wordsLower, firstChar, firstWordLower } = analysis;
-      if (words.length === 0) {
-        analysis.isSuffix = false;
-        return false;
+
+    const result: string[] = [];
+    let remaining = input;
+
+    const countries = Array.from(COUNTRY_SET).sort(
+      (a, b) => b.length - a.length
+    );
+
+    for (const country of countries) {
+      // Exact match (modern or clean legacy)
+      if (remaining.includes(country)) {
+        result.push(country);
+        remaining = remaining.replace(country, '');
+        continue;
       }
-      
-      // Heuristic 1: Starts with lowercase AND contains grammatical words
-      // This prevents lowercase country names (like "bolivia") from being treated as suffixes
-      // Only treat as suffix if it has grammatical indicators
-      if (firstChar === firstChar.toLowerCase() && firstChar !== firstChar.toUpperCase()) {
-        // Check if it contains grammatical words - if not, it's likely a standalone country name
-        const hasGrammaticalWords = wordsLower.some(w => PostgresFieldsService.GRAMMATICAL_WORDS.has(w));
-        if (hasGrammaticalWords) {
-          analysis.isSuffix = true;
-          return true;
-        }
-        // If lowercase but no grammatical words, it's likely a country name (e.g., "bolivia")
-        // Don't treat as suffix
-      }
-      
-      // Heuristic 2: Very short (1 word) and is a grammatical word
-      if (words.length === 1 && PostgresFieldsService.GRAMMATICAL_WORDS.has(firstWordLower)) {
-        analysis.isSuffix = true;
-        return true;
-      }
-      
-      // Heuristic 3: Short phrase (2-4 words) that starts with or contains grammatical words
-      // BUT: Special handling for "and" in the middle - it's often part of country names
-      // Example: "Sint Eustatius and Saba" - "and" is part of the country name, not a suffix
-      if (words.length >= 2 && words.length <= 4) {
-        const hasGrammaticalStart = PostgresFieldsService.GRAMMATICAL_WORDS.has(firstWordLower);
-        const andIndex = wordsLower.indexOf('and');
-        const hasAndInMiddle = andIndex > 0 && andIndex < wordsLower.length - 1;
-        
-        // If "and" is in the middle and part starts with uppercase, it's likely a country name component
-        // Example: "Sint Eustatius and Saba" should not be treated as a suffix
-        if (hasAndInMiddle && firstChar === firstChar.toUpperCase()) {
-          analysis.isSuffix = false;
-          return false;
-        }
-        
-        // Count grammatical words (optimized: single pass)
-        // Exclude "and" when it's in the middle (it's part of country name structure)
-        let grammaticalCount = 0;
-        for (let idx = 0; idx < wordsLower.length; idx++) {
-          const word = wordsLower[idx];
-          // Skip "and" if it's in the middle position
-          if (word === 'and' && idx > 0 && idx < wordsLower.length - 1) {
-            continue;
-          }
-          if (PostgresFieldsService.GRAMMATICAL_WORDS.has(word)) {
-            grammaticalCount++;
-            if (grammaticalCount >= 2) break; // Early exit
+
+      // Reconstruct split legacy names (like Bolivia)
+      if (country.includes(', ')) {
+        const parts = country.split(', ').map((p) => p.trim());
+
+        const allPartsExist = parts.every((part) => remaining.includes(part));
+
+        if (allPartsExist) {
+          result.push(country);
+          for (const part of parts) {
+            remaining = remaining.replace(part, '');
           }
         }
-        
-        if (hasGrammaticalStart || grammaticalCount >= 2) {
-          analysis.isSuffix = true;
-          return true;
-        }
-        
-        // Check if ends with "of" or contains "of"
-        if (wordsLower[wordsLower.length - 1] === 'of' || wordsLower.includes('of')) {
-          analysis.isSuffix = true;
-          return true;
-        }
-      }
-      
-      // Heuristic 4: Very short (1-2 words) at the end of the list
-      if (index === totalParts - 1 && words.length <= 2) {
-        if (PostgresFieldsService.GRAMMATICAL_WORDS.has(firstWordLower) ||
-            wordsLower.some(w => PostgresFieldsService.GRAMMATICAL_WORDS.has(w))) {
-          analysis.isSuffix = true;
-          return true;
-        }
-      }
-      
-      analysis.isSuffix = false;
-      return false;
-    };
-    
-    /**
-     * Determines if a part looks like a standalone country name
-     * Optimized: Uses pre-computed word arrays
-     * Note: Allows lowercase country names (e.g., "bolivia") if they don't have grammatical words
-     */
-    const isLikelyCountryName = (analysis: PartAnalysis): boolean => {
-      if (analysis.isCountry !== null) return analysis.isCountry;
-      
-      const { words, wordsLower, firstChar, firstWordLower } = analysis;
-      if (words.length === 0) {
-        analysis.isCountry = false;
-        return false;
-      }
-      
-      // Check if it's a lowercase part with grammatical words - these are suffixes, not country names
-      if (firstChar === firstChar.toLowerCase() && firstChar !== firstChar.toUpperCase()) {
-        const hasGrammaticalWords = wordsLower.some(w => PostgresFieldsService.GRAMMATICAL_WORDS.has(w));
-        if (hasGrammaticalWords) {
-          analysis.isCountry = false;
-          return false;
-        }
-        // Lowercase without grammatical words could be a country name (e.g., "bolivia")
-        // Continue to check for substantial words
-      } else if (firstChar !== firstChar.toUpperCase()) {
-        // Not uppercase and not lowercase (e.g., numbers, special chars) - not a country name
-        analysis.isCountry = false;
-        return false;
-      }
-      
-      // Not just grammatical words
-      if (words.length === 1 && PostgresFieldsService.GRAMMATICAL_WORDS.has(firstWordLower)) {
-        analysis.isCountry = false;
-        return false;
-      }
-      
-      // Has at least one non-grammatical word (optimized: early exit)
-      for (const wordLower of wordsLower) {
-        if (!PostgresFieldsService.GRAMMATICAL_WORDS.has(wordLower) && wordLower.length > 2) {
-          analysis.isCountry = true;
-          return true;
-        }
-      }
-      
-      analysis.isCountry = false;
-      return false;
-    };
-    
-    const merged: boolean[] = new Array(parts.length).fill(false);
-    
-    // First pass: Handle cases where a part with "and" in the middle should attach to previous part
-    // Example: "Bonaire" + "Sint Eustatius and Saba" -> "Bonaire, Sint Eustatius and Saba"
-    for (let i = 1; i < parts.length; i++) {
-      if (merged[i]) continue;
-      
-      const currentAnalysis = analyses[i];
-      const prevAnalysis = analyses[i - 1];
-      
-      // Check if current part has "and" in the middle and previous part is a country name
-      if (!merged[i - 1] && isLikelyCountryName(prevAnalysis)) {
-        const andIndex = currentAnalysis.wordsLower.indexOf('and');
-        const hasAndInMiddle = andIndex > 0 && andIndex < currentAnalysis.wordsLower.length - 1;
-        
-        // If current part has "and" in middle and starts with uppercase, it's likely a continuation
-        // Example: "Sint Eustatius and Saba" should attach to "Bonaire"
-        // Also check: if previous part is a single word or short (likely a country name prefix)
-        const prevIsShort = prevAnalysis.words.length <= 2;
-        
-        if (hasAndInMiddle && 
-            currentAnalysis.firstChar === currentAnalysis.firstChar.toUpperCase() &&
-            currentAnalysis.words.length >= 3 &&
-            prevIsShort) {
-          // Merge with previous country
-          parts[i - 1] = parts[i - 1] + ', ' + currentAnalysis.part;
-          merged[i] = true;
-          // Update the analysis for the merged part
-          const mergedPart = parts[i - 1];
-          const mergedWords = mergedPart.split(/\s+/).filter(w => w.length > 0);
-          analyses[i - 1] = {
-            part: mergedPart,
-            words: mergedWords,
-            wordsLower: mergedWords.map(w => w.toLowerCase()),
-            firstChar: mergedPart[0] || '',
-            firstWordLower: mergedWords[0]?.toLowerCase() || '',
-            isSuffix: null,
-            isCountry: true, // Mark as country since it's a merged country name
-          };
-        }
       }
     }
-    
-    // Second pass: Process from end to beginning to handle trailing suffixes
-    for (let i = parts.length - 1; i >= 0; i--) {
-      if (merged[i]) continue;
-      
-      const analysis = analyses[i];
-      
-      // Check if this part looks like a suffix
-      if (isLikelySuffix(analysis, i, parts.length) && i > 0) {
-        let targetIndex = -1;
-        
-        // Special case: suffix at the very end attaches to the FIRST country
-        if (i === parts.length - 1) {
-          // Find the first country name (not a suffix)
-          for (let j = 0; j < i; j++) {
-            if (!merged[j] && isLikelyCountryName(analyses[j])) {
-              targetIndex = j;
-              break;
-            }
-          }
-        } else {
-          // For suffixes in the middle, attach to the immediately previous country
-          for (let j = i - 1; j >= 0; j--) {
-            if (!merged[j] && isLikelyCountryName(analyses[j])) {
-              targetIndex = j;
-              break;
-            }
-          }
-        }
-        
-        // Attach the suffix to the target country
-        if (targetIndex >= 0) {
-          parts[targetIndex] = parts[targetIndex] + ', ' + analysis.part;
-          merged[i] = true;
-        }
-      }
+
+    return result;
+  }
+
+  private parseCountries(value?: string): string[] {
+    if (!value) return [];
+
+    const parsed = this.normalizeLegacyCountries(value);
+
+    if (parsed.length === 0) {
+      console.warn(`Invalid country value: "${value}"`);
     }
-    
-    // Collect all unmerged parts as separate countries
-    const countries: string[] = [];
-    for (let i = 0; i < parts.length; i++) {
-      if (!merged[i]) {
-        countries.push(parts[i].trim());
-      }
-    }
-    
-    return countries.length > 0 ? countries : [trimmed];
+
+    return parsed;
   }
 
   /* This function Fetches the Custom Field Enteres By User. Here
@@ -2338,56 +2112,63 @@ export class PostgresFieldsService implements IServicelocatorfields {
     // OPTIMIZED: Batch load dynamic options for table source fields to prevent N+1 queries
     // SECURITY FIX: Escape SQL literals to prevent SQL injection
 
-    const tableSourceFields = result.filter(
-      (data) => data?.sourceDetails?.source === 'table'
-    ).map((data) => {
-      // SECURITY FIX: Properly escape values to prevent SQL injection
-      // Handle multiple comma-separated values correctly
-      let whereCondition: string;
-      
-      if (!data.value) {
-        whereCondition = `value IS NULL`;
-      } else if (data.value.includes(',')) {
-        // Multiple comma-separated values - use IN clause with escaped values
-        const escapedValues = data.value
-          .split(',')
-          .map((val) => {
-            const trimmed = val.trim();
-            return trimmed ? `'${this.escapeSqlLiteral(trimmed)}'` : null;
-          })
-          .filter((v) => v !== null)
-          .join(', ');
-        
-        if (escapedValues) {
-          whereCondition = `"value" IN (${escapedValues})`;
-        } else {
+    const tableSourceFields = result
+      .filter((data) => data?.sourceDetails?.source === 'table')
+      .map((data) => {
+        // SECURITY FIX: Properly escape values to prevent SQL injection
+        // Handle multiple comma-separated values correctly
+        let whereCondition: string;
+
+        if (!data.value) {
           whereCondition = `value IS NULL`;
+        } else if (data.value.includes(',')) {
+          // Multiple comma-separated values - use IN clause with escaped values
+          const escapedValues = data.value
+            .split(',')
+            .map((val) => {
+              const trimmed = val.trim();
+              return trimmed ? `'${this.escapeSqlLiteral(trimmed)}'` : null;
+            })
+            .filter((v) => v !== null)
+            .join(', ');
+
+          if (escapedValues) {
+            whereCondition = `"value" IN (${escapedValues})`;
+          } else {
+            whereCondition = `value IS NULL`;
+          }
+        } else {
+          // Single value - use equality with escaped value
+          const escapedValue = this.escapeSqlLiteral(data.value.trim());
+          whereCondition = `value='${escapedValue}'`;
         }
-      } else {
-        // Single value - use equality with escaped value
-        const escapedValue = this.escapeSqlLiteral(data.value.trim());
-        whereCondition = `value='${escapedValue}'`;
-      }
-      
-      // Generate unique key for batching (must match lookup key exactly)
-      // Key generation also needs escaping for consistency
-      const keyValue = data.value
-        ? data.value.split(',').map((val) => {
-            const trimmed = val.trim();
-            return trimmed ? `'${this.escapeSqlLiteral(trimmed)}'` : '';
-          }).filter((v) => v).join(', ')
-        : '';
-      const key = `${data.sourceDetails.table}-${keyValue}`;
-      
-      return {
-        ...data,
-        key, // Unique key for batching
-        whereCondition,
-      };
-    });
+
+        // Generate unique key for batching (must match lookup key exactly)
+        // Key generation also needs escaping for consistency
+        const keyValue = data.value
+          ? data.value
+              .split(',')
+              .map((val) => {
+                const trimmed = val.trim();
+                return trimmed ? `'${this.escapeSqlLiteral(trimmed)}'` : '';
+              })
+              .filter((v) => v)
+              .join(', ')
+          : '';
+        const key = `${data.sourceDetails.table}-${keyValue}`;
+
+        return {
+          ...data,
+          key, // Unique key for batching
+          whereCondition,
+        };
+      });
 
     const dynamicOptionsMap = new Map<string, any[]>();
-    const uniqueTableQueries = new Map<string, { table: string; whereCondition: string }>();
+    const uniqueTableQueries = new Map<
+      string,
+      { table: string; whereCondition: string }
+    >();
 
     // Group unique table/whereCondition combinations
     for (const field of tableSourceFields) {
@@ -2402,9 +2183,9 @@ export class PostgresFieldsService implements IServicelocatorfields {
     // OPTIMIZED: Batch load all unique table queries with concurrency limiting
     // SECURITY: Concurrency limit prevents thundering herd if uniqueTableQueries.size is large
     const CONCURRENCY_LIMIT = 10; // Limit concurrent queries to prevent database overload
-    
+
     const batchQueryPromises = Array.from(uniqueTableQueries.entries());
-    
+
     // Process queries in batches to limit concurrency
     for (let i = 0; i < batchQueryPromises.length; i += CONCURRENCY_LIMIT) {
       const batch = batchQueryPromises.slice(i, i + CONCURRENCY_LIMIT);
@@ -2436,10 +2217,14 @@ export class PostgresFieldsService implements IServicelocatorfields {
           // SECURITY FIX: Generate key exactly the same way as when storing (must match exactly)
           // Use same escaping logic for key generation
           const keyValue = data.value
-            ? data.value.split(',').map((val) => {
-                const trimmed = val.trim();
-                return trimmed ? `'${this.escapeSqlLiteral(trimmed)}'` : '';
-              }).filter((v) => v).join(', ')
+            ? data.value
+                .split(',')
+                .map((val) => {
+                  const trimmed = val.trim();
+                  return trimmed ? `'${this.escapeSqlLiteral(trimmed)}'` : '';
+                })
+                .filter((v) => v)
+                .join(', ')
             : '';
           const key = `${data.sourceDetails.table}-${keyValue}`;
           const labels = dynamicOptionsMap.get(key);
@@ -2456,20 +2241,16 @@ export class PostgresFieldsService implements IServicelocatorfields {
 
       // For country fields, convert value to array
       if (isCountryField) {
-        const valueToParse = processedValue && processedValue !== originalValue 
-          ? processedValue 
-          : originalValue;
-        
-        if (valueToParse?.includes(',')) {
-          // Parse comma-separated country names into array
-          const countryArray = this.parseCountryNames(valueToParse);
-          processedValue = countryArray.length > 0 ? countryArray : processedValue;
-        } else if (valueToParse) {
-          // Single country value, convert to array
-          processedValue = [valueToParse];
-        } else {
-          // Empty value, set as empty array
+        const valueToParse =
+          processedValue && processedValue !== originalValue
+            ? processedValue
+            : originalValue;
+        console.log('Parsing country field value:', valueToParse);
+
+        if (!valueToParse) {
           processedValue = [];
+        } else {
+          processedValue = this.parseCountries(valueToParse);
         }
       }
 
@@ -2514,7 +2295,10 @@ export class PostgresFieldsService implements IServicelocatorfields {
    * @param fieldIds Array of field IDs to check
    * @returns Array of existing field entities
    */
-  async getFieldsByContextIdAndFieldIds(cohortId: string, fieldIds: string[]): Promise<any[]> {
+  async getFieldsByContextIdAndFieldIds(
+    cohortId: string,
+    fieldIds: string[]
+  ): Promise<any[]> {
     return await this.fieldsRepository.find({
       where: {
         contextId: cohortId,
@@ -2533,7 +2317,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
     if (fieldsData.length === 0) return [];
 
     // Remove originalFieldId and fieldId from each field data before saving
-    const cleanedFieldsData = fieldsData.map(field => {
+    const cleanedFieldsData = fieldsData.map((field) => {
       const { originalFieldId, fieldId, ...cleanField } = field;
       return cleanField;
     });
