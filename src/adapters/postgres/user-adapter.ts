@@ -586,7 +586,9 @@ export class PostgresUserService implements IServicelocator {
             whereCondition += ` AND `;
           }
           if (key === 'firstName') {
-            whereCondition += ` U."${key}" ILIKE '%${value}%'`;
+            // Escape SQL special characters to prevent SQL injection
+            const escapedValue = this.escapeSqlLiteral(String(value));
+            whereCondition += ` U."${key}" ILIKE '%${escapedValue}%'`;
           } else {
             if (
               key === 'status' ||
@@ -608,19 +610,23 @@ export class PostgresUserService implements IServicelocator {
                   // Handle other array fields (status, email, userId, country)
                   const status = value
                     .map(
-                      (item) =>
-                        `'${
-                          key === 'country'
-                            ? item.trim()
-                            : item.trim().toLowerCase()
-                        }'`
+                      (item) => {
+                        const trimmed = key === 'country'
+                          ? item.trim()
+                          : item.trim().toLowerCase();
+                        // Escape SQL special characters to prevent SQL injection (e.g., "Côte d'Ivoire")
+                        const escaped = this.escapeSqlLiteral(trimmed);
+                        return `'${escaped}'`;
+                      }
                     )
                     .join(',');
                   whereCondition += ` U."${key}" IN(${status})`;
                 }
               }
             } else {
-              whereCondition += ` U."${key}" = '${value}'`;
+              // Escape SQL special characters to prevent SQL injection
+              const escapedValue = this.escapeSqlLiteral(String(value));
+              whereCondition += ` U."${key}" = '${escapedValue}'`;
             }
           }
           index++;
@@ -3422,5 +3428,17 @@ export class PostgresUserService implements IServicelocator {
       console.error('Error in buildSearchTextWhereClause:', error);
       return '';
     }
+  }
+
+  /**
+   * SECURITY: Escape SQL literals to prevent SQL injection
+   * Escapes single quotes by doubling them (PostgreSQL standard)
+   * @param value - The string value to escape
+   * @returns Escaped string safe for SQL interpolation
+   */
+  private escapeSqlLiteral(value: string): string {
+    if (!value || typeof value !== 'string') return '';
+    // Escape single quotes by doubling them (PostgreSQL standard)
+    return value.replace(/'/g, "''");
   }
 }
