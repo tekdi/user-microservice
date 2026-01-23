@@ -65,9 +65,9 @@ async function bootstrap() {
   SwaggerModule.setup('swagger-docs', app, document);
   app.useGlobalFilters(new AllExceptionsFilter());
   app.enableCors();
-  
-  // Use environment variable for port, default to 3002
-  const port = process.env.PORT || 3002;
+
+  // Use environment variable for port, default to 3000
+  const port = process.env.PORT || 3000;
   await app.listen(port);
   console.log(`Application is running on port: ${port}`);
 }
