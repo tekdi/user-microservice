@@ -30,6 +30,7 @@ import { BulkImportModule } from './bulk-import/bulk-import.module';
 import { TerminusModule } from '@nestjs/terminus';
 import { HealthController } from './health/health.controller';
 import { HealthService } from './health/health.service';
+import { CacheModule } from './cache/cache.module';
 
 /**
  * Main Application Module
@@ -83,6 +84,7 @@ import { HealthService } from './health/health.service';
     ElasticsearchModule,
     BulkImportModule,
     TerminusModule,
+    CacheModule,
   ],
   controllers: [AppController, HealthController],
   providers: [

@@ -22,6 +22,7 @@ import { User } from 'src/user/entities/user-entity';
 import { Tenants } from 'src/userTenantMapping/entities/tenant.entity';
 import { ElasticsearchModule } from 'src/elasticsearch/elasticsearch.module';
 import { FormsModule } from 'src/forms/forms.module';
+import { CacheModule } from 'src/cache/cache.module';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { FormsModule } from 'src/forms/forms.module';
     PostgresModule,
     ElasticsearchModule,
     forwardRef(() => FormsModule),
+    CacheModule,
   ],
   controllers: [CohortController],
   providers: [
