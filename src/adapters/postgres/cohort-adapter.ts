@@ -995,6 +995,8 @@ export class PostgresCohortService {
 
       // Normalize date filters (cohort_startDate, cohort_endDate)
       // Convert to YYYY-MM-DD format for stable cache keys
+      // IMPORTANT: If normalization fails, preserve the raw value to prevent cache key collisions
+      // Invalid date filters must have unique cache keys so they don't collide with valid requests
       for (const [key, value] of Object.entries(filtersCopy)) {
         if (key === 'cohort_startDate' || key === 'cohort_endDate') {
           if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
@@ -1004,14 +1006,27 @@ export class PostgresCohortService {
             // Normalize date to YYYY-MM-DD format
             const normalizedDate = this.normalizeDateForCacheKey(dateValue);
             if (normalizedDate) {
+              // Successfully normalized - use normalized value
               normalizedFilters[key] = { [operator]: normalizedDate };
+            } else {
+              // Normalization failed - preserve raw value to prevent cache collisions
+              // Invalid date filters will get unique cache keys and hit validation errors later
+              normalizedFilters[key] = { [operator]: dateValue };
             }
           } else if (typeof value === 'string') {
             // Direct date value
             const normalizedDate = this.normalizeDateForCacheKey(value);
             if (normalizedDate) {
+              // Successfully normalized - use normalized value
               normalizedFilters[key] = normalizedDate;
+            } else {
+              // Normalization failed - preserve raw value to prevent cache collisions
+              // Invalid date filters will get unique cache keys and hit validation errors later
+              normalizedFilters[key] = value;
             }
+          } else {
+            // Non-string, non-object value - preserve as-is
+            normalizedFilters[key] = value;
           }
         } else if (key === 'customFieldsName' && typeof value === 'object') {
           // Normalize custom fields - ONLY normalize date values when field type is 'calendar'
