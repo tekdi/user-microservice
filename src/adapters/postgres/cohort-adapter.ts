@@ -38,6 +38,8 @@ import { PostgresCohortMembersService } from './cohortMembers-adapter';
 import { LoggerUtil } from 'src/common/logger/LoggerUtil';
 import { User } from 'src/user/entities/user-entity';
 import { FieldValueConverter } from 'src/utils/field-value-converter';
+import { CacheService } from 'src/cache/cache.service';
+import * as crypto from 'crypto';
 
 @Injectable()
 export class PostgresCohortService {
@@ -68,7 +70,8 @@ export class PostgresCohortService {
     private readonly postgresCohortMembersService: PostgresCohortMembersService,
     private readonly dataSource: DataSource,
     @InjectRepository(User)
-    private usersRepository: Repository<User>
+    private usersRepository: Repository<User>,
+    private readonly cacheService: CacheService
   ) {}
 
   public async getCohortsDetails(requiredData, res) {
@@ -948,6 +951,215 @@ export class PostgresCohortService {
     }
   }
 
+  /**
+   * Generate a stable cache key for cohort search
+   * 
+   * This method creates a cache key that includes:
+   * - tenantId: Ensures tenant isolation
+   * - academicYearId: Ensures academic year isolation
+   * - filters: All filter parameters including normalized date values
+   * - pagination: limit and offset
+   * - sorting: sort field and direction
+   * 
+   * Filters are normalized to ensure consistent cache keys:
+   * - Date filters (cohort_startDate.gt) are normalized to YYYY-MM-DD format
+   * - Custom field date values are normalized ONLY when field type is 'calendar'
+   * - Non-date custom field values (numeric, boolean, text) are used as-is to avoid cache collisions
+   * - No timestamps or dynamic values are used
+   * 
+   * The key is hashed using SHA256 to create a stable, fixed-length identifier.
+   * 
+   * @param tenantId Tenant ID from request header
+   * @param academicYearId Academic Year ID from request header
+   * @param cohortSearchDto Search DTO containing filters, pagination, and sorting
+   * @param customFields Optional array of custom field metadata to check field types
+   * @returns SHA256 hash of the normalized cache key parameters
+   */
+  private async generateCacheKey(
+    tenantId: string,
+    academicYearId: string,
+    cohortSearchDto: CohortSearchDto,
+    customFields?: any[]
+  ): Promise<string> {
+    const { sort, filters, includeDisplayValues } = cohortSearchDto;
+    const limit = cohortSearchDto.limit || 200;
+    const offset = cohortSearchDto.offset || 0;
+
+    // Normalize filters for cache key generation
+    // This ensures consistent keys regardless of input format
+    const normalizedFilters: any = {};
+
+    if (filters) {
+      // Deep clone to avoid mutating original
+      const filtersCopy = JSON.parse(JSON.stringify(filters));
+
+      // Normalize date filters (cohort_startDate, cohort_endDate)
+      // Convert to YYYY-MM-DD format for stable cache keys
+      // IMPORTANT: If normalization fails, preserve the raw value to prevent cache key collisions
+      // Invalid date filters must have unique cache keys so they don't collide with valid requests
+      for (const [key, value] of Object.entries(filtersCopy)) {
+        if (key === 'cohort_startDate' || key === 'cohort_endDate') {
+          if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+            // Handle operator-based filters (e.g., { gt: "2024-01-01" })
+            const operator = Object.keys(value)[0];
+            const dateValue = value[operator];
+            // Normalize date to YYYY-MM-DD format
+            const normalizedDate = this.normalizeDateForCacheKey(dateValue);
+            if (normalizedDate) {
+              // Successfully normalized - use normalized value
+              normalizedFilters[key] = { [operator]: normalizedDate };
+            } else {
+              // Normalization failed - preserve raw value to prevent cache collisions
+              // Invalid date filters will get unique cache keys and hit validation errors later
+              normalizedFilters[key] = { [operator]: dateValue };
+            }
+          } else if (typeof value === 'string') {
+            // Direct date value
+            const normalizedDate = this.normalizeDateForCacheKey(value);
+            if (normalizedDate) {
+              // Successfully normalized - use normalized value
+              normalizedFilters[key] = normalizedDate;
+            } else {
+              // Normalization failed - preserve raw value to prevent cache collisions
+              // Invalid date filters will get unique cache keys and hit validation errors later
+              normalizedFilters[key] = value;
+            }
+          } else {
+            // Non-string, non-object value - preserve as-is
+            normalizedFilters[key] = value;
+          }
+        } else if (key === 'customFieldsName' && typeof value === 'object') {
+          // Normalize custom fields - ONLY normalize date values when field type is 'calendar'
+          // This prevents cache key collisions when numeric/boolean values are incorrectly treated as dates
+          // 
+          // Problem: Previously, all custom field operator values were normalized as dates without checking type.
+          // This caused numeric values (e.g., 2024) or boolean values to be coerced into dates and truncated
+          // to YYYY-MM-DD, making distinct filters share the same cache key and return wrong cached results.
+          //
+          // Solution: Check the field type from metadata before normalizing. Only normalize when:
+          // 1. Field type is 'calendar' (date type), OR
+          // 2. Field type is unknown but value is clearly a date-like string
+          normalizedFilters[key] = {};
+          for (const [customKey, customValue] of Object.entries(value)) {
+            // Get the custom field metadata to check its type
+            // If field not found in metadata, assume it's not a date field to be safe
+            const customField = customFields?.find((field) => field.name === customKey);
+            const isDateField = customField?.type === 'calendar';
+            
+            if (typeof customValue === 'object' && customValue !== null && !Array.isArray(customValue)) {
+              // Operator-based filter (e.g., { gt: "2024-01-01" } or { gt: 2024 })
+              const operator = Object.keys(customValue)[0];
+              const fieldValue = customValue[operator];
+              
+              // Only normalize if the field type is 'calendar' (date type)
+              // For other types (numeric, checkbox, text, etc.), use value as-is to avoid collisions
+              if (isDateField) {
+                const normalizedDate = this.normalizeDateForCacheKey(fieldValue);
+                if (normalizedDate) {
+                  normalizedFilters[key][customKey] = { [operator]: normalizedDate };
+                } else {
+                  // If normalization fails, use original value to avoid cache collisions
+                  normalizedFilters[key][customKey] = customValue;
+                }
+              } else {
+                // For non-date fields (numeric, checkbox, text, etc.), use value as-is
+                // This preserves exact filter semantics and prevents cache key collisions
+                normalizedFilters[key][customKey] = customValue;
+              }
+            } else {
+              // Direct value (not operator-based)
+              // Only normalize if field type is 'calendar' and value is a string
+              // For non-date fields or non-string values, use as-is
+              if (isDateField && typeof customValue === 'string') {
+                const normalizedDate = this.normalizeDateForCacheKey(customValue);
+                if (normalizedDate) {
+                  normalizedFilters[key][customKey] = normalizedDate;
+                } else {
+                  // If normalization fails, use original value
+                  normalizedFilters[key][customKey] = customValue;
+                }
+              } else {
+                // For non-date fields or non-string values (numbers, booleans, etc.), use as-is
+                // This prevents incorrect date normalization that would cause cache collisions
+                normalizedFilters[key][customKey] = customValue;
+              }
+            }
+          }
+        } else {
+          // For other filters, use as-is (already normalized or not date-related)
+          normalizedFilters[key] = value;
+        }
+      }
+    }
+
+    // Build cache key object with all relevant parameters
+    // Sorting keys ensures consistent key generation
+    const cacheKeyObject = {
+      tenantId,
+      academicYearId,
+      filters: normalizedFilters,
+      limit,
+      offset,
+      sort: sort || ['name', 'ASC'],
+      includeDisplayValues: includeDisplayValues || false,
+    };
+
+    // Sort object keys to ensure consistent ordering
+    const sortedKeys = Object.keys(cacheKeyObject).sort();
+    const sortedObject: any = {};
+    for (const key of sortedKeys) {
+      sortedObject[key] = cacheKeyObject[key];
+    }
+
+    // Convert to JSON string and hash
+    const keyString = JSON.stringify(sortedObject);
+    const hash = crypto.createHash('sha256').update(keyString).digest('hex');
+
+    // Return prefixed cache key
+    return `cohort:search:${hash}`;
+  }
+
+  /**
+   * Normalize date string to YYYY-MM-DD format for cache key
+   * 
+   * This ensures that dates are stored in a consistent format in cache keys,
+   * regardless of whether they come as full timestamps, ISO strings, or date-only strings.
+   * 
+   * @param dateValue Date value to normalize
+   * @returns Normalized date in YYYY-MM-DD format, or null if invalid
+   */
+  private normalizeDateForCacheKey(dateValue: any): string | null {
+    if (!dateValue) {
+      return null;
+    }
+
+    try {
+      // If it's already in YYYY-MM-DD format, return as-is
+      if (typeof dateValue === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
+        return dateValue;
+      }
+
+      // Parse the date and extract YYYY-MM-DD
+      const date = new Date(dateValue);
+      if (isNaN(date.getTime())) {
+        return null;
+      }
+
+      // Extract YYYY-MM-DD from the date
+      const year = date.getUTCFullYear();
+      const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(date.getUTCDate()).padStart(2, '0');
+
+      return `${year}-${month}-${day}`;
+    } catch (error) {
+      LoggerUtil.warn(
+        `Error normalizing date for cache key: ${dateValue}`,
+        'COHORT_CACHE_KEY_NORMALIZATION'
+      );
+      return null;
+    }
+  }
+
   public async searchCohort(
     tenantId: string,
     academicYearId: string,
@@ -955,7 +1167,40 @@ export class PostgresCohortService {
     response
   ) {
     const apiId = APIID.COHORT_LIST;
+    
+    // Cache configuration
+    // TTL: 300 seconds (5 minutes)
+    // This API is read-heavy and shared across users, so caching helps protect the database
+    // from repeated queries with the same parameters. The 5-minute TTL balances freshness
+    // with performance - data is refreshed every 5 minutes automatically.
+    const CACHE_TTL = 300;
+
     try {
+      // Get custom fields metadata to check field types for proper cache key normalization
+      // This is needed to avoid incorrectly normalizing non-date values (numeric, boolean) as dates
+      const getCustomFields = await this.getCachedCustomFields();
+
+      // Generate cache key from all relevant parameters
+      // Filters are part of the cache key to ensure different filter combinations
+      // get different cache entries. This is necessary because the same tenant/academicYear
+      // can have different results based on filters (status, dates, etc.)
+      const cacheKey = await this.generateCacheKey(tenantId, academicYearId, cohortSearchDto, getCustomFields);
+
+      // Check cache first
+      const cachedResult = await this.cacheService.get<any>(cacheKey);
+      if (cachedResult) {
+        LoggerUtil.log(`Cache HIT for cohort search: ${cacheKey}`, apiId);
+        return APIResponse.success(
+          response,
+          apiId,
+          cachedResult,
+          HttpStatus.OK,
+          'Cohort details fetched successfully (cached)'
+        );
+      }
+
+      LoggerUtil.log(`Cache MISS for cohort search: ${cacheKey}`, apiId);
+
       const { sort, filters, includeDisplayValues } = cohortSearchDto;
       let { limit, offset } = cohortSearchDto;
       let cohortsByAcademicYear: CohortAcademicYear[];
@@ -980,8 +1225,8 @@ export class PostgresCohortService {
       //Get all cohorts fields (cached)
       const cohortAllKeys = this.getCachedCohortColumnNames();
 
-      //Get custom fields (cached)
-      const getCustomFields = await this.getCachedCustomFields();
+      //Get custom fields (cached) - already fetched above for cache key generation
+      // Reuse the same instance to avoid duplicate queries
 
       // Extract custom field names
       const customFieldsKeys = getCustomFields.map(
@@ -1580,10 +1825,30 @@ export class PostgresCohortService {
       }
 
       if (results.cohortDetails.length > 0) {
+        const successResponse = {
+          count,
+          results,
+        };
+
+        // Store result in cache for future requests (best-effort, non-blocking)
+        // Only cache successful responses with data
+        // This helps reduce database load for repeated queries
+        // Cache writes are wrapped in try-catch to prevent Redis errors from breaking requests
+        try {
+          await this.cacheService.set(cacheKey, successResponse, CACHE_TTL);
+        } catch (cacheError) {
+          // Log cache write failure but don't break the request
+          // Cache is an optimization - API should work even if Redis is down
+          LoggerUtil.warn(
+            `Failed to cache cohort search result: ${cacheError.message}`,
+            apiId
+          );
+        }
+
         return APIResponse.success(
           response,
           apiId,
-          { count, results },
+          successResponse,
           HttpStatus.OK,
           'Cohort details fetched successfully'
         );
