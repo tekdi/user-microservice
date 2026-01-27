@@ -1,4 +1,9 @@
-import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleInit,
+  OnModuleDestroy,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as redis from 'redis';
 
@@ -60,14 +65,19 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
    */
   async get<T>(key: string): Promise<T | null> {
     if (!this.cacheEnabled || !this.redisClient) {
-      this.logger.debug(`Cache is disabled or not connected, skipping get for key ${key}`);
+      this.logger.debug(
+        `Cache is disabled or not connected, skipping get for key ${key}`
+      );
       return null;
     }
 
     return new Promise((resolve) => {
       this.redisClient!.get(key, (err: Error | null, value: string | null) => {
         if (err) {
-          this.logger.error(`Error getting cache for key ${key}: ${err.message}`, err.stack);
+          this.logger.error(
+            `Error getting cache for key ${key}: ${err.message}`,
+            err.stack
+          );
           resolve(null);
           return;
         }
@@ -77,7 +87,9 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
           try {
             resolve(JSON.parse(value));
           } catch (parseError) {
-            this.logger.error(`Error parsing cached value for key ${key}: ${parseError}`);
+            this.logger.error(
+              `Error parsing cached value for key ${key}: ${parseError}`
+            );
             resolve(null);
           }
         } else {
@@ -96,7 +108,9 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
    */
   async set(key: string, value: any, ttl: number): Promise<void> {
     if (!this.cacheEnabled || !this.redisClient) {
-      this.logger.debug(`Cache is disabled or not connected, skipping set for key ${key}`);
+      this.logger.debug(
+        `Cache is disabled or not connected, skipping set for key ${key}`
+      );
       return;
     }
 
@@ -104,17 +118,28 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
       try {
         this.logger.debug(`Setting cache for key ${key} with TTL ${ttl}s`);
         const serializedValue = JSON.stringify(value);
-        this.redisClient!.setex(key, ttl, serializedValue, (err: Error | null) => {
-          if (err) {
-            this.logger.error(`Error setting cache for key ${key}: ${err.message}`, err.stack);
-            reject(err);
-          } else {
-            this.logger.debug(`Successfully set cache for key ${key}`);
-            resolve();
+        this.redisClient!.setex(
+          key,
+          ttl,
+          serializedValue,
+          (err: Error | null) => {
+            if (err) {
+              this.logger.error(
+                `Error setting cache for key ${key}: ${err.message}`,
+                err.stack
+              );
+              reject(err);
+            } else {
+              this.logger.debug(`Successfully set cache for key ${key}`);
+              resolve();
+            }
           }
-        });
+        );
       } catch (error: any) {
-        this.logger.error(`Error setting cache for key ${key}: ${error.message}`, error.stack);
+        this.logger.error(
+          `Error setting cache for key ${key}: ${error.message}`,
+          error.stack
+        );
         reject(error);
       }
     });
@@ -132,9 +157,58 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
     return new Promise((resolve) => {
       this.redisClient!.del(key, (err: Error | null) => {
         if (err) {
-          this.logger.error(`Error deleting cache for key ${key}: ${err.message}`);
+          this.logger.error(
+            `Error deleting cache for key ${key}: ${err.message}`
+          );
         }
         resolve();
+      });
+    });
+  }
+
+  /**
+   * Delete all cache entries matching a pattern
+   * @param pattern Redis key pattern (e.g., 'cohort:search:*')
+   * @returns Number of keys deleted
+   */
+  async delByPattern(pattern: string): Promise<number> {
+    if (!this.cacheEnabled || !this.redisClient) {
+      return 0;
+    }
+
+    return new Promise((resolve) => {
+      // Use KEYS to find all matching keys
+      // Note: For large Redis instances, consider using SCAN instead for better performance
+      this.redisClient!.keys(pattern, (err: Error | null, keys: string[]) => {
+        if (err) {
+          this.logger.error(
+            `Error finding cache keys for pattern ${pattern}: ${err.message}`
+          );
+          resolve(0);
+          return;
+        }
+
+        if (!keys || keys.length === 0) {
+          this.logger.debug(`No cache keys found matching pattern ${pattern}`);
+          resolve(0);
+          return;
+        }
+
+        // Delete all matching keys
+        this.redisClient!.del(...keys, (delErr: Error | null, count: number) => {
+          if (delErr) {
+            this.logger.error(
+              `Error deleting cache keys for pattern ${pattern}: ${delErr.message}`
+            );
+            resolve(0);
+            return;
+          }
+
+          this.logger.debug(
+            `Deleted ${count} cache entries matching pattern ${pattern}`
+          );
+          resolve(count);
+        });
       });
     });
   }

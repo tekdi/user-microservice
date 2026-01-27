@@ -684,6 +684,20 @@ export class PostgresCohortService {
         ...response,
         academicYearId: academicYearId,
       });
+
+      // Invalidate cohort search cache after successful creation
+      // This ensures that subsequent search requests include the new cohort
+      try {
+        await this.cacheService.delByPattern('cohort:search:*');
+        LoggerUtil.log('Invalidated cohort search cache after creation', apiId);
+      } catch (cacheError) {
+        // Log cache invalidation failure but don't break the request
+        LoggerUtil.warn(
+          `Failed to invalidate cohort search cache: ${cacheError.message}`,
+          apiId
+        );
+      }
+
       LoggerUtil.log(API_RESPONSES.CREATE_COHORT);
       return APIResponse.success(
         res,
@@ -916,6 +930,19 @@ export class PostgresCohortService {
         //     );
         //   }
         // }
+
+        // Invalidate cohort search cache after successful update
+        // This ensures that subsequent search requests return fresh data
+        try {
+          await this.cacheService.delByPattern('cohort:search:*');
+          LoggerUtil.log('Invalidated cohort search cache after update', apiId);
+        } catch (cacheError) {
+          // Log cache invalidation failure but don't break the request
+          LoggerUtil.warn(
+            `Failed to invalidate cohort search cache: ${cacheError.message}`,
+            apiId
+          );
+        }
 
         LoggerUtil.log(API_RESPONSES.COHORT_UPDATED_SUCCESSFULLY);
         return APIResponse.success(
@@ -2135,6 +2162,19 @@ export class PostgresCohortService {
         ]);
         await this.cohortMembersRepository.delete({ cohortId: cohortId });
         await this.fieldValuesRepository.delete({ itemId: cohortId });
+
+        // Invalidate cohort search cache after successful deletion
+        // This ensures that subsequent search requests don't return the deleted cohort
+        try {
+          await this.cacheService.delByPattern('cohort:search:*');
+          LoggerUtil.log('Invalidated cohort search cache after deletion', apiId);
+        } catch (cacheError) {
+          // Log cache invalidation failure but don't break the request
+          LoggerUtil.warn(
+            `Failed to invalidate cohort search cache: ${cacheError.message}`,
+            apiId
+          );
+        }
 
         return APIResponse.success(
           response,
