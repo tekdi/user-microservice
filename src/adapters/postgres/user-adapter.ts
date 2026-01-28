@@ -610,16 +610,15 @@ export class PostgresUserService implements IServicelocator {
                 } else {
                   // Handle other array fields (status, email, userId, country)
                   const status = value
-                    .map(
-                      (item) => {
-                        const trimmed = key === 'country'
+                    .map((item) => {
+                      const trimmed =
+                        key === 'country'
                           ? item.trim()
                           : item.trim().toLowerCase();
-                        // Escape SQL special characters to prevent SQL injection (e.g., "Côte d'Ivoire")
-                        const escaped = this.escapeSqlLiteral(trimmed);
-                        return `'${escaped}'`;
-                      }
-                    )
+                      // Escape SQL special characters to prevent SQL injection (e.g., "Côte d'Ivoire")
+                      const escaped = this.escapeSqlLiteral(trimmed);
+                      return `'${escaped}'`;
+                    })
                     .join(',');
                   whereCondition += ` U."${key}" IN(${status})`;
                 }
@@ -862,7 +861,7 @@ export class PostgresUserService implements IServicelocator {
       result.userData = userDetails;
 
       // Map customFields - value is already an array for country fields
-      result.userData["customFields"] = customFields.map((data: any) => ({
+      result.userData['customFields'] = customFields.map((data: any) => ({
         fieldId: data?.fieldId,
         label: data?.label,
         value: data?.value, // Already an array for country fields
@@ -981,7 +980,10 @@ export class PostgresUserService implements IServicelocator {
     }
 
     // Fetch tenant/role data (optimized: only essential fields, no privileges/tenantName)
-    const tenantDetails = await this.userTenantRoleData(userDetails.userId, tenantId);
+    const tenantDetails = await this.userTenantRoleData(
+      userDetails.userId,
+      tenantId
+    );
     userDetails['tenantData'] = tenantDetails || [];
 
     return userDetails;
@@ -1050,7 +1052,7 @@ export class PostgresUserService implements IServicelocator {
    * Optimized: Get tenant/role data with only essential fields
    * Returns: tenantId, userTenantMappingId, roleId, roleName
    * Does NOT fetch: tenantName, privileges (for performance optimization)
-   * 
+   *
    * TO ENABLE PRIVILEGES/TENANTNAME IN FUTURE:
    * 1. Uncomment privilege fetching code below
    * 2. Add tenantName to SELECT query
@@ -2524,7 +2526,7 @@ export class PostgresUserService implements IServicelocator {
     let apiResponse;
     let lastError;
     const maxRetries = 2; // Try original request + one retry with fresh token
-    
+
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         apiResponse = await this.axios(config);
@@ -2533,13 +2535,15 @@ export class PostgresUserService implements IServicelocator {
       } catch (e) {
         lastError = e;
         const statusCode = e?.response?.status;
-        
+
         // If we get a 401 (unauthorized), it might be due to an expired/invalid token
         // Clear the cache and retry with a fresh token (only on first attempt)
         if (statusCode === 401 && attempt === 1) {
-          LoggerUtil.log('Received 401 error, clearing cached token and retrying with fresh token');
+          LoggerUtil.log(
+            'Received 401 error, clearing cached token and retrying with fresh token'
+          );
           clearCachedAdminToken();
-          
+
           // Fetch a fresh token
           try {
             const keycloakResponse = await getKeycloakAdminToken();
@@ -2562,7 +2566,7 @@ export class PostgresUserService implements IServicelocator {
         }
       }
     }
-    
+
     // If we still don't have a successful response, return the error
     if (!apiResponse) {
       const statusCode = lastError?.response?.status;
@@ -2614,7 +2618,8 @@ export class PostgresUserService implements IServicelocator {
             };
 
             // Send notification asynchronously without blocking the response
-            const mailSend = await this.notificationRequest.sendNotification(
+            // Commenting unused
+            /* const mailSend = await this.notificationRequest.sendNotification(
               notificationPayload
             );
             if (mailSend?.result?.email?.errors?.length > 0) {
@@ -2628,7 +2633,7 @@ export class PostgresUserService implements IServicelocator {
               LoggerUtil.log(
                 `Password reset notification sent successfully to ${userEmail}`
               );
-            }
+            }*/
           } catch (error) {
             // Log error but don't fail the password reset
             LoggerUtil.error(
@@ -2642,7 +2647,9 @@ export class PostgresUserService implements IServicelocator {
           // (e.g., if LoggerUtil.error itself throws)
           LoggerUtil.error(
             `${API_RESPONSES.SERVER_ERROR}: ${requestUrl}`,
-            `Unhandled error in password reset notification: ${error?.message || String(error)}`
+            `Unhandled error in password reset notification: ${
+              error?.message || String(error)
+            }`
           );
         }); // Arrow function preserves 'this' context automatically
       }
