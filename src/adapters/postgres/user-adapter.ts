@@ -7,6 +7,7 @@ import { UserCreateDto } from '../../user/dto/user-create.dto';
 import jwt_decode from 'jwt-decode';
 import {
   getKeycloakAdminToken,
+  clearCachedAdminToken,
   createUserInKeyCloak,
   updateUserInKeyCloak,
   checkIfUsernameExistsInKeycloak,
@@ -2519,21 +2520,62 @@ export class PostgresUserService implements IServicelocator {
     //   });
     // }
 
-    // Simple try-catch without retry logic
+    // Try-catch with retry logic for 401 errors (token expiration)
     let apiResponse;
-    try {
-      apiResponse = await this.axios(config);
-    } catch (e) {
-      const statusCode = e?.response?.status;
+    let lastError;
+    const maxRetries = 2; // Try original request + one retry with fresh token
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        apiResponse = await this.axios(config);
+        // Success, break out of retry loop
+        break;
+      } catch (e) {
+        lastError = e;
+        const statusCode = e?.response?.status;
+        
+        // If we get a 401 (unauthorized), it might be due to an expired/invalid token
+        // Clear the cache and retry with a fresh token (only on first attempt)
+        if (statusCode === 401 && attempt === 1) {
+          LoggerUtil.log('Received 401 error, clearing cached token and retrying with fresh token');
+          clearCachedAdminToken();
+          
+          // Fetch a fresh token
+          try {
+            const keycloakResponse = await getKeycloakAdminToken();
+            token = keycloakResponse.data.access_token;
+            // Update the Authorization header with the new token
+            config.headers.Authorization = 'Bearer ' + token;
+            // Continue to retry with the fresh token
+            continue;
+          } catch (tokenError) {
+            LoggerUtil.error(
+              `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
+              `Error fetching fresh Keycloak admin token: ${tokenError.message}`
+            );
+            // If we can't get a fresh token, return the original error
+            break;
+          }
+        } else {
+          // For non-401 errors or if retry also failed, break and return error
+          break;
+        }
+      }
+    }
+    
+    // If we still don't have a successful response, return the error
+    if (!apiResponse) {
+      const statusCode = lastError?.response?.status;
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
-        `Error resetting Keycloak password: ${e.message}`
+        `Error resetting Keycloak password: ${lastError.message}`
       );
       return new ErrorResponse({
         errorCode: `${statusCode || 500}`,
         errorMessage:
-          e?.response?.data?.error ||
-          e.message ||
+          lastError?.response?.data?.error ||
+          lastError?.response?.data?.errorMessage ||
+          lastError.message ||
           'Failed to reset password in Keycloak',
       });
     }
