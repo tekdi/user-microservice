@@ -2618,21 +2618,22 @@ export class PostgresUserService implements IServicelocator {
             };
 
             // Send notification asynchronously without blocking the response
-            // const mailSend = await this.notificationRequest.sendNotification(
-            //   notificationPayload
-            // );
-            // if (mailSend?.result?.email?.errors?.length > 0) {
-            //   LoggerUtil.error(
-            //     `${API_RESPONSES.SERVER_ERROR}: ${requestUrl}`,
-            //     `Notification service returned errors: ${JSON.stringify(
-            //       mailSend.result.email.errors
-            //     )}`
-            //   );
-            // } else {
-            //   LoggerUtil.log(
-            //     `Password reset notification sent successfully to ${userEmail}`
-            //   );
-            // }
+            // Commenting unused
+            /* const mailSend = await this.notificationRequest.sendNotification(
+              notificationPayload
+            );
+            if (mailSend?.result?.email?.errors?.length > 0) {
+              LoggerUtil.error(
+                `${API_RESPONSES.SERVER_ERROR}: ${requestUrl}`,
+                `Notification service returned errors: ${JSON.stringify(
+                  mailSend.result.email.errors
+                )}`
+              );
+            } else {
+              LoggerUtil.log(
+                `Password reset notification sent successfully to ${userEmail}`
+              );
+            }*/
           } catch (error) {
             // Log error but don't fail the password reset
             LoggerUtil.error(
