@@ -16,11 +16,16 @@ import { LoggerUtil } from "src/common/logger/LoggerUtil";
 import { format } from "date-fns";
 import { navapathamConfig } from "./navapatham.config";
 import { KafkaService } from "../kafka/kafka.service";
+import { User } from "../user/entities/user-entity";
+import { Tenant } from "../tenant/entities/tenent.entity";
+import { UserRoleMapping } from "../rbac/assign-role/entities/assign-role.entity";
+import { SSO_DEFAULTS } from "../constants/sso.constants";
 
 @Injectable()
 export class CronService {
   private readonly logger = new Logger(CronService.name);
   private readonly apiId = "cron.navapatham.assignStudents";
+  private readonly pragyanpathApiId = "cron.pragyanpath.mapUsers";
 
   constructor(
     @InjectRepository(Cohort)
@@ -31,6 +36,12 @@ export class CronService {
     private readonly cohortAcademicYearRepository: Repository<CohortAcademicYear>,
     @InjectRepository(UserTenantMapping)
     private readonly userTenantMappingRepository: Repository<UserTenantMapping>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
+    @InjectRepository(Tenant)
+    private readonly tenantRepository: Repository<Tenant>,
+    @InjectRepository(UserRoleMapping)
+    private readonly userRoleMappingRepository: Repository<UserRoleMapping>,
     private readonly userService: UserService,
     private readonly fieldsService: FieldsService,
     private readonly cohortMembersService: CohortMembersService,
@@ -389,6 +400,143 @@ export class CronService {
       const errorMsg = `Fatal error in cron job: ${error.message}`;
       this.logger.error(errorMsg, error.stack);
       LoggerUtil.error(errorMsg, error.stack, this.apiId);
+    }
+  }
+
+  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
+  async mapPrathaUsersToTenant() {
+    this.logger.log("Starting Pragyanpath user tenant mapping cron job");
+    LoggerUtil.log("Pragyanpath cron job started", this.pragyanpathApiId);
+
+    try {
+      // Step 1: Get today's date (YYYY-MM-DD format)
+      const todayDate = format(new Date(), "yyyy-MM-dd");
+
+
+      const pragyanpathTenantId = SSO_DEFAULTS.DEFAULT_TENANT_ID;
+      this.logger.log(`Found pragyanpath tenant with ID: ${pragyanpathTenantId}`);
+
+      // Step 3: Fetch users created today with pratha.org email domain
+      const usersCreatedToday = await this.userRepository
+        .createQueryBuilder("user")
+        .where("DATE(user.createdAt) = :todayDate", { todayDate })
+        .andWhere("user.email LIKE :emailDomain", { emailDomain: "%@pratham.org" })
+        .getMany();
+ 
+      if (!usersCreatedToday || usersCreatedToday.length === 0) {
+        this.logger.log("No users with pratha.org email created today");
+        LoggerUtil.log("No users with pratha.org email found", this.pragyanpathApiId);
+        return;
+      }
+
+      this.logger.log(`Found ${usersCreatedToday.length} users with pratha.org email created today`);
+
+      let mappedCount = 0;
+      let skippedCount = 0;
+      const errors: string[] = [];
+
+      // Step 4: Process each user
+      for (const user of usersCreatedToday) {
+        try {
+          // Step 4.1: Check if user is already mapped to pragyanpath tenant
+          const existingMapping = await this.userTenantMappingRepository.findOne({
+            where: {
+              userId: user.userId,
+              tenantId: pragyanpathTenantId,
+            },
+          });
+
+          if (existingMapping) {
+            skippedCount++;
+            this.logger.log(
+              `User ${user.userId} (${user.email}) is already mapped to pragyanpath tenant`
+            );
+            continue;
+          }
+
+          // Step 4.2: Check if user already has role mapping for this tenant
+          const existingRoleMapping = await this.userRoleMappingRepository.findOne({
+            where: {
+              userId: user.userId,
+              tenantId: pragyanpathTenantId,
+            },
+          });
+
+          // Step 4.3: Create tenant mapping
+          await this.userTenantMappingRepository.save({
+            userId: user.userId,
+            tenantId: pragyanpathTenantId,
+            status: UserTenantMappingStatus.ACTIVE,
+            createdBy: user.userId,
+            updatedBy: user.userId,
+          });
+
+          this.logger.log(
+            `Created tenant mapping for user ${user.userId} (${user.email})`
+          );
+
+          // Step 4.4: Create role mapping if not exists (assign default learner role)
+          if (!existingRoleMapping) {
+            await this.userRoleMappingRepository.save({
+              userId: user.userId,
+              tenantId: pragyanpathTenantId,
+              roleId: SSO_DEFAULTS.DEFAULT_LEARNER_ROLE_ID,
+              createdBy: user.userId,
+              updatedBy: user.userId,
+            });
+
+            this.logger.log(
+              `Created role mapping for user ${user.userId} (${user.email}) with learner role`
+            );
+          }
+
+          // Step 4.5: Publish Kafka events
+          try {
+            await this.userTenantMappingService.publishUserTenantMappingEvent(
+              'created',
+              user.userId,
+              pragyanpathTenantId,
+              this.pragyanpathApiId
+            );
+          } catch (kafkaError) {
+            // Log error but don't fail the mapping
+            this.logger.error(
+              `Failed to publish user tenant mapping Kafka event for user ${user.userId}: ${kafkaError.message}`
+            );
+          }
+
+          mappedCount++;
+        } catch (error) {
+          skippedCount++;
+          const errorMsg = `Error processing user ${user.userId} (${user.email}): ${error.message}`;
+          this.logger.error(errorMsg);
+          errors.push(errorMsg);
+        }
+      }
+
+      // Log summary
+      const summary = {
+        totalUsers: usersCreatedToday.length,
+        mapped: mappedCount,
+        skipped: skippedCount,
+        errors: errors.length,
+      };
+
+      this.logger.log(
+        `Pragyanpath cron job completed. Summary: ${JSON.stringify(summary)}`
+      );
+      LoggerUtil.log(
+        `Pragyanpath cron job completed. Mapped: ${mappedCount}, Skipped: ${skippedCount}, Errors: ${errors.length}`,
+        this.pragyanpathApiId
+      );
+
+      if (errors.length > 0) {
+        this.logger.warn(`Errors encountered: ${JSON.stringify(errors)}`);
+      }
+    } catch (error) {
+      const errorMsg = `Fatal error in Pragyanpath cron job: ${error.message}`;
+      this.logger.error(errorMsg, error.stack);
+      LoggerUtil.error(errorMsg, error.stack, this.pragyanpathApiId);
     }
   }
 }
