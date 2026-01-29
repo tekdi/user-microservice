@@ -62,5 +62,6 @@ export const APIID = {
   SEND_RESET_OTP: 'api.send.reset.otp',
   SIGNED_URL: 'api.get.signedURL',
   SSO_AUTHENTICATE: 'api.sso.authenticate',
-  CRON_NAVAPATHAM_ASSIGN: 'api.cron.navapatham.assign'
+  CRON_NAVAPATHAM_ASSIGN: 'api.cron.navapatham.assign',
+  CRON_PRAGYANPATH_MAP_USERS: 'api.cron.pragyanpath.mapUsers'
 };
