@@ -242,4 +242,32 @@ export class CohortController {
     return await this.cohortService
       .getCohortHierarchyData(requiredData, response);
   }
+
+  @UseFilters(new AllExceptionsFilter(APIID.COHORT_READ))
+  @Get("/geographical-hierarchy/:userId")
+  @ApiOkResponse({ description: "User geographical hierarchy fetched successfully" })
+  @ApiNotFoundResponse({ description: "User Not Found" })
+  @ApiInternalServerErrorResponse({ description: "Internal Server Error." })
+  @ApiBadRequestResponse({ description: "Bad Request" })
+  @ApiHeader({
+    name: "academicyearid",
+    required: true,
+    description: "Academic Year ID (required)"
+  })
+  public async getUserGeographicalHierarchy(
+    @Headers() headers,
+    @Param("userId", ParseUUIDPipe) userId: string,
+    @Res() response: Response
+  ) {
+    const academicYearId = headers["academicyearid"];
+    if (!academicYearId || !isUUID(academicYearId)) {
+      throw new BadRequestException(API_RESPONSES.ACADEMICYEARID_VALIDATION);
+    }
+    const requiredData = {
+      userId: userId,
+      academicYearId: academicYearId as string,
+    };
+    return await this.cohortService
+      .getUserGeographicalHierarchy(requiredData, response);
+  }
 }

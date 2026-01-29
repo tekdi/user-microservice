@@ -47,4 +47,31 @@ export class CronController {
       );
     }
   }
+
+  @Post("pragyanpath/map-users")
+  @ApiOkResponse({ description: "Pragyanpath user mapping cron job executed successfully" })
+  @ApiInternalServerErrorResponse({ description: "Internal server error" })
+  async triggerMapPrathaUsers(@Res() response: Response) {
+    const apiId = APIID.CRON_PRAGYANPATH_MAP_USERS;
+    try {
+      // Execute the cron job manually
+      await this.cronService.mapPrathaUsersToTenant();
+      
+      return APIResponse.success(
+        response,
+        apiId,
+        { message: "Pragyanpath user mapping cron job executed successfully" },
+        HttpStatus.OK,
+        "Cron job completed"
+      );
+    } catch (error) {
+      return APIResponse.error(
+        response,
+        apiId,
+        API_RESPONSES.INTERNAL_SERVER_ERROR,
+        error.message || "Failed to execute pragyanpath mapping cron job",
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
 }

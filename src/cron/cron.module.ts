@@ -13,6 +13,9 @@ import { Cohort } from "../cohort/entities/cohort.entity";
 import { CohortMembers } from "../cohortMembers/entities/cohort-member.entity";
 import { CohortAcademicYear } from "../cohortAcademicYear/entities/cohortAcademicYear.entity";
 import { UserTenantMapping } from "../userTenantMapping/entities/user-tenant-mapping.entity";
+import { User } from "../user/entities/user-entity";
+import { Tenant } from "../tenant/entities/tenent.entity";
+import { UserRoleMapping } from "../rbac/assign-role/entities/assign-role.entity";
 
 @Module({
   imports: [
@@ -22,6 +25,9 @@ import { UserTenantMapping } from "../userTenantMapping/entities/user-tenant-map
       CohortMembers,
       CohortAcademicYear,
       UserTenantMapping,
+      User,
+      Tenant,
+      UserRoleMapping,
     ]),
     UserModule,
     CohortModule,
