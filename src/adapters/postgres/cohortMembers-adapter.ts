@@ -772,55 +772,47 @@ export class PostgresCohortMembersService {
         );
       }
 
-      // Validate Application End Date before creating cohort member
+      // Validate Application End Date before creating cohort member (only if configured)
       const applicationEndDateFieldId = process.env.APPLICATION_END_FIELD_ID;
 
-      if (!applicationEndDateFieldId) {
-        return APIResponse.error(
-          res,
-          apiId,
-          'Bad Request',
-          'Application End Date field ID is not configured.',
-          HttpStatus.BAD_REQUEST
-        );
-      }
+      if (applicationEndDateFieldId) {
+        const cohortId = cohortMembers.cohortId;
 
-      const cohortId = cohortMembers.cohortId;
+        // Query FieldValues table for the Application End Date field
+        const applicationEndDateField = await this.fieldValuesRepository.findOne({
+          where: {
+            itemId: cohortId,
+            fieldId: applicationEndDateFieldId,
+          },
+          select: ['calendarValue', 'value'],
+        });
 
-      // Query FieldValues table for the Application End Date field
-      const applicationEndDateField = await this.fieldValuesRepository.findOne({
-        where: {
-          itemId: cohortId,
-          fieldId: applicationEndDateFieldId,
-        },
-        select: ['calendarValue', 'value'],
-      });
+        if (applicationEndDateField) {
+          // Get the date value - prefer calendarValue, fallback to value
+          let endDate: Date | null = null;
 
-      if (applicationEndDateField) {
-        // Get the date value - prefer calendarValue, fallback to value
-        let endDate: Date | null = null;
-
-        if (applicationEndDateField.calendarValue) {
-          endDate = applicationEndDateField.calendarValue;
-        } else if (applicationEndDateField.value) {
-          // Try to parse the value string as a date
-          const parsedDate = new Date(applicationEndDateField.value);
-          if (!Number.isNaN(parsedDate.getTime())) {
-            endDate = parsedDate;
+          if (applicationEndDateField.calendarValue) {
+            endDate = applicationEndDateField.calendarValue;
+          } else if (applicationEndDateField.value) {
+            // Try to parse the value string as a date
+            const parsedDate = new Date(applicationEndDateField.value);
+            if (!Number.isNaN(parsedDate.getTime())) {
+              endDate = parsedDate;
+            }
           }
-        }
 
-        // Check if the end date is less than current UTC time
-        if (endDate) {
-          const currentUtcTime = new Date();
-          if (endDate < currentUtcTime) {
-            return APIResponse.error(
-              res,
-              apiId,
-              'Bad Request',
-              'Application End Date has passed. Cannot create cohort member after the end date.',
-              HttpStatus.BAD_REQUEST
-            );
+          // Check if the end date is less than current UTC time
+          if (endDate) {
+            const currentUtcTime = new Date();
+            if (endDate < currentUtcTime) {
+              return APIResponse.error(
+                res,
+                apiId,
+                'Bad Request',
+                'Application End Date has passed. Cannot create cohort member after the end date.',
+                HttpStatus.BAD_REQUEST
+              );
+            }
           }
         }
       }
@@ -1476,58 +1468,50 @@ export class PostgresCohortMembersService {
       const previousStatus = cohortMembershipToUpdate.status;
       const { status, statusReason } = cohortMembersUpdateDto;
 
-      // Validate Application End Date when status is being set to "submitted"
+      // Validate Application End Date when status is being set to "submitted" (only if configured)
       if (status === 'submitted') {
         const applicationEndDateFieldId = process.env.APPLICATION_END_FIELD_ID;
 
-        if (!applicationEndDateFieldId) {
-          return APIResponse.error(
-            res,
-            apiId,
-            'Bad Request',
-            'Application End Date field ID is not configured.',
-            HttpStatus.BAD_REQUEST
-          );
-        }
+        if (applicationEndDateFieldId) {
+          const cohortId = cohortMembershipToUpdate.cohortId;
 
-        const cohortId = cohortMembershipToUpdate.cohortId;
-
-        // Query FieldValues table for the Application End Date field
-        const applicationEndDateField = await this.fieldValuesRepository.findOne(
-          {
-            where: {
-              itemId: cohortId,
-              fieldId: applicationEndDateFieldId,
-            },
-            select: ['calendarValue', 'value'],
-          }
-        );
-
-        if (applicationEndDateField) {
-          // Get the date value - prefer calendarValue, fallback to value
-          let endDate: Date | null = null;
-
-          if (applicationEndDateField.calendarValue) {
-            endDate = applicationEndDateField.calendarValue;
-          } else if (applicationEndDateField.value) {
-            // Try to parse the value string as a date
-            const parsedDate = new Date(applicationEndDateField.value);
-            if (!Number.isNaN(parsedDate.getTime())) {
-              endDate = parsedDate;
+          // Query FieldValues table for the Application End Date field
+          const applicationEndDateField = await this.fieldValuesRepository.findOne(
+            {
+              where: {
+                itemId: cohortId,
+                fieldId: applicationEndDateFieldId,
+              },
+              select: ['calendarValue', 'value'],
             }
-          }
+          );
 
-          // Check if the end date is less than current UTC time
-          if (endDate) {
-            const currentUtcTime = new Date();
-            if (endDate < currentUtcTime) {
-              return APIResponse.error(
-                res,
-                apiId,
-                'Bad Request',
-                'Application End Date has passed. Cannot submit application after the end date.',
-                HttpStatus.BAD_REQUEST
-              );
+          if (applicationEndDateField) {
+            // Get the date value - prefer calendarValue, fallback to value
+            let endDate: Date | null = null;
+
+            if (applicationEndDateField.calendarValue) {
+              endDate = applicationEndDateField.calendarValue;
+            } else if (applicationEndDateField.value) {
+              // Try to parse the value string as a date
+              const parsedDate = new Date(applicationEndDateField.value);
+              if (!Number.isNaN(parsedDate.getTime())) {
+                endDate = parsedDate;
+              }
+            }
+
+            // Check if the end date is less than current UTC time
+            if (endDate) {
+              const currentUtcTime = new Date();
+              if (endDate < currentUtcTime) {
+                return APIResponse.error(
+                  res,
+                  apiId,
+                  'Bad Request',
+                  'Application End Date has passed. Cannot submit application after the end date.',
+                  HttpStatus.BAD_REQUEST
+                );
+              }
             }
           }
         }
