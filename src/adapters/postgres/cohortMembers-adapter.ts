@@ -772,6 +772,51 @@ export class PostgresCohortMembersService {
         );
       }
 
+      // Validate Application End Date before creating cohort member (only if configured)
+      const applicationEndDateFieldId = process.env.APPLICATION_END_FIELD_ID;
+
+      if (applicationEndDateFieldId) {
+        const cohortId = cohortMembers.cohortId;
+
+        // Query FieldValues table for the Application End Date field
+        const applicationEndDateField = await this.fieldValuesRepository.findOne({
+          where: {
+            itemId: cohortId,
+            fieldId: applicationEndDateFieldId,
+          },
+          select: ['calendarValue', 'value'],
+        });
+
+        if (applicationEndDateField) {
+          // Get the date value - prefer calendarValue, fallback to value
+          let endDate: Date | null = null;
+
+          if (applicationEndDateField.calendarValue) {
+            endDate = applicationEndDateField.calendarValue;
+          } else if (applicationEndDateField.value) {
+            // Try to parse the value string as a date
+            const parsedDate = new Date(applicationEndDateField.value);
+            if (!Number.isNaN(parsedDate.getTime())) {
+              endDate = parsedDate;
+            }
+          }
+
+          // Check if the end date is less than current UTC time
+          if (endDate) {
+            const currentUtcTime = new Date();
+            if (endDate < currentUtcTime) {
+              return APIResponse.error(
+                res,
+                apiId,
+                'Bad Request',
+                'Application End Date has passed. Cannot create cohort member after the end date.',
+                HttpStatus.BAD_REQUEST
+              );
+            }
+          }
+        }
+      }
+
       cohortMembers.createdBy = loginUser;
       cohortMembers.updatedBy = loginUser;
       cohortMembers.cohortAcademicYearId = cohortacAdemicyearId;
@@ -1422,6 +1467,55 @@ export class PostgresCohortMembersService {
       // Store the previous status before updating
       const previousStatus = cohortMembershipToUpdate.status;
       const { status, statusReason } = cohortMembersUpdateDto;
+
+      // Validate Application End Date when status is being set to "submitted" (only if configured)
+      if (status === 'submitted') {
+        const applicationEndDateFieldId = process.env.APPLICATION_END_FIELD_ID;
+
+        if (applicationEndDateFieldId) {
+          const cohortId = cohortMembershipToUpdate.cohortId;
+
+          // Query FieldValues table for the Application End Date field
+          const applicationEndDateField = await this.fieldValuesRepository.findOne(
+            {
+              where: {
+                itemId: cohortId,
+                fieldId: applicationEndDateFieldId,
+              },
+              select: ['calendarValue', 'value'],
+            }
+          );
+
+          if (applicationEndDateField) {
+            // Get the date value - prefer calendarValue, fallback to value
+            let endDate: Date | null = null;
+
+            if (applicationEndDateField.calendarValue) {
+              endDate = applicationEndDateField.calendarValue;
+            } else if (applicationEndDateField.value) {
+              // Try to parse the value string as a date
+              const parsedDate = new Date(applicationEndDateField.value);
+              if (!Number.isNaN(parsedDate.getTime())) {
+                endDate = parsedDate;
+              }
+            }
+
+            // Check if the end date is less than current UTC time
+            if (endDate) {
+              const currentUtcTime = new Date();
+              if (endDate < currentUtcTime) {
+                return APIResponse.error(
+                  res,
+                  apiId,
+                  'Bad Request',
+                  'Application End Date has passed. Cannot submit application after the end date.',
+                  HttpStatus.BAD_REQUEST
+                );
+              }
+            }
+          }
+        }
+      }
 
       // Prepare update data (exclude customFields and non-entity fields)
       const customFields = cohortMembersUpdateDto.customFields;
