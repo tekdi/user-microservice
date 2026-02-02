@@ -1,5 +1,4 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { Cron, CronExpression } from "@nestjs/schedule";
 import { PostgresCohortMembersService } from "src/adapters/postgres/cohortMembers-adapter";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
 
@@ -132,15 +131,19 @@ export class CohortMembersCronService {
    * @param tenantId - The tenant ID for the evaluation
    * @param academicYearId - The academic year ID for the evaluation
    * @param userId - The user ID from the authenticated request
+   * @param batchSize - Optional batch size for processing (overrides environment variable)
+   * @param userIds - Optional array of user IDs to filter processing (only these users will be processed)
    * @returns Promise with evaluation results
    */
   async triggerShortlistingEvaluation(
     tenantId: string,
     academicYearId: string,
-    userId: string
+    userId: string,
+    batchSize?: number,
+    userIds?: string[]
   ): Promise<any> {
     this.logger.log(
-      `Manual trigger of shortlisting evaluation for tenant: ${tenantId}, academic year: ${academicYearId}, user: ${userId}`
+      `Manual trigger of shortlisting evaluation for tenant: ${tenantId}, academic year: ${academicYearId}, user: ${userId}, batchSize: ${batchSize || 'default'}, userIds filter: ${userIds ? userIds.length + ' users' : 'all users'}`
     );
 
     try {
@@ -149,7 +152,9 @@ export class CohortMembersCronService {
         await this.cohortMembersService.evaluateCohortMemberShortlistingStatusInternal(
           tenantId,
           academicYearId,
-          userId
+          userId,
+          batchSize,
+          userIds
         );
 
       this.logger.log(`Manual shortlisting evaluation completed successfully`);

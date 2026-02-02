@@ -41,6 +41,7 @@ import { API_RESPONSES } from '@utils/response.messages';
 import APIResponse from 'src/common/responses/response';
 import { ShortlistingLogger } from 'src/common/logger/ShortlistingLogger';
 import { CohortMembersCronService } from './cohortMembers-cron.service';
+import { EvaluateShortlistingDto } from './dto/evaluate-shortlisting.dto';
 
 // Extend Express Request type to include user
 interface RequestWithUser extends Request {
@@ -358,12 +359,13 @@ export class CohortMembersController {
    *
    * This endpoint:
    * 1. Validates required headers (tenantid, academicyearid)
-   * 2. Triggers the shortlisting evaluation process
-   * 3. Returns detailed performance metrics and processing results
+   * 2. Accepts optional batchSize and userId array from request body
+   * 3. Triggers the shortlisting evaluation process
+   * 4. Returns detailed performance metrics and processing results
    *
    * The evaluation process:
    * - Fetches active cohorts with shortlist date = today
-   * - Processes submitted members in parallel batches
+   * - Processes submitted members in parallel batches (or filtered by userId array if provided)
    * - Evaluates form rules against user field values
    * - Updates member status to 'shortlisted' or 'rejected'
    * - Sends email notifications based on results
@@ -373,12 +375,17 @@ export class CohortMembersController {
    *
    * @param req - Express request object containing headers
    * @param res - Express response object
+   * @param body - Request body containing optional batchSize and userId array
+   * @param queryUserId - Optional userId from query parameter (for backward compatibility)
    * @returns JSON response with processing results and performance metrics
    */
   @Post('cron/evaluate-shortlisting-status')
+  @ApiBody({ type: EvaluateShortlistingDto, required: false })
+  @UsePipes(new ValidationPipe({ transform: true, skipMissingProperties: true, whitelist: true }))
   async evaluateShortlistingStatus(
     @Req() req: RequestWithUser,
     @Res() res: Response,
+    @Body() body?: EvaluateShortlistingDto,
     @Query('userid') queryUserId?: string
   ) {
     const apiId = APIID.COHORT_MEMBER_EVALUATE_SHORTLISTING;
@@ -444,12 +451,15 @@ export class CohortMembersController {
         );
       }
 
-      // Trigger the shortlisting evaluation process with user ID
+      // Trigger the shortlisting evaluation process with user ID, batchSize, and userId array
+      // If body is not provided or empty, use undefined to maintain backward compatibility
       const result =
         await this.cohortMembersCronService.triggerShortlistingEvaluation(
           tenantId,
           academicyearId,
-          userId
+          userId,
+          body?.batchSize,
+          body?.userId
         );
 
       // Return success response with the result data
