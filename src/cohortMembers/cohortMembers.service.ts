@@ -4,7 +4,7 @@ import { CohortMembersSearchDto } from "src/cohortMembers/dto/cohortMembers-sear
 import { CohortMembers } from "src/cohortMembers/entities/cohort-member.entity";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
-import { PostgresFieldsService } from "./fields-adapter";
+import { FieldsService } from "src/fields/fields.service";
 import { HttpStatus } from "@nestjs/common";
 import { User } from "src/user/entities/user-entity";
 import { CohortMembersUpdateDto } from "src/cohortMembers/dto/cohortMember-update.dto";
@@ -17,15 +17,16 @@ import { APIID } from "src/common/utils/api-id.config";
 import { MemberStatus } from "src/cohortMembers/entities/cohort-member.entity";
 import { NotificationRequest } from "@utils/notification.axios";
 import { CohortAcademicYear } from "src/cohortAcademicYear/entities/cohortAcademicYear.entity";
-import { PostgresAcademicYearService } from "./academicyears-adapter";
+import { AcademicYearService } from "src/academicyears/academicyears.service";
 import { API_RESPONSES } from "@utils/response.messages";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
-import { PostgresUserService } from "./user-adapter";
+import { UserService } from "src/user/user.service";
 import { isValid } from "date-fns";
 import { FieldValuesOptionDto } from "src/user/dto/user-create.dto";
+import { KafkaService } from "src/kafka/kafka.service";
 
 @Injectable()
-export class PostgresCohortMembersService {
+export class CohortMembersService {
   constructor(
     @InjectRepository(CohortMembers)
     private cohortMembersRepository: Repository<CohortMembers>,
@@ -37,10 +38,10 @@ export class PostgresCohortMembersService {
     private cohortRepository: Repository<Cohort>,
     @InjectRepository(CohortAcademicYear)
     private readonly cohortAcademicYearRespository: Repository<CohortAcademicYear>,
-    private readonly academicyearService: PostgresAcademicYearService,
-    private readonly notificationRequest: NotificationRequest,
-    private fieldsService: PostgresFieldsService,
-    private userService: PostgresUserService
+    private readonly academicyearService: AcademicYearService,
+    private fieldsService: FieldsService,
+    private userService: UserService,
+    private readonly kafkaService: KafkaService
   ) { }
 
   //Get cohort member
@@ -94,7 +95,7 @@ export class PostgresCohortMembersService {
         cohortId,
         cohortAcademicyearId
       );
-      if (userDetails === true) {
+      if (userDetails === true) { 
         const results = {
           userDetails: [],
         };
@@ -164,6 +165,9 @@ export class PostgresCohortMembersService {
         district: data?.district,
         state: data?.state,
         mobile: data?.mobile,
+        status: data?.status,
+        statusReason: data?.statusReason,
+        cohortMembershipId: data?.cohortMembershipId,
       };
 
       if (fieldShowHide === "true") {
@@ -228,10 +232,11 @@ export class PostgresCohortMembersService {
     } else {
       whereCase = `where CM."userId" =$1`;
     }
-    const query = `SELECT U."userId", U."username", "firstName", "middleName", "lastName",
-     U."district", U."state",U."mobile" FROM public."CohortMembers" CM
-    LEFT JOIN public."Users" U
-    ON CM."userId" = U."userId" ${whereCase}`;
+    const query = `SELECT U."userId", U."username", U."firstName", U."middleName", U."lastName", U."mobile",
+ CM."status", CM."statusReason", CM."cohortMembershipId"
+ FROM public."CohortMembers" CM
+LEFT JOIN public."Users" U
+ON CM."userId" = U."userId" ${whereCase}`;
 
     const result = await this.usersRepository.query(query, [searchData]);
     return result;
@@ -360,7 +365,8 @@ export class PostgresCohortMembersService {
         where,
         "true",
         options,
-        order
+        order,
+        tenantId
       );
 
       if (results["userDetails"].length == 0) {
@@ -434,14 +440,15 @@ export class PostgresCohortMembersService {
     where: any,
     fieldShowHide: any,
     options: any,
-    order: any
+    order: any,
+    tenantId: string
   ) {
     const results = {
       totalCount: 0,
       userDetails: [],
     };
 
-    const getUserDetails = await this.getUsers(where, options, order);
+    const getUserDetails = await this.getUsers(where, options, order, tenantId);
 
     if (getUserDetails.length > 0) {
       results.totalCount = parseInt(getUserDetails[0].total_count, 10);
@@ -588,13 +595,17 @@ export class PostgresCohortMembersService {
     });
   }
 
-  async getUsers(where: any, options: any, order: any) {
+  async getUsers(where: any, options: any, order: any, tenantId: string) {
     let whereCase = ``;
     let limit, offset;
+    const whereConditions: string[] = [];
+
+    // Always add tenantId filter
+    if (tenantId) {
+      whereConditions.push(`UTM."tenantId"='${tenantId}'`);
+    }
 
     if (where.length > 0) {
-      whereCase = "WHERE ";
-
       const processCondition = ([key, value]) => {
         switch (key) {
           case "role":
@@ -619,18 +630,41 @@ export class PostgresCohortMembersService {
           }
         }
       };
-      whereCase += where.map(processCondition).join(" AND ");
+      whereConditions.push(...where.map(processCondition));
     }
 
-    let query = `SELECT U."userId", U."enrollmentId", U."username", "firstName", "middleName", "lastName", R."name" AS role, U."mobile",U."deviceId",
-      CM."status", CM."statusReason",CM."cohortMembershipId",CM."status",CM."createdAt", CM."updatedAt",U."createdBy",U."updatedBy", COUNT(*) OVER() AS total_count  FROM public."CohortMembers" CM
-      INNER JOIN public."Users" U
-      ON CM."userId" = U."userId"
-      INNER JOIN public."UserRolesMapping" UR
-      ON UR."userId" = U."userId"
-      INNER JOIN public."Roles" R
-      ON R."roleId" = UR."roleId" ${whereCase}`;
+    if (whereConditions.length > 0) {
+      whereCase = "WHERE " + whereConditions.join(" AND ");
+    }
 
+    let query = `SELECT 
+  U."userId", 
+  U."enrollmentId", 
+  U."username", 
+  U."firstName", 
+  U."middleName", 
+  U."lastName", 
+  R."name" AS role, 
+  U."mobile",
+  U."deviceId",
+  CM."status", 
+  CM."statusReason",
+  CM."cohortMembershipId",
+  CM."createdAt", 
+  CM."updatedAt",
+  U."createdBy",
+  U."updatedBy",
+  COUNT(*) OVER() AS total_count
+FROM public."CohortMembers" CM
+INNER JOIN public."Users" U
+  ON CM."userId" = U."userId"
+INNER JOIN public."UserTenantMapping" UTM
+  ON U."userId" = UTM."userId"
+INNER JOIN public."UserRolesMapping" UR
+  ON UR."userId" = U."userId" AND UR."tenantId" = UTM."tenantId"
+INNER JOIN public."Roles" R
+  ON R."roleId" = UR."roleId"
+${whereCase}`;
     options.forEach((option) => {
       if (option[0] === "limit") {
         limit = option[1];
@@ -717,6 +751,21 @@ export class PostgresCohortMembersService {
       let result = await this.cohortMembersRepository.save(
         cohortMembershipToUpdate
       );
+      await this.publishCohortMemberEvent(
+            "updated",
+            cohortMembershipToUpdate,
+            apiId
+          );
+      if (!result) {
+        return APIResponse.error(
+          res,
+          apiId,
+          "Internal Server Error",
+          "Failed to update cohort member.",
+          HttpStatus.INTERNAL_SERVER_ERROR
+        );
+      }
+
       //update custom fields
       let responseForCustomField;
       if (
@@ -733,12 +782,18 @@ export class PostgresCohortMembersService {
           cohortMembersUpdateDto
         );
         if (result && responseForCustomField.success) {
-          return APIResponse.success(
+          APIResponse.success(
             res,
             apiId,
             [],
             HttpStatus.CREATED,
             API_RESPONSES.COHORTMEMBER_UPDATE_SUCCESSFULLY
+          );
+
+          await this.publishCohortMemberEvent(
+            "updated",
+            cohortMembershipToUpdate,
+            apiId
           );
         } else {
           const errorMessage =
@@ -751,9 +806,8 @@ export class PostgresCohortMembersService {
             HttpStatus.INTERNAL_SERVER_ERROR
           );
         }
-      }
-      if (result) {
-        return APIResponse.success(
+      } else {
+        APIResponse.success(
           res,
           apiId,
           [],
@@ -887,6 +941,9 @@ export class PostgresCohortMembersService {
       // cohortAcademicYearId: academicyearId
     };
 
+    // Track users that were successfully added to cohorts for Kafka event publishing
+    const affectedUsers = new Set<string>();
+
     const academicYear = await this.academicyearService.getActiveAcademicYear(
       academicyearId,
       tenantId
@@ -932,7 +989,7 @@ export class PostgresCohortMembersService {
                 cohortId: removeCohortId,
                 cohortAcademicYearId: cohortExists[0].cohortAcademicYearId,
               },
-              { status: MemberStatus.ARCHIVED }
+              { status: MemberStatus.REASSIGNED }
             );
             if (updateCohort.affected === 0) {
               results.push({
@@ -1033,6 +1090,9 @@ export class PostgresCohortMembersService {
               cohortMemberForAcademicYear
             );
             results.push(result);
+            
+            // Track user for Kafka event publishing
+            affectedUsers.add(userId);
           } catch (error) {
             LoggerUtil.error(
               `${API_RESPONSES.SERVER_ERROR}`,
@@ -1051,6 +1111,39 @@ export class PostgresCohortMembersService {
       }
     }
 
+    APIResponse.success(
+      response,
+      APIID.COHORT_MEMBER_CREATE,
+      results,
+      HttpStatus.CREATED,
+      API_RESPONSES.COHORTMEMBER_SUCCESSFULLY
+    );
+
+    // Publish Kafka events for affected users after successful bulk operations
+    // Use Promise.allSettled to ensure one failed event doesn't stop others
+
+    LoggerUtil.log(
+      `Publishing user events for ${affectedUsers.size} users`,
+      apiId
+    );
+
+    const publishPromises = Array.from(affectedUsers).map(async (userId) => {
+      try {
+        // Directly call publishUserEvent with 'updated' type since users joined new cohorts
+        this.userService.publishUserEvent('updated', userId, apiId);
+        LoggerUtil.log(`User event published for user: ${userId}`, apiId);
+      } catch (error) {
+        LoggerUtil.error(
+          `Failed to publish user event for user: ${userId}`,
+          `Error: ${error.message}`,
+          apiId
+        );
+        // Don't throw - we don't want Kafka failures to affect the main operation
+      }
+    });
+
+    await Promise.allSettled(publishPromises);
+    
     if (errors.length > 0) {
       return APIResponse.success(
         response,
@@ -1060,13 +1153,7 @@ export class PostgresCohortMembersService {
         API_RESPONSES.COHORTMEMBER_ERROR
       );
     }
-    return APIResponse.success(
-      response,
-      APIID.COHORT_MEMBER_CREATE,
-      results,
-      HttpStatus.CREATED,
-      API_RESPONSES.COHORTMEMBER_SUCCESSFULLY
-    );
+
   }
 
   public async registerFieldValue(
@@ -1124,6 +1211,94 @@ export class PostgresCohortMembersService {
       return { success: true, data: results };
     } catch (error) {
       return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Publish cohort member events by delegating to user event publisher
+   * Fetches the userId from cohortMembershipId and publishes a user event.
+   */
+  public async publishCohortMemberEvent(
+    eventType: "created" | "updated" | "deleted",
+    cohortMembershipToUpdate,
+    apiId: string
+  ): Promise<void> {
+    try {
+      // Prepare payload depending on event type
+      let cohortMemberData: any;
+
+      if (eventType === "deleted") {
+        cohortMemberData = {
+          cohortMembershipId : cohortMembershipToUpdate.cohortMembershipId,
+          deletedAt: new Date().toISOString(),
+        };
+      } else {
+        // Fetch only the custom fields we care about and send a minimal payload
+        let membershipCustomFields = [] as any[];
+        try {
+          const fields = await this.fieldsService.getFieldsAndFieldsValues(
+            cohortMemberData.cohortMembershipId
+          );
+          // Keep only 4 target fields by label (case-insensitive) with minimal shape { label, value }
+          const wanted = new Set(["subject", "fees", "registration", "board"]);
+          membershipCustomFields = (fields || [])
+            .map((field: any) => ({
+              label: field?.label,
+              value: field?.value,
+              selectedValues: field?.selectedValues,
+            }))
+            .filter((f: any) =>
+              wanted.has((f?.label || "").toString().trim().toLowerCase())
+            )
+            .map((f: any) => ({
+              label: f?.label,
+              // Prefer direct value; if absent, derive a string from selectedValues
+              value:
+                f?.value ??
+                (Array.isArray(f?.selectedValues)
+                  ? f.selectedValues
+                      .map(
+                        (v: any) =>
+                          v?.value ??
+                          v?.label ??
+                          v?.name ??
+                          v?.id ??
+                          (typeof v === "string" ? v : null)
+                      )
+                      .filter((v: any) => v != null)
+                      .join(",")
+                  : null),
+            }));
+        } catch (cfError) {
+          LoggerUtil.error(
+            `Failed to fetch cohort member custom fields`,
+            `Error: ${cfError.message}`,
+            apiId
+          );
+        }
+
+        cohortMemberData = {
+          cohortMembershipId : cohortMembershipToUpdate.cohortMembershipId,
+          customFields: membershipCustomFields,
+          eventTimestamp: new Date().toISOString(),
+        };
+      }
+
+      await this.kafkaService.publishCohortMemberEvent(
+        eventType,
+        cohortMembershipToUpdate,
+        cohortMemberData.cohortMembershipId
+      );
+      LoggerUtil.log(
+        `Cohort member ${eventType} event published to Kafka for cohortMembershipId ${cohortMemberData.cohortMembershipId}`,
+        apiId
+      );
+    } catch (error) {
+      LoggerUtil.error(
+        `Failed to publish cohort member ${eventType} event`,
+        `Error: ${error.message}`,
+        apiId
+      );
     }
   }
 }

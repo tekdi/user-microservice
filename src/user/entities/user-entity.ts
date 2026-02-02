@@ -95,7 +95,12 @@ export class User {
   @Column({ nullable: true })
   reason: string;
 
+  @Column({ type: "timestamptz", nullable: true })
+  lastLogin: Date | null;
+
   userRoleMappings: User;
+
+
 
   // @OneToMany(() => CohortMembers, cohortMember => cohortMember.cohort)
   // cohortMembers: CohortMembers[];

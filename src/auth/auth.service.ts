@@ -4,7 +4,6 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from "@nestjs/common";
-import { UserAdapter } from "src/user/useradapter";
 import axios from "axios";
 import jwt_decode from "jwt-decode";
 import APIResponse from "src/common/responses/response";
@@ -19,23 +18,27 @@ import { Repository } from "typeorm";
 import { NotificationRequest } from "@utils/notification.axios";
 import { JwtService } from "@nestjs/jwt";
 import { ConfigService } from '@nestjs/config';
+import { User } from "src/user/entities/user-entity";
+import { UserService } from "src/user/user.service";
 
 type LoginResponse = {
   access_token: string;
   refresh_token: string;
-  expires_in: number;
+  expires_in: number; 
   refresh_expires_in: number;
 };
 @Injectable()
 export class AuthService {
   constructor(
-    private readonly useradapter: UserAdapter,
     private readonly keycloakService: KeycloakService,
     @InjectRepository(MagicLink)
     private magicLinkRepository: Repository<MagicLink>,
     private jwtService: JwtService,
     private notificationService: NotificationRequest,
     private configService: ConfigService,
+    private readonly userService: UserService,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>
   ) { }
 
   async login(authDto, response: Response) {
@@ -86,17 +89,40 @@ export class AuthService {
     try {
       const decoded: any = jwt_decode(request.headers.authorization);
       const username = decoded.preferred_username;
-      const data = await this.useradapter
-        .buildUserAdapter()
+      const data = await this.userService
         .findUserDetails(null, username, tenantId);
 
-      return APIResponse.success(
+      // Update lastLogin timestamp for the user (stored in UTC/GMT)
+      if (data && data.userId) {
+        await this.userRepository.update(
+          { userId: data.userId },
+          { lastLogin: new Date() } // Stored as UTC/GMT in timestamptz column
+        );
+      }
+
+      // Send response to the client first (low latency)
+      const apiResponse = APIResponse.success(
         response,
         apiId,
         data,
         HttpStatus.OK,
         "User fetched by auth token Successfully."
       );
+
+      // Publish user login event to Kafka asynchronously - after response is sent to client
+      // Using 'login' event type which only sends lastLogin timestamp (lightweight)
+      if (data && data.userId) {
+        this.userService
+          .publishUserEvent('login', data.userId, apiId)
+          .catch(error => {
+            // Log error but don't block - Kafka failures shouldn't affect auth flow
+            LoggerUtil.error(
+              `Failed to publish user login event to Kafka for ${username}`,
+              `Error: ${error.message}`,
+              apiId
+            );
+          });
+      }
     } catch (e) {
       const errorMessage = e?.message || "Something went wrong";
       return APIResponse.error(
@@ -195,7 +221,7 @@ export class AuthService {
           HttpStatus.BAD_REQUEST
         );
       }
-      const user = await this.useradapter.findUserByIdentifier(requestDto.identifier);
+      const user = await this.userService.findUserByIdentifier(requestDto.identifier);
       LoggerUtil.debug(`User lookup: ${user ? 'found ' + user.userId : 'not found'}`, 'AuthService.requestMagicLink');
       if (!user) {
         return APIResponse.error(

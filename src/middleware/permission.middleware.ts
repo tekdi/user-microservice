@@ -2,7 +2,7 @@ import { HttpStatus, Injectable, NestMiddleware } from "@nestjs/common";
 import { Request, Response, NextFunction } from "express";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
 import APIResponse from "src/common/responses/response";
-import { RolePermissionService } from "src/permissionRbac/rolePermissionMapping/role-permission-mapping.service";
+import { RolePermissionService } from "src/rolePermissionMapping/role-permission-mapping.service";
 
 @Injectable()
 export class PermissionMiddleware implements NestMiddleware {

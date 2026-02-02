@@ -10,7 +10,7 @@ import {
 } from "@nestjs/common";
 import { LocationService } from "./location.service";
 import { CreateLocationDto } from "./dto/location-create.dto";
-import { Request, Response } from "express";
+import { Response } from "express";
 
 @Controller("locations")
 export class LocationController {
