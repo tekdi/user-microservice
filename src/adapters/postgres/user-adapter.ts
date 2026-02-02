@@ -7,6 +7,7 @@ import { UserCreateDto } from '../../user/dto/user-create.dto';
 import jwt_decode from 'jwt-decode';
 import {
   getKeycloakAdminToken,
+  clearCachedAdminToken,
   createUserInKeyCloak,
   updateUserInKeyCloak,
   checkIfUsernameExistsInKeycloak,
@@ -2536,11 +2537,12 @@ export class PostgresUserService implements IServicelocator {
         const statusCode = e?.response?.status;
 
         // If we get a 401 (unauthorized), it might be due to an expired/invalid token
-        // Retry with a fresh token (only on first attempt)
+        // Clear the cache and retry with a fresh token (only on first attempt)
         if (statusCode === 401 && attempt === 1) {
           LoggerUtil.log(
-            'Received 401 error, retrying with fresh token'
+            'Received 401 error, clearing cached token and retrying with fresh token'
           );
+          clearCachedAdminToken();
 
           // Fetch a fresh token
           try {

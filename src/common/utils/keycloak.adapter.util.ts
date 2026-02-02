@@ -3,6 +3,24 @@ import { API_RESPONSES } from './response.messages';
 import { LoggerUtil } from 'src/common/logger/LoggerUtil';
 const axios = require('axios');
 
+// Token cache to avoid fetching admin token on every request
+interface CachedToken {
+  token: string;
+  expiresAt: number;
+}
+
+let cachedAdminToken: CachedToken | null = null;
+let tokenFetchPromise: Promise<any> | null = null; // Promise for in-flight token fetch to prevent thundering herd
+
+/**
+ * Clear the cached admin token
+ * Useful when a 401 error occurs and we need to force a fresh token
+ */
+function clearCachedAdminToken(): void {
+  cachedAdminToken = null;
+  LoggerUtil.log('Cleared cached Keycloak admin token');
+}
+
 function getUserRole(userRoles: string[]) {
   if (userRoles.includes('systemAdmin')) {
     return 'systemAdmin';
@@ -31,6 +49,10 @@ function getUserGroup(role: string) {
 async function fetchNewToken(): Promise<any> {
   const axios = require('axios');
   const qs = require('qs');
+  const now = Date.now();
+
+  // Clear old cache before fetching new token to ensure clean state
+  clearCachedAdminToken();
 
   const data = qs.stringify({
     username: process.env.KEYCLOAK_USERNAME,
@@ -59,8 +81,23 @@ async function fetchNewToken(): Promise<any> {
     ]);
 
     const res = await tokenFetchWithTimeout;
+
+    // Cache the token with expiration
+    if (res?.data?.access_token) {
+      const expiresIn = (res.data.expires_in || 300) * 1000; // Default to 5 minutes (300 seconds) if not provided
+      cachedAdminToken = {
+        token: res.data.access_token,
+        expiresAt: now + expiresIn,
+      };
+      LoggerUtil.log(
+        `Keycloak admin token cached, expires in ${Math.floor(expiresIn / 1000)} seconds`
+      );
+    }
+
     return res;
   } catch (error) {
+    // Clear cache on error to force refresh on next request
+    cachedAdminToken = null;
     LoggerUtil.error(
       `${API_RESPONSES.SERVER_ERROR}`,
       `Error fetching Keycloak admin token: ${error.message}`
@@ -70,15 +107,68 @@ async function fetchNewToken(): Promise<any> {
 }
 
 /**
- * Get Keycloak admin token
- * Always fetches a fresh token from Keycloak (no caching)
+ * Get Keycloak admin token with caching mechanism and request deduplication
+ * 
+ * Features:
+ * - Token is cached and reused with adaptive buffer (20% of token lifetime or min 10 seconds)
+ * - Request deduplication: Multiple concurrent requests share the same token fetch promise
+ * - Prevents thundering herd problem under high load (e.g., 20k users)
+ * - Automatically refreshes token before expiry
+ * 
+ * This significantly reduces load on Keycloak token endpoint, especially under high traffic.
  */
 async function getKeycloakAdminToken(): Promise<any> {
   try {
+    const now = Date.now();
+
+    // Check if cached token is still valid
+    if (cachedAdminToken) {
+      const remainingTime = cachedAdminToken.expiresAt - now;
+      
+      // Calculate adaptive buffer: 20% of remaining time, minimum 10 seconds, maximum 60 seconds
+      // This works for:
+      // - 60-second tokens: 12-second buffer (cache used for ~48 seconds)
+      // - 300-second tokens: 60-second buffer (cache used for ~240 seconds)
+      const bufferTime = Math.min(
+        Math.max(remainingTime * 0.2, 10 * 1000), // 20% of remaining, min 10 seconds
+        60 * 1000 // max 60 seconds
+      );
+      
+      if (remainingTime > bufferTime) {
+        LoggerUtil.log(
+          `Using cached Keycloak admin token (expires in ${Math.floor(remainingTime / 1000)} seconds, buffer: ${Math.floor(bufferTime / 1000)}s)`
+        );
+        return {
+          data: {
+            access_token: cachedAdminToken.token,
+            expires_in: Math.floor(remainingTime / 1000),
+          },
+        };
+      }
+    }
+
+    // If there's already a token fetch in progress, wait for it instead of creating a new one
+    // This prevents thundering herd: 20k concurrent requests will share 1 token fetch
+    if (tokenFetchPromise !== null) {
+      LoggerUtil.log('Token fetch already in progress, waiting for existing request');
+      return await tokenFetchPromise;
+    }
+
+    // Start new token fetch and store the promise for other concurrent requests
     LoggerUtil.log('Fetching new Keycloak admin token');
-    const result = await fetchNewToken();
-    return result;
+    tokenFetchPromise = fetchNewToken();
+
+    try {
+      const result = await tokenFetchPromise;
+      return result;
+    } finally {
+      // Clear the promise after fetch completes (success or failure)
+      // This allows future requests to fetch a new token if needed
+      tokenFetchPromise = null;
+    }
   } catch (error) {
+    // Clear promise on error to allow retry
+    tokenFetchPromise = null;
     LoggerUtil.error(
       `${API_RESPONSES.SERVER_ERROR}`,
       `Error in getKeycloakAdminToken: ${error.message}`
@@ -299,6 +389,7 @@ export {
   getUserGroup,
   getUserRole,
   getKeycloakAdminToken,
+  clearCachedAdminToken,
   createUserInKeyCloak,
   updateUserInKeyCloak,
   checkIfEmailExistsInKeycloak,
