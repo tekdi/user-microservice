@@ -3145,16 +3145,21 @@ export class PostgresCohortMembersService {
    * @param tenantId - The tenant ID for the evaluation context
    * @param academicyearId - The academic year ID for the evaluation context
    * @param userId - The user ID from the authenticated request
+   * @param batchSize - Optional batch size for processing (overrides environment variable)
+   * @param userIds - Optional array of user IDs to filter processing (only these users will be processed)
    * @returns Promise with evaluation results and performance metrics
    */
   public async evaluateCohortMemberShortlistingStatusInternal(
     tenantId: string,
     academicyearId: string,
-    userId: string
+    userId: string,
+    batchSize?: number,
+    userIds?: string[]
   ) {
     const apiId = APIID.COHORT_MEMBER_EVALUATE_SHORTLISTING;
     // Configurable performance parameters with environment variable fallbacks
-    const batchSize = parseInt(process.env.BATCH_SIZE) || 5000;
+    // Use provided batchSize or fall back to environment variable or default
+    const effectiveBatchSize = batchSize || parseInt(process.env.BATCH_SIZE) || 5000;
     const maxConcurrentBatches =
       parseInt(process.env.MAX_CONCURRENT_BATCHES) || 10;
     const enableEmailNotifications =
@@ -3174,7 +3179,7 @@ export class PostgresCohortMembersService {
 
     try {
       ShortlistingLogger.logShortlisting(
-        `Starting cohort member shortlisting evaluation with batch size: ${batchSize}, max concurrent batches: ${maxConcurrentBatches}`,
+        `Starting cohort member shortlisting evaluation with batch size: ${effectiveBatchSize}, max concurrent batches: ${maxConcurrentBatches}, userIds filter: ${userIds ? userIds.length + ' users' : 'all users'}`,
         'ShortlistingEvaluation'
       );
 
@@ -3207,10 +3212,11 @@ export class PostgresCohortMembersService {
         const cohortResult = await this.evaluateCohortForShortlisting(
           cohort,
           tenantId,
-          batchSize,
+          effectiveBatchSize,
           maxConcurrentBatches,
           apiId,
-          userId
+          userId,
+          userIds
         );
         cohortResults.push(cohortResult);
       }
@@ -3223,7 +3229,7 @@ export class PostgresCohortMembersService {
       const performanceMetrics = this.calculatePerformanceMetrics(
         aggregatedResults.totalProcessed,
         totalTime,
-        batchSize,
+        effectiveBatchSize,
         maxConcurrentBatches
       );
 
@@ -3790,11 +3796,17 @@ export class PostgresCohortMembersService {
    * These are the members that need to be evaluated for shortlisting
    *
    * @param cohortId - The cohort ID to fetch members for
+   * @param userIds - Optional array of user IDs to filter by
+   * @param batchSize - Optional batch size to limit total users fetched (if provided, only fetch this many users)
    * @returns Promise with array of submitted cohort members
    */
-  private async getSubmittedCohortMembers(cohortId: string) {
-    // Optimized query with proper indexing and LIMIT for batch processing
-    const query = `
+  private async getSubmittedCohortMembers(
+    cohortId: string,
+    userIds?: string[],
+    batchSize?: number
+  ) {
+    // Build query with optional userId filtering
+    let query = `
       SELECT 
         cm."cohortMembershipId",
         cm."cohortId",
@@ -3806,15 +3818,42 @@ export class PostgresCohortMembersService {
       FROM public."CohortMembers" cm
       WHERE cm."cohortId" = $1 
       AND cm."status" = 'submitted'
-      ORDER BY cm."createdAt" ASC
-      LIMIT $2
     `;
 
-    const batchSize = parseInt(process.env.BATCH_SIZE) || 5000;
-    const members = await this.cohortMembersRepository.query(query, [
-      cohortId,
-      batchSize,
-    ]);
+    const queryParams: any[] = [cohortId];
+
+    // Add userId filter if provided
+    if (userIds && userIds.length > 0) {
+      // Create placeholders for userId array (e.g., $2, $3, $4, ...)
+      const userIdPlaceholders = userIds
+        .map((_, index) => `$${index + 2}`)
+        .join(', ');
+      query += ` AND cm."userId" IN (${userIdPlaceholders})`;
+      queryParams.push(...userIds);
+    }
+
+    query += ` ORDER BY cm."createdAt" ASC`;
+
+    // Apply LIMIT based on batchSize if provided
+    // If batchSize is provided (e.g., 1), only fetch that many users total
+    // If userIds are provided without batchSize, process all filtered users
+    // If neither is provided, use environment variable or default
+    if (batchSize !== undefined && batchSize !== null) {
+      // batchSize is provided - limit to that many users total
+      query += ` LIMIT $${queryParams.length + 1}`;
+      queryParams.push(batchSize);
+    } else if (!userIds || userIds.length === 0) {
+      // No batchSize and no userIds filter - use environment variable or default
+      const defaultBatchSize = parseInt(process.env.BATCH_SIZE) || 5000;
+      query += ` LIMIT $${queryParams.length + 1}`;
+      queryParams.push(defaultBatchSize);
+    }
+    // If userIds are provided but no batchSize, process all filtered users (no LIMIT)
+
+    const members = await this.cohortMembersRepository.query(
+      query,
+      queryParams
+    );
 
     return members;
   }
@@ -4326,7 +4365,8 @@ export class PostgresCohortMembersService {
     batchSize: number,
     maxConcurrentBatches: number,
     apiId: string,
-    userId: string
+    userId: string,
+    userIds?: string[]
   ) {
     const cohortStartTime = Date.now();
     ShortlistingLogger.logShortlisting(
@@ -4407,8 +4447,11 @@ export class PostgresCohortMembersService {
     }
 
     // Step 4: Get "Submitted" Cohort Members for this cohort
+    // Pass batchSize to limit total users fetched (if batchSize is 1, only fetch 1 user)
     const submittedMembers = await this.getSubmittedCohortMembers(
-      cohort.cohortId
+      cohort.cohortId,
+      userIds,
+      batchSize
     );
 
     if (submittedMembers.length === 0) {
