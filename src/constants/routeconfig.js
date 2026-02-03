@@ -690,8 +690,8 @@
 			]
 		},
 		{
-			"sourceRoute": "/interface/v1/cohort/geographical-hierarchy/:id",
-			"type": "GET",
+			"sourceRoute": "/interface/v1/cohort/geographical-hierarchy",
+			"type": "POST",
 			"priority": "MUST_HAVE",
 			"inSequence": false,
 			"orchestrated": false,

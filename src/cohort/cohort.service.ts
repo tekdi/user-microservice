@@ -1293,17 +1293,93 @@ export class CohortService {
     const apiId = APIID.COHORT_READ;
 
     try {
-      const { userId, academicYearId } = requiredData;
-
-      // Step 1: Get user cohorts (batches and centers)
-      const userCohorts = await this.findCohortName(userId, academicYearId);
-      if (!userCohorts || userCohorts.length === 0) {
-        return APIResponse.success(
+      const { userId, academicYearId, filters, limit, offset } = requiredData;
+      
+      // Validate userId
+      if (!userId || !isUUID(userId)) {
+        return APIResponse.error(
           res,
           apiId,
-          [],
-          HttpStatus.OK,
-          "User geographical hierarchy fetched successfully"
+          API_RESPONSES.BAD_REQUEST,
+          API_RESPONSES.INVALID_USERID,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+      
+      const paginationLimit = limit || 100;
+      const paginationOffset = offset || 0;
+      
+      LoggerUtil.log(
+        `Getting geographical hierarchy for userId: ${userId}, academicYearId: ${academicYearId}`,
+        apiId
+      );
+
+      // Step 1: Get user cohorts (batches and centers)
+      let userCohorts = await this.findCohortName(userId, academicYearId);
+      if (!userCohorts || userCohorts.length === 0) {
+        return APIResponse.error(
+          res,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          API_RESPONSES.COHORT_NOT_FOUND,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      // Step 1.5: Apply filters to user cohorts if provided
+      if (filters && Object.keys(filters).length > 0) {
+        const cleanedFilters = Object.fromEntries(
+          Object.entries(filters).filter(([_, value]) => value !== undefined && value !== null)
+        ) as Record<string, any>;
+
+        // Filter by parentId
+        if (cleanedFilters.parentId && Array.isArray(cleanedFilters.parentId) && cleanedFilters.parentId.length > 0) {
+          const parentIdArray = cleanedFilters.parentId as string[];
+          userCohorts = userCohorts.filter(
+            cohort => cohort.parentId && parentIdArray.includes(cohort.parentId)
+          );
+        }
+
+        // Filter by cohortId
+        if (cleanedFilters.cohortId && Array.isArray(cleanedFilters.cohortId) && cleanedFilters.cohortId.length > 0) {
+          const cohortIdArray = cleanedFilters.cohortId as string[];
+          userCohorts = userCohorts.filter(
+            cohort => cohortIdArray.includes(cohort.cohortId)
+          );
+        }
+
+        // Filter by type
+        if (cleanedFilters.type && typeof cleanedFilters.type === 'string') {
+          const typeFilter = cleanedFilters.type.toLowerCase();
+          userCohorts = userCohorts.filter(
+            cohort => cohort.type?.toLowerCase() === typeFilter
+          );
+        }
+
+        // Filter by status
+        if (cleanedFilters.status && Array.isArray(cleanedFilters.status) && cleanedFilters.status.length > 0) {
+          const statusArray = cleanedFilters.status as string[];
+          userCohorts = userCohorts.filter(
+            cohort => statusArray.includes(cohort.status)
+          );
+        }
+
+        // Filter by name (case-insensitive partial match)
+        if (cleanedFilters.name && typeof cleanedFilters.name === 'string') {
+          const nameFilter = cleanedFilters.name.toLowerCase();
+          userCohorts = userCohorts.filter(
+            cohort => cohort.name?.toLowerCase().includes(nameFilter)
+          );
+        }
+      }
+
+      if (userCohorts.length === 0) {
+        return APIResponse.error(
+          res,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          API_RESPONSES.COHORT_NOT_FOUND,
+          HttpStatus.BAD_REQUEST
         );
       }
 
@@ -1338,12 +1414,12 @@ export class CohortService {
       }
 
       if (centerIds.size === 0) {
-        return APIResponse.success(
+        return APIResponse.error(
           res,
           apiId,
-          [],
-          HttpStatus.OK,
-          "User geographical hierarchy fetched successfully"
+          API_RESPONSES.BAD_REQUEST,
+          API_RESPONSES.COHORT_NOT_FOUND,
+          HttpStatus.BAD_REQUEST
         );
       }
 
@@ -1355,6 +1431,13 @@ export class CohortService {
       });
 
       const centerGeoDataMap = new Map<string, any>();
+      const geoFilters = filters ? {
+        state: filters.state,
+        district: filters.district,
+        block: filters.block,
+        village: filters.village,
+        customFieldsName: filters.customFieldsName
+      } : null;
 
       // Process each center using existing method
       for (const center of centers) {
@@ -1370,7 +1453,9 @@ export class CohortService {
           districtId: null,
           districtName: null,
           blockId: null,
-          blockName: null
+          blockName: null,
+          villageId: null,
+          villageName: null
         };
 
         // Extract SDBV from custom fields (same pattern as used in cron.service.ts)
@@ -1397,15 +1482,67 @@ export class CohortService {
               geoData.blockId = val.id || val.value || null;
               geoData.blockName = val.label || val.value || null;
             }
+          } else if ((fieldLabel === 'village' || fieldName === 'village') && field.selectedValues?.[0]) {
+            const val = field.selectedValues[0];
+            if (val && typeof val === 'object') {
+              geoData.villageId = val.id || val.value || null;
+              geoData.villageName = val.label || val.value || null;
+            }
           }
         }
 
-        centerGeoDataMap.set(center.cohortId, {
-          centerId: center.cohortId,
-          centerName: center.name,
-          ...geoData,
-          batches: centerBatchMap.get(center.cohortId) || []
-        });
+        // Apply geographical filters if provided
+        let shouldInclude = true;
+        if (geoFilters) {
+          // Filter by state
+          if (geoFilters.state && Array.isArray(geoFilters.state) && geoFilters.state.length > 0) {
+            if (!geoData.stateId || !geoFilters.state.includes(geoData.stateId)) {
+              shouldInclude = false;
+            }
+          }
+
+          // Filter by district
+          if (shouldInclude && geoFilters.district && Array.isArray(geoFilters.district) && geoFilters.district.length > 0) {
+            if (!geoData.districtId || !geoFilters.district.includes(geoData.districtId)) {
+              shouldInclude = false;
+            }
+          }
+
+          // Filter by block
+          if (shouldInclude && geoFilters.block && Array.isArray(geoFilters.block) && geoFilters.block.length > 0) {
+            if (!geoData.blockId || !geoFilters.block.includes(geoData.blockId)) {
+              shouldInclude = false;
+            }
+          }
+
+          // Filter by village
+          if (shouldInclude && geoFilters.village && Array.isArray(geoFilters.village) && geoFilters.village.length > 0) {
+            if (!geoData.villageId || !geoFilters.village.includes(geoData.villageId)) {
+              shouldInclude = false;
+            }
+          }
+
+          // Filter by customFieldsName
+          if (shouldInclude && geoFilters.customFieldsName && typeof geoFilters.customFieldsName === 'object') {
+            // Apply custom field filters using fieldsService
+            const customFieldMatches = await this.fieldsService.filterUserUsingCustomFields(
+              'COHORT',
+              geoFilters.customFieldsName
+            );
+            if (customFieldMatches && !customFieldMatches.includes(center.cohortId)) {
+              shouldInclude = false;
+            }
+          }
+        }
+
+        if (shouldInclude) {
+          centerGeoDataMap.set(center.cohortId, {
+            centerId: center.cohortId,
+            centerName: center.name,
+            ...geoData,
+            batches: centerBatchMap.get(center.cohortId) || []
+          });
+        }
       }
 
       // Step 5: Build reverse geographical hierarchy
@@ -1502,6 +1639,11 @@ export class CohortService {
         result.push(stateData);
       }
 
+      // Step 7: Apply pagination
+      const totalCount = result.length;
+      const paginatedResult = result.slice(paginationOffset, paginationOffset + paginationLimit);
+      const currentPageCount = paginatedResult.length;
+
       LoggerUtil.log(
         "User geographical hierarchy fetched successfully",
         apiId
@@ -1510,7 +1652,13 @@ export class CohortService {
       return APIResponse.success(
         res,
         apiId,
-        result,
+        {
+          data: paginatedResult,
+          totalCount: totalCount,
+          currentPageCount: currentPageCount,
+          limit: paginationLimit,
+          offset: paginationOffset
+        },
         HttpStatus.OK,
         "User geographical hierarchy fetched successfully"
       );
