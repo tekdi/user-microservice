@@ -1302,7 +1302,7 @@ export class CohortService {
           apiId,
           API_RESPONSES.BAD_REQUEST,
           API_RESPONSES.INVALID_USERID,
-          HttpStatus.BAD_REQUEST
+          HttpStatus.NOT_FOUND
         );
       }
       
@@ -1322,7 +1322,7 @@ export class CohortService {
           apiId,
           API_RESPONSES.BAD_REQUEST,
           API_RESPONSES.COHORT_NOT_FOUND,
-          HttpStatus.BAD_REQUEST
+          HttpStatus.NOT_FOUND
         );
       }
 
@@ -1379,7 +1379,7 @@ export class CohortService {
           apiId,
           API_RESPONSES.BAD_REQUEST,
           API_RESPONSES.COHORT_NOT_FOUND,
-          HttpStatus.BAD_REQUEST
+          HttpStatus.NOT_FOUND
         );
       }
 
@@ -1419,7 +1419,7 @@ export class CohortService {
           apiId,
           API_RESPONSES.BAD_REQUEST,
           API_RESPONSES.COHORT_NOT_FOUND,
-          HttpStatus.BAD_REQUEST
+          HttpStatus.NOT_FOUND
         );
       }
 
