@@ -45,7 +45,8 @@ export class KeycloakService {
       grant_type: "password",
       username,
       password,
-    });
+    },
+    { encode: false });
 
     const axiosConfig = {
       method: "post",
