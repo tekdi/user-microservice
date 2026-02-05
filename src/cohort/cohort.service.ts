@@ -740,6 +740,11 @@ export class CohortService {
 
       const whereClause = {};
       const searchCustomFields = {};
+      
+      // SECURITY FIX: Always enforce tenantId from headers, not from filters
+      // This prevents users from querying cohorts from other tenants
+      whereClause["tenantId"] = tenantId;
+      
       if (academicYearId) {
         // check if the tenantId and academic year exist together
         cohortsByAcademicYear =
@@ -773,6 +778,11 @@ export class CohortService {
         }
 
         Object.entries(cleanedFilters).forEach(([key, value]) => {
+          // SECURITY FIX: Skip tenantId from filters - always use the one from headers
+          if (key === "tenantId") {
+            return; // Ignore tenantId from request body filters
+          }
+          
           if (!allowedKeys.includes(key) && key !== "customFieldsName") {
             return APIResponse.error(
               response,
