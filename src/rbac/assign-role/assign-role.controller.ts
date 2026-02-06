@@ -15,7 +15,7 @@ import {
   UseGuards,
   UseFilters,
 } from "@nestjs/common";
-import { AssignRoleAdapter } from "./assign-role.apater";
+import { AssignRoleService } from "./assign-role.service";
 import { CreateAssignRoleDto } from "./dto/create-assign-role.dto";
 import { Response, Request } from "express";
 import {
@@ -40,7 +40,7 @@ import { APIID } from "src/common/utils/api-id.config";
 @Controller("rbac/usersRoles")
 @UseGuards(JwtAuthGuard)
 export class AssignRoleController {
-  constructor(private readonly assignRoleAdpater: AssignRoleAdapter) {}
+  constructor(private readonly assignRoleService: AssignRoleService) {}
 
   @UseFilters(new AllExceptionsFilter(APIID.USERROLE_CREATE))
   @Post()
@@ -63,8 +63,7 @@ export class AssignRoleController {
     @Res() response: Response,
     @Headers() headers
   ) {
-    return await this.assignRoleAdpater
-      .buildassignroleAdapter()
+    return await this.assignRoleService
       .createAssignRole(request, createAssignRoleDto, response);
     // return response.status(result.statusCode).json(result);
   }
@@ -81,8 +80,7 @@ export class AssignRoleController {
     @Req() request: Request,
     @Res() response: Response
   ) {
-    return await this.assignRoleAdpater
-      .buildassignroleAdapter()
+    return await this.assignRoleService
       .getAssignedRole(userId, request, response);
     // return response.status(result.statusCode).json(result);
   }
@@ -98,8 +96,7 @@ export class AssignRoleController {
     @Body() deleteAssignRoleDto: DeleteAssignRoleDto, // Modify this line to accept DeleteAssignRoleDto
     @Res() response: Response
   ) {
-    return await this.assignRoleAdpater
-      .buildassignroleAdapter()
+    return await this.assignRoleService
       .deleteAssignedRole(deleteAssignRoleDto, response);
     // return response.status(result.statusCode).json(result);
   }

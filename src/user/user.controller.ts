@@ -18,7 +18,7 @@ import {
   UseFilters,
 } from "@nestjs/common";
 
-import {
+import { 
   ApiTags,
   ApiBody,
   ApiOkResponse,
@@ -38,7 +38,6 @@ import {
   SuggestUserDto,
   UserSearchDto,
 } from "./dto/user-search.dto";
-import { UserAdapter } from "./useradapter";
 import { UserCreateDto } from "./dto/user-create.dto";
 import { UserUpdateDTO } from "./dto/user-update.dto";
 import { JwtAuthGuard } from "src/common/guards/keycloak.guard";
@@ -59,6 +58,7 @@ import { OtpVerifyDTO } from "./dto/otpVerify.dto";
 import { OtpSendMailDTO } from "./dto/otpSendMail.dto";
 import { UploadS3Service } from "src/common/services/upload-S3.service";
 import { GetUserId } from "src/common/decorators/getUserId.decorator";
+import { UserService } from "./user.service";
 export interface UserData {
   context: string;
   tenantId: string;
@@ -70,7 +70,7 @@ export interface UserData {
 @Controller()
 export class UserController {
   constructor(
-    private userAdapter: UserAdapter,
+    private userService: UserService,
     private readonly uploadS3Service: UploadS3Service
   ) {}
 
@@ -116,8 +116,7 @@ export class UserController {
       userId: userId,
       fieldValue: fieldValueBoolean,
     };
-    const result = await this.userAdapter
-      .buildUserAdapter()
+    const result = await this.userService
       .getUsersDetailsById(userData, response);
 
     return response.status(result.statusCode).json(result);
@@ -150,8 +149,7 @@ export class UserController {
     //     "academicYearId is required and academicYearId must be a valid UUID."
     //   );
     // }
-    return await this.userAdapter
-      .buildUserAdapter()
+    return await this.userService
       .createUser(request, userCreateDto, academicYearId, response);
   }
 
@@ -177,8 +175,7 @@ export class UserController {
     const tenantId = headers["tenantid"];
     userUpdateDto.userData.tenantId = tenantId ? tenantId : null;
 
-    return await this.userAdapter
-      .buildUserAdapter()
+    return await this.userService
       .updateUser(userUpdateDto, response);
   }
 
@@ -202,8 +199,7 @@ export class UserController {
     @Body() userSearchDto: UserSearchDto
   ) {
     const tenantId = headers["tenantid"];
-    return await this.userAdapter
-      .buildUserAdapter()
+    return await this.userService
       .searchUser(tenantId, request, response, userSearchDto);
   }
 
@@ -216,8 +212,7 @@ export class UserController {
     @Res() response: Response,
     @Body() reqBody: SendPasswordResetLinkDto
   ) {
-    return await this.userAdapter
-      .buildUserAdapter()
+    return await this.userService
       .sendPasswordResetLink(
         request,
         reqBody.username,
@@ -235,8 +230,7 @@ export class UserController {
     @Res() response: Response,
     @Body() reqBody: ForgotPasswordDto
   ) {
-    return await this.userAdapter
-      .buildUserAdapter()
+    return await this.userService
       .forgotPassword(request, reqBody, response);
   }
 
@@ -253,8 +247,7 @@ export class UserController {
     @Res() response: Response,
     @Body() reqBody: ResetUserPasswordDto
   ) {
-    return await this.userAdapter
-      .buildUserAdapter()
+    return await this.userService
       .resetUserPassword(
         request,
         reqBody.userName,
@@ -273,8 +266,7 @@ export class UserController {
     @Body() existUserDto: ExistUserDto,
     @Res() response: Response
   ) {
-    const result = await this.userAdapter
-      .buildUserAdapter()
+    const result = await this.userService
       .checkUser(request, response, existUserDto);
     return response.status(result.statusCode).json(result);
   }
@@ -291,8 +283,7 @@ export class UserController {
     @Body() suggestUserDto: SuggestUserDto,
     @Res() response: Response
   ) {
-    const result = await this.userAdapter
-      .buildUserAdapter()
+    const result = await this.userService
       .suggestUsername(request, response, suggestUserDto);
     return response.status(result.statusCode).json(result);
   }
@@ -313,8 +304,7 @@ export class UserController {
     @Req() request: Request,
     @Res() response: Response
   ) {
-    return await this.userAdapter
-      .buildUserAdapter()
+    return await this.userService
       .deleteUserById(userId, response);
   }
 
@@ -324,7 +314,7 @@ export class UserController {
   @UsePipes(new ValidationPipe({ transform: true }))
   @ApiOkResponse({ description: API_RESPONSES.OTP_SEND_SUCCESSFULLY })
   async sendOtp(@Body() body: OtpSendDTO, @Res() response: Response) {
-    return await this.userAdapter.buildUserAdapter().sendOtp(body, response);
+    return await this.userService.sendOtp(body, response);
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.VERIFY_OTP))
@@ -333,7 +323,7 @@ export class UserController {
   @UsePipes(new ValidationPipe({ transform: true }))
   @ApiOkResponse({ description: API_RESPONSES.OTP_VALID })
   async verifyOtp(@Body() body: OtpVerifyDTO, @Res() response: Response) {
-    return this.userAdapter.buildUserAdapter().verifyOtp(body, response);
+    return this.userService.verifyOtp(body, response);
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.SEND_OTP_MAIL))
@@ -342,8 +332,7 @@ export class UserController {
   @UsePipes(new ValidationPipe({ transform: true }))
   @ApiOkResponse({ description: API_RESPONSES.OTP_SEND_SUCCESSFULLY })
   async sendOtpOnMail(@Body() body: OtpSendMailDTO, @Res() response: Response) {
-    return await this.userAdapter
-      .buildUserAdapter()
+    return await this.userService
       .sendOtpOnMail(body, response);
   }
 
@@ -356,8 +345,7 @@ export class UserController {
     @Res() response: Response,
     @Body() reqBody: SendPasswordResetOTPDto
   ) {
-    return await this.userAdapter
-      .buildUserAdapter()
+    return await this.userService
       .sendPasswordResetOTP(reqBody, response);
   }
   @Get("presigned-url")

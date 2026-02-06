@@ -3,17 +3,17 @@ import jwt_decode from "jwt-decode";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Form } from "./entities/form.entity";
 import { IsNull, Repository } from "typeorm";
-import { PostgresFieldsService } from "../adapters/postgres/fields-adapter";
 import APIResponse from "src/common/responses/response";
 import { CohortContextType } from "./utils/form-class";
 import { FormCreateDto } from "./dto/form-create.dto";
 import { APIID } from "@utils/api-id.config";
 import { API_RESPONSES } from "@utils/response.messages";
+import { FieldsService } from "src/fields/fields.service";
 
 @Injectable()
 export class FormsService {
   constructor(
-    private readonly fieldsService: PostgresFieldsService,
+    private readonly fieldsService: FieldsService,
     @InjectRepository(Form)
     private readonly formRepository: Repository<Form>
   ) { }

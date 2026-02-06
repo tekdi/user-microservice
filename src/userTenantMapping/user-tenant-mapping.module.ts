@@ -1,21 +1,36 @@
-import { HttpModule, Module } from "@nestjs/common";
+import { Module } from "@nestjs/common";
+import { HttpModule } from "@nestjs/axios";
 import { AssignTenantController } from "./user-tenant-mapping.controller";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { UserTenantMapping } from "./entities/user-tenant-mapping.entity";
-import { AssignTenantAdapter } from "./user-tenant-mapping.adapter";
-import { PostgresAssignTenantService } from "src/adapters/postgres/userTenantMapping-adapter";
+import { UserTenantMappingService } from "./user-tenant-mapping.service";
 import { User } from "src/user/entities/user-entity";
 import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
+import { Role } from "src/rbac/role/entities/role.entity";
+import { UserRoleMapping } from "src/rbac/assign-role/entities/assign-role.entity";
+import { KafkaModule } from "src/kafka/kafka.module";
+import { UserModule } from "src/user/user.module";
+import { FieldsModule } from "src/fields/fields.module";
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([UserTenantMapping, User, Tenants]),
+    TypeOrmModule.forFeature([
+      UserTenantMapping, 
+      User, 
+      Tenants,
+      Role,
+      UserRoleMapping,
+    ]),
+    UserModule,
+    FieldsModule,
+    KafkaModule,
     HttpModule,
   ],
   controllers: [AssignTenantController],
-  providers: [AssignTenantAdapter, PostgresAssignTenantService],
+  providers: [UserTenantMappingService],
+  exports: [UserTenantMappingService],
 })
-export class AssignTenantModule {}
+export class UserTenantMappingModule {}
 
 // import { Module } from '@nestjs/common';
 // import { AssignRoleAdapter } from './assign-role.apater';

@@ -16,7 +16,7 @@ import {
   Post,
   Body,
   Put,
-  Delete,
+  Delete, 
   Param,
   SerializeOptions,
   Req,
@@ -31,9 +31,8 @@ import {
   ParseUUIDPipe,
 } from "@nestjs/common";
 import { CohortMembersSearchDto } from "./dto/cohortMembers-search.dto";
-import { Request } from "@nestjs/common";
 import { CohortMembersDto } from "./dto/cohortMembers.dto";
-import { CohortMembersAdapter } from "./cohortMembersadapter";
+import { Request } from "express";
 import { CohortMembersUpdateDto } from "./dto/cohortMember-update.dto";
 import { JwtAuthGuard } from "src/common/guards/keycloak.guard";
 import { Response } from "express";
@@ -43,12 +42,13 @@ import { BulkCohortMember } from "./dto/bulkMember-create.dto";
 import { isUUID } from "class-validator";
 import { API_RESPONSES } from "@utils/response.messages";
 import { GetUserId } from "src/common/decorators/getUserId.decorator";
+import { CohortMembersService } from "./cohortMembers.service";
 
 @ApiTags("Cohort Member")
 @Controller("cohortmember")
 @UseGuards(JwtAuthGuard)
 export class CohortMembersController {
-  constructor(private readonly cohortMemberAdapter: CohortMembersAdapter) { }
+  constructor(private readonly cohortMembersService: CohortMembersService) { }
 
   //create cohort members
   @UseFilters(new AllExceptionsFilter(APIID.COHORT_MEMBER_CREATE))
@@ -88,8 +88,7 @@ export class CohortMembersController {
       );
     }
 
-    const result = await this.cohortMemberAdapter
-      .buildCohortMembersAdapter()
+    const result = await this.cohortMembersService
       .createCohortMembers(
         loginUser,
         cohortMembersDto,
@@ -132,8 +131,7 @@ export class CohortMembersController {
         "academicyearId is required and academicyearId must be a valid UUID."
       );
     }
-    const result = await this.cohortMemberAdapter
-      .buildCohortMembersAdapter()
+    const result = await this.cohortMembersService
       .getCohortMembers(
         cohortId,
         tenantId,
@@ -174,8 +172,7 @@ export class CohortMembersController {
         "academicyearId is required and must be a valid UUID."
       );
     }
-    const result = await this.cohortMemberAdapter
-      .buildCohortMembersAdapter()
+    const result = await this.cohortMembersService
       .searchCohortMembers(
         cohortMembersSearchDto,
         tenantId,
@@ -209,8 +206,7 @@ export class CohortMembersController {
         "unauthorized!"
       );
     }
-    const result = await this.cohortMemberAdapter
-      .buildCohortMembersAdapter()
+    const result = await this.cohortMembersService
       .updateCohortMembers(
         cohortMembersId,
         loginUser,
@@ -239,8 +235,7 @@ export class CohortMembersController {
   ) {
     const tenantid = headers["tenantid"];
 
-    const result = await this.cohortMemberAdapter
-      .buildCohortMembersAdapter()
+    const result = await this.cohortMembersService
       .deleteCohortMemberById(tenantid, cohortMembershipId, response);
   }
 
@@ -285,8 +280,7 @@ export class CohortMembersController {
         "academicyearId is required and must be a valid UUID."
       );
     }
-    const result = await this.cohortMemberAdapter
-      .buildCohortMembersAdapter()
+    const result = await this.cohortMembersService
       .createBulkCohortMembers(
         loginUser,
         bulkCohortMembersDto,

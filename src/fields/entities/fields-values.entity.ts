@@ -9,7 +9,7 @@ import {
 } from "typeorm";
 import { v4 as uuidv4 } from "uuid";
 import { Fields } from "./fields.entity";
-
+ 
 @Entity("FieldValues", { schema: "public" })
 export class FieldValues {
   @PrimaryGeneratedColumn("uuid", { name: "fieldValuesId" })
@@ -24,6 +24,12 @@ export class FieldValues {
   @Column("uuid", { nullable: false })
   fieldId: string;
 
+  @Column("uuid", { nullable: true })
+  tenantId?: string;
+
+  @Column("varchar", { nullable: true })
+  contextType?: string;
+  
   @CreateDateColumn({
     type: "timestamptz",
     default: () => "now()",

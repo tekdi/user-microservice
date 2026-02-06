@@ -1,6 +1,9 @@
 import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Kafka, Producer, Admin } from 'kafkajs';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { FieldValues } from '../fields/entities/fields-values.entity';
 
 @Injectable()
 export class KafkaService implements OnModuleInit, OnModuleDestroy {
@@ -10,8 +13,25 @@ export class KafkaService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(KafkaService.name);
   private isKafkaEnabled: boolean; // Flag to check if Kafka is enabled
   private topicsCreated: Set<string> = new Set(); // Track created topics
+  
+  // Constants for TYPE_OF_CENTER field transformation
+  private readonly TYPE_OF_CENTER_FIELD_ID = '000a7469-2721-4c7b-8180-52812a0f6fe7';
+  private readonly TYPE_MAPPINGS = {
+    COHORT: {
+      regular: 'regularCenter',
+      remote: 'remoteCenter'
+    }, 
+    BATCH: {
+      regular: 'regularBatch', 
+      remote: 'remoteBatch'
+    }
+  } as const;
 
-  constructor(private configService: ConfigService) {
+  constructor(
+    private configService: ConfigService,
+    @InjectRepository(FieldValues)
+    private fieldValuesRepository: Repository<FieldValues>
+  ) {
     // Retrieve Kafka config from the configuration
     this.isKafkaEnabled = this.configService.get<boolean>('kafkaEnabled', false); // Default to true if not specified
     const brokers = this.configService.get<string>('KAFKA_BROKERS', 'localhost:9092').split(',');
@@ -45,6 +65,89 @@ export class KafkaService implements OnModuleInit, OnModuleDestroy {
     } else {
       this.logger.log('Kafka is disabled. Skipping producer initialization.');
     }
+  }
+
+  /**
+   * Extract TYPE_OF_CENTER value from customFields array
+   * @param customFields - Array of custom field objects with fieldId and selectedValues
+   * @returns The TYPE_OF_CENTER value ('regular' or 'remote') or null
+   */
+  private extractTypeOfCenter(customFields: any[]): string | null {
+    if (!customFields || !Array.isArray(customFields)) {
+      return null;
+    }
+
+    const typeOfCenterField = customFields.find(
+      field => field.fieldId === this.TYPE_OF_CENTER_FIELD_ID
+    );
+
+    if (!typeOfCenterField) {
+      return null;
+    }
+
+    // Handle different customField structures
+    let value: string | null = null;
+
+    // First try selectedValues structure (from cohort creation)
+    if (typeOfCenterField.selectedValues && Array.isArray(typeOfCenterField.selectedValues)) {
+      const selectedValue = typeOfCenterField.selectedValues[0];
+      if (selectedValue) {
+        value = selectedValue.value || selectedValue.id || selectedValue;
+      }
+    }
+    // Fallback to direct value property (from field values table)
+    else if (typeOfCenterField.value) {
+      value = Array.isArray(typeOfCenterField.value) 
+        ? typeOfCenterField.value[0] 
+        : typeOfCenterField.value;
+    }
+
+    return value?.toString().toLowerCase() || null;
+  }
+
+  /**
+   * Query TYPE_OF_CENTER value from FieldValues table for a cohort
+   * @param cohortId - The cohort ID to query
+   * @returns The TYPE_OF_CENTER value ('regular' or 'remote') or null
+   */
+  private async queryTypeOfCenter(cohortId: string): Promise<string | null> {
+    try {
+      const fieldValue = await this.fieldValuesRepository.findOne({
+        where: {
+          itemId: cohortId,
+          fieldId: this.TYPE_OF_CENTER_FIELD_ID
+        }
+      });
+
+      if (!fieldValue || !fieldValue.value) {
+        return null;
+      }
+
+      // Handle text[] array from database
+      const value = Array.isArray(fieldValue.value) 
+        ? fieldValue.value[0] 
+        : fieldValue.value;
+
+      return value?.toString().toLowerCase() || null;
+    } catch (error) {
+      this.logger.error(`Failed to query TYPE_OF_CENTER for cohort ${cohortId}: ${error.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Transform cohort type based on TYPE_OF_CENTER value
+   * @param cohortType - The cohort type ('COHORT' or 'BATCH')
+   * @param typeOfCenter - The TYPE_OF_CENTER value ('regular' or 'remote')
+   * @returns Transformed type (e.g., 'regularCenter', 'remoteCenter', 'regularBatch', 'remoteBatch')
+   */
+  private transformCohortType(cohortType: 'COHORT' | 'BATCH', typeOfCenter: string | null): string {
+    if (!typeOfCenter || !(cohortType in this.TYPE_MAPPINGS) || !(typeOfCenter in this.TYPE_MAPPINGS[cohortType])) {
+      // Fallback to original type if transformation not possible
+      return cohortType;
+    }
+
+    return this.TYPE_MAPPINGS[cohortType][typeOfCenter];
   }
 
   async onModuleDestroy() {
@@ -184,11 +287,11 @@ export class KafkaService implements OnModuleInit, OnModuleDestroy {
   /**
    * Publish a user-related event to Kafka
    * 
-   * @param eventType - The type of user event (created, updated, deleted)
+   * @param eventType - The type of user event (created, updated, deleted, login)
    * @param userData - The user data to include in the event
    * @param userId - The ID of the user (used as the message key)
    */
-  async publishUserEvent(eventType: 'created' | 'updated' | 'deleted', userData: any, userId: string): Promise<void> {
+  async publishUserEvent(eventType: 'created' | 'updated' | 'deleted' | 'login', userData: any, userId: string): Promise<void> {
     if (!this.isKafkaEnabled) {
       this.logger.warn('Kafka is disabled. Skipping user event publish.');
       return; // Do nothing if Kafka is disabled
@@ -206,6 +309,9 @@ export class KafkaService implements OnModuleInit, OnModuleDestroy {
       case 'deleted':
         fullEventType = 'USER_DELETED';
         break;
+      case 'login':
+        fullEventType = 'USER_LOGIN';
+        break;
       default:
         fullEventType = 'UNKNOWN_EVENT';
         break;
@@ -222,9 +328,49 @@ export class KafkaService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Publish a cohort-related event to Kafka
+   * Publish a user-tenant-related event to Kafka
    * 
-   * @param eventType - The type of cohort event (created, updatetrued, deleted)
+   * @param eventType - The type of user-tenant event (created, updated, deleted)
+   * @param userTenantData - The user-tenant data to include in the event
+   * @param userId - The ID of the user (used as the message key)
+   */
+  async publishUserTenantEvent(eventType: 'created' | 'updated_status' | 'deleted', userTenantData: any, userId: string): Promise<void> {
+    if (!this.isKafkaEnabled) {
+      this.logger.warn('Kafka is disabled. Skipping user-tenant event publish.');
+      return; // Do nothing if Kafka is disabled
+    }
+
+    const topic = this.configService.get<string>('KAFKA_TOPIC', 'user-topic');
+    let fullEventType = '';
+    switch (eventType) {
+      case 'created':
+        fullEventType = 'USER_TENANT_MAPPING';
+        break;
+      case 'updated_status':
+        fullEventType = 'USER_TENANT_STATUS_UPDATE';
+        break;
+      case 'deleted':
+        fullEventType = 'USER_TENANT_DELETED';
+        break;
+      default:
+        fullEventType = 'UNKNOWN_EVENT';
+        break;
+    }
+    const payload = {
+      eventType: fullEventType,
+      timestamp: new Date().toISOString(),
+      userId,
+      data: userTenantData
+    };
+
+    await this.publishMessage(topic, payload, userId);
+    this.logger.log(`User-tenant ${eventType} event published for user ${userId}`);
+  }
+
+  /**
+   * Publish a cohort-related event to Kafka with TYPE_OF_CENTER transformation
+   * 
+   * @param eventType - The type of cohort event (created, updated, deleted)
    * @param cohortData - The cohort data to include in the event
    * @param cohortId - The ID of the cohort (used as the message key)
    */
@@ -235,6 +381,8 @@ export class KafkaService implements OnModuleInit, OnModuleDestroy {
     }
 
     const topic = this.configService.get<string>('KAFKA_TOPIC', 'user-topic');
+    
+    // Keep original eventType format
     let fullEventType = '';
     switch (eventType) {
       case 'created':
@@ -250,14 +398,98 @@ export class KafkaService implements OnModuleInit, OnModuleDestroy {
         fullEventType = 'UNKNOWN_EVENT';
         break;
     }
+
+    // Clone cohortData to avoid modifying the original
+    const transformedCohortData = { ...cohortData };
+
+    try {
+      // Determine the cohort type from the data
+      const cohortType = cohortData?.type?.toUpperCase();
+      let typeOfCenter: string | null = null;
+
+      if (cohortType === 'COHORT') {
+        // For COHORT events: Extract TYPE_OF_CENTER from customFields directly
+        this.logger.debug(`COHORT event - customFields structure:`, JSON.stringify(cohortData?.customFields || [], null, 2));
+        typeOfCenter = this.extractTypeOfCenter(cohortData?.customFields || []);
+        this.logger.log(`COHORT event - TYPE_OF_CENTER extracted: ${typeOfCenter}`);
+      } else if (cohortType === 'BATCH') {
+        // For BATCH events: Query TYPE_OF_CENTER using parentId as cohortId
+        const parentCohortId = cohortData?.parentId;
+        if (parentCohortId) {
+          typeOfCenter = await this.queryTypeOfCenter(parentCohortId);
+          this.logger.debug(`BATCH event - TYPE_OF_CENTER queried for parent cohort ${parentCohortId}: ${typeOfCenter}`);
+        } else {
+          this.logger.warn(`BATCH event missing parentId for cohort ${cohortId}`);
+        }
+      }
+
+      // Transform the type field in data based on TYPE_OF_CENTER
+      if (cohortType && (cohortType === 'COHORT' || cohortType === 'BATCH')) {
+        const originalType = transformedCohortData.type;
+        transformedCohortData.type = this.transformCohortType(cohortType as 'COHORT' | 'BATCH', typeOfCenter);
+        this.logger.log(`Cohort type transformation - Original: ${originalType}, TYPE_OF_CENTER: ${typeOfCenter}, Transformed: ${transformedCohortData.type}`);
+      } else {
+        this.logger.warn(`Unknown cohort type: ${cohortType}, keeping original type`);
+      }
+    } catch (error) {
+      // Keep original cohort type if transformation fails
+      this.logger.error(`Failed to transform cohort type for cohort ${cohortId}: ${error.message}`);
+    }
+
     const payload = {
       eventType: fullEventType,
       timestamp: new Date().toISOString(),
       cohortId,
-      data: cohortData
+      data: transformedCohortData
     };
 
     await this.publishMessage(topic, payload, cohortId);
-    this.logger.log(`Cohort ${eventType} event published for cohort ${cohortId}`);
+    this.logger.log(`Cohort ${eventType} event published for cohort ${cohortId} with type: ${transformedCohortData.type}`);
+  }
+
+  /**
+   * Publish a cohort member-related event to Kafka
+   * 
+   * @param eventType - The type of cohort member event (created, updated, deleted)
+   * @param cohortMemberData - The membership data to include in the event
+   * @param cohortMembershipId - The ID of the cohort membership (message key)
+   */
+  async publishCohortMemberEvent(
+    eventType: 'created' | 'updated' | 'deleted',
+    cohortMemberData: any,
+    cohortMembershipId: string
+  ): Promise<void> {
+    if (!this.isKafkaEnabled) {
+      this.logger.warn('Kafka is disabled. Skipping cohort member event publish.');
+      return;
+    }
+
+    const topic = this.configService.get<string>('KAFKA_TOPIC', 'user-topic');
+
+    let fullEventType = '';
+    switch (eventType) {
+      case 'created':
+        fullEventType = 'COHORT_MEMBER_CREATED';
+        break;
+      case 'updated':
+        fullEventType = 'COHORT_MEMBER_UPDATED';
+        break;
+      case 'deleted':
+        fullEventType = 'COHORT_MEMBER_DELETED';
+        break;
+      default:
+        fullEventType = 'UNKNOWN_EVENT';
+        break;
+    }
+
+    const payload = {
+      eventType: fullEventType,
+      timestamp: new Date().toISOString(),
+      cohortMembershipId,
+      data: cohortMemberData
+    };
+
+    await this.publishMessage(topic, payload, cohortMembershipId);
+    this.logger.log(`Cohort member ${eventType} event published for cohortMembershipId ${cohortMembershipId}`);
   }
 }
