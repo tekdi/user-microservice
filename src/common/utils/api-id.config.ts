@@ -124,4 +124,9 @@ export const APIID = {
   FORM_SUBMISSION_DELETE: 'api.formSubmission.delete',
   FORM_SUBMISSION_GET: 'api.formSubmission.get',
   FORM_SUBMISSION_LIST: 'api.formSubmission.list',
+
+  // Payment APIs
+  PAYMENT_INITIATE: 'api.payment.initiate',
+  PAYMENT_STATUS: 'api.payment.status',
+  PAYMENT_WEBHOOK: 'api.payment.webhook',
 } as const;

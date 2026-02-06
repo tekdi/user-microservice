@@ -108,14 +108,12 @@ export class FormsService {
           title: any;
           status: any;
           fields: any;
-          rules?: any;
           requiredFields?: string[] | null;
         } = {
           formid: formData.formid,
           title: formData.title,
           status: formData.status,
           fields: formData.fields,
-          rules: formData.rules ?? null,
         };
 
         // Conditionally include requiredFields only if fetchRequired === 'yes'
@@ -183,7 +181,7 @@ export class FormsService {
   async getFormData(whereClause): Promise<any> {
     let query = this.formRepository
       .createQueryBuilder('form')
-      .select(['form.formid', 'form.title', 'form.status', 'form.fields', 'form.rules'])
+      .select(['form.formid', 'form.title', 'form.status', 'form.fields'])
       .where('form.context = :context', { context: whereClause.context })
       .andWhere('form.status != :archivedStatus', {
         archivedStatus: FormStatus.ARCHIVED,
@@ -977,7 +975,7 @@ export class FormsService {
             : (fieldData as any).required,
         // Ensure dependsOn is not undefined
         dependsOn: fieldData.dependsOn || null,
-        // Handle JSON fields - sanitize for jsonb/json columns (TypeORM expects objects, not strings)
+        // Handle JSON fields - convert objects to strings for database storage
         fieldParams: this.sanitizeJsonField(fieldData.fieldParams),
         fieldAttributes: this.sanitizeJsonField(fieldData.fieldAttributes),
         sourceDetails: this.sanitizeJsonField(fieldData.sourceDetails),
@@ -1137,7 +1135,7 @@ export class FormsService {
       required:
         originalField.required === undefined ? true : originalField.required,
       dependsOn: originalField.dependsOn || null,
-      // Handle JSON fields - sanitize for jsonb/json columns (TypeORM expects objects, not strings)
+      // Handle JSON fields - convert objects to strings for database storage
       fieldParams: this.sanitizeJsonField(originalField.fieldParams),
       fieldAttributes: this.sanitizeJsonField(originalField.fieldAttributes),
       sourceDetails: this.sanitizeJsonField(originalField.sourceDetails),
@@ -1165,49 +1163,20 @@ export class FormsService {
   }
 
   /**
-   * Sanitizes JSON fields for jsonb/json columns
-   * For jsonb columns, TypeORM expects an object, not a string
+   * Sanitizes JSON fields by converting objects to strings for database storage
    * @param fieldValue The field value to sanitize
-   * @returns Sanitized field value (object, string, or null)
+   * @returns Sanitized field value (string or null)
    */
-  private sanitizeJsonField(fieldValue: any): any {
+  private sanitizeJsonField(fieldValue: any): string | null {
     if (!fieldValue) {
       return null;
     }
 
-    // If it's already a string, try to parse it (might be from previous double-encoding)
     if (typeof fieldValue === 'string') {
-      try {
-        const parsed = JSON.parse(fieldValue);
-        // If parsing succeeds, return the parsed object (TypeORM will handle jsonb serialization)
-        Logger.log('Parsed JSON string to object:', parsed);
-        return parsed;
-      } catch (e) {
-        // If parsing fails, it's not a JSON string, return as-is
-        return fieldValue;
-      }
+      return fieldValue;
     }
-
-    // Handle array case - if fieldParams is an array, unwrap it to get the object
-    // This fixes the issue where fieldParams comes as [{...}] but should be {...}
-    if (Array.isArray(fieldValue)) {
-      if (fieldValue.length === 1) {
-        // Unwrap single-element array to get the object
-        Logger.log('Unwrapped array to object in fieldParams');
-        return fieldValue[0];
-      } else if (fieldValue.length > 1) {
-        // Multiple elements - log warning but keep as array
-        Logger.warn('fieldParams is an array with multiple elements, keeping as array');
-        return fieldValue;
-      } else {
-        // Empty array
-        return null;
-      }
-    }
-
-    // If it's already an object, return it directly (TypeORM will handle jsonb serialization)
-    Logger.log('Sanitizing JSON field (object):', JSON.stringify(fieldValue));
-    return fieldValue;
+    Logger.log('Sanitizing JSON field:', JSON.stringify(fieldValue));
+    return JSON.stringify(fieldValue);
   }
 
   /**
