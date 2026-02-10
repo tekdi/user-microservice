@@ -233,4 +233,12 @@ export const API_RESPONSES = {
   CONFIGURATION_ALREADY_EXISTS_FOR_CONTEXT: 'Configuration already exists for context:',
   BULK_IMPORT_SUCCESS: 'Users imported successfully',
   BULK_IMPORT_FAILURE: 'Failed to import users',
+
+  // Pathway Management Messages
+  PATHWAY_CREATED_SUCCESSFULLY: 'Pathway created successfully',
+  PATHWAY_UPDATED_SUCCESSFULLY: 'Pathway updated successfully',
+  PATHWAY_NOT_FOUND: 'Pathway not found',
+  PATHWAY_KEY_EXISTS: 'Pathway with this key already exists',
+  PATHWAY_LIST_SUCCESS: 'Pathways retrieved successfully',
+  PATHWAY_GET_SUCCESS: 'Pathway retrieved successfully',
 };

@@ -124,4 +124,10 @@ export const APIID = {
   FORM_SUBMISSION_DELETE: 'api.formSubmission.delete',
   FORM_SUBMISSION_GET: 'api.formSubmission.get',
   FORM_SUBMISSION_LIST: 'api.formSubmission.list',
+
+  // Pathway Management APIs
+  PATHWAY_CREATE: 'api.pathway.create',
+  PATHWAY_LIST: 'api.pathway.list',
+  PATHWAY_GET: 'api.pathway.get',
+  PATHWAY_UPDATE: 'api.pathway.update',
 } as const;
