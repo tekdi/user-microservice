@@ -31,6 +31,7 @@ import { TerminusModule } from '@nestjs/terminus';
 import { HealthController } from './health/health.controller';
 import { HealthService } from './health/health.service';
 import { CacheModule } from './cache/cache.module';
+import { PathwaysModule } from './pathways/pathways.module';
 
 /**
  * Main Application Module
@@ -52,7 +53,7 @@ import { CacheModule } from './cache/cache.module';
  *
  * Module Structure:
  * - Core modules: User, Auth, RBAC, Database
- * - Feature modules: Cohort, CohortMembers, Fields, Forms
+ * - Feature modules: Cohort, CohortMembers, Fields, Forms, Pathways
  * - Support modules: Tenant, AcademicYears, Storage
  */
 @Module({
@@ -85,6 +86,7 @@ import { CacheModule } from './cache/cache.module';
     BulkImportModule,
     TerminusModule,
     CacheModule,
+    PathwaysModule,
   ],
   controllers: [AppController, HealthController],
   providers: [
