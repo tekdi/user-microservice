@@ -26,7 +26,7 @@ export class PaymentIntentService {
       userId: data.userId,
       purpose: data.purpose as any,
       amount: data.amount,
-      currency: data.currency || 'INR',
+      currency: data.currency || 'USD',
       provider: data.provider as any,
       metadata: data.metadata || {},
       status: PaymentIntentStatus.CREATED,
@@ -117,4 +117,3 @@ export class PaymentIntentService {
     return count > 0;
   }
 }
-
