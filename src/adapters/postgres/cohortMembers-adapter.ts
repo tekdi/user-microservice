@@ -3796,11 +3796,14 @@ export class PostgresCohortMembersService {
    * These are the members that need to be evaluated for shortlisting
    *
    * @param cohortId - The cohort ID to fetch members for
+   * @param userIds - Optional array of user IDs to filter by
+   * @param batchSize - Optional batch size to limit total users fetched (if provided, only fetch this many users)
    * @returns Promise with array of submitted cohort members
    */
   private async getSubmittedCohortMembers(
     cohortId: string,
-    userIds?: string[]
+    userIds?: string[],
+    batchSize?: number
   ) {
     // Build query with optional userId filtering
     let query = `
@@ -3831,13 +3834,21 @@ export class PostgresCohortMembersService {
 
     query += ` ORDER BY cm."createdAt" ASC`;
 
-    // Only apply LIMIT if userIds filter is not provided (to allow processing all filtered users)
-    // If userIds are provided, we want to process all of them regardless of batch size
-    if (!userIds || userIds.length === 0) {
-      const batchSize = parseInt(process.env.BATCH_SIZE) || 5000;
+    // Apply LIMIT based on batchSize if provided
+    // If batchSize is provided (e.g., 1), only fetch that many users total
+    // If userIds are provided without batchSize, process all filtered users
+    // If neither is provided, use environment variable or default
+    if (batchSize !== undefined && batchSize !== null) {
+      // batchSize is provided - limit to that many users total
       query += ` LIMIT $${queryParams.length + 1}`;
       queryParams.push(batchSize);
+    } else if (!userIds || userIds.length === 0) {
+      // No batchSize and no userIds filter - use environment variable or default
+      const defaultBatchSize = parseInt(process.env.BATCH_SIZE) || 5000;
+      query += ` LIMIT $${queryParams.length + 1}`;
+      queryParams.push(defaultBatchSize);
     }
+    // If userIds are provided but no batchSize, process all filtered users (no LIMIT)
 
     const members = await this.cohortMembersRepository.query(
       query,
@@ -4436,9 +4447,11 @@ export class PostgresCohortMembersService {
     }
 
     // Step 4: Get "Submitted" Cohort Members for this cohort
+    // Pass batchSize to limit total users fetched (if batchSize is 1, only fetch 1 user)
     const submittedMembers = await this.getSubmittedCohortMembers(
       cohort.cohortId,
-      userIds
+      userIds,
+      batchSize
     );
 
     if (submittedMembers.length === 0) {
