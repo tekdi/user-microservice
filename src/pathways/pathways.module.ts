@@ -1,19 +1,22 @@
-import { Module } from "@nestjs/common";
-import { TypeOrmModule } from "@nestjs/typeorm";
-import { PathwaysController } from "./pathways.controller";
-import { PathwaysService } from "./pathways.service";
-import { Pathway } from "./entities/pathway.entity";
-import { UserPathwayHistory } from "./entities/user-pathway-history.entity";
-import { User } from "../user/entities/user-entity";
-import { InterestModule } from "./interest/interest.module";
+import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { PathwaysController } from './pathway/pathways.controller';
+import { PathwaysService } from './pathway/pathways.service';
+import { Pathway } from './pathway/entities/pathway.entity';
+import { UserPathwayHistory } from './pathway/entities/user-pathway-history.entity';
+import { User } from '../user/entities/user-entity';
+import { TagsController } from './tags/tags.controller';
+import { TagsService } from './tags/tags.service';
+import { Tag } from './tags/entities/tag.entity';
+import { InterestsModule } from './interests/interests.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Pathway, UserPathwayHistory, User]),
-    InterestModule,
+    TypeOrmModule.forFeature([Pathway, UserPathwayHistory, User, Tag]),
+    InterestsModule,
   ],
-  controllers: [PathwaysController],
-  providers: [PathwaysService],
-  exports: [PathwaysService],
+  controllers: [PathwaysController, TagsController],
+  providers: [PathwaysService, TagsService],
+  exports: [PathwaysService, TagsService],
 })
 export class PathwaysModule { }

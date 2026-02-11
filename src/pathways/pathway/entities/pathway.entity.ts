@@ -23,8 +23,8 @@ export class Pathway {
   @Column({ type: "text", nullable: true })
   description: string | null;
 
-  @Column({ type: "jsonb", nullable: true })
-  tags: Record<string, any> | null;
+  @Column('text', { array: true, nullable: true, default: [] })
+  tags: string[] | null;
 
   @Column({ type: "int", nullable: false })
   display_order: number;

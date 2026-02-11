@@ -7,7 +7,7 @@ import {
     JoinColumn,
     Index,
 } from "typeorm";
-import { User } from "../../user/entities/user-entity";
+import { User } from "../../../user/entities/user-entity";
 import { Pathway } from "./pathway.entity";
 
 @Entity("user_pathway_history")

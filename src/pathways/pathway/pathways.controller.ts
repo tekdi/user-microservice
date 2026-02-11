@@ -12,7 +12,9 @@ import {
   Res,
   HttpCode,
   HttpStatus,
-} from "@nestjs/common";
+  UseGuards,
+  BadRequestException,
+} from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
@@ -25,17 +27,17 @@ import {
   ApiConflictResponse,
   ApiInternalServerErrorResponse,
   ApiNotFoundResponse,
-} from "@nestjs/swagger";
-import { PathwaysService } from "./pathways.service";
-import { CreatePathwayDto } from "./dto/create-pathway.dto";
-import { UpdatePathwayDto } from "./dto/update-pathway.dto";
-import { ListPathwayDto } from "./dto/list-pathway.dto";
-import { AssignPathwayDto } from "./dto/assign-pathway.dto";
-import { Response } from "express";
-import { JwtAuthGuard } from "src/common/guards/keycloak.guard";
-import { UseGuards, BadRequestException } from "@nestjs/common";
-import { API_RESPONSES } from "@utils/response.messages";
-import { isUUID } from "class-validator";
+} from '@nestjs/swagger';
+import { ApiGetByIdCommon } from '../common/decorators/api-common.decorator';
+import { PathwaysService } from './pathways.service';
+import { CreatePathwayDto } from './dto/create-pathway.dto';
+import { UpdatePathwayDto } from './dto/update-pathway.dto';
+import { ListPathwayDto } from './dto/list-pathway.dto';
+import { AssignPathwayDto } from './dto/assign-pathway.dto';
+import { Response } from 'express';
+import { JwtAuthGuard } from 'src/common/guards/keycloak.guard';
+import { API_RESPONSES } from '@utils/response.messages';
+import { isUUID } from 'class-validator';
 
 @ApiTags("Pathways")
 @Controller("pathway")
@@ -66,9 +68,13 @@ export class PathwaysController {
       pathway: {
         summary: "Standard pathway creation",
         value: {
-          key: "career_dev",
-          name: "Career Development",
-          description: "Build skills for corporate success",
+          key: 'career_dev',
+          name: 'Career Development',
+          description: 'Build skills for corporate success and job placements.',
+          tags: [
+            'a1b2c3d4-e111-2222-3333-444455556666',
+            'b2c3d4e5-f111-2222-3333-444455556777',
+          ],
           display_order: 1,
           is_active: true,
         },
@@ -80,10 +86,17 @@ export class PathwaysController {
     description: "Pathway created successfully",
     schema: {
       example: {
-        id: "uuid",
-        key: "career_dev",
-        name: "Career Development",
+        id: 'c3b6e50e-40ab-4148-8ca9-3b2296ca11e5',
+        key: 'career_dev',
+        name: 'Career Development',
+        description: 'Build skills for corporate success and job placements.',
+        tag_ids: [
+          'a1b2c3d4-e111-2222-3333-444455556666',
+          'b2c3d4e5-f111-2222-3333-444455556777',
+        ],
+        display_order: 1,
         is_active: true,
+        created_at: '2026-02-10T06:22:26.934Z',
       },
     },
   })
@@ -134,6 +147,14 @@ export class PathwaysController {
         summary: "List all pathways",
         value: {},
       },
+      paginated: {
+        summary: 'List pathways with pagination',
+        value: {
+          isActive: true,
+          limit: 10,
+          offset: 0,
+        },
+      },
     },
   })
   @ApiResponse({
@@ -161,16 +182,7 @@ export class PathwaysController {
     summary: "Get pathway by ID",
     description: "Retrieves a specific pathway by its UUID.",
   })
-  @ApiHeader({
-    name: "Authorization",
-    description: "Bearer token for authentication",
-    required: true,
-  })
-  @ApiHeader({
-    name: "tenantid",
-    description: "Tenant UUID",
-    required: true,
-  })
+  @ApiGetByIdCommon()
   @ApiParam({
     name: "id",
     description: "Pathway UUID",
@@ -181,10 +193,6 @@ export class PathwaysController {
     status: 200,
     description: "Pathway retrieved successfully",
   })
-  @ApiBadRequestResponse({ description: "Bad Request - Invalid UUID format" })
-  @ApiUnauthorizedResponse({ description: "Unauthorized" })
-  @ApiNotFoundResponse({ description: "Pathway not found" })
-  @ApiInternalServerErrorResponse({ description: "Internal Server Error" })
   async findOne(
     @Param("id", ParseUUIDPipe) id: string,
     @Headers("tenantid") tenantId: string,

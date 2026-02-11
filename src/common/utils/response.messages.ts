@@ -240,10 +240,21 @@ export const API_RESPONSES = {
   BULK_IMPORT_FAILURE: "Failed to import users",
 
   // Pathway Management Messages
-  PATHWAY_CREATED_SUCCESSFULLY: "Pathway created successfully",
-  PATHWAY_UPDATED_SUCCESSFULLY: "Pathway updated successfully",
-  PATHWAY_NOT_FOUND: "Pathway not found",
-  PATHWAY_KEY_EXISTS: "Pathway with this key already exists",
-  PATHWAY_LIST_SUCCESS: "Pathways retrieved successfully",
-  PATHWAY_GET_SUCCESS: "Pathway retrieved successfully",
+
+  PATHWAY_CREATED_SUCCESSFULLY: 'Pathway created successfully',
+  PATHWAY_UPDATED_SUCCESSFULLY: 'Pathway updated successfully',
+  PATHWAY_NOT_FOUND: 'Pathway not found',
+  PATHWAY_KEY_EXISTS: 'Pathway with this key already exists',
+  PATHWAY_LIST_SUCCESS: 'Pathways retrieved successfully',
+  PATHWAY_GET_SUCCESS: 'Pathway retrieved successfully',
+  INVALID_TAG_IDS: 'Invalid tag IDs provided',
+
+  // Tag Management Messages
+  TAG_CREATED_SUCCESSFULLY: 'Tag created successfully',
+  TAG_UPDATED_SUCCESSFULLY: 'Tag updated successfully',
+  TAG_ARCHIVED_SUCCESSFULLY: 'Tag archived successfully',
+  TAG_NOT_FOUND: 'Tag not found',
+  TAG_NAME_EXISTS: 'Tag with this name already exists',
+  TAG_LIST_SUCCESS: 'Tags retrieved successfully',
+  TAG_GET_SUCCESS: 'Tag retrieved successfully',
 };

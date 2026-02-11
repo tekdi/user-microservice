@@ -7,7 +7,7 @@ import {
     JoinColumn,
 } from "typeorm";
 import { UserPathwayHistory } from "./user-pathway-history.entity";
-import { Interest } from "../interest/entities/interest.entity";
+import { Interest } from "../../interests/entities/interest.entity";
 
 @Entity("user_pathway_interests")
 export class UserPathwayInterests {
