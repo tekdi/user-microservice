@@ -172,6 +172,16 @@ export class InterestsService {
         where: { id },
       });
 
+      if (!updatedInterest) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.NOT_FOUND,
+          API_RESPONSES.INTEREST_NOT_FOUND,
+          HttpStatus.NOT_FOUND
+        );
+      }
+
       const result = {
         id: updatedInterest.id,
         pathway_id: updatedInterest.pathway_id,
