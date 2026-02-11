@@ -6,6 +6,8 @@ import {
   IsOptional,
   MaxLength,
   Min,
+  IsArray,
+  IsUUID,
 } from 'class-validator';
 import { Expose } from 'class-transformer';
 
@@ -31,12 +33,18 @@ export class UpdatePathwayDto {
   description?: string;
 
   @ApiPropertyOptional({
-    description: 'Tags associated with the pathway',
-    example: { category: 'professional', level: 'advanced' },
+    description: 'Array of tag IDs from tags table (stored as PostgreSQL text[] array)',
+    example: [
+      'a1b2c3d4-e111-2222-3333-444455556666',
+      'b2c3d4e5-f111-2222-3333-444455556777',
+    ],
+    type: [String],
   })
   @Expose()
   @IsOptional()
-  tags?: Record<string, any>;
+  @IsArray({ message: 'tags must be an array' })
+  @IsUUID(undefined, { each: true, message: 'Each tag ID must be a valid UUID' })
+  tags?: string[];
 
   @ApiPropertyOptional({
     description: 'Display order for sorting pathways',
