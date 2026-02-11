@@ -1,5 +1,5 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { IsArray, IsNotEmpty, IsUUID } from "class-validator";
+import { ArrayNotEmpty, IsArray, IsNotEmpty, IsUUID } from "class-validator";
 import { Expose } from "class-transformer";
 
 export class SaveUserInterestsDto {
@@ -20,7 +20,7 @@ export class SaveUserInterestsDto {
     })
     @Expose()
     @IsArray()
-    @IsNotEmpty()
+    @ArrayNotEmpty()
     @IsUUID("4", { each: true })
     interestIds: string[];
 }
