@@ -55,15 +55,9 @@ export class LmsClientService {
     }
 
     try {
-      // Step 1: Get all courses for this pathwayId
+      // Step 1: Get all courses for this pathwayId with pagination
+      // FIXED: Implement pagination loop to fetch all courses, not just first 1000
       const searchUrl = `${this.lmsServiceUrl}/lms-service/v1/courses/search`;
-      const searchParams = {
-        pathwayId: pathwayId,
-        status: 'published',
-        limit: 1000, // Get all courses
-        offset: 0,
-      };
-
       const headers = {
         tenantid: tenantId,
         organisationid: organisationId,
@@ -74,30 +68,72 @@ export class LmsClientService {
         `Fetching courses for pathway ${pathwayId} from LMS service`
       );
 
-      const searchResponse = await axios.get(searchUrl, {
-        params: searchParams,
-        headers,
-        timeout: 10000,
-        validateStatus: (status) => status < 500,
-      });
+      // Pagination parameters
+      const limit = 1000; // Maximum per request
+      let offset = 0;
+      let allCourses: any[] = [];
+      let totalElements = 0;
+      let hasMore = true;
 
-      if (searchResponse.status !== 200) {
-        this.logger.warn(
-          `LMS service returned status ${searchResponse.status} for pathway ${pathwayId}. Returning 0 counts.`
-        );
-        return { videoCount: 0, resourceCount: 0, totalItems: 0 };
+      // Fetch all courses in paginated loop
+      while (hasMore) {
+        const searchParams = {
+          pathwayId: pathwayId,
+          status: 'published',
+          limit: limit,
+          offset: offset,
+        };
+
+        const searchResponse = await axios.get(searchUrl, {
+          params: searchParams,
+          headers,
+          timeout: 10000,
+          validateStatus: (status) => status < 500,
+        });
+
+        if (searchResponse.status !== 200) {
+          this.logger.warn(
+            `LMS service returned status ${searchResponse.status} for pathway ${pathwayId} at offset ${offset}. Returning partial counts.`
+          );
+          // If we have some courses, continue with what we have
+          if (allCourses.length === 0) {
+            return { videoCount: 0, resourceCount: 0, totalItems: 0 };
+          }
+          break;
+        }
+
+        // Extract courses and pagination metadata from response
+        const responseData = searchResponse.data?.result || searchResponse.data;
+        const courses = responseData?.courses || [];
+        totalElements = responseData?.totalElements || 0;
+
+        // Add courses to collection
+        allCourses = allCourses.concat(courses);
+
+        // Check if there are more courses to fetch
+        // Continue if: we got a full page AND (totalElements is unknown OR offset + limit < totalElements)
+        hasMore =
+          courses.length === limit &&
+          (totalElements === 0 || offset + limit < totalElements);
+
+        if (hasMore) {
+          offset += limit;
+          this.logger.debug(
+            `Fetched ${allCourses.length} courses so far for pathway ${pathwayId}, continuing...`
+          );
+        }
       }
 
-      // Extract courses from response
-      const courses =
-        searchResponse.data?.result?.courses ||
-        searchResponse.data?.courses ||
-        [];
-
-      if (courses.length === 0) {
+      if (allCourses.length === 0) {
         this.logger.debug(`No courses found for pathway ${pathwayId}`);
         return { videoCount: 0, resourceCount: 0, totalItems: 0 };
       }
+
+      this.logger.debug(
+        `Fetched total ${allCourses.length} courses for pathway ${pathwayId} (totalElements: ${totalElements})`
+      );
+
+      const courses = allCourses;
 
       // Step 2: Fetch hierarchy for each course in parallel to get modules and lessons
       // OPTIMIZED: Fetch all hierarchies in parallel

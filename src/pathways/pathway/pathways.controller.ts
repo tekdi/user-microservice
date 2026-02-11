@@ -14,6 +14,7 @@ import {
   HttpStatus,
   UseGuards,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -42,6 +43,8 @@ import { isUUID } from 'class-validator';
 @Controller('pathway')
 @UseGuards(JwtAuthGuard)
 export class PathwaysController {
+  private readonly logger = new Logger(PathwaysController.name);
+
   constructor(private readonly pathwaysService: PathwaysService) {}
 
   @Post('create')
@@ -173,8 +176,18 @@ export class PathwaysController {
     if (!tenantId || !isUUID(tenantId)) {
       throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
     }
-    // organisationId is optional, use default if not provided
-    const orgId = organisationId || process.env.DEFAULT_ORGANISATION_ID || '';
+    // SECURITY FIX: Use environment variable as safer fallback instead of client-provided header
+    // This prevents users from accessing other organizations' data by manipulating headers
+    // If organisationId is provided in header, validate it (future enhancement: check user access)
+    // For now, use DEFAULT_ORGANISATION_ID from environment for consistency with safer patterns
+    const orgId = process.env.DEFAULT_ORGANISATION_ID || organisationId || '';
+    if (organisationId && organisationId !== orgId) {
+      // Log warning if client provided different organisationId than default
+      // Future: Add authorization check here to validate user has access to requested organisationId
+      this.logger.warn(
+        `Client provided organisationId ${organisationId} differs from default ${orgId}. Using default for security.`
+      );
+    }
     return this.pathwaysService.list(listPathwayDto, tenantId, orgId, response);
   }
 
