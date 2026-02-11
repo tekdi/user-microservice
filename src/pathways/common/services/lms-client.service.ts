@@ -160,12 +160,7 @@ export class LmsClientService {
 
       return { videoCount, resourceCount, totalItems };
     } catch (error) {
-      let errorMessage = 'Unknown error';
-      if (axios.isAxiosError(error)) {
-        errorMessage = error.message;
-      } else if (error instanceof Error) {
-        errorMessage = error.message;
-      }
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
       this.logger.error(
         `Failed to fetch counts for pathway ${pathwayId} from LMS service: ${errorMessage}`
