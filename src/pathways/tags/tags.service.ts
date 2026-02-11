@@ -22,7 +22,7 @@ import { Response } from 'express';
 export class TagsService {
   constructor(
     @InjectRepository(Tag)
-    private tagRepository: Repository<Tag>,
+    private readonly tagRepository: Repository<Tag>,
   ) {}
 
   /**

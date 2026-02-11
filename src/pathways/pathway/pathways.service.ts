@@ -1,10 +1,4 @@
-import {
-  Injectable,
-  HttpStatus,
-  ConflictException,
-  NotFoundException,
-  BadRequestException,
-} from '@nestjs/common';
+import { Injectable, HttpStatus } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { Pathway } from './entities/pathway.entity';
@@ -22,9 +16,9 @@ import { Response } from 'express';
 export class PathwaysService {
   constructor(
     @InjectRepository(Pathway)
-    private pathwayRepository: Repository<Pathway>,
+    private readonly pathwayRepository: Repository<Pathway>,
     @InjectRepository(Tag)
-    private tagRepository: Repository<Tag>,
+    private readonly tagRepository: Repository<Tag>
   ) {}
 
   /**
@@ -33,7 +27,7 @@ export class PathwaysService {
    * Returns invalid tag IDs if any are found
    */
   private async validateTagIds(
-    tagIds: string[],
+    tagIds: string[]
   ): Promise<{ isValid: boolean; invalidTagIds: string[] }> {
     if (!tagIds || tagIds.length === 0) {
       return { isValid: true, invalidTagIds: [] }; // Empty array is valid
@@ -48,10 +42,9 @@ export class PathwaysService {
       select: ['id'],
     });
 
-    const existingTagIds = existingTags.map((tag) => tag.id);
-    const invalidTagIds = uniqueTagIds.filter(
-      (id) => !existingTagIds.includes(id),
-    );
+    // OPTIMIZED: Use Set for O(1) lookup instead of O(n) array.includes()
+    const existingTagIds = new Set(existingTags.map((tag) => tag.id));
+    const invalidTagIds = uniqueTagIds.filter((id) => !existingTagIds.has(id));
 
     return {
       isValid: invalidTagIds.length === 0,
@@ -64,14 +57,14 @@ export class PathwaysService {
    * Optimized: Single batch query to fetch all tags at once (no N+1)
    */
   private async fetchTagDetails(
-    tagIds: string[],
+    tagIds: string[]
   ): Promise<Array<{ id: string; name: string }>> {
     if (!tagIds || tagIds.length === 0) {
       return [];
     }
 
     // Remove duplicates and filter out null/undefined
-    const uniqueTagIds = [...new Set(tagIds.filter((id) => id))];
+    const uniqueTagIds = [...new Set(tagIds.filter(Boolean))];
 
     if (uniqueTagIds.length === 0) {
       return [];
@@ -95,7 +88,7 @@ export class PathwaysService {
    */
   async create(
     createPathwayDto: CreatePathwayDto,
-    response: Response,
+    response: Response
   ): Promise<Response> {
     const apiId = APIID.PATHWAY_CREATE;
     try {
@@ -111,7 +104,7 @@ export class PathwaysService {
           apiId,
           API_RESPONSES.CONFLICT,
           API_RESPONSES.PATHWAY_KEY_EXISTS,
-          HttpStatus.CONFLICT,
+          HttpStatus.CONFLICT
         );
       }
 
@@ -124,8 +117,10 @@ export class PathwaysService {
             response,
             apiId,
             API_RESPONSES.BAD_REQUEST,
-            `${API_RESPONSES.INVALID_TAG_IDS}: ${validation.invalidTagIds.join(', ')}`,
-            HttpStatus.BAD_REQUEST,
+            `${API_RESPONSES.INVALID_TAG_IDS}: ${validation.invalidTagIds.join(
+              ', '
+            )}`,
+            HttpStatus.BAD_REQUEST
           );
         }
       }
@@ -165,7 +160,7 @@ export class PathwaysService {
         apiId,
         result,
         HttpStatus.CREATED,
-        API_RESPONSES.PATHWAY_CREATED_SUCCESSFULLY,
+        API_RESPONSES.PATHWAY_CREATED_SUCCESSFULLY
       );
     } catch (error) {
       // Handle unique constraint violation
@@ -176,23 +171,22 @@ export class PathwaysService {
           apiId,
           API_RESPONSES.CONFLICT,
           API_RESPONSES.PATHWAY_KEY_EXISTS,
-          HttpStatus.CONFLICT,
+          HttpStatus.CONFLICT
         );
       }
 
-      const errorMessage =
-        error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+      const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error creating pathway: ${errorMessage}`,
-        apiId,
+        apiId
       );
       return APIResponse.error(
         response,
         apiId,
         API_RESPONSES.INTERNAL_SERVER_ERROR,
         errorMessage,
-        HttpStatus.INTERNAL_SERVER_ERROR,
+        HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }
@@ -203,7 +197,7 @@ export class PathwaysService {
    */
   async list(
     listPathwayDto: ListPathwayDto,
-    response: Response,
+    response: Response
   ): Promise<Response> {
     const apiId = APIID.PATHWAY_LIST;
     try {
@@ -282,22 +276,21 @@ export class PathwaysService {
         apiId,
         result,
         HttpStatus.OK,
-        API_RESPONSES.PATHWAY_LIST_SUCCESS,
+        API_RESPONSES.PATHWAY_LIST_SUCCESS
       );
     } catch (error) {
-      const errorMessage =
-        error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+      const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error listing pathways: ${errorMessage}`,
-        apiId,
+        apiId
       );
       return APIResponse.error(
         response,
         apiId,
         API_RESPONSES.INTERNAL_SERVER_ERROR,
         errorMessage,
-        HttpStatus.INTERNAL_SERVER_ERROR,
+        HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }
@@ -318,7 +311,7 @@ export class PathwaysService {
           apiId,
           API_RESPONSES.BAD_REQUEST,
           API_RESPONSES.UUID_VALIDATION,
-          HttpStatus.BAD_REQUEST,
+          HttpStatus.BAD_REQUEST
         );
       }
 
@@ -333,7 +326,7 @@ export class PathwaysService {
           apiId,
           API_RESPONSES.NOT_FOUND,
           API_RESPONSES.PATHWAY_NOT_FOUND,
-          HttpStatus.NOT_FOUND,
+          HttpStatus.NOT_FOUND
         );
       }
 
@@ -359,22 +352,21 @@ export class PathwaysService {
         apiId,
         result,
         HttpStatus.OK,
-        API_RESPONSES.PATHWAY_GET_SUCCESS,
+        API_RESPONSES.PATHWAY_GET_SUCCESS
       );
     } catch (error) {
-      const errorMessage =
-        error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+      const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error fetching pathway: ${errorMessage}`,
-        apiId,
+        apiId
       );
       return APIResponse.error(
         response,
         apiId,
         API_RESPONSES.INTERNAL_SERVER_ERROR,
         errorMessage,
-        HttpStatus.INTERNAL_SERVER_ERROR,
+        HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }
@@ -386,7 +378,7 @@ export class PathwaysService {
   async update(
     id: string,
     updatePathwayDto: UpdatePathwayDto,
-    response: Response,
+    response: Response
   ): Promise<Response> {
     const apiId = APIID.PATHWAY_UPDATE;
     try {
@@ -399,7 +391,7 @@ export class PathwaysService {
           apiId,
           API_RESPONSES.BAD_REQUEST,
           API_RESPONSES.UUID_VALIDATION,
-          HttpStatus.BAD_REQUEST,
+          HttpStatus.BAD_REQUEST
         );
       }
 
@@ -415,7 +407,7 @@ export class PathwaysService {
           apiId,
           API_RESPONSES.NOT_FOUND,
           API_RESPONSES.PATHWAY_NOT_FOUND,
-          HttpStatus.NOT_FOUND,
+          HttpStatus.NOT_FOUND
         );
       }
 
@@ -428,8 +420,10 @@ export class PathwaysService {
             response,
             apiId,
             API_RESPONSES.BAD_REQUEST,
-            `${API_RESPONSES.INVALID_TAG_IDS}: ${validation.invalidTagIds.join(', ')}`,
-            HttpStatus.BAD_REQUEST,
+            `${API_RESPONSES.INVALID_TAG_IDS}: ${validation.invalidTagIds.join(
+              ', '
+            )}`,
+            HttpStatus.BAD_REQUEST
           );
         }
       }
@@ -438,7 +432,7 @@ export class PathwaysService {
       // TypeORM update() doesn't handle undefined values, so we need to filter them
       // Tags stored as PostgreSQL text[] array: {tag_id1,tag_id2}
       const updateData: any = {};
-      
+
       if (updatePathwayDto.name !== undefined) {
         updateData.name = updatePathwayDto.name;
       }
@@ -464,7 +458,7 @@ export class PathwaysService {
           apiId,
           API_RESPONSES.BAD_REQUEST,
           'No valid fields provided for update',
-          HttpStatus.BAD_REQUEST,
+          HttpStatus.BAD_REQUEST
         );
       }
 
@@ -472,7 +466,7 @@ export class PathwaysService {
       // This is more efficient than findOne + save as it performs a direct UPDATE query
       const updateResult = await this.pathwayRepository.update(
         { id },
-        updateData,
+        updateData
       );
 
       if (!updateResult.affected || updateResult.affected === 0) {
@@ -481,7 +475,7 @@ export class PathwaysService {
           apiId,
           API_RESPONSES.INTERNAL_SERVER_ERROR,
           'Failed to update pathway',
-          HttpStatus.INTERNAL_SERVER_ERROR,
+          HttpStatus.INTERNAL_SERVER_ERROR
         );
       }
 
@@ -496,7 +490,7 @@ export class PathwaysService {
           apiId,
           API_RESPONSES.NOT_FOUND,
           API_RESPONSES.PATHWAY_NOT_FOUND,
-          HttpStatus.NOT_FOUND,
+          HttpStatus.NOT_FOUND
         );
       }
 
@@ -522,24 +516,22 @@ export class PathwaysService {
         apiId,
         result,
         HttpStatus.OK,
-        API_RESPONSES.PATHWAY_UPDATED_SUCCESSFULLY,
+        API_RESPONSES.PATHWAY_UPDATED_SUCCESSFULLY
       );
     } catch (error) {
-      const errorMessage =
-        error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+      const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error updating pathway: ${errorMessage}`,
-        apiId,
+        apiId
       );
       return APIResponse.error(
         response,
         apiId,
         API_RESPONSES.INTERNAL_SERVER_ERROR,
         errorMessage,
-        HttpStatus.INTERNAL_SERVER_ERROR,
+        HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }
 }
-
