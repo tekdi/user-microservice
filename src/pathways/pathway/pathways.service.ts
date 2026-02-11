@@ -6,6 +6,7 @@ import { Tag } from '../tags/entities/tag.entity';
 import { CreatePathwayDto } from './dto/create-pathway.dto';
 import { UpdatePathwayDto } from './dto/update-pathway.dto';
 import { ListPathwayDto } from './dto/list-pathway.dto';
+import { MAX_PAGINATION_LIMIT } from '../common/dto/pagination.dto';
 import APIResponse from 'src/common/responses/response';
 import { API_RESPONSES } from '@utils/response.messages';
 import { APIID } from '@utils/api-id.config';
@@ -207,8 +208,10 @@ export class PathwaysService {
         whereCondition.is_active = listPathwayDto.isActive;
       }
 
-      // Set pagination defaults
-      const limit = listPathwayDto.limit ?? 10;
+      // Set pagination defaults with safeguard to prevent unbounded queries
+      // Defense in depth: cap limit even if validation is bypassed
+      const requestedLimit = listPathwayDto.limit ?? 10;
+      const limit = Math.min(requestedLimit, MAX_PAGINATION_LIMIT);
       const offset = listPathwayDto.offset ?? 0;
 
       // OPTIMIZED: Single query with count and data using findAndCount

@@ -6,6 +6,7 @@ import { CreateTagDto } from './dto/create-tag.dto';
 import { UpdateTagDto } from './dto/update-tag.dto';
 import { ListTagDto } from './dto/list-tag.dto';
 import { FetchTagDto } from './dto/fetch-tag.dto';
+import { MAX_PAGINATION_LIMIT } from '../common/dto/pagination.dto';
 import APIResponse from 'src/common/responses/response';
 import { API_RESPONSES } from '@utils/response.messages';
 import { APIID } from '@utils/api-id.config';
@@ -332,8 +333,10 @@ export class TagsService {
         whereCondition.status = TagStatus.PUBLISHED;
       }
 
-      // Set pagination defaults
-      const limit = listTagDto.limit ?? 10;
+      // Set pagination defaults with safeguard to prevent unbounded queries
+      // Defense in depth: cap limit even if validation is bypassed
+      const requestedLimit = listTagDto.limit ?? 10;
+      const limit = Math.min(requestedLimit, MAX_PAGINATION_LIMIT);
       const offset = listTagDto.offset ?? 0;
 
       // OPTIMIZED: Single query with count and data using findAndCount
