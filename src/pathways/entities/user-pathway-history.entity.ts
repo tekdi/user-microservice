@@ -5,11 +5,13 @@ import {
     CreateDateColumn,
     ManyToOne,
     JoinColumn,
+    Index,
 } from "typeorm";
 import { User } from "../../user/entities/user-entity";
 import { Pathway } from "./pathway.entity";
 
 @Entity("user_pathway_history")
+@Index("ux_one_active_pathway", ["user_id"], { unique: true, where: "is_active = true" })
 export class UserPathwayHistory {
     @PrimaryGeneratedColumn("uuid")
     id: string;

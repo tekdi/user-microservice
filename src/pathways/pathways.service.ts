@@ -4,25 +4,32 @@ import {
   ConflictException,
   NotFoundException,
   BadRequestException,
-} from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Pathway } from './entities/pathway.entity';
-import { CreatePathwayDto } from './dto/create-pathway.dto';
-import { UpdatePathwayDto } from './dto/update-pathway.dto';
-import { ListPathwayDto } from './dto/list-pathway.dto';
-import APIResponse from 'src/common/responses/response';
-import { API_RESPONSES } from '@utils/response.messages';
-import { APIID } from '@utils/api-id.config';
-import { LoggerUtil } from 'src/common/logger/LoggerUtil';
-import { Response } from 'express';
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { Pathway } from "./entities/pathway.entity";
+import { CreatePathwayDto } from "./dto/create-pathway.dto";
+import { UpdatePathwayDto } from "./dto/update-pathway.dto";
+import { ListPathwayDto } from "./dto/list-pathway.dto";
+import { AssignPathwayDto } from "./dto/assign-pathway.dto";
+import { UserPathwayHistory } from "./entities/user-pathway-history.entity";
+import { User } from "../user/entities/user-entity";
+import APIResponse from "src/common/responses/response";
+import { API_RESPONSES } from "@utils/response.messages";
+import { APIID } from "@utils/api-id.config";
+import { LoggerUtil } from "src/common/logger/LoggerUtil";
+import { Response } from "express";
 
 @Injectable()
 export class PathwaysService {
   constructor(
     @InjectRepository(Pathway)
     private pathwayRepository: Repository<Pathway>,
-  ) {}
+    @InjectRepository(UserPathwayHistory)
+    private userPathwayHistoryRepository: Repository<UserPathwayHistory>,
+    @InjectRepository(User)
+    private userRepository: Repository<User>
+  ) { }
 
   /**
    * Create a new pathway
@@ -30,14 +37,14 @@ export class PathwaysService {
    */
   async create(
     createPathwayDto: CreatePathwayDto,
-    response: Response,
+    response: Response
   ): Promise<Response> {
     const apiId = APIID.PATHWAY_CREATE;
     try {
       // Check if pathway with same key already exists
       const existingPathway = await this.pathwayRepository.findOne({
         where: { key: createPathwayDto.key },
-        select: ['id', 'key'],
+        select: ["id", "key"],
       });
 
       if (existingPathway) {
@@ -46,7 +53,7 @@ export class PathwaysService {
           apiId,
           API_RESPONSES.CONFLICT,
           API_RESPONSES.PATHWAY_KEY_EXISTS,
-          HttpStatus.CONFLICT,
+          HttpStatus.CONFLICT
         );
       }
 
@@ -73,34 +80,33 @@ export class PathwaysService {
         apiId,
         result,
         HttpStatus.CREATED,
-        API_RESPONSES.PATHWAY_CREATED_SUCCESSFULLY,
+        API_RESPONSES.PATHWAY_CREATED_SUCCESSFULLY
       );
     } catch (error) {
       // Handle unique constraint violation
-      if (error.code === '23505') {
+      if (error.code === "23505") {
         // PostgreSQL unique constraint violation
         return APIResponse.error(
           response,
           apiId,
           API_RESPONSES.CONFLICT,
           API_RESPONSES.PATHWAY_KEY_EXISTS,
-          HttpStatus.CONFLICT,
+          HttpStatus.CONFLICT
         );
       }
 
-      const errorMessage =
-        error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+      const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error creating pathway: ${errorMessage}`,
-        apiId,
+        apiId
       );
       return APIResponse.error(
         response,
         apiId,
         API_RESPONSES.INTERNAL_SERVER_ERROR,
         errorMessage,
-        HttpStatus.INTERNAL_SERVER_ERROR,
+        HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }
@@ -111,7 +117,7 @@ export class PathwaysService {
    */
   async list(
     listPathwayDto: ListPathwayDto,
-    response: Response,
+    response: Response
   ): Promise<Response> {
     const apiId = APIID.PATHWAY_LIST;
     try {
@@ -126,19 +132,19 @@ export class PathwaysService {
       const pathways = await this.pathwayRepository.find({
         where: whereCondition,
         order: {
-          display_order: 'ASC',
-          created_at: 'DESC',
+          display_order: "ASC",
+          created_at: "DESC",
         },
         // Select only needed fields to reduce payload
         select: [
-          'id',
-          'key',
-          'name',
-          'description',
-          'tags',
-          'display_order',
-          'is_active',
-          'created_at',
+          "id",
+          "key",
+          "name",
+          "description",
+          "tags",
+          "display_order",
+          "is_active",
+          "created_at",
         ],
       });
 
@@ -147,22 +153,21 @@ export class PathwaysService {
         apiId,
         pathways,
         HttpStatus.OK,
-        API_RESPONSES.PATHWAY_LIST_SUCCESS,
+        API_RESPONSES.PATHWAY_LIST_SUCCESS
       );
     } catch (error) {
-      const errorMessage =
-        error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+      const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error listing pathways: ${errorMessage}`,
-        apiId,
+        apiId
       );
       return APIResponse.error(
         response,
         apiId,
         API_RESPONSES.INTERNAL_SERVER_ERROR,
         errorMessage,
-        HttpStatus.INTERNAL_SERVER_ERROR,
+        HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }
@@ -183,7 +188,7 @@ export class PathwaysService {
           apiId,
           API_RESPONSES.BAD_REQUEST,
           API_RESPONSES.UUID_VALIDATION,
-          HttpStatus.BAD_REQUEST,
+          HttpStatus.BAD_REQUEST
         );
       }
 
@@ -191,14 +196,14 @@ export class PathwaysService {
       const pathway = await this.pathwayRepository.findOne({
         where: { id },
         select: [
-          'id',
-          'key',
-          'name',
-          'description',
-          'tags',
-          'display_order',
-          'is_active',
-          'created_at',
+          "id",
+          "key",
+          "name",
+          "description",
+          "tags",
+          "display_order",
+          "is_active",
+          "created_at",
         ],
       });
 
@@ -208,7 +213,7 @@ export class PathwaysService {
           apiId,
           API_RESPONSES.NOT_FOUND,
           API_RESPONSES.PATHWAY_NOT_FOUND,
-          HttpStatus.NOT_FOUND,
+          HttpStatus.NOT_FOUND
         );
       }
 
@@ -217,22 +222,21 @@ export class PathwaysService {
         apiId,
         pathway,
         HttpStatus.OK,
-        API_RESPONSES.PATHWAY_GET_SUCCESS,
+        API_RESPONSES.PATHWAY_GET_SUCCESS
       );
     } catch (error) {
-      const errorMessage =
-        error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+      const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error fetching pathway: ${errorMessage}`,
-        apiId,
+        apiId
       );
       return APIResponse.error(
         response,
         apiId,
         API_RESPONSES.INTERNAL_SERVER_ERROR,
         errorMessage,
-        HttpStatus.INTERNAL_SERVER_ERROR,
+        HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }
@@ -244,7 +248,7 @@ export class PathwaysService {
   async update(
     id: string,
     updatePathwayDto: UpdatePathwayDto,
-    response: Response,
+    response: Response
   ): Promise<Response> {
     const apiId = APIID.PATHWAY_UPDATE;
     try {
@@ -257,14 +261,14 @@ export class PathwaysService {
           apiId,
           API_RESPONSES.BAD_REQUEST,
           API_RESPONSES.UUID_VALIDATION,
-          HttpStatus.BAD_REQUEST,
+          HttpStatus.BAD_REQUEST
         );
       }
 
       // Check if pathway exists
       const existingPathway = await this.pathwayRepository.findOne({
         where: { id },
-        select: ['id'],
+        select: ["id"],
       });
 
       if (!existingPathway) {
@@ -273,7 +277,7 @@ export class PathwaysService {
           apiId,
           API_RESPONSES.NOT_FOUND,
           API_RESPONSES.PATHWAY_NOT_FOUND,
-          HttpStatus.NOT_FOUND,
+          HttpStatus.NOT_FOUND
         );
       }
 
@@ -281,7 +285,7 @@ export class PathwaysService {
       // This is more efficient than findOne + save as it performs a direct UPDATE query
       const updateResult = await this.pathwayRepository.update(
         { id },
-        updatePathwayDto,
+        updatePathwayDto
       );
 
       if (!updateResult.affected || updateResult.affected === 0) {
@@ -289,8 +293,8 @@ export class PathwaysService {
           response,
           apiId,
           API_RESPONSES.INTERNAL_SERVER_ERROR,
-          'Failed to update pathway',
-          HttpStatus.INTERNAL_SERVER_ERROR,
+          "Failed to update pathway",
+          HttpStatus.INTERNAL_SERVER_ERROR
         );
       }
 
@@ -298,14 +302,14 @@ export class PathwaysService {
       const updatedPathway = await this.pathwayRepository.findOne({
         where: { id },
         select: [
-          'id',
-          'key',
-          'name',
-          'description',
-          'tags',
-          'display_order',
-          'is_active',
-          'created_at',
+          "id",
+          "key",
+          "name",
+          "description",
+          "tags",
+          "display_order",
+          "is_active",
+          "created_at",
         ],
       });
 
@@ -314,24 +318,110 @@ export class PathwaysService {
         apiId,
         updatedPathway,
         HttpStatus.OK,
-        API_RESPONSES.PATHWAY_UPDATED_SUCCESSFULLY,
+        API_RESPONSES.PATHWAY_UPDATED_SUCCESSFULLY
       );
     } catch (error) {
-      const errorMessage =
-        error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+      const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error updating pathway: ${errorMessage}`,
-        apiId,
+        apiId
       );
       return APIResponse.error(
         response,
         apiId,
         API_RESPONSES.INTERNAL_SERVER_ERROR,
         errorMessage,
-        HttpStatus.INTERNAL_SERVER_ERROR,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  /**
+   * Assign / Activate Pathway for User
+   * Logic: Deactivate existing active pathway and create new active record
+   */
+  async assignPathway(
+    assignDto: AssignPathwayDto,
+    response: Response
+  ): Promise<Response> {
+    const apiId = "api.user.pathway.assign";
+    try {
+      const { userId, pathwayId } = assignDto;
+
+      // 1. Validate user existence
+      const user = await this.userRepository.findOne({
+        where: { userId },
+      });
+      if (!user) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.NOT_FOUND,
+          "User not found",
+          HttpStatus.NOT_FOUND
+        );
+      }
+
+      // 2. Validate pathway existence and active status
+      const pathway = await this.pathwayRepository.findOne({
+        where: { id: pathwayId, is_active: true },
+      });
+      if (!pathway) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.NOT_FOUND,
+          "Active pathway not found",
+          HttpStatus.NOT_FOUND
+        );
+      }
+
+      // 3. Deactivate any existing active pathway for the user
+      await this.userPathwayHistoryRepository.update(
+        { user_id: userId, is_active: true },
+        { is_active: false, deactivated_at: new Date() }
+      );
+
+      // 4. Insert new active pathway record
+      const historyRecord = this.userPathwayHistoryRepository.create({
+        user_id: userId,
+        pathway_id: pathwayId,
+        is_active: true,
+        activated_at: new Date(),
+      });
+      const savedRecord = await this.userPathwayHistoryRepository.save(
+        historyRecord
+      );
+
+      const result = {
+        userId: savedRecord.user_id,
+        pathwayId: savedRecord.pathway_id,
+        isActive: savedRecord.is_active,
+        activatedAt: savedRecord.activated_at,
+      };
+
+      return APIResponse.success(
+        response,
+        apiId,
+        result,
+        HttpStatus.OK,
+        "Pathway assigned successfully"
+      );
+    } catch (error) {
+      const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error assigning pathway: ${errorMessage}`,
+        apiId
+      );
+      return APIResponse.error(
+        response,
+        apiId,
+        API_RESPONSES.INTERNAL_SERVER_ERROR,
+        errorMessage,
+        HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }
 }
-
