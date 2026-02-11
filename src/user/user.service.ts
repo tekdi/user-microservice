@@ -1683,6 +1683,8 @@ export class UserService {
         academicYearId
       );
 
+      console.log("validatedRoles", validatedRoles);
+
       // check if roles are invalid and academic year is provided
       if (
         Array.isArray(validatedRoles) &&
@@ -1944,7 +1946,7 @@ export class UserService {
           userContext.username
         ));
     } catch (e) {
-
+      console.log("error", e);
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
         `Error: ${e.message}`,
