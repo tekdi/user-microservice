@@ -1944,7 +1944,6 @@ export class UserService {
           userContext.username
         ));
     } catch (e) {
-
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
         `Error: ${e.message}`,
