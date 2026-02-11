@@ -177,6 +177,39 @@ export class PathwaysController {
     return this.pathwaysService.list(listPathwayDto, response);
   }
 
+  /**
+   * Get Active Pathway for User
+   */
+  @Get("active/:userId")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: "Get Active Pathway for User",
+    description: "Retrieves the currently active pathway assignment for a user.",
+  })
+  @ApiHeader({ name: "Authorization", required: true })
+  @ApiHeader({ name: "tenantid", required: true })
+  @ApiParam({
+    name: "userId",
+    description: "User UUID",
+    type: String,
+    format: "uuid",
+  })
+  @ApiResponse({
+    status: 200,
+    description: "Active pathway retrieved successfully",
+  })
+  @ApiNotFoundResponse({ description: "User or Active Pathway not found" })
+  async getActivePathway(
+    @Param("userId", ParseUUIDPipe) userId: string,
+    @Headers("tenantid") tenantId: string,
+    @Res() response: Response
+  ): Promise<Response> {
+    if (!tenantId || !isUUID(tenantId)) {
+      throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
+    }
+    return this.pathwaysService.getActivePathway(userId, response);
+  }
+
   @Get(":id")
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -278,8 +311,12 @@ export class PathwaysController {
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   async assign(
     @Body() assignPathwayDto: AssignPathwayDto,
+    @Headers("tenantid") tenantId: string,
     @Res() response: Response
   ): Promise<Response> {
+    if (!tenantId || !isUUID(tenantId)) {
+      throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
+    }
     return this.pathwaysService.assignPathway(assignPathwayDto, response);
   }
 
@@ -297,43 +334,17 @@ export class PathwaysController {
   @ApiBody({ type: SwitchPathwayDto })
   @ApiResponse({ status: 200, description: "Pathway switched successfully" })
   @ApiNotFoundResponse({ description: "User or Pathway not found" })
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   async switchPathway(
     @Body() switchPathwayDto: SwitchPathwayDto,
-    @Res() response: Response
-  ): Promise<Response> {
-    return this.pathwaysService.switchPathway(switchPathwayDto, response);
-  }
-
-  /**
-   * Get Active Pathway for User
-   */
-  @Get("active/:userId")
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: "Get Active Pathway for User",
-    description: "Retrieves the currently active pathway assignment for a user.",
-  })
-  @ApiHeader({ name: "Authorization", required: true })
-  @ApiHeader({ name: "tenantid", required: true })
-  @ApiParam({
-    name: "userId",
-    description: "User UUID",
-    type: String,
-    format: "uuid",
-  })
-  @ApiResponse({
-    status: 200,
-    description: "Active pathway retrieved successfully",
-  })
-  @ApiNotFoundResponse({ description: "User or Active Pathway not found" })
-  async getActivePathway(
-    @Param("userId", ParseUUIDPipe) userId: string,
     @Headers("tenantid") tenantId: string,
     @Res() response: Response
   ): Promise<Response> {
     if (!tenantId || !isUUID(tenantId)) {
       throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
     }
-    return this.pathwaysService.getActivePathway(userId, response);
+    return this.pathwaysService.switchPathway(switchPathwayDto, response);
   }
+
+
 }

@@ -5,7 +5,7 @@ export const API_RESPONSES = {
   FORGOT_PASSWORD_SUCCESS: "Forgot password Reset successfully",
   EMAIL_NOT_FOUND_FOR_RESET:
     "EmailId does not exist for sending Reset password link",
-  EMAIL_NOT_FOUND: " Email does not exist",
+  EMAIL_NOT_FOUND: "Email does not exist",
   RESET_PASSWORD_LINK_FAILED:
     "Failed to send the reset password link. Please try again later.",
   RESET_PASSWORD_LINK_SUCCESS:
@@ -241,29 +241,29 @@ export const API_RESPONSES = {
 
   // Pathway Management Messages
 
-  PATHWAY_CREATED_SUCCESSFULLY: 'Pathway created successfully',
-  PATHWAY_UPDATED_SUCCESSFULLY: 'Pathway updated successfully',
-  PATHWAY_NOT_FOUND: 'Pathway not found',
-  PATHWAY_KEY_EXISTS: 'Pathway with this key already exists',
-  PATHWAY_LIST_SUCCESS: 'Pathways retrieved successfully',
-  PATHWAY_GET_SUCCESS: 'Pathway retrieved successfully',
-  INVALID_TAG_IDS: 'Invalid tag IDs provided',
+  PATHWAY_CREATED_SUCCESSFULLY: "Pathway created successfully",
+  PATHWAY_UPDATED_SUCCESSFULLY: "Pathway updated successfully",
+  PATHWAY_NOT_FOUND: "Pathway not found",
+  PATHWAY_KEY_EXISTS: "Pathway with this key already exists",
+  PATHWAY_LIST_SUCCESS: "Pathways retrieved successfully",
+  PATHWAY_GET_SUCCESS: "Pathway retrieved successfully",
+  INVALID_TAG_IDS: "Invalid tag IDs provided",
 
   // Tag Management Messages
-  TAG_CREATED_SUCCESSFULLY: 'Tag created successfully',
-  TAG_UPDATED_SUCCESSFULLY: 'Tag updated successfully',
-  TAG_ARCHIVED_SUCCESSFULLY: 'Tag archived successfully',
-  TAG_NOT_FOUND: 'Tag not found',
-  TAG_NAME_EXISTS: 'Tag with this name already exists',
-  TAG_LIST_SUCCESS: 'Tags retrieved successfully',
-  TAG_GET_SUCCESS: 'Tag retrieved successfully',
+  TAG_CREATED_SUCCESSFULLY: "Tag created successfully",
+  TAG_UPDATED_SUCCESSFULLY: "Tag updated successfully",
+  TAG_ARCHIVED_SUCCESSFULLY: "Tag archived successfully",
+  TAG_NOT_FOUND: "Tag not found",
+  TAG_NAME_EXISTS: "Tag with this name already exists",
+  TAG_LIST_SUCCESS: "Tags retrieved successfully",
+  TAG_GET_SUCCESS: "Tag retrieved successfully",
 
   // Interest Management Messages
-  INTEREST_CREATED_SUCCESSFULLY: 'Interest created successfully',
-  INTEREST_UPDATED_SUCCESSFULLY: 'Interest updated successfully',
-  INTEREST_DELETED_SUCCESSFULLY: 'Interest deleted successfully',
-  INTEREST_NOT_FOUND: 'Interest not found',
-  INTEREST_KEY_EXISTS: 'Interest with this key already exists for the pathway',
-  INTEREST_LIST_SUCCESS: 'Interests retrieved successfully',
-  USER_INTERESTS_SAVED_SUCCESSFULLY: 'User interests saved successfully',
+  INTEREST_CREATED_SUCCESSFULLY: "Interest created successfully",
+  INTEREST_UPDATED_SUCCESSFULLY: "Interest updated successfully",
+  INTEREST_DELETED_SUCCESSFULLY: "Interest deleted successfully",
+  INTEREST_NOT_FOUND: "Interest not found",
+  INTEREST_KEY_EXISTS: "Interest with this key already exists for the pathway",
+  INTEREST_LIST_SUCCESS: "Interests retrieved successfully",
+  USER_INTERESTS_SAVED_SUCCESSFULLY: "User interests saved successfully",
 };

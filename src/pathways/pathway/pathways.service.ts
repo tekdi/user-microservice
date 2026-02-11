@@ -1,6 +1,6 @@
 import { Injectable, HttpStatus } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { Repository, In, DataSource } from 'typeorm';
 import { Pathway } from './entities/pathway.entity';
 import { Tag } from '../tags/entities/tag.entity';
 import { CreatePathwayDto } from './dto/create-pathway.dto';
@@ -27,7 +27,8 @@ export class PathwaysService {
     @InjectRepository(UserPathwayHistory)
     private readonly userPathwayHistoryRepository: Repository<UserPathwayHistory>,
     @InjectRepository(User)
-    private readonly userRepository: Repository<User>
+    private readonly userRepository: Repository<User>,
+    private readonly dataSource: DataSource
   ) { }
 
   /**
@@ -591,22 +592,24 @@ export class PathwaysService {
         );
       }
 
-      // 3. Deactivate any existing active pathway for the user
-      await this.userPathwayHistoryRepository.update(
-        { user_id: userId, is_active: true },
-        { is_active: false, deactivated_at: new Date() }
-      );
+      // 3 & 4. Atomic Transaction: Deactivate existing and insert new
+      const savedRecord = await this.dataSource.transaction(async (manager) => {
+        // Deactivate existing
+        await manager.update(
+          UserPathwayHistory,
+          { user_id: userId, is_active: true },
+          { is_active: false, deactivated_at: new Date() }
+        );
 
-      // 4. Insert new active pathway record
-      const historyRecord = this.userPathwayHistoryRepository.create({
-        user_id: userId,
-        pathway_id: pathwayId,
-        is_active: true,
-        activated_at: new Date(),
+        // Insert new
+        const historyRecord = manager.create(UserPathwayHistory, {
+          user_id: userId,
+          pathway_id: pathwayId,
+          is_active: true,
+          activated_at: new Date(),
+        });
+        return await manager.save(historyRecord);
       });
-      const savedRecord = await this.userPathwayHistoryRepository.save(
-        historyRecord
-      );
 
       const result = {
         id: savedRecord.id,
@@ -690,26 +693,26 @@ export class PathwaysService {
       });
 
       const timestamp = new Date();
+      let previousPathwayId = currentActive ? currentActive.pathway_id : null;
 
-      // 4. Deactivate current active pathway
-      let previousPathwayId = null;
-      if (currentActive) {
-        previousPathwayId = currentActive.pathway_id;
-        await this.userPathwayHistoryRepository.update(
-          { id: currentActive.id },
-          { is_active: false, deactivated_at: timestamp }
-        );
-      }
+      // 4 & 5. Atomic Transaction: Deactivate current (if any) and activate new
+      const newHistoryRecord = await this.dataSource.transaction(async (manager) => {
+        if (currentActive) {
+          await manager.update(
+            UserPathwayHistory,
+            { id: currentActive.id },
+            { is_active: false, deactivated_at: timestamp }
+          );
+        }
 
-      // 5. Activate new pathway
-      const newHistoryRecord = this.userPathwayHistoryRepository.create({
-        user_id: userId,
-        pathway_id: pathwayId,
-        is_active: true,
-        activated_at: timestamp,
+        const record = manager.create(UserPathwayHistory, {
+          user_id: userId,
+          pathway_id: pathwayId,
+          is_active: true,
+          activated_at: timestamp,
+        });
+        return await manager.save(record);
       });
-
-      await this.userPathwayHistoryRepository.save(newHistoryRecord);
 
       const result = {
         id: newHistoryRecord.id, // Return ID for saving interests

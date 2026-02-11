@@ -355,7 +355,10 @@ export class InterestsService {
     try {
       const { userPathwayHistoryId, interestIds } = saveDto;
 
-      // 1. Validate userPathwayHistoryId
+      // 1. Deduplicate interestIds (Optimization from CodeRabbit)
+      const uniqueInterestIds = [...new Set(interestIds)];
+
+      // 2. Validate userPathwayHistoryId
       const historyRecord = await this.userPathwayHistoryRepository.findOne({
         where: { id: userPathwayHistoryId },
         select: ['id', 'pathway_id'],
@@ -371,40 +374,40 @@ export class InterestsService {
         );
       }
 
-      // 2. Validate each interestId in batch (Optimization)
+      // 3. Validate each interestId in batch
       const validInterests = await this.interestRepository.find({
         where: {
-          id: In(interestIds),
+          id: In(uniqueInterestIds),
           pathway_id: historyRecord.pathway_id,
         },
         select: ['id'],
       });
 
-      if (validInterests.length !== interestIds.length) {
+      if (validInterests.length !== uniqueInterestIds.length) {
         return APIResponse.error(
           response,
           apiId,
           API_RESPONSES.BAD_REQUEST,
-          "One or more interests are invalid or do not belong to the correct pathway",
+          "One or more interests are invalid, duplicate, or do not belong to the correct pathway",
           HttpStatus.BAD_REQUEST
         );
       }
 
-      // 3. Avoid duplicates for the same visit
+      // 4. Avoid duplicates for the same visit
       const existingMappings = await this.userPathwayInterestsRepository.find({
         where: {
           user_pathway_history_id: userPathwayHistoryId,
-          interest_id: In(interestIds),
+          interest_id: In(uniqueInterestIds),
         },
         select: ['interest_id'],
       });
 
       const existingInterestIds = existingMappings.map((m) => m.interest_id);
-      const newInterestIds = interestIds.filter(
+      const newInterestIds = uniqueInterestIds.filter(
         (id) => !existingInterestIds.includes(id)
       );
 
-      // 4. Batch insert new records
+      // 5. Batch insert new records
       if (newInterestIds.length > 0) {
         const newRecords = newInterestIds.map((interestId) =>
           this.userPathwayInterestsRepository.create({
