@@ -5,6 +5,7 @@ import { Interest } from "./entities/interest.entity";
 import { CreateInterestDto } from "./dto/create-interest.dto";
 import { UpdateInterestDto } from "./dto/update-interest.dto";
 import { ListInterestDto } from "./dto/list-interest.dto";
+import { MAX_PAGINATION_LIMIT } from "../common/dto/pagination.dto";
 import { SaveUserInterestsDto } from "./dto/save-user-interests.dto";
 import { UserPathwayHistory } from "../pathway/entities/user-pathway-history.entity";
 import { UserPathwayInterests } from "../pathway/entities/user-pathway-interests.entity";
@@ -257,7 +258,8 @@ export class InterestsService {
   }
 
   /**
-   * List interests by pathway ID
+   * List interests by pathway ID with pagination
+   * Optimized: Uses findAndCount for efficient pagination
    */
   async listByPathwayId(
     pathwayId: string,
@@ -265,7 +267,7 @@ export class InterestsService {
     listInterestDto: ListInterestDto
   ): Promise<Response> {
     const apiId = APIID.INTEREST_LIST_BY_PATHWAY;
-    const { isActive } = listInterestDto;
+    const { isActive, limit: requestedLimit, offset } = listInterestDto;
     try {
       // Check if pathway exists
       const pathway = await this.pathwayRepository.findOne({
@@ -286,18 +288,40 @@ export class InterestsService {
       // Build filter
       const whereCondition: any = { pathway_id: pathwayId };
       if (isActive !== undefined) {
-        whereCondition.is_active = isActive === "true";
+        whereCondition.is_active = isActive;
       }
 
-      const interests = await this.interestRepository.find({
+      // Set pagination defaults with safeguard to prevent unbounded queries
+      const MAX_PAGINATION_LIMIT = 100;
+      const limit = requestedLimit
+        ? Math.min(requestedLimit, MAX_PAGINATION_LIMIT)
+        : 10;
+      const skip = offset ?? 0;
+
+      // OPTIMIZED: Use findAndCount for efficient pagination
+      const [items, totalCount] = await this.interestRepository.findAndCount({
         where: whereCondition,
-        select: ['id', 'key', 'label', 'is_active'],
+        select: ['id', 'key', 'label', 'is_active', 'created_at'],
+        order: {
+          created_at: 'DESC',
+        },
+        take: limit,
+        skip: skip,
       });
+
+      // Return paginated result with count
+      const result = {
+        count: items.length,
+        totalCount: totalCount,
+        limit: limit,
+        offset: skip,
+        items: items,
+      };
 
       return APIResponse.success(
         response,
         apiId,
-        interests,
+        result,
         HttpStatus.OK,
         API_RESPONSES.INTEREST_LIST_SUCCESS
       );
@@ -317,6 +341,7 @@ export class InterestsService {
       );
     }
   }
+
 
   /**
    * Save user interests for a pathway visit
@@ -392,8 +417,7 @@ export class InterestsService {
 
       const result = {
         userPathwayHistoryId,
-        totalInterestsSaved: interestIds.length,
-        newInterestsAdded: newInterestIds.length,
+        savedInterestsCount: newInterestIds.length,
       };
 
       return APIResponse.success(

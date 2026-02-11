@@ -130,6 +130,9 @@ export const APIID = {
   PATHWAY_LIST: "api.pathway.list",
   PATHWAY_GET: "api.pathway.get",
   PATHWAY_UPDATE: "api.pathway.update",
+  PATHWAY_ASSIGN: "api.user.pathway.assign",
+  PATHWAY_SWITCH: "api.user.pathway.switch",
+  PATHWAY_GET_ACTIVE: "api.user.pathway.active",
 
   // Tag Management APIs
   TAG_CREATE: 'api.user.tag.create',
@@ -137,4 +140,11 @@ export const APIID = {
   TAG_DELETE: 'api.user.tag.delete',
   TAG_LIST: 'api.user.tag.list',
   TAG_READ: 'api.user.tag.read',
+
+  // Interest Management APIs
+  INTEREST_CREATE: "api.interest.create",
+  INTEREST_UPDATE: "api.interest.update",
+  INTEREST_DELETE: "api.interest.delete",
+  INTEREST_LIST_BY_PATHWAY: "api.pathway.interests.list",
+  USER_INTERESTS_SAVE: "api.user.pathway.interests.save",
 } as const;

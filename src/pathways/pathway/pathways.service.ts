@@ -8,6 +8,7 @@ import { UpdatePathwayDto } from './dto/update-pathway.dto';
 import { ListPathwayDto } from './dto/list-pathway.dto';
 import { MAX_PAGINATION_LIMIT } from '../common/dto/pagination.dto';
 import { AssignPathwayDto } from './dto/assign-pathway.dto';
+import { SwitchPathwayDto } from './dto/switch-pathway.dto';
 import { UserPathwayHistory } from './entities/user-pathway-history.entity';
 import { User } from '../../user/entities/user-entity';
 import APIResponse from 'src/common/responses/response';
@@ -608,6 +609,7 @@ export class PathwaysService {
       );
 
       const result = {
+        id: savedRecord.id,
         userId: savedRecord.user_id,
         pathwayId: savedRecord.pathway_id,
         isActive: savedRecord.is_active,
@@ -626,6 +628,195 @@ export class PathwaysService {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error assigning pathway: ${errorMessage}`,
+        apiId
+      );
+      return APIResponse.error(
+        response,
+        apiId,
+        API_RESPONSES.INTERNAL_SERVER_ERROR,
+        errorMessage,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  /**
+   * Switch Active Pathway for User
+   * Deactivates current active pathway and activates the new one
+   */
+  async switchPathway(
+    switchDto: SwitchPathwayDto,
+    response: Response
+  ): Promise<Response> {
+    const apiId = APIID.PATHWAY_SWITCH;
+    try {
+      const { userId, pathwayId } = switchDto;
+
+      // 1. Validate user existence
+      const user = await this.userRepository.findOne({
+        where: { userId },
+        select: ['userId'],
+      });
+
+      if (!user) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.NOT_FOUND,
+          'User not found',
+          HttpStatus.NOT_FOUND
+        );
+      }
+
+      // 2. Validate target pathway existence and active status
+      const targetPathway = await this.pathwayRepository.findOne({
+        where: { id: pathwayId, is_active: true },
+        select: ['id'],
+      });
+
+      if (!targetPathway) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.NOT_FOUND,
+          'Target pathway not found or inactive',
+          HttpStatus.NOT_FOUND
+        );
+      }
+
+      // 3. Find currently active pathway
+      const currentActive = await this.userPathwayHistoryRepository.findOne({
+        where: { user_id: userId, is_active: true },
+      });
+
+      const timestamp = new Date();
+
+      // 4. Deactivate current active pathway
+      let previousPathwayId = null;
+      if (currentActive) {
+        previousPathwayId = currentActive.pathway_id;
+        await this.userPathwayHistoryRepository.update(
+          { id: currentActive.id },
+          { is_active: false, deactivated_at: timestamp }
+        );
+      }
+
+      // 5. Activate new pathway
+      const newHistoryRecord = this.userPathwayHistoryRepository.create({
+        user_id: userId,
+        pathway_id: pathwayId,
+        is_active: true,
+        activated_at: timestamp,
+      });
+
+      await this.userPathwayHistoryRepository.save(newHistoryRecord);
+
+      const result = {
+        id: newHistoryRecord.id, // Return ID for saving interests
+        userId,
+        previousPathwayId,
+        currentPathwayId: pathwayId,
+        activatedAt: timestamp,
+        deactivated_at: currentActive ? timestamp : null,
+      };
+
+      return APIResponse.success(
+        response,
+        apiId,
+        result,
+        HttpStatus.OK,
+        'Pathway switched successfully'
+      );
+    } catch (error) {
+      const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error switching pathway: ${errorMessage}`,
+        apiId
+      );
+      return APIResponse.error(
+        response,
+        apiId,
+        API_RESPONSES.INTERNAL_SERVER_ERROR,
+        errorMessage,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  /**
+   * Get Active Pathway for User
+   * Retrieves the currently active pathway assignment for a user
+   */
+  async getActivePathway(
+    userId: string,
+    response: Response
+  ): Promise<Response> {
+    const apiId = APIID.PATHWAY_GET_ACTIVE;
+    try {
+      // Validate UUID format
+      const uuidRegex =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(userId)) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          API_RESPONSES.UUID_VALIDATION,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      // 1. Validate user existence
+      const user = await this.userRepository.findOne({
+        where: { userId },
+        select: ['userId'],
+      });
+
+      if (!user) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.NOT_FOUND,
+          'User not found',
+          HttpStatus.NOT_FOUND
+        );
+      }
+
+      // 2. Get active pathway from user_pathway_history
+      const activePathway = await this.userPathwayHistoryRepository.findOne({
+        where: { user_id: userId, is_active: true },
+        select: ['id', 'pathway_id', 'activated_at'],
+      });
+
+      if (!activePathway) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.NOT_FOUND,
+          'No active pathway found for this user',
+          HttpStatus.NOT_FOUND
+        );
+      }
+
+      const result = {
+        id: activePathway.id,
+        pathwayId: activePathway.pathway_id,
+        activatedAt: activePathway.activated_at,
+      };
+
+      return APIResponse.success(
+        response,
+        apiId,
+        result,
+        HttpStatus.OK,
+        'Active pathway retrieved successfully'
+      );
+    } catch (error) {
+      const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error getting active pathway: ${errorMessage}`,
         apiId
       );
       return APIResponse.error(
