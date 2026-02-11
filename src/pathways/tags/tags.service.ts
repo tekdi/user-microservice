@@ -1,10 +1,4 @@
-import {
-  Injectable,
-  HttpStatus,
-  ConflictException,
-  NotFoundException,
-  BadRequestException,
-} from '@nestjs/common';
+import { Injectable, HttpStatus } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Tag, TagStatus } from './entities/tag.entity';
@@ -22,7 +16,7 @@ import { Response } from 'express';
 export class TagsService {
   constructor(
     @InjectRepository(Tag)
-    private readonly tagRepository: Repository<Tag>,
+    private readonly tagRepository: Repository<Tag>
   ) {}
 
   /**
@@ -31,7 +25,7 @@ export class TagsService {
    */
   async create(
     createTagDto: CreateTagDto,
-    response: Response,
+    response: Response
   ): Promise<Response> {
     const apiId = APIID.TAG_CREATE;
     try {
@@ -47,7 +41,7 @@ export class TagsService {
           apiId,
           API_RESPONSES.CONFLICT,
           API_RESPONSES.TAG_NAME_EXISTS,
-          HttpStatus.CONFLICT,
+          HttpStatus.CONFLICT
         );
       }
 
@@ -74,7 +68,7 @@ export class TagsService {
         apiId,
         result,
         HttpStatus.CREATED,
-        API_RESPONSES.TAG_CREATED_SUCCESSFULLY,
+        API_RESPONSES.TAG_CREATED_SUCCESSFULLY
       );
     } catch (error) {
       // Handle unique constraint violation
@@ -85,23 +79,22 @@ export class TagsService {
           apiId,
           API_RESPONSES.CONFLICT,
           API_RESPONSES.TAG_NAME_EXISTS,
-          HttpStatus.CONFLICT,
+          HttpStatus.CONFLICT
         );
       }
 
-      const errorMessage =
-        error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+      const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error creating tag: ${errorMessage}`,
-        apiId,
+        apiId
       );
       return APIResponse.error(
         response,
         apiId,
         API_RESPONSES.INTERNAL_SERVER_ERROR,
         errorMessage,
-        HttpStatus.INTERNAL_SERVER_ERROR,
+        HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }
@@ -113,7 +106,7 @@ export class TagsService {
   async update(
     id: string,
     updateTagDto: UpdateTagDto,
-    response: Response,
+    response: Response
   ): Promise<Response> {
     const apiId = APIID.TAG_UPDATE;
     try {
@@ -126,7 +119,7 @@ export class TagsService {
           apiId,
           API_RESPONSES.BAD_REQUEST,
           API_RESPONSES.UUID_VALIDATION,
-          HttpStatus.BAD_REQUEST,
+          HttpStatus.BAD_REQUEST
         );
       }
 
@@ -142,7 +135,7 @@ export class TagsService {
           apiId,
           API_RESPONSES.NOT_FOUND,
           API_RESPONSES.TAG_NOT_FOUND,
-          HttpStatus.NOT_FOUND,
+          HttpStatus.NOT_FOUND
         );
       }
 
@@ -159,7 +152,7 @@ export class TagsService {
             apiId,
             API_RESPONSES.CONFLICT,
             API_RESPONSES.TAG_NAME_EXISTS,
-            HttpStatus.CONFLICT,
+            HttpStatus.CONFLICT
           );
         }
       }
@@ -180,15 +173,12 @@ export class TagsService {
           apiId,
           API_RESPONSES.BAD_REQUEST,
           'No valid fields provided for update',
-          HttpStatus.BAD_REQUEST,
+          HttpStatus.BAD_REQUEST
         );
       }
 
       // OPTIMIZED: Use repository.update() for partial updates
-      const updateResult = await this.tagRepository.update(
-        { id },
-        updateData,
-      );
+      const updateResult = await this.tagRepository.update({ id }, updateData);
 
       if (!updateResult.affected || updateResult.affected === 0) {
         return APIResponse.error(
@@ -196,7 +186,7 @@ export class TagsService {
           apiId,
           API_RESPONSES.INTERNAL_SERVER_ERROR,
           'Failed to update tag',
-          HttpStatus.INTERNAL_SERVER_ERROR,
+          HttpStatus.INTERNAL_SERVER_ERROR
         );
       }
 
@@ -211,7 +201,7 @@ export class TagsService {
         apiId,
         updatedTag,
         HttpStatus.OK,
-        API_RESPONSES.TAG_UPDATED_SUCCESSFULLY,
+        API_RESPONSES.TAG_UPDATED_SUCCESSFULLY
       );
     } catch (error) {
       // Handle unique constraint violation
@@ -221,23 +211,22 @@ export class TagsService {
           apiId,
           API_RESPONSES.CONFLICT,
           API_RESPONSES.TAG_NAME_EXISTS,
-          HttpStatus.CONFLICT,
+          HttpStatus.CONFLICT
         );
       }
 
-      const errorMessage =
-        error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+      const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error updating tag: ${errorMessage}`,
-        apiId,
+        apiId
       );
       return APIResponse.error(
         response,
         apiId,
         API_RESPONSES.INTERNAL_SERVER_ERROR,
         errorMessage,
-        HttpStatus.INTERNAL_SERVER_ERROR,
+        HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }
@@ -246,10 +235,7 @@ export class TagsService {
    * Soft delete a tag (set status to archived)
    * Optimized: Single update query
    */
-  async delete(
-    id: string,
-    response: Response,
-  ): Promise<Response> {
+  async delete(id: string, response: Response): Promise<Response> {
     const apiId = APIID.TAG_DELETE;
     try {
       // Validate UUID format
@@ -261,7 +247,7 @@ export class TagsService {
           apiId,
           API_RESPONSES.BAD_REQUEST,
           API_RESPONSES.UUID_VALIDATION,
-          HttpStatus.BAD_REQUEST,
+          HttpStatus.BAD_REQUEST
         );
       }
 
@@ -277,14 +263,14 @@ export class TagsService {
           apiId,
           API_RESPONSES.NOT_FOUND,
           API_RESPONSES.TAG_NOT_FOUND,
-          HttpStatus.NOT_FOUND,
+          HttpStatus.NOT_FOUND
         );
       }
 
       // OPTIMIZED: Soft delete by updating status to archived in single query
       const updateResult = await this.tagRepository.update(
         { id },
-        { status: TagStatus.ARCHIVED },
+        { status: TagStatus.ARCHIVED }
       );
 
       if (!updateResult.affected || updateResult.affected === 0) {
@@ -293,7 +279,7 @@ export class TagsService {
           apiId,
           API_RESPONSES.INTERNAL_SERVER_ERROR,
           'Failed to archive tag',
-          HttpStatus.INTERNAL_SERVER_ERROR,
+          HttpStatus.INTERNAL_SERVER_ERROR
         );
       }
 
@@ -308,22 +294,21 @@ export class TagsService {
         apiId,
         result,
         HttpStatus.OK,
-        API_RESPONSES.TAG_ARCHIVED_SUCCESSFULLY,
+        API_RESPONSES.TAG_ARCHIVED_SUCCESSFULLY
       );
     } catch (error) {
-      const errorMessage =
-        error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+      const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error archiving tag: ${errorMessage}`,
-        apiId,
+        apiId
       );
       return APIResponse.error(
         response,
         apiId,
         API_RESPONSES.INTERNAL_SERVER_ERROR,
         errorMessage,
-        HttpStatus.INTERNAL_SERVER_ERROR,
+        HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }
@@ -333,10 +318,7 @@ export class TagsService {
    * Optimized: Single query with proper filtering
    * Note: Archived tags are excluded by default unless explicitly requested
    */
-  async list(
-    listTagDto: ListTagDto,
-    response: Response,
-  ): Promise<Response> {
+  async list(listTagDto: ListTagDto, response: Response): Promise<Response> {
     const apiId = APIID.TAG_LIST;
     try {
       // Build where clause
@@ -380,22 +362,21 @@ export class TagsService {
         apiId,
         result,
         HttpStatus.OK,
-        API_RESPONSES.TAG_LIST_SUCCESS,
+        API_RESPONSES.TAG_LIST_SUCCESS
       );
     } catch (error) {
-      const errorMessage =
-        error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+      const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error listing tags: ${errorMessage}`,
-        apiId,
+        apiId
       );
       return APIResponse.error(
         response,
         apiId,
         API_RESPONSES.INTERNAL_SERVER_ERROR,
         errorMessage,
-        HttpStatus.INTERNAL_SERVER_ERROR,
+        HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }
@@ -404,10 +385,7 @@ export class TagsService {
    * Fetch a single tag by ID
    * Optimized: Single query with proper error handling
    */
-  async fetch(
-    fetchTagDto: FetchTagDto,
-    response: Response,
-  ): Promise<Response> {
+  async fetch(fetchTagDto: FetchTagDto, response: Response): Promise<Response> {
     const apiId = APIID.TAG_READ;
     try {
       // Validate UUID format
@@ -419,7 +397,7 @@ export class TagsService {
           apiId,
           API_RESPONSES.BAD_REQUEST,
           API_RESPONSES.UUID_VALIDATION,
-          HttpStatus.BAD_REQUEST,
+          HttpStatus.BAD_REQUEST
         );
       }
 
@@ -435,7 +413,7 @@ export class TagsService {
           apiId,
           API_RESPONSES.NOT_FOUND,
           API_RESPONSES.TAG_NOT_FOUND,
-          HttpStatus.NOT_FOUND,
+          HttpStatus.NOT_FOUND
         );
       }
 
@@ -444,24 +422,22 @@ export class TagsService {
         apiId,
         tag,
         HttpStatus.OK,
-        API_RESPONSES.TAG_GET_SUCCESS,
+        API_RESPONSES.TAG_GET_SUCCESS
       );
     } catch (error) {
-      const errorMessage =
-        error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+      const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error fetching tag: ${errorMessage}`,
-        apiId,
+        apiId
       );
       return APIResponse.error(
         response,
         apiId,
         API_RESPONSES.INTERNAL_SERVER_ERROR,
         errorMessage,
-        HttpStatus.INTERNAL_SERVER_ERROR,
+        HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }
 }
-

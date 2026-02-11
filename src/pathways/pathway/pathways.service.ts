@@ -413,18 +413,22 @@ export class PathwaysService {
 
       // Validate tags if provided in update
       const updateDto = updatePathwayDto as any;
-      if (updateDto.tags && updateDto.tags.length > 0) {
-        const validation = await this.validateTagIds(updateDto.tags);
-        if (!validation.isValid) {
-          return APIResponse.error(
-            response,
-            apiId,
-            API_RESPONSES.BAD_REQUEST,
-            `${API_RESPONSES.INVALID_TAG_IDS}: ${validation.invalidTagIds.join(
-              ', '
-            )}`,
-            HttpStatus.BAD_REQUEST
-          );
+      // Guard against tags: null to avoid runtime errors
+      if (updateDto.tags !== undefined && updateDto.tags !== null) {
+        // Handle both empty array and array with values
+        if (Array.isArray(updateDto.tags) && updateDto.tags.length > 0) {
+          const validation = await this.validateTagIds(updateDto.tags);
+          if (!validation.isValid) {
+            return APIResponse.error(
+              response,
+              apiId,
+              API_RESPONSES.BAD_REQUEST,
+              `${API_RESPONSES.INVALID_TAG_IDS}: ${validation.invalidTagIds.join(
+                ', '
+              )}`,
+              HttpStatus.BAD_REQUEST
+            );
+          }
         }
       }
 
@@ -439,10 +443,11 @@ export class PathwaysService {
       if (updatePathwayDto.description !== undefined) {
         updateData.description = updatePathwayDto.description;
       }
-      if (updateDto.tags !== undefined) {
+      // Guard against null: only update if tags is explicitly provided (array or empty array)
+      if (updateDto.tags !== undefined && updateDto.tags !== null) {
         // Store as PostgreSQL text[] array
         // Empty array is valid, so we allow it
-        updateData.tags = updateDto.tags.length > 0 ? updateDto.tags : [];
+        updateData.tags = Array.isArray(updateDto.tags) ? updateDto.tags : [];
       }
       if (updatePathwayDto.display_order !== undefined) {
         updateData.display_order = updatePathwayDto.display_order;

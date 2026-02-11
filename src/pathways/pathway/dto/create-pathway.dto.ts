@@ -45,7 +45,7 @@ export class CreatePathwayDto {
   description?: string;
 
   @ApiPropertyOptional({
-    description: 'Array of tag IDs from tags table (stored as JSONB)',
+    description: 'Array of tag IDs from tags table (stored as PostgreSQL text[] array)',
     example: [
       'a1b2c3d4-e111-2222-3333-444455556666',
       'b2c3d4e5-f111-2222-3333-444455556777',

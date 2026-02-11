@@ -12,6 +12,7 @@ import {
   HttpCode,
   HttpStatus,
   BadRequestException,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -30,10 +31,8 @@ import { TagsService } from './tags.service';
 import { CreateTagDto } from './dto/create-tag.dto';
 import { UpdateTagDto } from './dto/update-tag.dto';
 import { ListTagDto } from './dto/list-tag.dto';
-import { FetchTagDto } from './dto/fetch-tag.dto';
 import { Response } from 'express';
 import { JwtAuthGuard } from 'src/common/guards/keycloak.guard';
-import { UseGuards } from '@nestjs/common';
 import { API_RESPONSES } from '@utils/response.messages';
 import { isUUID } from 'class-validator';
 
@@ -286,18 +285,6 @@ export class TagsController {
     type: String,
     format: 'uuid',
   })
-  @ApiBody({
-    type: FetchTagDto,
-    required: false,
-    examples: {
-      fetch: {
-        summary: 'Fetch tag by ID',
-        value: {
-          id: 'a1b2c3d4-e111-2222-3333-444455556666',
-        },
-      },
-    },
-  })
   @ApiResponse({
     status: 200,
     description: 'Tag retrieved successfully',
@@ -306,18 +293,15 @@ export class TagsController {
   @ApiUnauthorizedResponse({ description: 'Unauthorized' })
   @ApiNotFoundResponse({ description: 'Tag not found' })
   @ApiInternalServerErrorResponse({ description: 'Internal Server Error' })
-  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   async fetch(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() fetchTagDto: FetchTagDto,
     @Headers('tenantid') tenantId: string,
     @Res() response: Response
   ): Promise<Response> {
     if (!tenantId || !isUUID(tenantId)) {
       throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
     }
-    // Use ID from path parameter if body is not provided
-    const tagId = fetchTagDto?.id || id;
-    return this.tagsService.fetch({ id: tagId }, response);
+    // RESTful approach: Use only path parameter
+    return this.tagsService.fetch({ id }, response);
   }
 }

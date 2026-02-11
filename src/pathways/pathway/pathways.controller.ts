@@ -12,6 +12,8 @@ import {
   Res,
   HttpCode,
   HttpStatus,
+  UseGuards,
+  BadRequestException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -32,7 +34,6 @@ import { UpdatePathwayDto } from './dto/update-pathway.dto';
 import { ListPathwayDto } from './dto/list-pathway.dto';
 import { Response } from 'express';
 import { JwtAuthGuard } from 'src/common/guards/keycloak.guard';
-import { UseGuards, BadRequestException } from '@nestjs/common';
 import { API_RESPONSES } from '@utils/response.messages';
 import { isUUID } from 'class-validator';
 
@@ -268,4 +269,3 @@ export class PathwaysController {
     return this.pathwaysService.update(id, updatePathwayDto, response);
   }
 }
-
