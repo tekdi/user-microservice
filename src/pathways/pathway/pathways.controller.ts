@@ -28,6 +28,7 @@ import {
   ApiInternalServerErrorResponse,
   ApiNotFoundResponse,
 } from '@nestjs/swagger';
+import { ApiGetByIdCommon } from '../common/decorators/api-common.decorator';
 import { PathwaysService } from './pathways.service';
 import { CreatePathwayDto } from './dto/create-pathway.dto';
 import { UpdatePathwayDto } from './dto/update-pathway.dto';
@@ -180,16 +181,7 @@ export class PathwaysController {
     summary: 'Get pathway by ID',
     description: 'Retrieves a specific pathway by its UUID.',
   })
-  @ApiHeader({
-    name: 'Authorization',
-    description: 'Bearer token for authentication',
-    required: true,
-  })
-  @ApiHeader({
-    name: 'tenantid',
-    description: 'Tenant UUID',
-    required: true,
-  })
+  @ApiGetByIdCommon()
   @ApiParam({
     name: 'id',
     description: 'Pathway UUID',
@@ -200,10 +192,6 @@ export class PathwaysController {
     status: 200,
     description: 'Pathway retrieved successfully',
   })
-  @ApiBadRequestResponse({ description: 'Bad Request - Invalid UUID format' })
-  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
-  @ApiNotFoundResponse({ description: 'Pathway not found' })
-  @ApiInternalServerErrorResponse({ description: 'Internal Server Error' })
   async findOne(
     @Param('id', ParseUUIDPipe) id: string,
     @Headers('tenantid') tenantId: string,

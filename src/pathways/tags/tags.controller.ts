@@ -27,6 +27,7 @@ import {
   ApiInternalServerErrorResponse,
   ApiNotFoundResponse,
 } from '@nestjs/swagger';
+import { ApiGetByIdCommon } from '../common/decorators/api-common.decorator';
 import { TagsService } from './tags.service';
 import { CreateTagDto } from './dto/create-tag.dto';
 import { UpdateTagDto } from './dto/update-tag.dto';
@@ -269,16 +270,7 @@ export class TagsController {
     summary: 'Fetch tag by ID',
     description: 'Retrieves a specific tag by its UUID.',
   })
-  @ApiHeader({
-    name: 'Authorization',
-    description: 'Bearer token for authentication',
-    required: true,
-  })
-  @ApiHeader({
-    name: 'tenantid',
-    description: 'Tenant UUID',
-    required: true,
-  })
+  @ApiGetByIdCommon()
   @ApiParam({
     name: 'id',
     description: 'Tag UUID',
@@ -289,10 +281,6 @@ export class TagsController {
     status: 200,
     description: 'Tag retrieved successfully',
   })
-  @ApiBadRequestResponse({ description: 'Bad Request - Invalid UUID format' })
-  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
-  @ApiNotFoundResponse({ description: 'Tag not found' })
-  @ApiInternalServerErrorResponse({ description: 'Internal Server Error' })
   async fetch(
     @Param('id', ParseUUIDPipe) id: string,
     @Headers('tenantid') tenantId: string,
