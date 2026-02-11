@@ -1,14 +1,15 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
-import { IsOptional, IsString } from "class-validator";
+import { IsOptional, IsBoolean } from "class-validator";
 import { Expose } from "class-transformer";
+import { PaginationDto } from "../../common/dto/pagination.dto";
 
-export class ListInterestDto {
+export class ListInterestDto extends PaginationDto {
     @ApiPropertyOptional({
-        description: "Filter interests by active status (default: true)",
-        example: "true",
+        description: "Filter interests by active status",
+        example: true,
     })
     @Expose()
     @IsOptional()
-    @IsString()
-    isActive?: string;
+    @IsBoolean()
+    isActive?: boolean;
 }

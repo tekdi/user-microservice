@@ -257,4 +257,13 @@ export const API_RESPONSES = {
   TAG_NAME_EXISTS: 'Tag with this name already exists',
   TAG_LIST_SUCCESS: 'Tags retrieved successfully',
   TAG_GET_SUCCESS: 'Tag retrieved successfully',
+
+  // Interest Management Messages
+  INTEREST_CREATED_SUCCESSFULLY: 'Interest created successfully',
+  INTEREST_UPDATED_SUCCESSFULLY: 'Interest updated successfully',
+  INTEREST_DELETED_SUCCESSFULLY: 'Interest deleted successfully',
+  INTEREST_NOT_FOUND: 'Interest not found',
+  INTEREST_KEY_EXISTS: 'Interest with this key already exists for the pathway',
+  INTEREST_LIST_SUCCESS: 'Interests retrieved successfully',
+  USER_INTERESTS_SAVED_SUCCESSFULLY: 'User interests saved successfully',
 };
