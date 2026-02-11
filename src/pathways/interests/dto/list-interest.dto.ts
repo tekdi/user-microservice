@@ -9,7 +9,10 @@ export class ListInterestDto extends PaginationDto {
         example: true,
     })
     @Expose()
-    @Transform(({ value }) => value === "true" || value === true)
+    @Transform(({ value }) => {
+        if (value === undefined || value === null) return undefined;
+        return value === "true" || value === true;
+    })
     @IsOptional()
     @IsBoolean()
     isActive?: boolean;

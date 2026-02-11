@@ -292,7 +292,6 @@ export class InterestsService {
       }
 
       // Set pagination defaults with safeguard to prevent unbounded queries
-      const MAX_PAGINATION_LIMIT = 100;
       const limit = requestedLimit
         ? Math.min(requestedLimit, MAX_PAGINATION_LIMIT)
         : 10;
@@ -402,9 +401,9 @@ export class InterestsService {
         select: ['interest_id'],
       });
 
-      const existingInterestIds = existingMappings.map((m) => m.interest_id);
+      const existingInterestIds = new Set(existingMappings.map((m) => m.interest_id));
       const newInterestIds = uniqueInterestIds.filter(
-        (id) => !existingInterestIds.includes(id)
+        (id) => !existingInterestIds.has(id)
       );
 
       // 5. Batch insert new records
