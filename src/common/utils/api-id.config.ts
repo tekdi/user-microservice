@@ -130,4 +130,11 @@ export const APIID = {
   PATHWAY_LIST: 'api.pathway.list',
   PATHWAY_GET: 'api.pathway.get',
   PATHWAY_UPDATE: 'api.pathway.update',
+
+  // Tag Management APIs
+  TAG_CREATE: 'api.user.tag.create',
+  TAG_UPDATE: 'api.user.tag.update',
+  TAG_DELETE: 'api.user.tag.delete',
+  TAG_LIST: 'api.user.tag.list',
+  TAG_READ: 'api.user.tag.read',
 } as const;

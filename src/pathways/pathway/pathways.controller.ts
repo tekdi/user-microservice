@@ -67,7 +67,11 @@ export class PathwaysController {
         value: {
           key: 'career_dev',
           name: 'Career Development',
-          description: 'Build skills for corporate success',
+          description: 'Build skills for corporate success and job placements.',
+          tags: [
+            'a1b2c3d4-e111-2222-3333-444455556666',
+            'b2c3d4e5-f111-2222-3333-444455556777',
+          ],
           display_order: 1,
           is_active: true,
         },
@@ -79,10 +83,17 @@ export class PathwaysController {
     description: 'Pathway created successfully',
     schema: {
       example: {
-        id: 'uuid',
+        id: 'c3b6e50e-40ab-4148-8ca9-3b2296ca11e5',
         key: 'career_dev',
         name: 'Career Development',
+        description: 'Build skills for corporate success and job placements.',
+        tag_ids: [
+          'a1b2c3d4-e111-2222-3333-444455556666',
+          'b2c3d4e5-f111-2222-3333-444455556777',
+        ],
+        display_order: 1,
         is_active: true,
+        created_at: '2026-02-10T06:22:26.934Z',
       },
     },
   })
@@ -132,6 +143,14 @@ export class PathwaysController {
       all: {
         summary: 'List all pathways',
         value: {},
+      },
+      paginated: {
+        summary: 'List pathways with pagination',
+        value: {
+          isActive: true,
+          limit: 10,
+          offset: 0,
+        },
       },
     },
   })
@@ -249,3 +268,4 @@ export class PathwaysController {
     return this.pathwaysService.update(id, updatePathwayDto, response);
   }
 }
+
