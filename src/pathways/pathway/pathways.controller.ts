@@ -167,12 +167,15 @@ export class PathwaysController {
   async list(
     @Body() listPathwayDto: ListPathwayDto,
     @Headers('tenantid') tenantId: string,
+    @Headers('organisationid') organisationId: string,
     @Res() response: Response
   ): Promise<Response> {
     if (!tenantId || !isUUID(tenantId)) {
       throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
     }
-    return this.pathwaysService.list(listPathwayDto, response);
+    // organisationId is optional, use default if not provided
+    const orgId = organisationId || process.env.DEFAULT_ORGANISATION_ID || '';
+    return this.pathwaysService.list(listPathwayDto, tenantId, orgId, response);
   }
 
   @Get(':id')

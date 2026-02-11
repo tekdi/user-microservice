@@ -7,6 +7,7 @@ import { CreatePathwayDto } from './dto/create-pathway.dto';
 import { UpdatePathwayDto } from './dto/update-pathway.dto';
 import { ListPathwayDto } from './dto/list-pathway.dto';
 import { MAX_PAGINATION_LIMIT } from '../common/dto/pagination.dto';
+import { LmsClientService } from '../common/services/lms-client.service';
 import APIResponse from 'src/common/responses/response';
 import { API_RESPONSES } from '@utils/response.messages';
 import { APIID } from '@utils/api-id.config';
@@ -19,7 +20,8 @@ export class PathwaysService {
     @InjectRepository(Pathway)
     private readonly pathwayRepository: Repository<Pathway>,
     @InjectRepository(Tag)
-    private readonly tagRepository: Repository<Tag>
+    private readonly tagRepository: Repository<Tag>,
+    private readonly lmsClientService: LmsClientService
   ) {}
 
   /**
@@ -195,9 +197,12 @@ export class PathwaysService {
   /**
    * List pathways with optional filter and pagination
    * Optimized: Single query with findAndCount for efficient pagination
+   * Includes video and resource counts from LMS service
    */
   async list(
     listPathwayDto: ListPathwayDto,
+    tenantId: string,
+    organisationId: string,
     response: Response
   ): Promise<Response> {
     const apiId = APIID.PATHWAY_LIST;
@@ -246,12 +251,25 @@ export class PathwaysService {
         });
       }
 
-      // Transform items to include only tags with names (no tag_ids)
+      // OPTIMIZED: Batch fetch video and resource counts for all pathways in parallel
+      const pathwayIds = items.map((item: any) => item.id);
+      const countsMap = await this.lmsClientService.getBatchCounts(
+        pathwayIds,
+        tenantId,
+        organisationId
+      );
+
+      // Transform items to include only tags with names (no tag_ids) and counts
       const transformedItems = items.map((item: any) => {
         const tagIds = item.tags || [];
         const tags = tagIds
           .map((tagId: string) => tagDetailsMap.get(tagId))
           .filter((tag) => tag !== undefined); // Filter out any tags that weren't found
+
+        const counts = countsMap.get(item.id);
+        const videoCount = counts?.videoCount ?? 0;
+        const resourceCount = counts?.resourceCount ?? 0;
+        const totalItems = (counts as any)?.totalItems ?? 0;
 
         return {
           id: item.id,
@@ -262,6 +280,9 @@ export class PathwaysService {
           display_order: item.display_order,
           is_active: item.is_active,
           created_at: item.created_at,
+          video_count: videoCount,
+          resource_count: resourceCount,
+          total_items: totalItems,
         };
       });
 
@@ -426,9 +447,9 @@ export class PathwaysService {
               response,
               apiId,
               API_RESPONSES.BAD_REQUEST,
-              `${API_RESPONSES.INVALID_TAG_IDS}: ${validation.invalidTagIds.join(
-                ', '
-              )}`,
+              `${
+                API_RESPONSES.INVALID_TAG_IDS
+              }: ${validation.invalidTagIds.join(', ')}`,
               HttpStatus.BAD_REQUEST
             );
           }
