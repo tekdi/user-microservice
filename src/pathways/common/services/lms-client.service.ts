@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import axios, { AxiosError } from 'axios';
+import axios from 'axios';
 import { ConfigService } from '@nestjs/config';
 
 export interface VideoResourceCounts {
@@ -32,11 +32,11 @@ export class LmsClientService {
 
   /**
    * Get video and resource counts for a single pathway
-   * OPTIMIZED: 
+   * OPTIMIZED:
    * 1. First gets all courses for pathwayId using search API
    * 2. Then fetches hierarchy for each course in parallel to get modules and lessons
    * 3. Counts videos (format='video') and total lessons (as resources)
-   * 
+   *
    * @param pathwayId - Pathway ID to get counts for
    * @param tenantId - Tenant ID
    * @param organisationId - Organisation ID
@@ -45,11 +45,11 @@ export class LmsClientService {
   async getVideoAndResourceCounts(
     pathwayId: string,
     tenantId: string,
-    organisationId: string,
+    organisationId: string
   ): Promise<VideoResourceCounts> {
     if (!this.lmsServiceUrl) {
       this.logger.warn(
-        `LMS_SERVICE_URL not configured. Returning 0 counts for pathway ${pathwayId}`,
+        `LMS_SERVICE_URL not configured. Returning 0 counts for pathway ${pathwayId}`
       );
       return { videoCount: 0, resourceCount: 0, totalItems: 0 };
     }
@@ -71,7 +71,7 @@ export class LmsClientService {
       };
 
       this.logger.debug(
-        `Fetching courses for pathway ${pathwayId} from LMS service`,
+        `Fetching courses for pathway ${pathwayId} from LMS service`
       );
 
       const searchResponse = await axios.get(searchUrl, {
@@ -83,14 +83,16 @@ export class LmsClientService {
 
       if (searchResponse.status !== 200) {
         this.logger.warn(
-          `LMS service returned status ${searchResponse.status} for pathway ${pathwayId}. Returning 0 counts.`,
+          `LMS service returned status ${searchResponse.status} for pathway ${pathwayId}. Returning 0 counts.`
         );
         return { videoCount: 0, resourceCount: 0, totalItems: 0 };
       }
 
       // Extract courses from response
       const courses =
-        searchResponse.data?.result?.courses || searchResponse.data?.courses || [];
+        searchResponse.data?.result?.courses ||
+        searchResponse.data?.courses ||
+        [];
 
       if (courses.length === 0) {
         this.logger.debug(`No courses found for pathway ${pathwayId}`);
@@ -100,7 +102,12 @@ export class LmsClientService {
       // Step 2: Fetch hierarchy for each course in parallel to get modules and lessons
       // OPTIMIZED: Fetch all hierarchies in parallel
       const hierarchyPromises = courses.map((course: any) =>
-        this.getCourseHierarchy(course.courseId || course.id, tenantId, organisationId, headers),
+        this.getCourseHierarchy(
+          course.courseId || course.id,
+          tenantId,
+          organisationId,
+          headers
+        )
       );
 
       const hierarchies = await Promise.allSettled(hierarchyPromises);
@@ -113,7 +120,7 @@ export class LmsClientService {
       for (const result of hierarchies) {
         if (result.status === 'fulfilled' && result.value) {
           const hierarchy = result.value;
-          
+
           // Process modules and lessons
           if (hierarchy.modules && Array.isArray(hierarchy.modules)) {
             for (const module of hierarchy.modules) {
@@ -123,12 +130,12 @@ export class LmsClientService {
                   if (lesson.status === 'published') {
                     // Count total items: all published lessons
                     totalItems++;
-                    
+
                     // Count videos: lessons with format = 'video'
                     if (lesson.format === 'video') {
                       videoCount++;
                     }
-                    
+
                     // Count resources: lessons with format = 'document'
                     if (lesson.format === 'document') {
                       resourceCount++;
@@ -140,26 +147,28 @@ export class LmsClientService {
           }
         } else if (result.status === 'rejected') {
           this.logger.warn(
-            `Failed to fetch hierarchy for a course: ${result.reason?.message || 'Unknown error'}`,
+            `Failed to fetch hierarchy for a course: ${
+              result.reason?.message || 'Unknown error'
+            }`
           );
         }
       }
 
       this.logger.debug(
-        `Pathway ${pathwayId}: ${videoCount} videos, ${resourceCount} resources (documents), ${totalItems} total items`,
+        `Pathway ${pathwayId}: ${videoCount} videos, ${resourceCount} resources (documents), ${totalItems} total items`
       );
 
       return { videoCount, resourceCount, totalItems };
     } catch (error) {
-      const errorMessage =
-        axios.isAxiosError(error)
-          ? error.message
-          : error instanceof Error
-            ? error.message
-            : 'Unknown error';
+      let errorMessage = 'Unknown error';
+      if (axios.isAxiosError(error)) {
+        errorMessage = error.message;
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+      }
 
       this.logger.error(
-        `Failed to fetch counts for pathway ${pathwayId} from LMS service: ${errorMessage}`,
+        `Failed to fetch counts for pathway ${pathwayId} from LMS service: ${errorMessage}`
       );
 
       // Return 0 counts on error to not break pathways list API
@@ -170,7 +179,7 @@ export class LmsClientService {
   /**
    * Get course hierarchy with modules and lessons
    * Calls: GET /courses/{courseId}/hierarchy?includeModules=true&includeLessons=true
-   * 
+   *
    * @param courseId - Course ID
    * @param tenantId - Tenant ID
    * @param organisationId - Organisation ID
@@ -181,8 +190,8 @@ export class LmsClientService {
     courseId: string,
     tenantId: string,
     organisationId: string,
-    headers: Record<string, string>,
-  ): Promise<any | null> {
+    headers: Record<string, string>
+  ): Promise<Record<string, unknown> | null> {
     try {
       const hierarchyUrl = `${this.lmsServiceUrl}/lms-service/v1/courses/${courseId}/hierarchy`;
       const hierarchyParams = {
@@ -199,18 +208,18 @@ export class LmsClientService {
 
       if (hierarchyResponse.status !== 200) {
         this.logger.warn(
-          `Failed to fetch hierarchy for course ${courseId}: status ${hierarchyResponse.status}`,
+          `Failed to fetch hierarchy for course ${courseId}: status ${hierarchyResponse.status}`
         );
         return null;
       }
 
       // Extract hierarchy from response
-      return (
-        hierarchyResponse.data?.result || hierarchyResponse.data || null
-      );
+      return hierarchyResponse.data?.result || hierarchyResponse.data || null;
     } catch (error) {
       this.logger.warn(
-        `Error fetching hierarchy for course ${courseId}: ${axios.isAxiosError(error) ? error.message : 'Unknown error'}`,
+        `Error fetching hierarchy for course ${courseId}: ${
+          axios.isAxiosError(error) ? error.message : 'Unknown error'
+        }`
       );
       return null;
     }
@@ -219,7 +228,7 @@ export class LmsClientService {
   /**
    * Batch fetch video and resource counts for multiple pathways
    * OPTIMIZED: Fetches all counts in parallel using Promise.all
-   * 
+   *
    * @param pathwayIds - Array of pathway IDs to get counts for
    * @param tenantId - Tenant ID
    * @param organisationId - Organisation ID
@@ -228,7 +237,7 @@ export class LmsClientService {
   async getBatchCounts(
     pathwayIds: string[],
     tenantId: string,
-    organisationId: string,
+    organisationId: string
   ): Promise<Map<string, VideoResourceCounts>> {
     if (pathwayIds.length === 0) {
       return new Map();
@@ -237,8 +246,8 @@ export class LmsClientService {
     // OPTIMIZED: Fetch all counts in parallel (no sequential calls)
     const countPromises = pathwayIds.map((pathwayId) =>
       this.getVideoAndResourceCounts(pathwayId, tenantId, organisationId).then(
-        (counts) => ({ pathwayId, counts }),
-      ),
+        (counts) => ({ pathwayId, counts })
+      )
     );
 
     try {
@@ -252,15 +261,20 @@ export class LmsClientService {
       return countsMap;
     } catch (error) {
       this.logger.error(
-        `Error in batch fetch counts: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        `Error in batch fetch counts: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`
       );
       // Return map with 0 counts for all pathways
       const countsMap = new Map<string, VideoResourceCounts>();
       pathwayIds.forEach((pathwayId) => {
-        countsMap.set(pathwayId, { videoCount: 0, resourceCount: 0, totalItems: 0 });
+        countsMap.set(pathwayId, {
+          videoCount: 0,
+          resourceCount: 0,
+          totalItems: 0,
+        });
       });
       return countsMap;
     }
   }
 }
-
