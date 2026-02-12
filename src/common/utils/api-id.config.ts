@@ -147,4 +147,5 @@ export const APIID = {
   INTEREST_DELETE: "api.interest.delete",
   INTEREST_LIST_BY_PATHWAY: "api.pathway.interests.list",
   USER_INTERESTS_SAVE: "api.user.pathway.interests.save",
+  USER_INTERESTS_LIST: "api.user.pathway.interests.list",
 } as const;

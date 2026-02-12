@@ -37,6 +37,7 @@ import { AssignPathwayDto } from './dto/assign-pathway.dto';
 import { SwitchPathwayDto } from './dto/switch-pathway.dto';
 import { Response } from 'express';
 import { JwtAuthGuard } from 'src/common/guards/keycloak.guard';
+import { InterestsService } from '../interests/interests.service';
 import { API_RESPONSES } from '@utils/response.messages';
 import { isUUID } from 'class-validator';
 
@@ -44,7 +45,36 @@ import { isUUID } from 'class-validator';
 @Controller("pathway")
 @UseGuards(JwtAuthGuard)
 export class PathwaysController {
-  constructor(private readonly pathwaysService: PathwaysService) { }
+  constructor(
+    private readonly pathwaysService: PathwaysService,
+    private readonly interestsService: InterestsService
+  ) { }
+
+  /**
+   * List saved interests for a specific user pathway history record
+   */
+  @Get("interests/:userPathwayHistoryId")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: "List Saved Interests for User Pathway History",
+    description: "Retrieves the list of interests previously saved for a specific pathway history record.",
+  })
+  @ApiHeader({ name: "Authorization", required: true })
+  @ApiHeader({ name: "tenantid", required: true })
+  @ApiParam({ name: "userPathwayHistoryId", description: "User Pathway History UUID", format: "uuid" })
+  @ApiResponse({ status: 200, description: "Interests retrieved successfully" })
+  @ApiNotFoundResponse({ description: "History record not found" })
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  async listUserInterests(
+    @Param("userPathwayHistoryId", ParseUUIDPipe) userPathwayHistoryId: string,
+    @Headers("tenantid") tenantId: string,
+    @Res() response: Response
+  ): Promise<Response> {
+    if (!tenantId || !isUUID(tenantId)) {
+      throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
+    }
+    return this.interestsService.listUserInterests(userPathwayHistoryId, response);
+  }
 
   @Post("create")
   @HttpCode(HttpStatus.CREATED)

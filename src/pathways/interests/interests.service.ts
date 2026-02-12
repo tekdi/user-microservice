@@ -455,4 +455,86 @@ export class InterestsService {
       );
     }
   }
+
+  /**
+   * List saved interests for a specific user pathway history record
+   * Returns a simplified list of interests (ID, key, label)
+   */
+  async listUserInterests(
+    userPathwayHistoryId: string,
+    response: Response
+  ): Promise<Response> {
+    const apiId = APIID.USER_INTERESTS_LIST;
+    try {
+      // 1. Verify history record exists
+      const historyExists = await this.userPathwayHistoryRepository.findOne({
+        where: { id: userPathwayHistoryId },
+        select: ['id'],
+      });
+
+      if (!historyExists) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.NOT_FOUND,
+          "User pathway history record not found",
+          HttpStatus.NOT_FOUND
+        );
+      }
+
+      // 2. Fetch linked interest IDs
+      const mapping = await this.userPathwayInterestsRepository.find({
+        where: { user_pathway_history_id: userPathwayHistoryId },
+        select: ['interest_id'],
+      });
+
+      if (mapping.length === 0) {
+        return APIResponse.success(
+          response,
+          apiId,
+          [],
+          HttpStatus.OK,
+          API_RESPONSES.INTEREST_LIST_SUCCESS
+        );
+      }
+
+      const interestIds = mapping.map((m) => m.interest_id);
+
+      // 3. Fetch full interest details (reusing interestRepository "internal" logic)
+      // This avoids N+1 and maintains high performance
+      const interests = await this.interestRepository.find({
+        where: { id: In(interestIds) },
+        select: ['id', 'key', 'label'],
+      });
+
+      // 4. Map to requested format
+      const result = interests.map((interest) => ({
+        interestId: interest.id,
+        key: interest.key,
+        label: interest.label,
+      }));
+
+      return APIResponse.success(
+        response,
+        apiId,
+        result,
+        HttpStatus.OK,
+        API_RESPONSES.INTEREST_LIST_SUCCESS
+      );
+    } catch (error) {
+      const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error listing user interests: ${errorMessage}`,
+        apiId
+      );
+      return APIResponse.error(
+        response,
+        apiId,
+        API_RESPONSES.INTERNAL_SERVER_ERROR,
+        errorMessage,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
 }
