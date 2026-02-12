@@ -631,7 +631,7 @@ export class PathwaysService {
       });
 
       // If already active, no switch needed
-      if (currentActive && currentActive.pathway_id === pathwayId) {
+      if (currentActive?.pathway_id === pathwayId) {
         const result = {
           userId,
           previousPathwayId: pathwayId,
