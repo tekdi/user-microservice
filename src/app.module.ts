@@ -32,6 +32,7 @@ import { HealthController } from './health/health.controller';
 import { HealthService } from './health/health.service';
 import { CacheModule } from './cache/cache.module';
 import { PaymentsModule } from './payments/payments.module';
+import { PathwaysModule } from './pathways/pathways.module';
 
 /**
  * Main Application Module
@@ -53,7 +54,7 @@ import { PaymentsModule } from './payments/payments.module';
  *
  * Module Structure:
  * - Core modules: User, Auth, RBAC, Database
- * - Feature modules: Cohort, CohortMembers, Fields, Forms, Payments
+ * - Feature modules: Cohort, CohortMembers, Fields, Forms, Pathways
  * - Support modules: Tenant, AcademicYears, Storage
  */
 @Module({
@@ -87,6 +88,7 @@ import { PaymentsModule } from './payments/payments.module';
     TerminusModule,
     CacheModule,
     PaymentsModule,
+    PathwaysModule,
   ],
   controllers: [AppController, HealthController],
   providers: [
