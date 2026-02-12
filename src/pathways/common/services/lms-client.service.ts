@@ -177,61 +177,43 @@ export class LmsClientService {
       );
 
       const courses = allCourses;
+      // Extract course IDs - check both courseId and id fields
+      // Validate UUID format to ensure we're sending valid IDs
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      const courseIds = courses
+        .map((course: any) => {
+          const id = course.courseId || course.id || course.course_id;
+          return id;
+        })
+        .filter(Boolean)
+        .filter((id) => typeof id === 'string' && id.length > 0)
+        .filter((id) => uuidRegex.test(id)); // Only include valid UUIDs
 
-      // Step 2: Fetch hierarchy for each course in parallel to get modules and lessons
-      // OPTIMIZED: Fetch all hierarchies in parallel
-      const hierarchyPromises = courses.map((course: any) =>
-        this.getCourseHierarchy(
-          course.courseId || course.id,
-          tenantId,
-          organisationId,
-          headers
-        )
+      if (courseIds.length === 0) {
+        this.logger.warn(
+          `No valid course IDs found for pathway ${pathwayId}. Course structure sample: ${JSON.stringify(courses[0] || {})}`
+        );
+        return { videoCount: 0, resourceCount: 0, totalItems: 0 };
+      }
+
+      this.logger.debug(
+        `Extracted ${courseIds.length} valid course IDs for pathway ${pathwayId}: ${courseIds.slice(0, 3).join(', ')}${courseIds.length > 3 ? '...' : ''}`
       );
 
-      const hierarchies = await Promise.allSettled(hierarchyPromises);
+      // Step 2: OPTIMIZED - Use direct lesson count API instead of fetching hierarchy
+      // This is much faster as it queries the database directly
+      const countsMap = await this.getLessonCountsByCourseIds(courseIds, tenantId, organisationId, headers);
 
-      // Step 3: Count videos, resources (documents), and total items from all course hierarchies
+      // Step 3: Aggregate counts across all courses
       let videoCount = 0;
-      let resourceCount = 0; // Count of lessons with format = 'document'
-      let totalItems = 0; // Total count of all lessons
+      let resourceCount = 0;
+      let totalItems = 0;
 
-      for (const result of hierarchies) {
-        if (result.status === 'fulfilled' && result.value) {
-          const hierarchy = result.value;
-
-          // Process modules and lessons
-          if (hierarchy.modules && Array.isArray(hierarchy.modules)) {
-            for (const module of hierarchy.modules) {
-              if (module.lessons && Array.isArray(module.lessons)) {
-                for (const lesson of module.lessons) {
-                  // Only count published lessons
-                  if (lesson.status === 'published') {
-                    // Count total items: all published lessons
-                    totalItems++;
-
-                    // Count videos: lessons with format = 'video'
-                    if (lesson.format === 'video') {
-                      videoCount++;
-                    }
-
-                    // Count resources: lessons with format = 'document'
-                    if (lesson.format === 'document') {
-                      resourceCount++;
-                    }
-                  }
-                }
-              }
-            }
-          }
-        } else if (result.status === 'rejected') {
-          this.logger.warn(
-            `Failed to fetch hierarchy for a course: ${
-              result.reason?.message || 'Unknown error'
-            }`
-          );
-        }
-      }
+      countsMap.forEach((counts) => {
+        videoCount += counts.videoCount;
+        resourceCount += counts.resourceCount;
+        totalItems += counts.totalItems;
+      });
 
       this.logger.debug(
         `Pathway ${pathwayId}: ${videoCount} videos, ${resourceCount} resources (documents), ${totalItems} total items`
@@ -251,51 +233,90 @@ export class LmsClientService {
   }
 
   /**
-   * Get course hierarchy with modules and lessons
-   * Calls: GET /courses/{courseId}/hierarchy?includeModules=true&includeLessons=true
+   * Get lesson counts for multiple courses using optimized direct database query
+   * Calls: GET /courses/lesson-counts?courseIds=id1,id2,id3
+   * 
+   * OPTIMIZED: This is much faster than fetching hierarchy for each course
    *
-   * @param courseId - Course ID
+   * @param courseIds - Array of course IDs
    * @param tenantId - Tenant ID
    * @param organisationId - Organisation ID
    * @param headers - Request headers
-   * @returns Course hierarchy with modules and lessons, or null on error
+   * @returns Map of courseId to counts
    */
-  private async getCourseHierarchy(
-    courseId: string,
+  private async getLessonCountsByCourseIds(
+    courseIds: string[],
     tenantId: string,
     organisationId: string,
     headers: Record<string, string>
-  ): Promise<Record<string, unknown> | null> {
-    try {
-      const hierarchyUrl = `${this.lmsServiceUrl}/lms-service/v1/courses/${courseId}/hierarchy`;
-      const hierarchyParams = {
-        includeModules: 'true',
-        includeLessons: 'true',
-      };
+  ): Promise<Map<string, { videoCount: number; resourceCount: number; totalItems: number }>> {
+    if (courseIds.length === 0) {
+      return new Map();
+    }
 
-      const hierarchyResponse = await axios.get(hierarchyUrl, {
-        params: hierarchyParams,
+    try {
+      const countsUrl = `${this.lmsServiceUrl}/lms-service/v1/courses/lesson-counts`;
+      const courseIdsParam = courseIds.join(',');
+
+      this.logger.debug(
+        `Calling lesson-counts API with ${courseIds.length} course IDs: ${courseIdsParam.substring(0, 100)}${courseIdsParam.length > 100 ? '...' : ''}`
+      );
+
+      const countsResponse = await axios.get(countsUrl, {
+        params: { courseIds: courseIdsParam },
         headers,
         timeout: 10000,
         validateStatus: (status) => status < 500,
       });
 
-      if (hierarchyResponse.status !== 200) {
+      if (countsResponse.status !== 200) {
+        // Extract error message from different possible response structures
+        const errorData = countsResponse.data;
+        const errorMessage = 
+          errorData?.message || 
+          errorData?.errmsg || 
+          errorData?.params?.errmsg ||
+          errorData?.error ||
+          JSON.stringify(errorData) ||
+          'Unknown error';
+        
         this.logger.warn(
-          `Failed to fetch hierarchy for course ${courseId}: status ${hierarchyResponse.status}`
+          `Failed to fetch lesson counts: status ${countsResponse.status}, error: ${errorMessage}. Request: courseIds=${courseIdsParam.substring(0, 200)}${courseIdsParam.length > 200 ? '...' : ''}`
         );
-        return null;
+        
+        // Return map with zero counts for all courses
+        const zeroCountsMap = new Map<string, { videoCount: number; resourceCount: number; totalItems: number }>();
+        courseIds.forEach((courseId) => {
+          zeroCountsMap.set(courseId, { videoCount: 0, resourceCount: 0, totalItems: 0 });
+        });
+        return zeroCountsMap;
       }
 
-      // Extract hierarchy from response
-      return hierarchyResponse.data?.result || hierarchyResponse.data || null;
+      // Convert response object to Map
+      // Handle both direct response and wrapped in 'result' object
+      const responseData = countsResponse.data?.result || countsResponse.data || {};
+      const countsMap = new Map<string, { videoCount: number; resourceCount: number; totalItems: number }>();
+
+      courseIds.forEach((courseId) => {
+        const counts = responseData[courseId] || { videoCount: 0, resourceCount: 0, totalItems: 0 };
+        countsMap.set(courseId, counts);
+      });
+
+      this.logger.debug(
+        `Successfully fetched lesson counts for ${countsMap.size} courses`
+      );
+
+      return countsMap;
     } catch (error) {
       this.logger.warn(
-        `Error fetching hierarchy for course ${courseId}: ${
-          axios.isAxiosError(error) ? error.message : 'Unknown error'
-        }`
+        `Error fetching lesson counts: ${error instanceof Error ? error.message : 'Unknown error'}. Returning zero counts.`
       );
-      return null;
+      // Return map with zero counts for all courses on error
+      const zeroCountsMap = new Map<string, { videoCount: number; resourceCount: number; totalItems: number }>();
+      courseIds.forEach((courseId) => {
+        zeroCountsMap.set(courseId, { videoCount: 0, resourceCount: 0, totalItems: 0 });
+      });
+      return zeroCountsMap;
     }
   }
 
