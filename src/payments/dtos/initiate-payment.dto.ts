@@ -100,5 +100,21 @@ export class InitiatePaymentDto {
   })
   @IsOptional()
   allowPromotionCodes?: boolean;
+
+  @ApiProperty({ 
+    description: 'Base URL to redirect after successful payment (e.g., https://learner-qa.aspireleaders.org/profile). The session_id parameter will be automatically appended. Stripe will replace {CHECKOUT_SESSION_ID} with the actual session ID when redirecting. The sessionId is also returned in the API response.', 
+    required: false 
+  })
+  @IsOptional()
+  @IsString()
+  successUrl?: string;
+
+  @ApiProperty({ 
+    description: 'URL to redirect if payment is cancelled', 
+    required: false 
+  })
+  @IsOptional()
+  @IsString()
+  cancelUrl?: string;
 }
 

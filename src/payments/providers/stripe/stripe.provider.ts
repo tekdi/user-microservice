@@ -86,9 +86,26 @@ export class StripeProvider implements PaymentProvider {
 
   async initiatePayment(paymentData: InitiatePaymentDto): Promise<PaymentInitiationResult> {
     try {
-      const baseUrl = this.configService.get<string>('APP_BASE_URL', 'http://localhost:3000');
-      const successUrl = `https://learner-qa.aspireleaders.org/profile?session_id={CHECKOUT_SESSION_ID}`;
-      const cancelUrl = `https://learner-qa.aspireleaders.org/profile`;
+      // Use URLs from request body, fallback to environment variables or defaults
+      const defaultSuccessUrl = this.configService.get<string>(
+        'STRIPE_SUCCESS_URL',
+        'https://learner-qa.aspireleaders.org/profile?session_id={CHECKOUT_SESSION_ID}',
+      );
+      const defaultCancelUrl = this.configService.get<string>(
+        'STRIPE_CANCEL_URL',
+        'https://learner-qa.aspireleaders.org/profile',
+      );
+
+      // If successUrl is provided without the placeholder, append it
+      // Stripe will replace {CHECKOUT_SESSION_ID} with the actual session ID when redirecting
+      let successUrl = paymentData.successUrl || defaultSuccessUrl;
+      if (paymentData.successUrl && !paymentData.successUrl.includes('{CHECKOUT_SESSION_ID}')) {
+        // Append session_id parameter if not already present
+        const separator = paymentData.successUrl.includes('?') ? '&' : '?';
+        successUrl = `${paymentData.successUrl}${separator}session_id={CHECKOUT_SESSION_ID}`;
+      }
+
+      const cancelUrl = paymentData.cancelUrl || defaultCancelUrl;
 
       // Prepare checkout session configuration
       const currency = (paymentData.currency?.toLowerCase() || 'inr');
