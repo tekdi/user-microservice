@@ -68,15 +68,35 @@ export class LmsClientService {
         `Fetching courses for pathway ${pathwayId} from LMS service`
       );
 
-      // Pagination parameters
+      // Pagination parameters with safety guards
       const limit = 1000; // Maximum per request
+      const MAX_PAGES = 100; // Safety guard: Maximum 100 pages (100,000 courses)
+      const MAX_COURSES = 100000; // Absolute maximum courses to fetch
       let offset = 0;
       let allCourses: any[] = [];
       let totalElements = 0;
       let hasMore = true;
+      let pageCount = 0;
+      let previousCourseCount = 0;
 
-      // Fetch all courses in paginated loop
+      // Fetch all courses in paginated loop with safety guards
       while (hasMore) {
+        // SAFETY GUARD 1: Maximum page limit to prevent infinite loops
+        if (pageCount >= MAX_PAGES) {
+          this.logger.warn(
+            `Pagination safety guard triggered: Reached maximum page limit (${MAX_PAGES}) for pathway ${pathwayId}. Fetched ${allCourses.length} courses.`
+          );
+          break;
+        }
+
+        // SAFETY GUARD 2: Maximum total courses limit
+        if (allCourses.length >= MAX_COURSES) {
+          this.logger.warn(
+            `Pagination safety guard triggered: Reached maximum course limit (${MAX_COURSES}) for pathway ${pathwayId}.`
+          );
+          break;
+        }
+
         const searchParams = {
           pathwayId: pathwayId,
           status: 'published',
@@ -107,8 +127,31 @@ export class LmsClientService {
         const courses = responseData?.courses || [];
         totalElements = responseData?.totalElements || 0;
 
+        // SAFETY GUARD 3: No progress detection - if we get 0 courses, break to prevent infinite loop
+        if (courses.length === 0) {
+          this.logger.debug(
+            `No courses returned at offset ${offset} for pathway ${pathwayId}. Ending pagination.`
+          );
+          break;
+        }
+
+        // SAFETY GUARD 4: Detect if we're getting duplicate/unchanged results
+        // (indicates API might be ignoring offset parameter)
+        if (courses.length > 0 && allCourses.length > 0) {
+          const firstCourseId = courses[0]?.courseId || courses[0]?.id;
+          const lastFetchedCourseId = allCourses[allCourses.length - 1]?.courseId || allCourses[allCourses.length - 1]?.id;
+          if (firstCourseId === lastFetchedCourseId) {
+            this.logger.warn(
+              `Pagination safety guard triggered: Detected duplicate results at offset ${offset} for pathway ${pathwayId}. API may be ignoring offset parameter. Breaking pagination.`
+            );
+            break;
+          }
+        }
+
         // Add courses to collection
         allCourses = allCourses.concat(courses);
+        pageCount++;
+        previousCourseCount = allCourses.length;
 
         // Check if there are more courses to fetch
         // Continue if: we got a full page AND (totalElements is unknown OR offset + limit < totalElements)
@@ -119,7 +162,7 @@ export class LmsClientService {
         if (hasMore) {
           offset += limit;
           this.logger.debug(
-            `Fetched ${allCourses.length} courses so far for pathway ${pathwayId}, continuing...`
+            `Fetched ${allCourses.length} courses (page ${pageCount}) for pathway ${pathwayId}, continuing...`
           );
         }
       }
