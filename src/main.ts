@@ -45,10 +45,6 @@ async function bootstrap() {
     '/user/v1/payments/webhook/stripe',
     express.raw({ type: 'application/json' }),
   );
-  app.use(
-    '/payments/webhook/stripe',
-    express.raw({ type: 'application/json' }),
-  );
 
   app.use(
     process.env.IMAGEPATH,

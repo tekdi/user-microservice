@@ -1,4 +1,6 @@
 import { Injectable, Logger, BadRequestException, Inject } from '@nestjs/common';
+import { InjectDataSource } from '@nestjs/typeorm';
+import { DataSource, EntityManager } from 'typeorm';
 import { PaymentProvider } from '../interfaces/payment-provider.interface';
 import { PaymentIntentService } from './payment-intent.service';
 import { PaymentTransactionService } from './payment-transaction.service';
@@ -7,8 +9,12 @@ import { InitiatePaymentDto } from '../dtos/initiate-payment.dto';
 import {
   PaymentIntentStatus,
   PaymentTransactionStatus,
+  PaymentTargetUnlockStatus,
+  PaymentProvider as PaymentProviderEnum,
 } from '../enums/payment.enums';
-import { PaymentProvider as PaymentProviderEnum } from '../enums/payment.enums';
+import { PaymentTransaction } from '../entities/payment-transaction.entity';
+import { PaymentIntent } from '../entities/payment-intent.entity';
+import { PaymentTarget } from '../entities/payment-target.entity';
 
 @Injectable()
 export class PaymentService {
@@ -19,6 +25,7 @@ export class PaymentService {
     private paymentTransactionService: PaymentTransactionService,
     private paymentTargetService: PaymentTargetService,
     @Inject('PaymentProvider') private paymentProvider: PaymentProvider,
+    @InjectDataSource() private dataSource: DataSource,
   ) {}
 
   /**
@@ -94,11 +101,11 @@ export class PaymentService {
     );
 
     if (existingTransaction) {
-      // Check if this is a duplicate event
-      if (existingTransaction.status === PaymentTransactionStatus.SUCCESS && 
-          webhookEvent.status === 'success') {
+      // Check if this is a duplicate event - compare mapped statuses
+      const incomingStatus = this.mapWebhookStatusToTransactionStatus(webhookEvent.status);
+      if (existingTransaction.status === incomingStatus) {
         this.logger.warn(
-          `Duplicate webhook event for payment ${webhookEvent.paymentId}, ignoring`,
+          `Duplicate webhook event for payment ${webhookEvent.paymentId} with status ${webhookEvent.status}, ignoring`,
         );
         return { processed: false, reason: 'duplicate' };
       }
@@ -124,48 +131,97 @@ export class PaymentService {
       throw new BadRequestException('Payment intent not found');
     }
 
-    // Update or create transaction
-    let transaction = existingTransaction;
-    
-    if (!transaction) {
-      // Create new transaction
-      transaction = await this.paymentTransactionService.create({
-        paymentIntentId: intent.id,
-        provider: provider as any,
-        providerPaymentId: webhookEvent.paymentId,
-        providerSessionId: webhookEvent.sessionId,
-        status: this.mapWebhookStatusToTransactionStatus(webhookEvent.status),
-        failureReason:
-          webhookEvent.status === 'failed'
-            ? 'Payment failed via webhook'
-            : undefined,
-        rawResponse: webhookEvent.rawEvent,
-      });
-    } else {
-      // Update existing transaction
-      transaction = await this.paymentTransactionService.updateStatus(
-        transaction.id,
-        this.mapWebhookStatusToTransactionStatus(webhookEvent.status),
-        webhookEvent.status === 'failed' ? 'Payment failed via webhook' : undefined,
-      );
-    }
+    // Wrap all database operations in a transaction to ensure atomicity
+    const result = await this.dataSource.transaction(
+      async (manager: EntityManager) => {
+        const transactionStatus = this.mapWebhookStatusToTransactionStatus(
+          webhookEvent.status,
+        );
+        const intentStatus = this.mapWebhookStatusToIntentStatus(
+          webhookEvent.status,
+        );
 
-    // Update payment intent status
-    const intentStatus = this.mapWebhookStatusToIntentStatus(webhookEvent.status);
-    await this.paymentIntentService.updateStatus(intent.id, intentStatus);
+        // Reload entities within transaction context to ensure we have the latest state
+        const intentInTransaction = await manager.findOne(PaymentIntent, {
+          where: { id: intent.id },
+        });
 
-    // Unlock targets only on success
-    if (webhookEvent.status === 'success') {
-      await this.paymentTargetService.unlockAll(intent.id);
-      this.logger.log(`Unlocked targets for payment intent ${intent.id}`);
-    }
+        if (!intentInTransaction) {
+          throw new BadRequestException(
+            `Payment intent ${intent.id} not found in transaction`,
+          );
+        }
 
-    return {
-      processed: true,
-      paymentIntentId: intent.id,
-      transactionId: transaction.id,
-      status: webhookEvent.status,
-    };
+        // Reload existing transaction within transaction context if it exists
+        let transactionToUpdate: PaymentTransaction | null = null;
+        if (existingTransaction) {
+          transactionToUpdate = await manager.findOne(PaymentTransaction, {
+            where: { id: existingTransaction.id },
+          });
+        }
+
+        // Update or create transaction
+        let transaction: PaymentTransaction;
+
+        if (!transactionToUpdate) {
+          // Create new transaction
+          const transactionEntity = manager.create(PaymentTransaction, {
+            paymentIntentId: intentInTransaction.id,
+            provider: provider as any,
+            providerPaymentId: webhookEvent.paymentId,
+            providerSessionId: webhookEvent.sessionId,
+            status: transactionStatus,
+            failureReason:
+              webhookEvent.status === 'failed'
+                ? 'Payment failed via webhook'
+                : null,
+            rawResponse: webhookEvent.rawEvent,
+          });
+          transaction = await manager.save(PaymentTransaction, transactionEntity);
+        } else {
+          // Update existing transaction
+          transactionToUpdate.status = transactionStatus;
+          if (webhookEvent.status === 'failed') {
+            transactionToUpdate.failureReason = 'Payment failed via webhook';
+          }
+          transaction = await manager.save(
+            PaymentTransaction,
+            transactionToUpdate,
+          );
+        }
+
+        // Update payment intent status
+        intentInTransaction.status = intentStatus;
+        await manager.save(PaymentIntent, intentInTransaction);
+
+        // Unlock targets only on success
+        if (webhookEvent.status === 'success') {
+          await manager.update(
+            PaymentTarget,
+            {
+              paymentIntentId: intentInTransaction.id,
+              unlockStatus: PaymentTargetUnlockStatus.LOCKED,
+            },
+            {
+              unlockStatus: PaymentTargetUnlockStatus.UNLOCKED,
+              unlockedAt: new Date(),
+            },
+          );
+          this.logger.log(
+            `Unlocked targets for payment intent ${intentInTransaction.id}`,
+          );
+        }
+
+        return {
+          processed: true,
+          paymentIntentId: intentInTransaction.id,
+          transactionId: transaction.id,
+          status: webhookEvent.status,
+        };
+      },
+    );
+
+    return result;
   }
 
   /**

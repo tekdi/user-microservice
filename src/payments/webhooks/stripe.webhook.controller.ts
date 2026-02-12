@@ -68,11 +68,25 @@ export class StripeWebhookController {
         webhookSignature,
       );
 
-      return {
-        received: true,
-        processed: result.processed,
-        paymentIntentId: result.paymentIntentId,
-      };
+      if (result.processed && 'paymentIntentId' in result) {
+        return {
+          received: true,
+          processed: result.processed,
+          paymentIntentId: result.paymentIntentId,
+        };
+      } else if ('reason' in result) {
+        return {
+          received: true,
+          processed: result.processed,
+          reason: result.reason,
+        };
+      } else {
+        // Fallback (should not happen)
+        return {
+          received: true,
+          processed: result.processed,
+        };
+      }
     } catch (error) {
       this.logger.error(`Webhook processing failed: ${error.message}`, error.stack);
       throw error;

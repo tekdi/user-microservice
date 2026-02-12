@@ -14,6 +14,16 @@ export class StripeProvider implements PaymentProvider {
   private readonly logger = new Logger(StripeProvider.name);
   private stripe: Stripe;
 
+  // Zero-decimal currencies (no decimal places)
+  private readonly zeroDecimalCurrencies = new Set([
+    'bif', 'clp', 'djf', 'gnf', 'jpy', 'kmf', 'krw', 'mga', 'pyg', 'rwf', 'ugx', 'vnd', 'vuv', 'xaf', 'xof', 'xpf',
+  ]);
+
+  // Three-decimal currencies
+  private readonly threeDecimalCurrencies = new Set([
+    'bhd', 'jod', 'kwd', 'omr', 'tnd',
+  ]);
+
   constructor(private configService: ConfigService) {
     const stripeSecretKey = this.configService.get<string>('STRIPE_SECRET_KEY');
     
@@ -24,6 +34,50 @@ export class StripeProvider implements PaymentProvider {
     this.stripe = new Stripe(stripeSecretKey, {
       apiVersion: '2023-10-16',
     });
+  }
+
+  /**
+   * Get the currency exponent (multiplier) for Stripe unit_amount calculation
+   * @param currency - Currency code (case-insensitive)
+   * @returns The exponent: 0 for zero-decimal, 2 for two-decimal, 3 for three-decimal currencies
+   */
+  private getCurrencyExponent(currency: string): number {
+    const normalizedCurrency = currency.toLowerCase();
+    
+    if (this.zeroDecimalCurrencies.has(normalizedCurrency)) {
+      return 0;
+    }
+    
+    if (this.threeDecimalCurrencies.has(normalizedCurrency)) {
+      return 3;
+    }
+    
+    // Default to 2 decimal places for most currencies
+    return 2;
+  }
+
+  /**
+   * Convert amount to Stripe's unit_amount (smallest currency unit)
+   * @param amount - Amount in major currency units
+   * @param currency - Currency code
+   * @returns Amount in smallest currency unit
+   */
+  private convertToUnitAmount(amount: number, currency: string): number {
+    const exponent = this.getCurrencyExponent(currency);
+    const multiplier = Math.pow(10, exponent);
+    return Math.round(amount * multiplier);
+  }
+
+  /**
+   * Convert Stripe's unit_amount back to major currency units
+   * @param unitAmount - Amount in smallest currency unit
+   * @param currency - Currency code
+   * @returns Amount in major currency units
+   */
+  private convertFromUnitAmount(unitAmount: number, currency: string): number {
+    const exponent = this.getCurrencyExponent(currency);
+    const divisor = Math.pow(10, exponent);
+    return unitAmount / divisor;
   }
 
   getProviderName(): string {
@@ -37,17 +91,20 @@ export class StripeProvider implements PaymentProvider {
       const cancelUrl = `https://learner-qa.aspireleaders.org/profile`;
 
       // Prepare checkout session configuration
+      const currency = (paymentData.currency?.toLowerCase() || 'inr');
+      const unitAmount = this.convertToUnitAmount(paymentData.amount, currency);
+      
       const sessionConfig: Stripe.Checkout.SessionCreateParams = {
         payment_method_types: ['card'],
         line_items: [
           {
             price_data: {
-              currency: paymentData.currency?.toLowerCase() || 'inr',
+              currency,
               product_data: {
                 name: `Payment for ${paymentData.purpose}`,
                 description: `Payment intent: ${paymentData.purpose}`,
               },
-              unit_amount: Math.round(paymentData.amount * 100), // Convert to cents/paisa
+              unit_amount: unitAmount,
             },
             quantity: 1,
           },
@@ -163,8 +220,8 @@ export class StripeProvider implements PaymentProvider {
         sessionId = session.id;
         paymentId = session.payment_intent as string || '';
         status = session.payment_status === 'paid' ? 'success' : 'failed';
-        amount = (session.amount_total || 0) / 100; // Convert from cents
         currency = session.currency || 'inr';
+        amount = this.convertFromUnitAmount(session.amount_total || 0, currency);
         metadata = session.metadata || {};
         break;
 
@@ -172,8 +229,8 @@ export class StripeProvider implements PaymentProvider {
         const paymentIntent = event.data.object as Stripe.PaymentIntent;
         paymentId = paymentIntent.id;
         status = 'success';
-        amount = paymentIntent.amount / 100;
         currency = paymentIntent.currency;
+        amount = this.convertFromUnitAmount(paymentIntent.amount, currency);
         metadata = paymentIntent.metadata || {};
         break;
 
@@ -181,8 +238,8 @@ export class StripeProvider implements PaymentProvider {
         const failedPayment = event.data.object as Stripe.PaymentIntent;
         paymentId = failedPayment.id;
         status = 'failed';
-        amount = failedPayment.amount / 100;
         currency = failedPayment.currency;
+        amount = this.convertFromUnitAmount(failedPayment.amount, currency);
         metadata = failedPayment.metadata || {};
         break;
 
@@ -190,8 +247,8 @@ export class StripeProvider implements PaymentProvider {
         const refund = event.data.object as Stripe.Charge;
         paymentId = refund.payment_intent as string || '';
         status = 'refunded';
-        amount = (refund.amount_refunded || 0) / 100;
         currency = refund.currency;
+        amount = this.convertFromUnitAmount(refund.amount_refunded || 0, currency);
         metadata = refund.metadata || {};
         break;
 
