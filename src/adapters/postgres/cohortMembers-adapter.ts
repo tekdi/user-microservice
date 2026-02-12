@@ -392,9 +392,9 @@ export class PostgresCohortMembersService {
           return APIResponse.error(
             res,
             apiId,
-            API_RESPONSES.USER_NOTFOUND,
+            API_RESPONSES.USER_NOT_MEMBER_OF_COHORT,
             API_RESPONSES.NOT_FOUND,
-            HttpStatus.OK
+            HttpStatus.NOT_FOUND
           );
         }
         userYearExistInYear = getYearExitUser.map(
