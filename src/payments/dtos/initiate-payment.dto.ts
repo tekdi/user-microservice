@@ -12,6 +12,7 @@ import {
 import { Type } from 'class-transformer';
 import { PaymentPurpose, PaymentTargetType, PaymentContextType } from '../enums/payment.enums';
 
+// Update the metadata class as per the use case
 export class PaymentMetadataDto {
   @ApiProperty({ description: 'Cohort ID', required: false })
   @IsOptional()

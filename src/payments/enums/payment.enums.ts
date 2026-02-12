@@ -7,7 +7,6 @@ export enum PaymentIntentStatus {
   PAID = 'PAID',
   FAILED = 'FAILED',
   REFUNDED = 'REFUNDED',
-  FREE_UNLOCK = 'FREE_UNLOCK',
 }
 
 /**
@@ -53,6 +52,7 @@ export enum PaymentTargetType {
  */
 export enum PaymentContextType {
   COHORT = 'COHORT',
+  COURSE = 'COURSE',
 }
 
 /**

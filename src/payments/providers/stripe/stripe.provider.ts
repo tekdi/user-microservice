@@ -87,13 +87,19 @@ export class StripeProvider implements PaymentProvider {
   async initiatePayment(paymentData: InitiatePaymentDto): Promise<PaymentInitiationResult> {
     try {
       // Use URLs from request body, fallback to environment variables or defaults
+      const frontendUrl = this.configService.get<string>(
+        'FRONTEND_URL'
+      );
+      // Ensure FRONTEND_URL ends with a slash
+      const baseUrl = frontendUrl.endsWith('/') ? frontendUrl : `${frontendUrl}/`;
+      
       const defaultSuccessUrl = this.configService.get<string>(
         'STRIPE_SUCCESS_URL',
-        'https://learner-qa.aspireleaders.org/profile?session_id={CHECKOUT_SESSION_ID}',
+        `${baseUrl}profile?session_id={CHECKOUT_SESSION_ID}`,
       );
       const defaultCancelUrl = this.configService.get<string>(
         'STRIPE_CANCEL_URL',
-        'https://learner-qa.aspireleaders.org/profile',
+        `${baseUrl}profile`,
       );
 
       // If successUrl is provided without the placeholder, append it
