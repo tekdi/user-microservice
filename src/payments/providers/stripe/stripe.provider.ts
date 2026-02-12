@@ -33,11 +33,11 @@ export class StripeProvider implements PaymentProvider {
   async initiatePayment(paymentData: InitiatePaymentDto): Promise<PaymentInitiationResult> {
     try {
       const baseUrl = this.configService.get<string>('APP_BASE_URL', 'http://localhost:3000');
-      const successUrl = `${baseUrl}/user/v1/payments/success?session_id={CHECKOUT_SESSION_ID}`;
-      const cancelUrl = `${baseUrl}/user/v1/payments/cancel`;
+      const successUrl = `https://learner-qa.aspireleaders.org/profile?session_id={CHECKOUT_SESSION_ID}`;
+      const cancelUrl = `https://learner-qa.aspireleaders.org/profile`;
 
-      // Create Stripe Checkout Session
-      const session = await this.stripe.checkout.sessions.create({
+      // Prepare checkout session configuration
+      const sessionConfig: Stripe.Checkout.SessionCreateParams = {
         payment_method_types: ['card'],
         line_items: [
           {
@@ -61,7 +61,43 @@ export class StripeProvider implements PaymentProvider {
           purpose: paymentData.purpose,
           ...(paymentData.metadata || {}),
         },
-      });
+      };
+
+      // Support for promo codes and discounts
+      if (paymentData.promoCode) {
+        try {
+          // Try to retrieve the promotion code first to get the associated coupon
+          let couponId: string;
+          
+          try {
+            const promotionCode = await this.stripe.promotionCodes.retrieve(paymentData.promoCode);
+            couponId = promotionCode.coupon.id;
+            this.logger.log(`Retrieved coupon ${couponId} from promotion code ${paymentData.promoCode}`);
+          } catch (promoError) {
+            // If promotion code retrieval fails, try using it as a coupon ID directly
+            this.logger.log(`Promotion code retrieval failed, trying as coupon ID: ${paymentData.promoCode}`);
+            couponId = paymentData.promoCode;
+          }
+
+          // Apply the coupon
+          sessionConfig.discounts = [
+            {
+              coupon: couponId,
+            },
+          ];
+          this.logger.log(`Applying coupon: ${couponId}`);
+        } catch (error) {
+          this.logger.error(`Failed to apply promo code/coupon ${paymentData.promoCode}: ${error.message}`);
+          throw new Error(`Invalid promo code or coupon: ${paymentData.promoCode}. ${error.message}`);
+        }
+      } else if (paymentData.allowPromotionCodes) {
+        // Allow users to enter promo codes in the checkout UI
+        sessionConfig.allow_promotion_codes = true;
+        this.logger.log('Promo code entry enabled in checkout');
+      }
+
+      // Create Stripe Checkout Session
+      const session = await this.stripe.checkout.sessions.create(sessionConfig);
 
       this.logger.log(`Stripe checkout session created: ${session.id}`);
 

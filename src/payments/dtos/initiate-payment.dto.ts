@@ -84,5 +84,21 @@ export class InitiatePaymentDto {
   @ValidateNested({ each: true })
   @Type(() => PaymentTargetDto)
   targets: PaymentTargetDto[];
+
+  @ApiProperty({ 
+    description: 'Stripe promo code/coupon ID to apply automatically', 
+    required: false 
+  })
+  @IsOptional()
+  @IsString()
+  promoCode?: string;
+
+  @ApiProperty({ 
+    description: 'Allow users to enter promo codes in checkout UI', 
+    required: false,
+    default: false 
+  })
+  @IsOptional()
+  allowPromotionCodes?: boolean;
 }
 
