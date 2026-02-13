@@ -3,7 +3,6 @@ import {
   IsString,
   IsNotEmpty,
   IsOptional,
-  MaxLength,
   IsEnum,
 } from 'class-validator';
 import { MessageType } from '../entities/discussion-message.entity';
@@ -15,7 +14,6 @@ export class CreateMessageDto {
 
   @IsString()
   @IsNotEmpty()
-  @MaxLength(5000, { message: 'Message content cannot exceed 5000 characters' })
   content: string;
 
   @IsUUID()

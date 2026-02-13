@@ -17,14 +17,8 @@ import { CreateMessageDto } from './dto/create-message.dto';
 import { UpdateMessageDto } from './dto/update-message.dto';
 import { MessageQueryDto } from './dto/message-query.dto';
 import { MessageSearchDto } from './dto/message-search.dto';
-import { MarkReadDto } from './dto/mark-read.dto';
-import {
-  MessageResponseDto,
-  PaginatedMessagesResponseDto,
-} from './dto/message-response.dto';
 
-// TODO: Replace with your actual auth guard
-// @UseGuards(JwtAuthGuard)
+
 @Controller('discussions')
 export class DiscussionController {
   constructor(private readonly discussionService: DiscussionService) {}
@@ -83,34 +77,5 @@ export class DiscussionController {
   ) {
     return this.discussionService.searchMessages(searchDto, res);
   }
-
-  // @Post('groups/:groupId/mark-read')
-  // @HttpCode(HttpStatus.NO_CONTENT)
-  // async markAsRead(
-  //   @Param('groupId') groupId: string,
-  //   @Body() markReadDto: MarkReadDto,
-  // ): Promise<void> {
-  //   const lastReadAt = markReadDto.lastReadAt
-  //     ? new Date(markReadDto.lastReadAt)
-  //     : undefined;
-  //   return this.discussionService.markAsRead(
-  //     groupId,
-  //     markReadDto.userId,
-  //     markReadDto.lastReadMessageId,
-  //     lastReadAt,
-  //   );
-  // }
-
-  // @Get('groups/:groupId/unread-count')
-  // async getUnreadCount(
-  //   @Param('groupId') groupId: string,
-  //   @Query('userId') userId: string,
-  // ): Promise<{ count: number }> {
-  //   const count = await this.discussionService.getUnreadCount(
-  //     groupId,
-  //     userId,
-  //   );
-  //   return { count };
-  // }
 }
 

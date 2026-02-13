@@ -29,7 +29,7 @@ import kafkaConfig from "./kafka/kafka.config";
 import { HealthController } from "./health.controller";
 import { CohortcontentModule } from "./cohortcontent/cohortcontent.module";
 import { UserTenantMappingModule } from "./userTenantMapping/user-tenant-mapping.module";
-import { DiscussionModule } from "./discussion";
+import { DiscussionModule } from "./discussion/discussion.module";
 
 @Module({
   imports: [

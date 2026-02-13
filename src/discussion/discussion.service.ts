@@ -1,9 +1,5 @@
 import {
   Injectable,
-  NotFoundException,
-  ForbiddenException,
-  BadRequestException,
-  Inject,
   HttpStatus,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -15,22 +11,21 @@ import { MessageQueryDto } from './dto/message-query.dto';
 import { MessageSearchDto } from './dto/message-search.dto';
 import {
   MessageResponseDto,
-  PaginatedMessagesResponseDto,
 } from './dto/message-response.dto';
-import { IGroupMemberRepository } from './interfaces/group-member.interface';
 import APIResponse from 'src/common/responses/response';
 import { APIID } from 'src/common/utils/api-id.config';
 import { API_RESPONSES } from '@utils/response.messages';
 import { LoggerUtil } from 'src/common/logger/LoggerUtil';
 import { Response } from 'express';
+import { CohortMembers, MemberStatus } from 'src/cohortMembers/entities/cohort-member.entity';
 
 @Injectable()
 export class DiscussionService {
   constructor(
     @InjectRepository(DiscussionMessage)
     private readonly messageRepository: Repository<DiscussionMessage>,
-    // @Inject('GroupMemberRepository')
-    // private readonly groupMemberRepository: IGroupMemberRepository,
+    @InjectRepository(CohortMembers)
+    private readonly cohortMembersRepository: Repository<CohortMembers>,
   ) {}
 
   /**
@@ -44,21 +39,24 @@ export class DiscussionService {
   ) {
     const apiId = APIID.DISCUSSION_MESSAGE_CREATE;
     try {
-      // Validate sender is a member of the group
-      // const membership = await this.groupMemberRepository.findOneByGroupAndUser(
-      //   createDto.groupId,
-      //   senderId,
-      // );
+      // Validate sender is a member of the cohort (group)
+      const membership = await this.cohortMembersRepository.findOne({
+        where: {
+          cohortId: createDto.groupId,
+          userId: senderId,
+          status: MemberStatus.ACTIVE,
+        },
+      });
 
-      // if (!membership) {
-      //   return APIResponse.error(
-      //     res,
-      //     apiId,
-      //     API_RESPONSES.FORBIDDEN,
-      //     'You must be a member of the group to send messages',
-      //     HttpStatus.FORBIDDEN
-      //   );
-      // }
+      if (!membership) {
+        return APIResponse.error(
+          res,
+          apiId,
+          API_RESPONSES.FORBIDDEN,
+          'You must be a member of the group to send messages',
+          HttpStatus.FORBIDDEN
+        );
+      }
 
       // If replying, validate the replied message exists and belongs to same group
       if (createDto.replyToMessageId) {
@@ -141,21 +139,24 @@ export class DiscussionService {
   ) {
     const apiId = APIID.DISCUSSION_MESSAGE_GET;
     try {
-      // Validate user is a member of the group
-      // const membership = await this.groupMemberRepository.findOneByGroupAndUser(
-      //   groupId,
-      //   userId,
-      // );
+      // Validate user is a member of the cohort (group)
+      const membership = await this.cohortMembersRepository.findOne({
+        where: {
+          cohortId: groupId,
+          userId: userId,
+          status: MemberStatus.ACTIVE,
+        },
+      });
 
-      // if (!membership) {
-      //   return APIResponse.error(
-      //     res,
-      //     apiId,
-      //     API_RESPONSES.FORBIDDEN,
-      //     'You must be a member of the group to view messages',
-      //     HttpStatus.FORBIDDEN
-      //   );
-      // }
+      if (!membership) {
+        return APIResponse.error(
+          res,
+          apiId,
+          API_RESPONSES.FORBIDDEN,
+          'You must be a member of the group to view messages',
+          HttpStatus.FORBIDDEN
+        );
+      }
 
       const limit = query.limit || 20;
       const where: FindOptionsWhere<DiscussionMessage> = {
@@ -390,21 +391,24 @@ export class DiscussionService {
   ) {
     const apiId = APIID.DISCUSSION_MESSAGE_SEARCH;
     try {
-      // Validate user is a member of the group
-      // const membership = await this.groupMemberRepository.findOneByGroupAndUser(
-      //   groupId,
-      //   searchDto.userId,
-      // );
+      // Validate user is a member of the cohort (group)
+      const membership = await this.cohortMembersRepository.findOne({
+        where: {
+          cohortId: searchDto.groupId,
+          userId: searchDto.userId,
+          status: MemberStatus.ACTIVE,
+        },
+      });
 
-      // if (!membership) {
-      //   return APIResponse.error(
-      //     res,
-      //     apiId,
-      //     API_RESPONSES.FORBIDDEN,
-      //     'You must be a member of the group to search messages',
-      //     HttpStatus.FORBIDDEN
-      //   );
-      // }
+      if (!membership) {
+        return APIResponse.error(
+          res,
+          apiId,
+          API_RESPONSES.FORBIDDEN,
+          'You must be a member of the group to search messages',
+          HttpStatus.FORBIDDEN
+        );
+      }
 
       const limit = searchDto.limit || 20;
       const offset = searchDto.offset || 0;
@@ -492,101 +496,5 @@ export class DiscussionService {
       );
     }
   }
-
-  /**
-   * Mark messages as read for a user in a group
-   */
-  // async markAsRead(
-  //   groupId: string,
-  //   userId: string,
-  //   lastReadMessageId?: string,
-  //   lastReadAt?: Date,
-  // ): Promise<void> {
-  //   const membership = await this.groupMemberRepository.findOneByGroupAndUser(
-  //     groupId,
-  //     userId,
-  //   );
-
-  //   if (!membership) {
-  //     throw new ForbiddenException(
-  //       'You must be a member of the group to mark messages as read',
-  //     );
-  //   }
-
-  //   // If messageId provided, validate it exists and belongs to group
-  //   if (lastReadMessageId) {
-  //     const message = await this.messageRepository.findOne({
-  //       where: { id: lastReadMessageId, groupId },
-  //     });
-
-  //     if (!message) {
-  //       throw new BadRequestException(
-  //         'The message does not exist or does not belong to this group',
-  //       );
-  //     }
-  //   }
-
-  //   await this.groupMemberRepository.updateLastRead(
-  //     groupId,
-  //     userId,
-  //     lastReadMessageId,
-  //     lastReadAt || new Date(),
-  //   );
-  // }
-
-  /**
-   * Get unread count for a user in a group
-   * Optimized query using lastReadAt timestamp
-   */
-  // async getUnreadCount(groupId: string, userId: string): Promise<number> {
-  //   const membership = await this.groupMemberRepository.findOneByGroupAndUser(
-  //     groupId,
-  //     userId,
-  //   );
-
-  //   if (!membership) {
-  //     return 0;
-  //   }
-
-  //   // If no read timestamp, all messages are unread
-  //   if (!membership.lastReadAt && !membership.lastReadMessageId) {
-  //     return await this.messageRepository.count({
-  //       where: {
-  //         groupId,
-  //         deletedAt: null,
-  //       },
-  //     });
-  //   }
-
-  //   // Use lastReadAt for efficient counting
-  //   if (membership.lastReadAt) {
-  //     return await this.messageRepository.count({
-  //       where: {
-  //         groupId,
-  //         deletedAt: null,
-  //         createdAt: MoreThan(membership.lastReadAt),
-  //       },
-  //     });
-  //   }
-
-  //   // Fallback: use lastReadMessageId
-  //   if (membership.lastReadMessageId) {
-  //     const lastReadMessage = await this.messageRepository.findOne({
-  //       where: { id: membership.lastReadMessageId },
-  //     });
-
-  //     if (lastReadMessage) {
-  //       return await this.messageRepository.count({
-  //         where: {
-  //           groupId,
-  //           deletedAt: null,
-  //           createdAt: MoreThan(lastReadMessage.createdAt),
-  //         },
-  //       });
-  //     }
-  //   }
-
-  //   return 0;
-  // }
 }
 
