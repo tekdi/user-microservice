@@ -883,6 +883,71 @@
 					"packageName": "shiksha-user"
 				}
 			]
+		},
+		{
+			"sourceRoute": "/interface/v1/discussions/groups/messages",
+			"type": "POST",
+			"priority": "MUST_HAVE",
+			"inSequence": false,
+			"orchestrated": false,
+			"targetPackages": [
+				{
+					"basePackageName": "user",
+					"packageName": "shiksha-user"
+				}
+			]
+		},
+		{
+			"sourceRoute": "/interface/v1/discussions/groups/messages",
+			"type": "GET",
+			"priority": "MUST_HAVE",
+			"inSequence": false,
+			"orchestrated": false,
+			"targetPackages": [
+				{
+					"basePackageName": "user",
+					"packageName": "shiksha-user"
+				}
+			]
+		},
+		{
+			"sourceRoute": "/interface/v1/discussions/messages/:id",
+			"type": "PUT",
+			"priority": "MUST_HAVE",
+			"inSequence": false,
+			"orchestrated": false,
+			"targetPackages": [
+				{
+					"basePackageName": "user",
+					"packageName": "shiksha-user"
+				}
+			]
+		},
+		{
+			"sourceRoute": "/interface/v1/discussions/messages/:id",
+			"type": "DELETE",
+			"priority": "MUST_HAVE",
+			"inSequence": false,
+			"orchestrated": false,
+			"targetPackages": [
+				{
+					"basePackageName": "user",
+					"packageName": "shiksha-user"
+				}
+			]
+		},
+		{
+			"sourceRoute": "/interface/v1/discussions/groups/search",
+			"type": "GET",
+			"priority": "MUST_HAVE",
+			"inSequence": false,
+			"orchestrated": false,
+			"targetPackages": [
+				{
+					"basePackageName": "user",
+					"packageName": "shiksha-user"
+				}
+			]
 		}
 	]
   }
