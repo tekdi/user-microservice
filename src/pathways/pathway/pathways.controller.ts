@@ -34,7 +34,6 @@ import { CreatePathwayDto } from './dto/create-pathway.dto';
 import { UpdatePathwayDto } from './dto/update-pathway.dto';
 import { ListPathwayDto } from './dto/list-pathway.dto';
 import { AssignPathwayDto } from './dto/assign-pathway.dto';
-import { SwitchPathwayDto } from './dto/switch-pathway.dto';
 import { Response } from 'express';
 import { JwtAuthGuard } from 'src/common/guards/keycloak.guard';
 import { InterestsService } from '../interests/interests.service';
@@ -350,31 +349,7 @@ export class PathwaysController {
     return this.pathwaysService.assignPathway(assignPathwayDto, response);
   }
 
-  /**
-   * Switch Active Pathway for User
-   */
-  @Post("switch")
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: "Switch Active Pathway for User",
-    description: "Deactivates the current active pathway and activates a new one.",
-  })
-  @ApiHeader({ name: "Authorization", required: true })
-  @ApiHeader({ name: "tenantid", required: true })
-  @ApiBody({ type: SwitchPathwayDto })
-  @ApiResponse({ status: 200, description: "Pathway switched successfully" })
-  @ApiNotFoundResponse({ description: "User or Pathway not found" })
-  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
-  async switchPathway(
-    @Body() switchPathwayDto: SwitchPathwayDto,
-    @Headers("tenantid") tenantId: string,
-    @Res() response: Response
-  ): Promise<Response> {
-    if (!tenantId || !isUUID(tenantId)) {
-      throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
-    }
-    return this.pathwaysService.switchPathway(switchPathwayDto, response);
-  }
+
 
 
 }
