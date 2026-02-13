@@ -8,6 +8,9 @@ import {
   IsOptional,
   Min,
   ValidateNested,
+  IsArray,
+  ArrayNotEmpty,
+  IsBoolean,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { PaymentPurpose, PaymentTargetType, PaymentContextType } from '../enums/payment.enums';
@@ -82,6 +85,8 @@ export class InitiatePaymentDto {
 
   @ApiProperty({ type: [PaymentTargetDto], description: 'Targets to unlock after payment' })
   @IsNotEmpty()
+  @IsArray()
+  @ArrayNotEmpty()
   @ValidateNested({ each: true })
   @Type(() => PaymentTargetDto)
   targets: PaymentTargetDto[];
@@ -100,6 +105,7 @@ export class InitiatePaymentDto {
     default: false 
   })
   @IsOptional()
+  @IsBoolean()
   allowPromotionCodes?: boolean;
 
   @ApiProperty({ 

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { PaymentTransaction } from '../entities/payment-transaction.entity';
@@ -79,7 +79,7 @@ export class PaymentTransactionService {
     });
 
     if (!transaction) {
-      throw new Error(`Transaction with ID ${id} not found`);
+      throw new NotFoundException(`Transaction with ID ${id} not found`);
     }
 
     transaction.status = status;

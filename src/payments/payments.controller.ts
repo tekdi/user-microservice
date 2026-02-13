@@ -29,11 +29,11 @@ import { PaymentStatusResponseDto } from './dtos/payment-status.dto';
 
 @ApiTags('Payments')
 @Controller('payments')
-@UseFilters(new AllExceptionsFilter(APIID.PAYMENT_INITIATE))
 export class PaymentsController {
   constructor(private paymentService: PaymentService) {}
 
   @Post('initiate')
+  @UseFilters(new AllExceptionsFilter(APIID.PAYMENT_INITIATE))
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Initiate a payment' })
@@ -55,6 +55,7 @@ export class PaymentsController {
   }
 
   @Get(':id/status')
+  @UseFilters(new AllExceptionsFilter(APIID.PAYMENT_STATUS))
   @ApiOperation({ summary: 'Get payment status' })
   @ApiOkResponse({
     description: 'Payment status retrieved successfully',

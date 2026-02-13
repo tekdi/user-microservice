@@ -11,7 +11,6 @@ import { PaymentIntentService } from './services/payment-intent.service';
 import { PaymentTransactionService } from './services/payment-transaction.service';
 import { PaymentTargetService } from './services/payment-target.service';
 import { StripeProvider } from './providers/stripe/stripe.provider';
-import { PaymentProvider } from './interfaces/payment-provider.interface';
 
 /**
  * Payments Module
@@ -41,7 +40,6 @@ import { PaymentProvider } from './interfaces/payment-provider.interface';
       provide: 'PaymentProvider',
       useClass: StripeProvider,
     },
-    StripeProvider,
   ],
   exports: [PaymentService],
 })

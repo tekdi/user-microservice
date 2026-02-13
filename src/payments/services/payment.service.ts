@@ -40,7 +40,7 @@ export class PaymentService {
       userId: dto.userId,
       purpose: dto.purpose,
       amount: dto.amount,
-      currency: dto.currency || 'INR',
+      currency: dto.currency || 'USD',
       provider: PaymentProviderEnum.STRIPE, // Default to Stripe for now
       metadata: dto.metadata || {},
     });
