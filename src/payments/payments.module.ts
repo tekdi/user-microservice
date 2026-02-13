@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, Logger, OnModuleInit } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule } from '@nestjs/config';
 import { PaymentIntent } from './entities/payment-intent.entity';
@@ -43,5 +43,15 @@ import { StripeProvider } from './providers/stripe/stripe.provider';
   ],
   exports: [PaymentService],
 })
-export class PaymentsModule {}
+export class PaymentsModule implements OnModuleInit {
+  private readonly logger = new Logger(PaymentsModule.name);
+
+  onModuleInit() {
+    this.logger.log('PaymentsModule initialized successfully');
+    this.logger.log('PaymentsModule controllers loaded: PaymentsController, StripeWebhookController');
+    this.logger.log('PaymentsModule providers loaded: PaymentService, PaymentIntentService, PaymentTransactionService, PaymentTargetService, StripeProvider');
+    this.logger.log('PaymentsModule entities registered: PaymentIntent, PaymentTransaction, PaymentTarget');
+    this.logger.debug('PaymentsModule is properly configured and ready to handle payment requests');
+  }
+}
 

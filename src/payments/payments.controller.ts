@@ -51,6 +51,8 @@ export class PaymentsController {
   })
   @ApiBadRequestResponse({ description: 'Invalid payment data' })
   async initiatePayment(@Body() dto: InitiatePaymentDto) {
+    console.log('initiatePayment-----------------------controller called');
+    
     return await this.paymentService.initiatePayment(dto);
   }
 
