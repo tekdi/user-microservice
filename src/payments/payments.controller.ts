@@ -28,7 +28,7 @@ import { InitiatePaymentDto } from './dtos/initiate-payment.dto';
 import { PaymentStatusResponseDto } from './dtos/payment-status.dto';
 
 @ApiTags('Payments')
-@Controller('payments/session')
+@Controller('payment/session')
 export class PaymentsController {
   constructor(private paymentService: PaymentService) {}
 
@@ -51,6 +51,8 @@ export class PaymentsController {
   })
   @ApiBadRequestResponse({ description: 'Invalid payment data' })
   async initiatePayment(@Body() dto: InitiatePaymentDto) {
+    console.log('initiatePayment-----------------------controller called');
+    
     return await this.paymentService.initiatePayment(dto);
   }
 
