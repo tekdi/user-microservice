@@ -29,6 +29,7 @@ import kafkaConfig from "./kafka/kafka.config";
 import { HealthController } from "./health.controller";
 import { CohortcontentModule } from "./cohortcontent/cohortcontent.module";
 import { UserTenantMappingModule } from "./userTenantMapping/user-tenant-mapping.module";
+import { DiscussionModule } from "./discussion";
 
 @Module({
   imports: [
@@ -55,7 +56,8 @@ import { UserTenantMappingModule } from "./userTenantMapping/user-tenant-mapping
     AutomaticMemberModule,
     LocationModule,
     KafkaModule,
-    CohortcontentModule
+    CohortcontentModule,
+    DiscussionModule
   ],
   controllers: [AppController, HealthController],
   providers: [AppService, HttpService],

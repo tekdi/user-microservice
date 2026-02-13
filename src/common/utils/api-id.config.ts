@@ -69,4 +69,9 @@ export const APIID = {
   COHORT_CONTENT_SEARCH: 'api.cohort.content.search',
   COHORT_CONTENT_UPDATE: 'api.cohort.content.update',
   COHORT_CONTENT_DELETE: 'api.cohort.content.delete',
+  DISCUSSION_MESSAGE_CREATE: 'api.discussion.message.create',
+  DISCUSSION_MESSAGE_GET: 'api.discussion.message.get',
+  DISCUSSION_MESSAGE_UPDATE: 'api.discussion.message.update',
+  DISCUSSION_MESSAGE_DELETE: 'api.discussion.message.delete',
+  DISCUSSION_MESSAGE_SEARCH: 'api.discussion.message.search',
 };

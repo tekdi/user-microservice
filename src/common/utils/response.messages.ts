@@ -265,5 +265,17 @@ export const API_RESPONSES = {
     `Failed to publish user-tenant ${eventType} event to Kafka`,
   ERROR_GET_USER_TENANT_MAPPINGS: "Error retrieving user tenant mappings",
   
+  // Discussion messages
+  MESSAGE_CREATED_SUCCESSFULLY: "Message created successfully",
+  MESSAGE_UPDATED_SUCCESSFULLY: "Message updated successfully",
+  MESSAGE_DELETED_SUCCESSFULLY: "Message deleted successfully",
+  MESSAGES_FETCHED_SUCCESSFULLY: "Messages fetched successfully",
+  MESSAGE_NOT_FOUND: "Message not found",
+  MESSAGE_REPLY_NOT_FOUND: "The message you are replying to does not exist or does not belong to this group",
+  UNAUTHORIZED_MESSAGE_EDIT: "You can only edit your own messages",
+  UNAUTHORIZED_MESSAGE_DELETE: "You can only delete your own messages",
+  MESSAGES_SEARCH_SUCCESSFULLY: "Messages searched successfully",
+  NO_MESSAGES_FOUND: "No messages found matching the search criteria",
+  
 };
 
