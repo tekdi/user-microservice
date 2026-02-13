@@ -28,7 +28,7 @@ import { InitiatePaymentDto } from './dtos/initiate-payment.dto';
 import { PaymentStatusResponseDto } from './dtos/payment-status.dto';
 
 @ApiTags('Payments')
-@Controller('payments')
+@Controller('payments/session')
 export class PaymentsController {
   constructor(private paymentService: PaymentService) {}
 
