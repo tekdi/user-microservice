@@ -39,9 +39,16 @@ import { AllExceptionsFilter } from './common/filters/exception.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // Configure raw body for webhook routes
+  app.use(
+    '/user/v1/payments/webhook/stripe',
+    express.raw({ type: 'application/json' }),
+  );
+
   app.use(
     process.env.IMAGEPATH,
-    express.static(join(__dirname, '..', 'uploads'))
+    express.static(join(__dirname, '..', 'uploads')),
   );
   app.setGlobalPrefix('user/v1', {
     exclude: [
@@ -58,7 +65,7 @@ async function bootstrap() {
     .addTag('V1')
     .addApiKey(
       { type: 'apiKey', name: 'Authorization', in: 'header' },
-      'access-token'
+      'access-token',
     )
     .build();
   const document = SwaggerModule.createDocument(app, config);
