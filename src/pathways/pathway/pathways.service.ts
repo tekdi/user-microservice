@@ -1,12 +1,15 @@
 import { Injectable, HttpStatus } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { Repository, In, DataSource } from 'typeorm';
 import { Pathway } from './entities/pathway.entity';
 import { Tag } from '../tags/entities/tag.entity';
 import { CreatePathwayDto } from './dto/create-pathway.dto';
 import { UpdatePathwayDto } from './dto/update-pathway.dto';
 import { ListPathwayDto } from './dto/list-pathway.dto';
 import { MAX_PAGINATION_LIMIT } from '../common/dto/pagination.dto';
+import { AssignPathwayDto } from './dto/assign-pathway.dto';
+import { UserPathwayHistory } from './entities/user-pathway-history.entity';
+import { User } from '../../user/entities/user-entity';
 import APIResponse from 'src/common/responses/response';
 import { API_RESPONSES } from '@utils/response.messages';
 import { APIID } from '@utils/api-id.config';
@@ -19,8 +22,13 @@ export class PathwaysService {
     @InjectRepository(Pathway)
     private readonly pathwayRepository: Repository<Pathway>,
     @InjectRepository(Tag)
-    private readonly tagRepository: Repository<Tag>
-  ) {}
+    private readonly tagRepository: Repository<Tag>,
+    @InjectRepository(UserPathwayHistory)
+    private readonly userPathwayHistoryRepository: Repository<UserPathwayHistory>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
+    private readonly dataSource: DataSource
+  ) { }
 
   /**
    * Validate tag IDs exist in tags table
@@ -531,6 +539,278 @@ export class PathwaysService {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error updating pathway: ${errorMessage}`,
+        apiId
+      );
+      return APIResponse.error(
+        response,
+        apiId,
+        API_RESPONSES.INTERNAL_SERVER_ERROR,
+        errorMessage,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  /**
+   * Assign / Activate Pathway for User
+   * Logic: Deactivate existing active pathway and reactivate or create new record
+   */
+  async assignPathway(
+    assignDto: AssignPathwayDto,
+    response: Response
+  ): Promise<Response> {
+    const apiId = APIID.PATHWAY_ASSIGN;
+    return this.handlePathwayAssignment(
+      assignDto.userId,
+      assignDto.pathwayId,
+      apiId,
+      response,
+      assignDto.userGoal,
+      assignDto.created_by,
+      assignDto.updated_by
+    );
+  }
+
+
+
+  /**
+   * Shared internal method for Pathway Assignment and Switching
+   * Ensures strict reactivation of existing records to prevent duplicates
+   */
+  private async handlePathwayAssignment(
+    userId: string,
+    pathwayId: string,
+    apiId: string,
+    response: Response,
+    userGoal?: string,
+    created_by?: string,
+    updated_by?: string
+  ): Promise<Response> {
+    try {
+      // 1. Validate user existence
+      const user = await this.userRepository.findOne({
+        where: { userId },
+        select: ['userId'],
+      });
+
+      if (!user) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.NOT_FOUND,
+          'User not found',
+          HttpStatus.NOT_FOUND
+        );
+      }
+
+      // 2. Validate target pathway existence and active status
+      const pathway = await this.pathwayRepository.findOne({
+        where: { id: pathwayId, is_active: true },
+        select: ['id'],
+      });
+
+      if (!pathway) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.NOT_FOUND,
+          'Active pathway not found',
+          HttpStatus.NOT_FOUND
+        );
+      }
+
+      // 3. Find currently active pathway
+      const currentActive = await this.userPathwayHistoryRepository.findOne({
+        where: { user_id: userId, is_active: true },
+      });
+
+      // 4. Check if target pathway already has a history record for this user
+      // If found, we will REACTIVATE it instead of creating a new one
+      const existingTargetRecord = await this.userPathwayHistoryRepository.findOne({
+        where: { user_id: userId, pathway_id: pathwayId },
+      });
+
+      // If already active, no switch needed
+      if (currentActive?.pathway_id === pathwayId) {
+        const result = {
+          userId,
+          previousPathwayId: pathwayId,
+          currentPathwayId: pathwayId,
+          activatedAt: currentActive.activated_at,
+          deactivated_at: null,
+          userGoal: currentActive.user_goal,
+          created_by: currentActive.created_by,
+          updated_by: currentActive.updated_by,
+        };
+        return APIResponse.success(
+          response,
+          apiId,
+          result,
+          HttpStatus.OK,
+          'Pathway is already active'
+        );
+      }
+
+      const timestamp = new Date();
+      let previousPathwayId = currentActive ? currentActive.pathway_id : null;
+
+      // 5. Atomic Transaction: Deactivate current and Reactivate/Activate target
+      await this.dataSource.transaction(async (manager) => {
+        // Deactivate current active pathway
+        if (currentActive) {
+          await manager.update(
+            UserPathwayHistory,
+            { id: currentActive.id },
+            {
+              is_active: false,
+              deactivated_at: timestamp,
+              updated_by: updated_by || created_by
+            }
+          );
+        }
+
+        if (existingTargetRecord) {
+          // REACTIVATE: Update existing record timestamps and status
+          // This keeps the interests linked to this record ID safe
+          await manager.update(
+            UserPathwayHistory,
+            { id: existingTargetRecord.id },
+            {
+              is_active: true,
+              activated_at: timestamp,
+              deactivated_at: null, // As requested: if reactivated, null the column
+              user_goal: userGoal,
+              updated_by: null // Refined: null when deactivated_at is null
+            }
+          );
+        } else {
+          // CREATE: New history record
+          const record = manager.create(UserPathwayHistory, {
+            user_id: userId,
+            pathway_id: pathwayId,
+            is_active: true,
+            activated_at: timestamp,
+            user_goal: userGoal,
+            created_by: created_by,
+            updated_by: null // Refined: null on initial creation
+          });
+          await manager.save(record);
+        }
+      });
+
+      const result = {
+        userId,
+        previousPathwayId,
+        currentPathwayId: pathwayId,
+        activatedAt: timestamp,
+        deactivated_at: currentActive ? timestamp : null,
+        userGoal: userGoal,
+        created_by: created_by,
+        updated_by: null, // Refined: result is the active record, so updated_by is null
+      };
+
+      const successMessage = currentActive
+        ? API_RESPONSES.PATHWAY_SWITCHED_SUCCESSFULLY
+        : API_RESPONSES.PATHWAY_ASSIGNED_SUCCESSFULLY;
+
+      return APIResponse.success(
+        response,
+        apiId,
+        result,
+        HttpStatus.OK,
+        successMessage
+      );
+    } catch (error) {
+      const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error handling pathway assignment: ${errorMessage}`,
+        apiId
+      );
+      return APIResponse.error(
+        response,
+        apiId,
+        API_RESPONSES.INTERNAL_SERVER_ERROR,
+        errorMessage,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+
+  /**
+   * Get Active Pathway for User
+   * Retrieves the currently active pathway assignment for a user
+   */
+  async getActivePathway(
+    userId: string,
+    response: Response
+  ): Promise<Response> {
+    const apiId = APIID.PATHWAY_GET_ACTIVE;
+    try {
+      // Validate UUID format
+      const uuidRegex =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(userId)) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          API_RESPONSES.UUID_VALIDATION,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      // 1. Validate user existence
+      const user = await this.userRepository.findOne({
+        where: { userId },
+        select: ['userId'],
+      });
+
+      if (!user) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.NOT_FOUND,
+          'User not found',
+          HttpStatus.NOT_FOUND
+        );
+      }
+
+      // 2. Get active pathway from user_pathway_history
+      const activePathway = await this.userPathwayHistoryRepository.findOne({
+        where: { user_id: userId, is_active: true },
+        select: ['id', 'pathway_id', 'activated_at'],
+      });
+
+      if (!activePathway) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.NOT_FOUND,
+          'No active pathway found for this user',
+          HttpStatus.NOT_FOUND
+        );
+      }
+
+      const result = {
+        id: activePathway.id,
+        pathwayId: activePathway.pathway_id,
+        activatedAt: activePathway.activated_at,
+      };
+
+      return APIResponse.success(
+        response,
+        apiId,
+        result,
+        HttpStatus.OK,
+        'Active pathway retrieved successfully'
+      );
+    } catch (error) {
+      const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error getting active pathway: ${errorMessage}`,
         apiId
       );
       return APIResponse.error(

@@ -5,7 +5,7 @@ import { PaginationDto } from '../../common/dto/pagination.dto';
 
 export class ListPathwayDto extends PaginationDto {
   @ApiPropertyOptional({
-    description: 'Filter pathways by active status',
+    description: "Filter pathways by active status",
     example: true,
   })
   @Expose()
@@ -13,4 +13,3 @@ export class ListPathwayDto extends PaginationDto {
   @IsBoolean()
   isActive?: boolean;
 }
-
