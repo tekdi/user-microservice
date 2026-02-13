@@ -37,34 +37,59 @@ export class StripeWebhookController {
     @Body() body: any,
     @Headers('stripe-signature') signature: string,
   ) {
-    // Get raw body for signature verification
-    // When express.raw() middleware is used, body is a Buffer
-    const rawBody = Buffer.isBuffer(body) ? body : (req.rawBody || Buffer.from(JSON.stringify(body)));
-    
-    // Parse body if it's a Buffer
-    const parsedBody = Buffer.isBuffer(body) ? JSON.parse(body.toString('utf8')) : body;
-    
-    // Log webhook received with event details
-    const eventType = parsedBody?.type || 'unknown';
-    const eventId = parsedBody?.id || 'unknown';
-    this.logger.log(`🔔 Stripe Webhook Received - Event Type: ${eventType}, Event ID: ${eventId}`);
-    this.logger.debug(`Webhook payload: ${JSON.stringify(parsedBody, null, 2)}`);
-    
-    if (!rawBody || rawBody.length === 0) {
-      this.logger.warn('Raw body not available, using JSON stringified body');
-    }
-
-    // Signature is optional in development mode (for testing without Stripe CLI)
-    // In production, signature should always be present
-    const nodeEnv = process.env.NODE_ENV || 'development';
-    if (!signature && nodeEnv === 'production') {
-      throw new BadRequestException('Missing stripe-signature header');
-    }
-
-    // Use empty string if signature is missing (for development testing)
-    const webhookSignature = signature || '';
-
     try {
+      // Get raw body for signature verification
+      // When express.raw() middleware is used, body is a Buffer
+      let rawBody: Buffer;
+      let parsedBody: any;
+
+      if (Buffer.isBuffer(body)) {
+        rawBody = body;
+        // Safely parse JSON from Buffer
+        try {
+          parsedBody = JSON.parse(body.toString('utf8'));
+        } catch (parseError) {
+          this.logger.error(`Failed to parse webhook body as JSON: ${parseError.message}`);
+          throw new BadRequestException('Invalid JSON payload in webhook body');
+        }
+      } else {
+        // If body is already parsed, try to get raw body from request
+        rawBody = req.rawBody || (() => {
+          try {
+            return Buffer.from(JSON.stringify(body));
+          } catch (stringifyError) {
+            this.logger.error(`Failed to stringify webhook body: ${stringifyError.message}`);
+            throw new BadRequestException('Invalid webhook body format');
+          }
+        })();
+        parsedBody = body;
+      }
+      
+      // Validate parsed body structure
+      if (!parsedBody || typeof parsedBody !== 'object') {
+        this.logger.error('Webhook body is not a valid object');
+        throw new BadRequestException('Invalid webhook payload structure');
+      }
+      
+      // Log webhook received with event details
+      const eventType = parsedBody?.type || 'unknown';
+      const eventId = parsedBody?.id || 'unknown';
+      this.logger.log(`🔔 Stripe Webhook Received - Event Type: ${eventType}, Event ID: ${eventId}`);
+      this.logger.debug(`Webhook payload: ${JSON.stringify(parsedBody, null, 2)}`);
+      
+      if (!rawBody || rawBody.length === 0) {
+        this.logger.warn('Raw body not available, using JSON stringified body');
+      }
+
+      // Signature is optional in development mode (for testing without Stripe CLI)
+      // In production, signature should always be present
+      const nodeEnv = process.env.NODE_ENV || 'development';
+      if (!signature && nodeEnv === 'production') {
+        throw new BadRequestException('Missing stripe-signature header');
+      }
+
+      // Use empty string if signature is missing (for development testing)
+      const webhookSignature = signature || '';
       const result = await this.paymentService.handleWebhook(
         PaymentProviderEnum.STRIPE,
         parsedBody,
@@ -95,8 +120,15 @@ export class StripeWebhookController {
         };
       }
     } catch (error) {
+      // If it's already a BadRequestException, re-throw it
+      if (error instanceof BadRequestException) {
+        this.logger.error(`❌ Stripe Webhook Validation Failed - Error: ${error.message}`);
+        throw error;
+      }
+      
+      // For other errors, log and throw as BadRequestException to avoid exposing internal errors
       this.logger.error(`❌ Stripe Webhook Processing Failed - Error: ${error.message}`, error.stack);
-      throw error;
+      throw new BadRequestException(`Webhook processing failed: ${error.message}`);
     }
   }
 }
