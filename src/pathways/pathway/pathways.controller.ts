@@ -15,6 +15,7 @@ import {
   UseGuards,
   BadRequestException,
   Logger,
+  Req,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -34,10 +35,19 @@ import { PathwaysService } from './pathways.service';
 import { CreatePathwayDto } from './dto/create-pathway.dto';
 import { UpdatePathwayDto } from './dto/update-pathway.dto';
 import { ListPathwayDto } from './dto/list-pathway.dto';
-import { Response } from 'express';
+import { Response, Request } from 'express';
 import { JwtAuthGuard } from 'src/common/guards/keycloak.guard';
 import { API_RESPONSES } from '@utils/response.messages';
 import { isUUID } from 'class-validator';
+
+interface RequestWithUser extends Request {
+  user?: {
+    userId: string;
+    name?: string;
+    username?: string;
+    [key: string]: any;
+  };
+}
 
 @ApiTags('Pathways')
 @Controller('pathway')
@@ -110,12 +120,14 @@ export class PathwaysController {
   async create(
     @Body() createPathwayDto: CreatePathwayDto,
     @Headers('tenantid') tenantId: string,
+    @Req() request: RequestWithUser,
     @Res() response: Response
   ): Promise<Response> {
     if (!tenantId || !isUUID(tenantId)) {
       throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
     }
-    return this.pathwaysService.create(createPathwayDto, response);
+    const userId = request.user?.userId || null;
+    return this.pathwaysService.create(createPathwayDto, userId, response);
   }
 
   @Post('list')
@@ -265,11 +277,13 @@ export class PathwaysController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updatePathwayDto: UpdatePathwayDto,
     @Headers('tenantid') tenantId: string,
+    @Req() request: RequestWithUser,
     @Res() response: Response
   ): Promise<Response> {
     if (!tenantId || !isUUID(tenantId)) {
       throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
     }
-    return this.pathwaysService.update(id, updatePathwayDto, response);
+    const userId = request.user?.userId || null;
+    return this.pathwaysService.update(id, updatePathwayDto, userId, response);
   }
 }

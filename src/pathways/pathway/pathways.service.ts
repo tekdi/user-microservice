@@ -1,6 +1,6 @@
 import { Injectable, HttpStatus } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { Repository, In, ILike } from 'typeorm';
 import { Pathway } from './entities/pathway.entity';
 import { Tag } from '../tags/entities/tag.entity';
 import { CreatePathwayDto } from './dto/create-pathway.dto';
@@ -91,6 +91,7 @@ export class PathwaysService {
    */
   async create(
     createPathwayDto: CreatePathwayDto,
+    userId: string | null,
     response: Response
   ): Promise<Response> {
     const apiId = APIID.PATHWAY_CREATE;
@@ -135,6 +136,8 @@ export class PathwaysService {
         ...createPathwayDto,
         is_active: createPathwayDto.is_active ?? true,
         tags: dto.tags && dto.tags.length > 0 ? dto.tags : [],
+        created_by: userId,
+        updated_by: userId,
       };
 
       // Create and save in single operation
@@ -207,30 +210,70 @@ export class PathwaysService {
   ): Promise<Response> {
     const apiId = APIID.PATHWAY_LIST;
     try {
-      // Build where clause conditionally
-      const whereCondition: any = {};
-      if (listPathwayDto.isActive !== undefined) {
-        whereCondition.is_active = listPathwayDto.isActive;
-      }
-
       // Set pagination defaults with safeguard to prevent unbounded queries
       // Defense in depth: cap limit even if validation is bypassed
       const requestedLimit = listPathwayDto.limit ?? 10;
       const limit = Math.min(requestedLimit, MAX_PAGINATION_LIMIT);
       const offset = listPathwayDto.offset ?? 0;
 
-      // OPTIMIZED: Single query with count and data using findAndCount
-      // This performs both COUNT and SELECT in an optimized way
-      // Using indexed columns (is_active, display_order) for performance
-      const [items, totalCount] = await this.pathwayRepository.findAndCount({
-        where: whereCondition,
-        order: {
-          display_order: 'ASC',
-          created_at: 'DESC',
-        },
-        take: limit,
-        skip: offset,
-      });
+      // Extract filters from nested object
+      const filters = listPathwayDto.filters || {};
+
+      // Check if we need QueryBuilder for text search (name or description)
+      const needsTextSearch = !!(filters.name || filters.description);
+      let items: any[];
+      let totalCount: number;
+
+      if (needsTextSearch) {
+        // Use QueryBuilder for ILIKE queries (optimized for text search)
+        const queryBuilder = this.pathwayRepository.createQueryBuilder("pathway");
+
+        // Apply filters
+        if (filters.id) {
+          queryBuilder.andWhere("pathway.id = :id", { id: filters.id });
+        }
+        if (filters.name) {
+          queryBuilder.andWhere("pathway.name ILIKE :name", { name: `%${filters.name}%` });
+        }
+        if (filters.description) {
+          queryBuilder.andWhere("pathway.description ILIKE :description", { description: `%${filters.description}%` });
+        }
+        if (filters.isActive !== undefined) {
+          queryBuilder.andWhere("pathway.is_active = :isActive", { isActive: filters.isActive });
+        }
+
+        // Apply ordering
+        queryBuilder.orderBy("pathway.display_order", "ASC");
+        queryBuilder.addOrderBy("pathway.created_at", "DESC");
+
+        // Apply pagination
+        queryBuilder.skip(offset).take(limit);
+
+        // Execute query
+        [items, totalCount] = await queryBuilder.getManyAndCount();
+      } else {
+        // Use findAndCount for simple filters (more efficient when no text search)
+        const whereCondition: any = {};
+        if (filters.id) {
+          whereCondition.id = filters.id;
+        }
+        if (filters.isActive !== undefined) {
+          whereCondition.is_active = filters.isActive;
+        }
+
+        // OPTIMIZED: Single query with count and data using findAndCount
+        // This performs both COUNT and SELECT in an optimized way
+        // Using indexed columns (is_active, display_order) for performance
+        [items, totalCount] = await this.pathwayRepository.findAndCount({
+          where: whereCondition,
+          order: {
+            display_order: "ASC",
+            created_at: "DESC",
+          },
+          take: limit,
+          skip: offset,
+        });
+      }
 
       // OPTIMIZED: Collect all unique tag IDs from all pathways in one pass
       const allTagIds = new Set<string>();
@@ -402,6 +445,7 @@ export class PathwaysService {
   async update(
     id: string,
     updatePathwayDto: UpdatePathwayDto,
+    userId: string | null,
     response: Response
   ): Promise<Response> {
     const apiId = APIID.PATHWAY_UPDATE;
@@ -480,6 +524,11 @@ export class PathwaysService {
         updateData.is_active = updatePathwayDto.is_active;
       }
 
+      // Always set updated_by when updating
+      if (userId) {
+        updateData.updated_by = userId;
+      }
+
       // Check if there's anything to update
       if (Object.keys(updateData).length === 0) {
         return APIResponse.error(
@@ -493,6 +542,7 @@ export class PathwaysService {
 
       // OPTIMIZED: Use repository.update() for partial updates
       // This is more efficient than findOne + save as it performs a direct UPDATE query
+      // updated_at is automatically updated by UpdateDateColumn decorator
       const updateResult = await this.pathwayRepository.update(
         { id },
         updateData

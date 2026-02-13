@@ -3,6 +3,7 @@ import {
   PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
+  UpdateDateColumn,
   Index,
 } from 'typeorm';
 
@@ -35,5 +36,18 @@ export class Tag {
     nullable: false,
   })
   created_at: Date;
+
+  @UpdateDateColumn({
+    type: 'timestamp',
+    default: () => 'CURRENT_TIMESTAMP',
+    onUpdate: 'CURRENT_TIMESTAMP',
+  })
+  updated_at: Date;
+
+  @Column({ type: 'uuid', nullable: true })
+  created_by: string | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  updated_by: string | null;
 }
 
