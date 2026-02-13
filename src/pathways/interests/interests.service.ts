@@ -78,6 +78,7 @@ export class InterestsService {
       const interest = this.interestRepository.create({
         ...createInterestDto,
         is_active: createInterestDto.is_active ?? true,
+        // created_by is already snake_case in DTO now
       });
 
       const savedInterest = await this.interestRepository.save(interest);
@@ -89,6 +90,8 @@ export class InterestsService {
         label: savedInterest.label,
         is_active: savedInterest.is_active,
         created_at: savedInterest.created_at,
+        created_by: savedInterest.created_by,
+        // updated_by/updated_at will be null initially
       };
 
       return APIResponse.success(
@@ -167,7 +170,13 @@ export class InterestsService {
       }
 
       // OPTIMIZED: Use repository.update() for partial updates
-      await this.interestRepository.update({ id }, updateInterestDto);
+      await this.interestRepository.update(
+        { id },
+        {
+          ...updateInterestDto,
+          updated_at: new Date(),
+        }
+      );
 
       const updatedInterest = await this.interestRepository.findOne({
         where: { id },
@@ -189,6 +198,10 @@ export class InterestsService {
         key: updatedInterest.key,
         label: updatedInterest.label,
         is_active: updatedInterest.is_active,
+        created_at: updatedInterest.created_at,
+        created_by: updatedInterest.created_by,
+        updated_at: updatedInterest.updated_at,
+        updated_by: updatedInterest.updated_by,
       };
 
       return APIResponse.success(
@@ -237,7 +250,14 @@ export class InterestsService {
       }
 
       // Soft delete: set is_active to false
-      await this.interestRepository.update({ id }, { is_active: false });
+      await this.interestRepository.update(
+        { id },
+        {
+          is_active: false,
+          updated_at: new Date(),
+          // Note: addedBy/updatedBy for delete would require DTO change for delete API
+        }
+      );
 
       const result = {
         id: id,
@@ -438,6 +458,7 @@ export class InterestsService {
             manager.create(UserPathwayInterests, {
               user_pathway_history_id: userPathwayHistoryId,
               interest_id: interestId,
+              created_by: saveDto.created_by,
             })
           );
           await manager.save(newRecords);
@@ -449,6 +470,7 @@ export class InterestsService {
         addedCount: interestIdsToAdd.length,
         removedCount: interestIdsToRemove.length,
         totalSavedCount: uniqueInterestIds.length,
+        created_by: saveDto.created_by,
       };
 
       return APIResponse.success(

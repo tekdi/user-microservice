@@ -23,4 +23,14 @@ export class SaveUserInterestsDto {
     @ArrayNotEmpty()
     @IsUUID("4", { each: true })
     interestIds: string[];
+
+    @ApiProperty({
+        description: "User UUID who created these mapping entries",
+        example: "8d2c6e59-91c4-4e9a-9e29-2a3b7b6b1e11",
+        format: "uuid",
+    })
+    @Expose()
+    @IsUUID()
+    @IsNotEmpty()
+    created_by: string;
 }

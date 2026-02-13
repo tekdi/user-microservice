@@ -36,4 +36,17 @@ export class Interest {
     default: () => "CURRENT_TIMESTAMP",
   })
   created_at: Date;
+
+  @Column({ name: "created_by", type: "uuid", nullable: true })
+  created_by: string;
+
+  @Column({ name: "updated_by", type: "uuid", nullable: true })
+  updated_by: string;
+
+  @Column({
+    name: "updated_at",
+    type: "timestamptz",
+    nullable: true,
+  })
+  updated_at: Date;
 }

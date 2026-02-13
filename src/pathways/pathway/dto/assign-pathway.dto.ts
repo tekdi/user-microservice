@@ -33,4 +33,24 @@ export class AssignPathwayDto {
     @IsString()
     @IsOptional()
     userGoal?: string;
+
+    @ApiProperty({
+        description: "User UUID who created/updated this assignment",
+        example: "8d2c6e59-91c4-4e9a-9e29-2a3b7b6b1e11",
+        format: "uuid",
+    })
+    @Expose()
+    @IsUUID()
+    @IsNotEmpty()
+    created_by: string;
+
+    @ApiProperty({
+        description: "User UUID who updated this assignment",
+        example: "8d2c6e59-91c4-4e9a-9e29-2a3b7b6b1e11",
+        format: "uuid",
+    })
+    @Expose()
+    @IsUUID()
+    @IsOptional()
+    updated_by?: string;
 }

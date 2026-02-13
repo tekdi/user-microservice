@@ -35,4 +35,7 @@ export class UserPathwayInterests {
         default: () => "CURRENT_TIMESTAMP",
     })
     created_at: Date;
+
+    @Column({ type: "uuid", nullable: true })
+    created_by: string;
 }

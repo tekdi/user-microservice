@@ -565,7 +565,9 @@ export class PathwaysService {
       assignDto.pathwayId,
       apiId,
       response,
-      assignDto.userGoal
+      assignDto.userGoal,
+      assignDto.created_by,
+      assignDto.updated_by
     );
   }
 
@@ -580,7 +582,9 @@ export class PathwaysService {
     pathwayId: string,
     apiId: string,
     response: Response,
-    userGoal?: string
+    userGoal?: string,
+    created_by?: string,
+    updated_by?: string
   ): Promise<Response> {
     try {
       // 1. Validate user existence
@@ -635,6 +639,8 @@ export class PathwaysService {
           activatedAt: currentActive.activated_at,
           deactivated_at: null,
           userGoal: currentActive.user_goal,
+          created_by: currentActive.created_by,
+          updated_by: currentActive.updated_by,
         };
         return APIResponse.success(
           response,
@@ -655,7 +661,11 @@ export class PathwaysService {
           await manager.update(
             UserPathwayHistory,
             { id: currentActive.id },
-            { is_active: false, deactivated_at: timestamp }
+            {
+              is_active: false,
+              deactivated_at: timestamp,
+              updated_by: updated_by || created_by
+            }
           );
         }
 
@@ -670,6 +680,7 @@ export class PathwaysService {
               activated_at: timestamp,
               deactivated_at: null, // As requested: if reactivated, null the column
               user_goal: userGoal,
+              updated_by: null // Refined: null when deactivated_at is null
             }
           );
         } else {
@@ -680,6 +691,8 @@ export class PathwaysService {
             is_active: true,
             activated_at: timestamp,
             user_goal: userGoal,
+            created_by: created_by,
+            updated_by: null // Refined: null on initial creation
           });
           await manager.save(record);
         }
@@ -692,6 +705,8 @@ export class PathwaysService {
         activatedAt: timestamp,
         deactivated_at: currentActive ? timestamp : null,
         userGoal: userGoal,
+        created_by: created_by,
+        updated_by: null, // Refined: result is the active record, so updated_by is null
       };
 
       const successMessage = currentActive

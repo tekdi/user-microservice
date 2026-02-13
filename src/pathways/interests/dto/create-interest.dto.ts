@@ -50,4 +50,14 @@ export class CreateInterestDto {
   @IsBoolean()
   @IsOptional()
   is_active?: boolean;
+
+  @ApiProperty({
+    description: "User UUID who created this interest",
+    example: "8d2c6e59-91c4-4e9a-9e29-2a3b7b6b1e11",
+    format: "uuid",
+  })
+  @Expose()
+  @IsUUID()
+  @IsNotEmpty()
+  created_by: string;
 }

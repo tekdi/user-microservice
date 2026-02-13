@@ -44,4 +44,10 @@ export class UserPathwayHistory {
 
     @Column({ type: "text", nullable: true })
     user_goal: string;
+
+    @Column({ type: "uuid", nullable: true })
+    created_by: string;
+
+    @Column({ type: "uuid", nullable: true })
+    updated_by: string;
 }
