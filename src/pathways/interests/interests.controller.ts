@@ -1,7 +1,7 @@
 import {
   Controller,
   Post,
-  Put,
+  Patch,
   Delete,
   Get,
   Query,
@@ -78,7 +78,7 @@ export class InterestsController {
   /**
    * Update an existing interest
    */
-  @Put("update/:id")
+  @Patch("update/:id")
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: "Update interest",

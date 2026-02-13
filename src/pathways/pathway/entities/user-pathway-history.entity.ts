@@ -41,4 +41,7 @@ export class UserPathwayHistory {
 
     @Column({ type: "timestamp", nullable: true })
     deactivated_at: Date;
+
+    @Column({ type: "text", nullable: true })
+    user_goal: string;
 }

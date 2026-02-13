@@ -1,6 +1,6 @@
 import { Injectable, HttpStatus } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository, In } from "typeorm";
+import { Repository, In, DataSource } from "typeorm";
 import { Interest } from "./entities/interest.entity";
 import { CreateInterestDto } from "./dto/create-interest.dto";
 import { UpdateInterestDto } from "./dto/update-interest.dto";
@@ -26,7 +26,8 @@ export class InterestsService {
     @InjectRepository(UserPathwayHistory)
     private readonly userPathwayHistoryRepository: Repository<UserPathwayHistory>,
     @InjectRepository(UserPathwayInterests)
-    private readonly userPathwayInterestsRepository: Repository<UserPathwayInterests>
+    private readonly userPathwayInterestsRepository: Repository<UserPathwayInterests>,
+    private readonly dataSource: DataSource
   ) { }
 
   /**
@@ -402,34 +403,52 @@ export class InterestsService {
         );
       }
 
-      // 4. Avoid duplicates for the same visit
+      // 4. Fetch existing mappings for this record
       const existingMappings = await this.userPathwayInterestsRepository.find({
-        where: {
-          user_pathway_history_id: userPathwayHistoryId,
-          interest_id: In(uniqueInterestIds),
-        },
-        select: ['interest_id'],
+        where: { user_pathway_history_id: userPathwayHistoryId },
+        select: ["interest_id"],
       });
 
       const existingInterestIds = new Set(existingMappings.map((m) => m.interest_id));
-      const newInterestIds = uniqueInterestIds.filter(
+      const requestedInterestIdsSet = new Set(uniqueInterestIds);
+
+      // Identify IDs to add (in request but not in DB)
+      const interestIdsToAdd = uniqueInterestIds.filter(
         (id) => !existingInterestIds.has(id)
       );
 
-      // 5. Batch insert new records
-      if (newInterestIds.length > 0) {
-        const newRecords = newInterestIds.map((interestId) =>
-          this.userPathwayInterestsRepository.create({
+      // Identify IDs to remove (in DB but not in request)
+      const interestIdsToRemove = Array.from(existingInterestIds).filter(
+        (id) => !requestedInterestIdsSet.has(id)
+      );
+
+      // 5. Atomic transaction to Sync (Add/Delete)
+      await this.dataSource.transaction(async (manager) => {
+        // Delete unchecked interests
+        if (interestIdsToRemove.length > 0) {
+          await manager.delete(UserPathwayInterests, {
             user_pathway_history_id: userPathwayHistoryId,
-            interest_id: interestId,
-          })
-        );
-        await this.userPathwayInterestsRepository.save(newRecords);
-      }
+            interest_id: In(interestIdsToRemove),
+          });
+        }
+
+        // Add new selection
+        if (interestIdsToAdd.length > 0) {
+          const newRecords = interestIdsToAdd.map((interestId) =>
+            manager.create(UserPathwayInterests, {
+              user_pathway_history_id: userPathwayHistoryId,
+              interest_id: interestId,
+            })
+          );
+          await manager.save(newRecords);
+        }
+      });
 
       const result = {
         userPathwayHistoryId,
-        savedInterestsCount: newInterestIds.length,
+        addedCount: interestIdsToAdd.length,
+        removedCount: interestIdsToRemove.length,
+        totalSavedCount: uniqueInterestIds.length,
       };
 
       return APIResponse.success(

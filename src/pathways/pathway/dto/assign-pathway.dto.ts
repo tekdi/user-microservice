@@ -1,5 +1,5 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { IsNotEmpty, IsUUID } from "class-validator";
+import { IsNotEmpty, IsOptional, IsString, IsUUID } from "class-validator";
 import { Expose } from "class-transformer";
 
 export class AssignPathwayDto {
@@ -22,4 +22,15 @@ export class AssignPathwayDto {
     @IsUUID()
     @IsNotEmpty()
     pathwayId: string;
+
+    @ApiProperty({
+        description: "User Goal / Objective for this pathway",
+        example: "I want to become a full-stack developer in 6 months.",
+        type: String,
+        required: false,
+    })
+    @Expose()
+    @IsString()
+    @IsOptional()
+    userGoal?: string;
 }

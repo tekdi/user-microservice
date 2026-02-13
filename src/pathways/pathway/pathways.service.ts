@@ -8,7 +8,6 @@ import { UpdatePathwayDto } from './dto/update-pathway.dto';
 import { ListPathwayDto } from './dto/list-pathway.dto';
 import { MAX_PAGINATION_LIMIT } from '../common/dto/pagination.dto';
 import { AssignPathwayDto } from './dto/assign-pathway.dto';
-import { SwitchPathwayDto } from './dto/switch-pathway.dto';
 import { UserPathwayHistory } from './entities/user-pathway-history.entity';
 import { User } from '../../user/entities/user-entity';
 import APIResponse from 'src/common/responses/response';
@@ -561,20 +560,16 @@ export class PathwaysService {
     response: Response
   ): Promise<Response> {
     const apiId = APIID.PATHWAY_ASSIGN;
-    return this.handlePathwayAssignment(assignDto.userId, assignDto.pathwayId, apiId, response);
+    return this.handlePathwayAssignment(
+      assignDto.userId,
+      assignDto.pathwayId,
+      apiId,
+      response,
+      assignDto.userGoal
+    );
   }
 
-  /**
-   * Switch Active Pathway for User
-   * Deactivates current active pathway and reactivates or activates the new one
-   */
-  async switchPathway(
-    switchDto: SwitchPathwayDto,
-    response: Response
-  ): Promise<Response> {
-    const apiId = APIID.PATHWAY_SWITCH;
-    return this.handlePathwayAssignment(switchDto.userId, switchDto.pathwayId, apiId, response);
-  }
+
 
   /**
    * Shared internal method for Pathway Assignment and Switching
@@ -584,7 +579,8 @@ export class PathwaysService {
     userId: string,
     pathwayId: string,
     apiId: string,
-    response: Response
+    response: Response,
+    userGoal?: string
   ): Promise<Response> {
     try {
       // 1. Validate user existence
@@ -638,6 +634,7 @@ export class PathwaysService {
           currentPathwayId: pathwayId,
           activatedAt: currentActive.activated_at,
           deactivated_at: null,
+          userGoal: currentActive.user_goal,
         };
         return APIResponse.success(
           response,
@@ -672,6 +669,7 @@ export class PathwaysService {
               is_active: true,
               activated_at: timestamp,
               deactivated_at: null, // As requested: if reactivated, null the column
+              user_goal: userGoal,
             }
           );
         } else {
@@ -681,6 +679,7 @@ export class PathwaysService {
             pathway_id: pathwayId,
             is_active: true,
             activated_at: timestamp,
+            user_goal: userGoal,
           });
           await manager.save(record);
         }
@@ -692,14 +691,19 @@ export class PathwaysService {
         currentPathwayId: pathwayId,
         activatedAt: timestamp,
         deactivated_at: currentActive ? timestamp : null,
+        userGoal: userGoal,
       };
+
+      const successMessage = currentActive
+        ? API_RESPONSES.PATHWAY_SWITCHED_SUCCESSFULLY
+        : API_RESPONSES.PATHWAY_ASSIGNED_SUCCESSFULLY;
 
       return APIResponse.success(
         response,
         apiId,
         result,
         HttpStatus.OK,
-        'Pathway assigned successfully'
+        successMessage
       );
     } catch (error) {
       const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
