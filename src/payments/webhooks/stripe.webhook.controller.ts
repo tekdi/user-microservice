@@ -37,7 +37,22 @@ export class StripeWebhookController {
     @Body() body: any,
     @Headers('stripe-signature') signature: string,
   ) {
-    this.logger.log('Received Stripe webhook');
+    // Get raw body for signature verification
+    // When express.raw() middleware is used, body is a Buffer
+    const rawBody = Buffer.isBuffer(body) ? body : (req.rawBody || Buffer.from(JSON.stringify(body)));
+    
+    // Parse body if it's a Buffer
+    const parsedBody = Buffer.isBuffer(body) ? JSON.parse(body.toString('utf8')) : body;
+    
+    // Log webhook received with event details
+    const eventType = parsedBody?.type || 'unknown';
+    const eventId = parsedBody?.id || 'unknown';
+    this.logger.log(`🔔 Stripe Webhook Received - Event Type: ${eventType}, Event ID: ${eventId}`);
+    this.logger.debug(`Webhook payload: ${JSON.stringify(parsedBody, null, 2)}`);
+    
+    if (!rawBody || rawBody.length === 0) {
+      this.logger.warn('Raw body not available, using JSON stringified body');
+    }
 
     // Signature is optional in development mode (for testing without Stripe CLI)
     // In production, signature should always be present
@@ -49,17 +64,6 @@ export class StripeWebhookController {
     // Use empty string if signature is missing (for development testing)
     const webhookSignature = signature || '';
 
-    // Get raw body for signature verification
-    // When express.raw() middleware is used, body is a Buffer
-    const rawBody = Buffer.isBuffer(body) ? body : (req.rawBody || Buffer.from(JSON.stringify(body)));
-    
-    // Parse body if it's a Buffer
-    const parsedBody = Buffer.isBuffer(body) ? JSON.parse(body.toString('utf8')) : body;
-    
-    if (!rawBody || rawBody.length === 0) {
-      this.logger.warn('Raw body not available, using JSON stringified body');
-    }
-
     try {
       const result = await this.paymentService.handleWebhook(
         PaymentProviderEnum.STRIPE,
@@ -69,12 +73,14 @@ export class StripeWebhookController {
       );
 
       if (result.processed && 'paymentIntentId' in result) {
+        this.logger.log(`✅ Stripe Webhook Processed Successfully - Payment Intent ID: ${result.paymentIntentId}`);
         return {
           received: true,
           processed: result.processed,
           paymentIntentId: result.paymentIntentId,
         };
       } else if ('reason' in result) {
+        this.logger.log(`⚠️ Stripe Webhook Skipped - Reason: ${result.reason}`);
         return {
           received: true,
           processed: result.processed,
@@ -82,13 +88,14 @@ export class StripeWebhookController {
         };
       } else {
         // Fallback (should not happen)
+        this.logger.warn('Stripe Webhook processed with unknown result format');
         return {
           received: true,
           processed: result.processed,
         };
       }
     } catch (error) {
-      this.logger.error(`Webhook processing failed: ${error.message}`, error.stack);
+      this.logger.error(`❌ Stripe Webhook Processing Failed - Error: ${error.message}`, error.stack);
       throw error;
     }
   }

@@ -78,7 +78,9 @@ export class PaymentService {
     rawPayload: string | Buffer,
     signature: string,
   ) {
-    this.logger.log(`Handling webhook from ${provider}`);
+    const eventType = event?.type || 'unknown';
+    const eventId = event?.id || 'unknown';
+    this.logger.log(`📥 Processing webhook from ${provider} - Event: ${eventType} (${eventId})`);
 
     // Verify signature (optional in development mode)
     const isValid = this.paymentProvider.verifyWebhookSignature(
