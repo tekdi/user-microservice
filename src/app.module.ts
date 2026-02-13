@@ -31,6 +31,7 @@ import { TerminusModule } from '@nestjs/terminus';
 import { HealthController } from './health/health.controller';
 import { HealthService } from './health/health.service';
 import { CacheModule } from './cache/cache.module';
+import { PaymentsModule } from './payments/payments.module';
 import { PathwaysModule } from './pathways/pathways.module';
 
 /**
@@ -86,6 +87,7 @@ import { PathwaysModule } from './pathways/pathways.module';
     BulkImportModule,
     TerminusModule,
     CacheModule,
+    PaymentsModule,
     PathwaysModule,
   ],
   controllers: [AppController, HealthController],
