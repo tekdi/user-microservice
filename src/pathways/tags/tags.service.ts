@@ -1,6 +1,6 @@
 import { Injectable, HttpStatus } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, ILike } from 'typeorm';
 import { Tag, TagStatus } from './entities/tag.entity';
 import { CreateTagDto } from './dto/create-tag.dto';
 import { UpdateTagDto } from './dto/update-tag.dto';
@@ -26,6 +26,7 @@ export class TagsService {
    */
   async create(
     createTagDto: CreateTagDto,
+    userId: string | null,
     response: Response
   ): Promise<Response> {
     const apiId = APIID.TAG_CREATE;
@@ -50,6 +51,8 @@ export class TagsService {
       const tagData = {
         name: createTagDto.name,
         status: TagStatus.PUBLISHED,
+        created_by: userId,
+        updated_by: userId,
       };
 
       // Create and save in single operation
@@ -107,6 +110,7 @@ export class TagsService {
   async update(
     id: string,
     updateTagDto: UpdateTagDto,
+    userId: string | null,
     response: Response
   ): Promise<Response> {
     const apiId = APIID.TAG_UPDATE;
@@ -167,6 +171,11 @@ export class TagsService {
         updateData.status = updateTagDto.status;
       }
 
+      // Always set updated_by when updating
+      if (userId) {
+        updateData.updated_by = userId;
+      }
+
       // Check if there's anything to update
       if (Object.keys(updateData).length === 0) {
         return APIResponse.error(
@@ -179,6 +188,7 @@ export class TagsService {
       }
 
       // OPTIMIZED: Use repository.update() for partial updates
+      // updated_at is automatically updated by UpdateDateColumn decorator
       const updateResult = await this.tagRepository.update({ id }, updateData);
 
       if (!updateResult.affected || updateResult.affected === 0) {
@@ -322,34 +332,78 @@ export class TagsService {
   async list(listTagDto: ListTagDto, response: Response): Promise<Response> {
     const apiId = APIID.TAG_LIST;
     try {
-      // Build where clause
-      const whereCondition: Partial<Tag> = {};
-
-      // If status is provided, use it; otherwise default to published only
-      if (listTagDto.status) {
-        whereCondition.status = listTagDto.status;
-      } else {
-        // Default: only show published tags (exclude archived)
-        whereCondition.status = TagStatus.PUBLISHED;
-      }
-
       // Set pagination defaults with safeguard to prevent unbounded queries
       // Defense in depth: cap limit even if validation is bypassed
       const requestedLimit = listTagDto.limit ?? 10;
       const limit = Math.min(requestedLimit, MAX_PAGINATION_LIMIT);
       const offset = listTagDto.offset ?? 0;
 
-      // OPTIMIZED: Single query with count and data using findAndCount
-      // This performs both COUNT and SELECT in an optimized way
-      const [items, totalCount] = await this.tagRepository.findAndCount({
-        where: whereCondition,
-        order: {
-          created_at: 'DESC',
-        },
-        take: limit,
-        skip: offset,
-        select: ['id', 'name', 'status', 'created_at'],
-      });
+      // Extract filters from nested object
+      const filters = listTagDto.filters || {};
+
+      // Check if we need QueryBuilder for text search (name)
+      const needsTextSearch = !!filters.name;
+      let items: Tag[];
+      let totalCount: number;
+
+      if (needsTextSearch) {
+        // Use QueryBuilder for ILIKE queries (optimized for text search)
+        const queryBuilder = this.tagRepository.createQueryBuilder("tag");
+
+        // Apply filters
+        if (filters.id) {
+          queryBuilder.andWhere("tag.id = :id", { id: filters.id });
+        }
+        if (filters.name) {
+          queryBuilder.andWhere("tag.name ILIKE :name", { name: `%${filters.name}%` });
+        }
+        // If status is provided, use it; otherwise default to published only
+        if (filters.status) {
+          queryBuilder.andWhere("tag.status = :status", { status: filters.status });
+        } else {
+          // Default: only show published tags (exclude archived)
+          queryBuilder.andWhere("tag.status = :status", { status: TagStatus.PUBLISHED });
+        }
+
+        // Apply ordering
+        queryBuilder.orderBy("tag.created_at", "DESC");
+
+        // Apply pagination
+        queryBuilder.skip(offset).take(limit);
+
+        // Select specific fields
+        queryBuilder.select(["tag.id", "tag.name", "tag.status", "tag.created_at"]);
+
+        // Execute query
+        [items, totalCount] = await queryBuilder.getManyAndCount();
+      } else {
+        // Use findAndCount for simple filters (more efficient when no text search)
+        const whereCondition: Partial<Tag> = {};
+
+        if (filters.id) {
+          whereCondition.id = filters.id;
+        }
+
+        // If status is provided, use it; otherwise default to published only
+        if (filters.status) {
+          whereCondition.status = filters.status;
+        } else {
+          // Default: only show published tags (exclude archived)
+          whereCondition.status = TagStatus.PUBLISHED;
+        }
+
+        // OPTIMIZED: Single query with count and data using findAndCount
+        // This performs both COUNT and SELECT in an optimized way
+        [items, totalCount] = await this.tagRepository.findAndCount({
+          where: whereCondition,
+          order: {
+            created_at: "DESC",
+          },
+          take: limit,
+          skip: offset,
+          select: ["id", "name", "status", "created_at"],
+        });
+      }
 
       // Return paginated result with count, limit, and offset
       const result = {

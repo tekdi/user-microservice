@@ -14,6 +14,8 @@ import {
   HttpStatus,
   UseGuards,
   BadRequestException,
+  Logger,
+  Req,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -33,15 +35,26 @@ import { PathwaysService } from './pathways.service';
 import { CreatePathwayDto } from './dto/create-pathway.dto';
 import { UpdatePathwayDto } from './dto/update-pathway.dto';
 import { ListPathwayDto } from './dto/list-pathway.dto';
-import { Response } from 'express';
+import { Response, Request } from 'express';
 import { JwtAuthGuard } from 'src/common/guards/keycloak.guard';
 import { API_RESPONSES } from '@utils/response.messages';
 import { isUUID } from 'class-validator';
+
+interface RequestWithUser extends Request {
+  user?: {
+    userId: string;
+    name?: string;
+    username?: string;
+    [key: string]: any;
+  };
+}
 
 @ApiTags('Pathways')
 @Controller('pathway')
 @UseGuards(JwtAuthGuard)
 export class PathwaysController {
+  private readonly logger = new Logger(PathwaysController.name);
+
   constructor(private readonly pathwaysService: PathwaysService) {}
 
   @Post('create')
@@ -107,12 +120,14 @@ export class PathwaysController {
   async create(
     @Body() createPathwayDto: CreatePathwayDto,
     @Headers('tenantid') tenantId: string,
+    @Req() request: RequestWithUser,
     @Res() response: Response
   ): Promise<Response> {
     if (!tenantId || !isUUID(tenantId)) {
       throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
     }
-    return this.pathwaysService.create(createPathwayDto, response);
+    const userId = request.user?.userId || null;
+    return this.pathwaysService.create(createPathwayDto, userId, response);
   }
 
   @Post('list')
@@ -167,12 +182,25 @@ export class PathwaysController {
   async list(
     @Body() listPathwayDto: ListPathwayDto,
     @Headers('tenantid') tenantId: string,
+    @Headers('organisationid') organisationId: string,
     @Res() response: Response
   ): Promise<Response> {
     if (!tenantId || !isUUID(tenantId)) {
       throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
     }
-    return this.pathwaysService.list(listPathwayDto, response);
+    // SECURITY FIX: Use environment variable as safer fallback instead of client-provided header
+    // This prevents users from accessing other organizations' data by manipulating headers
+    // If organisationId is provided in header, validate it (future enhancement: check user access)
+    // For now, use DEFAULT_ORGANISATION_ID from environment for consistency with safer patterns
+    const orgId = process.env.DEFAULT_ORGANISATION_ID || organisationId || '';
+    if (organisationId && organisationId !== orgId) {
+      // Log warning if client provided different organisationId than default
+      // Future: Add authorization check here to validate user has access to requested organisationId
+      this.logger.warn(
+        `Client provided organisationId ${organisationId} differs from default ${orgId}. Using default for security.`
+      );
+    }
+    return this.pathwaysService.list(listPathwayDto, tenantId, orgId, response);
   }
 
   @Get(':id')
@@ -249,11 +277,13 @@ export class PathwaysController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updatePathwayDto: UpdatePathwayDto,
     @Headers('tenantid') tenantId: string,
+    @Req() request: RequestWithUser,
     @Res() response: Response
   ): Promise<Response> {
     if (!tenantId || !isUUID(tenantId)) {
       throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
     }
-    return this.pathwaysService.update(id, updatePathwayDto, response);
+    const userId = request.user?.userId || null;
+    return this.pathwaysService.update(id, updatePathwayDto, userId, response);
   }
 }
