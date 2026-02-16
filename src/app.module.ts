@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
@@ -101,4 +101,32 @@ import { PathwaysModule } from './pathways/pathways.module';
     },
   ],
 })
-export class AppModule {}
+export class AppModule implements OnModuleInit {
+  private readonly logger = new Logger(AppModule.name);
+
+  onModuleInit() {
+    this.logger.log('AppModule initialized successfully');
+    this.logger.log('PaymentsModule is included in AppModule imports');
+    this.logger.debug('All modules loaded:', [
+      'RbacModule',
+      'UserModule',
+      'CohortModule',
+      'CohortMembersModule',
+      'AssignTenantModule',
+      'FieldsModule',
+      'AuthModule',
+      'AuthRbacModule',
+      'DatabaseModule',
+      'FormsModule',
+      'TenantModule',
+      'AcademicyearsModule',
+      'CohortAcademicYearModule',
+      'ElasticsearchModule',
+      'BulkImportModule',
+      'TerminusModule',
+      'CacheModule',
+      'PaymentsModule',
+      'PathwaysModule',
+    ]);
+  }
+}

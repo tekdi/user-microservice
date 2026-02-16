@@ -32,7 +32,7 @@ class PathwayFiltersDto {
   description?: string;
 
   @ApiPropertyOptional({
-    description: 'Filter pathways by active status',
+    description: "Filter pathways by active status",
     example: true,
   })
   @Expose()
@@ -40,7 +40,6 @@ class PathwayFiltersDto {
   @IsBoolean()
   isActive?: boolean;
 }
-
 export class ListPathwayDto extends PaginationDto {
   @ApiPropertyOptional({
     description: 'Filters for pathways',
@@ -59,4 +58,3 @@ export class ListPathwayDto extends PaginationDto {
   @Type(() => PathwayFiltersDto)
   filters?: PathwayFiltersDto;
 }
-

@@ -1,12 +1,17 @@
 import { Injectable, HttpStatus } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In, ILike } from 'typeorm';
+import { Repository, In, DataSource, Like, ILike, Not } from 'typeorm';
 import { Pathway } from './entities/pathway.entity';
 import { Tag } from '../tags/entities/tag.entity';
 import { CreatePathwayDto } from './dto/create-pathway.dto';
 import { UpdatePathwayDto } from './dto/update-pathway.dto';
 import { ListPathwayDto } from './dto/list-pathway.dto';
+import { UpdateOrderDto, BulkUpdateOrderDto } from './dto/update-pathway-order.dto';
+import { StringUtil } from '../common/utils/string.util';
 import { MAX_PAGINATION_LIMIT } from '../common/dto/pagination.dto';
+import { AssignPathwayDto } from './dto/assign-pathway.dto';
+import { UserPathwayHistory } from './entities/user-pathway-history.entity';
+import { User } from '../../user/entities/user-entity';
 import { LmsClientService } from '../common/services/lms-client.service';
 import APIResponse from 'src/common/responses/response';
 import { API_RESPONSES } from '@utils/response.messages';
@@ -21,8 +26,13 @@ export class PathwaysService {
     private readonly pathwayRepository: Repository<Pathway>,
     @InjectRepository(Tag)
     private readonly tagRepository: Repository<Tag>,
+    @InjectRepository(UserPathwayHistory)
+    private readonly userPathwayHistoryRepository: Repository<UserPathwayHistory>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
+    private readonly dataSource: DataSource,
     private readonly lmsClientService: LmsClientService
-  ) {}
+  ) { }
 
   /**
    * Validate tag IDs exist in tags table
@@ -76,12 +86,13 @@ export class PathwaysService {
     // OPTIMIZED: Single query to fetch all tag details at once (no N+1)
     const tags = await this.tagRepository.find({
       where: { id: In(uniqueTagIds) },
-      select: ['id', 'name'],
+      select: ['id', 'name', 'alias'],
     });
 
     return tags.map((tag) => ({
       id: tag.id,
       name: tag.name,
+      alias: tag.alias,
     }));
   }
 
@@ -96,9 +107,34 @@ export class PathwaysService {
   ): Promise<Response> {
     const apiId = APIID.PATHWAY_CREATE;
     try {
+      // Auto-generate key from name if not provided
+      let key = createPathwayDto.key;
+      if (!key) {
+        key = await this.generateUniqueKey(createPathwayDto.name);
+      }
+
+      // Check if an active pathway with same name (case-insensitive) already exists
+      const activePathwayWithName = await this.pathwayRepository.findOne({
+        where: {
+          name: ILike(createPathwayDto.name),
+          is_active: true,
+        },
+        select: ['id'],
+      });
+
+      if (activePathwayWithName) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.CONFLICT,
+          "An active pathway with this name already exists",
+          HttpStatus.CONFLICT
+        );
+      }
+
       // Check if pathway with same key already exists
       const existingPathway = await this.pathwayRepository.findOne({
-        where: { key: createPathwayDto.key },
+        where: { key },
         select: ['id', 'key'],
       });
 
@@ -129,11 +165,25 @@ export class PathwaysService {
         }
       }
 
+      // Handle auto-increment for display_order if not provided
+      let displayOrder = createPathwayDto.display_order;
+      if (displayOrder === undefined || displayOrder === null) {
+        const maxOrderResult = await this.pathwayRepository
+          .createQueryBuilder('pathway')
+          .select('MAX(pathway.display_order)', 'max')
+          .getRawOne();
+
+        const maxOrder = maxOrderResult?.max || 0;
+        displayOrder = Number(maxOrder) + 1;
+      }
+
       // Set default is_active if not provided
       // Store tags as PostgreSQL text[] array in database
       // Format: {tag_id1,tag_id2,tag_id3}
       const pathwayData = {
         ...createPathwayDto,
+        key: key,
+        display_order: displayOrder,
         is_active: createPathwayDto.is_active ?? true,
         tags: dto.tags && dto.tags.length > 0 ? dto.tags : [],
         created_by: userId,
@@ -491,8 +541,7 @@ export class PathwaysService {
               response,
               apiId,
               API_RESPONSES.BAD_REQUEST,
-              `${
-                API_RESPONSES.INVALID_TAG_IDS
+              `${API_RESPONSES.INVALID_TAG_IDS
               }: ${validation.invalidTagIds.join(', ')}`,
               HttpStatus.BAD_REQUEST
             );
@@ -506,6 +555,25 @@ export class PathwaysService {
       const updateData: any = {};
 
       if (updatePathwayDto.name !== undefined) {
+        // Check if an active pathway with same name (case-insensitive) already exists, excluding current pathway
+        const activePathwayWithName = await this.pathwayRepository.findOne({
+          where: {
+            name: ILike(updatePathwayDto.name),
+            is_active: true,
+            id: Not(id),
+          },
+          select: ['id'],
+        });
+
+        if (activePathwayWithName) {
+          return APIResponse.error(
+            response,
+            apiId,
+            API_RESPONSES.CONFLICT,
+            "An active pathway with this name already exists",
+            HttpStatus.CONFLICT
+          );
+        }
         updateData.name = updatePathwayDto.name;
       }
       if (updatePathwayDto.description !== undefined) {
@@ -602,6 +670,378 @@ export class PathwaysService {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error updating pathway: ${errorMessage}`,
+        apiId
+      );
+      return APIResponse.error(
+        response,
+        apiId,
+        API_RESPONSES.INTERNAL_SERVER_ERROR,
+        errorMessage,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  /**
+   * Assign / Activate Pathway for User
+   * Logic: Deactivate existing active pathway and reactivate or create new record
+   */
+  async assignPathway(
+    assignDto: AssignPathwayDto,
+    response: Response
+  ): Promise<Response> {
+    const apiId = APIID.PATHWAY_ASSIGN;
+    return this.handlePathwayAssignment(
+      assignDto.userId,
+      assignDto.pathwayId,
+      apiId,
+      response,
+      assignDto.userGoal,
+      assignDto.created_by,
+      assignDto.updated_by
+    );
+  }
+
+
+
+  /**
+   * Shared internal method for Pathway Assignment and Switching
+   * Ensures strict reactivation of existing records to prevent duplicates
+   */
+  private async handlePathwayAssignment(
+    userId: string,
+    pathwayId: string,
+    apiId: string,
+    response: Response,
+    userGoal?: string,
+    created_by?: string,
+    updated_by?: string
+  ): Promise<Response> {
+    try {
+      // 1. Validate user existence
+      const user = await this.userRepository.findOne({
+        where: { userId },
+        select: ['userId'],
+      });
+
+      if (!user) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.NOT_FOUND,
+          'User not found',
+          HttpStatus.NOT_FOUND
+        );
+      }
+
+      // 2. Validate target pathway existence and active status
+      const pathway = await this.pathwayRepository.findOne({
+        where: { id: pathwayId, is_active: true },
+        select: ['id'],
+      });
+
+      if (!pathway) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.NOT_FOUND,
+          'Active pathway not found',
+          HttpStatus.NOT_FOUND
+        );
+      }
+
+      // 3. Find currently active pathway
+      const currentActive = await this.userPathwayHistoryRepository.findOne({
+        where: { user_id: userId, is_active: true },
+      });
+
+      // 4. Check if target pathway already has a history record for this user
+      // If found, we will REACTIVATE it instead of creating a new one
+      const existingTargetRecord = await this.userPathwayHistoryRepository.findOne({
+        where: { user_id: userId, pathway_id: pathwayId },
+      });
+
+      // If already active, no switch needed
+      if (currentActive?.pathway_id === pathwayId) {
+        const result = {
+          userId,
+          previousPathwayId: pathwayId,
+          currentPathwayId: pathwayId,
+          activatedAt: currentActive.activated_at,
+          deactivated_at: null,
+          userGoal: currentActive.user_goal,
+          created_by: currentActive.created_by,
+          updated_by: currentActive.updated_by,
+        };
+        return APIResponse.success(
+          response,
+          apiId,
+          result,
+          HttpStatus.OK,
+          'Pathway is already active'
+        );
+      }
+
+      const timestamp = new Date();
+      let previousPathwayId = currentActive ? currentActive.pathway_id : null;
+
+      // 5. Atomic Transaction: Deactivate current and Reactivate/Activate target
+      await this.dataSource.transaction(async (manager) => {
+        // Deactivate current active pathway
+        if (currentActive) {
+          await manager.update(
+            UserPathwayHistory,
+            { id: currentActive.id },
+            {
+              is_active: false,
+              deactivated_at: timestamp,
+              updated_by: updated_by || created_by
+            }
+          );
+        }
+
+        if (existingTargetRecord) {
+          // REACTIVATE: Update existing record timestamps and status
+          // This keeps the interests linked to this record ID safe
+          await manager.update(
+            UserPathwayHistory,
+            { id: existingTargetRecord.id },
+            {
+              is_active: true,
+              activated_at: timestamp,
+              deactivated_at: null, // As requested: if reactivated, null the column
+              user_goal: userGoal,
+              updated_by: null // Refined: null when deactivated_at is null
+            }
+          );
+        } else {
+          // CREATE: New history record
+          const record = manager.create(UserPathwayHistory, {
+            user_id: userId,
+            pathway_id: pathwayId,
+            is_active: true,
+            activated_at: timestamp,
+            user_goal: userGoal,
+            created_by: created_by,
+            updated_by: null // Refined: null on initial creation
+          });
+          await manager.save(record);
+        }
+      });
+
+      const result = {
+        userId,
+        previousPathwayId,
+        currentPathwayId: pathwayId,
+        activatedAt: timestamp,
+        deactivated_at: currentActive ? timestamp : null,
+        userGoal: userGoal,
+        created_by: created_by,
+        updated_by: null, // Refined: result is the active record, so updated_by is null
+      };
+
+      const successMessage = currentActive
+        ? API_RESPONSES.PATHWAY_SWITCHED_SUCCESSFULLY
+        : API_RESPONSES.PATHWAY_ASSIGNED_SUCCESSFULLY;
+
+      return APIResponse.success(
+        response,
+        apiId,
+        result,
+        HttpStatus.OK,
+        successMessage
+      );
+    } catch (error) {
+      const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error handling pathway assignment: ${errorMessage}`,
+        apiId
+      );
+      return APIResponse.error(
+        response,
+        apiId,
+        API_RESPONSES.INTERNAL_SERVER_ERROR,
+        errorMessage,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+
+  /**
+   * Get Active Pathway for User
+   * Retrieves the currently active pathway assignment for a user
+   */
+  async getActivePathway(
+    userId: string,
+    response: Response
+  ): Promise<Response> {
+    const apiId = APIID.PATHWAY_GET_ACTIVE;
+    try {
+      // Validate UUID format
+      const uuidRegex =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(userId)) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          API_RESPONSES.UUID_VALIDATION,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      // 1. Validate user existence
+      const user = await this.userRepository.findOne({
+        where: { userId },
+        select: ['userId'],
+      });
+
+      if (!user) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.NOT_FOUND,
+          'User not found',
+          HttpStatus.NOT_FOUND
+        );
+      }
+
+      // 2. Get active pathway from user_pathway_history
+      const activePathway = await this.userPathwayHistoryRepository.findOne({
+        where: { user_id: userId, is_active: true },
+        select: ['id', 'pathway_id', 'activated_at'],
+      });
+
+      if (!activePathway) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.NOT_FOUND,
+          'No active pathway found for this user',
+          HttpStatus.NOT_FOUND
+        );
+      }
+
+      const result = {
+        id: activePathway.id,
+        pathwayId: activePathway.pathway_id,
+        activatedAt: activePathway.activated_at,
+      };
+
+      return APIResponse.success(
+        response,
+        apiId,
+        result,
+        HttpStatus.OK,
+        'Active pathway retrieved successfully'
+      );
+    } catch (error) {
+      const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error getting active pathway: ${errorMessage}`,
+        apiId
+      );
+      return APIResponse.error(
+        response,
+        apiId,
+        API_RESPONSES.INTERNAL_SERVER_ERROR,
+        errorMessage,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  /**
+   * Generate a unique key from name for a pathway
+   * Logic mirrors TagsService.generateUniqueAlias and InterestsService.generateUniqueKey
+   */
+  private async generateUniqueKey(name: string): Promise<string> {
+    // Step 1: Normalization (Safe truncation handled by utility)
+    let key = StringUtil.normalizeKey(name, 50);
+
+    if (!key) {
+      // Fallback if name contains no valid chars
+      key = `pathway_${Date.now()}`;
+    }
+
+    // Step 2: Uniqueness check with prefix search
+    const existingKeys = await this.pathwayRepository.find({
+      where: {
+        key: Like(`${key}%`),
+      },
+      select: ['key'],
+    });
+
+    if (existingKeys.length === 0) {
+      return key;
+    }
+
+    const keySet = new Set(existingKeys.map((p) => p.key));
+    if (!keySet.has(key)) {
+      return key;
+    }
+
+    // Step 3: Find next available numeric suffix
+    let counter = 1;
+    let uniqueKey = `${key}_${counter}`;
+
+    // Ensure suffix doesn't exceed length limit
+    while (keySet.has(uniqueKey)) {
+      counter++;
+      const suffix = `_${counter}`;
+      if (key.length + suffix.length > 50) {
+        // Trim base key to fit suffix
+        const trimmedBase = key.substring(0, 50 - suffix.length);
+        uniqueKey = `${trimmedBase}${suffix}`;
+      } else {
+        uniqueKey = `${key}${suffix}`;
+      }
+
+      // Safety break
+      if (counter > 1000) break;
+    }
+
+    return uniqueKey;
+  }
+
+  /**
+   * Bulk update pathway display orders
+   */
+  async updateOrderStructure(
+    bulkUpdateOrderDto: BulkUpdateOrderDto,
+    response: Response
+  ): Promise<Response> {
+    const apiId = APIID.PATHWAY_ORDER_STRUCTURE;
+    try {
+      const { orders } = bulkUpdateOrderDto;
+
+      // Update each pathway order
+      // We process them sequentially for simplicity and safety
+      for (const orderItem of orders) {
+        await this.pathwayRepository.update(
+          { id: orderItem.id },
+          {
+            display_order: orderItem.order,
+            updated_at: new Date(),
+          }
+        );
+      }
+
+      return APIResponse.success(
+        response,
+        apiId,
+        null,
+        HttpStatus.OK,
+        "Pathway order structure updated successfully"
+      );
+    } catch (error) {
+      const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error updating pathway order structure: ${errorMessage}`,
         apiId
       );
       return APIResponse.error(
