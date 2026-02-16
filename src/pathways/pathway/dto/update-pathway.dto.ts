@@ -1,4 +1,4 @@
-import { ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiPropertyOptional } from "@nestjs/swagger";
 import {
   IsString,
   IsBoolean,
@@ -13,19 +13,19 @@ import { Expose } from 'class-transformer';
 
 export class UpdatePathwayDto {
   @ApiPropertyOptional({
-    description: 'Display name of the pathway',
-    example: 'Advanced Career Track',
+    description: "Display name of the pathway",
+    example: "Advanced Career Track",
     maxLength: 100,
   })
   @Expose()
   @IsOptional()
   @IsString()
-  @MaxLength(100, { message: 'Name must not exceed 100 characters' })
+  @MaxLength(100, { message: "Name must not exceed 100 characters" })
   name?: string;
 
   @ApiPropertyOptional({
-    description: 'Detailed description of the pathway',
-    example: 'Advanced skills for corporate leadership',
+    description: "Detailed description of the pathway",
+    example: "Advanced skills for corporate leadership",
   })
   @Expose()
   @IsOptional()
@@ -47,18 +47,18 @@ export class UpdatePathwayDto {
   tags?: string[];
 
   @ApiPropertyOptional({
-    description: 'Display order for sorting pathways',
+    description: "Display order for sorting pathways",
     example: 2,
     minimum: 0,
   })
   @Expose()
   @IsOptional()
   @IsNumber()
-  @Min(0, { message: 'Display order must be a non-negative number' })
+  @Min(0, { message: "Display order must be a non-negative number" })
   display_order?: number;
 
   @ApiPropertyOptional({
-    description: 'Whether the pathway is active',
+    description: "Whether the pathway is active",
     example: true,
   })
   @Expose()
@@ -66,4 +66,3 @@ export class UpdatePathwayDto {
   @IsBoolean()
   is_active?: boolean;
 }
-

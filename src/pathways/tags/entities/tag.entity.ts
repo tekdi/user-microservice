@@ -13,14 +13,18 @@ export enum TagStatus {
 }
 
 @Entity('tags')
-@Index(['name'], { unique: true })
+@Index(['name'], { unique: true, where: "status = 'published'" })
+@Index(['alias'], { unique: true })
 @Index(['status'])
 export class Tag {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ type: 'varchar', length: 100, unique: true, nullable: false })
+  @Column({ type: 'varchar', length: 100, nullable: false })
   name: string;
+
+  @Column({ type: 'varchar', length: 100, nullable: false })
+  alias: string;
 
   @Column({
     type: 'varchar',
@@ -31,14 +35,13 @@ export class Tag {
   status: TagStatus;
 
   @CreateDateColumn({
-    type: 'timestamp',
+    type: 'timestamp with time zone',
     default: () => 'CURRENT_TIMESTAMP',
-    nullable: false,
   })
   created_at: Date;
 
   @UpdateDateColumn({
-    type: 'timestamp',
+    type: 'timestamp with time zone',
     default: () => 'CURRENT_TIMESTAMP',
     onUpdate: 'CURRENT_TIMESTAMP',
   })
