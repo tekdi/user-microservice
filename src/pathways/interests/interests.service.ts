@@ -663,8 +663,13 @@ export class InterestsService {
       .replace(/-/g, '_')
       .replace(/_{2,}/g, '_'); // Safe collapse of multiple underscores
 
-    // Remove leading/trailing underscores
-    key = key.replace(/^_+/, '').replace(/_+$/, '');
+    // Remove leading/trailing underscores (safe, non-backtracking approach)
+    while (key.startsWith('_')) {
+      key = key.slice(1);
+    }
+    while (key.endsWith('_')) {
+      key = key.slice(0, -1);
+    }
 
     if (!key) {
       // Fallback if label contains no valid chars

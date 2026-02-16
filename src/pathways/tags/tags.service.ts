@@ -605,8 +605,13 @@ export class TagsService implements OnModuleInit {
       .replace(/-/g, '_')
       .replace(/_{2,}/g, '_');
 
-    // Remove leading and trailing underscores (safe, non-backtracking approach)
-    alias = alias.replace(/^_+/, '').replace(/_+$/, '');
+    // Remove leading/trailing underscores (safe, non-backtracking approach)
+    while (alias.startsWith('_')) {
+      alias = alias.slice(1);
+    }
+    while (alias.endsWith('_')) {
+      alias = alias.slice(0, -1);
+    }
 
     if (!alias) {
       alias = new Date().toISOString().replace(/\D/g, '').slice(0, 14);
