@@ -657,17 +657,12 @@ export class InterestsService {
     label: string,
     pathwayId: string
   ): Promise<string> {
-    // Step 1: Normalization
-    let key = StringUtil.normalizeKey(label);
+    // Step 1: Normalization (Safe truncation handled by utility)
+    let key = StringUtil.normalizeKey(label, 50);
 
     if (!key) {
       // Fallback if label contains no valid chars
       key = `interest_${Date.now()}`;
-    }
-
-    // Truncate to 50 chars (DB limit)
-    if (key.length > 50) {
-      key = key.substring(0, 50).replace(/_+$/, '');
     }
 
     // Step 2: Uniqueness check with prefix search

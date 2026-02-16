@@ -234,25 +234,28 @@ export class TagsService implements OnModuleInit {
       }
 
       // OPTIMIZED: Use repository.update() for partial updates
-      // updated_at is automatically updated by UpdateDateColumn decorator
-      const updateResult = await this.tagRepository.update({ id }, updateData);
+      await this.tagRepository.update(
+        { id },
+        {
+          ...updateData,
+          updated_at: new Date(),
+        }
+      );
 
-      if (!updateResult.affected || updateResult.affected === 0) {
+      // Fetch updated tag for response (safety check for concurrent deletion)
+      const updatedTag = await this.tagRepository.findOne({
+        where: { id },
+      });
+
+      if (!updatedTag) {
         return APIResponse.error(
           response,
           apiId,
-          API_RESPONSES.INTERNAL_SERVER_ERROR,
-          'Failed to update tag',
-          HttpStatus.INTERNAL_SERVER_ERROR
+          API_RESPONSES.NOT_FOUND,
+          API_RESPONSES.TAG_NOT_FOUND,
+          HttpStatus.NOT_FOUND
         );
       }
-
-      const updatedTag = {
-        ...existingTag,
-        ...updateData,
-        updated_at: new Date(), // Approximation since we didn't fetch again
-        updated_by: updateData.updated_by,
-      };
 
       return APIResponse.success(
         response,

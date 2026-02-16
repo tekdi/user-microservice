@@ -959,17 +959,12 @@ export class PathwaysService {
    * Logic mirrors TagsService.generateUniqueAlias and InterestsService.generateUniqueKey
    */
   private async generateUniqueKey(name: string): Promise<string> {
-    // Step 1: Normalization
-    let key = StringUtil.normalizeKey(name);
+    // Step 1: Normalization (Safe truncation handled by utility)
+    let key = StringUtil.normalizeKey(name, 50);
 
     if (!key) {
       // Fallback if name contains no valid chars
       key = `pathway_${Date.now()}`;
-    }
-
-    // Truncate to 50 chars (DB limit)
-    if (key.length > 50) {
-      key = key.substring(0, 50).replace(/_+$/, '');
     }
 
     // Step 2: Uniqueness check with prefix search
@@ -1011,6 +1006,7 @@ export class PathwaysService {
 
     return uniqueKey;
   }
+
   /**
    * Bulk update pathway display orders
    */
