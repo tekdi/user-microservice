@@ -1,6 +1,6 @@
 import { Injectable, HttpStatus } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository, In, DataSource } from "typeorm";
+import { Repository, In, DataSource, ILike } from "typeorm";
 import { Interest } from "./entities/interest.entity";
 import { CreateInterestDto } from "./dto/create-interest.dto";
 import { UpdateInterestDto } from "./dto/update-interest.dto";
@@ -320,6 +320,12 @@ export class InterestsService {
       const whereCondition: any = { pathway_id: pathwayId };
       if (isActive !== undefined) {
         whereCondition.is_active = isActive;
+      }
+      if (listInterestDto.label) {
+        whereCondition.label = ILike(`%${listInterestDto.label}%`);
+      }
+      if (listInterestDto.id) {
+        whereCondition.id = listInterestDto.id;
       }
 
       // Set pagination defaults with safeguard to prevent unbounded queries

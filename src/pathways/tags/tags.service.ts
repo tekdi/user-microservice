@@ -1,6 +1,6 @@
 import { Injectable, HttpStatus, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Like, Not, DataSource, ILike, In } from 'typeorm';
+import { Repository, Like, Not, DataSource } from 'typeorm';
 import { Tag, TagStatus } from './entities/tag.entity';
 import { CreateTagDto } from './dto/create-tag.dto';
 import { UpdateTagDto } from './dto/update-tag.dto';
@@ -41,7 +41,7 @@ export class TagsService implements OnModuleInit {
         try {
           await this.dataSource.query(query);
         } catch (e) {
-          // Ignore errors (e.g. if constraint doesn't exist)
+          LoggerUtil.warn('TagsService', `Ignored error during index drop: ${e.message}`);
         }
       }
       LoggerUtil.log('TagsService', 'Attempted to cleanup legacy tag name indexes');
@@ -161,10 +161,7 @@ export class TagsService implements OnModuleInit {
   ): Promise<Response> {
     const apiId = APIID.TAG_UPDATE;
     try {
-      // Validate UUID format
-      const uuidRegex =
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      if (!uuidRegex.test(id)) {
+      if (!this.isValidUUID(id)) {
         return APIResponse.error(
           response,
           apiId,
@@ -174,7 +171,6 @@ export class TagsService implements OnModuleInit {
         );
       }
 
-      // Check if tag exists
       const existingTag = await this.tagRepository.findOne({
         where: { id },
         select: ['id', 'name', 'alias', 'status', 'created_at'],
@@ -190,17 +186,10 @@ export class TagsService implements OnModuleInit {
         );
       }
 
-      // Prepare update data - filter out undefined values
       const updateData: Partial<Tag> = {};
 
-      // If name is being changed, check if new name conflicts with an existing PUBLISHED tag
       if (updateTagDto.name && updateTagDto.name !== existingTag.name) {
-        const nameConflict = await this.tagRepository.findOne({
-          where: { name: updateTagDto.name, status: TagStatus.PUBLISHED },
-          select: ['id'],
-        });
-
-        if (nameConflict) {
+        if (await this.checkNameConflict(updateTagDto.name)) {
           return APIResponse.error(
             response,
             apiId,
@@ -212,15 +201,8 @@ export class TagsService implements OnModuleInit {
         updateData.name = updateTagDto.name;
       }
 
-      // If alias is being changed, check for GLOBAL uniqueness (published or archived)
-      // Note: We DO NOT auto-suffix in update, we ask the user for a unique one.
       if (updateTagDto.alias && updateTagDto.alias !== existingTag.alias) {
-        const aliasConflict = await this.tagRepository.findOne({
-          where: { alias: updateTagDto.alias },
-          select: ['id'],
-        });
-
-        if (aliasConflict) {
+        if (await this.checkAliasConflict(updateTagDto.alias)) {
           return APIResponse.error(
             response,
             apiId,
@@ -240,7 +222,6 @@ export class TagsService implements OnModuleInit {
         updateData.updated_by = userId || updateTagDto.updated_by;
       }
 
-      // Check if there's anything to update
       if (Object.keys(updateData).length === 0) {
         return APIResponse.error(
           response,
@@ -265,20 +246,12 @@ export class TagsService implements OnModuleInit {
         );
       }
 
-      // Fetch updated tag for response
-      const updatedTag = await this.tagRepository.findOne({
-        where: { id },
-        select: [
-          'id',
-          'name',
-          'alias',
-          'status',
-          'created_at',
-          'updated_at',
-          'created_by',
-          'updated_by',
-        ],
-      });
+      const updatedTag = {
+        ...existingTag,
+        ...updateData,
+        updated_at: new Date(), // Approximation since we didn't fetch again
+        updated_by: updateData.updated_by,
+      };
 
       return APIResponse.success(
         response,
@@ -628,15 +601,15 @@ export class TagsService implements OnModuleInit {
     // Step 1: Normalization
     let alias = name
       .toLowerCase()
-      .replace(/[^a-z0-9_\-]/g, '_')
+      .replace(/[^a-z0-9_-]/g, '_')
       .replace(/-/g, '_')
       .replace(/_+/g, '_');
 
     // Remove leading and trailing underscores (safe, non-backtracking approach)
-    alias = alias.replace(/^_+/, '').replace(/_`+$/, '');
+    alias = alias.replace(/^_+/, '').replace(/_+$/, '');
 
     if (!alias) {
-      alias = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14);
+      alias = new Date().toISOString().replace(/\D/g, '').slice(0, 14);
     }
 
     // Step 2: Optimized uniqueness check using prefix search
@@ -667,5 +640,26 @@ export class TagsService implements OnModuleInit {
     }
 
     return uniqueAlias;
+  }
+
+  private isValidUUID(id: string): boolean {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    return uuidRegex.test(id);
+  }
+
+  private async checkNameConflict(name: string): Promise<boolean> {
+    const conflict = await this.tagRepository.findOne({
+      where: { name, status: TagStatus.PUBLISHED },
+      select: ['id'],
+    });
+    return !!conflict;
+  }
+
+  private async checkAliasConflict(alias: string): Promise<boolean> {
+    const conflict = await this.tagRepository.findOne({
+      where: { alias },
+      select: ['id'],
+    });
+    return !!conflict;
   }
 }
