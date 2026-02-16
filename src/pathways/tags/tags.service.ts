@@ -630,8 +630,10 @@ export class TagsService implements OnModuleInit {
       .toLowerCase()
       .replace(/[^a-z0-9_\-]/g, '_')
       .replace(/-/g, '_')
-      .replace(/_+/g, '_')
-      .replace(/^_+|_+$/g, '');
+      .replace(/_+/g, '_');
+
+    // Remove leading and trailing underscores (safe, non-backtracking approach)
+    alias = alias.replace(/^_+/, '').replace(/_+$/, '');
 
     if (!alias) {
       alias = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14);
