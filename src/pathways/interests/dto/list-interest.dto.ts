@@ -5,6 +5,15 @@ import { PaginationDto } from "../../common/dto/pagination.dto";
 
 export class ListInterestDto extends PaginationDto {
     @ApiPropertyOptional({
+        description: "Pathway UUID",
+        example: "123e4567-e89b-12d3-a456-426614174000",
+        format: "uuid",
+    })
+    @IsOptional()
+    @IsUUID()
+    pathwayId?: string;
+
+    @ApiPropertyOptional({
         description: "Filter interests by active status",
         example: true,
     })

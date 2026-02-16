@@ -133,51 +133,23 @@ export class InterestsController {
   /**
    * List all interests for a pathway with pagination
    */
-  @Get("list/:pathwayId")
+  @Post("list")
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: "List Interests by Pathway",
-    description: "Retrieves interests associated with the given pathway ID with pagination support. Returns paginated results with count metadata.",
+    description: "Retrieves interests associated with the given pathway ID in the request body with pagination support.",
   })
   @ApiHeader({ name: "Authorization", required: true })
   @ApiHeader({ name: "tenantid", required: true })
-  @ApiParam({ name: "pathwayId", description: "Pathway UUID", format: "uuid" })
+  @ApiBody({ type: ListInterestDto })
   @ApiResponse({
     status: 200,
     description: "Interests retrieved successfully",
-    schema: {
-      example: {
-        id: "api.interest.list.pathway",
-        ver: "1.0",
-        ts: "2026-02-11T10:55:13.663Z",
-        params: {
-          resmsgid: "uuid",
-          status: "successful"
-        },
-        responseCode: 200,
-        result: {
-          count: 5,
-          totalCount: 15,
-          limit: 10,
-          offset: 0,
-          items: [
-            {
-              id: "uuid",
-              key: "internships",
-              label: "Internships",
-              is_active: true,
-              created_at: "2026-02-11T10:55:13.663Z"
-            }
-          ]
-        }
-      }
-    }
   })
   @ApiNotFoundResponse({ description: "Pathway not found" })
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   async listByPathway(
-    @Param("pathwayId", ParseUUIDPipe) pathwayId: string,
-    @Query() listInterestDto: ListInterestDto,
+    @Body() listInterestDto: ListInterestDto,
     @Headers("tenantid") tenantId: string,
     @Res() response: Response
   ): Promise<Response> {
@@ -185,7 +157,6 @@ export class InterestsController {
       throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
     }
     return this.interestsService.listByPathwayId(
-      pathwayId,
       response,
       listInterestDto
     );

@@ -137,6 +137,7 @@ export const APIID = {
   PATHWAY_ASSIGN: "api.user.pathway.assign",
   PATHWAY_SWITCH: "api.user.pathway.switch",
   PATHWAY_GET_ACTIVE: "api.user.pathway.active",
+  PATHWAY_ORDER_STRUCTURE: "api.pathway.order.structure",
 
   // Tag Management APIs
   TAG_CREATE: 'api.user.tag.create',

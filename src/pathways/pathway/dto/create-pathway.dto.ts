@@ -20,7 +20,7 @@ export class CreatePathwayDto {
   })
   @Expose()
   @IsString()
-  @IsNotEmpty()
+  @IsOptional()
   @MaxLength(50, { message: "Key must not exceed 50 characters" })
   key: string;
 
@@ -58,16 +58,16 @@ export class CreatePathwayDto {
   @IsUUID(undefined, { each: true, message: 'Each tag ID must be a valid UUID' })
   tags?: string[];
 
-  @ApiProperty({
-    description: "Display order for sorting pathways",
+  @ApiPropertyOptional({
+    description: "Display order for sorting pathways (auto-incremented if not provided)",
     example: 1,
     minimum: 0,
   })
   @Expose()
   @IsNumber()
-  @IsNotEmpty()
+  @IsOptional()
   @Min(0, { message: "Display order must be a non-negative number" })
-  display_order: number;
+  display_order?: number;
 
   @ApiProperty({
     description: "Whether the pathway is active",

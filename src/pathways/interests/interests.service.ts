@@ -1,6 +1,6 @@
 import { Injectable, HttpStatus } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository, In, DataSource, ILike } from "typeorm";
+import { Repository, In, DataSource, ILike, Like, Not } from "typeorm";
 import { Interest } from "./entities/interest.entity";
 import { CreateInterestDto } from "./dto/create-interest.dto";
 import { UpdateInterestDto } from "./dto/update-interest.dto";
@@ -56,11 +56,41 @@ export class InterestsService {
         );
       }
 
-      // Check if interest with same key exists for this pathway
+      // 1. Check if an active interest with same label already exists for this pathway
+      // Requirement: if status is active and same name (label), block creation.
+      const activeInterestWithLabel = await this.interestRepository.findOne({
+        where: {
+          pathway_id: createInterestDto.pathway_id,
+          label: ILike(createInterestDto.label),
+          is_active: true,
+        },
+        select: ['id'],
+      });
+
+      if (activeInterestWithLabel) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.CONFLICT,
+          "An active interest with this name already exists in this pathway",
+          HttpStatus.CONFLICT
+        );
+      }
+
+      // 2. Auto-generate key from label if not provided
+      let key = createInterestDto.key;
+      if (!key) {
+        key = await this.generateUniqueKey(
+          createInterestDto.label,
+          createInterestDto.pathway_id
+        );
+      }
+
+      // 3. Check if interest with same key exists for this pathway
       const existingInterest = await this.interestRepository.findOne({
         where: {
           pathway_id: createInterestDto.pathway_id,
-          key: createInterestDto.key,
+          key: key,
         },
         select: ['id'],
       });
@@ -77,6 +107,7 @@ export class InterestsService {
 
       const interest = this.interestRepository.create({
         ...createInterestDto,
+        key: key,
         is_active: createInterestDto.is_active ?? true,
         // created_by is already snake_case in DTO now
       });
@@ -164,6 +195,29 @@ export class InterestsService {
             apiId,
             API_RESPONSES.CONFLICT,
             API_RESPONSES.INTEREST_KEY_EXISTS,
+            HttpStatus.CONFLICT
+          );
+        }
+      }
+
+      // 4. If label is being updated, check for uniqueness of active interest with same label
+      if (updateInterestDto.label) {
+        const activeInterestWithLabel = await this.interestRepository.findOne({
+          where: {
+            pathway_id: existingInterest.pathway_id,
+            label: ILike(updateInterestDto.label),
+            is_active: true,
+            id: Not(id),
+          },
+          select: ['id'],
+        });
+
+        if (activeInterestWithLabel) {
+          return APIResponse.error(
+            response,
+            apiId,
+            API_RESPONSES.CONFLICT,
+            "An active interest with this name already exists in this pathway",
             HttpStatus.CONFLICT
           );
         }
@@ -293,13 +347,21 @@ export class InterestsService {
    * Optimized: Uses findAndCount for efficient pagination
    */
   async listByPathwayId(
-    pathwayId: string,
     response: Response,
     listInterestDto: ListInterestDto
   ): Promise<Response> {
     const apiId = APIID.INTEREST_LIST_BY_PATHWAY;
-    const { isActive, limit: requestedLimit, offset } = listInterestDto;
+    const { pathwayId, isActive, limit: requestedLimit, offset } = listInterestDto;
     try {
+      if (!pathwayId) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          "pathwayId is required in request body",
+          HttpStatus.BAD_REQUEST
+        );
+      }
       // Check if pathway exists
       const pathway = await this.pathwayRepository.findOne({
         where: { id: pathwayId },
@@ -583,5 +645,76 @@ export class InterestsService {
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
+  }
+
+
+  /**
+   * Generate a unique key from label within a pathway
+   * Logic mirrors TagsService.generateUniqueAlias
+   */
+  private async generateUniqueKey(
+    label: string,
+    pathwayId: string
+  ): Promise<string> {
+    // Step 1: Normalization
+    let key = label
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]/g, '_')
+      .replace(/-/g, '_')
+      .replace(/_{2,}/g, '_'); // Safe collapse of multiple underscores
+
+    // Remove leading/trailing underscores
+    key = key.replace(/^_+/, '').replace(/_+$/, '');
+
+    if (!key) {
+      // Fallback if label contains no valid chars
+      key = `interest_${Date.now()}`;
+    }
+
+    // Truncate to 50 chars (DB limit)
+    if (key.length > 50) {
+      key = key.substring(0, 50).replace(/_+$/, '');
+    }
+
+    // Step 2: Uniqueness check with prefix search
+    const existingKeys = await this.interestRepository.find({
+      where: {
+        pathway_id: pathwayId,
+        key: Like(`${key}%`),
+      },
+      select: ['key'],
+    });
+
+    if (existingKeys.length === 0) {
+      return key;
+    }
+
+    const keySet = new Set(existingKeys.map((i) => i.key));
+    if (!keySet.has(key)) {
+      return key;
+    }
+
+    // Step 3: Find next available numeric suffix
+    let counter = 1;
+    let uniqueKey = `${key}_${counter}`;
+
+    // Ensure suffix doesn't exceed length limit
+    // If base key is long, we might need to trim it to fit suffix
+    while (keySet.has(uniqueKey)) {
+      counter++;
+      const suffix = `_${counter}`;
+      if (key.length + suffix.length > 50) {
+        // Trim base key to fit suffix
+        const trimmedBase = key.substring(0, 50 - suffix.length);
+        uniqueKey = `${trimmedBase}${suffix}`;
+      } else {
+        uniqueKey = `${key}${suffix}`;
+      }
+
+      // Safety break to prevent infinite loop if somehow we cycle (unlikely with counter increment)
+      if (counter > 1000) break;
+    }
+
+    return uniqueKey;
   }
 }

@@ -27,7 +27,7 @@ export class CreateInterestDto {
   })
   @Expose()
   @IsString()
-  @IsNotEmpty()
+  @IsOptional()
   @MaxLength(50)
   key: string;
 

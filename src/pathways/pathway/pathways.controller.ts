@@ -36,6 +36,7 @@ import { CreatePathwayDto } from './dto/create-pathway.dto';
 import { UpdatePathwayDto } from './dto/update-pathway.dto';
 import { ListPathwayDto } from './dto/list-pathway.dto';
 import { AssignPathwayDto } from './dto/assign-pathway.dto';
+import { BulkUpdateOrderDto } from './dto/update-pathway-order.dto';
 import { Response, Request } from 'express';
 import { JwtAuthGuard } from 'src/common/guards/keycloak.guard';
 import { InterestsService } from '../interests/interests.service';
@@ -145,7 +146,7 @@ export class PathwaysController {
   })
   @ApiBadRequestResponse({ description: "Bad Request" })
   @ApiUnauthorizedResponse({ description: "Unauthorized" })
-  @ApiConflictResponse({ description: "Pathway with this key already exists" })
+  @ApiConflictResponse({ description: "Pathway conflict: check if key or active name already exists" })
   @ApiInternalServerErrorResponse({ description: "Internal Server Error" })
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   async create(
@@ -159,6 +160,31 @@ export class PathwaysController {
     }
     const userId = request.user?.userId || null;
     return this.pathwaysService.create(createPathwayDto, userId, response);
+  }
+
+  /**
+   * Bulk update pathway display orders
+   */
+  @Post("order/structure")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: "Bulk Update Pathway Order Structure",
+    description: "Updates the display order for multiple pathways in a single request.",
+  })
+  @ApiHeader({ name: "Authorization", required: true })
+  @ApiHeader({ name: "tenantid", required: true })
+  @ApiBody({ type: BulkUpdateOrderDto })
+  @ApiResponse({ status: 200, description: "Pathway order structure updated successfully" })
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  async updateOrderStructure(
+    @Body() bulkUpdateOrderDto: BulkUpdateOrderDto,
+    @Headers("tenantid") tenantId: string,
+    @Res() response: Response
+  ): Promise<Response> {
+    if (!tenantId || !isUUID(tenantId)) {
+      throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
+    }
+    return this.pathwaysService.updateOrderStructure(bulkUpdateOrderDto, response);
   }
 
   @Post("list")

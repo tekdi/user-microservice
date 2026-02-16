@@ -1,11 +1,12 @@
 import { Injectable, HttpStatus } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In, DataSource } from 'typeorm';
+import { Repository, In, DataSource, Like, ILike, Not } from 'typeorm';
 import { Pathway } from './entities/pathway.entity';
 import { Tag } from '../tags/entities/tag.entity';
 import { CreatePathwayDto } from './dto/create-pathway.dto';
 import { UpdatePathwayDto } from './dto/update-pathway.dto';
 import { ListPathwayDto } from './dto/list-pathway.dto';
+import { UpdateOrderDto, BulkUpdateOrderDto } from './dto/update-pathway-order.dto';
 import { MAX_PAGINATION_LIMIT } from '../common/dto/pagination.dto';
 import { AssignPathwayDto } from './dto/assign-pathway.dto';
 import { UserPathwayHistory } from './entities/user-pathway-history.entity';
@@ -105,9 +106,34 @@ export class PathwaysService {
   ): Promise<Response> {
     const apiId = APIID.PATHWAY_CREATE;
     try {
+      // Auto-generate key from name if not provided
+      let key = createPathwayDto.key;
+      if (!key) {
+        key = await this.generateUniqueKey(createPathwayDto.name);
+      }
+
+      // Check if an active pathway with same name (case-insensitive) already exists
+      const activePathwayWithName = await this.pathwayRepository.findOne({
+        where: {
+          name: ILike(createPathwayDto.name),
+          is_active: true,
+        },
+        select: ['id'],
+      });
+
+      if (activePathwayWithName) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.CONFLICT,
+          "An active pathway with this name already exists",
+          HttpStatus.CONFLICT
+        );
+      }
+
       // Check if pathway with same key already exists
       const existingPathway = await this.pathwayRepository.findOne({
-        where: { key: createPathwayDto.key },
+        where: { key },
         select: ['id', 'key'],
       });
 
@@ -138,11 +164,25 @@ export class PathwaysService {
         }
       }
 
+      // Handle auto-increment for display_order if not provided
+      let displayOrder = createPathwayDto.display_order;
+      if (displayOrder === undefined || displayOrder === null) {
+        const maxOrderResult = await this.pathwayRepository
+          .createQueryBuilder('pathway')
+          .select('MAX(pathway.display_order)', 'max')
+          .getRawOne();
+
+        const maxOrder = maxOrderResult?.max || 0;
+        displayOrder = Number(maxOrder) + 1;
+      }
+
       // Set default is_active if not provided
       // Store tags as PostgreSQL text[] array in database
       // Format: {tag_id1,tag_id2,tag_id3}
       const pathwayData = {
         ...createPathwayDto,
+        key: key,
+        display_order: displayOrder,
         is_active: createPathwayDto.is_active ?? true,
         tags: dto.tags && dto.tags.length > 0 ? dto.tags : [],
         created_by: userId,
@@ -514,6 +554,25 @@ export class PathwaysService {
       const updateData: any = {};
 
       if (updatePathwayDto.name !== undefined) {
+        // Check if an active pathway with same name (case-insensitive) already exists, excluding current pathway
+        const activePathwayWithName = await this.pathwayRepository.findOne({
+          where: {
+            name: ILike(updatePathwayDto.name),
+            is_active: true,
+            id: Not(id),
+          },
+          select: ['id'],
+        });
+
+        if (activePathwayWithName) {
+          return APIResponse.error(
+            response,
+            apiId,
+            API_RESPONSES.CONFLICT,
+            "An active pathway with this name already exists",
+            HttpStatus.CONFLICT
+          );
+        }
         updateData.name = updatePathwayDto.name;
       }
       if (updatePathwayDto.description !== undefined) {
@@ -882,6 +941,117 @@ export class PathwaysService {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error getting active pathway: ${errorMessage}`,
+        apiId
+      );
+      return APIResponse.error(
+        response,
+        apiId,
+        API_RESPONSES.INTERNAL_SERVER_ERROR,
+        errorMessage,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  /**
+   * Generate a unique key from name for a pathway
+   * Logic mirrors TagsService.generateUniqueAlias and InterestsService.generateUniqueKey
+   */
+  private async generateUniqueKey(name: string): Promise<string> {
+    // Step 1: Normalization
+    let key = name
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]/g, '_')
+      .replace(/-/g, '_')
+      .replace(/_{2,}/g, '_'); // Safe collapse of multiple underscores
+
+    // Remove leading/trailing underscores
+    key = key.replace(/^_+/, '').replace(/_+$/, '');
+
+    if (!key) {
+      // Fallback if name contains no valid chars
+      key = `pathway_${Date.now()}`;
+    }
+
+    // Truncate to 50 chars (DB limit)
+    if (key.length > 50) {
+      key = key.substring(0, 50).replace(/_+$/, '');
+    }
+
+    // Step 2: Uniqueness check with prefix search
+    const existingKeys = await this.pathwayRepository.find({
+      where: {
+        key: Like(`${key}%`),
+      },
+      select: ['key'],
+    });
+
+    if (existingKeys.length === 0) {
+      return key;
+    }
+
+    const keySet = new Set(existingKeys.map((p) => p.key));
+    if (!keySet.has(key)) {
+      return key;
+    }
+
+    // Step 3: Find next available numeric suffix
+    let counter = 1;
+    let uniqueKey = `${key}_${counter}`;
+
+    // Ensure suffix doesn't exceed length limit
+    while (keySet.has(uniqueKey)) {
+      counter++;
+      const suffix = `_${counter}`;
+      if (key.length + suffix.length > 50) {
+        // Trim base key to fit suffix
+        const trimmedBase = key.substring(0, 50 - suffix.length);
+        uniqueKey = `${trimmedBase}${suffix}`;
+      } else {
+        uniqueKey = `${key}${suffix}`;
+      }
+
+      // Safety break
+      if (counter > 1000) break;
+    }
+
+    return uniqueKey;
+  }
+  /**
+   * Bulk update pathway display orders
+   */
+  async updateOrderStructure(
+    bulkUpdateOrderDto: BulkUpdateOrderDto,
+    response: Response
+  ): Promise<Response> {
+    const apiId = APIID.PATHWAY_ORDER_STRUCTURE;
+    try {
+      const { orders } = bulkUpdateOrderDto;
+
+      // Update each pathway order
+      // We process them sequentially for simplicity and safety
+      for (const orderItem of orders) {
+        await this.pathwayRepository.update(
+          { id: orderItem.id },
+          {
+            display_order: orderItem.order,
+            updated_at: new Date(),
+          }
+        );
+      }
+
+      return APIResponse.success(
+        response,
+        apiId,
+        null,
+        HttpStatus.OK,
+        "Pathway order structure updated successfully"
+      );
+    } catch (error) {
+      const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error updating pathway order structure: ${errorMessage}`,
         apiId
       );
       return APIResponse.error(
