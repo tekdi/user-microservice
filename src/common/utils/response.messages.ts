@@ -266,4 +266,6 @@ export const API_RESPONSES = {
   INTEREST_KEY_EXISTS: "Interest with this key already exists for the pathway",
   INTEREST_LIST_SUCCESS: "Interests retrieved successfully",
   USER_INTERESTS_SAVED_SUCCESSFULLY: "User interests saved successfully",
+  PATHWAY_SWITCHED_SUCCESSFULLY: "Pathway switched successfully",
+  PATHWAY_ASSIGNED_SUCCESSFULLY: "Pathway assigned successfully",
 };
