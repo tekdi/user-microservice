@@ -13,6 +13,7 @@ import {
   HttpStatus,
   BadRequestException,
   UseGuards,
+  Req,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -33,10 +34,19 @@ import { CreateTagDto } from './dto/create-tag.dto';
 import { UpdateTagDto } from './dto/update-tag.dto';
 import { DeleteTagDto } from './dto/delete-tag.dto';
 import { ListTagDto } from './dto/list-tag.dto';
-import { Response } from 'express';
+import { Response, Request } from 'express';
 import { JwtAuthGuard } from 'src/common/guards/keycloak.guard';
 import { API_RESPONSES } from '@utils/response.messages';
 import { isUUID } from 'class-validator';
+
+interface RequestWithUser extends Request {
+  user?: {
+    userId: string;
+    name?: string;
+    username?: string;
+    [key: string]: any;
+  };
+}
 
 @ApiTags('Tags')
 @Controller('tag')
@@ -92,12 +102,14 @@ export class TagsController {
   async create(
     @Body() createTagDto: CreateTagDto,
     @Headers('tenantid') tenantId: string,
+    @Req() request: RequestWithUser,
     @Res() response: Response
   ): Promise<Response> {
     if (!tenantId || !isUUID(tenantId)) {
       throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
     }
-    return this.tagsService.create(createTagDto, response);
+    const userId = request.user?.userId || null;
+    return this.tagsService.create(createTagDto, userId, response);
   }
 
   @Patch('update/:id')
@@ -149,12 +161,14 @@ export class TagsController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updateTagDto: UpdateTagDto,
     @Headers('tenantid') tenantId: string,
+    @Req() request: RequestWithUser,
     @Res() response: Response
   ): Promise<Response> {
     if (!tenantId || !isUUID(tenantId)) {
       throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
     }
-    return this.tagsService.update(id, updateTagDto, response);
+    const userId = request.user?.userId || null;
+    return this.tagsService.update(id, updateTagDto, userId, response);
   }
 
   @Post('delete/:id')

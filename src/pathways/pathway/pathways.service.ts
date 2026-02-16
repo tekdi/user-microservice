@@ -10,6 +10,7 @@ import { MAX_PAGINATION_LIMIT } from '../common/dto/pagination.dto';
 import { AssignPathwayDto } from './dto/assign-pathway.dto';
 import { UserPathwayHistory } from './entities/user-pathway-history.entity';
 import { User } from '../../user/entities/user-entity';
+import { LmsClientService } from '../common/services/lms-client.service';
 import APIResponse from 'src/common/responses/response';
 import { API_RESPONSES } from '@utils/response.messages';
 import { APIID } from '@utils/api-id.config';
@@ -27,7 +28,8 @@ export class PathwaysService {
     private readonly userPathwayHistoryRepository: Repository<UserPathwayHistory>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
-    private readonly dataSource: DataSource
+    private readonly dataSource: DataSource,
+    private readonly lmsClientService: LmsClientService
   ) { }
 
   /**
@@ -98,6 +100,7 @@ export class PathwaysService {
    */
   async create(
     createPathwayDto: CreatePathwayDto,
+    userId: string | null,
     response: Response
   ): Promise<Response> {
     const apiId = APIID.PATHWAY_CREATE;
@@ -142,6 +145,8 @@ export class PathwaysService {
         ...createPathwayDto,
         is_active: createPathwayDto.is_active ?? true,
         tags: dto.tags && dto.tags.length > 0 ? dto.tags : [],
+        created_by: userId,
+        updated_by: userId,
       };
 
       // Create and save in single operation
@@ -204,37 +209,80 @@ export class PathwaysService {
   /**
    * List pathways with optional filter and pagination
    * Optimized: Single query with findAndCount for efficient pagination
+   * Includes video and resource counts from LMS service
    */
   async list(
     listPathwayDto: ListPathwayDto,
+    tenantId: string,
+    organisationId: string,
     response: Response
   ): Promise<Response> {
     const apiId = APIID.PATHWAY_LIST;
     try {
-      // Build where clause conditionally
-      const whereCondition: any = {};
-      if (listPathwayDto.isActive !== undefined) {
-        whereCondition.is_active = listPathwayDto.isActive;
-      }
-
       // Set pagination defaults with safeguard to prevent unbounded queries
       // Defense in depth: cap limit even if validation is bypassed
       const requestedLimit = listPathwayDto.limit ?? 10;
       const limit = Math.min(requestedLimit, MAX_PAGINATION_LIMIT);
       const offset = listPathwayDto.offset ?? 0;
 
-      // OPTIMIZED: Single query with count and data using findAndCount
-      // This performs both COUNT and SELECT in an optimized way
-      // Using indexed columns (is_active, display_order) for performance
-      const [items, totalCount] = await this.pathwayRepository.findAndCount({
-        where: whereCondition,
-        order: {
-          display_order: 'ASC',
-          created_at: 'DESC',
-        },
-        take: limit,
-        skip: offset,
-      });
+      // Extract filters from nested object
+      const filters = listPathwayDto.filters || {};
+
+      // Check if we need QueryBuilder for text search (name or description)
+      const needsTextSearch = !!(filters.name || filters.description);
+      let items: any[];
+      let totalCount: number;
+
+      if (needsTextSearch) {
+        // Use QueryBuilder for ILIKE queries (optimized for text search)
+        const queryBuilder = this.pathwayRepository.createQueryBuilder("pathway");
+
+        // Apply filters
+        if (filters.id) {
+          queryBuilder.andWhere("pathway.id = :id", { id: filters.id });
+        }
+        if (filters.name) {
+          queryBuilder.andWhere("pathway.name ILIKE :name", { name: `%${filters.name}%` });
+        }
+        if (filters.description) {
+          queryBuilder.andWhere("pathway.description ILIKE :description", { description: `%${filters.description}%` });
+        }
+        if (filters.isActive !== undefined) {
+          queryBuilder.andWhere("pathway.is_active = :isActive", { isActive: filters.isActive });
+        }
+
+        // Apply ordering
+        queryBuilder.orderBy("pathway.display_order", "ASC");
+        queryBuilder.addOrderBy("pathway.created_at", "DESC");
+
+        // Apply pagination
+        queryBuilder.skip(offset).take(limit);
+
+        // Execute query
+        [items, totalCount] = await queryBuilder.getManyAndCount();
+      } else {
+        // Use findAndCount for simple filters (more efficient when no text search)
+        const whereCondition: any = {};
+        if (filters.id) {
+          whereCondition.id = filters.id;
+        }
+        if (filters.isActive !== undefined) {
+          whereCondition.is_active = filters.isActive;
+        }
+
+        // OPTIMIZED: Single query with count and data using findAndCount
+        // This performs both COUNT and SELECT in an optimized way
+        // Using indexed columns (is_active, display_order) for performance
+        [items, totalCount] = await this.pathwayRepository.findAndCount({
+          where: whereCondition,
+          order: {
+            display_order: "ASC",
+            created_at: "DESC",
+          },
+          take: limit,
+          skip: offset,
+        });
+      }
 
       // OPTIMIZED: Collect all unique tag IDs from all pathways in one pass
       const allTagIds = new Set<string>();
@@ -255,12 +303,25 @@ export class PathwaysService {
         });
       }
 
-      // Transform items to include only tags with names (no tag_ids)
+      // OPTIMIZED: Batch fetch video and resource counts for all pathways in parallel
+      const pathwayIds = items.map((item: any) => item.id);
+      const countsMap = await this.lmsClientService.getBatchCounts(
+        pathwayIds,
+        tenantId,
+        organisationId
+      );
+
+      // Transform items to include only tags with names (no tag_ids) and counts
       const transformedItems = items.map((item: any) => {
         const tagIds = item.tags || [];
         const tags = tagIds
           .map((tagId: string) => tagDetailsMap.get(tagId))
           .filter((tag) => tag !== undefined); // Filter out any tags that weren't found
+
+        const counts = countsMap.get(item.id);
+        const videoCount = counts?.videoCount ?? 0;
+        const resourceCount = counts?.resourceCount ?? 0;
+        const totalItems = (counts as any)?.totalItems ?? 0;
 
         return {
           id: item.id,
@@ -271,6 +332,9 @@ export class PathwaysService {
           display_order: item.display_order,
           is_active: item.is_active,
           created_at: item.created_at,
+          video_count: videoCount,
+          resource_count: resourceCount,
+          total_items: totalItems,
         };
       });
 
@@ -390,6 +454,7 @@ export class PathwaysService {
   async update(
     id: string,
     updatePathwayDto: UpdatePathwayDto,
+    userId: string | null,
     response: Response
   ): Promise<Response> {
     const apiId = APIID.PATHWAY_UPDATE;
@@ -435,9 +500,8 @@ export class PathwaysService {
               response,
               apiId,
               API_RESPONSES.BAD_REQUEST,
-              `${API_RESPONSES.INVALID_TAG_IDS}: ${validation.invalidTagIds.join(
-                ', '
-              )}`,
+              `${API_RESPONSES.INVALID_TAG_IDS
+              }: ${validation.invalidTagIds.join(', ')}`,
               HttpStatus.BAD_REQUEST
             );
           }
@@ -468,6 +532,11 @@ export class PathwaysService {
         updateData.is_active = updatePathwayDto.is_active;
       }
 
+      // Always set updated_by when updating
+      if (userId) {
+        updateData.updated_by = userId;
+      }
+
       // Check if there's anything to update
       if (Object.keys(updateData).length === 0) {
         return APIResponse.error(
@@ -481,6 +550,7 @@ export class PathwaysService {
 
       // OPTIMIZED: Use repository.update() for partial updates
       // This is more efficient than findOne + save as it performs a direct UPDATE query
+      // updated_at is automatically updated by UpdateDateColumn decorator
       const updateResult = await this.pathwayRepository.update(
         { id },
         updateData

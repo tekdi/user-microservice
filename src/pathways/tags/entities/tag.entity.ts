@@ -48,9 +48,9 @@ export class Tag {
   updated_at: Date;
 
   @Column({ type: 'uuid', nullable: true })
-  created_by: string;
+  created_by: string | null;
 
   @Column({ type: 'uuid', nullable: true })
-  updated_by: string;
+  updated_by: string | null;
 }
 
