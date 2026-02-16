@@ -14,6 +14,7 @@ import APIResponse from "src/common/responses/response";
 import { API_RESPONSES } from "@utils/response.messages";
 import { APIID } from "@utils/api-id.config";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
+import { StringUtil } from '../common/utils/string.util';
 import { Response } from "express";
 
 @Injectable()
@@ -657,19 +658,7 @@ export class InterestsService {
     pathwayId: string
   ): Promise<string> {
     // Step 1: Normalization
-    let key = label
-      .toLowerCase()
-      .replace(/[^a-z0-9_-]/g, '_')
-      .replace(/-/g, '_')
-      .replace(/_{2,}/g, '_'); // Safe collapse of multiple underscores
-
-    // Remove leading/trailing underscores (safe, non-backtracking approach)
-    while (key.startsWith('_')) {
-      key = key.slice(1);
-    }
-    while (key.endsWith('_')) {
-      key = key.slice(0, -1);
-    }
+    let key = StringUtil.normalizeKey(label);
 
     if (!key) {
       // Fallback if label contains no valid chars

@@ -7,6 +7,7 @@ import { CreatePathwayDto } from './dto/create-pathway.dto';
 import { UpdatePathwayDto } from './dto/update-pathway.dto';
 import { ListPathwayDto } from './dto/list-pathway.dto';
 import { UpdateOrderDto, BulkUpdateOrderDto } from './dto/update-pathway-order.dto';
+import { StringUtil } from '../common/utils/string.util';
 import { MAX_PAGINATION_LIMIT } from '../common/dto/pagination.dto';
 import { AssignPathwayDto } from './dto/assign-pathway.dto';
 import { UserPathwayHistory } from './entities/user-pathway-history.entity';
@@ -959,19 +960,7 @@ export class PathwaysService {
    */
   private async generateUniqueKey(name: string): Promise<string> {
     // Step 1: Normalization
-    let key = name
-      .toLowerCase()
-      .replace(/[^a-z0-9_-]/g, '_')
-      .replace(/-/g, '_')
-      .replace(/_{2,}/g, '_'); // Safe collapse of multiple underscores
-
-    // Remove leading/trailing underscores (safe, non-backtracking approach)
-    while (key.startsWith('_')) {
-      key = key.slice(1);
-    }
-    while (key.endsWith('_')) {
-      key = key.slice(0, -1);
-    }
+    let key = StringUtil.normalizeKey(name);
 
     if (!key) {
       // Fallback if name contains no valid chars

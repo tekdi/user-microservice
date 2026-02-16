@@ -2,6 +2,7 @@ import { Injectable, HttpStatus, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Like, Not, DataSource } from 'typeorm';
 import { Tag, TagStatus } from './entities/tag.entity';
+import { StringUtil } from '../common/utils/string.util';
 import { CreateTagDto } from './dto/create-tag.dto';
 import { UpdateTagDto } from './dto/update-tag.dto';
 import { DeleteTagDto } from './dto/delete-tag.dto';
@@ -599,19 +600,7 @@ export class TagsService implements OnModuleInit {
     excludeId?: string
   ): Promise<string> {
     // Step 1: Normalization
-    let alias = name
-      .toLowerCase()
-      .replace(/[^a-z0-9_-]/g, '_')
-      .replace(/-/g, '_')
-      .replace(/_{2,}/g, '_');
-
-    // Remove leading/trailing underscores (safe, non-backtracking approach)
-    while (alias.startsWith('_')) {
-      alias = alias.slice(1);
-    }
-    while (alias.endsWith('_')) {
-      alias = alias.slice(0, -1);
-    }
+    let alias = StringUtil.normalizeKey(name);
 
     if (!alias) {
       alias = new Date().toISOString().replace(/\D/g, '').slice(0, 14);
