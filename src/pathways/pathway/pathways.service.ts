@@ -82,12 +82,13 @@ export class PathwaysService {
     // OPTIMIZED: Single query to fetch all tag details at once (no N+1)
     const tags = await this.tagRepository.find({
       where: { id: In(uniqueTagIds) },
-      select: ['id', 'name'],
+      select: ['id', 'name', 'alias'],
     });
 
     return tags.map((tag) => ({
       id: tag.id,
       name: tag.name,
+      alias: tag.alias,
     }));
   }
 

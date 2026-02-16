@@ -31,6 +31,7 @@ import { ApiGetByIdCommon } from '../common/decorators/api-common.decorator';
 import { TagsService } from './tags.service';
 import { CreateTagDto } from './dto/create-tag.dto';
 import { UpdateTagDto } from './dto/update-tag.dto';
+import { DeleteTagDto } from './dto/delete-tag.dto';
 import { ListTagDto } from './dto/list-tag.dto';
 import { Response } from 'express';
 import { JwtAuthGuard } from 'src/common/guards/keycloak.guard';
@@ -41,7 +42,7 @@ import { isUUID } from 'class-validator';
 @Controller('tag')
 @UseGuards(JwtAuthGuard)
 export class TagsController {
-  constructor(private readonly tagsService: TagsService) {}
+  constructor(private readonly tagsService: TagsService) { }
 
   @Post('create')
   @HttpCode(HttpStatus.CREATED)
@@ -179,6 +180,17 @@ export class TagsController {
     type: String,
     format: 'uuid',
   })
+  @ApiBody({
+    type: DeleteTagDto,
+    examples: {
+      delete: {
+        summary: 'Archive a tag',
+        value: {
+          updated_by: 'a1b2c3d4-e111-2222-3333-444455556666',
+        },
+      },
+    },
+  })
   @ApiResponse({
     status: 200,
     description: 'Tag archived successfully',
@@ -193,15 +205,19 @@ export class TagsController {
   @ApiUnauthorizedResponse({ description: 'Unauthorized' })
   @ApiNotFoundResponse({ description: 'Tag not found' })
   @ApiInternalServerErrorResponse({ description: 'Internal Server Error' })
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   async delete(
     @Param('id', ParseUUIDPipe) id: string,
+    @Body() deleteTagDto: DeleteTagDto,
     @Headers('tenantid') tenantId: string,
     @Res() response: Response
   ): Promise<Response> {
     if (!tenantId || !isUUID(tenantId)) {
       throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
     }
-    return this.tagsService.delete(id, response);
+    // Ensure ID from path matches ID in body if provided, or prioritize path ID
+    deleteTagDto.id = id;
+    return this.tagsService.delete(deleteTagDto, response);
   }
 
   @Post('list')
