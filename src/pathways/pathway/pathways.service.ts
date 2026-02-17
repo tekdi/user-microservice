@@ -1,4 +1,4 @@
-import { Injectable, HttpStatus } from '@nestjs/common';
+import { Injectable, HttpStatus, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, DataSource, Like, ILike, Not } from 'typeorm';
 import { Pathway } from './entities/pathway.entity';
@@ -20,7 +20,7 @@ import { LoggerUtil } from 'src/common/logger/LoggerUtil';
 import { Response } from 'express';
 
 @Injectable()
-export class PathwaysService {
+export class PathwaysService implements OnModuleInit {
   constructor(
     @InjectRepository(Pathway)
     private readonly pathwayRepository: Repository<Pathway>,
@@ -33,6 +33,57 @@ export class PathwaysService {
     private readonly dataSource: DataSource,
     private readonly lmsClientService: LmsClientService
   ) { }
+
+  /**
+   * One-time cleanup to fix duplicate display_order values and enforce unique index
+   */
+  async onModuleInit() {
+    try {
+      LoggerUtil.log('PathwaysService', 'Starting display_order cleanup and index enforcement...');
+
+      // 1. Get all pathways sorted by creation date or current order
+      const pathways = await this.pathwayRepository.find({
+        order: {
+          display_order: 'ASC',
+          created_at: 'ASC',
+        },
+        select: ['id', 'display_order'],
+      });
+
+      // 2. Sequential re-assignment to ensure absolute uniqueness
+      // We use a transaction for this cleanup
+      await this.dataSource.transaction(async (manager) => {
+        let currentOrder = 1;
+        for (const pathway of pathways) {
+          await manager.update(
+            Pathway,
+            { id: pathway.id },
+            { display_order: currentOrder++ }
+          );
+        }
+
+        // 3. Explicitly drop any corrupted indexes and recreate the unique constraint
+        const queries = [
+          'DROP INDEX IF EXISTS "ux_pathways_display_order"',
+          'DROP INDEX IF EXISTS "IDX_display_order"', // Possible auto-generated names
+          'ALTER TABLE "pathways" DROP CONSTRAINT IF EXISTS "UQ_pathways_display_order"',
+          'CREATE UNIQUE INDEX IF NOT EXISTS "ux_pathways_display_order" ON "pathways" ("display_order")',
+        ];
+
+        for (const query of queries) {
+          try {
+            await manager.query(query);
+          } catch (e) {
+            LoggerUtil.warn('PathwaysService', `Cleanup query ignored: ${query} - ${e.message}`);
+          }
+        }
+      });
+
+      LoggerUtil.log('PathwaysService', `Successfully sanitized ${pathways.length} pathway orders and enforced uniqueness.`);
+    } catch (error) {
+      LoggerUtil.error('PathwaysService', `Critical error during display_order cleanup: ${error.message}`);
+    }
+  }
 
   /**
    * Validate tag IDs exist in tags table
@@ -165,9 +216,23 @@ export class PathwaysService {
         }
       }
 
-      // Handle auto-increment for display_order if not provided
+      // Handle auto-increment for display_order if not provided OR if duplicate is provided
       let displayOrder = createPathwayDto.display_order;
-      if (displayOrder === undefined || displayOrder === null) {
+
+      let needsAutoGeneration = displayOrder === undefined || displayOrder === null || displayOrder === 0;
+
+      if (!needsAutoGeneration) {
+        // Check if forcefully provided order is already taken
+        const existingWithOrder = await this.pathwayRepository.findOne({
+          where: { display_order: displayOrder },
+          select: ['id'],
+        });
+        if (existingWithOrder) {
+          needsAutoGeneration = true;
+        }
+      }
+
+      if (needsAutoGeneration) {
         const maxOrderResult = await this.pathwayRepository
           .createQueryBuilder('pathway')
           .select('MAX(pathway.display_order)', 'max')
@@ -221,7 +286,24 @@ export class PathwaysService {
     } catch (error) {
       // Handle unique constraint violation
       if (error.code === '23505') {
+        LoggerUtil.error(
+          `${API_RESPONSES.CONFLICT}`,
+          `Conflict error details: ${error.detail}`,
+          apiId
+        );
         // PostgreSQL unique constraint violation
+        // Check if it's the display_order or the key
+        const detail = error.detail || '';
+        if (detail.includes('display_order')) {
+          return APIResponse.error(
+            response,
+            apiId,
+            API_RESPONSES.CONFLICT,
+            "A pathway with this display order already exists. Please try again or use auto-increment.",
+            HttpStatus.CONFLICT
+          );
+        }
+
         return APIResponse.error(
           response,
           apiId,
@@ -1007,9 +1089,6 @@ export class PathwaysService {
     return uniqueKey;
   }
 
-  /**
-   * Bulk update pathway display orders
-   */
   async updateOrderStructure(
     bulkUpdateOrderDto: BulkUpdateOrderDto,
     response: Response
@@ -1018,17 +1097,39 @@ export class PathwaysService {
     try {
       const { orders } = bulkUpdateOrderDto;
 
-      // Update each pathway order
-      // We process them sequentially for simplicity and safety
-      for (const orderItem of orders) {
-        await this.pathwayRepository.update(
-          { id: orderItem.id },
-          {
-            display_order: orderItem.order,
-            updated_at: new Date(),
+      // Use a transaction for safe reordering
+      await this.dataSource.transaction(async (transactionalEntityManager) => {
+        // Step 1: Temporarily update all targeted display_order values to a non-conflicting range
+        // This avoids UniqueConstraintViolation during the actual swapping
+        const TEMP_OFFSET = 10000;
+        for (const orderItem of orders) {
+          // Fetch current order to ensure record exist and get current value
+          const pathway = await transactionalEntityManager.findOne(Pathway, {
+            where: { id: orderItem.id },
+            select: ['id', 'display_order'],
+          });
+
+          if (pathway) {
+            await transactionalEntityManager.update(
+              Pathway,
+              { id: orderItem.id },
+              { display_order: pathway.display_order + TEMP_OFFSET }
+            );
           }
-        );
-      }
+        }
+
+        // Step 2: Apply the final display_order values from the request
+        for (const orderItem of orders) {
+          await transactionalEntityManager.update(
+            Pathway,
+            { id: orderItem.id },
+            {
+              display_order: orderItem.order,
+              updated_at: new Date(),
+            }
+          );
+        }
+      });
 
       return APIResponse.success(
         response,

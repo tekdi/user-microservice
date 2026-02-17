@@ -27,7 +27,7 @@ export class Pathway {
   @Column('text', { array: true, nullable: true, default: [] })
   tags: string[] | null;
 
-  @Column({ type: "int", nullable: false })
+  @Column({ type: "int", nullable: false, unique: true })
   display_order: number;
 
   @Column({ type: "boolean", default: true, nullable: false })

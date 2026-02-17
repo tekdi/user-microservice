@@ -23,6 +23,7 @@ export class UpdateOrderDto {
         minimum: 0,
     })
     @Expose()
+    @Type(() => Number)
     @IsNumber()
     @Min(0)
     order: number;
