@@ -1,4 +1,4 @@
-import { Injectable, HttpStatus } from '@nestjs/common';
+import { Injectable, HttpStatus, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, DataSource, Like, ILike, Not } from 'typeorm';
 import { Pathway } from './entities/pathway.entity';
@@ -21,6 +21,7 @@ import { Response } from 'express';
 
 @Injectable()
 export class PathwaysService {
+  private readonly logger = new Logger(PathwaysService.name);
   constructor(
     @InjectRepository(Pathway)
     private readonly pathwayRepository: Repository<Pathway>,
@@ -220,21 +221,44 @@ export class PathwaysService {
         return validation.errorResponse;
       }
 
-      // Calculate safe display order (auto-increment on duplicate)
-      const displayOrder = await this.calculateDisplayOrder(createPathwayDto.display_order);
+      let attempts = 0;
+      const MAX_ATTEMPTS = 3;
+      let savedPathway;
 
-      // Prepare data for save
-      const pathwayData = {
-        ...createPathwayDto,
-        key,
-        display_order: displayOrder,
-        is_active: createPathwayDto.is_active ?? true,
-        tags: (createPathwayDto as any).tags || [],
-        created_by: userId,
-        updated_by: userId,
-      };
+      while (attempts < MAX_ATTEMPTS) {
+        attempts++;
+        try {
+          // Calculate safe display order (auto-increment on duplicate)
+          // Inside the loop so it can pick up new MAX if a previous attempt collided
+          const displayOrder = await this.calculateDisplayOrder(createPathwayDto.display_order);
 
-      const savedPathway = await this.pathwayRepository.save(this.pathwayRepository.create(pathwayData));
+          // Prepare data for save
+          const pathwayData = {
+            ...createPathwayDto,
+            key,
+            display_order: displayOrder,
+            is_active: createPathwayDto.is_active ?? true,
+            tags: (createPathwayDto as any).tags || [],
+            created_by: userId,
+            updated_by: userId,
+          };
+
+          savedPathway = await this.pathwayRepository.save(this.pathwayRepository.create(pathwayData));
+          break; // Success!
+        } catch (error) {
+          // Handle unique constraint violation for display_order specifically
+          const isDisplayOrderConflict = error.code === '23505' && error.detail?.includes('display_order');
+
+          if (isDisplayOrderConflict && attempts < MAX_ATTEMPTS) {
+            LoggerUtil.warn(
+              `Display order collision detected (attempt ${attempts}). Retrying...`,
+              apiId
+            );
+            continue; // Retry with fresh calculation
+          }
+          throw error; // Rethrow to be handled by outer catch (key conflict or actual error)
+        }
+      }
 
       // Fetch tag details for the response
       const tagDetails = await this.fetchTagDetails(savedPathway.tags || []);
@@ -1102,17 +1126,17 @@ export class PathwaysService {
 
       // 3. Use a transaction for safe reordering
       await this.dataSource.transaction(async (transactionalEntityManager) => {
-        // Step 1: Temporarily update all targeted display_order values to a non-conflicting range
-        // We use a large offset (1 billion) to avoid any possible collision with valid orders
-        const TEMP_OFFSET = 1_000_000_000;
-
+        // Step 1: Temporarily update all targeted display_order values to a non-conflicting negative range
+        // We use negation ( -order ) to avoid UniqueConstraintViolation during swapping.
+        // This also eliminates the risk of integer overflow that a large positive offset might cause.
+        // Since all display orders are >= 1, negated values will be <= -1, ensuring no collision with existing positive values.
         for (const orderItem of orders) {
           // We already validated existence above, so we can proceed safely
           const currentPathway = existingPathways.find(p => p.id === orderItem.id);
           await transactionalEntityManager.update(
             Pathway,
             { id: orderItem.id },
-            { display_order: currentPathway.display_order + TEMP_OFFSET }
+            { display_order: -currentPathway.display_order }
           );
         }
 
