@@ -174,7 +174,7 @@ export class PathwaysService {
    */
   private async calculateDisplayOrder(requestedOrder?: number): Promise<number> {
     let displayOrder = requestedOrder;
-    let needsAutoGeneration = displayOrder === undefined || displayOrder === null || displayOrder === 0;
+    let needsAutoGeneration = displayOrder === undefined || displayOrder === null;
 
     if (!needsAutoGeneration) {
       // Check if forcefully provided order is already taken
@@ -1071,25 +1071,49 @@ export class PathwaysService {
     try {
       const { orders } = bulkUpdateOrderDto;
 
-      // Use a transaction for safe reordering
+      // 1. Validate uniqueness of IDs and Order values in the request itself
+      const ids = orders.map(o => o.id);
+      const orderValues = orders.map(o => o.order);
+
+      if (new Set(ids).size !== ids.length) {
+        return APIResponse.error(response, apiId, API_RESPONSES.BAD_REQUEST, "Duplicate IDs found in request", HttpStatus.BAD_REQUEST);
+      }
+      if (new Set(orderValues).size !== orderValues.length) {
+        return APIResponse.error(response, apiId, API_RESPONSES.BAD_REQUEST, "Duplicate order values found in request", HttpStatus.BAD_REQUEST);
+      }
+
+      // 2. Validate that all pathways exist before starting the transaction
+      const existingPathways = await this.pathwayRepository.find({
+        where: { id: In(ids) },
+        select: ['id', 'display_order']
+      });
+
+      if (existingPathways.length !== orders.length) {
+        const foundIds = existingPathways.map(p => p.id);
+        const missingIds = ids.filter(id => !foundIds.includes(id));
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.NOT_FOUND,
+          `One or more pathways not found: ${missingIds.join(', ')}`,
+          HttpStatus.NOT_FOUND
+        );
+      }
+
+      // 3. Use a transaction for safe reordering
       await this.dataSource.transaction(async (transactionalEntityManager) => {
         // Step 1: Temporarily update all targeted display_order values to a non-conflicting range
-        // This avoids UniqueConstraintViolation during the actual swapping
-        const TEMP_OFFSET = 10000;
-        for (const orderItem of orders) {
-          // Fetch current order to ensure record exist and get current value
-          const pathway = await transactionalEntityManager.findOne(Pathway, {
-            where: { id: orderItem.id },
-            select: ['id', 'display_order'],
-          });
+        // We use a large offset (1 billion) to avoid any possible collision with valid orders
+        const TEMP_OFFSET = 1_000_000_000;
 
-          if (pathway) {
-            await transactionalEntityManager.update(
-              Pathway,
-              { id: orderItem.id },
-              { display_order: pathway.display_order + TEMP_OFFSET }
-            );
-          }
+        for (const orderItem of orders) {
+          // We already validated existence above, so we can proceed safely
+          const currentPathway = existingPathways.find(p => p.id === orderItem.id);
+          await transactionalEntityManager.update(
+            Pathway,
+            { id: orderItem.id },
+            { display_order: currentPathway.display_order + TEMP_OFFSET }
+          );
         }
 
         // Step 2: Apply the final display_order values from the request

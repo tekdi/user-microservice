@@ -25,7 +25,7 @@ export class UpdateOrderDto {
     @Expose()
     @Type(() => Number)
     @IsNumber()
-    @Min(0)
+    @Min(1)
     order: number;
 }
 

@@ -66,7 +66,7 @@ export class CreatePathwayDto {
   @Expose()
   @IsNumber()
   @IsOptional()
-  @Min(0, { message: "Display order must be a non-negative number" })
+  @Min(1, { message: "Display order must be at least 1" })
   display_order?: number;
 
   @ApiProperty({
