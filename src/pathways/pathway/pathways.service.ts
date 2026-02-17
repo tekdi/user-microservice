@@ -475,6 +475,7 @@ export class PathwaysService {
           tags: tags,
           display_order: item.display_order,
           is_active: item.is_active,
+          image_url: item.image_url,
           created_at: item.created_at,
           video_count: videoCount,
           resource_count: resourceCount,
