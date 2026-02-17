@@ -244,7 +244,7 @@ export const API_RESPONSES = {
   PATHWAY_CREATED_SUCCESSFULLY: "Pathway created successfully",
   PATHWAY_UPDATED_SUCCESSFULLY: "Pathway updated successfully",
   PATHWAY_NOT_FOUND: "Pathway not found",
-  PATHWAY_KEY_EXISTS: "Pathway with this key already exists",
+  PATHWAY_KEY_EXISTS: "Pathway with this name already exists",
   PATHWAY_LIST_SUCCESS: "Pathways retrieved successfully",
   PATHWAY_GET_SUCCESS: "Pathway retrieved successfully",
   INVALID_TAG_IDS: "Invalid tag IDs provided",
