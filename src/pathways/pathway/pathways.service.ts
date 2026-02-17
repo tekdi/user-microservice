@@ -1,4 +1,4 @@
-import { Injectable, HttpStatus, OnModuleInit } from '@nestjs/common';
+import { Injectable, HttpStatus } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, DataSource, Like, ILike, Not } from 'typeorm';
 import { Pathway } from './entities/pathway.entity';
@@ -20,7 +20,7 @@ import { LoggerUtil } from 'src/common/logger/LoggerUtil';
 import { Response } from 'express';
 
 @Injectable()
-export class PathwaysService implements OnModuleInit {
+export class PathwaysService {
   constructor(
     @InjectRepository(Pathway)
     private readonly pathwayRepository: Repository<Pathway>,
@@ -33,57 +33,6 @@ export class PathwaysService implements OnModuleInit {
     private readonly dataSource: DataSource,
     private readonly lmsClientService: LmsClientService
   ) { }
-
-  /**
-   * One-time cleanup to fix duplicate display_order values and enforce unique index
-   */
-  async onModuleInit() {
-    try {
-      LoggerUtil.log('PathwaysService', 'Starting display_order cleanup and index enforcement...');
-
-      // 1. Get all pathways sorted by creation date or current order
-      const pathways = await this.pathwayRepository.find({
-        order: {
-          display_order: 'ASC',
-          created_at: 'ASC',
-        },
-        select: ['id', 'display_order'],
-      });
-
-      // 2. Sequential re-assignment to ensure absolute uniqueness
-      // We use a transaction for this cleanup
-      await this.dataSource.transaction(async (manager) => {
-        let currentOrder = 1;
-        for (const pathway of pathways) {
-          await manager.update(
-            Pathway,
-            { id: pathway.id },
-            { display_order: currentOrder++ }
-          );
-        }
-
-        // 3. Explicitly drop any corrupted indexes and recreate the unique constraint
-        const queries = [
-          'DROP INDEX IF EXISTS "ux_pathways_display_order"',
-          'DROP INDEX IF EXISTS "IDX_display_order"', // Possible auto-generated names
-          'ALTER TABLE "pathways" DROP CONSTRAINT IF EXISTS "UQ_pathways_display_order"',
-          'CREATE UNIQUE INDEX IF NOT EXISTS "ux_pathways_display_order" ON "pathways" ("display_order")',
-        ];
-
-        for (const query of queries) {
-          try {
-            await manager.query(query);
-          } catch (e) {
-            LoggerUtil.warn('PathwaysService', `Cleanup query ignored: ${query} - ${e.message}`);
-          }
-        }
-      });
-
-      LoggerUtil.log('PathwaysService', `Successfully sanitized ${pathways.length} pathway orders and enforced uniqueness.`);
-    } catch (error) {
-      LoggerUtil.error('PathwaysService', `Critical error during display_order cleanup: ${error.message}`);
-    }
-  }
 
   /**
    * Validate tag IDs exist in tags table
