@@ -1089,8 +1089,8 @@ export class PathwaysService {
       });
 
       if (existingPathways.length !== orders.length) {
-        const foundIds = existingPathways.map(p => p.id);
-        const missingIds = ids.filter(id => !foundIds.includes(id));
+        const foundIds = new Set(existingPathways.map(p => p.id));
+        const missingIds = ids.filter(id => !foundIds.has(id));
         return APIResponse.error(
           response,
           apiId,
