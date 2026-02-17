@@ -45,8 +45,7 @@ export class CreatePathwayDto {
   description?: string;
 
   @ApiPropertyOptional({
-    description: "Image URL (from presigned S3 upload). Use pathway/storage/presigned-url, upload to S3, then send the returned fileUrl here.",
-    example: "https://bucket.s3.region.amazonaws.com/pathway-images/Screenshot.png",
+    description: "Image URL (from presigned S3 upload). upload to S3, then send the returned fileUrl here.",
   })
   @Expose()
   @IsOptional()

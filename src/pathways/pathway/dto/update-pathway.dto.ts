@@ -34,7 +34,6 @@ export class UpdatePathwayDto {
 
   @ApiPropertyOptional({
     description: "Image URL (from presigned S3 upload). Replaces existing image; old image is deleted from S3.",
-    example: "https://bucket.s3.region.amazonaws.com/pathway-images/Screenshot.png",
   })
   @Expose()
   @IsOptional()
