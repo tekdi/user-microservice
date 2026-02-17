@@ -45,14 +45,6 @@ export class CreatePathwayDto {
   description?: string;
 
   @ApiPropertyOptional({
-    description: "Image URL (from presigned S3 upload). upload to S3, then send the returned fileUrl here.",
-  })
-  @Expose()
-  @IsOptional()
-  @IsString()
-  image_url?: string;
-
-  @ApiPropertyOptional({
     description: 'Array of tag IDs from tags table (stored as PostgreSQL text[] array)',
     example: [
       'a1b2c3d4-e111-2222-3333-444455556666',
@@ -60,6 +52,16 @@ export class CreatePathwayDto {
     ],
     type: [String],
   })
+
+   @ApiPropertyOptional({
+    description: "Image URL (from presigned S3 upload). upload to S3, then send the returned fileUrl here.",
+  })
+  @Expose()
+  @IsOptional()
+  @IsString()
+  image_url?: string;
+
+  
   @Expose()
   @IsOptional()
   @IsArray({ message: 'tags must be an array' })

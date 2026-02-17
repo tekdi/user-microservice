@@ -44,11 +44,36 @@ export class PathwaysService {
   }
 
   /**
+   * Normalize path key: trim leading/trailing slashes and collapse consecutive slashes.
+   * Uses simple string iteration (O(n)) to avoid any regex and ReDoS risk.
+   */
+  private normalizePathKey(s: string): string {
+    let start = 0;
+    while (start < s.length && s[start] === '/') start++;
+    let end = s.length;
+    while (end > start && s[end - 1] === '/') end--;
+    if (start >= end) return '';
+    const segment: string[] = [];
+    let i = start;
+    while (i < end) {
+      if (s[i] === '/') {
+        segment.push('/');
+        while (i < end && s[i] === '/') i++;
+      } else {
+        const begin = i;
+        while (i < end && s[i] !== '/') i++;
+        segment.push(s.slice(begin, i));
+      }
+    }
+    return segment.join('');
+  }
+
+  /**
    * Sanitized pathway storage key prefix from env (single source of truth for PATHWAY_STORAGE_KEY_PREFIX).
    */
   private getPathwayStoragePrefix(): string {
     const raw = this.configService.get<string>('PATHWAY_STORAGE_KEY_PREFIX') || 'pathway-images/pathway/files';
-    return raw.replace(/^\/+/, '').replace(/\/+$/, '').replace(/\/+/g, '/');
+    return this.normalizePathKey(raw);
   }
 
   /**
@@ -128,7 +153,7 @@ export class PathwaysService {
       }
       s3Key = extracted;
     } else {
-      s3Key = keyOrUrl.replace(/^\/+/, '').replace(/\/+$/, '').replace(/\/+/g, '/');
+      s3Key = this.normalizePathKey(keyOrUrl);
     }
     if (!prefixWithSlash || !s3Key.startsWith(prefixWithSlash)) {
       return APIResponse.error(response, apiId, API_RESPONSES.BAD_REQUEST, `File key must be a file under pathway storage prefix (${prefix}/), not the prefix itself`, HttpStatus.BAD_REQUEST);
