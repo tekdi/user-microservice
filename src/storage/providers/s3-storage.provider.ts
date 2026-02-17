@@ -47,7 +47,7 @@ export class S3StorageProvider implements StorageProvider {
     this.bucket = this.configService.get<string>('AWS_BUCKET');
     this.region = this.configService.get<string>('AWS_REGION');
     // Remove leading and trailing slashes to avoid double slashes
-    this.uploadDir = this.configService.get<string>('AWS_STORAGE_UPLOAD_DIR')?.replace(/^\/|\/$/g, '') || 'uploads';
+    this.uploadDir = this.configService.get<string>('AWS_STORAGE_UPLOAD_DIR')?.replace(/(^\/|\/$)/g, '') || 'uploads';
   }
 
   /**
@@ -87,7 +87,7 @@ export class S3StorageProvider implements StorageProvider {
    */
   async upload(file: Express.Multer.File, userId?: string, subpath?: string): Promise<string> {
     if (subpath !== undefined && subpath !== null) {
-      const sanitized = String(subpath).replace(/^\/|\/$/g, '');
+      const sanitized = String(subpath).replace(/(^\/|\/$)/g, '');
       if (sanitized.includes('..') || sanitized.includes('/') || sanitized.includes('\\')) {
         throw new Error('Invalid subpath: path traversal and path separators are not allowed');
       }
@@ -97,7 +97,7 @@ export class S3StorageProvider implements StorageProvider {
     const fileName = `${uuidv4()}_${timestamp}${fileExtension}`;
     // Base dir: uploadDir or uploadDir/subpath (e.g. /uploads/userservice/application-form/pathways)
     const baseDir = subpath
-      ? `${this.uploadDir}/${String(subpath).replace(/^\/|\/$/g, '')}`.replace(/\/+/g, '/')
+      ? `${this.uploadDir}/${String(subpath).replace(/(^\/|\/$)/g, '')}`.replace(/\/+/g, '/')
       : this.uploadDir;
     let key: string;
     if (userId) {
@@ -214,7 +214,7 @@ export class S3StorageProvider implements StorageProvider {
     contentType: string,
     options?: { expiresIn?: number; sizeLimit?: number },
   ): Promise<{ url: string; fields: Record<string, string> }> {
-    const cleanKey = key.replace(/^\/|\/$/g, '').replace(/\/+/g, '/');
+    const cleanKey = key.replace(/(^\/|\/$)/g, '').replace(/\/+/g, '/');
     const expiresIn = options?.expiresIn ?? parseInt(this.configService.get<string>('AWS_UPLOAD_FILE_EXPIRY') || '3600', 10);
     const sizeLimit = options?.sizeLimit ?? 5 * 1024 * 1024; // 5MB default
     const { url, fields } = await createPresignedPost(this.s3Client, {

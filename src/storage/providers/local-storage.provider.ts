@@ -38,7 +38,7 @@ export class LocalStorageProvider implements StorageProvider {
    */
   async upload(file: Express.Multer.File, userId?: string, subpath?: string): Promise<string> {
     if (subpath !== undefined && subpath !== null) {
-      const sanitized = String(subpath).replace(/^\/|\/$/g, '');
+      const sanitized = String(subpath).replace(/(^\/|\/$)/g, '');
       if (sanitized.includes('..') || sanitized.includes(path.sep)) {
         throw new Error('Invalid subpath: path traversal and path separators are not allowed');
       }
@@ -47,7 +47,7 @@ export class LocalStorageProvider implements StorageProvider {
     const timestamp = Date.now();
     const fileName = `${uuidv4()}_${timestamp}${fileExtension}`;
 
-    const baseDir = subpath ? path.join(this.uploadDir, String(subpath).replace(/^\/|\/$/g, '')) : this.uploadDir;
+    const baseDir = subpath ? path.join(this.uploadDir, String(subpath).replace(/(^\/|\/$)/g, '')) : this.uploadDir;
     const targetDir = userId ? path.join(baseDir, userId) : baseDir;
     await fs.promises.mkdir(targetDir, { recursive: true });
 
