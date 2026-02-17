@@ -86,7 +86,7 @@ export class PathwaysService {
     image_filesize: number;
   } {
     const pathway_upload_path = this.getPathwayStoragePrefix();
-    const presigned_url_expires_in = parseInt(
+    const presigned_url_expires_in = Number.parseInt(
       this.configService.get<string>('AWS_UPLOAD_FILE_EXPIRY') || '3600',
       10
     );
@@ -118,7 +118,7 @@ export class PathwaysService {
       );
     }
     const maxSizeBytes = config.image_filesize * 1024 * 1024;
-    const cappedSizeLimit = sizeLimit != null ? Math.min(sizeLimit, maxSizeBytes) : maxSizeBytes;
+    const cappedSizeLimit = sizeLimit == null ? maxSizeBytes : Math.min(sizeLimit, maxSizeBytes);
 
     const prefix = this.getPathwayStoragePrefix();
     const fileName = (key || '').trim();
@@ -188,7 +188,8 @@ export class PathwaysService {
       const key = urlObj.pathname.replace(/^\//, '');
       return key || null;
     } catch (error) {
-      this.logger.warn(`Failed to extract S3 key from URL: ${url}`);
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Failed to extract S3 key from URL: ${url}. ${message}`);
       return null;
     }
   }
@@ -527,7 +528,7 @@ export class PathwaysService {
       // OPTIMIZED: Batch fetch video and resource counts for all pathways
       // SAFETY: Validate items array and extract IDs safely
       const pathwayIds = items
-        .filter((item: any) => item && item.id && typeof item.id === 'string')
+        .filter((item: any) => item?.id != null && typeof item.id === 'string')
         .map((item: any) => item.id);
 
       const MAX_BATCH_SIZE = 100;

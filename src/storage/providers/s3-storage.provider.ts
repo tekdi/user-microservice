@@ -193,7 +193,7 @@ export class S3StorageProvider implements StorageProvider {
         originalFileName: fileName
       }
     });
-    const expiresIn = options?.expiresIn || parseInt(this.configService.get<string>('AWS_UPLOAD_FILE_EXPIRY') || '3600', 10);
+    const expiresIn = options?.expiresIn || Number.parseInt(this.configService.get<string>('AWS_UPLOAD_FILE_EXPIRY') || '3600', 10);
     // Generate pre-signed URL with only content-type as required header
     const url = await getSignedUrl(this.s3Client, command, {
       expiresIn,
@@ -215,7 +215,7 @@ export class S3StorageProvider implements StorageProvider {
     options?: { expiresIn?: number; sizeLimit?: number },
   ): Promise<{ url: string; fields: Record<string, string> }> {
     const cleanKey = key.replace(/(^\/|\/$)/g, '').replace(/\/+/g, '/');
-    const expiresIn = options?.expiresIn ?? parseInt(this.configService.get<string>('AWS_UPLOAD_FILE_EXPIRY') || '3600', 10);
+    const expiresIn = options?.expiresIn ?? Number.parseInt(this.configService.get<string>('AWS_UPLOAD_FILE_EXPIRY') || '3600', 10);
     const sizeLimit = options?.sizeLimit ?? 5 * 1024 * 1024; // 5MB default
     const { url, fields } = await createPresignedPost(this.s3Client, {
       Bucket: this.bucket,
