@@ -42,18 +42,20 @@ export class LocalStorageProvider implements StorageProvider {
    * - Writes file buffer to local filesystem
    * - Returns the local file path
    * @param file - The file to upload
-   * @param userId - Optional user ID for folder structure (not used in local storage)
+   * @param userId - Optional user ID for folder structure
+   * @param subpath - Optional subpath under upload dir (e.g. 'pathways')
    * @returns The local file path
    */
-  async upload(file: Express.Multer.File, userId?: string): Promise<string> {
+  async upload(file: Express.Multer.File, userId?: string, subpath?: string): Promise<string> {
     const fileExtension = path.extname(file.originalname);
     const timestamp = Date.now();
     const fileName = `${uuidv4()}_${timestamp}${fileExtension}`;
-    
-    // Create user folder if userId is provided
-    const targetDir = await this.ensureUserFolderExists(userId);
-    const filePath = path.join(targetDir, fileName);
 
+    const baseDir = subpath ? path.join(this.uploadDir, subpath) : this.uploadDir;
+    const targetDir = userId ? path.join(baseDir, userId) : baseDir;
+    await fs.promises.mkdir(targetDir, { recursive: true });
+
+    const filePath = path.join(targetDir, fileName);
     await fs.promises.writeFile(filePath, file.buffer);
     return filePath;
   }

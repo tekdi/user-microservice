@@ -11,12 +11,14 @@ import { TagsService } from './tags/tags.service';
 import { Tag } from './tags/entities/tag.entity';
 import { InterestsModule } from './interests/interests.module';
 import { LmsClientService } from './common/services/lms-client.service';
+import { StorageModule } from '../storage/storage.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Pathway, UserPathwayHistory, User, Tag]),
     InterestsModule,
     ConfigModule,
+    StorageModule, // Added for S3 file upload support
   ],
   controllers: [PathwaysController, TagsController],
   providers: [PathwaysService, TagsService, LmsClientService],

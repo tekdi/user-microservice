@@ -16,7 +16,10 @@ import {
   BadRequestException,
   Logger,
   Req,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiTags,
   ApiOperation,
@@ -24,6 +27,7 @@ import {
   ApiHeader,
   ApiBody,
   ApiParam,
+  ApiConsumes,
   ApiBadRequestResponse,
   ApiUnauthorizedResponse,
   ApiConflictResponse,
@@ -42,6 +46,7 @@ import { JwtAuthGuard } from 'src/common/guards/keycloak.guard';
 import { InterestsService } from '../interests/interests.service';
 import { API_RESPONSES } from '@utils/response.messages';
 import { isUUID } from 'class-validator';
+import { CoerceFormDataPipe } from './pipes/coerce-form-data.pipe';
 
 interface RequestWithUser extends Request {
   user?: {
@@ -148,18 +153,21 @@ export class PathwaysController {
   @ApiUnauthorizedResponse({ description: "Unauthorized" })
   @ApiConflictResponse({ description: "Pathway conflict: check if key or active name already exists" })
   @ApiInternalServerErrorResponse({ description: "Internal Server Error" })
-  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('image'))
+  @UsePipes(new CoerceFormDataPipe(), new ValidationPipe({ transform: true, whitelist: true }))
   async create(
     @Body() createPathwayDto: CreatePathwayDto,
     @Headers('tenantid') tenantId: string,
     @Req() request: RequestWithUser,
+    @UploadedFile() image: Express.Multer.File,
     @Res() response: Response
   ): Promise<Response> {
     if (!tenantId || !isUUID(tenantId)) {
       throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
     }
     const userId = request.user?.userId || null;
-    return this.pathwaysService.create(createPathwayDto, userId, response);
+    return this.pathwaysService.create(createPathwayDto, userId, image, response);
   }
 
   /**
@@ -362,19 +370,22 @@ export class PathwaysController {
   @ApiUnauthorizedResponse({ description: "Unauthorized" })
   @ApiNotFoundResponse({ description: "Pathway not found" })
   @ApiInternalServerErrorResponse({ description: "Internal Server Error" })
-  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('image'))
+  @UsePipes(new CoerceFormDataPipe(), new ValidationPipe({ transform: true, whitelist: true }))
   async update(
     @Param("id", ParseUUIDPipe) id: string,
     @Body() updatePathwayDto: UpdatePathwayDto,
     @Headers('tenantid') tenantId: string,
     @Req() request: RequestWithUser,
+    @UploadedFile() image: Express.Multer.File,
     @Res() response: Response
   ): Promise<Response> {
     if (!tenantId || !isUUID(tenantId)) {
       throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
     }
     const userId = request.user?.userId || null;
-    return this.pathwaysService.update(id, updatePathwayDto, userId, response);
+    return this.pathwaysService.update(id, updatePathwayDto, userId, image, response);
   }
 
   /**

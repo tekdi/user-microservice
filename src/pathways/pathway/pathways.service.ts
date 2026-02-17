@@ -1,4 +1,4 @@
-import { Injectable, HttpStatus } from '@nestjs/common';
+import { Injectable, HttpStatus, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, DataSource, Like, ILike, Not } from 'typeorm';
 import { Pathway } from './entities/pathway.entity';
@@ -18,9 +18,14 @@ import { API_RESPONSES } from '@utils/response.messages';
 import { APIID } from '@utils/api-id.config';
 import { LoggerUtil } from 'src/common/logger/LoggerUtil';
 import { Response } from 'express';
+import { S3StorageProvider } from '../../storage/providers/s3-storage.provider';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class PathwaysService {
+  private readonly logger = new Logger(PathwaysService.name);
+  private readonly s3StorageProvider: S3StorageProvider;
+
   constructor(
     @InjectRepository(Pathway)
     private readonly pathwayRepository: Repository<Pathway>,
@@ -31,8 +36,74 @@ export class PathwaysService {
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     private readonly dataSource: DataSource,
-    private readonly lmsClientService: LmsClientService
-  ) { }
+    private readonly lmsClientService: LmsClientService,   
+    private readonly configService: ConfigService
+  ) {
+    // Initialize S3StorageProvider for image uploads
+    this.s3StorageProvider = new S3StorageProvider(this.configService);
+  }
+
+  /**
+   * Validate image file type (PNG, SVG, JPG)
+   */
+  private validateImageType(file: Express.Multer.File): void {
+    if (!file) {
+      return; // Image is optional
+    }
+
+    const allowedMimeTypes = ['image/png', 'image/svg+xml', 'image/jpeg', 'image/jpg'];
+    const allowedExtensions = ['.png', '.svg', '.jpg', '.jpeg'];
+
+    const fileExtension = file.originalname.toLowerCase().substring(file.originalname.lastIndexOf('.'));
+    const isValidMimeType = allowedMimeTypes.includes(file.mimetype.toLowerCase());
+    const isValidExtension = allowedExtensions.includes(fileExtension);
+
+    if (!isValidMimeType || !isValidExtension) {
+      throw new BadRequestException(
+        `Invalid image type. Allowed types are: PNG, SVG, JPG. Received: ${file.mimetype}`
+      );
+    }
+  }
+
+  /**
+   * Extract S3 key from S3 URL
+   * URL format: https://bucket.s3.region.amazonaws.com/key
+   */
+  private extractS3KeyFromUrl(url: string): string | null {
+    if (!url) {
+      return null;
+    }
+
+    try {
+      const urlObj = new URL(url);
+      // Remove leading slash from pathname
+      const key = urlObj.pathname.replace(/^\//, '');
+      return key || null;
+    } catch (error) {
+      this.logger.warn(`Failed to extract S3 key from URL: ${url}`);
+      return null;
+    }
+  }
+
+  /**
+   * Delete image from S3 if URL exists
+   */
+  private async deleteImageFromS3(imageUrl: string | null): Promise<void> {
+    if (!imageUrl) {
+      return;
+    }
+
+    try {
+      const s3Key = this.extractS3KeyFromUrl(imageUrl);
+      if (s3Key) {
+        await this.s3StorageProvider.delete(s3Key);
+        this.logger.debug(`Deleted image from S3: ${s3Key}`);
+      }
+    } catch (error) {
+      // Log error but don't fail the request if deletion fails
+      this.logger.warn(`Failed to delete image from S3: ${imageUrl}, error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
 
   /**
    * Validate tag IDs exist in tags table
@@ -103,10 +174,12 @@ export class PathwaysService {
   async create(
     createPathwayDto: CreatePathwayDto,
     userId: string | null,
+    image: Express.Multer.File | undefined,
     response: Response
   ): Promise<Response> {
     const apiId = APIID.PATHWAY_CREATE;
     try {
+      const dto = createPathwayDto as any;
       // Auto-generate key from name if not provided
       let key = createPathwayDto.key;
       if (!key) {
@@ -130,8 +203,11 @@ export class PathwaysService {
           "An active pathway with this name already exists",
           HttpStatus.CONFLICT
         );
+        
       }
-
+      if (image) {
+        this.validateImageType(image);
+      }
       // Check if pathway with same key already exists
       const existingPathway = await this.pathwayRepository.findOne({
         where: { key },
@@ -149,7 +225,6 @@ export class PathwaysService {
       }
 
       // Validate tags if provided
-      const dto = createPathwayDto as any;
       if (dto.tags && dto.tags.length > 0) {
         const validation = await this.validateTagIds(dto.tags);
         if (!validation.isValid) {
@@ -176,21 +251,34 @@ export class PathwaysService {
         const maxOrder = maxOrderResult?.max || 0;
         displayOrder = Number(maxOrder) + 1;
       }
+      let imageUrl: string | null = null;
+      if (image) {
+        try {
+          const s3Key = await this.s3StorageProvider.upload(image, userId || undefined, 'pathways');
+          imageUrl = this.s3StorageProvider.getUrl(s3Key);
+        } catch (error) {
+          this.logger.error(`Failed to upload image to S3: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          return APIResponse.error(
+            response,
+            apiId,
+            API_RESPONSES.INTERNAL_SERVER_ERROR,
+            'Failed to upload image to S3',
+            HttpStatus.INTERNAL_SERVER_ERROR
+          );
+        }
+      }
 
-      // Set default is_active if not provided
-      // Store tags as PostgreSQL text[] array in database
-      // Format: {tag_id1,tag_id2,tag_id3}
       const pathwayData = {
         ...createPathwayDto,
         key: key,
         display_order: displayOrder,
         is_active: createPathwayDto.is_active ?? true,
         tags: dto.tags && dto.tags.length > 0 ? dto.tags : [],
+        image_url: imageUrl,
         created_by: userId,
         updated_by: userId,
       };
 
-      // Create and save in single operation
       const pathway = this.pathwayRepository.create(pathwayData);
       const savedPathway = await this.pathwayRepository.save(pathway);
 
@@ -208,6 +296,7 @@ export class PathwaysService {
         tags: tagDetails,
         display_order: savedData.display_order,
         is_active: savedData.is_active,
+        image_url: savedData.image_url,
         created_at: savedData.created_at,
       };
 
@@ -267,7 +356,7 @@ export class PathwaysService {
       const offset = listPathwayDto.offset ?? 0;
 
       // Extract filters from nested object
-      const filters = listPathwayDto.filters || {};
+      const filters = (listPathwayDto as any).filters || {};
 
       // Check if we need QueryBuilder for text search (name or description)
       const needsTextSearch = !!(filters.name || filters.description);
@@ -345,9 +434,23 @@ export class PathwaysService {
       }
 
       // OPTIMIZED: Batch fetch video and resource counts for all pathways in parallel
-      const pathwayIds = items.map((item: any) => item.id);
+      // SAFETY: Validate items array and extract IDs safely
+      const pathwayIds = items
+        .filter((item: any) => item && item.id && typeof item.id === 'string')
+        .map((item: any) => item.id);
+      
+      // SAFETY: Limit batch size to prevent memory issues
+      const MAX_BATCH_SIZE = 100; // Limit concurrent pathway count requests
+      const pathwayIdsToProcess = pathwayIds.slice(0, MAX_BATCH_SIZE);
+      
+      if (pathwayIds.length > MAX_BATCH_SIZE) {
+        this.logger.warn(
+          `Pathway list query returned ${pathwayIds.length} pathways, but batch size is limited to ${MAX_BATCH_SIZE} to prevent memory issues. Processing first ${MAX_BATCH_SIZE} pathways.`
+        );
+      }
+      
       const countsMap = await this.lmsClientService.getBatchCounts(
-        pathwayIds,
+        pathwayIdsToProcess,
         tenantId,
         organisationId
       );
@@ -379,10 +482,9 @@ export class PathwaysService {
         };
       });
 
-      // Return paginated result with count
+      // Return paginated result; count = total count of records (for pagination)
       const result = {
-        count: items.length,
-        totalCount: totalCount,
+        count: totalCount,
         limit: limit,
         offset: offset,
         items: transformedItems,
@@ -452,7 +554,7 @@ export class PathwaysService {
       const tagIds = pathwayData.tags || [];
       const tagDetails = await this.fetchTagDetails(tagIds);
 
-      // Transform to return only tags with names (no tag_ids)
+      // Transform to return tags and image_url (S3 link)
       const result = {
         id: pathwayData.id,
         key: pathwayData.key,
@@ -461,6 +563,7 @@ export class PathwaysService {
         tags: tagDetails,
         display_order: pathwayData.display_order,
         is_active: pathwayData.is_active,
+        image_url: pathwayData.image_url,
         created_at: pathwayData.created_at,
       };
 
@@ -496,6 +599,7 @@ export class PathwaysService {
     id: string,
     updatePathwayDto: UpdatePathwayDto,
     userId: string | null,
+    image: Express.Multer.File | undefined,
     response: Response
   ): Promise<Response> {
     const apiId = APIID.PATHWAY_UPDATE;
@@ -513,10 +617,16 @@ export class PathwaysService {
         );
       }
 
-      // Check if pathway exists
+      const updateDto = updatePathwayDto as any;
+
+      // Validate multipart image if provided
+      if (image) {
+        this.validateImageType(image);
+      }
+
+      // Check if pathway exists and get existing image_url for deletion
       const existingPathway = await this.pathwayRepository.findOne({
         where: { id },
-        select: ['id'],
       });
 
       if (!existingPathway) {
@@ -529,8 +639,10 @@ export class PathwaysService {
         );
       }
 
+      // Store old image URL for deletion if new image is uploaded
+      const oldImageUrl = (existingPathway as any).image_url;
+
       // Validate tags if provided in update
-      const updateDto = updatePathwayDto as any;
       // Guard against tags: null to avoid runtime errors
       if (updateDto.tags !== undefined && updateDto.tags !== null) {
         // Handle both empty array and array with values
@@ -546,6 +658,26 @@ export class PathwaysService {
               HttpStatus.BAD_REQUEST
             );
           }
+        }
+      }
+
+      let newImageUrl: string | null = null;
+      if (image) {
+        try {
+          const s3Key = await this.s3StorageProvider.upload(image, userId || undefined, 'pathways');
+          newImageUrl = this.s3StorageProvider.getUrl(s3Key);
+          if (oldImageUrl) {
+            await this.deleteImageFromS3(oldImageUrl);
+          }
+        } catch (error) {
+          this.logger.error(`Failed to upload image to S3: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          return APIResponse.error(
+            response,
+            apiId,
+            API_RESPONSES.INTERNAL_SERVER_ERROR,
+            'Failed to upload image to S3',
+            HttpStatus.INTERNAL_SERVER_ERROR
+          );
         }
       }
 
@@ -590,6 +722,9 @@ export class PathwaysService {
       }
       if (updatePathwayDto.is_active !== undefined) {
         updateData.is_active = updatePathwayDto.is_active;
+      }
+      if (newImageUrl !== null) {
+        updateData.image_url = newImageUrl;
       }
 
       // Always set updated_by when updating
@@ -655,6 +790,7 @@ export class PathwaysService {
         tags: tagDetails,
         display_order: pathwayData.display_order,
         is_active: pathwayData.is_active,
+        image_url: pathwayData.image_url,
         created_at: pathwayData.created_at,
       };
 

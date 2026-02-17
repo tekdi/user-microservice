@@ -51,11 +51,12 @@ export class S3StorageProvider implements StorageProvider {
 
   /**
    * Ensures the user folder exists in S3 by creating a folder marker if needed.
+   * @param baseDir - Base directory (uploadDir or uploadDir/subpath)
    * @param userId - The user ID for the folder
    */
-  private async ensureUserFolderExists(userId: string): Promise<void> {
+  private async ensureUserFolderExists(baseDir: string, userId: string): Promise<void> {
     if (!userId) return;
-    const folderKey = `${this.uploadDir}/${userId}/`;
+    const folderKey = `${baseDir}/${userId}/`;
     try {
       // Try to check if folder exists by checking for a folder marker
       await this.s3Client.send(
@@ -80,30 +81,38 @@ export class S3StorageProvider implements StorageProvider {
    * Uploads a file to S3, placing it in a user-specific folder if userId is provided.
    * @param file - The file to upload
    * @param userId - Optional user ID for folder structure
+   * @param subpath - Optional subpath under upload dir (e.g. 'pathways') so key is uploadDir/subpath/...
    * @returns The S3 key of the uploaded file
    */
-  async upload(file: Express.Multer.File, userId?: string): Promise<string> {
+  async upload(file: Express.Multer.File, userId?: string, subpath?: string): Promise<string> {
     const fileExtension = path.extname(file.originalname);
     const timestamp = Date.now();
     const fileName = `${uuidv4()}_${timestamp}${fileExtension}`;
-    // Create the key with user folder if userId is provided
+    // Base dir: uploadDir or uploadDir/subpath (e.g. /uploads/userservice/application-form/pathways)
+    const baseDir = subpath
+      ? `${this.uploadDir}/${subpath.replace(/^\/|\/$/g, '')}`.replace(/\/+/g, '/')
+      : this.uploadDir;
     let key: string;
     if (userId) {
-      // Ensure user folder exists before uploading
-      await this.ensureUserFolderExists(userId);
-      key = `${this.uploadDir}/${userId}/${fileName}`;
+      await this.ensureUserFolderExists(baseDir, userId);
+      key = `${baseDir}/${userId}/${fileName}`;
     } else {
-      key = `${this.uploadDir}/${fileName}`;
+      key = `${baseDir}/${fileName}`;
     }
+    // Use Buffer so SDK knows length (avoids "Stream of unknown length" warning)
+    const body = Buffer.isBuffer(file.buffer) ? file.buffer : Buffer.from(file.buffer);
+    const contentLength = body.length;
+
     const command = new PutObjectCommand({
       Bucket: this.bucket,
       Key: key,
-      Body: file.buffer,
+      Body: body,
+      ContentLength: contentLength,
       ContentType: file.mimetype,
       ContentDisposition: `attachment; filename="${file.originalname}"`,
       Metadata: {
         originalFileName: file.originalname,
-        fileSize: file.size.toString(),
+        fileSize: String(contentLength),
         uploadedAt: new Date().toISOString()
       }
     });
@@ -160,7 +169,7 @@ export class S3StorageProvider implements StorageProvider {
     const uniqueFileName = `${uuidv4()}_${timestamp}${fileExtension}`;
     let key: string;
     if (userId) {
-      await this.ensureUserFolderExists(userId);
+      await this.ensureUserFolderExists(this.uploadDir, userId);
       key = `${this.uploadDir}/${userId}/${uniqueFileName}`;
     } else {
       key = `${this.uploadDir}/${uniqueFileName}`;

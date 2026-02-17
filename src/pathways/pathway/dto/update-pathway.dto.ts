@@ -9,7 +9,7 @@ import {
   IsArray,
   IsUUID,
 } from 'class-validator';
-import { Expose } from 'class-transformer';
+import { Expose, Type, Transform } from 'class-transformer';
 
 export class UpdatePathwayDto {
   @ApiPropertyOptional({
@@ -52,6 +52,7 @@ export class UpdatePathwayDto {
     minimum: 0,
   })
   @Expose()
+  @Type(() => Number)
   @IsOptional()
   @IsNumber()
   @Min(0, { message: "Display order must be a non-negative number" })
@@ -62,6 +63,12 @@ export class UpdatePathwayDto {
     example: true,
   })
   @Expose()
+  @Transform(({ value }) => {
+    if (value === undefined || value === null || value === '') return undefined;
+    if (value === true || value === 'true') return true;
+    if (value === false || value === 'false') return false;
+    return undefined;
+  })
   @IsOptional()
   @IsBoolean()
   is_active?: boolean;
