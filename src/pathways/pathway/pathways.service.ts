@@ -1114,8 +1114,8 @@ export class PathwaysService {
       });
 
       if (existingPathways.length !== orders.length) {
-        const foundIds = new Set(existingPathways.map(p => p.id));
-        const missingIds = ids.filter(id => !foundIds.has(id));
+        const foundIdsSet = new Set(existingPathways.map(p => p.id));
+        const missingIds = ids.filter(id => !foundIdsSet.has(id));
         return APIResponse.error(
           response,
           apiId,
@@ -1125,7 +1125,28 @@ export class PathwaysService {
         );
       }
 
-      // 3. Use a transaction for safe reordering
+      // 3. Prevent collisions with pathways NOT in the request
+      // If a user reorders A and B but targets an order held by C (which is not in the request),
+      // the unique index will block Step 2. We validate this upfront for a clear error message.
+      const potentialConflicts = await this.pathwayRepository.find({
+        where: { display_order: In(orderValues) },
+        select: ['id', 'name', 'display_order']
+      });
+
+      const externalConflicts = potentialConflicts.filter(p => !ids.includes(p.id));
+
+      if (externalConflicts.length > 0) {
+        const conflictDetails = externalConflicts.map(p => `'${p.name}' (Order ${p.display_order})`).join(', ');
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.CONFLICT,
+          `Reordering failed: The target display orders are currently occupied by other pathways not included in this request: ${conflictDetails}. Please include these pathways in your request to perform a safe swap or shift.`,
+          HttpStatus.CONFLICT
+        );
+      }
+
+      // 4. Use a transaction for safe reordering
       await this.dataSource.transaction(async (transactionalEntityManager) => {
         // Step 1: Temporarily update all targeted display_order values to a non-conflicting negative range
         // We use negation ( -order ) to avoid UniqueConstraintViolation during swapping.
