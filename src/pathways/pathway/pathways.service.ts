@@ -991,7 +991,7 @@ export class PathwaysService {
       // 2. Get active pathway from user_pathway_history
       const activePathway = await this.userPathwayHistoryRepository.findOne({
         where: { user_id: userId, is_active: true },
-        select: ['id', 'pathway_id', 'activated_at'],
+        select: ['id', 'pathway_id', 'activated_at', 'user_goal'],
       });
 
       if (!activePathway) {
@@ -1008,6 +1008,7 @@ export class PathwaysService {
         id: activePathway.id,
         pathwayId: activePathway.pathway_id,
         activatedAt: activePathway.activated_at,
+        userGoal: activePathway.user_goal,
       };
 
       return APIResponse.success(
