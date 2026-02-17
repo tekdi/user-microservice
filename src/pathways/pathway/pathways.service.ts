@@ -97,6 +97,110 @@ export class PathwaysService {
   }
 
   /**
+   * Internal validation for pathway creation
+   * Checks for name and key uniqueness and validates tags
+   */
+  private async validatePathwayCreation(
+    createPathwayDto: CreatePathwayDto,
+    key: string,
+    apiId: string,
+    response: Response
+  ): Promise<{ isValid: boolean; errorResponse?: Response }> {
+    // 1. Check if an active pathway with same name (case-insensitive) already exists
+    const activePathwayWithName = await this.pathwayRepository.findOne({
+      where: {
+        name: ILike(createPathwayDto.name),
+        is_active: true,
+      },
+      select: ['id'],
+    });
+
+    if (activePathwayWithName) {
+      return {
+        isValid: false,
+        errorResponse: APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.CONFLICT,
+          "An active pathway with this name already exists",
+          HttpStatus.CONFLICT
+        )
+      };
+    }
+
+    // 2. Check if pathway with same key already exists
+    const existingPathway = await this.pathwayRepository.findOne({
+      where: { key },
+      select: ['id', 'key'],
+    });
+
+    if (existingPathway) {
+      return {
+        isValid: false,
+        errorResponse: APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.CONFLICT,
+          API_RESPONSES.PATHWAY_KEY_EXISTS,
+          HttpStatus.CONFLICT
+        )
+      };
+    }
+
+    // 3. Validate tags if provided
+    const dto = createPathwayDto as any;
+    if (dto.tags && dto.tags.length > 0) {
+      const validation = await this.validateTagIds(dto.tags);
+      if (!validation.isValid) {
+        return {
+          isValid: false,
+          errorResponse: APIResponse.error(
+            response,
+            apiId,
+            API_RESPONSES.BAD_REQUEST,
+            `${API_RESPONSES.INVALID_TAG_IDS}: ${validation.invalidTagIds.join(', ')}`,
+            HttpStatus.BAD_REQUEST
+          )
+        };
+      }
+    }
+
+    return { isValid: true };
+  }
+
+  /**
+   * Internal logic to calculate a unique display order
+   * Falls back to auto-increment if provided order is a duplicate
+   */
+  private async calculateDisplayOrder(requestedOrder?: number): Promise<number> {
+    let displayOrder = requestedOrder;
+    let needsAutoGeneration = displayOrder === undefined || displayOrder === null || displayOrder === 0;
+
+    if (!needsAutoGeneration) {
+      // Check if forcefully provided order is already taken
+      const existingWithOrder = await this.pathwayRepository.findOne({
+        where: { display_order: displayOrder },
+        select: ['id'],
+      });
+      if (existingWithOrder) {
+        needsAutoGeneration = true;
+      }
+    }
+
+    if (needsAutoGeneration) {
+      const maxOrderResult = await this.pathwayRepository
+        .createQueryBuilder('pathway')
+        .select('MAX(pathway.display_order)', 'max')
+        .getRawOne();
+
+      const maxOrder = maxOrderResult?.max || 0;
+      displayOrder = Number(maxOrder) + 1;
+    }
+
+    return displayOrder;
+  }
+
+  /**
    * Create a new pathway
    * Optimized: Single query with conflict check and batch tag validation
    */
@@ -108,121 +212,42 @@ export class PathwaysService {
     const apiId = APIID.PATHWAY_CREATE;
     try {
       // Auto-generate key from name if not provided
-      let key = createPathwayDto.key;
-      if (!key) {
-        key = await this.generateUniqueKey(createPathwayDto.name);
+      const key = createPathwayDto.key || await this.generateUniqueKey(createPathwayDto.name);
+
+      // Perform all validations
+      const validation = await this.validatePathwayCreation(createPathwayDto, key, apiId, response);
+      if (!validation.isValid) {
+        return validation.errorResponse;
       }
 
-      // Check if an active pathway with same name (case-insensitive) already exists
-      const activePathwayWithName = await this.pathwayRepository.findOne({
-        where: {
-          name: ILike(createPathwayDto.name),
-          is_active: true,
-        },
-        select: ['id'],
-      });
+      // Calculate safe display order (auto-increment on duplicate)
+      const displayOrder = await this.calculateDisplayOrder(createPathwayDto.display_order);
 
-      if (activePathwayWithName) {
-        return APIResponse.error(
-          response,
-          apiId,
-          API_RESPONSES.CONFLICT,
-          "An active pathway with this name already exists",
-          HttpStatus.CONFLICT
-        );
-      }
-
-      // Check if pathway with same key already exists
-      const existingPathway = await this.pathwayRepository.findOne({
-        where: { key },
-        select: ['id', 'key'],
-      });
-
-      if (existingPathway) {
-        return APIResponse.error(
-          response,
-          apiId,
-          API_RESPONSES.CONFLICT,
-          API_RESPONSES.PATHWAY_KEY_EXISTS,
-          HttpStatus.CONFLICT
-        );
-      }
-
-      // Validate tags if provided
-      const dto = createPathwayDto as any;
-      if (dto.tags && dto.tags.length > 0) {
-        const validation = await this.validateTagIds(dto.tags);
-        if (!validation.isValid) {
-          return APIResponse.error(
-            response,
-            apiId,
-            API_RESPONSES.BAD_REQUEST,
-            `${API_RESPONSES.INVALID_TAG_IDS}: ${validation.invalidTagIds.join(
-              ', '
-            )}`,
-            HttpStatus.BAD_REQUEST
-          );
-        }
-      }
-
-      // Handle auto-increment for display_order if not provided OR if duplicate is provided
-      let displayOrder = createPathwayDto.display_order;
-
-      let needsAutoGeneration = displayOrder === undefined || displayOrder === null || displayOrder === 0;
-
-      if (!needsAutoGeneration) {
-        // Check if forcefully provided order is already taken
-        const existingWithOrder = await this.pathwayRepository.findOne({
-          where: { display_order: displayOrder },
-          select: ['id'],
-        });
-        if (existingWithOrder) {
-          needsAutoGeneration = true;
-        }
-      }
-
-      if (needsAutoGeneration) {
-        const maxOrderResult = await this.pathwayRepository
-          .createQueryBuilder('pathway')
-          .select('MAX(pathway.display_order)', 'max')
-          .getRawOne();
-
-        const maxOrder = maxOrderResult?.max || 0;
-        displayOrder = Number(maxOrder) + 1;
-      }
-
-      // Set default is_active if not provided
-      // Store tags as PostgreSQL text[] array in database
-      // Format: {tag_id1,tag_id2,tag_id3}
+      // Prepare data for save
       const pathwayData = {
         ...createPathwayDto,
-        key: key,
+        key,
         display_order: displayOrder,
         is_active: createPathwayDto.is_active ?? true,
-        tags: dto.tags && dto.tags.length > 0 ? dto.tags : [],
+        tags: (createPathwayDto as any).tags || [],
         created_by: userId,
         updated_by: userId,
       };
 
-      // Create and save in single operation
-      const pathway = this.pathwayRepository.create(pathwayData);
-      const savedPathway = await this.pathwayRepository.save(pathway);
+      const savedPathway = await this.pathwayRepository.save(this.pathwayRepository.create(pathwayData));
 
-      // OPTIMIZED: Fetch tag details in a single batch query (no N+1)
-      const savedData = savedPathway as any;
-      const tagIds = savedData.tags || [];
-      const tagDetails = await this.fetchTagDetails(tagIds);
+      // Fetch tag details for the response
+      const tagDetails = await this.fetchTagDetails(savedPathway.tags || []);
 
-      // Return all fields with tags (id and name) instead of tag_ids
       const result = {
-        id: savedData.id,
-        key: savedData.key,
-        name: savedData.name,
-        description: savedData.description,
+        id: savedPathway.id,
+        key: savedPathway.key,
+        name: savedPathway.name,
+        description: savedPathway.description,
         tags: tagDetails,
-        display_order: savedData.display_order,
-        is_active: savedData.is_active,
-        created_at: savedData.created_at,
+        display_order: savedPathway.display_order,
+        is_active: savedPathway.is_active,
+        created_at: savedPathway.created_at,
       };
 
       return APIResponse.success(
