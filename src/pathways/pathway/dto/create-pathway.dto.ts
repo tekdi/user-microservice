@@ -10,7 +10,7 @@ import {
   IsArray,
   IsUUID,
 } from 'class-validator';
-import { Expose, Type, Transform } from 'class-transformer';
+import { Expose, Type } from 'class-transformer';
 
 export class CreatePathwayDto {
   @ApiProperty({
@@ -61,7 +61,7 @@ export class CreatePathwayDto {
   @IsString()
   image_url?: string;
 
-  
+
   @Expose()
   @IsOptional()
   @IsArray({ message: 'tags must be an array' })

@@ -140,6 +140,11 @@ export class PathwaysService {
   /**
    * Delete a file from pathway S3 storage by URL or key (like LMS DELETE /storage/files?key=...).
    * Key/URL must be under PATHWAY_STORAGE_KEY_PREFIX. Logs the deletion.
+   *
+   * URL support: Only AWS S3 virtual-hosted-style URLs are supported:
+   * https://bucket.s3.region.amazonaws.com/key
+   * Path-style URLs (https://s3.region.amazonaws.com/bucket/key) or custom S3-compatible
+   * endpoints (e.g. MinIO) may not parse correctly and can cause deletion failures.
    */
   async deletePathwayStorageFile(keyOrUrl: string, response: Response): Promise<Response> {
     const apiId = APIID.PATHWAY_STORAGE_DELETE;
@@ -163,13 +168,14 @@ export class PathwaysService {
       return APIResponse.success(response, apiId, { deleted: true, key: s3Key }, HttpStatus.OK, 'File deleted from storage');
     } catch (error) {
       this.logger.warn(`Pathway storage delete failed: key=${s3Key}, error=${error instanceof Error ? error.message : 'Unknown'}`);
-      return APIResponse.error(response, apiId, API_RESPONSES.INTERNAL_SERVER_ERROR, error instanceof Error ? error.message : 'Delete failed', HttpStatus.INTERNAL_SERVER_ERROR);
+      return APIResponse.error(response, apiId, API_RESPONSES.INTERNAL_SERVER_ERROR, 'Failed to delete file from storage', HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 
   /**
-   * Extract S3 key from S3 URL
-   * URL format: https://bucket.s3.region.amazonaws.com/key
+   * Extract S3 object key from a virtual-hosted-style S3 URL.
+   * Supported format: https://bucket.s3.region.amazonaws.com/key (pathname is the key).
+   * Path-style or custom S3-compatible endpoints are not supported.
    */
   private extractS3KeyFromUrl(url: string): string | null {
     if (!url) {
@@ -279,7 +285,6 @@ export class PathwaysService {
   ): Promise<Response> {
     const apiId = APIID.PATHWAY_CREATE;
     try {
-      const dto = createPathwayDto as any;
       // Auto-generate key from name if not provided
       let key = createPathwayDto.key;
       if (!key) {
@@ -322,8 +327,8 @@ export class PathwaysService {
       }
 
       // Validate tags if provided
-      if (dto.tags && dto.tags.length > 0) {
-        const validation = await this.validateTagIds(dto.tags);
+      if (createPathwayDto.tags && createPathwayDto.tags.length > 0) {
+        const validation = await this.validateTagIds(createPathwayDto.tags);
         if (!validation.isValid) {
           return APIResponse.error(
             response,
@@ -349,7 +354,7 @@ export class PathwaysService {
         displayOrder = Number(maxOrder) + 1;
       }
       let imageUrl: string | null = null;
-      const dtoImageUrl = (createPathwayDto as any).image_url;
+      const dtoImageUrl = createPathwayDto.image_url;
       if (dtoImageUrl && typeof dtoImageUrl === 'string' && dtoImageUrl.trim() !== '') {
         imageUrl = dtoImageUrl.trim();
       }
@@ -359,7 +364,7 @@ export class PathwaysService {
         key: key,
         display_order: displayOrder,
         is_active: createPathwayDto.is_active ?? true,
-        tags: dto.tags && dto.tags.length > 0 ? dto.tags : [],
+        tags: createPathwayDto.tags && createPathwayDto.tags.length > 0 ? createPathwayDto.tags : [],
         image_url: imageUrl,
         created_by: userId,
         updated_by: userId,
@@ -699,8 +704,6 @@ export class PathwaysService {
         );
       }
 
-      const updateDto = updatePathwayDto as any;
-
       // Check if pathway exists and get existing image_url for deletion
       const existingPathway = await this.pathwayRepository.findOne({
         where: { id },
@@ -716,15 +719,12 @@ export class PathwaysService {
         );
       }
 
-      // Store old image URL for deletion if new image is uploaded
-      const oldImageUrl = (existingPathway as any).image_url;
+      const oldImageUrl = existingPathway.image_url;
 
       // Validate tags if provided in update
-      // Guard against tags: null to avoid runtime errors
-      if (updateDto.tags !== undefined && updateDto.tags !== null) {
-        // Handle both empty array and array with values
-        if (Array.isArray(updateDto.tags) && updateDto.tags.length > 0) {
-          const validation = await this.validateTagIds(updateDto.tags);
+      if (updatePathwayDto.tags !== undefined && updatePathwayDto.tags !== null) {
+        if (Array.isArray(updatePathwayDto.tags) && updatePathwayDto.tags.length > 0) {
+          const validation = await this.validateTagIds(updatePathwayDto.tags);
           if (!validation.isValid) {
             return APIResponse.error(
               response,
@@ -778,10 +778,10 @@ export class PathwaysService {
         updateData.description = updatePathwayDto.description;
       }
       // Guard against null: only update if tags is explicitly provided (array or empty array)
-      if (updateDto.tags !== undefined && updateDto.tags !== null) {
+      if (updatePathwayDto.tags !== undefined && updatePathwayDto.tags !== null) {
         // Store as PostgreSQL text[] array
         // Empty array is valid, so we allow it
-        updateData.tags = Array.isArray(updateDto.tags) ? updateDto.tags : [];
+        updateData.tags = Array.isArray(updatePathwayDto.tags) ? updatePathwayDto.tags : [];
       }
       if (updatePathwayDto.display_order !== undefined) {
         updateData.display_order = updatePathwayDto.display_order;

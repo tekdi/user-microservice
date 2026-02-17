@@ -9,7 +9,7 @@ import {
   IsArray,
   IsUUID,
 } from 'class-validator';
-import { Expose, Type, Transform } from 'class-transformer';
+import { Expose, Type } from 'class-transformer';
 
 export class UpdatePathwayDto {
   @ApiPropertyOptional({
