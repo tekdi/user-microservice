@@ -44,24 +44,82 @@ export class PathwaysService {
   }
 
   /**
-   * Validate image file type (PNG, SVG, JPG)
+   * Get pathway storage/config (LMS-style). Returns upload path, presigned expiry, image mime types and size limit from env.
    */
-  private validateImageType(file: Express.Multer.File): void {
-    if (!file) {
-      return; // Image is optional
+  getPathwayConfig(): {
+    pathway_upload_path: string;
+    presigned_url_expires_in: number;
+    image_mime_type: string;
+    image_filesize: number;
+  } {
+    const rawPrefix = this.configService.get<string>('PATHWAY_STORAGE_KEY_PREFIX') || 'pathway-images/pathway/files';
+    const pathway_upload_path = rawPrefix.replace(/^\/+|\/+$/g, '').replace(/\/+/g, '/');
+    const presigned_url_expires_in = parseInt(
+      this.configService.get<string>('AWS_UPLOAD_FILE_EXPIRY') || '3600',
+      10
+    );
+    return {
+      pathway_upload_path,
+      presigned_url_expires_in,
+      image_mime_type: 'image/jpeg, image/jpg, image/png, image/svg+xml',
+      image_filesize: 5, // MB, same as pathway image limit
+    };
+  }
+
+  /**
+   * Get presigned URL for pathway image upload. Client sends only the image file name (e.g. file_1771313851464_f195e1.png).
+   * Backend builds full S3 key from PATHWAY_STORAGE_KEY_PREFIX env (e.g. pathway-images/pathway/files) + filename.
+   */
+  async getPresignedUploadUrl(
+    key: string,
+    contentType: string,
+    expiresIn?: number,
+    _sizeLimit?: number
+  ): Promise<{ url: string; fields: Record<string, string>; fileUrl: string }> {
+    const rawPrefix = this.configService.get<string>('PATHWAY_STORAGE_KEY_PREFIX') || 'pathway-images/pathway/files';
+    const prefix = rawPrefix.replace(/^\/+|\/+$/g, '').replace(/\/+/g, '/');
+    const fileName = (key || '').trim();
+    if (!fileName) {
+      throw new BadRequestException('Key (file name) is required');
     }
+    if (fileName.includes('/') || fileName.includes('\\') || fileName.includes('..')) {
+      throw new BadRequestException('Key must be a file name only (no path or path traversal). Example: file_1771313851464_f195e1.png');
+    }
+    const fullKey = prefix ? `${prefix}/${fileName}` : fileName;
+    const { url, fields } = await this.s3StorageProvider.getPresignedPostForKey(fullKey, contentType, {
+      expiresIn,
+      sizeLimit: _sizeLimit,
+    });
+    const fileUrl = this.s3StorageProvider.getUrl(fullKey);
+    return { url, fields, fileUrl };
+  }
 
-    const allowedMimeTypes = ['image/png', 'image/svg+xml', 'image/jpeg', 'image/jpg'];
-    const allowedExtensions = ['.png', '.svg', '.jpg', '.jpeg'];
-
-    const fileExtension = file.originalname.toLowerCase().substring(file.originalname.lastIndexOf('.'));
-    const isValidMimeType = allowedMimeTypes.includes(file.mimetype.toLowerCase());
-    const isValidExtension = allowedExtensions.includes(fileExtension);
-
-    if (!isValidMimeType || !isValidExtension) {
-      throw new BadRequestException(
-        `Invalid image type. Allowed types are: PNG, SVG, JPG. Received: ${file.mimetype}`
-      );
+  /**
+   * Delete a file from pathway S3 storage by URL or key (like LMS DELETE /storage/files?key=...).
+   * Key/URL must be under PATHWAY_STORAGE_KEY_PREFIX. Logs the deletion.
+   */
+  async deletePathwayStorageFile(keyOrUrl: string, response: Response): Promise<Response> {
+    const apiId = APIID.PATHWAY_STORAGE_DELETE;
+    const prefix = (this.configService.get<string>('PATHWAY_STORAGE_KEY_PREFIX') || 'pathway-images/pathway/files').replace(/^\/+|\/+$/g, '').replace(/\/+/g, '/');
+    let s3Key: string;
+    if (keyOrUrl.startsWith('http://') || keyOrUrl.startsWith('https://')) {
+      const extracted = this.extractS3KeyFromUrl(keyOrUrl);
+      if (!extracted) {
+        return APIResponse.error(response, apiId, API_RESPONSES.BAD_REQUEST, 'Invalid file URL', HttpStatus.BAD_REQUEST);
+      }
+      s3Key = extracted;
+    } else {
+      s3Key = keyOrUrl.replace(/^\/+|\/+$/g, '').replace(/\/+/g, '/');
+    }
+    if (!s3Key.startsWith(prefix + '/') && s3Key !== prefix) {
+      return APIResponse.error(response, apiId, API_RESPONSES.BAD_REQUEST, `File key must be under pathway storage prefix (${prefix}/)`, HttpStatus.BAD_REQUEST);
+    }
+    try {
+      await this.s3StorageProvider.delete(s3Key);
+      return APIResponse.success(response, apiId, { deleted: true, key: s3Key }, HttpStatus.OK, 'File deleted from storage');
+    } catch (error) {
+      this.logger.warn(`Pathway storage delete failed: key=${s3Key}, error=${error instanceof Error ? error.message : 'Unknown'}`);
+      return APIResponse.error(response, apiId, API_RESPONSES.INTERNAL_SERVER_ERROR, error instanceof Error ? error.message : 'Delete failed', HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 
@@ -97,7 +155,6 @@ export class PathwaysService {
       const s3Key = this.extractS3KeyFromUrl(imageUrl);
       if (s3Key) {
         await this.s3StorageProvider.delete(s3Key);
-        this.logger.debug(`Deleted image from S3: ${s3Key}`);
       }
     } catch (error) {
       // Log error but don't fail the request if deletion fails
@@ -174,7 +231,6 @@ export class PathwaysService {
   async create(
     createPathwayDto: CreatePathwayDto,
     userId: string | null,
-    image: Express.Multer.File | undefined,
     response: Response
   ): Promise<Response> {
     const apiId = APIID.PATHWAY_CREATE;
@@ -204,9 +260,6 @@ export class PathwaysService {
           HttpStatus.CONFLICT
         );
         
-      }
-      if (image) {
-        this.validateImageType(image);
       }
       // Check if pathway with same key already exists
       const existingPathway = await this.pathwayRepository.findOne({
@@ -252,20 +305,9 @@ export class PathwaysService {
         displayOrder = Number(maxOrder) + 1;
       }
       let imageUrl: string | null = null;
-      if (image) {
-        try {
-          const s3Key = await this.s3StorageProvider.upload(image, userId || undefined, 'pathways');
-          imageUrl = this.s3StorageProvider.getUrl(s3Key);
-        } catch (error) {
-          this.logger.error(`Failed to upload image to S3: ${error instanceof Error ? error.message : 'Unknown error'}`);
-          return APIResponse.error(
-            response,
-            apiId,
-            API_RESPONSES.INTERNAL_SERVER_ERROR,
-            'Failed to upload image to S3',
-            HttpStatus.INTERNAL_SERVER_ERROR
-          );
-        }
+      const dtoImageUrl = (createPathwayDto as any).image_url;
+      if (dtoImageUrl && typeof dtoImageUrl === 'string' && dtoImageUrl.trim() !== '') {
+        imageUrl = dtoImageUrl.trim();
       }
 
       const pathwayData = {
@@ -600,7 +642,6 @@ export class PathwaysService {
     id: string,
     updatePathwayDto: UpdatePathwayDto,
     userId: string | null,
-    image: Express.Multer.File | undefined,
     response: Response
   ): Promise<Response> {
     const apiId = APIID.PATHWAY_UPDATE;
@@ -619,11 +660,6 @@ export class PathwaysService {
       }
 
       const updateDto = updatePathwayDto as any;
-
-      // Validate multipart image if provided
-      if (image) {
-        this.validateImageType(image);
-      }
 
       // Check if pathway exists and get existing image_url for deletion
       const existingPathway = await this.pathwayRepository.findOne({
@@ -663,22 +699,11 @@ export class PathwaysService {
       }
 
       let newImageUrl: string | null = null;
-      if (image) {
-        try {
-          const s3Key = await this.s3StorageProvider.upload(image, userId || undefined, 'pathways');
-          newImageUrl = this.s3StorageProvider.getUrl(s3Key);
-          if (oldImageUrl) {
-            await this.deleteImageFromS3(oldImageUrl);
-          }
-        } catch (error) {
-          this.logger.error(`Failed to upload image to S3: ${error instanceof Error ? error.message : 'Unknown error'}`);
-          return APIResponse.error(
-            response,
-            apiId,
-            API_RESPONSES.INTERNAL_SERVER_ERROR,
-            'Failed to upload image to S3',
-            HttpStatus.INTERNAL_SERVER_ERROR
-          );
+      const dtoImageUrl = updatePathwayDto.image_url;
+      if (dtoImageUrl !== undefined && dtoImageUrl !== null && typeof dtoImageUrl === 'string' && dtoImageUrl.trim() !== '') {
+        newImageUrl = dtoImageUrl.trim();
+        if (oldImageUrl) {
+          await this.deleteImageFromS3(oldImageUrl);
         }
       }
 

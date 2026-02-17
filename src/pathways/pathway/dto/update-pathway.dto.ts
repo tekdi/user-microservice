@@ -33,6 +33,15 @@ export class UpdatePathwayDto {
   description?: string;
 
   @ApiPropertyOptional({
+    description: "Image URL (from presigned S3 upload). Replaces existing image; old image is deleted from S3.",
+    example: "https://bucket.s3.region.amazonaws.com/pathway-images/Screenshot.png",
+  })
+  @Expose()
+  @IsOptional()
+  @IsString()
+  image_url?: string;
+
+  @ApiPropertyOptional({
     description: 'Array of tag IDs from tags table (stored as PostgreSQL text[] array)',
     example: [
       'a1b2c3d4-e111-2222-3333-444455556666',
@@ -63,12 +72,6 @@ export class UpdatePathwayDto {
     example: true,
   })
   @Expose()
-  @Transform(({ value }) => {
-    if (value === undefined || value === null || value === '') return undefined;
-    if (value === true || value === 'true') return true;
-    if (value === false || value === 'false') return false;
-    return undefined;
-  })
   @IsOptional()
   @IsBoolean()
   is_active?: boolean;

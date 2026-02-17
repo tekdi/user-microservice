@@ -3,8 +3,10 @@ import {
   Post,
   Get,
   Patch,
+  Delete,
   Body,
   Param,
+  Query,
   UsePipes,
   ValidationPipe,
   ParseUUIDPipe,
@@ -16,10 +18,7 @@ import {
   BadRequestException,
   Logger,
   Req,
-  UseInterceptors,
-  UploadedFile,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiTags,
   ApiOperation,
@@ -27,7 +26,6 @@ import {
   ApiHeader,
   ApiBody,
   ApiParam,
-  ApiConsumes,
   ApiBadRequestResponse,
   ApiUnauthorizedResponse,
   ApiConflictResponse,
@@ -39,14 +37,16 @@ import { PathwaysService } from './pathways.service';
 import { CreatePathwayDto } from './dto/create-pathway.dto';
 import { UpdatePathwayDto } from './dto/update-pathway.dto';
 import { ListPathwayDto } from './dto/list-pathway.dto';
+import { PathwayPresignedUrlDto } from './dto/presigned-url.dto';
 import { AssignPathwayDto } from './dto/assign-pathway.dto';
 import { BulkUpdateOrderDto } from './dto/update-pathway-order.dto';
 import { Response, Request } from 'express';
 import { JwtAuthGuard } from 'src/common/guards/keycloak.guard';
 import { InterestsService } from '../interests/interests.service';
 import { API_RESPONSES } from '@utils/response.messages';
+import { APIID } from '@utils/api-id.config';
+import APIResponse from 'src/common/responses/response';
 import { isUUID } from 'class-validator';
-import { CoerceFormDataPipe } from './pipes/coerce-form-data.pipe';
 
 interface RequestWithUser extends Request {
   user?: {
@@ -92,6 +92,112 @@ export class PathwaysController {
       throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
     }
     return this.interestsService.listUserInterests(userPathwayHistoryId, response);
+  }
+
+  @Get("config")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: "Get pathway storage config (LMS-style)",
+    description: "Returns upload path, presigned URL expiry, image mime types and size limit. Frontend can use this like LMS /lms-service/v1/config.",
+  })
+  @ApiHeader({ name: "Authorization", required: true })
+  @ApiHeader({ name: "tenantid", required: true })
+  @ApiResponse({
+    status: 200,
+    description: "Pathway config",
+    schema: {
+      example: {
+        config: {
+          pathway_upload_path: "pathway-images/pathway/files",
+          presigned_url_expires_in: 3600,
+          image_mime_type: "image/jpeg, image/jpg, image/png, image/svg+xml",
+          image_filesize: 5,
+        },
+      },
+    },
+  })
+  async getConfig(
+    @Headers("tenantid") tenantId: string,
+    @Res() response: Response
+  ): Promise<Response> {
+    if (!tenantId || !isUUID(tenantId)) {
+      throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
+    }
+    const config = this.pathwaysService.getPathwayConfig();
+    return APIResponse.success(response, APIID.PATHWAY_CONFIG, { config }, HttpStatus.OK, "Config retrieved");
+  }
+
+  @Post("storage/presigned-url")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: "Get presigned URL for pathway image upload",
+    description:
+      "Returns a presigned S3 URL. Client uploads the file to this URL, then sends the returned fileUrl as image_url in pathway create/update (JSON body). Key must start with PATHWAY_STORAGE_KEY_PREFIX (e.g. pathway/pathwayId/imagename.png).",
+  })
+  @ApiHeader({ name: "Authorization", required: true })
+  @ApiHeader({ name: "tenantid", required: true })
+  @ApiBody({ type: PathwayPresignedUrlDto })
+  @ApiResponse({
+    status: 200,
+    description: "Presigned POST generated (LMS-style: url + fields). POST form-data to url with fields + file.",
+    schema: {
+      example: {
+        url: "https://bucket.s3.region.amazonaws.com/",
+        fields: {
+          "Content-Type": "image/png",
+          key: "pathway/files/Screenshot.png",
+          bucket: "aspire-leaders-assets-qa",
+          "X-Amz-Algorithm": "AWS4-HMAC-SHA256",
+          "X-Amz-Credential": "...",
+          "X-Amz-Date": "...",
+          Policy: "...",
+          "X-Amz-Signature": "...",
+        },
+        fileUrl: "https://bucket.s3.region.amazonaws.com/pathway/files/Screenshot.png",
+      },
+    },
+  })
+  @ApiBadRequestResponse({ description: "Invalid key (must start with configured prefix)" })
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  async getPresignedUrl(
+    @Body() dto: PathwayPresignedUrlDto,
+    @Headers('tenantid') tenantId: string,
+    @Res() response: Response
+  ): Promise<Response> {
+    if (!tenantId || !isUUID(tenantId)) {
+      throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
+    }
+    const result = await this.pathwaysService.getPresignedUploadUrl(
+      dto.key,
+      dto.contentType,
+      dto.expiresIn,
+      dto.sizeLimit
+    );
+    return APIResponse.success(response, APIID.PATHWAY_PRESIGNED_URL, result, HttpStatus.OK, 'Presigned URL generated');
+  }
+
+  @Delete("storage/files")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: "Delete file from pathway S3 storage",
+    description: "Deletes a file from S3 by URL or key (same idea as LMS DELETE /storage/files?key=...). Use this to remove an image from S3. Key/URL must be under PATHWAY_STORAGE_KEY_PREFIX.",
+  })
+  @ApiHeader({ name: "Authorization", required: true })
+  @ApiHeader({ name: "tenantid", required: true })
+  @ApiResponse({ status: 200, description: "File deleted", schema: { example: { deleted: true, key: "pathway/files/old.png" } } })
+  @ApiBadRequestResponse({ description: "Invalid or disallowed key/URL" })
+  async deleteStorageFile(
+    @Query("key") keyOrUrl: string,
+    @Headers("tenantid") tenantId: string,
+    @Res() response: Response
+  ): Promise<Response> {
+    if (!tenantId || !isUUID(tenantId)) {
+      throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
+    }
+    if (!keyOrUrl || typeof keyOrUrl !== "string" || !keyOrUrl.trim()) {
+      throw new BadRequestException("Query parameter 'key' (file URL or S3 key) is required");
+    }
+    return this.pathwaysService.deletePathwayStorageFile(keyOrUrl.trim(), response);
   }
 
   @Post("create")
@@ -153,21 +259,18 @@ export class PathwaysController {
   @ApiUnauthorizedResponse({ description: "Unauthorized" })
   @ApiConflictResponse({ description: "Pathway conflict: check if key or active name already exists" })
   @ApiInternalServerErrorResponse({ description: "Internal Server Error" })
-  @ApiConsumes('multipart/form-data')
-  @UseInterceptors(FileInterceptor('image'))
-  @UsePipes(new CoerceFormDataPipe(), new ValidationPipe({ transform: true, whitelist: true }))
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   async create(
     @Body() createPathwayDto: CreatePathwayDto,
     @Headers('tenantid') tenantId: string,
     @Req() request: RequestWithUser,
-    @UploadedFile() image: Express.Multer.File,
     @Res() response: Response
   ): Promise<Response> {
     if (!tenantId || !isUUID(tenantId)) {
       throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
     }
     const userId = request.user?.userId || null;
-    return this.pathwaysService.create(createPathwayDto, userId, image, response);
+    return this.pathwaysService.create(createPathwayDto, userId, response);
   }
 
   /**
@@ -370,22 +473,19 @@ export class PathwaysController {
   @ApiUnauthorizedResponse({ description: "Unauthorized" })
   @ApiNotFoundResponse({ description: "Pathway not found" })
   @ApiInternalServerErrorResponse({ description: "Internal Server Error" })
-  @ApiConsumes('multipart/form-data')
-  @UseInterceptors(FileInterceptor('image'))
-  @UsePipes(new CoerceFormDataPipe(), new ValidationPipe({ transform: true, whitelist: true }))
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   async update(
     @Param("id", ParseUUIDPipe) id: string,
     @Body() updatePathwayDto: UpdatePathwayDto,
     @Headers('tenantid') tenantId: string,
     @Req() request: RequestWithUser,
-    @UploadedFile() image: Express.Multer.File,
     @Res() response: Response
   ): Promise<Response> {
     if (!tenantId || !isUUID(tenantId)) {
       throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
     }
     const userId = request.user?.userId || null;
-    return this.pathwaysService.update(id, updatePathwayDto, userId, image, response);
+    return this.pathwaysService.update(id, updatePathwayDto, userId, response);
   }
 
   /**

@@ -26,16 +26,6 @@ export class LocalStorageProvider implements StorageProvider {
     this.uploadDir = this.configService.get<string>('STORAGE_LOCAL_UPLOAD_DIR') || './uploads';
   }
 
-  private async ensureUserFolderExists(userId: string): Promise<string> {
-    if (!userId) return this.uploadDir;
-
-    const userFolder = path.join(this.uploadDir, userId);
-    if (!fs.existsSync(userFolder)) {
-      await fs.promises.mkdir(userFolder, { recursive: true });
-    }
-    return userFolder;
-  }
-
   /**
    * Uploads a file to local storage.
    * - Creates unique filename with timestamp
@@ -47,11 +37,17 @@ export class LocalStorageProvider implements StorageProvider {
    * @returns The local file path
    */
   async upload(file: Express.Multer.File, userId?: string, subpath?: string): Promise<string> {
+    if (subpath !== undefined && subpath !== null) {
+      const sanitized = String(subpath).replace(/^\/|\/$/g, '');
+      if (sanitized.includes('..') || sanitized.includes(path.sep)) {
+        throw new Error('Invalid subpath: path traversal and path separators are not allowed');
+      }
+    }
     const fileExtension = path.extname(file.originalname);
     const timestamp = Date.now();
     const fileName = `${uuidv4()}_${timestamp}${fileExtension}`;
 
-    const baseDir = subpath ? path.join(this.uploadDir, subpath) : this.uploadDir;
+    const baseDir = subpath ? path.join(this.uploadDir, String(subpath).replace(/^\/|\/$/g, '')) : this.uploadDir;
     const targetDir = userId ? path.join(baseDir, userId) : baseDir;
     await fs.promises.mkdir(targetDir, { recursive: true });
 
