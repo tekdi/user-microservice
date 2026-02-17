@@ -53,7 +53,7 @@ export class PathwaysService {
     image_filesize: number;
   } {
     const rawPrefix = this.configService.get<string>('PATHWAY_STORAGE_KEY_PREFIX') || 'pathway-images/pathway/files';
-    const pathway_upload_path = rawPrefix.replace(/^\/+|\/+$/g, '').replace(/\/+/g, '/');
+    const pathway_upload_path = rawPrefix.replace(/^\/+/, '').replace(/\/+$/, '').replace(/\/+/g, '/');
     const presigned_url_expires_in = parseInt(
       this.configService.get<string>('AWS_UPLOAD_FILE_EXPIRY') || '3600',
       10
@@ -69,15 +69,27 @@ export class PathwaysService {
   /**
    * Get presigned URL for pathway image upload. Client sends only the image file name (e.g. file_1771313851464_f195e1.png).
    * Backend builds full S3 key from PATHWAY_STORAGE_KEY_PREFIX env (e.g. pathway-images/pathway/files) + filename.
+   * Validates contentType against allowed image MIME types and caps sizeLimit at config max.
    */
   async getPresignedUploadUrl(
     key: string,
     contentType: string,
     expiresIn?: number,
-    _sizeLimit?: number
+    sizeLimit?: number
   ): Promise<{ url: string; fields: Record<string, string>; fileUrl: string }> {
+    const config = this.getPathwayConfig();
+    const allowedMimeTypes = config.image_mime_type.split(',').map((s) => s.trim().toLowerCase());
+    const contentTypeLower = (contentType || '').trim().toLowerCase();
+    if (!allowedMimeTypes.includes(contentTypeLower)) {
+      throw new BadRequestException(
+        `contentType must be one of: ${config.image_mime_type}. Received: ${contentType || '(empty)'}`
+      );
+    }
+    const maxSizeBytes = config.image_filesize * 1024 * 1024;
+    const cappedSizeLimit = sizeLimit != null ? Math.min(sizeLimit, maxSizeBytes) : maxSizeBytes;
+
     const rawPrefix = this.configService.get<string>('PATHWAY_STORAGE_KEY_PREFIX') || 'pathway-images/pathway/files';
-    const prefix = rawPrefix.replace(/^\/+|\/+$/g, '').replace(/\/+/g, '/');
+    const prefix = rawPrefix.replace(/^\/+/, '').replace(/\/+$/, '').replace(/\/+/g, '/');
     const fileName = (key || '').trim();
     if (!fileName) {
       throw new BadRequestException('Key (file name) is required');
@@ -88,7 +100,7 @@ export class PathwaysService {
     const fullKey = prefix ? `${prefix}/${fileName}` : fileName;
     const { url, fields } = await this.s3StorageProvider.getPresignedPostForKey(fullKey, contentType, {
       expiresIn,
-      sizeLimit: _sizeLimit,
+      sizeLimit: cappedSizeLimit,
     });
     const fileUrl = this.s3StorageProvider.getUrl(fullKey);
     return { url, fields, fileUrl };
@@ -100,7 +112,7 @@ export class PathwaysService {
    */
   async deletePathwayStorageFile(keyOrUrl: string, response: Response): Promise<Response> {
     const apiId = APIID.PATHWAY_STORAGE_DELETE;
-    const prefix = (this.configService.get<string>('PATHWAY_STORAGE_KEY_PREFIX') || 'pathway-images/pathway/files').replace(/^\/+|\/+$/g, '').replace(/\/+/g, '/');
+    const prefix = (this.configService.get<string>('PATHWAY_STORAGE_KEY_PREFIX') || 'pathway-images/pathway/files').replace(/^\/+/, '').replace(/\/+$/, '').replace(/\/+/g, '/');
     let s3Key: string;
     if (keyOrUrl.startsWith('http://') || keyOrUrl.startsWith('https://')) {
       const extracted = this.extractS3KeyFromUrl(keyOrUrl);
@@ -109,7 +121,7 @@ export class PathwaysService {
       }
       s3Key = extracted;
     } else {
-      s3Key = keyOrUrl.replace(/^\/+|\/+$/g, '').replace(/\/+/g, '/');
+      s3Key = keyOrUrl.replace(/^\/+/, '').replace(/\/+$/, '').replace(/\/+/g, '/');
     }
     if (!s3Key.startsWith(prefix + '/') && s3Key !== prefix) {
       return APIResponse.error(response, apiId, API_RESPONSES.BAD_REQUEST, `File key must be under pathway storage prefix (${prefix}/)`, HttpStatus.BAD_REQUEST);
