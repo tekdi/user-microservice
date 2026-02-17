@@ -494,27 +494,23 @@ export class PathwaysService {
         });
       }
 
-      // OPTIMIZED: Batch fetch video and resource counts for all pathways in parallel
+      // OPTIMIZED: Batch fetch video and resource counts for all pathways
       // SAFETY: Validate items array and extract IDs safely
       const pathwayIds = items
         .filter((item: any) => item && item.id && typeof item.id === 'string')
         .map((item: any) => item.id);
-      
-      // SAFETY: Limit batch size to prevent memory issues
-      const MAX_BATCH_SIZE = 100; // Limit concurrent pathway count requests
-      const pathwayIdsToProcess = pathwayIds.slice(0, MAX_BATCH_SIZE);
-      
-      if (pathwayIds.length > MAX_BATCH_SIZE) {
-        this.logger.warn(
-          `Pathway list query returned ${pathwayIds.length} pathways, but batch size is limited to ${MAX_BATCH_SIZE} to prevent memory issues. Processing first ${MAX_BATCH_SIZE} pathways.`
+
+      const MAX_BATCH_SIZE = 100;
+      const countsMap = new Map<string, { videoCount: number; resourceCount: number; totalItems: number }>();
+      for (let i = 0; i < pathwayIds.length; i += MAX_BATCH_SIZE) {
+        const chunk = pathwayIds.slice(i, i + MAX_BATCH_SIZE);
+        const chunkMap = await this.lmsClientService.getBatchCounts(
+          chunk,
+          tenantId,
+          organisationId
         );
+        chunkMap.forEach((counts, id) => countsMap.set(id, counts));
       }
-      
-      const countsMap = await this.lmsClientService.getBatchCounts(
-        pathwayIdsToProcess,
-        tenantId,
-        organisationId
-      );
 
       // Transform items to include only tags with names (no tag_ids) and counts
       const transformedItems = items.map((item: any) => {
