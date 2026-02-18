@@ -233,7 +233,7 @@ export class FileUploadService {
 
       // Get presigned URL from storage provider
       const storageProvider = this.storageConfig.getProvider();
-      const expiresIn = parseInt(process.env.AWS_UPLOAD_FILE_EXPIRY || '3600', 10);
+      const expiresIn = Number.parseInt(process.env.AWS_UPLOAD_FILE_EXPIRY || '3600', 10);
 
       const result = await storageProvider.getPresignedUrl(
         dynamicFileName,
