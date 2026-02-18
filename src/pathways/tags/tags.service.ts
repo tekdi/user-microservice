@@ -425,15 +425,15 @@ export class TagsService implements OnModuleInit {
   }
 
   /**
-   * Generate a stable cache key for tag list (tenantId + normalized list params).
+   * Generate a stable cache key for tag list (list params only).
+   * Tags are global (no tenant column); key is shared across tenants to avoid duplicate cache entries.
    */
-  private generateTagListCacheKey(tenantId: string, listTagDto: ListTagDto): string {
+  private generateTagListCacheKey(listTagDto: ListTagDto): string {
     const requestedLimit = listTagDto.limit ?? 10;
     const limit = Math.min(requestedLimit, MAX_PAGINATION_LIMIT);
     const offset = listTagDto.offset ?? 0;
     const filters = listTagDto.filters || {};
     const cacheKeyObject = {
-      tenantId,
       filters: Object.keys(filters).sort().reduce((acc: any, k) => {
         acc[k] = (filters as any)[k];
         return acc;
@@ -463,7 +463,7 @@ export class TagsService implements OnModuleInit {
       10
     );
     try {
-      const cacheKey = this.generateTagListCacheKey(tenantId, listTagDto);
+      const cacheKey = this.generateTagListCacheKey(listTagDto);
       const cachedResult = await this.cacheService.get<{ count: number; limit: number; offset: number; items: Tag[] }>(cacheKey);
       if (cachedResult) {
         this.logger.debug(`Cache HIT for tag list: ${cacheKey}`);

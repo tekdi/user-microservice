@@ -494,6 +494,19 @@ export class PathwaysService {
       const cachedResult = await this.cacheService.get<{ count: number; limit: number; offset: number; items: any[] }>(cacheKey);
       if (cachedResult) {
         this.logger.debug(`Cache HIT for pathway list: ${cacheKey}`);
+        // Cached items store tag_ids only; resolve tag names on hit so renames/archives are fresh
+        const allTagIds = new Set<string>();
+        (cachedResult.items || []).forEach((item: any) => {
+          const ids = item.tag_ids ?? (item.tags || []).map((t: any) => t?.id ?? t);
+          ids.forEach((tagId: string) => {
+            if (tagId) allTagIds.add(tagId);
+          });
+        });
+        const tagDetailsMap = new Map<string, { id: string; name: string }>();
+        if (allTagIds.size > 0) {
+          const tagDetails = await this.fetchTagDetails(Array.from(allTagIds));
+          tagDetails.forEach((tag) => tagDetailsMap.set(tag.id, tag));
+        }
         // Cached items do not include video_count, resource_count, total_items; fetch from LMS
         const pathwayIds = (cachedResult.items || [])
           .filter((item: any) => item?.id != null && typeof item.id === 'string')
@@ -509,10 +522,22 @@ export class PathwaysService {
           );
           chunkMap.forEach((counts, id) => countsMap.set(id, counts));
         }
-        const itemsWithCounts = cachedResult.items.map((item: any) => {
+        const itemsWithCountsAndTags = cachedResult.items.map((item: any) => {
           const counts = countsMap.get(item.id);
+          const tagIds = item.tag_ids ?? (item.tags || []).map((t: any) => t?.id ?? t);
+          const tags = tagIds
+            .map((tagId: string) => tagDetailsMap.get(tagId))
+            .filter((t) => t !== undefined);
           return {
-            ...item,
+            id: item.id,
+            key: item.key,
+            name: item.name,
+            description: item.description,
+            tags,
+            display_order: item.display_order,
+            is_active: item.is_active,
+            image_url: item.image_url,
+            created_at: item.created_at,
             video_count: counts?.videoCount ?? 0,
             resource_count: counts?.resourceCount ?? 0,
             total_items: (counts as any)?.totalItems ?? 0,
@@ -522,7 +547,7 @@ export class PathwaysService {
           count: cachedResult.count,
           limit: cachedResult.limit,
           offset: cachedResult.offset,
-          items: itemsWithCounts,
+          items: itemsWithCountsAndTags,
         };
         return APIResponse.success(
           response,
@@ -672,13 +697,16 @@ export class PathwaysService {
         items: transformedItems,
       };
 
-      // Cache list response without video_count, resource_count, total_items (fetched from LMS on cache hit)
+      // Cache list response: tag_ids only (resolve names on hit to avoid stale tag data), no video/resource counts
       try {
         const resultForCache = {
           count: totalCount,
           limit: limit,
           offset: offset,
-          items: transformedItems.map(({ video_count, resource_count, total_items, ...item }) => item),
+          items: transformedItems.map(({ video_count, resource_count, total_items, tags, ...item }) => ({
+            ...item,
+            tag_ids: (tags || []).map((t: { id: string }) => t.id),
+          })),
         };
         await this.cacheService.set(cacheKey, resultForCache, pathwayListCacheTtl);
       } catch (cacheError: any) {
