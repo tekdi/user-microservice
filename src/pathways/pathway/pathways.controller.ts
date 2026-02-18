@@ -1,3 +1,4 @@
+import { ActivePathwayDto } from "./dto/active-pathway.dto";
 import {
   Controller,
   Post,
@@ -18,7 +19,7 @@ import {
   BadRequestException,
   Logger,
   Req,
-} from '@nestjs/common';
+} from "@nestjs/common";
 import {
   ApiTags,
   ApiOperation,
@@ -31,22 +32,22 @@ import {
   ApiConflictResponse,
   ApiInternalServerErrorResponse,
   ApiNotFoundResponse,
-} from '@nestjs/swagger';
-import { ApiGetByIdCommon } from '../common/decorators/api-common.decorator';
-import { PathwaysService } from './pathways.service';
-import { CreatePathwayDto } from './dto/create-pathway.dto';
-import { UpdatePathwayDto } from './dto/update-pathway.dto';
-import { ListPathwayDto } from './dto/list-pathway.dto';
-import { PathwayPresignedUrlDto } from './dto/presigned-url.dto';
-import { AssignPathwayDto } from './dto/assign-pathway.dto';
-import { BulkUpdateOrderDto } from './dto/update-pathway-order.dto';
-import { Response, Request } from 'express';
-import { JwtAuthGuard } from 'src/common/guards/keycloak.guard';
-import { InterestsService } from '../interests/interests.service';
-import { API_RESPONSES } from '@utils/response.messages';
-import { APIID } from '@utils/api-id.config';
-import APIResponse from 'src/common/responses/response';
-import { isUUID } from 'class-validator';
+} from "@nestjs/swagger";
+import { ApiGetByIdCommon } from "../common/decorators/api-common.decorator";
+import { PathwaysService } from "./pathways.service";
+import { CreatePathwayDto } from "./dto/create-pathway.dto";
+import { UpdatePathwayDto } from "./dto/update-pathway.dto";
+import { ListPathwayDto } from "./dto/list-pathway.dto";
+import { PathwayPresignedUrlDto } from "./dto/presigned-url.dto";
+import { AssignPathwayDto } from "./dto/assign-pathway.dto";
+import { BulkUpdateOrderDto } from "./dto/update-pathway-order.dto";
+import { Response, Request } from "express";
+import { JwtAuthGuard } from "src/common/guards/keycloak.guard";
+import { InterestsService } from "../interests/interests.service";
+import { API_RESPONSES } from "@utils/response.messages";
+import { APIID } from "@utils/api-id.config";
+import APIResponse from "src/common/responses/response";
+import { isUUID } from "class-validator";
 
 interface RequestWithUser extends Request {
   user?: {
@@ -57,8 +58,8 @@ interface RequestWithUser extends Request {
   };
 }
 
-@ApiTags('Pathways')
-@Controller('pathway')
+@ApiTags("Pathways")
+@Controller("pathway")
 @UseGuards(JwtAuthGuard)
 export class PathwaysController {
   private readonly logger = new Logger(PathwaysController.name);
@@ -66,7 +67,7 @@ export class PathwaysController {
   constructor(
     private readonly pathwaysService: PathwaysService,
     private readonly interestsService: InterestsService
-  ) { }
+  ) {}
 
   /**
    * List saved interests for a specific user pathway history record
@@ -75,11 +76,16 @@ export class PathwaysController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: "List Saved Interests for User Pathway History",
-    description: "Retrieves the list of interests previously saved for a specific pathway history record.",
+    description:
+      "Retrieves the list of interests previously saved for a specific pathway history record.",
   })
   @ApiHeader({ name: "Authorization", required: true })
   @ApiHeader({ name: "tenantid", required: true })
-  @ApiParam({ name: "userPathwayHistoryId", description: "User Pathway History UUID", format: "uuid" })
+  @ApiParam({
+    name: "userPathwayHistoryId",
+    description: "User Pathway History UUID",
+    format: "uuid",
+  })
   @ApiResponse({ status: 200, description: "Interests retrieved successfully" })
   @ApiNotFoundResponse({ description: "History record not found" })
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
@@ -91,14 +97,18 @@ export class PathwaysController {
     if (!tenantId || !isUUID(tenantId)) {
       throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
     }
-    return this.interestsService.listUserInterests(userPathwayHistoryId, response);
+    return this.interestsService.listUserInterests(
+      userPathwayHistoryId,
+      response
+    );
   }
 
   @Get("config")
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: "Get pathway storage config (LMS-style)",
-    description: "Returns upload path, presigned URL expiry, image mime types and size limit. Frontend can use this like LMS /lms-service/v1/config.",
+    description:
+      "Returns upload path, presigned URL expiry, image mime types and size limit. Frontend can use this like LMS /lms-service/v1/config.",
   })
   @ApiHeader({ name: "Authorization", required: true })
   @ApiHeader({ name: "tenantid", required: true })
@@ -124,7 +134,13 @@ export class PathwaysController {
       throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
     }
     const config = this.pathwaysService.getPathwayConfig();
-    return APIResponse.success(response, APIID.PATHWAY_CONFIG, { config }, HttpStatus.OK, "Config retrieved");
+    return APIResponse.success(
+      response,
+      APIID.PATHWAY_CONFIG,
+      { config },
+      HttpStatus.OK,
+      "Config retrieved"
+    );
   }
 
   @Post("storage/presigned-url")
@@ -139,7 +155,8 @@ export class PathwaysController {
   @ApiBody({ type: PathwayPresignedUrlDto })
   @ApiResponse({
     status: 200,
-    description: "Presigned POST generated (LMS-style: url + fields). POST form-data to url with fields + file.",
+    description:
+      "Presigned POST generated (LMS-style: url + fields). POST form-data to url with fields + file.",
     schema: {
       example: {
         url: "https://bucket.s3.region.amazonaws.com/",
@@ -153,15 +170,18 @@ export class PathwaysController {
           Policy: "...",
           "X-Amz-Signature": "...",
         },
-        fileUrl: "https://bucket.s3.region.amazonaws.com/pathway/files/Screenshot.png",
+        fileUrl:
+          "https://bucket.s3.region.amazonaws.com/pathway/files/Screenshot.png",
       },
     },
   })
-  @ApiBadRequestResponse({ description: "Invalid key (must start with configured prefix)" })
+  @ApiBadRequestResponse({
+    description: "Invalid key (must start with configured prefix)",
+  })
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   async getPresignedUrl(
     @Body() dto: PathwayPresignedUrlDto,
-    @Headers('tenantid') tenantId: string,
+    @Headers("tenantid") tenantId: string,
     @Res() response: Response
   ): Promise<Response> {
     if (!tenantId || !isUUID(tenantId)) {
@@ -173,18 +193,29 @@ export class PathwaysController {
       dto.expiresIn,
       dto.sizeLimit
     );
-    return APIResponse.success(response, APIID.PATHWAY_PRESIGNED_URL, result, HttpStatus.OK, 'Presigned URL generated');
+    return APIResponse.success(
+      response,
+      APIID.PATHWAY_PRESIGNED_URL,
+      result,
+      HttpStatus.OK,
+      "Presigned URL generated"
+    );
   }
 
   @Delete("storage/files")
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: "Delete file from pathway S3 storage",
-    description: "Deletes a file from S3 by URL or key (same idea as LMS DELETE /storage/files?key=...). Use this to remove an image from S3. Key/URL must be under PATHWAY_STORAGE_KEY_PREFIX.",
+    description:
+      "Deletes a file from S3 by URL or key (same idea as LMS DELETE /storage/files?key=...). Use this to remove an image from S3. Key/URL must be under PATHWAY_STORAGE_KEY_PREFIX.",
   })
   @ApiHeader({ name: "Authorization", required: true })
   @ApiHeader({ name: "tenantid", required: true })
-  @ApiResponse({ status: 200, description: "File deleted", schema: { example: { deleted: true, key: "pathway/files/old.png" } } })
+  @ApiResponse({
+    status: 200,
+    description: "File deleted",
+    schema: { example: { deleted: true, key: "pathway/files/old.png" } },
+  })
   @ApiBadRequestResponse({ description: "Invalid or disallowed key/URL" })
   async deleteStorageFile(
     @Query("key") keyOrUrl: string,
@@ -195,9 +226,14 @@ export class PathwaysController {
       throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
     }
     if (!keyOrUrl || typeof keyOrUrl !== "string" || !keyOrUrl.trim()) {
-      throw new BadRequestException("Query parameter 'key' (file URL or S3 key) is required");
+      throw new BadRequestException(
+        "Query parameter 'key' (file URL or S3 key) is required"
+      );
     }
-    return this.pathwaysService.deletePathwayStorageFile(keyOrUrl.trim(), response);
+    return this.pathwaysService.deletePathwayStorageFile(
+      keyOrUrl.trim(),
+      response
+    );
   }
 
   @Post("create")
@@ -223,12 +259,12 @@ export class PathwaysController {
       pathway: {
         summary: "Standard pathway creation",
         value: {
-          key: 'career_dev',
-          name: 'Career Development',
-          description: 'Build skills for corporate success and job placements.',
+          key: "career_dev",
+          name: "Career Development",
+          description: "Build skills for corporate success and job placements.",
           tags: [
-            'a1b2c3d4-e111-2222-3333-444455556666',
-            'b2c3d4e5-f111-2222-3333-444455556777',
+            "a1b2c3d4-e111-2222-3333-444455556666",
+            "b2c3d4e5-f111-2222-3333-444455556777",
           ],
           display_order: 1,
           is_active: true,
@@ -241,28 +277,30 @@ export class PathwaysController {
     description: "Pathway created successfully",
     schema: {
       example: {
-        id: 'c3b6e50e-40ab-4148-8ca9-3b2296ca11e5',
-        key: 'career_dev',
-        name: 'Career Development',
-        description: 'Build skills for corporate success and job placements.',
+        id: "c3b6e50e-40ab-4148-8ca9-3b2296ca11e5",
+        key: "career_dev",
+        name: "Career Development",
+        description: "Build skills for corporate success and job placements.",
         tag_ids: [
-          'a1b2c3d4-e111-2222-3333-444455556666',
-          'b2c3d4e5-f111-2222-3333-444455556777',
+          "a1b2c3d4-e111-2222-3333-444455556666",
+          "b2c3d4e5-f111-2222-3333-444455556777",
         ],
         display_order: 1,
         is_active: true,
-        created_at: '2026-02-10T06:22:26.934Z',
+        created_at: "2026-02-10T06:22:26.934Z",
       },
     },
   })
   @ApiBadRequestResponse({ description: "Bad Request" })
   @ApiUnauthorizedResponse({ description: "Unauthorized" })
-  @ApiConflictResponse({ description: "Pathway conflict: check if key or active name already exists" })
+  @ApiConflictResponse({
+    description: "Pathway conflict: check if key or active name already exists",
+  })
   @ApiInternalServerErrorResponse({ description: "Internal Server Error" })
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   async create(
     @Body() createPathwayDto: CreatePathwayDto,
-    @Headers('tenantid') tenantId: string,
+    @Headers("tenantid") tenantId: string,
     @Req() request: RequestWithUser,
     @Res() response: Response
   ): Promise<Response> {
@@ -280,12 +318,16 @@ export class PathwaysController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: "Bulk Update Pathway Order Structure",
-    description: "Updates the display order for multiple pathways in a single request.",
+    description:
+      "Updates the display order for multiple pathways in a single request.",
   })
   @ApiHeader({ name: "Authorization", required: true })
   @ApiHeader({ name: "tenantid", required: true })
   @ApiBody({ type: BulkUpdateOrderDto })
-  @ApiResponse({ status: 200, description: "Pathway order structure updated successfully" })
+  @ApiResponse({
+    status: 200,
+    description: "Pathway order structure updated successfully",
+  })
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   async updateOrderStructure(
     @Body() bulkUpdateOrderDto: BulkUpdateOrderDto,
@@ -295,7 +337,10 @@ export class PathwaysController {
     if (!tenantId || !isUUID(tenantId)) {
       throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
     }
-    return this.pathwaysService.updateOrderStructure(bulkUpdateOrderDto, response);
+    return this.pathwaysService.updateOrderStructure(
+      bulkUpdateOrderDto,
+      response
+    );
   }
 
   @Post("list")
@@ -330,7 +375,7 @@ export class PathwaysController {
         value: {},
       },
       paginated: {
-        summary: 'List pathways with pagination',
+        summary: "List pathways with pagination",
         value: {
           isActive: true,
           limit: 10,
@@ -349,8 +394,8 @@ export class PathwaysController {
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   async list(
     @Body() listPathwayDto: ListPathwayDto,
-    @Headers('tenantid') tenantId: string,
-    @Headers('organisationid') organisationId: string,
+    @Headers("tenantid") tenantId: string,
+    @Headers("organisationid") organisationId: string,
     @Res() response: Response
   ): Promise<Response> {
     if (!tenantId || !isUUID(tenantId)) {
@@ -360,7 +405,7 @@ export class PathwaysController {
     // This prevents users from accessing other organizations' data by manipulating headers
     // If organisationId is provided in header, validate it (future enhancement: check user access)
     // For now, use DEFAULT_ORGANISATION_ID from environment for consistency with safer patterns
-    const orgId = process.env.DEFAULT_ORGANISATION_ID || organisationId || '';
+    const orgId = process.env.DEFAULT_ORGANISATION_ID || organisationId || "";
     if (organisationId && organisationId !== orgId) {
       // Log warning if client provided different organisationId than default
       // Future: Add authorization check here to validate user has access to requested organisationId
@@ -374,34 +419,41 @@ export class PathwaysController {
   /**
    * Get Active Pathway for User
    */
-  @Get("active/:userId")
+  @Post("active")
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: "Get Active Pathway for User",
-    description: "Retrieves the currently active pathway assignment for a user.",
+    summary: "Get Active Pathway or specific pathway history for User",
   })
   @ApiHeader({ name: "Authorization", required: true })
   @ApiHeader({ name: "tenantid", required: true })
-  @ApiParam({
-    name: "userId",
-    description: "User UUID",
-    type: String,
-    format: "uuid",
+  @ApiBody({
+    type: ActivePathwayDto,
+    description: "User ID (required) and Pathway ID (optional)",
   })
   @ApiResponse({
     status: 200,
     description: "Active pathway retrieved successfully",
+    schema: {
+      type: "object",
+      properties: {
+        id: { type: "string" },
+        pathwayId: { type: "string" },
+        activatedAt: { type: "string" },
+        userGoal: { type: "string" },
+      },
+    },
   })
   @ApiNotFoundResponse({ description: "User or Active Pathway not found" })
+  @UsePipes(new ValidationPipe({ transform: true }))
   async getActivePathway(
-    @Param("userId", ParseUUIDPipe) userId: string,
+    @Body() activePathwayDto: ActivePathwayDto,
     @Headers("tenantid") tenantId: string,
     @Res() response: Response
   ): Promise<Response> {
     if (!tenantId || !isUUID(tenantId)) {
       throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
     }
-    return this.pathwaysService.getActivePathway(userId, response);
+    return this.pathwaysService.getActivePathway(activePathwayDto, response);
   }
 
   @Get(":id")
@@ -477,7 +529,7 @@ export class PathwaysController {
   async update(
     @Param("id", ParseUUIDPipe) id: string,
     @Body() updatePathwayDto: UpdatePathwayDto,
-    @Headers('tenantid') tenantId: string,
+    @Headers("tenantid") tenantId: string,
     @Req() request: RequestWithUser,
     @Res() response: Response
   ): Promise<Response> {
@@ -515,8 +567,4 @@ export class PathwaysController {
     }
     return this.pathwaysService.assignPathway(assignPathwayDto, response);
   }
-
-
-
-
 }

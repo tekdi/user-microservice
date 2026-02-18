@@ -1,27 +1,37 @@
-import { Injectable, HttpStatus, BadRequestException, Logger } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In, DataSource, Like, ILike, Not } from 'typeorm';
-import * as crypto from 'crypto';
-import { CacheService } from 'src/cache/cache.service';
-import { Pathway } from './entities/pathway.entity';
-import { Tag } from '../tags/entities/tag.entity';
-import { CreatePathwayDto } from './dto/create-pathway.dto';
-import { UpdatePathwayDto } from './dto/update-pathway.dto';
-import { ListPathwayDto } from './dto/list-pathway.dto';
-import { UpdateOrderDto, BulkUpdateOrderDto } from './dto/update-pathway-order.dto';
-import { StringUtil } from '../common/utils/string.util';
-import { MAX_PAGINATION_LIMIT } from '../common/dto/pagination.dto';
-import { AssignPathwayDto } from './dto/assign-pathway.dto';
-import { UserPathwayHistory } from './entities/user-pathway-history.entity';
-import { User } from '../../user/entities/user-entity';
-import { LmsClientService } from '../common/services/lms-client.service';
-import APIResponse from 'src/common/responses/response';
-import { API_RESPONSES } from '@utils/response.messages';
-import { APIID } from '@utils/api-id.config';
-import { LoggerUtil } from 'src/common/logger/LoggerUtil';
-import { Response } from 'express';
-import { S3StorageProvider } from '../../storage/providers/s3-storage.provider';
-import { ConfigService } from '@nestjs/config';
+import {
+  Injectable,
+  HttpStatus,
+  BadRequestException,
+  Logger,
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository, In, DataSource, Like, ILike, Not } from "typeorm";
+import * as crypto from "crypto";
+import { CacheService } from "src/cache/cache.service";
+import { Pathway } from "./entities/pathway.entity";
+import { Tag } from "../tags/entities/tag.entity";
+import { CreatePathwayDto } from "./dto/create-pathway.dto";
+import { UpdatePathwayDto } from "./dto/update-pathway.dto";
+import { ListPathwayDto } from "./dto/list-pathway.dto";
+import {
+  UpdateOrderDto,
+  BulkUpdateOrderDto,
+} from "./dto/update-pathway-order.dto";
+import { StringUtil } from "../common/utils/string.util";
+import { MAX_PAGINATION_LIMIT } from "../common/dto/pagination.dto";
+import { AssignPathwayDto } from "./dto/assign-pathway.dto";
+import { UserPathwayHistory } from "./entities/user-pathway-history.entity";
+import { User } from "../../user/entities/user-entity";
+import { LmsClientService } from "../common/services/lms-client.service";
+import APIResponse from "src/common/responses/response";
+import { API_RESPONSES } from "@utils/response.messages";
+import { APIID } from "@utils/api-id.config";
+import { LoggerUtil } from "src/common/logger/LoggerUtil";
+import { Response } from "express";
+import { S3StorageProvider } from "../../storage/providers/s3-storage.provider";
+import { ConfigService } from "@nestjs/config";
+import { isUUID } from "class-validator";
+import { ActivePathwayDto } from "./dto/active-pathway.dto";
 
 @Injectable()
 export class PathwaysService {
@@ -52,30 +62,32 @@ export class PathwaysService {
    */
   private normalizePathKey(s: string): string {
     let start = 0;
-    while (start < s.length && s[start] === '/') start++;
+    while (start < s.length && s[start] === "/") start++;
     let end = s.length;
-    while (end > start && s[end - 1] === '/') end--;
-    if (start >= end) return '';
+    while (end > start && s[end - 1] === "/") end--;
+    if (start >= end) return "";
     const segment: string[] = [];
     let i = start;
     while (i < end) {
-      if (s[i] === '/') {
-        segment.push('/');
-        while (i < end && s[i] === '/') i++;
+      if (s[i] === "/") {
+        segment.push("/");
+        while (i < end && s[i] === "/") i++;
       } else {
         const begin = i;
-        while (i < end && s[i] !== '/') i++;
+        while (i < end && s[i] !== "/") i++;
         segment.push(s.slice(begin, i));
       }
     }
-    return segment.join('');
+    return segment.join("");
   }
 
   /**
    * Sanitized pathway storage key prefix from env (single source of truth for PATHWAY_STORAGE_KEY_PREFIX).
    */
   private getPathwayStoragePrefix(): string {
-    const raw = this.configService.get<string>('PATHWAY_STORAGE_KEY_PREFIX') || 'pathway-images/pathway/files';
+    const raw =
+      this.configService.get<string>("PATHWAY_STORAGE_KEY_PREFIX") ||
+      "pathway-images/pathway/files";
     return this.normalizePathKey(raw);
   }
 
@@ -90,13 +102,13 @@ export class PathwaysService {
   } {
     const pathway_upload_path = this.getPathwayStoragePrefix();
     const presigned_url_expires_in = Number.parseInt(
-      this.configService.get<string>('AWS_UPLOAD_FILE_EXPIRY') || '3600',
+      this.configService.get<string>("AWS_UPLOAD_FILE_EXPIRY") || "3600",
       10
     );
     return {
       pathway_upload_path,
       presigned_url_expires_in,
-      image_mime_type: 'image/jpeg, image/jpg, image/png, image/svg+xml',
+      image_mime_type: "image/jpeg, image/jpg, image/png, image/svg+xml",
       image_filesize: 5, // MB, same as pathway image limit
     };
   }
@@ -113,29 +125,44 @@ export class PathwaysService {
     sizeLimit?: number
   ): Promise<{ url: string; fields: Record<string, string>; fileUrl: string }> {
     const config = this.getPathwayConfig();
-    const allowedMimeTypes = config.image_mime_type.split(',').map((s) => s.trim().toLowerCase());
-    const contentTypeLower = (contentType || '').trim().toLowerCase();
+    const allowedMimeTypes = config.image_mime_type
+      .split(",")
+      .map((s) => s.trim().toLowerCase());
+    const contentTypeLower = (contentType || "").trim().toLowerCase();
     if (!allowedMimeTypes.includes(contentTypeLower)) {
       throw new BadRequestException(
-        `contentType must be one of: ${config.image_mime_type}. Received: ${contentType || '(empty)'}`
+        `contentType must be one of: ${config.image_mime_type}. Received: ${
+          contentType || "(empty)"
+        }`
       );
     }
     const maxSizeBytes = config.image_filesize * 1024 * 1024;
-    const cappedSizeLimit = sizeLimit == null ? maxSizeBytes : Math.min(sizeLimit, maxSizeBytes);
+    const cappedSizeLimit =
+      sizeLimit == null ? maxSizeBytes : Math.min(sizeLimit, maxSizeBytes);
 
     const prefix = this.getPathwayStoragePrefix();
-    const fileName = (key || '').trim();
+    const fileName = (key || "").trim();
     if (!fileName) {
-      throw new BadRequestException('Key (file name) is required');
+      throw new BadRequestException("Key (file name) is required");
     }
-    if (fileName.includes('/') || fileName.includes('\\') || fileName.includes('..')) {
-      throw new BadRequestException('Key must be a file name only (no path or path traversal). Example: file_1771313851464_f195e1.png');
+    if (
+      fileName.includes("/") ||
+      fileName.includes("\\") ||
+      fileName.includes("..")
+    ) {
+      throw new BadRequestException(
+        "Key must be a file name only (no path or path traversal). Example: file_1771313851464_f195e1.png"
+      );
     }
     const fullKey = prefix ? `${prefix}/${fileName}` : fileName;
-    const { url, fields } = await this.s3StorageProvider.getPresignedPostForKey(fullKey, contentType, {
-      expiresIn,
-      sizeLimit: cappedSizeLimit,
-    });
+    const { url, fields } = await this.s3StorageProvider.getPresignedPostForKey(
+      fullKey,
+      contentType,
+      {
+        expiresIn,
+        sizeLimit: cappedSizeLimit,
+      }
+    );
     const fileUrl = this.s3StorageProvider.getUrl(fullKey);
     return { url, fields, fileUrl };
   }
@@ -149,29 +176,60 @@ export class PathwaysService {
    * Path-style URLs (https://s3.region.amazonaws.com/bucket/key) or custom S3-compatible
    * endpoints (e.g. MinIO) may not parse correctly and can cause deletion failures.
    */
-  async deletePathwayStorageFile(keyOrUrl: string, response: Response): Promise<Response> {
+  async deletePathwayStorageFile(
+    keyOrUrl: string,
+    response: Response
+  ): Promise<Response> {
     const apiId = APIID.PATHWAY_STORAGE_DELETE;
     const prefix = this.getPathwayStoragePrefix();
-    const prefixWithSlash = prefix ? `${prefix}/` : '';
+    const prefixWithSlash = prefix ? `${prefix}/` : "";
     let s3Key: string;
-    if (keyOrUrl.startsWith('http://') || keyOrUrl.startsWith('https://')) {
+    if (keyOrUrl.startsWith("http://") || keyOrUrl.startsWith("https://")) {
       const extracted = this.extractS3KeyFromUrl(keyOrUrl);
       if (!extracted) {
-        return APIResponse.error(response, apiId, API_RESPONSES.BAD_REQUEST, 'Invalid file URL', HttpStatus.BAD_REQUEST);
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          "Invalid file URL",
+          HttpStatus.BAD_REQUEST
+        );
       }
       s3Key = extracted;
     } else {
       s3Key = this.normalizePathKey(keyOrUrl);
     }
     if (!prefixWithSlash || !s3Key.startsWith(prefixWithSlash)) {
-      return APIResponse.error(response, apiId, API_RESPONSES.BAD_REQUEST, `File key must be a file under pathway storage prefix (${prefix}/), not the prefix itself`, HttpStatus.BAD_REQUEST);
+      return APIResponse.error(
+        response,
+        apiId,
+        API_RESPONSES.BAD_REQUEST,
+        `File key must be a file under pathway storage prefix (${prefix}/), not the prefix itself`,
+        HttpStatus.BAD_REQUEST
+      );
     }
     try {
       await this.s3StorageProvider.delete(s3Key);
-      return APIResponse.success(response, apiId, { deleted: true, key: s3Key }, HttpStatus.OK, 'File deleted from storage');
+      return APIResponse.success(
+        response,
+        apiId,
+        { deleted: true, key: s3Key },
+        HttpStatus.OK,
+        "File deleted from storage"
+      );
     } catch (error) {
-      this.logger.warn(`Pathway storage delete failed: key=${s3Key}, error=${error instanceof Error ? error.message : 'Unknown'}`);
-      return APIResponse.error(response, apiId, API_RESPONSES.INTERNAL_SERVER_ERROR, 'Failed to delete file from storage', HttpStatus.INTERNAL_SERVER_ERROR);
+      this.logger.warn(
+        `Pathway storage delete failed: key=${s3Key}, error=${
+          error instanceof Error ? error.message : "Unknown"
+        }`
+      );
+      return APIResponse.error(
+        response,
+        apiId,
+        API_RESPONSES.INTERNAL_SERVER_ERROR,
+        "Failed to delete file from storage",
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
     }
   }
 
@@ -188,7 +246,7 @@ export class PathwaysService {
     try {
       const urlObj = new URL(url);
       // Remove leading slash from pathname
-      const key = urlObj.pathname.replace(/^\//, '');
+      const key = urlObj.pathname.replace(/^\//, "");
       return key || null;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -212,7 +270,11 @@ export class PathwaysService {
       }
     } catch (error) {
       // Log error but don't fail the request if deletion fails
-      this.logger.warn(`Failed to delete image from S3: ${imageUrl}, error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      this.logger.warn(
+        `Failed to delete image from S3: ${imageUrl}, error: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
     }
   }
 
@@ -234,7 +296,7 @@ export class PathwaysService {
     // OPTIMIZED: Single query to check all tag IDs at once (no N+1)
     const existingTags = await this.tagRepository.find({
       where: { id: In(uniqueTagIds) },
-      select: ['id'],
+      select: ["id"],
     });
 
     // OPTIMIZED: Use Set for O(1) lookup instead of O(n) array.includes()
@@ -268,7 +330,7 @@ export class PathwaysService {
     // OPTIMIZED: Single query to fetch all tag details at once (no N+1)
     const tags = await this.tagRepository.find({
       where: { id: In(uniqueTagIds) },
-      select: ['id', 'name', 'alias'],
+      select: ["id", "name", "alias"],
     });
 
     return tags.map((tag) => ({
@@ -294,7 +356,7 @@ export class PathwaysService {
         name: ILike(createPathwayDto.name),
         is_active: true,
       },
-      select: ['id'],
+      select: ["id"],
     });
 
     if (activePathwayWithName) {
@@ -306,14 +368,14 @@ export class PathwaysService {
           API_RESPONSES.CONFLICT,
           "An active pathway with this name already exists",
           HttpStatus.CONFLICT
-        )
+        ),
       };
     }
 
     // 2. Check if pathway with same key already exists
     const existingPathway = await this.pathwayRepository.findOne({
       where: { key },
-      select: ['id', 'key'],
+      select: ["id", "key"],
     });
 
     if (existingPathway) {
@@ -325,7 +387,7 @@ export class PathwaysService {
           API_RESPONSES.CONFLICT,
           API_RESPONSES.PATHWAY_KEY_EXISTS,
           HttpStatus.CONFLICT
-        )
+        ),
       };
     }
 
@@ -340,9 +402,11 @@ export class PathwaysService {
             response,
             apiId,
             API_RESPONSES.BAD_REQUEST,
-            `${API_RESPONSES.INVALID_TAG_IDS}: ${validation.invalidTagIds.join(', ')} `,
+            `${API_RESPONSES.INVALID_TAG_IDS}: ${validation.invalidTagIds.join(
+              ", "
+            )} `,
             HttpStatus.BAD_REQUEST
-          )
+          ),
         };
       }
     }
@@ -354,15 +418,18 @@ export class PathwaysService {
    * Internal logic to calculate a unique display order
    * Falls back to auto-increment if provided order is a duplicate
    */
-  private async calculateDisplayOrder(requestedOrder?: number): Promise<number> {
+  private async calculateDisplayOrder(
+    requestedOrder?: number
+  ): Promise<number> {
     let displayOrder = requestedOrder;
-    let needsAutoGeneration = displayOrder === undefined || displayOrder === null;
+    let needsAutoGeneration =
+      displayOrder === undefined || displayOrder === null;
 
     if (!needsAutoGeneration) {
       // Check if forcefully provided order is already taken
       const existingWithOrder = await this.pathwayRepository.findOne({
         where: { display_order: displayOrder },
-        select: ['id'],
+        select: ["id"],
       });
       if (existingWithOrder) {
         needsAutoGeneration = true;
@@ -371,8 +438,8 @@ export class PathwaysService {
 
     if (needsAutoGeneration) {
       const maxOrderResult = await this.pathwayRepository
-        .createQueryBuilder('pathway')
-        .select('MAX(pathway.display_order)', 'max')
+        .createQueryBuilder("pathway")
+        .select("MAX(pathway.display_order)", "max")
         .getRawOne();
 
       const maxOrder = maxOrderResult?.max || 0;
@@ -394,10 +461,17 @@ export class PathwaysService {
     const apiId = APIID.PATHWAY_CREATE;
     try {
       // Auto-generate key from name if not provided
-      const key = createPathwayDto.key || await this.generateUniqueKey(createPathwayDto.name);
+      const key =
+        createPathwayDto.key ||
+        (await this.generateUniqueKey(createPathwayDto.name));
 
       // Perform all validations
-      const validation = await this.validatePathwayCreation(createPathwayDto, key, apiId, response);
+      const validation = await this.validatePathwayCreation(
+        createPathwayDto,
+        key,
+        apiId,
+        response
+      );
       if (!validation.isValid) {
         return validation.errorResponse;
       }
@@ -406,13 +480,14 @@ export class PathwaysService {
       const MAX_ATTEMPTS = 3;
       let savedPathway;
 
-
       while (attempts < MAX_ATTEMPTS) {
         attempts++;
         try {
           // Calculate safe display order (auto-increment on duplicate)
           // Inside the loop so it can pick up new MAX if a previous attempt collided
-          const displayOrder = await this.calculateDisplayOrder(createPathwayDto.display_order);
+          const displayOrder = await this.calculateDisplayOrder(
+            createPathwayDto.display_order
+          );
 
           // Prepare data for save
           const pathwayData = {
@@ -425,11 +500,14 @@ export class PathwaysService {
             updated_by: userId,
           };
 
-          savedPathway = await this.pathwayRepository.save(this.pathwayRepository.create(pathwayData));
+          savedPathway = await this.pathwayRepository.save(
+            this.pathwayRepository.create(pathwayData)
+          );
           break; // Success!
         } catch (error) {
           // Handle unique constraint violation for display_order specifically
-          const isDisplayOrderConflict = error.code === '23505' && error.detail?.includes('display_order');
+          const isDisplayOrderConflict =
+            error.code === "23505" && error.detail?.includes("display_order");
 
           if (isDisplayOrderConflict && attempts < MAX_ATTEMPTS) {
             LoggerUtil.warn(
@@ -446,10 +524,16 @@ export class PathwaysService {
 
       // Invalidate pathway search cache
       try {
-        await this.cacheService.delByPattern('pathway:search:*');
-        LoggerUtil.log('Invalidated pathway search cache after creation', apiId);
+        await this.cacheService.delByPattern("pathway:search:*");
+        LoggerUtil.log(
+          "Invalidated pathway search cache after creation",
+          apiId
+        );
       } catch (cacheError) {
-        LoggerUtil.warn(`Failed to invalidate pathway search cache: ${cacheError.message}`, apiId);
+        LoggerUtil.warn(
+          `Failed to invalidate pathway search cache: ${cacheError.message}`,
+          apiId
+        );
       }
 
       const result = {
@@ -473,7 +557,7 @@ export class PathwaysService {
       );
     } catch (error) {
       // Handle unique constraint violation
-      if (error.code === '23505') {
+      if (error.code === "23505") {
         LoggerUtil.error(
           `${API_RESPONSES.CONFLICT} `,
           `Conflict error details: ${error.detail} `,
@@ -481,8 +565,8 @@ export class PathwaysService {
         );
         // PostgreSQL unique constraint violation
         // Check if it's the display_order or the key
-        const detail = error.detail || '';
-        if (detail.includes('display_order')) {
+        const detail = error.detail || "";
+        if (detail.includes("display_order")) {
           return APIResponse.error(
             response,
             apiId,
@@ -532,9 +616,14 @@ export class PathwaysService {
     try {
       // 1. Generate cache key from all relevant parameters
       const cacheKey = `pathway:search:${crypto
-        .createHash('md5')
-        .update(JSON.stringify(listPathwayDto, Object.keys(listPathwayDto).sort()))
-        .digest('hex')}`;
+        .createHash("sha256")
+        .update(
+          JSON.stringify(
+            listPathwayDto,
+            Object.keys(listPathwayDto).sort((a, b) => a.localeCompare(b))
+          )
+        )
+        .digest("hex")}`;
 
       // 2. Check cache for DB data only (LMS counts are always fetched live)
       let dbItems: any[] = null;
@@ -567,20 +656,27 @@ export class PathwaysService {
 
         if (needsTextSearch) {
           // Use QueryBuilder for ILIKE queries (optimized for text search)
-          const queryBuilder = this.pathwayRepository.createQueryBuilder("pathway");
+          const queryBuilder =
+            this.pathwayRepository.createQueryBuilder("pathway");
 
           // Apply filters
           if (filters.id) {
             queryBuilder.andWhere("pathway.id = :id", { id: filters.id });
           }
           if (filters.name) {
-            queryBuilder.andWhere("pathway.name ILIKE :name", { name: `% ${filters.name}% ` });
+            queryBuilder.andWhere("pathway.name ILIKE :name", {
+              name: `% ${filters.name}% `,
+            });
           }
           if (filters.description) {
-            queryBuilder.andWhere("pathway.description ILIKE :description", { description: `% ${filters.description}% ` });
+            queryBuilder.andWhere("pathway.description ILIKE :description", {
+              description: `% ${filters.description}% `,
+            });
           }
           if (filters.isActive !== undefined) {
-            queryBuilder.andWhere("pathway.is_active = :isActive", { isActive: filters.isActive });
+            queryBuilder.andWhere("pathway.is_active = :isActive", {
+              isActive: filters.isActive,
+            });
           }
 
           // Apply ordering
@@ -654,13 +750,17 @@ export class PathwaysService {
         });
 
         // Cache only DB data (tags resolved, no LMS counts) for 300 seconds
-        await this.cacheService.set(cacheKey, { items: dbItems, totalCount, limit, offset }, 300);
+        await this.cacheService.set(
+          cacheKey,
+          { items: dbItems, totalCount, limit, offset },
+          300
+        );
         LoggerUtil.log(`Cached DB pathway data for key: ${cacheKey}`, apiId);
       }
 
       // Always fetch LMS counts live (never cached) for fresh video/resource counts
       const pathwayIds = dbItems
-        .filter((item: any) => item?.id != null && typeof item.id === 'string')
+        .filter((item: any) => item?.id != null && typeof item.id === "string")
         .map((item: any) => item.id);
       const countsMap = await this.lmsClientService.getBatchCounts(
         pathwayIds,
@@ -832,16 +932,23 @@ export class PathwaysService {
       const oldImageUrl = existingPathway.image_url;
 
       // Validate tags if provided in update
-      if (updatePathwayDto.tags !== undefined && updatePathwayDto.tags !== null) {
-        if (Array.isArray(updatePathwayDto.tags) && updatePathwayDto.tags.length > 0) {
+      if (
+        updatePathwayDto.tags !== undefined &&
+        updatePathwayDto.tags !== null
+      ) {
+        if (
+          Array.isArray(updatePathwayDto.tags) &&
+          updatePathwayDto.tags.length > 0
+        ) {
           const validation = await this.validateTagIds(updatePathwayDto.tags);
           if (!validation.isValid) {
             return APIResponse.error(
               response,
               apiId,
               API_RESPONSES.BAD_REQUEST,
-              `${API_RESPONSES.INVALID_TAG_IDS
-              }: ${validation.invalidTagIds.join(', ')} `,
+              `${
+                API_RESPONSES.INVALID_TAG_IDS
+              }: ${validation.invalidTagIds.join(", ")} `,
               HttpStatus.BAD_REQUEST
             );
           }
@@ -850,7 +957,12 @@ export class PathwaysService {
 
       let newImageUrl: string | null = null;
       const dtoImageUrl = updatePathwayDto.image_url;
-      if (dtoImageUrl !== undefined && dtoImageUrl !== null && typeof dtoImageUrl === 'string' && dtoImageUrl.trim() !== '') {
+      if (
+        dtoImageUrl !== undefined &&
+        dtoImageUrl !== null &&
+        typeof dtoImageUrl === "string" &&
+        dtoImageUrl.trim() !== ""
+      ) {
         newImageUrl = dtoImageUrl.trim();
         if (oldImageUrl) {
           await this.deleteImageFromS3(oldImageUrl);
@@ -870,7 +982,7 @@ export class PathwaysService {
             is_active: true,
             id: Not(id),
           },
-          select: ['id'],
+          select: ["id"],
         });
 
         if (activePathwayWithName) {
@@ -888,10 +1000,15 @@ export class PathwaysService {
         updateData.description = updatePathwayDto.description;
       }
       // Guard against null: only update if tags is explicitly provided (array or empty array)
-      if (updatePathwayDto.tags !== undefined && updatePathwayDto.tags !== null) {
+      if (
+        updatePathwayDto.tags !== undefined &&
+        updatePathwayDto.tags !== null
+      ) {
         // Store as PostgreSQL text[] array
         // Empty array is valid, so we allow it
-        updateData.tags = Array.isArray(updatePathwayDto.tags) ? updatePathwayDto.tags : [];
+        updateData.tags = Array.isArray(updatePathwayDto.tags)
+          ? updatePathwayDto.tags
+          : [];
       }
       if (updatePathwayDto.display_order !== undefined) {
         updateData.display_order = updatePathwayDto.display_order;
@@ -914,7 +1031,7 @@ export class PathwaysService {
           response,
           apiId,
           API_RESPONSES.BAD_REQUEST,
-          'No valid fields provided for update',
+          "No valid fields provided for update",
           HttpStatus.BAD_REQUEST
         );
       }
@@ -932,17 +1049,20 @@ export class PathwaysService {
           response,
           apiId,
           API_RESPONSES.INTERNAL_SERVER_ERROR,
-          'Failed to update pathway',
+          "Failed to update pathway",
           HttpStatus.INTERNAL_SERVER_ERROR
         );
       }
 
       // Invalidate pathway search cache
       try {
-        await this.cacheService.delByPattern('pathway:search:*');
-        LoggerUtil.log('Invalidated pathway search cache after update', apiId);
+        await this.cacheService.delByPattern("pathway:search:*");
+        LoggerUtil.log("Invalidated pathway search cache after update", apiId);
       } catch (cacheError) {
-        LoggerUtil.warn(`Failed to invalidate pathway search cache: ${cacheError.message}`, apiId);
+        LoggerUtil.warn(
+          `Failed to invalidate pathway search cache: ${cacheError.message}`,
+          apiId
+        );
       }
 
       // Fetch updated pathway for response
@@ -1022,8 +1142,6 @@ export class PathwaysService {
     );
   }
 
-
-
   /**
    * Shared internal method for Pathway Assignment and Switching
    * Ensures strict reactivation of existing records to prevent duplicates
@@ -1041,7 +1159,7 @@ export class PathwaysService {
       // 1. Validate user existence
       const user = await this.userRepository.findOne({
         where: { userId },
-        select: ['userId'],
+        select: ["userId"],
       });
 
       if (!user) {
@@ -1049,7 +1167,7 @@ export class PathwaysService {
           response,
           apiId,
           API_RESPONSES.NOT_FOUND,
-          'User not found',
+          "User not found",
           HttpStatus.NOT_FOUND
         );
       }
@@ -1057,7 +1175,7 @@ export class PathwaysService {
       // 2. Validate target pathway existence and active status
       const pathway = await this.pathwayRepository.findOne({
         where: { id: pathwayId, is_active: true },
-        select: ['id'],
+        select: ["id"],
       });
 
       if (!pathway) {
@@ -1065,7 +1183,7 @@ export class PathwaysService {
           response,
           apiId,
           API_RESPONSES.NOT_FOUND,
-          'Active pathway not found',
+          "Active pathway not found",
           HttpStatus.NOT_FOUND
         );
       }
@@ -1077,9 +1195,10 @@ export class PathwaysService {
 
       // 4. Check if target pathway already has a history record for this user
       // If found, we will REACTIVATE it instead of creating a new one
-      const existingTargetRecord = await this.userPathwayHistoryRepository.findOne({
-        where: { user_id: userId, pathway_id: pathwayId },
-      });
+      const existingTargetRecord =
+        await this.userPathwayHistoryRepository.findOne({
+          where: { user_id: userId, pathway_id: pathwayId },
+        });
 
       // If already active, no switch needed
       if (currentActive?.pathway_id === pathwayId) {
@@ -1098,12 +1217,12 @@ export class PathwaysService {
           apiId,
           result,
           HttpStatus.OK,
-          'Pathway is already active'
+          "Pathway is already active"
         );
       }
 
       const timestamp = new Date();
-      let previousPathwayId = currentActive ? currentActive.pathway_id : null;
+      const previousPathwayId = currentActive ? currentActive.pathway_id : null;
 
       // 5. Atomic Transaction: Deactivate current and Reactivate/Activate target
       await this.dataSource.transaction(async (manager) => {
@@ -1115,7 +1234,7 @@ export class PathwaysService {
             {
               is_active: false,
               deactivated_at: timestamp,
-              updated_by: updated_by || created_by
+              updated_by: updated_by || created_by,
             }
           );
         }
@@ -1131,7 +1250,7 @@ export class PathwaysService {
               activated_at: timestamp,
               deactivated_at: null, // As requested: if reactivated, null the column
               user_goal: userGoal,
-              updated_by: null // Refined: null when deactivated_at is null
+              updated_by: null, // Refined: null when deactivated_at is null
             }
           );
         } else {
@@ -1143,7 +1262,7 @@ export class PathwaysService {
             activated_at: timestamp,
             user_goal: userGoal,
             created_by: created_by,
-            updated_by: null // Refined: null on initial creation
+            updated_by: null, // Refined: null on initial creation
           });
           await manager.save(record);
         }
@@ -1152,7 +1271,7 @@ export class PathwaysService {
       // Fetch the active record after transaction to get its id
       const activeRecord = await this.userPathwayHistoryRepository.findOne({
         where: { user_id: userId, pathway_id: pathwayId, is_active: true },
-        select: ['id'],
+        select: ["id"],
       });
 
       const result = {
@@ -1195,21 +1314,22 @@ export class PathwaysService {
     }
   }
 
-
   /**
    * Get Active Pathway for User
    * Retrieves the currently active pathway assignment for a user
+   * If pathwayId is provided, retrieves that specific history record if it belongs to the user
    */
   async getActivePathway(
-    userId: string,
+    activePathwayDto: ActivePathwayDto,
+    // userId: string,
     response: Response
   ): Promise<Response> {
     const apiId = APIID.PATHWAY_GET_ACTIVE;
+    const { userId, pathwayId } = activePathwayDto;
+
     try {
       // Validate UUID format
-      const uuidRegex =
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      if (!uuidRegex.test(userId)) {
+      if (!isUUID(userId)) {
         return APIResponse.error(
           response,
           apiId,
@@ -1222,7 +1342,7 @@ export class PathwaysService {
       // 1. Validate user existence
       const user = await this.userRepository.findOne({
         where: { userId },
-        select: ['userId'],
+        select: ["userId"],
       });
 
       if (!user) {
@@ -1230,23 +1350,44 @@ export class PathwaysService {
           response,
           apiId,
           API_RESPONSES.NOT_FOUND,
-          'User not found',
+          "User not found",
           HttpStatus.NOT_FOUND
         );
       }
 
-      // 2. Get active pathway from user_pathway_history
-      const activePathway = await this.userPathwayHistoryRepository.findOne({
-        where: { user_id: userId, is_active: true },
-        select: ['id', 'pathway_id', 'activated_at', 'user_goal'],
-      });
+      let activePathway;
+
+      if (pathwayId) {
+        // If pathwayId is provided, fetch specific history record for this user and pathway
+        activePathway = await this.userPathwayHistoryRepository.findOne({
+          where: { user_id: userId, pathway_id: pathwayId },
+          select: [
+            "id",
+            "pathway_id",
+            "activated_at",
+            "user_goal",
+            "is_active",
+          ],
+          order: { activated_at: "DESC" }, // Get most recent if multiple (shouldn't happen usually)
+        });
+      } else {
+        // If only userId is provided, fetch the currently active pathway
+        activePathway = await this.userPathwayHistoryRepository.findOne({
+          where: { user_id: userId, is_active: true },
+          select: ["id", "pathway_id", "activated_at", "user_goal"],
+        });
+      }
 
       if (!activePathway) {
+        const msg = pathwayId
+          ? "Pathway history not found for this user and pathway"
+          : "No active pathway found for this user";
+
         return APIResponse.error(
           response,
           apiId,
           API_RESPONSES.NOT_FOUND,
-          'No active pathway found for this user',
+          msg,
           HttpStatus.NOT_FOUND
         );
       }
@@ -1256,6 +1397,7 @@ export class PathwaysService {
         pathwayId: activePathway.pathway_id,
         activatedAt: activePathway.activated_at,
         userGoal: activePathway.user_goal,
+        isActive: activePathway.is_active, // Helpful to know if specific pathway requested
       };
 
       return APIResponse.success(
@@ -1263,7 +1405,7 @@ export class PathwaysService {
         apiId,
         result,
         HttpStatus.OK,
-        'Active pathway retrieved successfully'
+        "pathway retrieved successfully"
       );
     } catch (error) {
       const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
@@ -1300,7 +1442,7 @@ export class PathwaysService {
       where: {
         key: Like(`${key}% `),
       },
-      select: ['key'],
+      select: ["key"],
     });
 
     if (existingKeys.length === 0) {
@@ -1344,30 +1486,42 @@ export class PathwaysService {
       const { orders } = bulkUpdateOrderDto;
 
       // 1. Validate uniqueness of IDs and Order values in the request itself
-      const ids = orders.map(o => o.id);
-      const orderValues = orders.map(o => o.order);
+      const ids = orders.map((o) => o.id);
+      const orderValues = orders.map((o) => o.order);
 
       if (new Set(ids).size !== ids.length) {
-        return APIResponse.error(response, apiId, API_RESPONSES.BAD_REQUEST, "Duplicate IDs found in request", HttpStatus.BAD_REQUEST);
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          "Duplicate IDs found in request",
+          HttpStatus.BAD_REQUEST
+        );
       }
       if (new Set(orderValues).size !== orderValues.length) {
-        return APIResponse.error(response, apiId, API_RESPONSES.BAD_REQUEST, "Duplicate order values found in request", HttpStatus.BAD_REQUEST);
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          "Duplicate order values found in request",
+          HttpStatus.BAD_REQUEST
+        );
       }
 
       // 2. Validate that all pathways exist before starting the transaction
       const existingPathways = await this.pathwayRepository.find({
         where: { id: In(ids) },
-        select: ['id', 'display_order']
+        select: ["id", "display_order"],
       });
 
       if (existingPathways.length !== orders.length) {
-        const foundIdsSet = new Set(existingPathways.map(p => p.id));
-        const missingIds = ids.filter(id => !foundIdsSet.has(id));
+        const foundIdsSet = new Set(existingPathways.map((p) => p.id));
+        const missingIds = ids.filter((id) => !foundIdsSet.has(id));
         return APIResponse.error(
           response,
           apiId,
           API_RESPONSES.NOT_FOUND,
-          `One or more pathways not found: ${missingIds.join(', ')} `,
+          `One or more pathways not found: ${missingIds.join(", ")} `,
           HttpStatus.NOT_FOUND
         );
       }
@@ -1377,13 +1531,17 @@ export class PathwaysService {
       // the unique index will block Step 2. We validate this upfront for a clear error message.
       const potentialConflicts = await this.pathwayRepository.find({
         where: { display_order: In(orderValues) },
-        select: ['id', 'name', 'display_order']
+        select: ["id", "name", "display_order"],
       });
 
-      const externalConflicts = potentialConflicts.filter(p => !ids.includes(p.id));
+      const externalConflicts = potentialConflicts.filter(
+        (p) => !ids.includes(p.id)
+      );
 
       if (externalConflicts.length > 0) {
-        const conflictDetails = externalConflicts.map(p => `'${p.name}'(Order ${p.display_order})`).join(', ');
+        const conflictDetails = externalConflicts
+          .map((p) => `'${p.name}'(Order ${p.display_order})`)
+          .join(", ");
         return APIResponse.error(
           response,
           apiId,
@@ -1401,7 +1559,9 @@ export class PathwaysService {
         // Since all display orders are >= 1, negated values will be <= -1, ensuring no collision with existing positive values.
         for (const orderItem of orders) {
           // We already validated existence above, so we can proceed safely
-          const currentPathway = existingPathways.find(p => p.id === orderItem.id);
+          const currentPathway = existingPathways.find(
+            (p) => p.id === orderItem.id
+          );
           await transactionalEntityManager.update(
             Pathway,
             { id: orderItem.id },
@@ -1424,10 +1584,16 @@ export class PathwaysService {
 
       // Invalidate pathway search cache
       try {
-        await this.cacheService.delByPattern('pathway:search:*');
-        LoggerUtil.log('Invalidated pathway search cache after reordering', apiId);
+        await this.cacheService.delByPattern("pathway:search:*");
+        LoggerUtil.log(
+          "Invalidated pathway search cache after reordering",
+          apiId
+        );
       } catch (cacheError) {
-        LoggerUtil.warn(`Failed to invalidate pathway search cache: ${cacheError.message}`, apiId);
+        LoggerUtil.warn(
+          `Failed to invalidate pathway search cache: ${cacheError.message}`,
+          apiId
+        );
       }
 
       return APIResponse.success(

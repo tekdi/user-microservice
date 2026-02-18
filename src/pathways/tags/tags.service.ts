@@ -1,21 +1,21 @@
-import { Injectable, HttpStatus, OnModuleInit } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Like, Not, DataSource } from 'typeorm';
-import * as crypto from 'crypto';
-import { CacheService } from 'src/cache/cache.service';
-import { Tag, TagStatus } from './entities/tag.entity';
-import { StringUtil } from '../common/utils/string.util';
-import { CreateTagDto } from './dto/create-tag.dto';
-import { UpdateTagDto } from './dto/update-tag.dto';
-import { DeleteTagDto } from './dto/delete-tag.dto';
-import { ListTagDto } from './dto/list-tag.dto';
-import { FetchTagDto } from './dto/fetch-tag.dto';
-import { MAX_PAGINATION_LIMIT } from '../common/dto/pagination.dto';
-import APIResponse from 'src/common/responses/response';
-import { API_RESPONSES } from '@utils/response.messages';
-import { APIID } from '@utils/api-id.config';
-import { LoggerUtil } from 'src/common/logger/LoggerUtil';
-import { Response } from 'express';
+import { Injectable, HttpStatus, OnModuleInit } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository, Like, Not, DataSource } from "typeorm";
+import * as crypto from "crypto";
+import { CacheService } from "src/cache/cache.service";
+import { Tag, TagStatus } from "./entities/tag.entity";
+import { StringUtil } from "../common/utils/string.util";
+import { CreateTagDto } from "./dto/create-tag.dto";
+import { UpdateTagDto } from "./dto/update-tag.dto";
+import { DeleteTagDto } from "./dto/delete-tag.dto";
+import { ListTagDto } from "./dto/list-tag.dto";
+import { FetchTagDto } from "./dto/fetch-tag.dto";
+import { MAX_PAGINATION_LIMIT } from "../common/dto/pagination.dto";
+import APIResponse from "src/common/responses/response";
+import { API_RESPONSES } from "@utils/response.messages";
+import { APIID } from "@utils/api-id.config";
+import { LoggerUtil } from "src/common/logger/LoggerUtil";
+import { Response } from "express";
 
 @Injectable()
 export class TagsService implements OnModuleInit {
@@ -24,7 +24,7 @@ export class TagsService implements OnModuleInit {
     private readonly tagRepository: Repository<Tag>,
     private readonly dataSource: DataSource,
     private readonly cacheService: CacheService
-  ) { }
+  ) {}
 
   /**
    * Drop the old globally unique index if it exists to allow partial index to work
@@ -45,12 +45,21 @@ export class TagsService implements OnModuleInit {
         try {
           await this.dataSource.query(query);
         } catch (e) {
-          LoggerUtil.warn('TagsService', `Ignored error during index drop: ${e.message}`);
+          LoggerUtil.warn(
+            "TagsService",
+            `Ignored error during index drop: ${e.message}`
+          );
         }
       }
-      LoggerUtil.log('TagsService', 'Attempted to cleanup legacy tag name indexes');
+      LoggerUtil.log(
+        "TagsService",
+        "Attempted to cleanup legacy tag name indexes"
+      );
     } catch (error) {
-      LoggerUtil.error('API_RESPONSES.SERVER_ERROR', `Error during Tag index cleanup: ${error.message}`);
+      LoggerUtil.error(
+        "API_RESPONSES.SERVER_ERROR",
+        `Error during Tag index cleanup: ${error.message}`
+      );
     }
   }
 
@@ -68,7 +77,7 @@ export class TagsService implements OnModuleInit {
       // Check if a PUBLISHED tag with same name already exists
       const existingPublished = await this.tagRepository.findOne({
         where: { name: createTagDto.name, status: TagStatus.PUBLISHED },
-        select: ['id'],
+        select: ["id"],
       });
 
       if (existingPublished) {
@@ -102,10 +111,13 @@ export class TagsService implements OnModuleInit {
 
       // Invalidate tag search cache after successful creation
       try {
-        await this.cacheService.delByPattern('tags:search:*');
-        LoggerUtil.log('Invalidated tag search cache after creation', apiId);
+        await this.cacheService.delByPattern("tags:search:*");
+        LoggerUtil.log("Invalidated tag search cache after creation", apiId);
       } catch (cacheError) {
-        LoggerUtil.warn(`Failed to invalidate tag search cache: ${cacheError.message}`, apiId);
+        LoggerUtil.warn(
+          `Failed to invalidate tag search cache: ${cacheError.message}`,
+          apiId
+        );
       }
 
       // Return all fields as per API spec
@@ -129,7 +141,7 @@ export class TagsService implements OnModuleInit {
       );
     } catch (error) {
       // Handle unique constraint violation
-      if (error.code === '23505') {
+      if (error.code === "23505") {
         LoggerUtil.error(
           `${API_RESPONSES.CONFLICT}`,
           `Conflict error details: ${error.detail}`,
@@ -185,7 +197,7 @@ export class TagsService implements OnModuleInit {
 
       const existingTag = await this.tagRepository.findOne({
         where: { id },
-        select: ['id', 'name', 'alias', 'status', 'created_at'],
+        select: ["id", "name", "alias", "status", "created_at"],
       });
 
       if (!existingTag) {
@@ -219,7 +231,7 @@ export class TagsService implements OnModuleInit {
             response,
             apiId,
             API_RESPONSES.CONFLICT,
-            'Tag with this alias already exists',
+            "Tag with this alias already exists",
             HttpStatus.CONFLICT
           );
         }
@@ -239,7 +251,7 @@ export class TagsService implements OnModuleInit {
           response,
           apiId,
           API_RESPONSES.BAD_REQUEST,
-          'No valid fields provided for update',
+          "No valid fields provided for update",
           HttpStatus.BAD_REQUEST
         );
       }
@@ -255,10 +267,13 @@ export class TagsService implements OnModuleInit {
 
       // Invalidate tag search cache after successful update
       try {
-        await this.cacheService.delByPattern('tags:search:*');
-        LoggerUtil.log('Invalidated tag search cache after update', apiId);
+        await this.cacheService.delByPattern("tags:search:*");
+        LoggerUtil.log("Invalidated tag search cache after update", apiId);
       } catch (cacheError) {
-        LoggerUtil.warn(`Failed to invalidate tag search cache: ${cacheError.message}`, apiId);
+        LoggerUtil.warn(
+          `Failed to invalidate tag search cache: ${cacheError.message}`,
+          apiId
+        );
       }
 
       // Fetch updated tag for response (safety check for concurrent deletion)
@@ -285,7 +300,7 @@ export class TagsService implements OnModuleInit {
       );
     } catch (error) {
       // Handle unique constraint violation
-      if (error.code === '23505') {
+      if (error.code === "23505") {
         LoggerUtil.error(
           `${API_RESPONSES.CONFLICT}`,
           `Update conflict error details: ${error.detail}`,
@@ -343,7 +358,7 @@ export class TagsService implements OnModuleInit {
       // Check if tag exists
       const existingTag = await this.tagRepository.findOne({
         where: { id },
-        select: ['id', 'status'],
+        select: ["id", "status"],
       });
 
       if (!existingTag) {
@@ -368,10 +383,13 @@ export class TagsService implements OnModuleInit {
 
       // Invalidate tag search cache after successful archiving (soft delete)
       try {
-        await this.cacheService.delByPattern('tags:search:*');
-        LoggerUtil.log('Invalidated tag search cache after archiving', apiId);
+        await this.cacheService.delByPattern("tags:search:*");
+        LoggerUtil.log("Invalidated tag search cache after archiving", apiId);
       } catch (cacheError) {
-        LoggerUtil.warn(`Failed to invalidate tag search cache: ${cacheError.message}`, apiId);
+        LoggerUtil.warn(
+          `Failed to invalidate tag search cache: ${cacheError.message}`,
+          apiId
+        );
       }
 
       if (!updateResult.affected || updateResult.affected === 0) {
@@ -379,7 +397,7 @@ export class TagsService implements OnModuleInit {
           response,
           apiId,
           API_RESPONSES.INTERNAL_SERVER_ERROR,
-          'Failed to archive tag',
+          "Failed to archive tag",
           HttpStatus.INTERNAL_SERVER_ERROR
         );
       }
@@ -424,9 +442,14 @@ export class TagsService implements OnModuleInit {
     try {
       // 1. Generate cache key from all relevant parameters
       const cacheKey = `tags:search:${crypto
-        .createHash('md5')
-        .update(JSON.stringify(listTagDto, Object.keys(listTagDto).sort()))
-        .digest('hex')}`;
+        .createHash("sha256")
+        .update(
+          JSON.stringify(
+            listTagDto,
+            Object.keys(listTagDto).sort((a, b) => a.localeCompare(b))
+          )
+        )
+        .digest("hex")}`;
 
       // 2. Check cache first
       const cachedResult = await this.cacheService.get<any>(cacheKey);
@@ -459,45 +482,45 @@ export class TagsService implements OnModuleInit {
 
       if (needsTextSearch) {
         // Use QueryBuilder for ILIKE queries (optimized for text search)
-        const queryBuilder = this.tagRepository.createQueryBuilder('tag');
+        const queryBuilder = this.tagRepository.createQueryBuilder("tag");
 
         // Apply filters
         if (filters.id) {
-          queryBuilder.andWhere('tag.id = :id', { id: filters.id });
+          queryBuilder.andWhere("tag.id = :id", { id: filters.id });
         }
         if (filters.name) {
-          queryBuilder.andWhere('tag.name ILIKE :name', {
+          queryBuilder.andWhere("tag.name ILIKE :name", {
             name: `%${filters.name}%`,
           });
         }
         // If status is provided, use it; otherwise default to published only
         if (filters.status) {
-          queryBuilder.andWhere('tag.status = :status', {
+          queryBuilder.andWhere("tag.status = :status", {
             status: filters.status,
           });
         } else {
           // Default: only show published tags (exclude archived)
-          queryBuilder.andWhere('tag.status = :status', {
+          queryBuilder.andWhere("tag.status = :status", {
             status: TagStatus.PUBLISHED,
           });
         }
 
         // Apply ordering
-        queryBuilder.orderBy('tag.created_at', 'DESC');
+        queryBuilder.orderBy("tag.created_at", "DESC");
 
         // Apply pagination
         queryBuilder.skip(offset).take(limit);
 
         // Select specific fields
         queryBuilder.select([
-          'tag.id',
-          'tag.name',
-          'tag.alias',
-          'tag.status',
-          'tag.created_at',
-          'tag.updated_at',
-          'tag.created_by',
-          'tag.updated_by',
+          "tag.id",
+          "tag.name",
+          "tag.alias",
+          "tag.status",
+          "tag.created_at",
+          "tag.updated_at",
+          "tag.created_by",
+          "tag.updated_by",
         ]);
 
         // Execute query
@@ -523,19 +546,19 @@ export class TagsService implements OnModuleInit {
         [items, totalCount] = await this.tagRepository.findAndCount({
           where: whereCondition,
           order: {
-            created_at: 'DESC',
+            created_at: "DESC",
           },
           take: limit,
           skip: offset,
           select: [
-            'id',
-            'name',
-            'alias',
-            'status',
-            'created_at',
-            'updated_at',
-            'created_by',
-            'updated_by',
+            "id",
+            "name",
+            "alias",
+            "status",
+            "created_at",
+            "updated_at",
+            "created_by",
+            "updated_by",
           ],
         });
       }
@@ -599,14 +622,14 @@ export class TagsService implements OnModuleInit {
       const tag = await this.tagRepository.findOne({
         where: { id: fetchTagDto.id },
         select: [
-          'id',
-          'name',
-          'alias',
-          'status',
-          'created_at',
-          'updated_at',
-          'created_by',
-          'updated_by',
+          "id",
+          "name",
+          "alias",
+          "status",
+          "created_at",
+          "updated_at",
+          "created_by",
+          "updated_by",
         ],
       });
 
@@ -656,7 +679,7 @@ export class TagsService implements OnModuleInit {
     let alias = StringUtil.normalizeKey(name);
 
     if (!alias) {
-      alias = new Date().toISOString().replace(/\D/g, '').slice(0, 14);
+      alias = new Date().toISOString().replace(/\D/g, "").slice(0, 14);
     }
 
     // Step 2: Optimized uniqueness check using prefix search
@@ -666,7 +689,7 @@ export class TagsService implements OnModuleInit {
         alias: Like(`${alias}%`),
         ...(excludeId ? { id: Not(excludeId) } : {}),
       },
-      select: ['alias'],
+      select: ["alias"],
     });
 
     if (existingAliases.length === 0) {
@@ -690,14 +713,15 @@ export class TagsService implements OnModuleInit {
   }
 
   private isValidUUID(id: string): boolean {
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const uuidRegex =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     return uuidRegex.test(id);
   }
 
   private async checkNameConflict(name: string): Promise<boolean> {
     const conflict = await this.tagRepository.findOne({
       where: { name, status: TagStatus.PUBLISHED },
-      select: ['id'],
+      select: ["id"],
     });
     return !!conflict;
   }
@@ -705,7 +729,7 @@ export class TagsService implements OnModuleInit {
   private async checkAliasConflict(alias: string): Promise<boolean> {
     const conflict = await this.tagRepository.findOne({
       where: { alias },
-      select: ['id'],
+      select: ["id"],
     });
     return !!conflict;
   }

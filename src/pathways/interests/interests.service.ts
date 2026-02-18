@@ -1,8 +1,8 @@
 import { Injectable, HttpStatus } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository, In, DataSource, ILike, Like, Not } from "typeorm";
-import * as crypto from 'crypto';
-import { CacheService } from 'src/cache/cache.service';
+import * as crypto from "crypto";
+import { CacheService } from "src/cache/cache.service";
 import { Interest } from "./entities/interest.entity";
 import { CreateInterestDto } from "./dto/create-interest.dto";
 import { UpdateInterestDto } from "./dto/update-interest.dto";
@@ -16,7 +16,7 @@ import APIResponse from "src/common/responses/response";
 import { API_RESPONSES } from "@utils/response.messages";
 import { APIID } from "@utils/api-id.config";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
-import { StringUtil } from '../common/utils/string.util';
+import { StringUtil } from "../common/utils/string.util";
 import { Response } from "express";
 
 @Injectable()
@@ -32,7 +32,7 @@ export class InterestsService {
     private readonly userPathwayInterestsRepository: Repository<UserPathwayInterests>,
     private readonly dataSource: DataSource,
     private readonly cacheService: CacheService
-  ) { }
+  ) {}
 
   /**
    * Create a new interest for a pathway
@@ -47,7 +47,7 @@ export class InterestsService {
       // Check if pathway exists
       const pathway = await this.pathwayRepository.findOne({
         where: { id: createInterestDto.pathway_id },
-        select: ['id'],
+        select: ["id"],
       });
 
       if (!pathway) {
@@ -68,7 +68,7 @@ export class InterestsService {
           label: ILike(createInterestDto.label),
           is_active: true,
         },
-        select: ['id'],
+        select: ["id"],
       });
 
       if (activeInterestWithLabel) {
@@ -96,7 +96,7 @@ export class InterestsService {
           pathway_id: createInterestDto.pathway_id,
           key: key,
         },
-        select: ['id'],
+        select: ["id"],
       });
 
       if (existingInterest) {
@@ -120,10 +120,18 @@ export class InterestsService {
 
       // Invalidate interest search cache for this pathway
       try {
-        await this.cacheService.delByPattern(`interests:search:${savedInterest.pathway_id}:*`);
-        LoggerUtil.log(`Invalidated interest search cache for pathway: ${savedInterest.pathway_id}`, apiId);
+        await this.cacheService.delByPattern(
+          `interests:search:${savedInterest.pathway_id}:*`
+        );
+        LoggerUtil.log(
+          `Invalidated interest search cache for pathway: ${savedInterest.pathway_id}`,
+          apiId
+        );
       } catch (cacheError) {
-        LoggerUtil.warn(`Failed to invalidate interest search cache: ${cacheError.message}`, apiId);
+        LoggerUtil.warn(
+          `Failed to invalidate interest search cache: ${cacheError.message}`,
+          apiId
+        );
       }
 
       const result = {
@@ -175,7 +183,7 @@ export class InterestsService {
       // Check if interest exists
       const existingInterest = await this.interestRepository.findOne({
         where: { id },
-        select: ['id', 'key', 'pathway_id'],
+        select: ["id", "key", "pathway_id"],
       });
 
       if (!existingInterest) {
@@ -198,7 +206,7 @@ export class InterestsService {
             pathway_id: existingInterest.pathway_id,
             key: updateInterestDto.key,
           },
-          select: ['id'],
+          select: ["id"],
         });
 
         if (duplicateKeyInterest) {
@@ -221,7 +229,7 @@ export class InterestsService {
             is_active: true,
             id: Not(id),
           },
-          select: ['id'],
+          select: ["id"],
         });
 
         if (activeInterestWithLabel) {
@@ -246,10 +254,18 @@ export class InterestsService {
 
       // Invalidate interest search cache for this pathway
       try {
-        await this.cacheService.delByPattern(`interests:search:${existingInterest.pathway_id}:*`);
-        LoggerUtil.log(`Invalidated interest search cache for pathway: ${existingInterest.pathway_id}`, apiId);
+        await this.cacheService.delByPattern(
+          `interests:search:${existingInterest.pathway_id}:*`
+        );
+        LoggerUtil.log(
+          `Invalidated interest search cache for pathway: ${existingInterest.pathway_id}`,
+          apiId
+        );
       } catch (cacheError) {
-        LoggerUtil.warn(`Failed to invalidate interest search cache: ${cacheError.message}`, apiId);
+        LoggerUtil.warn(
+          `Failed to invalidate interest search cache: ${cacheError.message}`,
+          apiId
+        );
       }
 
       const updatedInterest = await this.interestRepository.findOne({
@@ -310,7 +326,7 @@ export class InterestsService {
     try {
       const existingInterest = await this.interestRepository.findOne({
         where: { id },
-        select: ['id', 'pathway_id'],
+        select: ["id", "pathway_id"],
       });
 
       if (!existingInterest) {
@@ -335,10 +351,18 @@ export class InterestsService {
 
       // Invalidate interest search cache for this pathway
       try {
-        await this.cacheService.delByPattern(`interests:search:${existingInterest.pathway_id}:*`);
-        LoggerUtil.log(`Invalidated interest search cache for pathway: ${existingInterest.pathway_id}`, apiId);
+        await this.cacheService.delByPattern(
+          `interests:search:${existingInterest.pathway_id}:*`
+        );
+        LoggerUtil.log(
+          `Invalidated interest search cache for pathway: ${existingInterest.pathway_id}`,
+          apiId
+        );
       } catch (cacheError) {
-        LoggerUtil.warn(`Failed to invalidate interest search cache: ${cacheError.message}`, apiId);
+        LoggerUtil.warn(
+          `Failed to invalidate interest search cache: ${cacheError.message}`,
+          apiId
+        );
       }
 
       const result = {
@@ -379,7 +403,12 @@ export class InterestsService {
     listInterestDto: ListInterestDto
   ): Promise<Response> {
     const apiId = APIID.INTEREST_LIST_BY_PATHWAY;
-    const { pathwayId, isActive, limit: requestedLimit, offset } = listInterestDto;
+    const {
+      pathwayId,
+      isActive,
+      limit: requestedLimit,
+      offset,
+    } = listInterestDto;
     try {
       if (!pathwayId) {
         return APIResponse.error(
@@ -393,9 +422,14 @@ export class InterestsService {
 
       // 1. Generate cache key from all relevant parameters
       const cacheKey = `interests:search:${pathwayId}:${crypto
-        .createHash('md5')
-        .update(JSON.stringify(listInterestDto, Object.keys(listInterestDto).sort()))
-        .digest('hex')}`;
+        .createHash("sha256")
+        .update(
+          JSON.stringify(
+            listInterestDto,
+            Object.keys(listInterestDto).sort((a, b) => a.localeCompare(b))
+          )
+        )
+        .digest("hex")}`;
 
       // 2. Check cache first
       const cachedResult = await this.cacheService.get<any>(cacheKey);
@@ -415,7 +449,7 @@ export class InterestsService {
       // Check if pathway exists
       const pathway = await this.pathwayRepository.findOne({
         where: { id: pathwayId },
-        select: ['id'],
+        select: ["id"],
       });
 
       if (!pathway) {
@@ -449,9 +483,9 @@ export class InterestsService {
       // OPTIMIZED: Use findAndCount for efficient pagination
       const [items, totalCount] = await this.interestRepository.findAndCount({
         where: whereCondition,
-        select: ['id', 'key', 'label', 'is_active', 'created_at'],
+        select: ["id", "key", "label", "is_active", "created_at"],
         order: {
-          created_at: 'DESC',
+          created_at: "DESC",
         },
         take: limit,
         skip: skip,
@@ -493,7 +527,6 @@ export class InterestsService {
     }
   }
 
-
   /**
    * Save user interests for a pathway visit
    * Logic: Validates history record and interest IDs before saving
@@ -512,7 +545,7 @@ export class InterestsService {
       // 2. Validate userPathwayHistoryId
       const historyRecord = await this.userPathwayHistoryRepository.findOne({
         where: { id: userPathwayHistoryId },
-        select: ['id', 'pathway_id'],
+        select: ["id", "pathway_id"],
       });
 
       if (!historyRecord) {
@@ -531,7 +564,7 @@ export class InterestsService {
           id: In(uniqueInterestIds),
           pathway_id: historyRecord.pathway_id,
         },
-        select: ['id'],
+        select: ["id"],
       });
 
       if (validInterests.length !== uniqueInterestIds.length) {
@@ -550,7 +583,9 @@ export class InterestsService {
         select: ["interest_id"],
       });
 
-      const existingInterestIds = new Set(existingMappings.map((m) => m.interest_id));
+      const existingInterestIds = new Set(
+        existingMappings.map((m) => m.interest_id)
+      );
       const requestedInterestIdsSet = new Set(uniqueInterestIds);
 
       // Identify IDs to add (in request but not in DB)
@@ -631,7 +666,7 @@ export class InterestsService {
       // 1. Verify history record exists
       const historyExists = await this.userPathwayHistoryRepository.findOne({
         where: { id: userPathwayHistoryId },
-        select: ['id'],
+        select: ["id"],
       });
 
       if (!historyExists) {
@@ -647,7 +682,7 @@ export class InterestsService {
       // 2. Fetch linked interest IDs
       const mapping = await this.userPathwayInterestsRepository.find({
         where: { user_pathway_history_id: userPathwayHistoryId },
-        select: ['interest_id'],
+        select: ["interest_id"],
       });
 
       if (mapping.length === 0) {
@@ -666,7 +701,7 @@ export class InterestsService {
       // This avoids N+1 and maintains high performance
       const interests = await this.interestRepository.find({
         where: { id: In(interestIds) },
-        select: ['id', 'key', 'label'],
+        select: ["id", "key", "label"],
       });
 
       // 4. Map to requested format
@@ -700,7 +735,6 @@ export class InterestsService {
     }
   }
 
-
   /**
    * Generate a unique key from label within a pathway
    * Logic mirrors TagsService.generateUniqueAlias
@@ -723,7 +757,7 @@ export class InterestsService {
         pathway_id: pathwayId,
         key: Like(`${key}%`),
       },
-      select: ['key'],
+      select: ["key"],
     });
 
     if (existingKeys.length === 0) {
