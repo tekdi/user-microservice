@@ -1349,7 +1349,7 @@ export class PathwaysService {
         apiId,
         result,
         HttpStatus.OK,
-        'Pathway assignment retrieved successfully'
+        'Pathway retrieved successfully'
       );
     } catch (error) {
       const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
@@ -1432,8 +1432,52 @@ export class PathwaysService {
     try {
       const { orders } = bulkUpdateOrderDto;
 
-      // Update each pathway order
-      // We process them sequentially for simplicity and safety
+      // 1. Internal Validation: Check for duplicate IDs or Orders within the payload itself
+      const payloadIds = new Set(orders.map((o) => o.id));
+      const payloadOrders = new Set(orders.map((o) => o.order));
+
+      if (payloadIds.size !== orders.length) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          "Duplicate pathway IDs found in update request",
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      if (payloadOrders.size !== orders.length) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.CONFLICT,
+          "Duplicate display order numbers found in update request",
+          HttpStatus.CONFLICT
+        );
+      }
+
+      // 2. External Validation: Check for conflicts with pathways NOT in the payload
+      for (const orderItem of orders) {
+        const externalConflict = await this.pathwayRepository.findOne({
+          where: {
+            display_order: orderItem.order,
+            id: Not(In(Array.from(payloadIds))),
+          },
+          select: ["id", "display_order","name"],
+        });
+
+        if (externalConflict) {
+          return APIResponse.error(
+            response,
+            apiId,
+            API_RESPONSES.CONFLICT,
+            `Display order ${orderItem.order} is already taken by another pathway: ${externalConflict.name}`,
+            HttpStatus.CONFLICT
+          );
+        }
+      }
+
+      // 3. Process updates sequentially
       for (const orderItem of orders) {
         await this.pathwayRepository.update(
           { id: orderItem.id },
