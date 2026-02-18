@@ -40,6 +40,7 @@ import { ListPathwayDto } from './dto/list-pathway.dto';
 import { PathwayPresignedUrlDto } from './dto/presigned-url.dto';
 import { AssignPathwayDto } from './dto/assign-pathway.dto';
 import { BulkUpdateOrderDto } from './dto/update-pathway-order.dto';
+import { ActivePathwayDto } from './dto/active-pathway.dto';
 import { Response, Request } from 'express';
 import { JwtAuthGuard } from 'src/common/guards/keycloak.guard';
 import { InterestsService } from '../interests/interests.service';
@@ -374,7 +375,7 @@ export class PathwaysController {
   /**
    * Get Active Pathway for User
    */
-  @Get("active/:userId")
+  @Post("active")
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: "Get Active Pathway for User",
@@ -382,26 +383,26 @@ export class PathwaysController {
   })
   @ApiHeader({ name: "Authorization", required: true })
   @ApiHeader({ name: "tenantid", required: true })
-  @ApiParam({
-    name: "userId",
-    description: "User UUID",
-    type: String,
-    format: "uuid",
-  })
+  @ApiBody({ type: ActivePathwayDto })
   @ApiResponse({
     status: 200,
     description: "Active pathway retrieved successfully",
   })
   @ApiNotFoundResponse({ description: "User or Active Pathway not found" })
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   async getActivePathway(
-    @Param("userId", ParseUUIDPipe) userId: string,
+    @Body() activePathwayDto: ActivePathwayDto,
     @Headers("tenantid") tenantId: string,
     @Res() response: Response
   ): Promise<Response> {
     if (!tenantId || !isUUID(tenantId)) {
       throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
     }
-    return this.pathwaysService.getActivePathway(userId, response);
+    return this.pathwaysService.getActivePathway(
+      activePathwayDto.userId,
+      response,
+      activePathwayDto.pathwayId
+    );
   }
 
   @Get(":id")
