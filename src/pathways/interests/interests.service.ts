@@ -730,7 +730,7 @@ export class InterestsService {
       limit,
       offset,
     };
-    const sortedKeys = Object.keys(cacheKeyObject).sort();
+    const sortedKeys = Object.keys(cacheKeyObject).sort((a, b) => a.localeCompare(b));
     const sortedObject: any = {};
     for (const key of sortedKeys) {
       sortedObject[key] = cacheKeyObject[key as keyof typeof cacheKeyObject];
