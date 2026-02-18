@@ -12,6 +12,7 @@ import {
   PaymentIntentStatus,
   PaymentTransactionStatus,
   PaymentTargetUnlockStatus,
+  PaymentTargetType,
   PaymentProvider as PaymentProviderEnum,
 } from '../enums/payment.enums';
 import { PaymentTransaction } from '../entities/payment-transaction.entity';
@@ -227,14 +228,15 @@ export class PaymentService {
         };
       },
     );
+    this.logger.log(`result------------: ${JSON.stringify(result)}`);
 
-    // Generate certificates after successful payment (outside transaction to avoid blocking)
+    // Process payment targets after successful payment (outside transaction to avoid blocking)
     if (result.processed && result.status === 'success' && result.userId) {
-      this.generateCertificatesForPayment(result.paymentIntentId, result.userId).catch(
+      this.processPaymentTargets(result.paymentIntentId, result.userId).catch(
         (error) => {
           // Log error but don't fail the webhook processing
           this.logger.error(
-            `Failed to generate certificates for payment ${result.paymentIntentId}: ${error.message}`,
+            `Failed to process payment targets for payment ${result.paymentIntentId}: ${error.message}`,
             error.stack,
           );
         },
@@ -245,9 +247,10 @@ export class PaymentService {
   }
 
   /**
-   * Generate certificates for all targets in a payment intent
+   * Process payment targets after successful payment
+   * Handles different target types (e.g., certificate generation for CERTIFICATE_BUNDLE)
    */
-  private async generateCertificatesForPayment(
+  private async processPaymentTargets(
     paymentIntentId: string,
     userId: string,
   ): Promise<void> {
@@ -277,36 +280,43 @@ export class PaymentService {
       const firstName = userDetails.firstName || '';
       const lastName = userDetails.lastName || '';
 
-      // Generate certificate for each target (using contextId as courseId)
-      const certificatePromises = targets.map(async (target) => {
-        const issuanceDate = new Date().toISOString();
-        const expirationDate = '0000-00-00T00:00:00.000Z'; // Default expiration date as per API
-
+      // Process each target based on its type
+      const targetPromises = targets.map(async (target) => {
         try {
-          await this.certificateService.generateCertificate({
-            userId: userId,
-            courseId: target.contextId, // contextId from target table is the courseId
-            firstName: firstName,
-            lastName: lastName,
-            issuanceDate: issuanceDate,
-            expirationDate: expirationDate,
-          });
+          // Only generate certificate for CERTIFICATE_BUNDLE target type
+          if (target.targetType === PaymentTargetType.CERTIFICATE_BUNDLE) {
+            const issuanceDate = new Date().toISOString();
+            const expirationDate = '0000-00-00T00:00:00.000Z'; // Default expiration date as per API
 
-          this.logger.log(
-            `Certificate generated for user ${userId} and course ${target.contextId}`,
-          );
+            await this.certificateService.generateCertificate({
+              userId: userId,
+              courseId: target.contextId, // contextId from target table is the courseId
+              firstName: firstName,
+              lastName: lastName,
+              issuanceDate: issuanceDate,
+              expirationDate: expirationDate,
+            });
+
+            this.logger.log(
+              `Certificate generated for user ${userId} and course ${target.contextId}`,
+            );
+          } else {
+            this.logger.debug(
+              `Skipping certificate generation for target type: ${target.targetType}`,
+            );
+          }
         } catch (error) {
           this.logger.error(
-            `Failed to generate certificate for user ${userId} and course ${target.contextId}: ${error.message}`,
+            `Failed to process target ${target.id} for user ${userId}: ${error.message}`,
           );
-          // Continue with other certificates even if one fails
+          // Continue with other targets even if one fails
         }
       });
 
-      await Promise.allSettled(certificatePromises);
+      await Promise.allSettled(targetPromises);
     } catch (error) {
       this.logger.error(
-        `Error generating certificates for payment ${paymentIntentId}: ${error.message}`,
+        `Error processing payment targets for payment ${paymentIntentId}: ${error.message}`,
         error.stack,
       );
       throw error;
