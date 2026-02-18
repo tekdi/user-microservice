@@ -491,7 +491,14 @@ export class PathwaysService {
     );
     try {
       const cacheKey = this.generatePathwayListCacheKey(tenantId, organisationId, listPathwayDto);
-      const cachedResult = await this.cacheService.get<{ count: number; limit: number; offset: number; items: any[] }>(cacheKey);
+      let cachedResult: { count: number; limit: number; offset: number; items: any[] } | null = null;
+      try {
+        cachedResult = await this.cacheService.get<{ count: number; limit: number; offset: number; items: any[] }>(cacheKey);
+      } catch (cacheReadError: any) {
+        this.logger.warn(
+          `Pathway list cache read failed, falling through to DB: ${cacheReadError?.message || cacheReadError}`
+        );
+      }
       if (cachedResult) {
         this.logger.debug(`Cache HIT for pathway list: ${cacheKey}`);
         // Cached items store tag_ids only; resolve tag names on hit so renames/archives are fresh

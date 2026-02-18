@@ -464,7 +464,14 @@ export class TagsService implements OnModuleInit {
     );
     try {
       const cacheKey = this.generateTagListCacheKey(listTagDto);
-      const cachedResult = await this.cacheService.get<{ count: number; limit: number; offset: number; items: Tag[] }>(cacheKey);
+      let cachedResult: { count: number; limit: number; offset: number; items: Tag[] } | null = null;
+      try {
+        cachedResult = await this.cacheService.get<{ count: number; limit: number; offset: number; items: Tag[] }>(cacheKey);
+      } catch (cacheReadError: any) {
+        this.logger.warn(
+          `Tag list cache read failed, falling through to DB: ${cacheReadError?.message || cacheReadError}`
+        );
+      }
       if (cachedResult) {
         this.logger.debug(`Cache HIT for tag list: ${cacheKey}`);
         return APIResponse.success(
