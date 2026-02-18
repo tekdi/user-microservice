@@ -12,6 +12,7 @@ import { Tag } from './tags/entities/tag.entity';
 import { InterestsModule } from './interests/interests.module';
 import { LmsClientService } from './common/services/lms-client.service';
 import { StorageModule } from '../storage/storage.module';
+import { CacheModule } from '../cache/cache.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { StorageModule } from '../storage/storage.module';
     InterestsModule,
     ConfigModule,
     StorageModule, // Added for S3 file upload support
+    CacheModule,
   ],
   controllers: [PathwaysController, TagsController],
   providers: [PathwaysService, TagsService, LmsClientService],
