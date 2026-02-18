@@ -5,6 +5,8 @@ import { PaymentProvider } from '../interfaces/payment-provider.interface';
 import { PaymentIntentService } from './payment-intent.service';
 import { PaymentTransactionService } from './payment-transaction.service';
 import { PaymentTargetService } from './payment-target.service';
+import { CertificateService } from './certificate.service';
+import { UserAdapter } from '../../user/useradapter';
 import { InitiatePaymentDto } from '../dtos/initiate-payment.dto';
 import {
   PaymentIntentStatus,
@@ -24,6 +26,8 @@ export class PaymentService {
     private paymentIntentService: PaymentIntentService,
     private paymentTransactionService: PaymentTransactionService,
     private paymentTargetService: PaymentTargetService,
+    private certificateService: CertificateService,
+    private userAdapter: UserAdapter,
     @Inject('PaymentProvider') private paymentProvider: PaymentProvider,
     @InjectDataSource() private dataSource: DataSource,
   ) {}
@@ -219,11 +223,94 @@ export class PaymentService {
           paymentIntentId: intentInTransaction.id,
           transactionId: transaction.id,
           status: webhookEvent.status,
+          userId: intentInTransaction.userId,
         };
       },
     );
 
+    // Generate certificates after successful payment (outside transaction to avoid blocking)
+    if (result.processed && result.status === 'success' && result.userId) {
+      this.generateCertificatesForPayment(result.paymentIntentId, result.userId).catch(
+        (error) => {
+          // Log error but don't fail the webhook processing
+          this.logger.error(
+            `Failed to generate certificates for payment ${result.paymentIntentId}: ${error.message}`,
+            error.stack,
+          );
+        },
+      );
+    }
+
     return result;
+  }
+
+  /**
+   * Generate certificates for all targets in a payment intent
+   */
+  private async generateCertificatesForPayment(
+    paymentIntentId: string,
+    userId: string,
+  ): Promise<void> {
+    try {
+      // Fetch payment targets to get contextId (courseId)
+      const targets = await this.paymentTargetService.findByPaymentIntentId(
+        paymentIntentId,
+      );
+
+      if (!targets || targets.length === 0) {
+        this.logger.warn(
+          `No targets found for payment intent ${paymentIntentId}`,
+        );
+        return;
+      }
+
+      // Fetch user details
+      const userDetails = await this.userAdapter
+        .buildUserAdapter()
+        .findUserDetails(userId, null);
+
+      if (!userDetails) {
+        this.logger.error(`User not found for userId: ${userId}`);
+        return;
+      }
+
+      const firstName = userDetails.firstName || '';
+      const lastName = userDetails.lastName || '';
+
+      // Generate certificate for each target (using contextId as courseId)
+      const certificatePromises = targets.map(async (target) => {
+        const issuanceDate = new Date().toISOString();
+        const expirationDate = '0000-00-00T00:00:00.000Z'; // Default expiration date as per API
+
+        try {
+          await this.certificateService.generateCertificate({
+            userId: userId,
+            courseId: target.contextId, // contextId from target table is the courseId
+            firstName: firstName,
+            lastName: lastName,
+            issuanceDate: issuanceDate,
+            expirationDate: expirationDate,
+          });
+
+          this.logger.log(
+            `Certificate generated for user ${userId} and course ${target.contextId}`,
+          );
+        } catch (error) {
+          this.logger.error(
+            `Failed to generate certificate for user ${userId} and course ${target.contextId}: ${error.message}`,
+          );
+          // Continue with other certificates even if one fails
+        }
+      });
+
+      await Promise.allSettled(certificatePromises);
+    } catch (error) {
+      this.logger.error(
+        `Error generating certificates for payment ${paymentIntentId}: ${error.message}`,
+        error.stack,
+      );
+      throw error;
+    }
   }
 
   /**
