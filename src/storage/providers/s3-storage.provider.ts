@@ -183,7 +183,7 @@ export class S3StorageProvider implements StorageProvider {
       expiresIn,
       signableHeaders: new Set(['content-type']),
     });
-    return { 
+    return {
       url,
       key,
     };
@@ -201,20 +201,20 @@ export class S3StorageProvider implements StorageProvider {
       console.log('Verifying file with key:', key);
       console.log('Bucket:', this.bucket);
       console.log('Region:', this.region);
-      
+
       const command = new HeadObjectCommand({
         Bucket: this.bucket,
         Key: key
       });
-      
+
       const result = await this.s3Client.send(command);
-      
+
       console.log('File verification successful:', {
         exists: true,
         contentType: result.ContentType,
         size: result.ContentLength
       });
-      
+
       return {
         exists: true,
         contentType: result.ContentType,
@@ -227,7 +227,7 @@ export class S3StorageProvider implements StorageProvider {
         statusCode: error.$metadata?.httpStatusCode,
         errorCode: error.$metadata?.errorCode
       });
-      
+
       // Handle specific error types
       if (error.$metadata?.httpStatusCode === 404) {
         return {
@@ -235,10 +235,10 @@ export class S3StorageProvider implements StorageProvider {
           error: 'File not found'
         };
       }
-      
+
       // Handle network/DNS errors
       if (error.message && (
-        error.message.includes('EAI_AGAIN') || 
+        error.message.includes('EAI_AGAIN') ||
         error.message.includes('getaddrinfo') ||
         error.message.includes('ENOTFOUND') ||
         error.message.includes('timeout')
@@ -251,7 +251,7 @@ export class S3StorageProvider implements StorageProvider {
           error: `Network connectivity issue: ${error.message}`
         };
       }
-      
+
       return {
         exists: false,
         error: error.message
@@ -276,8 +276,8 @@ export class S3StorageProvider implements StorageProvider {
    * @returns Validation result and whether file was deleted
    */
   async verifyAndCleanupFile(
-    key: string, 
-    expectedContentType: string, 
+    key: string,
+    expectedContentType: string,
     expectedSize?: number,
     minimumFileSize?: number
   ): Promise<{ valid: boolean; deleted: boolean; reason?: string }> {
@@ -298,10 +298,10 @@ export class S3StorageProvider implements StorageProvider {
         await this.delete(key);
         return { valid: false, deleted: true, reason: `File size mismatch. Expected: ${expectedSize}, Got: ${verification.size}` };
       }
-      
+
       // Get minimum file size from parameter, configuration, or use default
       const minSize = minimumFileSize ?? this.getMinFileSize();
-      
+
       // Check if file is too small (likely corrupted or empty)
       if (verification.size !== undefined && verification.size < minSize) {
         console.log(`File too small for ${key}. Size: ${verification.size}, Minimum: ${minSize}. Deleting file.`);
