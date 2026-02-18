@@ -64,10 +64,6 @@ export class LmsClientService {
         'Content-Type': 'application/json',
       };
 
-      this.logger.debug(
-        `Fetching courses for pathway ${pathwayId} from LMS service`
-      );
-
       // Pagination parameters with safety guards
       const limit = 1000; // Maximum per request
       const MAX_PAGES = 100; // Safety guard: Maximum 100 pages (100,000 courses)
@@ -129,9 +125,6 @@ export class LmsClientService {
 
         // SAFETY GUARD 3: No progress detection - if we get 0 courses, break to prevent infinite loop
         if (courses.length === 0) {
-          this.logger.debug(
-            `No courses returned at offset ${offset} for pathway ${pathwayId}. Ending pagination.`
-          );
           break;
         }
 
@@ -161,20 +154,12 @@ export class LmsClientService {
 
         if (hasMore) {
           offset += limit;
-          this.logger.debug(
-            `Fetched ${allCourses.length} courses (page ${pageCount}) for pathway ${pathwayId}, continuing...`
-          );
         }
       }
 
       if (allCourses.length === 0) {
-        this.logger.debug(`No courses found for pathway ${pathwayId}`);
         return { videoCount: 0, resourceCount: 0, totalItems: 0 };
       }
-
-      this.logger.debug(
-        `Fetched total ${allCourses.length} courses for pathway ${pathwayId} (totalElements: ${totalElements})`
-      );
 
       const courses = allCourses;
       // Extract course IDs - check both courseId and id fields
@@ -196,10 +181,6 @@ export class LmsClientService {
         return { videoCount: 0, resourceCount: 0, totalItems: 0 };
       }
 
-      this.logger.debug(
-        `Extracted ${courseIds.length} valid course IDs for pathway ${pathwayId}: ${courseIds.slice(0, 3).join(', ')}${courseIds.length > 3 ? '...' : ''}`
-      );
-
       // Step 2: OPTIMIZED - Use direct lesson count API instead of fetching hierarchy
       // This is much faster as it queries the database directly
       const countsMap = await this.getLessonCountsByCourseIds(courseIds, tenantId, organisationId, headers);
@@ -214,10 +195,6 @@ export class LmsClientService {
         resourceCount += counts.resourceCount;
         totalItems += counts.totalItems;
       });
-
-      this.logger.debug(
-        `Pathway ${pathwayId}: ${videoCount} videos, ${resourceCount} resources (documents), ${totalItems} total items`
-      );
 
       return { videoCount, resourceCount, totalItems };
     } catch (error) {
@@ -257,10 +234,6 @@ export class LmsClientService {
     try {
       const countsUrl = `${this.lmsServiceUrl}/lms-service/v1/courses/lesson-counts`;
       const courseIdsParam = courseIds.join(',');
-
-      this.logger.debug(
-        `Calling lesson-counts API with ${courseIds.length} course IDs: ${courseIdsParam.substring(0, 100)}${courseIdsParam.length > 100 ? '...' : ''}`
-      );
 
       const countsResponse = await axios.get(countsUrl, {
         params: { courseIds: courseIdsParam },
@@ -302,10 +275,6 @@ export class LmsClientService {
         countsMap.set(courseId, counts);
       });
 
-      this.logger.debug(
-        `Successfully fetched lesson counts for ${countsMap.size} courses`
-      );
-
       return countsMap;
     } catch (error) {
       this.logger.warn(
@@ -337,6 +306,8 @@ export class LmsClientService {
     if (pathwayIds.length === 0) {
       return new Map();
     }
+
+    this.logger.debug(`Fetching video/resource counts for ${pathwayIds.length} pathways from LMS`);
 
     // OPTIMIZED: Fetch all counts in parallel (no sequential calls)
     const countPromises = pathwayIds.map((pathwayId) =>
