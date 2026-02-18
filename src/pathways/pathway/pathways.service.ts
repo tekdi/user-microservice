@@ -346,17 +346,35 @@ export class PathwaysService {
         }
       }
 
-      // Handle auto-increment for display_order if not provided
+      // 3. Handle auto-increment for display_order
       let displayOrder = createPathwayDto.display_order;
-      if (displayOrder === undefined || displayOrder === null) {
-        const maxOrderResult = await this.pathwayRepository
-          .createQueryBuilder('pathway')
-          .select('MAX(pathway.display_order)', 'max')
-          .getRawOne();
+      
+      // Fetch current max display_order for auto-increment or conflict resolution
+      const maxOrderResult = await this.pathwayRepository
+        .createQueryBuilder('pathway')
+        .select('MAX(pathway.display_order)', 'max')
+        .getRawOne();
+      const maxOrder = Number(maxOrderResult?.max || 0);
 
-        const maxOrder = maxOrderResult?.max || 0;
-        displayOrder = Number(maxOrder) + 1;
+      if (displayOrder === 0 || displayOrder === undefined || displayOrder === null) {
+        // If 0, null, or undefined, always use max + 1
+        displayOrder = maxOrder + 1;
+      } else {
+        // If a specific order is requested (> 0), check if it's already taken
+        const orderConflict = await this.pathwayRepository.findOne({
+          where: { display_order: displayOrder },
+          select: ['id'],
+        });
+
+        if (orderConflict) {
+          // If taken, fallback to max + 1 as per requirement
+          this.logger.debug(
+            `Display order ${displayOrder} is taken. Falling back to ${maxOrder + 1}`
+          );
+          displayOrder = maxOrder + 1;
+        }
       }
+
       let imageUrl: string | null = null;
       const dtoImageUrl = createPathwayDto.image_url;
       if (dtoImageUrl && typeof dtoImageUrl === 'string' && dtoImageUrl.trim() !== '') {
@@ -415,7 +433,21 @@ export class PathwaysService {
     } catch (error) {
       // Handle unique constraint violation
       if (error.code === '23505') {
-        // PostgreSQL unique constraint violation
+        const detail = error.detail || '';
+        const constraint = error.constraint || '';
+        
+        // If it's a display order conflict
+        if (detail.includes('display_order') || constraint.includes('display_order')) {
+          return APIResponse.error(
+            response,
+            apiId,
+            API_RESPONSES.CONFLICT,
+            'Display order must be unique. Please try again or use 0 for auto-assignment.',
+            HttpStatus.CONFLICT
+          );
+        }
+
+        // Default to key/name conflict
         return APIResponse.error(
           response,
           apiId,
