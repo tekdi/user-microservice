@@ -75,7 +75,6 @@ export class StripeWebhookController {
       const eventType = parsedBody?.type || 'unknown';
       const eventId = parsedBody?.id || 'unknown';
       this.logger.log(`🔔 Stripe Webhook Received - Event Type: ${eventType}, Event ID: ${eventId}`);
-      this.logger.debug(`Webhook payload: ${JSON.stringify(parsedBody, null, 2)}`);
       
       if (!rawBody || rawBody.length === 0) {
         this.logger.warn('Raw body not available, using JSON stringified body');
@@ -93,26 +92,10 @@ export class StripeWebhookController {
         
         if (stripeSignatureKey) {
           webhookSignature = req.headers[stripeSignatureKey] as string;
-          this.logger.debug(`Found stripe-signature header with key: ${stripeSignatureKey}`);
-        } else {
-          // Log all headers for debugging (excluding sensitive data)
-          this.logger.warn('stripe-signature header not found. Available headers:');
-          headerKeys.forEach(key => {
-            // Don't log sensitive headers
-            if (!key.toLowerCase().includes('authorization') && 
-                !key.toLowerCase().includes('cookie') &&
-                !key.toLowerCase().includes('stripe-signature')) {
-              this.logger.debug(`  ${key}: ${req.headers[key]}`);
-            }
-          });
         }
       }
 
-      // Log signature status for debugging
-      if (webhookSignature) {
-        this.logger.debug(`✅ stripe-signature header received (length: ${webhookSignature.length})`);
-        this.logger.debug(`✅ stripe-signature header received (Signature: ${webhookSignature})`);
-      } else {
+      if (!webhookSignature) {
         this.logger.warn('⚠️ stripe-signature header is missing');
       }
 

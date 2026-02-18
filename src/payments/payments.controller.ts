@@ -28,7 +28,7 @@ import { InitiatePaymentDto } from './dtos/initiate-payment.dto';
 import { PaymentStatusResponseDto } from './dtos/payment-status.dto';
 
 @ApiTags('Payments')
-@Controller('payments/session')
+@Controller('payments')
 export class PaymentsController {
   constructor(private paymentService: PaymentService) {}
 
@@ -51,8 +51,6 @@ export class PaymentsController {
   })
   @ApiBadRequestResponse({ description: 'Invalid payment data' })
   async initiatePayment(@Body() dto: InitiatePaymentDto) {
-    console.log('initiatePayment-----------------------controller called');
-    
     return await this.paymentService.initiatePayment(dto);
   }
 
@@ -64,10 +62,7 @@ export class PaymentsController {
     type: PaymentStatusResponseDto,
   })
   @ApiNotFoundResponse({ description: 'Payment intent not found' })
-  async getPaymentStatus(
-    @Param('id', ParseUUIDPipe) paymentIntentId: string,
-  ) {
+  async getPaymentStatus(@Param('id', ParseUUIDPipe) paymentIntentId: string) {
     return await this.paymentService.getPaymentStatus(paymentIntentId);
   }
 }
-
