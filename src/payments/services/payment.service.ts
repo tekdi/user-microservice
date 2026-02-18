@@ -5,11 +5,14 @@ import { PaymentProvider } from '../interfaces/payment-provider.interface';
 import { PaymentIntentService } from './payment-intent.service';
 import { PaymentTransactionService } from './payment-transaction.service';
 import { PaymentTargetService } from './payment-target.service';
+import { CertificateService } from './certificate.service';
+import { UserAdapter } from '../../user/useradapter';
 import { InitiatePaymentDto } from '../dtos/initiate-payment.dto';
 import {
   PaymentIntentStatus,
   PaymentTransactionStatus,
   PaymentTargetUnlockStatus,
+  PaymentTargetType,
   PaymentProvider as PaymentProviderEnum,
 } from '../enums/payment.enums';
 import { PaymentTransaction } from '../entities/payment-transaction.entity';
@@ -24,6 +27,8 @@ export class PaymentService {
     private paymentIntentService: PaymentIntentService,
     private paymentTransactionService: PaymentTransactionService,
     private paymentTargetService: PaymentTargetService,
+    private certificateService: CertificateService,
+    private userAdapter: UserAdapter,
     @Inject('PaymentProvider') private paymentProvider: PaymentProvider,
     @InjectDataSource() private dataSource: DataSource,
   ) {}
@@ -219,11 +224,103 @@ export class PaymentService {
           paymentIntentId: intentInTransaction.id,
           transactionId: transaction.id,
           status: webhookEvent.status,
+          userId: intentInTransaction.userId,
         };
       },
     );
+    this.logger.log(`result------------: ${JSON.stringify(result)}`);
+
+    // Process payment targets after successful payment (outside transaction to avoid blocking)
+    if (result.processed && result.status === 'success' && result.userId) {
+      this.processPaymentTargets(result.paymentIntentId, result.userId).catch(
+        (error) => {
+          // Log error but don't fail the webhook processing
+          this.logger.error(
+            `Failed to process payment targets for payment ${result.paymentIntentId}: ${error.message}`,
+            error.stack,
+          );
+        },
+      );
+    }
 
     return result;
+  }
+
+  /**
+   * Process payment targets after successful payment
+   * Handles different target types (e.g., certificate generation for CERTIFICATE_BUNDLE)
+   */
+  private async processPaymentTargets(
+    paymentIntentId: string,
+    userId: string,
+  ): Promise<void> {
+    try {
+      // Fetch payment targets to get contextId (courseId)
+      const targets = await this.paymentTargetService.findByPaymentIntentId(
+        paymentIntentId,
+      );
+
+      if (!targets || targets.length === 0) {
+        this.logger.warn(
+          `No targets found for payment intent ${paymentIntentId}`,
+        );
+        return;
+      }
+
+      // Fetch user details
+      const userDetails = await this.userAdapter
+        .buildUserAdapter()
+        .findUserDetails(userId, null);
+
+      if (!userDetails) {
+        this.logger.error(`User not found for userId: ${userId}`);
+        return;
+      }
+
+      const firstName = userDetails.firstName || '';
+      const lastName = userDetails.lastName || '';
+
+      // Process each target based on its type
+      const targetPromises = targets.map(async (target) => {
+        try {
+          // Only generate certificate for CERTIFICATE_BUNDLE target type
+          if (target.targetType === PaymentTargetType.CERTIFICATE_BUNDLE) {
+            const issuanceDate = new Date().toISOString();
+            const expirationDate = '0000-00-00T00:00:00.000Z'; // Default expiration date as per API
+
+            await this.certificateService.generateCertificate({
+              userId: userId,
+              courseId: target.contextId, // contextId from target table is the courseId
+              firstName: firstName,
+              lastName: lastName,
+              issuanceDate: issuanceDate,
+              expirationDate: expirationDate,
+            });
+
+            this.logger.log(
+              `Certificate generated for user ${userId} and course ${target.contextId}`,
+            );
+          } else {
+            this.logger.debug(
+              `Skipping certificate generation for target type: ${target.targetType}`,
+            );
+          }
+        } catch (error) {
+          this.logger.error(
+            `Failed to process target ${target.id} for user ${userId}: ${error.message}`,
+          );
+          // Continue with other targets even if one fails
+        }
+      });
+
+      await Promise.allSettled(targetPromises);
+    } catch (error) {
+      this.logger.error(
+        `Error processing payment targets for payment ${paymentIntentId}: ${error.message}`,
+        error.stack,
+      );
+      throw error;
+    }
   }
 
   /**
