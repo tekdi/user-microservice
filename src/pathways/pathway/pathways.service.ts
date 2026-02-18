@@ -1,3 +1,4 @@
+import * as crypto from 'crypto';
 import { Injectable, HttpStatus, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, DataSource, Like, ILike, Not } from 'typeorm';
@@ -20,6 +21,7 @@ import { LoggerUtil } from 'src/common/logger/LoggerUtil';
 import { Response } from 'express';
 import { S3StorageProvider } from '../../storage/providers/s3-storage.provider';
 import { ConfigService } from '@nestjs/config';
+import { CacheService } from 'src/cache/cache.service';
 
 @Injectable()
 export class PathwaysService {
@@ -37,7 +39,8 @@ export class PathwaysService {
     private readonly userRepository: Repository<User>,
     private readonly dataSource: DataSource,
     private readonly lmsClientService: LmsClientService,   
-    private readonly configService: ConfigService
+    private readonly configService: ConfigService,
+    private readonly cacheService: CacheService
   ) {
     // Initialize S3StorageProvider for image uploads
     this.s3StorageProvider = new S3StorageProvider(this.configService);
@@ -392,6 +395,16 @@ export class PathwaysService {
         created_at: savedData.created_at,
       };
 
+      // Invalidate pathway list cache after successful creation
+      try {
+        await this.cacheService.delByPattern('pathway:list:*');
+        this.logger.debug('Invalidated pathway list cache after creation');
+      } catch (cacheError: any) {
+        this.logger.warn(
+          `Failed to invalidate pathway list cache: ${cacheError?.message || cacheError}`
+        );
+      }
+
       return APIResponse.success(
         response,
         apiId,
@@ -429,6 +442,38 @@ export class PathwaysService {
   }
 
   /**
+   * Generate a stable cache key for pathway list (tenantId + organisationId + normalized list params).
+   */
+  private generatePathwayListCacheKey(
+    tenantId: string,
+    organisationId: string,
+    listPathwayDto: ListPathwayDto
+  ): string {
+    const requestedLimit = listPathwayDto.limit ?? 10;
+    const limit = Math.min(requestedLimit, MAX_PAGINATION_LIMIT);
+    const offset = listPathwayDto.offset ?? 0;
+    const filters = (listPathwayDto as any).filters || {};
+    const cacheKeyObject = {
+      tenantId,
+      organisationId,
+      filters: Object.keys(filters).sort().reduce((acc: any, k) => {
+        acc[k] = (filters as any)[k];
+        return acc;
+      }, {}),
+      limit,
+      offset,
+    };
+    const sortedKeys = Object.keys(cacheKeyObject).sort();
+    const sortedObject: any = {};
+    for (const key of sortedKeys) {
+      sortedObject[key] = cacheKeyObject[key as keyof typeof cacheKeyObject];
+    }
+    const keyString = JSON.stringify(sortedObject);
+    const hash = crypto.createHash('sha256').update(keyString).digest('hex');
+    return `pathway:list:${hash}`;
+  }
+
+  /**
    * List pathways with optional filter and pagination
    * Optimized: Single query with findAndCount for efficient pagination
    * Includes video and resource counts from LMS service
@@ -440,7 +485,55 @@ export class PathwaysService {
     response: Response
   ): Promise<Response> {
     const apiId = APIID.PATHWAY_LIST;
+    const pathwayListCacheTtl = parseInt(
+      this.configService.get('PATHWAY_LIST_CACHE_TTL_SECONDS') || '1800',
+      10
+    );
     try {
+      const cacheKey = this.generatePathwayListCacheKey(tenantId, organisationId, listPathwayDto);
+      const cachedResult = await this.cacheService.get<{ count: number; limit: number; offset: number; items: any[] }>(cacheKey);
+      if (cachedResult) {
+        this.logger.debug(`Cache HIT for pathway list: ${cacheKey}`);
+        // Cached items do not include video_count, resource_count, total_items; fetch from LMS
+        const pathwayIds = (cachedResult.items || [])
+          .filter((item: any) => item?.id != null && typeof item.id === 'string')
+          .map((item: any) => item.id);
+        const MAX_BATCH_SIZE = 100;
+        const countsMap = new Map<string, { videoCount: number; resourceCount: number; totalItems: number }>();
+        for (let i = 0; i < pathwayIds.length; i += MAX_BATCH_SIZE) {
+          const chunk = pathwayIds.slice(i, i + MAX_BATCH_SIZE);
+          const chunkMap = await this.lmsClientService.getBatchCounts(
+            chunk,
+            tenantId,
+            organisationId
+          );
+          chunkMap.forEach((counts, id) => countsMap.set(id, counts));
+        }
+        const itemsWithCounts = cachedResult.items.map((item: any) => {
+          const counts = countsMap.get(item.id);
+          return {
+            ...item,
+            video_count: counts?.videoCount ?? 0,
+            resource_count: counts?.resourceCount ?? 0,
+            total_items: (counts as any)?.totalItems ?? 0,
+          };
+        });
+        const resultFromCache = {
+          count: cachedResult.count,
+          limit: cachedResult.limit,
+          offset: cachedResult.offset,
+          items: itemsWithCounts,
+        };
+        return APIResponse.success(
+          response,
+          apiId,
+          resultFromCache,
+          HttpStatus.OK,
+          API_RESPONSES.PATHWAY_LIST_SUCCESS
+        );
+      }
+      this.logger.debug(`Cache MISS for pathway list: ${cacheKey}`);
+
       // Set pagination defaults with safeguard to prevent unbounded queries
       // Defense in depth: cap limit even if validation is bypassed
       const requestedLimit = listPathwayDto.limit ?? 10;
@@ -578,6 +671,21 @@ export class PathwaysService {
         offset: offset,
         items: transformedItems,
       };
+
+      // Cache list response without video_count, resource_count, total_items (fetched from LMS on cache hit)
+      try {
+        const resultForCache = {
+          count: totalCount,
+          limit: limit,
+          offset: offset,
+          items: transformedItems.map(({ video_count, resource_count, total_items, ...item }) => item),
+        };
+        await this.cacheService.set(cacheKey, resultForCache, pathwayListCacheTtl);
+      } catch (cacheError: any) {
+        this.logger.warn(
+          `Failed to cache pathway list result: ${cacheError?.message || cacheError}`
+        );
+      }
 
       return APIResponse.success(
         response,
@@ -860,6 +968,16 @@ export class PathwaysService {
         image_url: pathwayData.image_url,
         created_at: pathwayData.created_at,
       };
+
+      // Invalidate pathway list cache after successful update
+      try {
+        await this.cacheService.delByPattern('pathway:list:*');
+        this.logger.debug('Invalidated pathway list cache after update');
+      } catch (cacheError: any) {
+        this.logger.warn(
+          `Failed to invalidate pathway list cache: ${cacheError?.message || cacheError}`
+        );
+      }
 
       return APIResponse.success(
         response,
@@ -1230,6 +1348,16 @@ export class PathwaysService {
             display_order: orderItem.order,
             updated_at: new Date(),
           }
+        );
+      }
+
+      // Invalidate pathway list cache after order/structure update
+      try {
+        await this.cacheService.delByPattern('pathway:list:*');
+        this.logger.debug('Invalidated pathway list cache after order structure update');
+      } catch (cacheError: any) {
+        this.logger.warn(
+          `Failed to invalidate pathway list cache: ${cacheError?.message || cacheError}`
         );
       }
 

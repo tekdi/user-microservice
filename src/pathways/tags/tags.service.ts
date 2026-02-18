@@ -1,6 +1,8 @@
-import { Injectable, HttpStatus, OnModuleInit } from '@nestjs/common';
+import * as crypto from 'crypto';
+import { Injectable, HttpStatus, OnModuleInit, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Like, Not, DataSource } from 'typeorm';
+import { ConfigService } from '@nestjs/config';
 import { Tag, TagStatus } from './entities/tag.entity';
 import { StringUtil } from '../common/utils/string.util';
 import { CreateTagDto } from './dto/create-tag.dto';
@@ -14,13 +16,18 @@ import { API_RESPONSES } from '@utils/response.messages';
 import { APIID } from '@utils/api-id.config';
 import { LoggerUtil } from 'src/common/logger/LoggerUtil';
 import { Response } from 'express';
+import { CacheService } from 'src/cache/cache.service';
 
 @Injectable()
 export class TagsService implements OnModuleInit {
+  private readonly logger = new Logger(TagsService.name);
+
   constructor(
     @InjectRepository(Tag)
     private readonly tagRepository: Repository<Tag>,
-    private readonly dataSource: DataSource
+    private readonly dataSource: DataSource,
+    private readonly configService: ConfigService,
+    private readonly cacheService: CacheService
   ) { }
 
   /**
@@ -108,6 +115,16 @@ export class TagsService implements OnModuleInit {
         created_by: savedTag.created_by,
         updated_by: savedTag.updated_by,
       };
+
+      // Invalidate tag list cache after successful creation
+      try {
+        await this.cacheService.delByPattern('tag:list:*');
+        this.logger.debug('Invalidated tag list cache after creation');
+      } catch (cacheError: any) {
+        this.logger.warn(
+          `Failed to invalidate tag list cache: ${cacheError?.message || cacheError}`
+        );
+      }
 
       return APIResponse.success(
         response,
@@ -257,6 +274,16 @@ export class TagsService implements OnModuleInit {
         );
       }
 
+      // Invalidate tag list cache after successful update
+      try {
+        await this.cacheService.delByPattern('tag:list:*');
+        this.logger.debug('Invalidated tag list cache after update');
+      } catch (cacheError: any) {
+        this.logger.warn(
+          `Failed to invalidate tag list cache: ${cacheError?.message || cacheError}`
+        );
+      }
+
       return APIResponse.success(
         response,
         apiId,
@@ -363,6 +390,16 @@ export class TagsService implements OnModuleInit {
         status: status || TagStatus.ARCHIVED,
       };
 
+      // Invalidate tag list cache after successful delete (soft delete)
+      try {
+        await this.cacheService.delByPattern('tag:list:*');
+        this.logger.debug('Invalidated tag list cache after delete');
+      } catch (cacheError: any) {
+        this.logger.warn(
+          `Failed to invalidate tag list cache: ${cacheError?.message || cacheError}`
+        );
+      }
+
       return APIResponse.success(
         response,
         apiId,
@@ -388,13 +425,58 @@ export class TagsService implements OnModuleInit {
   }
 
   /**
+   * Generate a stable cache key for tag list (tenantId + normalized list params).
+   */
+  private generateTagListCacheKey(tenantId: string, listTagDto: ListTagDto): string {
+    const requestedLimit = listTagDto.limit ?? 10;
+    const limit = Math.min(requestedLimit, MAX_PAGINATION_LIMIT);
+    const offset = listTagDto.offset ?? 0;
+    const filters = listTagDto.filters || {};
+    const cacheKeyObject = {
+      tenantId,
+      filters: Object.keys(filters).sort().reduce((acc: any, k) => {
+        acc[k] = (filters as any)[k];
+        return acc;
+      }, {}),
+      limit,
+      offset,
+    };
+    const sortedKeys = Object.keys(cacheKeyObject).sort();
+    const sortedObject: any = {};
+    for (const key of sortedKeys) {
+      sortedObject[key] = cacheKeyObject[key as keyof typeof cacheKeyObject];
+    }
+    const keyString = JSON.stringify(sortedObject);
+    const hash = crypto.createHash('sha256').update(keyString).digest('hex');
+    return `tag:list:${hash}`;
+  }
+
+  /**
    * List tags with optional filtering and pagination
    * Optimized: Single query with proper filtering
    * Note: Archived tags are excluded by default unless explicitly requested
    */
-  async list(listTagDto: ListTagDto, response: Response): Promise<Response> {
+  async list(listTagDto: ListTagDto, tenantId: string, response: Response): Promise<Response> {
     const apiId = APIID.TAG_LIST;
+    const tagListCacheTtl = parseInt(
+      this.configService.get('TAG_LIST_CACHE_TTL_SECONDS') || '1800',
+      10
+    );
     try {
+      const cacheKey = this.generateTagListCacheKey(tenantId, listTagDto);
+      const cachedResult = await this.cacheService.get<{ count: number; limit: number; offset: number; items: Tag[] }>(cacheKey);
+      if (cachedResult) {
+        this.logger.debug(`Cache HIT for tag list: ${cacheKey}`);
+        return APIResponse.success(
+          response,
+          apiId,
+          cachedResult,
+          HttpStatus.OK,
+          API_RESPONSES.TAG_LIST_SUCCESS
+        );
+      }
+      this.logger.debug(`Cache MISS for tag list: ${cacheKey}`);
+
       // Set pagination defaults with safeguard to prevent unbounded queries
       // Defense in depth: cap limit even if validation is bypassed
       const requestedLimit = listTagDto.limit ?? 10;
@@ -499,6 +581,15 @@ export class TagsService implements OnModuleInit {
         offset: offset,
         items: items,
       };
+
+      // Cache successful list response (best-effort, non-blocking)
+      try {
+        await this.cacheService.set(cacheKey, result, tagListCacheTtl);
+      } catch (cacheError: any) {
+        this.logger.warn(
+          `Failed to cache tag list result: ${cacheError?.message || cacheError}`
+        );
+      }
 
       return APIResponse.success(
         response,

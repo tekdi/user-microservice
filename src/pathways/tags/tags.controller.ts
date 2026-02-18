@@ -291,7 +291,7 @@ export class TagsController {
     if (!tenantId || !isUUID(tenantId)) {
       throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
     }
-    return this.tagsService.list(listTagDto, response);
+    return this.tagsService.list(listTagDto, tenantId, response);
   }
 
   @Post('fetch/:id')
