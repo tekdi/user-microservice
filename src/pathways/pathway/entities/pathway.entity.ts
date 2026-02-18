@@ -24,7 +24,7 @@ export class Pathway {
   @Column({ type: "text", nullable: true })
   description: string | null;
 
-  @Column('text', { array: true, nullable: true, default: [] })
+  @Column("text", { array: true, nullable: true, default: [] })
   tags: string[] | null;
 
   @Column({ type: "int", nullable: false, unique: true })
@@ -33,7 +33,7 @@ export class Pathway {
   @Column({ type: "boolean", default: true, nullable: false })
   is_active: boolean;
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: "text", nullable: true })
   image_url: string | null;
 
   @CreateDateColumn({
@@ -43,15 +43,15 @@ export class Pathway {
   created_at: Date;
 
   @UpdateDateColumn({
-    type: 'timestamp',
-    default: () => 'CURRENT_TIMESTAMP',
-    onUpdate: 'CURRENT_TIMESTAMP',
+    type: "timestamp",
+    default: () => "CURRENT_TIMESTAMP",
+    onUpdate: "CURRENT_TIMESTAMP",
   })
   updated_at: Date;
 
-  @Column({ type: 'uuid', nullable: true })
+  @Column({ type: "uuid", nullable: true })
   created_by: string | null;
 
-  @Column({ type: 'uuid', nullable: true })
+  @Column({ type: "uuid", nullable: true })
   updated_by: string | null;
 }

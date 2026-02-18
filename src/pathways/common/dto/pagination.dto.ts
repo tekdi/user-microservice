@@ -1,6 +1,6 @@
-import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsInt, Min, Max } from 'class-validator';
-import { Expose, Type } from 'class-transformer';
+import { ApiPropertyOptional } from "@nestjs/swagger";
+import { IsOptional, IsInt, Min, Max } from "class-validator";
+import { Expose, Type } from "class-transformer";
 
 /**
  * Maximum allowed limit for pagination to prevent unbounded queries
@@ -15,7 +15,7 @@ export const MAX_PAGINATION_LIMIT = 100;
  */
 export class PaginationDto {
   @ApiPropertyOptional({
-    description: 'Maximum number of items to return',
+    description: "Maximum number of items to return",
     example: 10,
     minimum: 1,
     maximum: MAX_PAGINATION_LIMIT,
@@ -24,15 +24,15 @@ export class PaginationDto {
   @Expose()
   @IsOptional()
   @Type(() => Number)
-  @IsInt({ message: 'Limit must be an integer' })
-  @Min(1, { message: 'Limit must be at least 1' })
+  @IsInt({ message: "Limit must be an integer" })
+  @Min(1, { message: "Limit must be at least 1" })
   @Max(MAX_PAGINATION_LIMIT, {
     message: `Limit cannot exceed ${MAX_PAGINATION_LIMIT}`,
   })
   limit?: number;
 
   @ApiPropertyOptional({
-    description: 'Number of items to skip for pagination',
+    description: "Number of items to skip for pagination",
     example: 0,
     minimum: 0,
     default: 0,
@@ -40,8 +40,7 @@ export class PaginationDto {
   @Expose()
   @IsOptional()
   @Type(() => Number)
-  @IsInt({ message: 'Offset must be an integer' })
-  @Min(0, { message: 'Offset must be non-negative' })
+  @IsInt({ message: "Offset must be an integer" })
+  @Min(0, { message: "Offset must be non-negative" })
   offset?: number;
 }
-

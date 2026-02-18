@@ -5,29 +5,29 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   Index,
-} from 'typeorm';
+} from "typeorm";
 
 export enum TagStatus {
-  PUBLISHED = 'published',
-  ARCHIVED = 'archived',
+  PUBLISHED = "published",
+  ARCHIVED = "archived",
 }
 
-@Entity('tags')
-@Index(['name'], { unique: true, where: "status = 'published'" })
-@Index(['alias'], { unique: true })
-@Index(['status'])
+@Entity("tags")
+@Index(["name"], { unique: true, where: "status = 'published'" })
+@Index(["alias"], { unique: true })
+@Index(["status"])
 export class Tag {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryGeneratedColumn("uuid")
   id: string;
 
-  @Column({ type: 'varchar', length: 100, nullable: false })
+  @Column({ type: "varchar", length: 100, nullable: false })
   name: string;
 
-  @Column({ type: 'varchar', length: 100, nullable: false })
+  @Column({ type: "varchar", length: 100, nullable: false })
   alias: string;
 
   @Column({
-    type: 'varchar',
+    type: "varchar",
     length: 20,
     nullable: false,
     default: TagStatus.PUBLISHED,
@@ -35,22 +35,21 @@ export class Tag {
   status: TagStatus;
 
   @CreateDateColumn({
-    type: 'timestamp with time zone',
-    default: () => 'CURRENT_TIMESTAMP',
+    type: "timestamp with time zone",
+    default: () => "CURRENT_TIMESTAMP",
   })
   created_at: Date;
 
   @UpdateDateColumn({
-    type: 'timestamp with time zone',
-    default: () => 'CURRENT_TIMESTAMP',
-    onUpdate: 'CURRENT_TIMESTAMP',
+    type: "timestamp with time zone",
+    default: () => "CURRENT_TIMESTAMP",
+    onUpdate: "CURRENT_TIMESTAMP",
   })
   updated_at: Date;
 
-  @Column({ type: 'uuid', nullable: true })
+  @Column({ type: "uuid", nullable: true })
   created_by: string | null;
 
-  @Column({ type: 'uuid', nullable: true })
+  @Column({ type: "uuid", nullable: true })
   updated_by: string | null;
 }
-

@@ -1,11 +1,11 @@
-import { applyDecorators } from '@nestjs/common';
+import { applyDecorators } from "@nestjs/common";
 import {
   ApiHeader,
   ApiBadRequestResponse,
   ApiUnauthorizedResponse,
   ApiNotFoundResponse,
   ApiInternalServerErrorResponse,
-} from '@nestjs/swagger';
+} from "@nestjs/swagger";
 
 /**
  * Common API decorators for authentication headers and standard error responses
@@ -14,15 +14,15 @@ import {
 export function ApiCommonHeaders() {
   return applyDecorators(
     ApiHeader({
-      name: 'Authorization',
-      description: 'Bearer token for authentication',
+      name: "Authorization",
+      description: "Bearer token for authentication",
       required: true,
     }),
     ApiHeader({
-      name: 'tenantid',
-      description: 'Tenant UUID',
+      name: "tenantid",
+      description: "Tenant UUID",
       required: true,
-    }),
+    })
   );
 }
 
@@ -32,10 +32,10 @@ export function ApiCommonHeaders() {
  */
 export function ApiCommonErrorResponses() {
   return applyDecorators(
-    ApiBadRequestResponse({ description: 'Bad Request - Invalid UUID format' }),
-    ApiUnauthorizedResponse({ description: 'Unauthorized' }),
-    ApiNotFoundResponse({ description: 'Resource not found' }),
-    ApiInternalServerErrorResponse({ description: 'Internal Server Error' }),
+    ApiBadRequestResponse({ description: "Bad Request - Invalid UUID format" }),
+    ApiUnauthorizedResponse({ description: "Unauthorized" }),
+    ApiNotFoundResponse({ description: "Resource not found" }),
+    ApiInternalServerErrorResponse({ description: "Internal Server Error" })
   );
 }
 
@@ -46,4 +46,3 @@ export function ApiCommonErrorResponses() {
 export function ApiGetByIdCommon() {
   return applyDecorators(ApiCommonHeaders(), ApiCommonErrorResponses());
 }
-

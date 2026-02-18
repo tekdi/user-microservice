@@ -6,7 +6,7 @@ import {
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository, In, DataSource, Like, ILike, Not } from "typeorm";
-import * as crypto from "crypto";
+import * as crypto from "node:crypto";
 import { CacheService } from "src/cache/cache.service";
 import { Pathway } from "./entities/pathway.entity";
 import { Tag } from "../tags/entities/tag.entity";
@@ -14,7 +14,6 @@ import { CreatePathwayDto } from "./dto/create-pathway.dto";
 import { UpdatePathwayDto } from "./dto/update-pathway.dto";
 import { ListPathwayDto } from "./dto/list-pathway.dto";
 import {
-  UpdateOrderDto,
   BulkUpdateOrderDto,
 } from "./dto/update-pathway-order.dto";
 import { StringUtil } from "../common/utils/string.util";
@@ -61,24 +60,22 @@ export class PathwaysService {
    * Uses simple string iteration (O(n)) to avoid any regex and ReDoS risk.
    */
   private normalizePathKey(s: string): string {
+    const trimmed = this.trimSlashes(s);
+    if (!trimmed) return "";
+
+    const segments = trimmed.split("/").filter((seg) => seg.length > 0);
+    return segments.join("/");
+  }
+
+  /**
+   * Helper to trim leading and trailing slashes
+   */
+  private trimSlashes(s: string): string {
     let start = 0;
     while (start < s.length && s[start] === "/") start++;
     let end = s.length;
     while (end > start && s[end - 1] === "/") end--;
-    if (start >= end) return "";
-    const segment: string[] = [];
-    let i = start;
-    while (i < end) {
-      if (s[i] === "/") {
-        segment.push("/");
-        while (i < end && s[i] === "/") i++;
-      } else {
-        const begin = i;
-        while (i < end && s[i] !== "/") i++;
-        segment.push(s.slice(begin, i));
-      }
-    }
-    return segment.join("");
+    return s.slice(start, end);
   }
 
   /**
@@ -131,8 +128,7 @@ export class PathwaysService {
     const contentTypeLower = (contentType || "").trim().toLowerCase();
     if (!allowedMimeTypes.includes(contentTypeLower)) {
       throw new BadRequestException(
-        `contentType must be one of: ${config.image_mime_type}. Received: ${
-          contentType || "(empty)"
+        `contentType must be one of: ${config.image_mime_type}. Received: ${contentType || "(empty)"
         }`
       );
     }
@@ -219,8 +215,7 @@ export class PathwaysService {
       );
     } catch (error) {
       this.logger.warn(
-        `Pathway storage delete failed: key=${s3Key}, error=${
-          error instanceof Error ? error.message : "Unknown"
+        `Pathway storage delete failed: key=${s3Key}, error=${error instanceof Error ? error.message : "Unknown"
         }`
       );
       return APIResponse.error(
@@ -271,8 +266,7 @@ export class PathwaysService {
     } catch (error) {
       // Log error but don't fail the request if deletion fails
       this.logger.warn(
-        `Failed to delete image from S3: ${imageUrl}, error: ${
-          error instanceof Error ? error.message : "Unknown error"
+        `Failed to delete image from S3: ${imageUrl}, error: ${error instanceof Error ? error.message : "Unknown error"
         }`
       );
     }
@@ -460,81 +454,27 @@ export class PathwaysService {
   ): Promise<Response> {
     const apiId = APIID.PATHWAY_CREATE;
     try {
-      // Auto-generate key from name if not provided
       const key =
         createPathwayDto.key ||
         (await this.generateUniqueKey(createPathwayDto.name));
 
-      // Perform all validations
       const validation = await this.validatePathwayCreation(
         createPathwayDto,
         key,
         apiId,
         response
       );
-      if (!validation.isValid) {
-        return validation.errorResponse;
-      }
+      if (!validation.isValid) return validation.errorResponse;
 
-      let attempts = 0;
-      const MAX_ATTEMPTS = 3;
-      let savedPathway;
-
-      while (attempts < MAX_ATTEMPTS) {
-        attempts++;
-        try {
-          // Calculate safe display order (auto-increment on duplicate)
-          // Inside the loop so it can pick up new MAX if a previous attempt collided
-          const displayOrder = await this.calculateDisplayOrder(
-            createPathwayDto.display_order
-          );
-
-          // Prepare data for save
-          const pathwayData = {
-            ...createPathwayDto,
-            key,
-            display_order: displayOrder,
-            is_active: createPathwayDto.is_active ?? true,
-            tags: (createPathwayDto as any).tags || [],
-            created_by: userId,
-            updated_by: userId,
-          };
-
-          savedPathway = await this.pathwayRepository.save(
-            this.pathwayRepository.create(pathwayData)
-          );
-          break; // Success!
-        } catch (error) {
-          // Handle unique constraint violation for display_order specifically
-          const isDisplayOrderConflict =
-            error.code === "23505" && error.detail?.includes("display_order");
-
-          if (isDisplayOrderConflict && attempts < MAX_ATTEMPTS) {
-            LoggerUtil.warn(
-              `Display order collision detected(attempt ${attempts}).Retrying...`,
-              apiId
-            );
-            continue; // Retry with fresh calculation
-          }
-          throw error; // Rethrow to be handled by outer catch (key conflict or actual error)
-        }
-      }
+      const savedPathway = await this.executeCreateWithRetries(
+        createPathwayDto,
+        key,
+        userId,
+        apiId
+      );
 
       const tagDetails = await this.fetchTagDetails(savedPathway.tags || []);
-
-      // Invalidate pathway search cache
-      try {
-        await this.cacheService.delByPattern("pathway:search:*");
-        LoggerUtil.log(
-          "Invalidated pathway search cache after creation",
-          apiId
-        );
-      } catch (cacheError) {
-        LoggerUtil.warn(
-          `Failed to invalidate pathway search cache: ${cacheError.message}`,
-          apiId
-        );
-      }
+      await this.invalidatePathwayCache(apiId);
 
       const result = {
         id: savedPathway.id,
@@ -556,49 +496,119 @@ export class PathwaysService {
         API_RESPONSES.PATHWAY_CREATED_SUCCESSFULLY
       );
     } catch (error) {
-      // Handle unique constraint violation
-      if (error.code === "23505") {
-        LoggerUtil.error(
-          `${API_RESPONSES.CONFLICT} `,
-          `Conflict error details: ${error.detail} `,
-          apiId
-        );
-        // PostgreSQL unique constraint violation
-        // Check if it's the display_order or the key
-        const detail = error.detail || "";
-        if (detail.includes("display_order")) {
-          return APIResponse.error(
-            response,
-            apiId,
-            API_RESPONSES.CONFLICT,
-            "A pathway with this display order already exists. Please try again or use auto-increment.",
-            HttpStatus.CONFLICT
-          );
-        }
+      return this.handleCreateError(error, apiId, response);
+    }
+  }
 
+  /**
+   * Internal helper to execute creation with retries for display order collision
+   */
+  private async executeCreateWithRetries(
+    dto: CreatePathwayDto,
+    key: string,
+    userId: string | null,
+    apiId: string
+  ): Promise<Pathway> {
+    let attempts = 0;
+    const MAX_ATTEMPTS = 3;
+
+    while (attempts < MAX_ATTEMPTS) {
+      attempts++;
+      try {
+        const displayOrder = await this.calculateDisplayOrder(
+          dto.display_order
+        );
+        const pathwayData = {
+          ...dto,
+          key,
+          display_order: displayOrder,
+          is_active: dto.is_active ?? true,
+          tags: (dto as any).tags || [],
+          created_by: userId,
+          updated_by: userId,
+        };
+
+        return await this.pathwayRepository.save(
+          this.pathwayRepository.create(pathwayData)
+        );
+      } catch (error) {
+        const isDisplayOrderConflict =
+          error.code === "23505" && error.detail?.includes("display_order");
+
+        if (isDisplayOrderConflict && attempts < MAX_ATTEMPTS) {
+          LoggerUtil.warn(
+            `Display order collision detected(attempt ${attempts}).Retrying...`,
+            apiId
+          );
+          continue;
+        }
+        throw error;
+      }
+    }
+    throw new Error("Failed to create pathway after maximum retry attempts");
+  }
+
+  /**
+   * Internal helper to invalidate pathway search cache
+   */
+  private async invalidatePathwayCache(apiId: string): Promise<void> {
+    try {
+      await this.cacheService.delByPattern("pathway:search:*");
+      LoggerUtil.log("Invalidated pathway search cache", apiId);
+    } catch (cacheError) {
+      LoggerUtil.warn(
+        `Failed to invalidate pathway search cache: ${cacheError.message}`,
+        apiId
+      );
+    }
+  }
+
+  /**
+   * Internal helper to handle create errors
+   */
+  private handleCreateError(
+    error: any,
+    apiId: string,
+    response: Response
+  ): Response {
+    if (error.code === "23505") {
+      LoggerUtil.error(
+        `${API_RESPONSES.CONFLICT} `,
+        `Conflict error details: ${error.detail} `,
+        apiId
+      );
+      const detail = error.detail || "";
+      if (detail.includes("display_order")) {
         return APIResponse.error(
           response,
           apiId,
           API_RESPONSES.CONFLICT,
-          API_RESPONSES.PATHWAY_KEY_EXISTS,
+          "A pathway with this display order already exists. Please try again or use auto-increment.",
           HttpStatus.CONFLICT
         );
       }
-
-      const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
-      LoggerUtil.error(
-        `${API_RESPONSES.SERVER_ERROR} `,
-        `Error creating pathway: ${errorMessage} `,
-        apiId
-      );
       return APIResponse.error(
         response,
         apiId,
-        API_RESPONSES.INTERNAL_SERVER_ERROR,
-        errorMessage,
-        HttpStatus.INTERNAL_SERVER_ERROR
+        API_RESPONSES.CONFLICT,
+        API_RESPONSES.PATHWAY_KEY_EXISTS,
+        HttpStatus.CONFLICT
       );
     }
+
+    const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+    LoggerUtil.error(
+      `${API_RESPONSES.SERVER_ERROR} `,
+      `Error creating pathway: ${errorMessage} `,
+      apiId
+    );
+    return APIResponse.error(
+      response,
+      apiId,
+      API_RESPONSES.INTERNAL_SERVER_ERROR,
+      errorMessage,
+      HttpStatus.INTERNAL_SERVER_ERROR
+    );
   }
 
   /**
@@ -614,202 +624,220 @@ export class PathwaysService {
   ): Promise<Response> {
     const apiId = APIID.PATHWAY_LIST;
     try {
-      // 1. Generate cache key from all relevant parameters
-      const cacheKey = `pathway:search:${crypto
-        .createHash("sha256")
-        .update(
-          JSON.stringify(
-            listPathwayDto,
-            Object.keys(listPathwayDto).sort((a, b) => a.localeCompare(b))
-          )
-        )
-        .digest("hex")}`;
-
-      // 2. Check cache for DB data only (LMS counts are always fetched live)
-      let dbItems: any[] = null;
-      let totalCount: number = null;
-      let limit: number;
-      let offset: number;
-
+      const cacheKey = this.generatePathwayListCacheKey(listPathwayDto);
       const cachedDb = await this.cacheService.get<any>(cacheKey);
+
       if (cachedDb) {
         LoggerUtil.log(`Cache HIT for pathway search (DB): ${cacheKey}`, apiId);
-        dbItems = cachedDb.items;
-        totalCount = cachedDb.totalCount;
-        limit = cachedDb.limit;
-        offset = cachedDb.offset;
-      } else {
-        LoggerUtil.log(`Cache MISS for pathway search: ${cacheKey}`, apiId);
-
-        // Set pagination defaults with safeguard to prevent unbounded queries
-        // Defense in depth: cap limit even if validation is bypassed
-        const requestedLimit = listPathwayDto.limit ?? 10;
-        limit = Math.min(requestedLimit, MAX_PAGINATION_LIMIT);
-        offset = listPathwayDto.offset ?? 0;
-
-        // Extract filters from nested object
-        const filters = listPathwayDto.filters || {};
-
-        // Check if we need QueryBuilder for text search (name or description)
-        const needsTextSearch = !!(filters.name || filters.description);
-        let rawItems: any[];
-
-        if (needsTextSearch) {
-          // Use QueryBuilder for ILIKE queries (optimized for text search)
-          const queryBuilder =
-            this.pathwayRepository.createQueryBuilder("pathway");
-
-          // Apply filters
-          if (filters.id) {
-            queryBuilder.andWhere("pathway.id = :id", { id: filters.id });
-          }
-          if (filters.name) {
-            queryBuilder.andWhere("pathway.name ILIKE :name", {
-              name: `% ${filters.name}% `,
-            });
-          }
-          if (filters.description) {
-            queryBuilder.andWhere("pathway.description ILIKE :description", {
-              description: `% ${filters.description}% `,
-            });
-          }
-          if (filters.isActive !== undefined) {
-            queryBuilder.andWhere("pathway.is_active = :isActive", {
-              isActive: filters.isActive,
-            });
-          }
-
-          // Apply ordering
-          queryBuilder.orderBy("pathway.display_order", "ASC");
-          queryBuilder.addOrderBy("pathway.created_at", "DESC");
-
-          // Apply pagination
-          queryBuilder.skip(offset).take(limit);
-
-          // Execute query
-          [rawItems, totalCount] = await queryBuilder.getManyAndCount();
-        } else {
-          // Use findAndCount for simple filters (more efficient when no text search)
-          const whereCondition: any = {};
-          const filters = listPathwayDto.filters || {};
-          if (filters.id) {
-            whereCondition.id = filters.id;
-          }
-          if (filters.isActive !== undefined) {
-            whereCondition.is_active = filters.isActive;
-          }
-
-          // OPTIMIZED: Single query with count and data using findAndCount
-          [rawItems, totalCount] = await this.pathwayRepository.findAndCount({
-            where: whereCondition,
-            order: {
-              display_order: "ASC",
-              created_at: "DESC",
-            },
-            take: limit,
-            skip: offset,
-          });
-        }
-
-        // OPTIMIZED: Collect all unique tag IDs from all pathways in one pass
-        const allTagIds = new Set<string>();
-        rawItems.forEach((item: any) => {
-          if (item.tags && Array.isArray(item.tags)) {
-            item.tags.forEach((tagId: string) => {
-              if (tagId) allTagIds.add(tagId);
-            });
-          }
-        });
-
-        // OPTIMIZED: Fetch all tag details in a single batch query (no N+1)
-        const tagDetailsMap = new Map<string, { id: string; name: string }>();
-        if (allTagIds.size > 0) {
-          const tagDetails = await this.fetchTagDetails(Array.from(allTagIds));
-          tagDetails.forEach((tag) => {
-            tagDetailsMap.set(tag.id, tag);
-          });
-        }
-
-        // Build DB items with tags resolved (no LMS counts yet)
-        dbItems = rawItems.map((item: any) => {
-          const tagIds = item.tags || [];
-          const tags = tagIds
-            .map((tagId: string) => tagDetailsMap.get(tagId))
-            .filter((tag) => tag !== undefined);
-
-          return {
-            id: item.id,
-            key: item.key,
-            name: item.name,
-            description: item.description,
-            tags: tags,
-            display_order: item.display_order,
-            is_active: item.is_active,
-            created_at: item.created_at,
-          };
-        });
-
-        // Cache only DB data (tags resolved, no LMS counts) for 300 seconds
-        await this.cacheService.set(
-          cacheKey,
-          { items: dbItems, totalCount, limit, offset },
-          300
+        return this.respondWithEnrichedPathways(
+          cachedDb.items,
+          cachedDb.totalCount,
+          cachedDb.limit,
+          cachedDb.offset,
+          tenantId,
+          organisationId,
+          apiId,
+          response
         );
-        LoggerUtil.log(`Cached DB pathway data for key: ${cacheKey}`, apiId);
       }
 
-      // Always fetch LMS counts live (never cached) for fresh video/resource counts
-      const pathwayIds = dbItems
-        .filter((item: any) => item?.id != null && typeof item.id === "string")
-        .map((item: any) => item.id);
-      const countsMap = await this.lmsClientService.getBatchCounts(
-        pathwayIds,
-        tenantId,
-        organisationId
+      LoggerUtil.log(`Cache MISS for pathway search: ${cacheKey}`, apiId);
+      const limit = Math.min(listPathwayDto.limit ?? 10, MAX_PAGINATION_LIMIT);
+      const offset = listPathwayDto.offset ?? 0;
+
+      const { items: rawItems, totalCount } = await this.fetchPathwaysFromDb(
+        listPathwayDto,
+        limit,
+        offset
       );
 
-      // Merge live LMS counts into cached DB items
-      const transformedItems = dbItems.map((item: any) => {
-        const counts = countsMap.get(item.id);
-        return {
-          ...item,
-          video_count: counts?.videoCount ?? 0,
-          resource_count: counts?.resourceCount ?? 0,
-          total_items: (counts as any)?.totalItems ?? 0,
-        };
-      });
+      const dbItems = await this.resolveTagsForPathways(rawItems);
+      await this.cacheService.set(
+        cacheKey,
+        { items: dbItems, totalCount, limit, offset },
+        300
+      );
 
-      // Return paginated result; count = total count of records (for pagination)
-      const result = {
-        count: dbItems.length,
-        totalCount: totalCount,
-        limit: limit,
-        offset: offset,
-        items: transformedItems,
-      };
-
-      return APIResponse.success(
-        response,
+      return this.respondWithEnrichedPathways(
+        dbItems,
+        totalCount,
+        limit,
+        offset,
+        tenantId,
+        organisationId,
         apiId,
-        result,
-        HttpStatus.OK,
-        API_RESPONSES.PATHWAY_LIST_SUCCESS
+        response
       );
     } catch (error) {
-      const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
-      LoggerUtil.error(
-        `${API_RESPONSES.SERVER_ERROR} `,
-        `Error listing pathways: ${errorMessage} `,
-        apiId
-      );
-      return APIResponse.error(
-        response,
-        apiId,
-        API_RESPONSES.INTERNAL_SERVER_ERROR,
-        errorMessage,
-        HttpStatus.INTERNAL_SERVER_ERROR
-      );
+      return this.handleListError(error, apiId, response);
     }
+  }
+
+  /**
+   * Helper to generate cache key for pathway list
+   */
+  private generatePathwayListCacheKey(dto: ListPathwayDto): string {
+    return `pathway:search:${crypto
+      .createHash("sha256")
+      .update(
+        JSON.stringify(
+          dto,
+          Object.keys(dto).sort((a, b) => a.localeCompare(b))
+        )
+      )
+      .digest("hex")}`;
+  }
+
+  /**
+   * Helper to fetch pathways from DB with filtering
+   */
+  private async fetchPathwaysFromDb(
+    dto: ListPathwayDto,
+    limit: number,
+    offset: number
+  ): Promise<{ items: Pathway[]; totalCount: number }> {
+    const filters = dto.filters || {};
+    const needsTextSearch = !!(filters.name || filters.description);
+
+    if (needsTextSearch) {
+      const queryBuilder = this.pathwayRepository.createQueryBuilder("pathway");
+      if (filters.id)
+        queryBuilder.andWhere("pathway.id = :id", { id: filters.id });
+      if (filters.name) {
+        queryBuilder.andWhere("pathway.name ILIKE :name", {
+          name: `% ${filters.name}% `,
+        });
+      }
+      if (filters.description) {
+        queryBuilder.andWhere("pathway.description ILIKE :description", {
+          description: `% ${filters.description}% `,
+        });
+      }
+      if (filters.isActive !== undefined) {
+        queryBuilder.andWhere("pathway.is_active = :isActive", {
+          isActive: filters.isActive,
+        });
+      }
+      queryBuilder.orderBy("pathway.display_order", "ASC");
+      queryBuilder.addOrderBy("pathway.created_at", "DESC");
+      queryBuilder.skip(offset).take(limit);
+
+      const [items, totalCount] = await queryBuilder.getManyAndCount();
+      return { items, totalCount };
+    }
+
+    const where: any = {};
+    if (filters.id) where.id = filters.id;
+    if (filters.isActive !== undefined) where.is_active = filters.isActive;
+
+    const [items, totalCount] = await this.pathwayRepository.findAndCount({
+      where,
+      order: { display_order: "ASC", created_at: "DESC" },
+      take: limit,
+      skip: offset,
+    });
+    return { items, totalCount };
+  }
+
+  /**
+   * Helper to resolve tags for a list of pathways
+   */
+  private async resolveTagsForPathways(pathways: Pathway[]): Promise<any[]> {
+    const allTagIds = new Set<string>();
+    pathways.forEach((p) => {
+      const tags = (p as any).tags;
+      if (tags && Array.isArray(tags)) {
+        tags.forEach((t) => {
+          if (t) allTagIds.add(t);
+        });
+      }
+    });
+
+    const tagMap = new Map<string, { id: string; name: string }>();
+    if (allTagIds.size > 0) {
+      const details = await this.fetchTagDetails(Array.from(allTagIds));
+      details.forEach((d) => tagMap.set(d.id, d));
+    }
+
+    return pathways.map((p) => {
+      const tagIds = (p as any).tags || [];
+      const tags = tagIds
+        .map((tid: string) => tagMap.get(tid))
+        .filter((t: any) => t !== undefined);
+
+      return {
+        id: p.id,
+        key: p.key,
+        name: p.name,
+        description: p.description,
+        tags,
+        display_order: p.display_order,
+        is_active: p.is_active,
+        created_at: p.created_at,
+        image_url: p.image_url,
+      };
+    });
+  }
+
+  /**
+   * Helper to enrich with LMS counts and respond
+   */
+  private async respondWithEnrichedPathways(
+    items: any[],
+    totalCount: number,
+    limit: number,
+    offset: number,
+    tenantId: string,
+    organisationId: string,
+    apiId: string,
+    response: Response
+  ): Promise<Response> {
+    const pathwayIds = items
+      .filter((i) => i?.id != null && typeof i.id === "string")
+      .map((i) => i.id);
+
+    const countsMap = await this.lmsClientService.getBatchCounts(
+      pathwayIds,
+      tenantId,
+      organisationId
+    );
+
+    const enrichedItems = items.map((i) => {
+      const counts = countsMap.get(i.id);
+      return {
+        ...i,
+        video_count: counts?.videoCount ?? 0,
+        resource_count: counts?.resourceCount ?? 0,
+        total_items: (counts as any)?.totalItems ?? 0,
+      };
+    });
+
+    return APIResponse.success(
+      response,
+      apiId,
+      { count: items.length, totalCount, limit, offset, items: enrichedItems },
+      HttpStatus.OK,
+      API_RESPONSES.PATHWAY_LIST_SUCCESS
+    );
+  }
+
+  /**
+   * Helper to handle list errors
+   */
+  private handleListError(
+    error: any,
+    apiId: string,
+    response: Response
+  ): Response {
+    const msg = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+    LoggerUtil.error(`${API_RESPONSES.SERVER_ERROR} `, msg, apiId);
+    return APIResponse.error(
+      response,
+      apiId,
+      API_RESPONSES.INTERNAL_SERVER_ERROR,
+      msg,
+      HttpStatus.INTERNAL_SERVER_ERROR
+    );
   }
 
   /**
@@ -901,10 +929,7 @@ export class PathwaysService {
   ): Promise<Response> {
     const apiId = APIID.PATHWAY_UPDATE;
     try {
-      // Validate UUID format
-      const uuidRegex =
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      if (!uuidRegex.test(id)) {
+      if (!isUUID(id)) {
         return APIResponse.error(
           response,
           apiId,
@@ -914,7 +939,6 @@ export class PathwaysService {
         );
       }
 
-      // Check if pathway exists and get existing image_url for deletion
       const existingPathway = await this.pathwayRepository.findOne({
         where: { id },
       });
@@ -929,174 +953,42 @@ export class PathwaysService {
         );
       }
 
-      const oldImageUrl = existingPathway.image_url;
+      const tagValidation = await this.validateTagsOnUpdate(
+        updatePathwayDto.tags,
+        apiId,
+        response
+      );
+      if (tagValidation) return tagValidation;
 
-      // Validate tags if provided in update
-      if (
-        updatePathwayDto.tags !== undefined &&
-        updatePathwayDto.tags !== null
-      ) {
-        if (
-          Array.isArray(updatePathwayDto.tags) &&
-          updatePathwayDto.tags.length > 0
-        ) {
-          const validation = await this.validateTagIds(updatePathwayDto.tags);
-          if (!validation.isValid) {
-            return APIResponse.error(
-              response,
-              apiId,
-              API_RESPONSES.BAD_REQUEST,
-              `${
-                API_RESPONSES.INVALID_TAG_IDS
-              }: ${validation.invalidTagIds.join(", ")} `,
-              HttpStatus.BAD_REQUEST
-            );
-          }
-        }
-      }
-
-      let newImageUrl: string | null = null;
-      const dtoImageUrl = updatePathwayDto.image_url;
-      if (
-        dtoImageUrl !== undefined &&
-        dtoImageUrl !== null &&
-        typeof dtoImageUrl === "string" &&
-        dtoImageUrl.trim() !== ""
-      ) {
-        newImageUrl = dtoImageUrl.trim();
-        if (oldImageUrl) {
-          await this.deleteImageFromS3(oldImageUrl);
-        }
-      }
-
-      // Prepare update data - filter out undefined values and map tags correctly
-      // TypeORM update() doesn't handle undefined values, so we need to filter them
-      // Tags stored as PostgreSQL text[] array: {tag_id1,tag_id2}
-      const updateData: any = {};
-
-      if (updatePathwayDto.name !== undefined) {
-        // Check if an active pathway with same name (case-insensitive) already exists, excluding current pathway
-        const activePathwayWithName = await this.pathwayRepository.findOne({
-          where: {
-            name: ILike(updatePathwayDto.name),
-            is_active: true,
-            id: Not(id),
-          },
-          select: ["id"],
-        });
-
-        if (activePathwayWithName) {
-          return APIResponse.error(
-            response,
-            apiId,
-            API_RESPONSES.CONFLICT,
-            "An active pathway with this name already exists",
-            HttpStatus.CONFLICT
-          );
-        }
-        updateData.name = updatePathwayDto.name;
-      }
-      if (updatePathwayDto.description !== undefined) {
-        updateData.description = updatePathwayDto.description;
-      }
-      // Guard against null: only update if tags is explicitly provided (array or empty array)
-      if (
-        updatePathwayDto.tags !== undefined &&
-        updatePathwayDto.tags !== null
-      ) {
-        // Store as PostgreSQL text[] array
-        // Empty array is valid, so we allow it
-        updateData.tags = Array.isArray(updatePathwayDto.tags)
-          ? updatePathwayDto.tags
-          : [];
-      }
-      if (updatePathwayDto.display_order !== undefined) {
-        updateData.display_order = updatePathwayDto.display_order;
-      }
-      if (updatePathwayDto.is_active !== undefined) {
-        updateData.is_active = updatePathwayDto.is_active;
-      }
-      if (newImageUrl !== null) {
-        updateData.image_url = newImageUrl;
-      }
-
-      // Always set updated_by when updating
-      if (userId) {
-        updateData.updated_by = userId;
-      }
-
-      // Check if there's anything to update
-      if (Object.keys(updateData).length === 0) {
-        return APIResponse.error(
-          response,
-          apiId,
-          API_RESPONSES.BAD_REQUEST,
-          "No valid fields provided for update",
-          HttpStatus.BAD_REQUEST
-        );
-      }
-
-      // OPTIMIZED: Use repository.update() for partial updates
-      // This is more efficient than findOne + save as it performs a direct UPDATE query
-      // updated_at is automatically updated by UpdateDateColumn decorator
-      const updateResult = await this.pathwayRepository.update(
-        { id },
-        updateData
+      const newImageUrl = await this.handleImageOnUpdate(
+        updatePathwayDto.image_url,
+        existingPathway.image_url
       );
 
-      if (!updateResult.affected || updateResult.affected === 0) {
-        return APIResponse.error(
-          response,
-          apiId,
-          API_RESPONSES.INTERNAL_SERVER_ERROR,
-          "Failed to update pathway",
-          HttpStatus.INTERNAL_SERVER_ERROR
-        );
-      }
+      const payload = await this.prepareUpdatePayload(
+        id,
+        updatePathwayDto,
+        newImageUrl,
+        userId,
+        apiId,
+        response
+      );
+      if (payload.error) return payload.error;
 
-      // Invalidate pathway search cache
-      try {
-        await this.cacheService.delByPattern("pathway:search:*");
-        LoggerUtil.log("Invalidated pathway search cache after update", apiId);
-      } catch (cacheError) {
-        LoggerUtil.warn(
-          `Failed to invalidate pathway search cache: ${cacheError.message}`,
-          apiId
-        );
-      }
+      await this.pathwayRepository.update({ id }, payload.data as any);
+      await this.invalidatePathwayCache(apiId);
 
-      // Fetch updated pathway for response
       const updatedPathway = await this.pathwayRepository.findOne({
         where: { id },
       });
 
-      if (!updatedPathway) {
-        return APIResponse.error(
-          response,
-          apiId,
-          API_RESPONSES.NOT_FOUND,
-          API_RESPONSES.PATHWAY_NOT_FOUND,
-          HttpStatus.NOT_FOUND
-        );
-      }
-
-      // OPTIMIZED: Fetch tag details in a single batch query (no N+1)
-      const pathwayData = updatedPathway as any;
-      const tagIds = pathwayData.tags || [];
-      const tagDetails = await this.fetchTagDetails(tagIds);
-
-      // Transform to return tags (id and name) instead of tag_ids
+      const tagDetails = await this.fetchTagDetails(
+        (updatedPathway as any).tags || []
+      );
       const result = {
-        id: pathwayData.id,
-        key: pathwayData.key,
-        name: pathwayData.name,
-        description: pathwayData.description,
+        ...updatedPathway,
         tags: tagDetails,
-        display_order: pathwayData.display_order,
-        is_active: pathwayData.is_active,
-        image_url: pathwayData.image_url,
-        created_at: pathwayData.created_at,
-      };
+      } as any;
 
       return APIResponse.success(
         response,
@@ -1106,20 +998,132 @@ export class PathwaysService {
         API_RESPONSES.PATHWAY_UPDATED_SUCCESSFULLY
       );
     } catch (error) {
-      const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
-      LoggerUtil.error(
-        `${API_RESPONSES.SERVER_ERROR} `,
-        `Error updating pathway: ${errorMessage} `,
-        apiId
-      );
+      return this.handleUpdateError(error, apiId, response);
+    }
+  }
+
+  /**
+   * Helper to validate tags during update
+   */
+  private async validateTagsOnUpdate(
+    tags: string[] | undefined | null,
+    apiId: string,
+    response: Response
+  ): Promise<Response | null> {
+    if (tags && Array.isArray(tags) && tags.length > 0) {
+      const validation = await this.validateTagIds(tags);
+      if (!validation.isValid) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          `${API_RESPONSES.INVALID_TAG_IDS}: ${validation.invalidTagIds.join(
+            ", "
+          )} `,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Helper to handle image replacement during update
+   */
+  private async handleImageOnUpdate(
+    dtoImageUrl: string | undefined | null,
+    oldImageUrl: string | null
+  ): Promise<string | null> {
+    if (typeof dtoImageUrl === "string" && dtoImageUrl.trim() !== "") {
+      const newImageUrl = dtoImageUrl.trim();
+      if (oldImageUrl) await this.deleteImageFromS3(oldImageUrl);
+      return newImageUrl;
+    }
+    return null;
+  }
+
+  /**
+   * Helper to prepare partial update payload
+   */
+  private async prepareUpdatePayload(
+    id: string,
+    dto: UpdatePathwayDto,
+    newImageUrl: string | null,
+    userId: string | null,
+    apiId: string,
+    response: Response
+  ): Promise<{ data?: Partial<Pathway>; error?: Response }> {
+    const updateData: any = {};
+
+    if (dto.name !== undefined) {
+      const conflict = await this.pathwayRepository.findOne({
+        where: { name: ILike(dto.name), is_active: true, id: Not(id) },
+        select: ["id"],
+      });
+      if (conflict) {
+        return {
+          error: APIResponse.error(
+            response,
+            apiId,
+            API_RESPONSES.CONFLICT,
+            "An active pathway with this name already exists",
+            HttpStatus.CONFLICT
+          ),
+        };
+      }
+      updateData.name = dto.name;
+    }
+
+    if (dto.description !== undefined) updateData.description = dto.description;
+    if (dto.tags !== undefined && dto.tags !== null) {
+      updateData.tags = Array.isArray(dto.tags) ? dto.tags : [];
+    }
+    if (dto.display_order !== undefined)
+      updateData.display_order = dto.display_order;
+    if (dto.is_active !== undefined) updateData.is_active = dto.is_active;
+    if (newImageUrl !== null) updateData.image_url = newImageUrl;
+    if (userId) updateData.updated_by = userId;
+
+    if (Object.keys(updateData).length === 0) {
+      return {
+        error: APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          "No valid fields provided for update",
+          HttpStatus.BAD_REQUEST
+        ),
+      };
+    }
+    return { data: updateData };
+  }
+
+  /**
+   * Helper to handle update errors
+   */
+  private handleUpdateError(
+    error: any,
+    apiId: string,
+    response: Response
+  ): Response {
+    if (error.code === "23505") {
       return APIResponse.error(
         response,
         apiId,
-        API_RESPONSES.INTERNAL_SERVER_ERROR,
-        errorMessage,
-        HttpStatus.INTERNAL_SERVER_ERROR
+        API_RESPONSES.CONFLICT,
+        `${API_RESPONSES.PATHWAY_KEY_EXISTS} (${error.detail})`,
+        HttpStatus.CONFLICT
       );
     }
+    const msg = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+    LoggerUtil.error(`${API_RESPONSES.SERVER_ERROR} `, msg, apiId);
+    return APIResponse.error(
+      response,
+      apiId,
+      API_RESPONSES.INTERNAL_SERVER_ERROR,
+      msg,
+      HttpStatus.INTERNAL_SERVER_ERROR
+    );
   }
 
   /**

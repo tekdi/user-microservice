@@ -1,12 +1,12 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsOptional, IsEnum } from 'class-validator';
-import { Expose } from 'class-transformer';
-import { TagStatus } from '../entities/tag.entity';
+import { ApiProperty } from "@nestjs/swagger";
+import { IsString, IsOptional, IsEnum } from "class-validator";
+import { Expose } from "class-transformer";
+import { TagStatus } from "../entities/tag.entity";
 
 export class DeleteTagDto {
   @ApiProperty({
-    description: 'Tag ID to delete (soft delete - sets status to archived)',
-    example: 'a1b2c3d4-e111-2222-3333-444455556666',
+    description: "Tag ID to delete (soft delete - sets status to archived)",
+    example: "a1b2c3d4-e111-2222-3333-444455556666",
   })
   @Expose()
   @IsOptional()
@@ -14,7 +14,7 @@ export class DeleteTagDto {
   id?: string;
 
   @ApiProperty({
-    description: 'Status to set (should be archived)',
+    description: "Status to set (should be archived)",
     enum: TagStatus,
     example: TagStatus.ARCHIVED,
     required: false,
@@ -25,8 +25,8 @@ export class DeleteTagDto {
   status?: TagStatus;
 
   @ApiProperty({
-    description: 'UUID of the user who deleted the tag',
-    example: 'a1b2c3d4-e111-2222-3333-444455556666',
+    description: "UUID of the user who deleted the tag",
+    example: "a1b2c3d4-e111-2222-3333-444455556666",
     required: false,
   })
   @Expose()
@@ -34,4 +34,3 @@ export class DeleteTagDto {
   @IsString()
   updated_by?: string;
 }
-

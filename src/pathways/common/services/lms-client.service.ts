@@ -1,6 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
-import axios from 'axios';
-import { ConfigService } from '@nestjs/config';
+import { Injectable, Logger } from "@nestjs/common";
+import axios from "axios";
+import { ConfigService } from "@nestjs/config";
 
 export interface VideoResourceCounts {
   videoCount: number;
@@ -24,9 +24,9 @@ export class LmsClientService {
   private readonly lmsServiceUrl: string;
 
   constructor(private readonly configService: ConfigService) {
-    this.lmsServiceUrl = this.configService.get<string>('LMS_SERVICE_URL');
+    this.lmsServiceUrl = this.configService.get<string>("LMS_SERVICE_URL");
     if (!this.lmsServiceUrl) {
-      this.logger.warn('LMS_SERVICE_URL not configured. Counts will return 0.');
+      this.logger.warn("LMS_SERVICE_URL not configured. Counts will return 0.");
     }
   }
 
@@ -61,7 +61,7 @@ export class LmsClientService {
       const headers = {
         tenantid: tenantId,
         organisationid: organisationId,
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       };
 
       this.logger.debug(
@@ -99,7 +99,7 @@ export class LmsClientService {
 
         const searchParams = {
           pathwayId: pathwayId,
-          status: 'published',
+          status: "published",
           limit: limit,
           offset: offset,
         };
@@ -139,7 +139,9 @@ export class LmsClientService {
         // (indicates API might be ignoring offset parameter)
         if (courses.length > 0 && allCourses.length > 0) {
           const firstCourseId = courses[0]?.courseId || courses[0]?.id;
-          const lastFetchedCourseId = allCourses[allCourses.length - 1]?.courseId || allCourses[allCourses.length - 1]?.id;
+          const lastFetchedCourseId =
+            allCourses[allCourses.length - 1]?.courseId ||
+            allCourses[allCourses.length - 1]?.id;
           if (firstCourseId === lastFetchedCourseId) {
             this.logger.warn(
               `Pagination safety guard triggered: Detected duplicate results at offset ${offset} for pathway ${pathwayId}. API may be ignoring offset parameter. Breaking pagination.`
@@ -179,30 +181,42 @@ export class LmsClientService {
       const courses = allCourses;
       // Extract course IDs - check both courseId and id fields
       // Validate UUID format to ensure we're sending valid IDs
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      const uuidRegex =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
       const courseIds = courses
         .map((course: any) => {
           const id = course.courseId || course.id || course.course_id;
           return id;
         })
         .filter(Boolean)
-        .filter((id) => typeof id === 'string' && id.length > 0)
+        .filter((id) => typeof id === "string" && id.length > 0)
         .filter((id) => uuidRegex.test(id)); // Only include valid UUIDs
 
       if (courseIds.length === 0) {
         this.logger.warn(
-          `No valid course IDs found for pathway ${pathwayId}. Course structure sample: ${JSON.stringify(courses[0] || {})}`
+          `No valid course IDs found for pathway ${pathwayId}. Course structure sample: ${JSON.stringify(
+            courses[0] || {}
+          )}`
         );
         return { videoCount: 0, resourceCount: 0, totalItems: 0 };
       }
 
       this.logger.debug(
-        `Extracted ${courseIds.length} valid course IDs for pathway ${pathwayId}: ${courseIds.slice(0, 3).join(', ')}${courseIds.length > 3 ? '...' : ''}`
+        `Extracted ${
+          courseIds.length
+        } valid course IDs for pathway ${pathwayId}: ${courseIds
+          .slice(0, 3)
+          .join(", ")}${courseIds.length > 3 ? "..." : ""}`
       );
 
       // Step 2: OPTIMIZED - Use direct lesson count API instead of fetching hierarchy
       // This is much faster as it queries the database directly
-      const countsMap = await this.getLessonCountsByCourseIds(courseIds, tenantId, organisationId, headers);
+      const countsMap = await this.getLessonCountsByCourseIds(
+        courseIds,
+        tenantId,
+        organisationId,
+        headers
+      );
 
       // Step 3: Aggregate counts across all courses
       let videoCount = 0;
@@ -221,7 +235,8 @@ export class LmsClientService {
 
       return { videoCount, resourceCount, totalItems };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
 
       this.logger.error(
         `Failed to fetch counts for pathway ${pathwayId} from LMS service: ${errorMessage}`
@@ -235,7 +250,7 @@ export class LmsClientService {
   /**
    * Get lesson counts for multiple courses using optimized direct database query
    * Calls: GET /courses/lesson-counts?courseIds=id1,id2,id3
-   * 
+   *
    * OPTIMIZED: This is much faster than fetching hierarchy for each course
    *
    * @param courseIds - Array of course IDs
@@ -249,17 +264,26 @@ export class LmsClientService {
     tenantId: string,
     organisationId: string,
     headers: Record<string, string>
-  ): Promise<Map<string, { videoCount: number; resourceCount: number; totalItems: number }>> {
+  ): Promise<
+    Map<
+      string,
+      { videoCount: number; resourceCount: number; totalItems: number }
+    >
+  > {
     if (courseIds.length === 0) {
       return new Map();
     }
 
     try {
       const countsUrl = `${this.lmsServiceUrl}/lms-service/v1/courses/lesson-counts`;
-      const courseIdsParam = courseIds.join(',');
+      const courseIdsParam = courseIds.join(",");
 
       this.logger.debug(
-        `Calling lesson-counts API with ${courseIds.length} course IDs: ${courseIdsParam.substring(0, 100)}${courseIdsParam.length > 100 ? '...' : ''}`
+        `Calling lesson-counts API with ${
+          courseIds.length
+        } course IDs: ${courseIdsParam.substring(0, 100)}${
+          courseIdsParam.length > 100 ? "..." : ""
+        }`
       );
 
       const countsResponse = await axios.get(countsUrl, {
@@ -278,27 +302,47 @@ export class LmsClientService {
           errorData?.params?.errmsg ||
           errorData?.error ||
           JSON.stringify(errorData) ||
-          'Unknown error';
+          "Unknown error";
 
         this.logger.warn(
-          `Failed to fetch lesson counts: status ${countsResponse.status}, error: ${errorMessage}. Request: courseIds=${courseIdsParam.substring(0, 200)}${courseIdsParam.length > 200 ? '...' : ''}`
+          `Failed to fetch lesson counts: status ${
+            countsResponse.status
+          }, error: ${errorMessage}. Request: courseIds=${courseIdsParam.substring(
+            0,
+            200
+          )}${courseIdsParam.length > 200 ? "..." : ""}`
         );
 
         // Return map with zero counts for all courses
-        const zeroCountsMap = new Map<string, { videoCount: number; resourceCount: number; totalItems: number }>();
+        const zeroCountsMap = new Map<
+          string,
+          { videoCount: number; resourceCount: number; totalItems: number }
+        >();
         courseIds.forEach((courseId) => {
-          zeroCountsMap.set(courseId, { videoCount: 0, resourceCount: 0, totalItems: 0 });
+          zeroCountsMap.set(courseId, {
+            videoCount: 0,
+            resourceCount: 0,
+            totalItems: 0,
+          });
         });
         return zeroCountsMap;
       }
 
       // Convert response object to Map
       // Handle both direct response and wrapped in 'result' object
-      const responseData = countsResponse.data?.result || countsResponse.data || {};
-      const countsMap = new Map<string, { videoCount: number; resourceCount: number; totalItems: number }>();
+      const responseData =
+        countsResponse.data?.result || countsResponse.data || {};
+      const countsMap = new Map<
+        string,
+        { videoCount: number; resourceCount: number; totalItems: number }
+      >();
 
       courseIds.forEach((courseId) => {
-        const counts = responseData[courseId] || { videoCount: 0, resourceCount: 0, totalItems: 0 };
+        const counts = responseData[courseId] || {
+          videoCount: 0,
+          resourceCount: 0,
+          totalItems: 0,
+        };
         countsMap.set(courseId, counts);
       });
 
@@ -309,12 +353,21 @@ export class LmsClientService {
       return countsMap;
     } catch (error) {
       this.logger.warn(
-        `Error fetching lesson counts: ${error instanceof Error ? error.message : 'Unknown error'}. Returning zero counts.`
+        `Error fetching lesson counts: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }. Returning zero counts.`
       );
       // Return map with zero counts for all courses on error
-      const zeroCountsMap = new Map<string, { videoCount: number; resourceCount: number; totalItems: number }>();
+      const zeroCountsMap = new Map<
+        string,
+        { videoCount: number; resourceCount: number; totalItems: number }
+      >();
       courseIds.forEach((courseId) => {
-        zeroCountsMap.set(courseId, { videoCount: 0, resourceCount: 0, totalItems: 0 });
+        zeroCountsMap.set(courseId, {
+          videoCount: 0,
+          resourceCount: 0,
+          totalItems: 0,
+        });
       });
       return zeroCountsMap;
     }
@@ -356,7 +409,8 @@ export class LmsClientService {
       return countsMap;
     } catch (error) {
       this.logger.error(
-        `Error in batch fetch counts: ${error instanceof Error ? error.message : 'Unknown error'
+        `Error in batch fetch counts: ${
+          error instanceof Error ? error.message : "Unknown error"
         }`
       );
       // Return map with 0 counts for all pathways

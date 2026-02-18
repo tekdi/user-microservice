@@ -1,7 +1,7 @@
 import { Injectable, HttpStatus, OnModuleInit } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository, Like, Not, DataSource } from "typeorm";
-import * as crypto from "crypto";
+import * as crypto from "node:crypto";
 import { CacheService } from "src/cache/cache.service";
 import { Tag, TagStatus } from "./entities/tag.entity";
 import { StringUtil } from "../common/utils/string.util";
@@ -24,7 +24,7 @@ export class TagsService implements OnModuleInit {
     private readonly tagRepository: Repository<Tag>,
     private readonly dataSource: DataSource,
     private readonly cacheService: CacheService
-  ) {}
+  ) { }
 
   /**
    * Drop the old globally unique index if it exists to allow partial index to work
@@ -210,87 +210,24 @@ export class TagsService implements OnModuleInit {
         );
       }
 
-      const updateData: Partial<Tag> = {};
+      const payload = await this.prepareUpdatePayload(
+        id,
+        updateTagDto,
+        existingTag,
+        userId,
+        apiId,
+        response
+      );
+      if (payload.error) return payload.error;
 
-      if (updateTagDto.name && updateTagDto.name !== existingTag.name) {
-        if (await this.checkNameConflict(updateTagDto.name)) {
-          return APIResponse.error(
-            response,
-            apiId,
-            API_RESPONSES.CONFLICT,
-            API_RESPONSES.TAG_NAME_EXISTS,
-            HttpStatus.CONFLICT
-          );
-        }
-        updateData.name = updateTagDto.name;
-      }
-
-      if (updateTagDto.alias && updateTagDto.alias !== existingTag.alias) {
-        if (await this.checkAliasConflict(updateTagDto.alias)) {
-          return APIResponse.error(
-            response,
-            apiId,
-            API_RESPONSES.CONFLICT,
-            "Tag with this alias already exists",
-            HttpStatus.CONFLICT
-          );
-        }
-        updateData.alias = updateTagDto.alias;
-      }
-
-      if (updateTagDto.status !== undefined) {
-        updateData.status = updateTagDto.status;
-      }
-
-      if (userId || updateTagDto.updated_by) {
-        updateData.updated_by = userId || updateTagDto.updated_by;
-      }
-
-      if (Object.keys(updateData).length === 0) {
-        return APIResponse.error(
-          response,
-          apiId,
-          API_RESPONSES.BAD_REQUEST,
-          "No valid fields provided for update",
-          HttpStatus.BAD_REQUEST
-        );
-      }
-
-      // OPTIMIZED: Use repository.update() for partial updates
       await this.tagRepository.update(
         { id },
-        {
-          ...updateData,
-          updated_at: new Date(),
-        }
+        { ...payload.data, updated_at: new Date() }
       );
 
-      // Invalidate tag search cache after successful update
-      try {
-        await this.cacheService.delByPattern("tags:search:*");
-        LoggerUtil.log("Invalidated tag search cache after update", apiId);
-      } catch (cacheError) {
-        LoggerUtil.warn(
-          `Failed to invalidate tag search cache: ${cacheError.message}`,
-          apiId
-        );
-      }
+      await this.invalidateTagCache(apiId);
 
-      // Fetch updated tag for response (safety check for concurrent deletion)
-      const updatedTag = await this.tagRepository.findOne({
-        where: { id },
-      });
-
-      if (!updatedTag) {
-        return APIResponse.error(
-          response,
-          apiId,
-          API_RESPONSES.NOT_FOUND,
-          API_RESPONSES.TAG_NOT_FOUND,
-          HttpStatus.NOT_FOUND
-        );
-      }
-
+      const updatedTag = await this.tagRepository.findOne({ where: { id } });
       return APIResponse.success(
         response,
         apiId,
@@ -299,36 +236,109 @@ export class TagsService implements OnModuleInit {
         API_RESPONSES.TAG_UPDATED_SUCCESSFULLY
       );
     } catch (error) {
-      // Handle unique constraint violation
-      if (error.code === "23505") {
-        LoggerUtil.error(
-          `${API_RESPONSES.CONFLICT}`,
-          `Update conflict error details: ${error.detail}`,
-          apiId
-        );
-        return APIResponse.error(
+      return this.handleUpdateError(error, apiId, response);
+    }
+  }
+
+  /**
+   * Helper to prepare update data for tag
+   */
+  private async prepareUpdatePayload(
+    id: string,
+    dto: UpdateTagDto,
+    existing: Tag,
+    userId: string | null,
+    apiId: string,
+    response: Response
+  ): Promise<{ data?: Partial<Tag>; error?: Response }> {
+    const data: Partial<Tag> = {};
+
+    if (dto.name && dto.name !== existing.name) {
+      if (await this.checkNameConflict(dto.name)) {
+        return {
+          error: APIResponse.error(
+            response,
+            apiId,
+            API_RESPONSES.CONFLICT,
+            API_RESPONSES.TAG_NAME_EXISTS,
+            HttpStatus.CONFLICT
+          ),
+        };
+      }
+      data.name = dto.name;
+    }
+
+    if (dto.alias && dto.alias !== existing.alias) {
+      if (await this.checkAliasConflict(dto.alias)) {
+        return {
+          error: APIResponse.error(
+            response,
+            apiId,
+            API_RESPONSES.CONFLICT,
+            "Tag with this alias already exists",
+            HttpStatus.CONFLICT
+          ),
+        };
+      }
+      data.alias = dto.alias;
+    }
+
+    if (dto.status !== undefined) data.status = dto.status;
+    if (userId || dto.updated_by) data.updated_by = userId || dto.updated_by;
+
+    if (Object.keys(data).length === 0) {
+      return {
+        error: APIResponse.error(
           response,
           apiId,
-          API_RESPONSES.CONFLICT,
-          `${API_RESPONSES.TAG_NAME_EXISTS} (${error.detail})`,
-          HttpStatus.CONFLICT
-        );
-      }
+          API_RESPONSES.BAD_REQUEST,
+          "No valid fields provided for update",
+          HttpStatus.BAD_REQUEST
+        ),
+      };
+    }
 
-      const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
-      LoggerUtil.error(
-        `${API_RESPONSES.SERVER_ERROR}`,
-        `Error updating tag: ${errorMessage}`,
-        apiId
-      );
+    return { data };
+  }
+
+  /**
+   * Helper to invalidate tag cache
+   */
+  private async invalidateTagCache(apiId: string) {
+    try {
+      await this.cacheService.delByPattern("tags:search:*");
+      LoggerUtil.log(`Invalidated tag search cache`, apiId);
+    } catch (e) {
+      LoggerUtil.warn(`Failed to invalidate tag search cache: ${e.message}`, apiId);
+    }
+  }
+
+  /**
+   * Helper to handle update errors
+   */
+  private handleUpdateError(
+    error: any,
+    apiId: string,
+    response: Response
+  ): Response {
+    if (error.code === "23505") {
       return APIResponse.error(
         response,
         apiId,
-        API_RESPONSES.INTERNAL_SERVER_ERROR,
-        errorMessage,
-        HttpStatus.INTERNAL_SERVER_ERROR
+        API_RESPONSES.CONFLICT,
+        `${API_RESPONSES.TAG_NAME_EXISTS} (${error.detail})`,
+        HttpStatus.CONFLICT
       );
     }
+    const msg = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+    LoggerUtil.error(`${API_RESPONSES.SERVER_ERROR}`, msg, apiId);
+    return APIResponse.error(
+      response,
+      apiId,
+      API_RESPONSES.INTERNAL_SERVER_ERROR,
+      msg,
+      HttpStatus.INTERNAL_SERVER_ERROR
+    );
   }
 
   /**
@@ -440,138 +450,31 @@ export class TagsService implements OnModuleInit {
   async list(listTagDto: ListTagDto, response: Response): Promise<Response> {
     const apiId = APIID.TAG_LIST;
     try {
-      // 1. Generate cache key from all relevant parameters
-      const cacheKey = `tags:search:${crypto
-        .createHash("sha256")
-        .update(
-          JSON.stringify(
-            listTagDto,
-            Object.keys(listTagDto).sort((a, b) => a.localeCompare(b))
-          )
-        )
-        .digest("hex")}`;
+      const cacheKey = this.generateTagListCacheKey(listTagDto);
+      const cached = await this.cacheService.get<any>(cacheKey);
 
-      // 2. Check cache first
-      const cachedResult = await this.cacheService.get<any>(cacheKey);
-      if (cachedResult) {
+      if (cached) {
         LoggerUtil.log(`Cache HIT for tag search: ${cacheKey}`, apiId);
         return APIResponse.success(
           response,
           apiId,
-          cachedResult,
+          cached,
           HttpStatus.OK,
           API_RESPONSES.TAG_LIST_SUCCESS
         );
       }
 
       LoggerUtil.log(`Cache MISS for tag search: ${cacheKey}`, apiId);
-
-      // Set pagination defaults with safeguard to prevent unbounded queries
-      // Defense in depth: cap limit even if validation is bypassed
-      const requestedLimit = listTagDto.limit ?? 10;
-      const limit = Math.min(requestedLimit, MAX_PAGINATION_LIMIT);
+      const limit = Math.min(listTagDto.limit ?? 10, MAX_PAGINATION_LIMIT);
       const offset = listTagDto.offset ?? 0;
 
-      // Extract filters from nested object
-      const filters = listTagDto.filters || {};
+      const { items, totalCount } = await this.fetchTagsFromDb(
+        listTagDto,
+        limit,
+        offset
+      );
 
-      // Check if we need QueryBuilder for text search (name)
-      const needsTextSearch = !!filters.name;
-      let items: Tag[];
-      let totalCount: number;
-
-      if (needsTextSearch) {
-        // Use QueryBuilder for ILIKE queries (optimized for text search)
-        const queryBuilder = this.tagRepository.createQueryBuilder("tag");
-
-        // Apply filters
-        if (filters.id) {
-          queryBuilder.andWhere("tag.id = :id", { id: filters.id });
-        }
-        if (filters.name) {
-          queryBuilder.andWhere("tag.name ILIKE :name", {
-            name: `%${filters.name}%`,
-          });
-        }
-        // If status is provided, use it; otherwise default to published only
-        if (filters.status) {
-          queryBuilder.andWhere("tag.status = :status", {
-            status: filters.status,
-          });
-        } else {
-          // Default: only show published tags (exclude archived)
-          queryBuilder.andWhere("tag.status = :status", {
-            status: TagStatus.PUBLISHED,
-          });
-        }
-
-        // Apply ordering
-        queryBuilder.orderBy("tag.created_at", "DESC");
-
-        // Apply pagination
-        queryBuilder.skip(offset).take(limit);
-
-        // Select specific fields
-        queryBuilder.select([
-          "tag.id",
-          "tag.name",
-          "tag.alias",
-          "tag.status",
-          "tag.created_at",
-          "tag.updated_at",
-          "tag.created_by",
-          "tag.updated_by",
-        ]);
-
-        // Execute query
-        [items, totalCount] = await queryBuilder.getManyAndCount();
-      } else {
-        // Use findAndCount for simple filters (more efficient when no text search)
-        const whereCondition: any = {};
-
-        if (filters.id) {
-          whereCondition.id = filters.id;
-        }
-
-        // If status is provided, use it; otherwise default to published only
-        if (filters.status) {
-          whereCondition.status = filters.status;
-        } else {
-          // Default: only show published tags (exclude archived)
-          whereCondition.status = TagStatus.PUBLISHED;
-        }
-
-        // OPTIMIZED: Single query with count and data using findAndCount
-        // This performs both COUNT and SELECT in an optimized way
-        [items, totalCount] = await this.tagRepository.findAndCount({
-          where: whereCondition,
-          order: {
-            created_at: "DESC",
-          },
-          take: limit,
-          skip: offset,
-          select: [
-            "id",
-            "name",
-            "alias",
-            "status",
-            "created_at",
-            "updated_at",
-            "created_by",
-            "updated_by",
-          ],
-        });
-      }
-
-      // Return paginated result; count = total count of records (for pagination)
-      const result = {
-        count: totalCount,
-        limit: limit,
-        offset: offset,
-        items: items,
-      };
-
-      // 3. Set cache before returning (TTL: 300 seconds)
+      const result = { count: totalCount, limit, offset, items };
       await this.cacheService.set(cacheKey, result, 300);
 
       return APIResponse.success(
@@ -582,20 +485,89 @@ export class TagsService implements OnModuleInit {
         API_RESPONSES.TAG_LIST_SUCCESS
       );
     } catch (error) {
-      const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
-      LoggerUtil.error(
-        `${API_RESPONSES.SERVER_ERROR}`,
-        `Error listing tags: ${errorMessage}`,
-        apiId
-      );
-      return APIResponse.error(
-        response,
-        apiId,
-        API_RESPONSES.INTERNAL_SERVER_ERROR,
-        errorMessage,
-        HttpStatus.INTERNAL_SERVER_ERROR
-      );
+      return this.handleListError(error, apiId, response);
     }
+  }
+
+  /**
+   * Helper to generate cache key for tag list
+   */
+  private generateTagListCacheKey(dto: ListTagDto): string {
+    return `tags:search:${crypto
+      .createHash("sha256")
+      .update(
+        JSON.stringify(
+          dto,
+          Object.keys(dto).sort((a, b) => a.localeCompare(b))
+        )
+      )
+      .digest("hex")}`;
+  }
+
+  /**
+   * Helper to fetch tags from DB with filtering
+   */
+  private async fetchTagsFromDb(
+    dto: ListTagDto,
+    limit: number,
+    offset: number
+  ): Promise<{ items: Tag[]; totalCount: number }> {
+    const filters = dto.filters || {};
+    const needsTextSearch = !!filters.name;
+
+    if (needsTextSearch) {
+      const qb = this.tagRepository.createQueryBuilder("tag");
+      if (filters.id) qb.andWhere("tag.id = :id", { id: filters.id });
+      if (filters.name) qb.andWhere("tag.name ILIKE :name", { name: `%${filters.name}%` });
+
+      const status = filters.status || TagStatus.PUBLISHED;
+      qb.andWhere("tag.status = :status", { status });
+
+      qb.orderBy("tag.created_at", "DESC");
+      qb.skip(offset).take(limit);
+      qb.select([
+        "tag.id", "tag.name", "tag.alias", "tag.status",
+        "tag.created_at", "tag.updated_at", "tag.created_by", "tag.updated_by"
+      ]);
+
+      const [items, totalCount] = await qb.getManyAndCount();
+      return { items, totalCount };
+    }
+
+    const where: any = {};
+    if (filters.id) where.id = filters.id;
+    where.status = filters.status || TagStatus.PUBLISHED;
+
+    const [items, totalCount] = await this.tagRepository.findAndCount({
+      where,
+      order: { created_at: "DESC" },
+      take: limit,
+      skip: offset,
+      select: [
+        "id", "name", "alias", "status",
+        "created_at", "updated_at", "created_by", "updated_by"
+      ],
+    });
+    return { items, totalCount };
+  }
+
+  /**
+   * Helper to handle list errors
+   */
+  private handleListError(
+    error: any,
+    apiId: string,
+    response: Response
+  ): Response {
+    const msg = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+    LoggerUtil.error(`${API_RESPONSES.SERVER_ERROR}`, msg, apiId);
+    return APIResponse.error(
+      response,
+      apiId,
+      API_RESPONSES.INTERNAL_SERVER_ERROR,
+      msg,
+      HttpStatus.INTERNAL_SERVER_ERROR
+    );
   }
 
   /**

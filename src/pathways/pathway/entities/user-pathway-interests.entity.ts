@@ -1,11 +1,11 @@
 import {
-    Entity,
-    PrimaryGeneratedColumn,
-    Column,
-    CreateDateColumn,
-    ManyToOne,
-    JoinColumn,
-    Index,
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  ManyToOne,
+  JoinColumn,
+  Index,
 } from "typeorm";
 import { UserPathwayHistory } from "./user-pathway-history.entity";
 import { Interest } from "../../interests/entities/interest.entity";
@@ -13,29 +13,29 @@ import { Interest } from "../../interests/entities/interest.entity";
 @Entity("user_pathway_interests")
 @Index(["user_pathway_history_id", "interest_id"], { unique: true })
 export class UserPathwayInterests {
-    @PrimaryGeneratedColumn("uuid")
-    id: string;
+  @PrimaryGeneratedColumn("uuid")
+  id: string;
 
-    @Column({ type: "uuid", nullable: false })
-    user_pathway_history_id: string;
+  @Column({ type: "uuid", nullable: false })
+  user_pathway_history_id: string;
 
-    @ManyToOne(() => UserPathwayHistory)
-    @JoinColumn({ name: "user_pathway_history_id" })
-    userPathwayHistory: UserPathwayHistory;
+  @ManyToOne(() => UserPathwayHistory)
+  @JoinColumn({ name: "user_pathway_history_id" })
+  userPathwayHistory: UserPathwayHistory;
 
-    @Column({ type: "uuid", nullable: false })
-    interest_id: string;
+  @Column({ type: "uuid", nullable: false })
+  interest_id: string;
 
-    @ManyToOne(() => Interest)
-    @JoinColumn({ name: "interest_id" })
-    interest: Interest;
+  @ManyToOne(() => Interest)
+  @JoinColumn({ name: "interest_id" })
+  interest: Interest;
 
-    @CreateDateColumn({
-        type: "timestamp",
-        default: () => "CURRENT_TIMESTAMP",
-    })
-    created_at: Date;
+  @CreateDateColumn({
+    type: "timestamp",
+    default: () => "CURRENT_TIMESTAMP",
+  })
+  created_at: Date;
 
-    @Column({ type: "uuid", nullable: true })
-    created_by: string;
+  @Column({ type: "uuid", nullable: true })
+  created_by: string;
 }

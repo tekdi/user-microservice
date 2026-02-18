@@ -22,4 +22,4 @@ import { UserPathwayInterests } from "../pathway/entities/user-pathway-interests
   providers: [InterestsService],
   exports: [InterestsService],
 })
-export class InterestsModule { }
+export class InterestsModule {}

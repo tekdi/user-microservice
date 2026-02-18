@@ -1,7 +1,7 @@
 import { Injectable, HttpStatus } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository, In, DataSource, ILike, Like, Not } from "typeorm";
-import * as crypto from "crypto";
+import * as crypto from "node:crypto";
 import { CacheService } from "src/cache/cache.service";
 import { Interest } from "./entities/interest.entity";
 import { CreateInterestDto } from "./dto/create-interest.dto";
@@ -32,7 +32,7 @@ export class InterestsService {
     private readonly userPathwayInterestsRepository: Repository<UserPathwayInterests>,
     private readonly dataSource: DataSource,
     private readonly cacheService: CacheService
-  ) {}
+  ) { }
 
   /**
    * Create a new interest for a pathway

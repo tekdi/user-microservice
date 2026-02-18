@@ -44,7 +44,7 @@ import { isUUID } from "class-validator";
 @Controller("interest")
 @UseGuards(JwtAuthGuard)
 export class InterestsController {
-  constructor(private readonly interestsService: InterestsService) { }
+  constructor(private readonly interestsService: InterestsService) {}
 
   /**
    * Create a new interest
@@ -137,7 +137,8 @@ export class InterestsController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: "List Interests by Pathway",
-    description: "Retrieves interests associated with the given pathway ID in the request body with pagination support.",
+    description:
+      "Retrieves interests associated with the given pathway ID in the request body with pagination support.",
   })
   @ApiHeader({ name: "Authorization", required: true })
   @ApiHeader({ name: "tenantid", required: true })
@@ -156,10 +157,7 @@ export class InterestsController {
     if (!tenantId || !isUUID(tenantId)) {
       throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
     }
-    return this.interestsService.listByPathwayId(
-      response,
-      listInterestDto
-    );
+    return this.interestsService.listByPathwayId(response, listInterestDto);
   }
 
   /**
@@ -169,7 +167,8 @@ export class InterestsController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: "Save User Interests for a Pathway",
-    description: "Saves a selection of interests for a specific user pathway event.",
+    description:
+      "Saves a selection of interests for a specific user pathway event.",
   })
   @ApiHeader({ name: "Authorization", required: true })
   @ApiHeader({ name: "tenantid", required: true })
@@ -189,10 +188,10 @@ export class InterestsController {
         responseCode: "OK",
         result: {
           userPathwayHistoryId: "uph1-uuid",
-          savedInterestsCount: 2
-        }
-      }
-    }
+          savedInterestsCount: 2,
+        },
+      },
+    },
   })
   @ApiBadRequestResponse({ description: "Bad Request - Invalid IDs" })
   @ApiNotFoundResponse({ description: "History record not found" })
@@ -205,6 +204,9 @@ export class InterestsController {
     if (!tenantId || !isUUID(tenantId)) {
       throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
     }
-    return this.interestsService.saveUserInterests(saveUserInterestsDto, response);
+    return this.interestsService.saveUserInterests(
+      saveUserInterestsDto,
+      response
+    );
   }
 }
