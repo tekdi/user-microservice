@@ -452,8 +452,8 @@ export class PathwaysService {
           // If it's a unique constraint violation on display_order, retry
           const isDisplayOrderConflict =
             error.code === '23505' &&
-            ((error.detail && error.detail.includes('display_order')) ||
-              (error.constraint && error.constraint.includes('display_order')));
+            (error.detail?.includes('display_order') ||
+              error.constraint?.includes('display_order'));
 
           if (isDisplayOrderConflict && attempt < MAX_RETRIES) {
             this.logger.warn(
@@ -473,11 +473,11 @@ export class PathwaysService {
     } catch (error) {
       // Handle unique constraint violation
       if (error.code === '23505') {
-        const detail = error.detail || '';
-        const constraint = error.constraint || '';
-        
         // If it's a display order conflict
-        if (detail.includes('display_order') || constraint.includes('display_order')) {
+        if (
+          error.detail?.includes('display_order') ||
+          error.constraint?.includes('display_order')
+        ) {
           return APIResponse.error(
             response,
             apiId,
@@ -1241,7 +1241,7 @@ export class PathwaysService {
               activated_at: timestamp,
               deactivated_at: null,
               user_goal: userGoal,
-              updated_by: null
+              updated_by: created_by
             }
           );
           activeId = existingTargetRecord.id;
@@ -1254,7 +1254,7 @@ export class PathwaysService {
             activated_at: timestamp,
             user_goal: userGoal,
             created_by: created_by,
-            updated_by: null
+            updated_by: created_by
           });
           const savedRecord = await manager.save(record);
           activeId = savedRecord.id;
@@ -1270,7 +1270,7 @@ export class PathwaysService {
         deactivated_at: currentActive ? timestamp : null,
         userGoal: userGoal,
         created_by: created_by,
-        updated_by: null,
+        updated_by: created_by,
       };
 
       const successMessage = currentActive
@@ -1354,11 +1354,9 @@ export class PathwaysService {
       }
 
       // 2. Build where condition based on whether pathwayId is provided
-      const whereCondition: any = { user_id: userId };
+      const whereCondition: any = { user_id: userId, is_active: true };
       if (pathwayId) {
         whereCondition.pathway_id = pathwayId;
-      } else {
-        whereCondition.is_active = true;
       }
 
       // 3. Get pathway from user_pathway_history
@@ -1371,6 +1369,7 @@ export class PathwaysService {
           'deactivated_at',
           'user_goal',
           'is_active',
+          'updated_by',
         ],
       });
 
@@ -1391,8 +1390,10 @@ export class PathwaysService {
         id: userPathway.id,
         pathwayId: userPathway.pathway_id,
         activatedAt: userPathway.activated_at,
+        deactivatedAt: userPathway.deactivated_at,
         userGoal: userPathway.user_goal,
         isActive: userPathway.is_active,
+        updatedBy: userPathway.updated_by,
       };
 
       return APIResponse.success(
