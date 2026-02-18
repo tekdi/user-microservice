@@ -354,33 +354,28 @@ export class InterestsService {
     const apiId = APIID.INTEREST_LIST_BY_PATHWAY;
     const { pathwayId, isActive, limit: requestedLimit, offset } = listInterestDto;
     try {
-      if (!pathwayId) {
-        return APIResponse.error(
-          response,
-          apiId,
-          API_RESPONSES.BAD_REQUEST,
-          "pathwayId is required in request body",
-          HttpStatus.BAD_REQUEST
-        );
-      }
-      // Check if pathway exists
-      const pathway = await this.pathwayRepository.findOne({
-        where: { id: pathwayId },
-        select: ['id'],
-      });
+    
+      // 1. Validate pathway extraction and existence IF provided
+      const whereCondition: any = {};
+      if (pathwayId) {
+        const pathway = await this.pathwayRepository.findOne({
+          where: { id: pathwayId },
+          select: ['id'],
+        });
 
-      if (!pathway) {
-        return APIResponse.error(
-          response,
-          apiId,
-          API_RESPONSES.NOT_FOUND,
-          API_RESPONSES.PATHWAY_NOT_FOUND,
-          HttpStatus.NOT_FOUND
-        );
+        if (!pathway) {
+          return APIResponse.error(
+            response,
+            apiId,
+            API_RESPONSES.NOT_FOUND,
+            API_RESPONSES.PATHWAY_NOT_FOUND,
+            HttpStatus.NOT_FOUND
+          );
+        }
+        whereCondition.pathway_id = pathwayId;
       }
 
-      // Build filter
-      const whereCondition: any = { pathway_id: pathwayId };
+      // 2. Build additional filters
       if (isActive !== undefined) {
         whereCondition.is_active = isActive;
       }
@@ -400,7 +395,7 @@ export class InterestsService {
       // OPTIMIZED: Use findAndCount for efficient pagination
       const [items, totalCount] = await this.interestRepository.findAndCount({
         where: whereCondition,
-        select: ['id', 'key', 'label', 'is_active', 'created_at'],
+        select: ['id', 'pathway_id', 'key', 'label', 'is_active', 'created_at'],
         order: {
           created_at: 'DESC',
         },
