@@ -1,6 +1,8 @@
 import { Injectable, HttpStatus, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, DataSource, Like, ILike, Not } from 'typeorm';
+import * as crypto from 'crypto';
+import { CacheService } from 'src/cache/cache.service';
 import { Pathway } from './entities/pathway.entity';
 import { Tag } from '../tags/entities/tag.entity';
 import { CreatePathwayDto } from './dto/create-pathway.dto';
@@ -32,7 +34,8 @@ export class PathwaysService {
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     private readonly dataSource: DataSource,
-    private readonly lmsClientService: LmsClientService
+    private readonly lmsClientService: LmsClientService,
+    private readonly cacheService: CacheService
   ) { }
 
   /**
@@ -159,7 +162,7 @@ export class PathwaysService {
             response,
             apiId,
             API_RESPONSES.BAD_REQUEST,
-            `${API_RESPONSES.INVALID_TAG_IDS}: ${validation.invalidTagIds.join(', ')}`,
+            `${API_RESPONSES.INVALID_TAG_IDS}: ${validation.invalidTagIds.join(', ')} `,
             HttpStatus.BAD_REQUEST
           )
         };
@@ -251,7 +254,7 @@ export class PathwaysService {
 
           if (isDisplayOrderConflict && attempts < MAX_ATTEMPTS) {
             LoggerUtil.warn(
-              `Display order collision detected (attempt ${attempts}). Retrying...`,
+              `Display order collision detected(attempt ${attempts}).Retrying...`,
               apiId
             );
             continue; // Retry with fresh calculation
@@ -260,8 +263,15 @@ export class PathwaysService {
         }
       }
 
-      // Fetch tag details for the response
       const tagDetails = await this.fetchTagDetails(savedPathway.tags || []);
+
+      // Invalidate pathway search cache
+      try {
+        await this.cacheService.delByPattern('pathway:search:*');
+        LoggerUtil.log('Invalidated pathway search cache after creation', apiId);
+      } catch (cacheError) {
+        LoggerUtil.warn(`Failed to invalidate pathway search cache: ${cacheError.message}`, apiId);
+      }
 
       const result = {
         id: savedPathway.id,
@@ -285,8 +295,8 @@ export class PathwaysService {
       // Handle unique constraint violation
       if (error.code === '23505') {
         LoggerUtil.error(
-          `${API_RESPONSES.CONFLICT}`,
-          `Conflict error details: ${error.detail}`,
+          `${API_RESPONSES.CONFLICT} `,
+          `Conflict error details: ${error.detail} `,
           apiId
         );
         // PostgreSQL unique constraint violation
@@ -313,8 +323,8 @@ export class PathwaysService {
 
       const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
       LoggerUtil.error(
-        `${API_RESPONSES.SERVER_ERROR}`,
-        `Error creating pathway: ${errorMessage}`,
+        `${API_RESPONSES.SERVER_ERROR} `,
+        `Error creating pathway: ${errorMessage} `,
         apiId
       );
       return APIResponse.error(
@@ -340,128 +350,156 @@ export class PathwaysService {
   ): Promise<Response> {
     const apiId = APIID.PATHWAY_LIST;
     try {
-      // Set pagination defaults with safeguard to prevent unbounded queries
-      // Defense in depth: cap limit even if validation is bypassed
-      const requestedLimit = listPathwayDto.limit ?? 10;
-      const limit = Math.min(requestedLimit, MAX_PAGINATION_LIMIT);
-      const offset = listPathwayDto.offset ?? 0;
+      // 1. Generate cache key from all relevant parameters
+      const cacheKey = `pathway:search:${crypto
+        .createHash('md5')
+        .update(JSON.stringify(listPathwayDto, Object.keys(listPathwayDto).sort()))
+        .digest('hex')}`;
 
-      // Extract filters from nested object
-      const filters = listPathwayDto.filters || {};
+      // 2. Check cache for DB data only (LMS counts are always fetched live)
+      let dbItems: any[] = null;
+      let totalCount: number = null;
+      let limit: number;
+      let offset: number;
 
-      // Check if we need QueryBuilder for text search (name or description)
-      const needsTextSearch = !!(filters.name || filters.description);
-      let items: any[];
-      let totalCount: number;
-
-      if (needsTextSearch) {
-        // Use QueryBuilder for ILIKE queries (optimized for text search)
-        const queryBuilder = this.pathwayRepository.createQueryBuilder("pathway");
-
-        // Apply filters
-        if (filters.id) {
-          queryBuilder.andWhere("pathway.id = :id", { id: filters.id });
-        }
-        if (filters.name) {
-          queryBuilder.andWhere("pathway.name ILIKE :name", { name: `%${filters.name}%` });
-        }
-        if (filters.description) {
-          queryBuilder.andWhere("pathway.description ILIKE :description", { description: `%${filters.description}%` });
-        }
-        if (filters.isActive !== undefined) {
-          queryBuilder.andWhere("pathway.is_active = :isActive", { isActive: filters.isActive });
-        }
-
-        // Apply ordering
-        queryBuilder.orderBy("pathway.display_order", "ASC");
-        queryBuilder.addOrderBy("pathway.created_at", "DESC");
-
-        // Apply pagination
-        queryBuilder.skip(offset).take(limit);
-
-        // Execute query
-        [items, totalCount] = await queryBuilder.getManyAndCount();
+      const cachedDb = await this.cacheService.get<any>(cacheKey);
+      if (cachedDb) {
+        LoggerUtil.log(`Cache HIT for pathway search (DB): ${cacheKey}`, apiId);
+        dbItems = cachedDb.items;
+        totalCount = cachedDb.totalCount;
+        limit = cachedDb.limit;
+        offset = cachedDb.offset;
       } else {
-        // Use findAndCount for simple filters (more efficient when no text search)
-        const whereCondition: any = {};
-        if (filters.id) {
-          whereCondition.id = filters.id;
-        }
-        if (filters.isActive !== undefined) {
-          whereCondition.is_active = filters.isActive;
-        }
+        LoggerUtil.log(`Cache MISS for pathway search: ${cacheKey}`, apiId);
 
-        // OPTIMIZED: Single query with count and data using findAndCount
-        // This performs both COUNT and SELECT in an optimized way
-        // Using indexed columns (is_active, display_order) for performance
-        [items, totalCount] = await this.pathwayRepository.findAndCount({
-          where: whereCondition,
-          order: {
-            display_order: "ASC",
-            created_at: "DESC",
-          },
-          take: limit,
-          skip: offset,
-        });
-      }
+        // Set pagination defaults with safeguard to prevent unbounded queries
+        // Defense in depth: cap limit even if validation is bypassed
+        const requestedLimit = listPathwayDto.limit ?? 10;
+        limit = Math.min(requestedLimit, MAX_PAGINATION_LIMIT);
+        offset = listPathwayDto.offset ?? 0;
 
-      // OPTIMIZED: Collect all unique tag IDs from all pathways in one pass
-      const allTagIds = new Set<string>();
-      items.forEach((item: any) => {
-        if (item.tags && Array.isArray(item.tags)) {
-          item.tags.forEach((tagId: string) => {
-            if (tagId) allTagIds.add(tagId);
+        // Extract filters from nested object
+        const filters = listPathwayDto.filters || {};
+
+        // Check if we need QueryBuilder for text search (name or description)
+        const needsTextSearch = !!(filters.name || filters.description);
+        let rawItems: any[];
+
+        if (needsTextSearch) {
+          // Use QueryBuilder for ILIKE queries (optimized for text search)
+          const queryBuilder = this.pathwayRepository.createQueryBuilder("pathway");
+
+          // Apply filters
+          if (filters.id) {
+            queryBuilder.andWhere("pathway.id = :id", { id: filters.id });
+          }
+          if (filters.name) {
+            queryBuilder.andWhere("pathway.name ILIKE :name", { name: `% ${filters.name}% ` });
+          }
+          if (filters.description) {
+            queryBuilder.andWhere("pathway.description ILIKE :description", { description: `% ${filters.description}% ` });
+          }
+          if (filters.isActive !== undefined) {
+            queryBuilder.andWhere("pathway.is_active = :isActive", { isActive: filters.isActive });
+          }
+
+          // Apply ordering
+          queryBuilder.orderBy("pathway.display_order", "ASC");
+          queryBuilder.addOrderBy("pathway.created_at", "DESC");
+
+          // Apply pagination
+          queryBuilder.skip(offset).take(limit);
+
+          // Execute query
+          [rawItems, totalCount] = await queryBuilder.getManyAndCount();
+        } else {
+          // Use findAndCount for simple filters (more efficient when no text search)
+          const whereCondition: any = {};
+          const filters = listPathwayDto.filters || {};
+          if (filters.id) {
+            whereCondition.id = filters.id;
+          }
+          if (filters.isActive !== undefined) {
+            whereCondition.is_active = filters.isActive;
+          }
+
+          // OPTIMIZED: Single query with count and data using findAndCount
+          [rawItems, totalCount] = await this.pathwayRepository.findAndCount({
+            where: whereCondition,
+            order: {
+              display_order: "ASC",
+              created_at: "DESC",
+            },
+            take: limit,
+            skip: offset,
           });
         }
-      });
 
-      // OPTIMIZED: Fetch all tag details in a single batch query (no N+1)
-      const tagDetailsMap = new Map<string, { id: string; name: string }>();
-      if (allTagIds.size > 0) {
-        const tagDetails = await this.fetchTagDetails(Array.from(allTagIds));
-        tagDetails.forEach((tag) => {
-          tagDetailsMap.set(tag.id, tag);
+        // OPTIMIZED: Collect all unique tag IDs from all pathways in one pass
+        const allTagIds = new Set<string>();
+        rawItems.forEach((item: any) => {
+          if (item.tags && Array.isArray(item.tags)) {
+            item.tags.forEach((tagId: string) => {
+              if (tagId) allTagIds.add(tagId);
+            });
+          }
         });
+
+        // OPTIMIZED: Fetch all tag details in a single batch query (no N+1)
+        const tagDetailsMap = new Map<string, { id: string; name: string }>();
+        if (allTagIds.size > 0) {
+          const tagDetails = await this.fetchTagDetails(Array.from(allTagIds));
+          tagDetails.forEach((tag) => {
+            tagDetailsMap.set(tag.id, tag);
+          });
+        }
+
+        // Build DB items with tags resolved (no LMS counts yet)
+        dbItems = rawItems.map((item: any) => {
+          const tagIds = item.tags || [];
+          const tags = tagIds
+            .map((tagId: string) => tagDetailsMap.get(tagId))
+            .filter((tag) => tag !== undefined);
+
+          return {
+            id: item.id,
+            key: item.key,
+            name: item.name,
+            description: item.description,
+            tags: tags,
+            display_order: item.display_order,
+            is_active: item.is_active,
+            created_at: item.created_at,
+          };
+        });
+
+        // Cache only DB data (tags resolved, no LMS counts) for 300 seconds
+        await this.cacheService.set(cacheKey, { items: dbItems, totalCount, limit, offset }, 300);
+        LoggerUtil.log(`Cached DB pathway data for key: ${cacheKey}`, apiId);
       }
 
-      // OPTIMIZED: Batch fetch video and resource counts for all pathways in parallel
-      const pathwayIds = items.map((item: any) => item.id);
+      // Always fetch LMS counts live (never cached) for fresh video/resource counts
+      const pathwayIds = dbItems.map((item: any) => item.id);
       const countsMap = await this.lmsClientService.getBatchCounts(
         pathwayIds,
         tenantId,
         organisationId
       );
 
-      // Transform items to include only tags with names (no tag_ids) and counts
-      const transformedItems = items.map((item: any) => {
-        const tagIds = item.tags || [];
-        const tags = tagIds
-          .map((tagId: string) => tagDetailsMap.get(tagId))
-          .filter((tag) => tag !== undefined); // Filter out any tags that weren't found
-
+      // Merge live LMS counts into cached DB items
+      const transformedItems = dbItems.map((item: any) => {
         const counts = countsMap.get(item.id);
-        const videoCount = counts?.videoCount ?? 0;
-        const resourceCount = counts?.resourceCount ?? 0;
-        const totalItems = (counts as any)?.totalItems ?? 0;
-
         return {
-          id: item.id,
-          key: item.key,
-          name: item.name,
-          description: item.description,
-          tags: tags,
-          display_order: item.display_order,
-          is_active: item.is_active,
-          created_at: item.created_at,
-          video_count: videoCount,
-          resource_count: resourceCount,
-          total_items: totalItems,
+          ...item,
+          video_count: counts?.videoCount ?? 0,
+          resource_count: counts?.resourceCount ?? 0,
+          total_items: (counts as any)?.totalItems ?? 0,
         };
       });
 
       // Return paginated result with count
       const result = {
-        count: items.length,
+        count: dbItems.length,
         totalCount: totalCount,
         limit: limit,
         offset: offset,
@@ -478,8 +516,8 @@ export class PathwaysService {
     } catch (error) {
       const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
       LoggerUtil.error(
-        `${API_RESPONSES.SERVER_ERROR}`,
-        `Error listing pathways: ${errorMessage}`,
+        `${API_RESPONSES.SERVER_ERROR} `,
+        `Error listing pathways: ${errorMessage} `,
         apiId
       );
       return APIResponse.error(
@@ -554,8 +592,8 @@ export class PathwaysService {
     } catch (error) {
       const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
       LoggerUtil.error(
-        `${API_RESPONSES.SERVER_ERROR}`,
-        `Error fetching pathway: ${errorMessage}`,
+        `${API_RESPONSES.SERVER_ERROR} `,
+        `Error fetching pathway: ${errorMessage} `,
         apiId
       );
       return APIResponse.error(
@@ -622,7 +660,7 @@ export class PathwaysService {
               apiId,
               API_RESPONSES.BAD_REQUEST,
               `${API_RESPONSES.INVALID_TAG_IDS
-              }: ${validation.invalidTagIds.join(', ')}`,
+              }: ${validation.invalidTagIds.join(', ')} `,
               HttpStatus.BAD_REQUEST
             );
           }
@@ -706,6 +744,14 @@ export class PathwaysService {
         );
       }
 
+      // Invalidate pathway search cache
+      try {
+        await this.cacheService.delByPattern('pathway:search:*');
+        LoggerUtil.log('Invalidated pathway search cache after update', apiId);
+      } catch (cacheError) {
+        LoggerUtil.warn(`Failed to invalidate pathway search cache: ${cacheError.message}`, apiId);
+      }
+
       // Fetch updated pathway for response
       const updatedPathway = await this.pathwayRepository.findOne({
         where: { id },
@@ -748,8 +794,8 @@ export class PathwaysService {
     } catch (error) {
       const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
       LoggerUtil.error(
-        `${API_RESPONSES.SERVER_ERROR}`,
-        `Error updating pathway: ${errorMessage}`,
+        `${API_RESPONSES.SERVER_ERROR} `,
+        `Error updating pathway: ${errorMessage} `,
         apiId
       );
       return APIResponse.error(
@@ -934,8 +980,8 @@ export class PathwaysService {
     } catch (error) {
       const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
       LoggerUtil.error(
-        `${API_RESPONSES.SERVER_ERROR}`,
-        `Error handling pathway assignment: ${errorMessage}`,
+        `${API_RESPONSES.SERVER_ERROR} `,
+        `Error handling pathway assignment: ${errorMessage} `,
         apiId
       );
       return APIResponse.error(
@@ -1021,8 +1067,8 @@ export class PathwaysService {
     } catch (error) {
       const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
       LoggerUtil.error(
-        `${API_RESPONSES.SERVER_ERROR}`,
-        `Error getting active pathway: ${errorMessage}`,
+        `${API_RESPONSES.SERVER_ERROR} `,
+        `Error getting active pathway: ${errorMessage} `,
         apiId
       );
       return APIResponse.error(
@@ -1045,13 +1091,13 @@ export class PathwaysService {
 
     if (!key) {
       // Fallback if name contains no valid chars
-      key = `pathway_${Date.now()}`;
+      key = `pathway_${Date.now()} `;
     }
 
     // Step 2: Uniqueness check with prefix search
     const existingKeys = await this.pathwayRepository.find({
       where: {
-        key: Like(`${key}%`),
+        key: Like(`${key}% `),
       },
       select: ['key'],
     });
@@ -1067,18 +1113,18 @@ export class PathwaysService {
 
     // Step 3: Find next available numeric suffix
     let counter = 1;
-    let uniqueKey = `${key}_${counter}`;
+    let uniqueKey = `${key}_${counter} `;
 
     // Ensure suffix doesn't exceed length limit
     while (keySet.has(uniqueKey)) {
       counter++;
-      const suffix = `_${counter}`;
+      const suffix = `_${counter} `;
       if (key.length + suffix.length > 50) {
         // Trim base key to fit suffix
         const trimmedBase = key.substring(0, 50 - suffix.length);
-        uniqueKey = `${trimmedBase}${suffix}`;
+        uniqueKey = `${trimmedBase}${suffix} `;
       } else {
-        uniqueKey = `${key}${suffix}`;
+        uniqueKey = `${key}${suffix} `;
       }
 
       // Safety break
@@ -1120,7 +1166,7 @@ export class PathwaysService {
           response,
           apiId,
           API_RESPONSES.NOT_FOUND,
-          `One or more pathways not found: ${missingIds.join(', ')}`,
+          `One or more pathways not found: ${missingIds.join(', ')} `,
           HttpStatus.NOT_FOUND
         );
       }
@@ -1136,7 +1182,7 @@ export class PathwaysService {
       const externalConflicts = potentialConflicts.filter(p => !ids.includes(p.id));
 
       if (externalConflicts.length > 0) {
-        const conflictDetails = externalConflicts.map(p => `'${p.name}' (Order ${p.display_order})`).join(', ');
+        const conflictDetails = externalConflicts.map(p => `'${p.name}'(Order ${p.display_order})`).join(', ');
         return APIResponse.error(
           response,
           apiId,
@@ -1175,6 +1221,14 @@ export class PathwaysService {
         }
       });
 
+      // Invalidate pathway search cache
+      try {
+        await this.cacheService.delByPattern('pathway:search:*');
+        LoggerUtil.log('Invalidated pathway search cache after reordering', apiId);
+      } catch (cacheError) {
+        LoggerUtil.warn(`Failed to invalidate pathway search cache: ${cacheError.message}`, apiId);
+      }
+
       return APIResponse.success(
         response,
         apiId,
@@ -1185,8 +1239,8 @@ export class PathwaysService {
     } catch (error) {
       const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
       LoggerUtil.error(
-        `${API_RESPONSES.SERVER_ERROR}`,
-        `Error updating pathway order structure: ${errorMessage}`,
+        `${API_RESPONSES.SERVER_ERROR} `,
+        `Error updating pathway order structure: ${errorMessage} `,
         apiId
       );
       return APIResponse.error(

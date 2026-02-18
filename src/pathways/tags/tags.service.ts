@@ -1,6 +1,8 @@
 import { Injectable, HttpStatus, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Like, Not, DataSource } from 'typeorm';
+import * as crypto from 'crypto';
+import { CacheService } from 'src/cache/cache.service';
 import { Tag, TagStatus } from './entities/tag.entity';
 import { StringUtil } from '../common/utils/string.util';
 import { CreateTagDto } from './dto/create-tag.dto';
@@ -20,7 +22,8 @@ export class TagsService implements OnModuleInit {
   constructor(
     @InjectRepository(Tag)
     private readonly tagRepository: Repository<Tag>,
-    private readonly dataSource: DataSource
+    private readonly dataSource: DataSource,
+    private readonly cacheService: CacheService
   ) { }
 
   /**
@@ -96,6 +99,14 @@ export class TagsService implements OnModuleInit {
       // Create and save in single operation
       const tag = this.tagRepository.create(tagData);
       const savedTag = await this.tagRepository.save(tag);
+
+      // Invalidate tag search cache after successful creation
+      try {
+        await this.cacheService.delByPattern('tags:search:*');
+        LoggerUtil.log('Invalidated tag search cache after creation', apiId);
+      } catch (cacheError) {
+        LoggerUtil.warn(`Failed to invalidate tag search cache: ${cacheError.message}`, apiId);
+      }
 
       // Return all fields as per API spec
       const result = {
@@ -242,6 +253,14 @@ export class TagsService implements OnModuleInit {
         }
       );
 
+      // Invalidate tag search cache after successful update
+      try {
+        await this.cacheService.delByPattern('tags:search:*');
+        LoggerUtil.log('Invalidated tag search cache after update', apiId);
+      } catch (cacheError) {
+        LoggerUtil.warn(`Failed to invalidate tag search cache: ${cacheError.message}`, apiId);
+      }
+
       // Fetch updated tag for response (safety check for concurrent deletion)
       const updatedTag = await this.tagRepository.findOne({
         where: { id },
@@ -347,6 +366,14 @@ export class TagsService implements OnModuleInit {
         }
       );
 
+      // Invalidate tag search cache after successful archiving (soft delete)
+      try {
+        await this.cacheService.delByPattern('tags:search:*');
+        LoggerUtil.log('Invalidated tag search cache after archiving', apiId);
+      } catch (cacheError) {
+        LoggerUtil.warn(`Failed to invalidate tag search cache: ${cacheError.message}`, apiId);
+      }
+
       if (!updateResult.affected || updateResult.affected === 0) {
         return APIResponse.error(
           response,
@@ -395,6 +422,27 @@ export class TagsService implements OnModuleInit {
   async list(listTagDto: ListTagDto, response: Response): Promise<Response> {
     const apiId = APIID.TAG_LIST;
     try {
+      // 1. Generate cache key from all relevant parameters
+      const cacheKey = `tags:search:${crypto
+        .createHash('md5')
+        .update(JSON.stringify(listTagDto, Object.keys(listTagDto).sort()))
+        .digest('hex')}`;
+
+      // 2. Check cache first
+      const cachedResult = await this.cacheService.get<any>(cacheKey);
+      if (cachedResult) {
+        LoggerUtil.log(`Cache HIT for tag search: ${cacheKey}`, apiId);
+        return APIResponse.success(
+          response,
+          apiId,
+          cachedResult,
+          HttpStatus.OK,
+          API_RESPONSES.TAG_LIST_SUCCESS
+        );
+      }
+
+      LoggerUtil.log(`Cache MISS for tag search: ${cacheKey}`, apiId);
+
       // Set pagination defaults with safeguard to prevent unbounded queries
       // Defense in depth: cap limit even if validation is bypassed
       const requestedLimit = listTagDto.limit ?? 10;
@@ -500,6 +548,9 @@ export class TagsService implements OnModuleInit {
         offset: offset,
         items: items,
       };
+
+      // 3. Set cache before returning (TTL: 300 seconds)
+      await this.cacheService.set(cacheKey, result, 300);
 
       return APIResponse.success(
         response,

@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { CacheModule } from '../cache/cache.module';
 import { ConfigModule } from '@nestjs/config';
 import { PathwaysController } from './pathway/pathways.controller';
 import { PathwaysService } from './pathway/pathways.service';
@@ -17,6 +18,7 @@ import { LmsClientService } from './common/services/lms-client.service';
     TypeOrmModule.forFeature([Pathway, UserPathwayHistory, User, Tag]),
     InterestsModule,
     ConfigModule,
+    CacheModule,
   ],
   controllers: [PathwaysController, TagsController],
   providers: [PathwaysService, TagsService, LmsClientService],

@@ -272,18 +272,18 @@ export class LmsClientService {
       if (countsResponse.status !== 200) {
         // Extract error message from different possible response structures
         const errorData = countsResponse.data;
-        const errorMessage = 
-          errorData?.message || 
-          errorData?.errmsg || 
+        const errorMessage =
+          errorData?.message ||
+          errorData?.errmsg ||
           errorData?.params?.errmsg ||
           errorData?.error ||
           JSON.stringify(errorData) ||
           'Unknown error';
-        
+
         this.logger.warn(
           `Failed to fetch lesson counts: status ${countsResponse.status}, error: ${errorMessage}. Request: courseIds=${courseIdsParam.substring(0, 200)}${courseIdsParam.length > 200 ? '...' : ''}`
         );
-        
+
         // Return map with zero counts for all courses
         const zeroCountsMap = new Map<string, { videoCount: number; resourceCount: number; totalItems: number }>();
         courseIds.forEach((courseId) => {
@@ -356,8 +356,7 @@ export class LmsClientService {
       return countsMap;
     } catch (error) {
       this.logger.error(
-        `Error in batch fetch counts: ${
-          error instanceof Error ? error.message : 'Unknown error'
+        `Error in batch fetch counts: ${error instanceof Error ? error.message : 'Unknown error'
         }`
       );
       // Return map with 0 counts for all pathways

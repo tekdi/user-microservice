@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { CacheModule } from "src/cache/cache.module";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { InterestsController } from "./interests.controller";
 import { InterestsService } from "./interests.service";
@@ -15,6 +16,7 @@ import { UserPathwayInterests } from "../pathway/entities/user-pathway-interests
       UserPathwayHistory,
       UserPathwayInterests,
     ]),
+    CacheModule,
   ],
   controllers: [InterestsController],
   providers: [InterestsService],

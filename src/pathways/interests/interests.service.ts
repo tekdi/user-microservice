@@ -1,6 +1,8 @@
 import { Injectable, HttpStatus } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository, In, DataSource, ILike, Like, Not } from "typeorm";
+import * as crypto from 'crypto';
+import { CacheService } from 'src/cache/cache.service';
 import { Interest } from "./entities/interest.entity";
 import { CreateInterestDto } from "./dto/create-interest.dto";
 import { UpdateInterestDto } from "./dto/update-interest.dto";
@@ -28,7 +30,8 @@ export class InterestsService {
     private readonly userPathwayHistoryRepository: Repository<UserPathwayHistory>,
     @InjectRepository(UserPathwayInterests)
     private readonly userPathwayInterestsRepository: Repository<UserPathwayInterests>,
-    private readonly dataSource: DataSource
+    private readonly dataSource: DataSource,
+    private readonly cacheService: CacheService
   ) { }
 
   /**
@@ -114,6 +117,14 @@ export class InterestsService {
       });
 
       const savedInterest = await this.interestRepository.save(interest);
+
+      // Invalidate interest search cache for this pathway
+      try {
+        await this.cacheService.delByPattern(`interests:search:${savedInterest.pathway_id}:*`);
+        LoggerUtil.log(`Invalidated interest search cache for pathway: ${savedInterest.pathway_id}`, apiId);
+      } catch (cacheError) {
+        LoggerUtil.warn(`Failed to invalidate interest search cache: ${cacheError.message}`, apiId);
+      }
 
       const result = {
         id: savedInterest.id,
@@ -233,6 +244,14 @@ export class InterestsService {
         }
       );
 
+      // Invalidate interest search cache for this pathway
+      try {
+        await this.cacheService.delByPattern(`interests:search:${existingInterest.pathway_id}:*`);
+        LoggerUtil.log(`Invalidated interest search cache for pathway: ${existingInterest.pathway_id}`, apiId);
+      } catch (cacheError) {
+        LoggerUtil.warn(`Failed to invalidate interest search cache: ${cacheError.message}`, apiId);
+      }
+
       const updatedInterest = await this.interestRepository.findOne({
         where: { id },
       });
@@ -291,7 +310,7 @@ export class InterestsService {
     try {
       const existingInterest = await this.interestRepository.findOne({
         where: { id },
-        select: ['id'],
+        select: ['id', 'pathway_id'],
       });
 
       if (!existingInterest) {
@@ -313,6 +332,14 @@ export class InterestsService {
           // Note: addedBy/updatedBy for delete would require DTO change for delete API
         }
       );
+
+      // Invalidate interest search cache for this pathway
+      try {
+        await this.cacheService.delByPattern(`interests:search:${existingInterest.pathway_id}:*`);
+        LoggerUtil.log(`Invalidated interest search cache for pathway: ${existingInterest.pathway_id}`, apiId);
+      } catch (cacheError) {
+        LoggerUtil.warn(`Failed to invalidate interest search cache: ${cacheError.message}`, apiId);
+      }
 
       const result = {
         id: id,
@@ -363,6 +390,28 @@ export class InterestsService {
           HttpStatus.BAD_REQUEST
         );
       }
+
+      // 1. Generate cache key from all relevant parameters
+      const cacheKey = `interests:search:${pathwayId}:${crypto
+        .createHash('md5')
+        .update(JSON.stringify(listInterestDto, Object.keys(listInterestDto).sort()))
+        .digest('hex')}`;
+
+      // 2. Check cache first
+      const cachedResult = await this.cacheService.get<any>(cacheKey);
+      if (cachedResult) {
+        LoggerUtil.log(`Cache HIT for interest search: ${cacheKey}`, apiId);
+        return APIResponse.success(
+          response,
+          apiId,
+          cachedResult,
+          HttpStatus.OK,
+          API_RESPONSES.INTEREST_LIST_SUCCESS
+        );
+      }
+
+      LoggerUtil.log(`Cache MISS for interest search: ${cacheKey}`, apiId);
+
       // Check if pathway exists
       const pathway = await this.pathwayRepository.findOne({
         where: { id: pathwayId },
@@ -416,6 +465,9 @@ export class InterestsService {
         offset: skip,
         items: items,
       };
+
+      // 3. Set cache before returning (TTL: 300 seconds)
+      await this.cacheService.set(cacheKey, result, 300);
 
       return APIResponse.success(
         response,
