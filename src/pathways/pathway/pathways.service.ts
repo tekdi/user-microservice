@@ -346,90 +346,130 @@ export class PathwaysService {
         }
       }
 
-      // 3. Handle auto-increment for display_order
-      let displayOrder = createPathwayDto.display_order;
-      
-      // Fetch current max display_order for auto-increment or conflict resolution
-      const maxOrderResult = await this.pathwayRepository
-        .createQueryBuilder('pathway')
-        .select('MAX(pathway.display_order)', 'max')
-        .getRawOne();
-      const maxOrder = Number(maxOrderResult?.max || 0);
+      // 3. Handle auto-increment for display_order with retry logic for TOCTOU race conditions
+      const MAX_RETRIES = 3;
+      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        try {
+          let displayOrder = createPathwayDto.display_order;
 
-      if (displayOrder === 0 || displayOrder === undefined || displayOrder === null) {
-        // If 0, null, or undefined, always use max + 1
-        displayOrder = maxOrder + 1;
-      } else {
-        // If a specific order is requested (> 0), check if it's already taken
-        const orderConflict = await this.pathwayRepository.findOne({
-          where: { display_order: displayOrder },
-          select: ['id'],
-        });
+          // Fetch current max display_order for auto-increment or conflict resolution
+          const maxOrderResult = await this.pathwayRepository
+            .createQueryBuilder('pathway')
+            .select('MAX(pathway.display_order)', 'max')
+            .getRawOne();
+          const maxOrder = Number(maxOrderResult?.max || 0);
 
-        if (orderConflict) {
-          // If taken, fallback to max + 1 as per requirement
-          this.logger.debug(
-            `Display order ${displayOrder} is taken. Falling back to ${maxOrder + 1}`
+          if (
+            displayOrder === 0 ||
+            displayOrder === undefined ||
+            displayOrder === null
+          ) {
+            // If 0, null, or undefined, always use max + 1
+            displayOrder = maxOrder + 1;
+          } else {
+            // If a specific order is requested (> 0), check if it's already taken
+            const orderConflict = await this.pathwayRepository.findOne({
+              where: { display_order: displayOrder },
+              select: ['id'],
+            });
+
+            if (orderConflict) {
+              // If taken, fallback to max + 1
+              this.logger.debug(
+                `Display order ${displayOrder} is taken. Falling back to ${
+                  maxOrder + 1
+                }`
+              );
+              displayOrder = maxOrder + 1;
+            }
+          }
+
+          let imageUrl: string | null = null;
+          const dtoImageUrl = createPathwayDto.image_url;
+          if (
+            dtoImageUrl &&
+            typeof dtoImageUrl === 'string' &&
+            dtoImageUrl.trim() !== ''
+          ) {
+            imageUrl = dtoImageUrl.trim();
+          }
+
+          const pathwayData = {
+            ...createPathwayDto,
+            key: key,
+            display_order: displayOrder,
+            is_active: createPathwayDto.is_active ?? true,
+            tags:
+              createPathwayDto.tags && createPathwayDto.tags.length > 0
+                ? createPathwayDto.tags
+                : [],
+            image_url: imageUrl,
+            created_by: userId,
+            updated_by: userId,
+          };
+
+          const pathway = this.pathwayRepository.create(pathwayData);
+          const savedPathway = await this.pathwayRepository.save(pathway);
+
+          // OPTIMIZED: Fetch tag details in a single batch query (no N+1)
+          const savedData = savedPathway as any;
+          const tagIds = savedData.tags || [];
+          const tagDetails = await this.fetchTagDetails(tagIds);
+
+          // Return all fields with tags (id and name) instead of tag_ids
+          const result = {
+            id: savedData.id,
+            key: savedData.key,
+            name: savedData.name,
+            description: savedData.description,
+            tags: tagDetails,
+            display_order: savedData.display_order,
+            is_active: savedData.is_active,
+            image_url: savedData.image_url,
+            created_at: savedData.created_at,
+          };
+
+          // Invalidate pathway list cache after successful creation
+          try {
+            await this.cacheService.delByPattern('pathway:list:*');
+            this.logger.debug('Invalidated pathway list cache after creation');
+          } catch (cacheError: any) {
+            this.logger.warn(
+              `Failed to invalidate pathway list cache: ${
+                cacheError?.message || cacheError
+              }`
+            );
+          }
+
+          return APIResponse.success(
+            response,
+            apiId,
+            result,
+            HttpStatus.CREATED,
+            API_RESPONSES.PATHWAY_CREATED_SUCCESSFULLY
           );
-          displayOrder = maxOrder + 1;
+        } catch (error) {
+          // If it's a unique constraint violation on display_order, retry
+          const isDisplayOrderConflict =
+            error.code === '23505' &&
+            ((error.detail && error.detail.includes('display_order')) ||
+              (error.constraint && error.constraint.includes('display_order')));
+
+          if (isDisplayOrderConflict && attempt < MAX_RETRIES) {
+            this.logger.warn(
+              `Display order conflict occurred (TOCTOU race). Attempt ${attempt} failed. Retrying...`
+            );
+            // Optionally add a small delay here if needed, but usually just re-fetching max is enough
+            continue;
+          }
+
+          // If it's not a display_order conflict or we've exhausted retries, let the outer catch handle it
+          throw error;
         }
       }
 
-      let imageUrl: string | null = null;
-      const dtoImageUrl = createPathwayDto.image_url;
-      if (dtoImageUrl && typeof dtoImageUrl === 'string' && dtoImageUrl.trim() !== '') {
-        imageUrl = dtoImageUrl.trim();
-      }
-
-      const pathwayData = {
-        ...createPathwayDto,
-        key: key,
-        display_order: displayOrder,
-        is_active: createPathwayDto.is_active ?? true,
-        tags: createPathwayDto.tags && createPathwayDto.tags.length > 0 ? createPathwayDto.tags : [],
-        image_url: imageUrl,
-        created_by: userId,
-        updated_by: userId,
-      };
-
-      const pathway = this.pathwayRepository.create(pathwayData);
-      const savedPathway = await this.pathwayRepository.save(pathway);
-
-      // OPTIMIZED: Fetch tag details in a single batch query (no N+1)
-      const savedData = savedPathway as any;
-      const tagIds = savedData.tags || [];
-      const tagDetails = await this.fetchTagDetails(tagIds);
-
-      // Return all fields with tags (id and name) instead of tag_ids
-      const result = {
-        id: savedData.id,
-        key: savedData.key,
-        name: savedData.name,
-        description: savedData.description,
-        tags: tagDetails,
-        display_order: savedData.display_order,
-        is_active: savedData.is_active,
-        image_url: savedData.image_url,
-        created_at: savedData.created_at,
-      };
-
-      // Invalidate pathway list cache after successful creation
-      try {
-        await this.cacheService.delByPattern('pathway:list:*');
-        this.logger.debug('Invalidated pathway list cache after creation');
-      } catch (cacheError: any) {
-        this.logger.warn(
-          `Failed to invalidate pathway list cache: ${cacheError?.message || cacheError}`
-        );
-      }
-
-      return APIResponse.success(
-        response,
-        apiId,
-        result,
-        HttpStatus.CREATED,
-        API_RESPONSES.PATHWAY_CREATED_SUCCESSFULLY
-      );
+      // This part should theoretically not be reached if MAX_RETRIES is handled correctly inside the loop
+      throw new Error('Failed to create pathway after multiple retry attempts');
     } catch (error) {
       // Handle unique constraint violation
       if (error.code === '23505') {
@@ -1273,15 +1313,26 @@ export class PathwaysService {
   ): Promise<Response> {
     const apiId = APIID.PATHWAY_GET_ACTIVE;
     try {
-      // Validate UUID format
+      // Validate UUID format for userId and pathwayId
       const uuidRegex =
         /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
       if (!uuidRegex.test(userId)) {
         return APIResponse.error(
           response,
           apiId,
           API_RESPONSES.BAD_REQUEST,
           API_RESPONSES.UUID_VALIDATION,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      if (pathwayId && !uuidRegex.test(pathwayId)) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          'Invalid pathwayId format. Must be a valid UUID.',
           HttpStatus.BAD_REQUEST
         );
       }
@@ -1456,25 +1507,24 @@ export class PathwaysService {
         );
       }
 
-      // 2. External Validation: Check for conflicts with pathways NOT in the payload
-      for (const orderItem of orders) {
-        const externalConflict = await this.pathwayRepository.findOne({
-          where: {
-            display_order: orderItem.order,
-            id: Not(In(Array.from(payloadIds))),
-          },
-          select: ["id", "display_order","name"],
-        });
+      // 2. External Validation: Check for conflicts with pathways NOT in the payload using a single batch query
+      const externalConflicts = await this.pathwayRepository.find({
+        where: {
+          display_order: In(Array.from(payloadOrders)),
+          id: Not(In(Array.from(payloadIds))),
+        },
+        select: ['id', 'display_order', 'name'],
+      });
 
-        if (externalConflict) {
-          return APIResponse.error(
-            response,
-            apiId,
-            API_RESPONSES.CONFLICT,
-            `Display order ${orderItem.order} is already taken by another pathway: ${externalConflict.name}`,
-            HttpStatus.CONFLICT
-          );
-        }
+      if (externalConflicts.length > 0) {
+        const conflict = externalConflicts[0];
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.CONFLICT,
+          `Display order ${conflict.display_order} is already taken by another pathway: ${conflict.name}`,
+          HttpStatus.CONFLICT
+        );
       }
 
       // 3. Process updates sequentially
@@ -1503,7 +1553,7 @@ export class PathwaysService {
         apiId,
         null,
         HttpStatus.OK,
-        "Pathway order structure updated successfully"
+        'Pathway order structure updated successfully'
       );
     } catch (error) {
       const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;

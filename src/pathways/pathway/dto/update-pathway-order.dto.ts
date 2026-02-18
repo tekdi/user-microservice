@@ -4,6 +4,7 @@ import {
     IsUUID,
     Min,
     IsString,
+    IsOptional,
     IsNotEmpty,
     ArrayNotEmpty,
     ValidateNested,
@@ -20,11 +21,12 @@ export class UpdateOrderDto {
     id: string;
     @ApiProperty({
         description: "Pathway name",
+        required: false,
     })
     @Expose()
     @IsString()
-    @IsNotEmpty()
-    name: string;
+    @IsOptional()
+    name?: string;
 
     @ApiProperty({
         description: "New display order for the pathway",
