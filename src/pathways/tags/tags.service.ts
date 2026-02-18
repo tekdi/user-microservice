@@ -540,10 +540,9 @@ export class TagsService implements OnModuleInit {
         });
       }
 
-      // Return paginated result with count, limit, and offset
+      // Return paginated result; count = total count of records (for pagination)
       const result = {
-        count: items.length,
-        totalCount: totalCount,
+        count: totalCount,
         limit: limit,
         offset: offset,
         items: items,

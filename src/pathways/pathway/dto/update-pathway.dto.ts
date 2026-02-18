@@ -9,7 +9,7 @@ import {
   IsArray,
   IsUUID,
 } from 'class-validator';
-import { Expose } from 'class-transformer';
+import { Expose, Type } from 'class-transformer';
 
 export class UpdatePathwayDto {
   @ApiPropertyOptional({
@@ -33,6 +33,14 @@ export class UpdatePathwayDto {
   description?: string;
 
   @ApiPropertyOptional({
+    description: "Image URL (from presigned S3 upload). Replaces existing image; old image is deleted from S3.",
+  })
+  @Expose()
+  @IsOptional()
+  @IsString()
+  image_url?: string;
+
+  @ApiPropertyOptional({
     description: 'Array of tag IDs from tags table (stored as PostgreSQL text[] array)',
     example: [
       'a1b2c3d4-e111-2222-3333-444455556666',
@@ -52,6 +60,7 @@ export class UpdatePathwayDto {
     minimum: 0,
   })
   @Expose()
+  @Type(() => Number)
   @IsOptional()
   @IsNumber()
   @Min(0, { message: "Display order must be a non-negative number" })

@@ -33,6 +33,9 @@ export class Pathway {
   @Column({ type: "boolean", default: true, nullable: false })
   is_active: boolean;
 
+  @Column({ type: 'text', nullable: true })
+  image_url: string | null;
+
   @CreateDateColumn({
     type: "timestamp",
     default: () => "CURRENT_TIMESTAMP",

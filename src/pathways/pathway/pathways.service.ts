@@ -1,4 +1,4 @@
-import { Injectable, HttpStatus, Logger } from '@nestjs/common';
+import { Injectable, HttpStatus, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, DataSource, Like, ILike, Not } from 'typeorm';
 import * as crypto from 'crypto';
@@ -20,10 +20,14 @@ import { API_RESPONSES } from '@utils/response.messages';
 import { APIID } from '@utils/api-id.config';
 import { LoggerUtil } from 'src/common/logger/LoggerUtil';
 import { Response } from 'express';
+import { S3StorageProvider } from '../../storage/providers/s3-storage.provider';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class PathwaysService {
   private readonly logger = new Logger(PathwaysService.name);
+  private readonly s3StorageProvider: S3StorageProvider;
+
   constructor(
     @InjectRepository(Pathway)
     private readonly pathwayRepository: Repository<Pathway>,
@@ -35,8 +39,182 @@ export class PathwaysService {
     private readonly userRepository: Repository<User>,
     private readonly dataSource: DataSource,
     private readonly lmsClientService: LmsClientService,
-    private readonly cacheService: CacheService
-  ) { }
+    private readonly cacheService: CacheService,
+    private readonly configService: ConfigService
+  ) {
+    // Initialize S3StorageProvider for image uploads
+    this.s3StorageProvider = new S3StorageProvider(this.configService);
+  }
+
+  /**
+   * Normalize path key: trim leading/trailing slashes and collapse consecutive slashes.
+   * Uses simple string iteration (O(n)) to avoid any regex and ReDoS risk.
+   */
+  private normalizePathKey(s: string): string {
+    let start = 0;
+    while (start < s.length && s[start] === '/') start++;
+    let end = s.length;
+    while (end > start && s[end - 1] === '/') end--;
+    if (start >= end) return '';
+    const segment: string[] = [];
+    let i = start;
+    while (i < end) {
+      if (s[i] === '/') {
+        segment.push('/');
+        while (i < end && s[i] === '/') i++;
+      } else {
+        const begin = i;
+        while (i < end && s[i] !== '/') i++;
+        segment.push(s.slice(begin, i));
+      }
+    }
+    return segment.join('');
+  }
+
+  /**
+   * Sanitized pathway storage key prefix from env (single source of truth for PATHWAY_STORAGE_KEY_PREFIX).
+   */
+  private getPathwayStoragePrefix(): string {
+    const raw = this.configService.get<string>('PATHWAY_STORAGE_KEY_PREFIX') || 'pathway-images/pathway/files';
+    return this.normalizePathKey(raw);
+  }
+
+  /**
+   * Get pathway storage/config (LMS-style). Returns upload path, presigned expiry, image mime types and size limit from env.
+   */
+  getPathwayConfig(): {
+    pathway_upload_path: string;
+    presigned_url_expires_in: number;
+    image_mime_type: string;
+    image_filesize: number;
+  } {
+    const pathway_upload_path = this.getPathwayStoragePrefix();
+    const presigned_url_expires_in = Number.parseInt(
+      this.configService.get<string>('AWS_UPLOAD_FILE_EXPIRY') || '3600',
+      10
+    );
+    return {
+      pathway_upload_path,
+      presigned_url_expires_in,
+      image_mime_type: 'image/jpeg, image/jpg, image/png, image/svg+xml',
+      image_filesize: 5, // MB, same as pathway image limit
+    };
+  }
+
+  /**
+   * Get presigned URL for pathway image upload. Client sends only the image file name (e.g. file_1771313851464_f195e1.png).
+   * Backend builds full S3 key from PATHWAY_STORAGE_KEY_PREFIX env (e.g. pathway-images/pathway/files) + filename.
+   * Validates contentType against allowed image MIME types and caps sizeLimit at config max.
+   */
+  async getPresignedUploadUrl(
+    key: string,
+    contentType: string,
+    expiresIn?: number,
+    sizeLimit?: number
+  ): Promise<{ url: string; fields: Record<string, string>; fileUrl: string }> {
+    const config = this.getPathwayConfig();
+    const allowedMimeTypes = config.image_mime_type.split(',').map((s) => s.trim().toLowerCase());
+    const contentTypeLower = (contentType || '').trim().toLowerCase();
+    if (!allowedMimeTypes.includes(contentTypeLower)) {
+      throw new BadRequestException(
+        `contentType must be one of: ${config.image_mime_type}. Received: ${contentType || '(empty)'}`
+      );
+    }
+    const maxSizeBytes = config.image_filesize * 1024 * 1024;
+    const cappedSizeLimit = sizeLimit == null ? maxSizeBytes : Math.min(sizeLimit, maxSizeBytes);
+
+    const prefix = this.getPathwayStoragePrefix();
+    const fileName = (key || '').trim();
+    if (!fileName) {
+      throw new BadRequestException('Key (file name) is required');
+    }
+    if (fileName.includes('/') || fileName.includes('\\') || fileName.includes('..')) {
+      throw new BadRequestException('Key must be a file name only (no path or path traversal). Example: file_1771313851464_f195e1.png');
+    }
+    const fullKey = prefix ? `${prefix}/${fileName}` : fileName;
+    const { url, fields } = await this.s3StorageProvider.getPresignedPostForKey(fullKey, contentType, {
+      expiresIn,
+      sizeLimit: cappedSizeLimit,
+    });
+    const fileUrl = this.s3StorageProvider.getUrl(fullKey);
+    return { url, fields, fileUrl };
+  }
+
+  /**
+   * Delete a file from pathway S3 storage by URL or key (like LMS DELETE /storage/files?key=...).
+   * Key/URL must be under PATHWAY_STORAGE_KEY_PREFIX. Logs the deletion.
+   *
+   * URL support: Only AWS S3 virtual-hosted-style URLs are supported:
+   * https://bucket.s3.region.amazonaws.com/key
+   * Path-style URLs (https://s3.region.amazonaws.com/bucket/key) or custom S3-compatible
+   * endpoints (e.g. MinIO) may not parse correctly and can cause deletion failures.
+   */
+  async deletePathwayStorageFile(keyOrUrl: string, response: Response): Promise<Response> {
+    const apiId = APIID.PATHWAY_STORAGE_DELETE;
+    const prefix = this.getPathwayStoragePrefix();
+    const prefixWithSlash = prefix ? `${prefix}/` : '';
+    let s3Key: string;
+    if (keyOrUrl.startsWith('http://') || keyOrUrl.startsWith('https://')) {
+      const extracted = this.extractS3KeyFromUrl(keyOrUrl);
+      if (!extracted) {
+        return APIResponse.error(response, apiId, API_RESPONSES.BAD_REQUEST, 'Invalid file URL', HttpStatus.BAD_REQUEST);
+      }
+      s3Key = extracted;
+    } else {
+      s3Key = this.normalizePathKey(keyOrUrl);
+    }
+    if (!prefixWithSlash || !s3Key.startsWith(prefixWithSlash)) {
+      return APIResponse.error(response, apiId, API_RESPONSES.BAD_REQUEST, `File key must be a file under pathway storage prefix (${prefix}/), not the prefix itself`, HttpStatus.BAD_REQUEST);
+    }
+    try {
+      await this.s3StorageProvider.delete(s3Key);
+      return APIResponse.success(response, apiId, { deleted: true, key: s3Key }, HttpStatus.OK, 'File deleted from storage');
+    } catch (error) {
+      this.logger.warn(`Pathway storage delete failed: key=${s3Key}, error=${error instanceof Error ? error.message : 'Unknown'}`);
+      return APIResponse.error(response, apiId, API_RESPONSES.INTERNAL_SERVER_ERROR, 'Failed to delete file from storage', HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  /**
+   * Extract S3 object key from a virtual-hosted-style S3 URL.
+   * Supported format: https://bucket.s3.region.amazonaws.com/key (pathname is the key).
+   * Path-style or custom S3-compatible endpoints are not supported.
+   */
+  private extractS3KeyFromUrl(url: string): string | null {
+    if (!url) {
+      return null;
+    }
+
+    try {
+      const urlObj = new URL(url);
+      // Remove leading slash from pathname
+      const key = urlObj.pathname.replace(/^\//, '');
+      return key || null;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Failed to extract S3 key from URL: ${url}. ${message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Delete image from S3 if URL exists
+   */
+  private async deleteImageFromS3(imageUrl: string | null): Promise<void> {
+    if (!imageUrl) {
+      return;
+    }
+
+    try {
+      const s3Key = this.extractS3KeyFromUrl(imageUrl);
+      if (s3Key) {
+        await this.s3StorageProvider.delete(s3Key);
+      }
+    } catch (error) {
+      // Log error but don't fail the request if deletion fails
+      this.logger.warn(`Failed to delete image from S3: ${imageUrl}, error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
 
   /**
    * Validate tag IDs exist in tags table
@@ -228,6 +406,7 @@ export class PathwaysService {
       const MAX_ATTEMPTS = 3;
       let savedPathway;
 
+
       while (attempts < MAX_ATTEMPTS) {
         attempts++;
         try {
@@ -281,6 +460,7 @@ export class PathwaysService {
         tags: tagDetails,
         display_order: savedPathway.display_order,
         is_active: savedPathway.is_active,
+        image_url: savedPathway.image_url,
         created_at: savedPathway.created_at,
       };
 
@@ -479,7 +659,9 @@ export class PathwaysService {
       }
 
       // Always fetch LMS counts live (never cached) for fresh video/resource counts
-      const pathwayIds = dbItems.map((item: any) => item.id);
+      const pathwayIds = dbItems
+        .filter((item: any) => item?.id != null && typeof item.id === 'string')
+        .map((item: any) => item.id);
       const countsMap = await this.lmsClientService.getBatchCounts(
         pathwayIds,
         tenantId,
@@ -497,7 +679,7 @@ export class PathwaysService {
         };
       });
 
-      // Return paginated result with count
+      // Return paginated result; count = total count of records (for pagination)
       const result = {
         count: dbItems.length,
         totalCount: totalCount,
@@ -570,7 +752,7 @@ export class PathwaysService {
       const tagIds = pathwayData.tags || [];
       const tagDetails = await this.fetchTagDetails(tagIds);
 
-      // Transform to return only tags with names (no tag_ids)
+      // Transform to return tags and image_url (S3 link)
       const result = {
         id: pathwayData.id,
         key: pathwayData.key,
@@ -579,6 +761,7 @@ export class PathwaysService {
         tags: tagDetails,
         display_order: pathwayData.display_order,
         is_active: pathwayData.is_active,
+        image_url: pathwayData.image_url,
         created_at: pathwayData.created_at,
       };
 
@@ -631,10 +814,9 @@ export class PathwaysService {
         );
       }
 
-      // Check if pathway exists
+      // Check if pathway exists and get existing image_url for deletion
       const existingPathway = await this.pathwayRepository.findOne({
         where: { id },
-        select: ['id'],
       });
 
       if (!existingPathway) {
@@ -647,13 +829,12 @@ export class PathwaysService {
         );
       }
 
+      const oldImageUrl = existingPathway.image_url;
+
       // Validate tags if provided in update
-      const updateDto = updatePathwayDto as any;
-      // Guard against tags: null to avoid runtime errors
-      if (updateDto.tags !== undefined && updateDto.tags !== null) {
-        // Handle both empty array and array with values
-        if (Array.isArray(updateDto.tags) && updateDto.tags.length > 0) {
-          const validation = await this.validateTagIds(updateDto.tags);
+      if (updatePathwayDto.tags !== undefined && updatePathwayDto.tags !== null) {
+        if (Array.isArray(updatePathwayDto.tags) && updatePathwayDto.tags.length > 0) {
+          const validation = await this.validateTagIds(updatePathwayDto.tags);
           if (!validation.isValid) {
             return APIResponse.error(
               response,
@@ -664,6 +845,15 @@ export class PathwaysService {
               HttpStatus.BAD_REQUEST
             );
           }
+        }
+      }
+
+      let newImageUrl: string | null = null;
+      const dtoImageUrl = updatePathwayDto.image_url;
+      if (dtoImageUrl !== undefined && dtoImageUrl !== null && typeof dtoImageUrl === 'string' && dtoImageUrl.trim() !== '') {
+        newImageUrl = dtoImageUrl.trim();
+        if (oldImageUrl) {
+          await this.deleteImageFromS3(oldImageUrl);
         }
       }
 
@@ -698,16 +888,19 @@ export class PathwaysService {
         updateData.description = updatePathwayDto.description;
       }
       // Guard against null: only update if tags is explicitly provided (array or empty array)
-      if (updateDto.tags !== undefined && updateDto.tags !== null) {
+      if (updatePathwayDto.tags !== undefined && updatePathwayDto.tags !== null) {
         // Store as PostgreSQL text[] array
         // Empty array is valid, so we allow it
-        updateData.tags = Array.isArray(updateDto.tags) ? updateDto.tags : [];
+        updateData.tags = Array.isArray(updatePathwayDto.tags) ? updatePathwayDto.tags : [];
       }
       if (updatePathwayDto.display_order !== undefined) {
         updateData.display_order = updatePathwayDto.display_order;
       }
       if (updatePathwayDto.is_active !== undefined) {
         updateData.is_active = updatePathwayDto.is_active;
+      }
+      if (newImageUrl !== null) {
+        updateData.image_url = newImageUrl;
       }
 
       // Always set updated_by when updating
@@ -781,6 +974,7 @@ export class PathwaysService {
         tags: tagDetails,
         display_order: pathwayData.display_order,
         is_active: pathwayData.is_active,
+        image_url: pathwayData.image_url,
         created_at: pathwayData.created_at,
       };
 
@@ -955,7 +1149,14 @@ export class PathwaysService {
         }
       });
 
+      // Fetch the active record after transaction to get its id
+      const activeRecord = await this.userPathwayHistoryRepository.findOne({
+        where: { user_id: userId, pathway_id: pathwayId, is_active: true },
+        select: ['id'],
+      });
+
       const result = {
+        id: activeRecord?.id ?? null,
         userId,
         previousPathwayId,
         currentPathwayId: pathwayId,
@@ -963,7 +1164,7 @@ export class PathwaysService {
         deactivated_at: currentActive ? timestamp : null,
         userGoal: userGoal,
         created_by: created_by,
-        updated_by: null, // Refined: result is the active record, so updated_by is null
+        updated_by: null,
       };
 
       const successMessage = currentActive

@@ -10,7 +10,7 @@ import {
   IsArray,
   IsUUID,
 } from 'class-validator';
-import { Expose } from 'class-transformer';
+import { Expose, Type } from 'class-transformer';
 
 export class CreatePathwayDto {
   @ApiProperty({
@@ -52,6 +52,16 @@ export class CreatePathwayDto {
     ],
     type: [String],
   })
+
+   @ApiPropertyOptional({
+    description: "Image URL (from presigned S3 upload). upload to S3, then send the returned fileUrl here.",
+  })
+  @Expose()
+  @IsOptional()
+  @IsString()
+  image_url?: string;
+
+
   @Expose()
   @IsOptional()
   @IsArray({ message: 'tags must be an array' })
@@ -64,6 +74,7 @@ export class CreatePathwayDto {
     minimum: 0,
   })
   @Expose()
+  @Type(() => Number)
   @IsNumber()
   @IsOptional()
   @Min(1, { message: "Display order must be at least 1" })
