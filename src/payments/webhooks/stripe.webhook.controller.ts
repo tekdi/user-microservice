@@ -25,7 +25,7 @@ import { PaymentProvider as PaymentProviderEnum } from '../enums/payment.enums';
 export class StripeWebhookController {
   private readonly logger = new Logger(StripeWebhookController.name);
 
-  constructor(private paymentService: PaymentService) {}
+  constructor(private readonly paymentService: PaymentService) {}
 
   @Post('stripe')
   @HttpCode(HttpStatus.OK)
@@ -81,15 +81,50 @@ export class StripeWebhookController {
         this.logger.warn('Raw body not available, using JSON stringified body');
       }
 
+      // Try to get signature from headers (case-insensitive fallback)
+      // NestJS @Headers decorator is case-sensitive, so we also check the request directly
+      let webhookSignature = signature;
+      if (!webhookSignature) {
+        // Try to find the header in the request (case-insensitive)
+        const headerKeys = Object.keys(req.headers);
+        const stripeSignatureKey = headerKeys.find(
+          key => key.toLowerCase() === 'stripe-signature'
+        );
+        
+        if (stripeSignatureKey) {
+          webhookSignature = req.headers[stripeSignatureKey] as string;
+          this.logger.debug(`Found stripe-signature header with key: ${stripeSignatureKey}`);
+        } else {
+          // Log all headers for debugging (excluding sensitive data)
+          this.logger.warn('stripe-signature header not found. Available headers:');
+          headerKeys.forEach(key => {
+            // Don't log sensitive headers
+            if (!key.toLowerCase().includes('authorization') && 
+                !key.toLowerCase().includes('cookie') &&
+                !key.toLowerCase().includes('stripe-signature')) {
+              this.logger.debug(`  ${key}: ${req.headers[key]}`);
+            }
+          });
+        }
+      }
+
+      // Log signature status for debugging
+      if (webhookSignature) {
+        this.logger.debug(`✅ stripe-signature header received (length: ${webhookSignature.length})`);
+        this.logger.debug(`✅ stripe-signature header received (Signature: ${webhookSignature})`);
+      } else {
+        this.logger.warn('⚠️ stripe-signature header is missing');
+      }
+
       // Signature is optional in development mode (for testing without Stripe CLI)
       // In production, signature should always be present
       const nodeEnv = process.env.NODE_ENV || 'development';
-      if (!signature && nodeEnv === 'production') {
+      if (!webhookSignature && nodeEnv === 'production') {
         throw new BadRequestException('Missing stripe-signature header');
       }
 
       // Use empty string if signature is missing (for development testing)
-      const webhookSignature = signature || '';
+      webhookSignature = webhookSignature || '';
       const result = await this.paymentService.handleWebhook(
         PaymentProviderEnum.STRIPE,
         parsedBody,
