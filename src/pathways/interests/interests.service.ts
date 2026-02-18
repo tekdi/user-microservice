@@ -23,6 +23,7 @@ import { CacheService } from "src/cache/cache.service";
 @Injectable()
 export class InterestsService {
   private readonly logger = new Logger(InterestsService.name);
+  private readonly interestListCacheTtl: number;
 
   constructor(
     @InjectRepository(Interest)
@@ -36,7 +37,11 @@ export class InterestsService {
     private readonly dataSource: DataSource,
     private readonly configService: ConfigService,
     private readonly cacheService: CacheService
-  ) { }
+  ) {
+    const ttlConfig = this.configService.get('INTEREST_LIST_CACHE_TTL_SECONDS');
+    const parsedTtl = parseInt(ttlConfig, 10);
+    this.interestListCacheTtl = !isNaN(parsedTtl) ? parsedTtl : 1800; // Default to 30 mins
+  }
 
   /**
    * Create a new interest for a pathway
@@ -390,10 +395,6 @@ export class InterestsService {
   ): Promise<Response> {
     const apiId = APIID.INTEREST_LIST_BY_PATHWAY;
     const { pathwayId, isActive, limit: requestedLimit, offset } = listInterestDto;
-    const interestListCacheTtl = parseInt(
-      this.configService.get('INTEREST_LIST_CACHE_TTL_SECONDS') || '1800',
-      10
-    );
 
     try {
       const cacheKey = this.generateInterestListCacheKey(listInterestDto);
@@ -477,7 +478,7 @@ export class InterestsService {
 
       // Cache successful list response (best-effort, non-blocking)
       try {
-        await this.cacheService.set(cacheKey, result, interestListCacheTtl);
+        await this.cacheService.set(cacheKey, result, this.interestListCacheTtl);
       } catch (cacheError: any) {
         this.logger.warn(
           `Failed to cache interest list result: ${cacheError?.message || cacheError}`
