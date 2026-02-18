@@ -1,4 +1,5 @@
 import { ApiProperty } from "@nestjs/swagger";
+import { Expose, Type } from "class-transformer";
 import {
   IsArray,
   IsUUID,
@@ -6,7 +7,9 @@ import {
   IsOptional,
   IsNotEmpty,
   ArrayMaxSize,
+  ValidateNested,
 } from "class-validator";
+import { FieldValuesOptionDto } from "src/user/dto/user-create.dto";
 
 export class BulkCohortMember {
   @ApiProperty({
@@ -41,6 +44,18 @@ export class BulkCohortMember {
   @IsUUID("4", { each: true })
   @ArrayMaxSize(1000)
   removeCohortId: string[];
+
+
+  @ApiProperty({
+    type: [FieldValuesOptionDto],
+    description: "Array of Custom fields",
+  })
+  @Expose()
+  @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => FieldValuesOptionDto)
+  customFields?: FieldValuesOptionDto[];
+
 
   constructor(obj: any) {
     Object.assign(this, obj);
