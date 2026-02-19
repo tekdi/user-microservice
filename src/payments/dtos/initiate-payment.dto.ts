@@ -27,6 +27,11 @@ export class PaymentMetadataDto {
   @IsUUID()
   courseId?: string;
 
+  @ApiProperty({ description: 'Context ID', required: false })
+  @IsOptional()
+  @IsUUID()
+  contextId?: string;
+
   @ApiProperty({ description: 'Price snapshot at time of payment', required: false })
   @IsOptional()
   @IsNumber()

@@ -139,6 +139,7 @@ export class StripeProvider implements PaymentProvider {
         metadata: {
           userId: paymentData.userId,
           purpose: paymentData.purpose,
+          contextId: paymentData.metadata?.contextId,
           ...(paymentData.metadata || {}),
         },
       };

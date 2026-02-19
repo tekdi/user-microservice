@@ -224,7 +224,7 @@ export class PaymentService {
           transactionId: transaction.id,
           status: webhookEvent.status,
           userId: intentInTransaction.userId,
-          metadata: webhookEvent.metadata || intentInTransaction.metadata || {},
+          metadata: webhookEvent.metadata || {},
         };
       },
     );
@@ -232,7 +232,7 @@ export class PaymentService {
 
     // Process payment targets after successful payment (outside transaction to avoid blocking)
     if (result.processed && result.status === 'success' && result.userId) {
-      this.processPaymentTargets(result.paymentIntentId, result.userId).catch(
+      this.processPaymentTargets(result.paymentIntentId, result.userId, result.metadata.contextId, result.metadata.purpose).catch(
         (error) => {
           // Log error but don't fail the webhook processing
           this.logger.error(
@@ -253,6 +253,8 @@ export class PaymentService {
   private async processPaymentTargets(
     paymentIntentId: string,
     userId: string,
+    contextId: string,
+    purpose: string,
   ): Promise<void> {
     try {
       // Fetch payment targets to get contextId (courseId)
@@ -271,13 +273,13 @@ export class PaymentService {
       const targetPromises = targets.map(async (target) => {
         try {
           // Only generate certificate for CERTIFICATE_BUNDLE target type
-          if (target.targetType === PaymentTargetType.CERTIFICATE_BUNDLE) {
+          if (purpose === PaymentTargetType.CERTIFICATE_BUNDLE) {
             const issuanceDate = new Date().toISOString();
             const expirationDate = '0000-00-00T00:00:00.000Z'; // Default expiration date as per API
 
             await this.certificateService.generateCertificate({
               userId: userId,
-              courseId: target.contextId, // contextId from target table is the courseId
+              courseId: contextId, // contextId from target table is the courseId
               issuanceDate: issuanceDate,
               expirationDate: expirationDate,
             });
