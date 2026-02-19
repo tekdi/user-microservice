@@ -6,7 +6,6 @@ import { PaymentIntentService } from './payment-intent.service';
 import { PaymentTransactionService } from './payment-transaction.service';
 import { PaymentTargetService } from './payment-target.service';
 import { CertificateService } from './certificate.service';
-import { UserAdapter } from '../../user/useradapter';
 import { InitiatePaymentDto } from '../dtos/initiate-payment.dto';
 import {
   PaymentIntentStatus,
@@ -28,7 +27,6 @@ export class PaymentService {
     private paymentTransactionService: PaymentTransactionService,
     private paymentTargetService: PaymentTargetService,
     private certificateService: CertificateService,
-    private userAdapter: UserAdapter,
     @Inject('PaymentProvider') private paymentProvider: PaymentProvider,
     @InjectDataSource() private dataSource: DataSource,
   ) {}
@@ -218,6 +216,7 @@ export class PaymentService {
             `Unlocked targets for payment intent ${intentInTransaction.id}`,
           );
         }
+        this.logger.log(`webhookEvent------------: ${JSON.stringify(webhookEvent)}`);
 
         return {
           processed: true,
@@ -225,6 +224,7 @@ export class PaymentService {
           transactionId: transaction.id,
           status: webhookEvent.status,
           userId: intentInTransaction.userId,
+          metadata: webhookEvent.metadata || intentInTransaction.metadata || {},
         };
       },
     );
@@ -267,19 +267,6 @@ export class PaymentService {
         return;
       }
 
-      // Fetch user details
-      const userDetails = await this.userAdapter
-        .buildUserAdapter()
-        .findUserDetails(userId, null);
-
-      if (!userDetails) {
-        this.logger.error(`User not found for userId: ${userId}`);
-        return;
-      }
-
-      const firstName = userDetails.firstName || '';
-      const lastName = userDetails.lastName || '';
-
       // Process each target based on its type
       const targetPromises = targets.map(async (target) => {
         try {
@@ -291,8 +278,6 @@ export class PaymentService {
             await this.certificateService.generateCertificate({
               userId: userId,
               courseId: target.contextId, // contextId from target table is the courseId
-              firstName: firstName,
-              lastName: lastName,
               issuanceDate: issuanceDate,
               expirationDate: expirationDate,
             });
