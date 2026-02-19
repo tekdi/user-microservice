@@ -5,8 +5,6 @@ import { HttpService } from '../../common/utils/http-service';
 export interface GenerateCertificateDto {
   userId: string;
   courseId: string;
-  firstName: string;
-  lastName: string;
   issuanceDate: string;
   expirationDate: string;
 }
@@ -39,8 +37,6 @@ export class CertificateService {
       const response = await this.httpService.post(url, {
         userId: data.userId,
         courseId: data.courseId,
-        firstName: data.firstName,
-        lastName: data.lastName,
         issuanceDate: data.issuanceDate,
         expirationDate: data.expirationDate,
       });
