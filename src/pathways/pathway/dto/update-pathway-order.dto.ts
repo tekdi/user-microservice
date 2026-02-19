@@ -3,6 +3,8 @@ import {
     IsNumber,
     IsUUID,
     Min,
+    IsString,
+    IsOptional,
     ArrayNotEmpty,
     ValidateNested,
 } from 'class-validator';
@@ -16,6 +18,14 @@ export class UpdateOrderDto {
     @Expose()
     @IsUUID()
     id: string;
+    @ApiProperty({
+        description: "Pathway name",
+        required: false,
+    })
+    @Expose()
+    @IsString()
+    @IsOptional()
+    name?: string;
 
     @ApiProperty({
         description: "New display order for the pathway",

@@ -136,8 +136,8 @@ export class InterestsController {
   @Post("list")
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: "List Interests by Pathway",
-    description: "Retrieves interests associated with the given pathway ID in the request body with pagination support.",
+    summary: "List Interests",
+    description: "Retrieves interests with optional pathway ID, interest ID, or label filters from the request body with pagination support.",
   })
   @ApiHeader({ name: "Authorization", required: true })
   @ApiHeader({ name: "tenantid", required: true })

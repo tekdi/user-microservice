@@ -1,6 +1,8 @@
-import { Injectable, HttpStatus } from "@nestjs/common";
+import * as crypto from 'crypto';
+import { Injectable, HttpStatus, Logger } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository, In, DataSource, ILike, Like, Not } from "typeorm";
+import { ConfigService } from "@nestjs/config";
 import { Interest } from "./entities/interest.entity";
 import { CreateInterestDto } from "./dto/create-interest.dto";
 import { UpdateInterestDto } from "./dto/update-interest.dto";
@@ -16,9 +18,13 @@ import { APIID } from "@utils/api-id.config";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
 import { StringUtil } from '../common/utils/string.util';
 import { Response } from "express";
+import { CacheService } from "src/cache/cache.service";
 
 @Injectable()
 export class InterestsService {
+  private readonly logger = new Logger(InterestsService.name);
+  private readonly interestListCacheTtl: number;
+
   constructor(
     @InjectRepository(Interest)
     private readonly interestRepository: Repository<Interest>,
@@ -28,8 +34,14 @@ export class InterestsService {
     private readonly userPathwayHistoryRepository: Repository<UserPathwayHistory>,
     @InjectRepository(UserPathwayInterests)
     private readonly userPathwayInterestsRepository: Repository<UserPathwayInterests>,
-    private readonly dataSource: DataSource
-  ) { }
+    private readonly dataSource: DataSource,
+    private readonly configService: ConfigService,
+    private readonly cacheService: CacheService
+  ) {
+    const ttlConfig = this.configService.get('INTEREST_LIST_CACHE_TTL_SECONDS');
+    const parsedTtl = parseInt(ttlConfig, 10);
+    this.interestListCacheTtl = !isNaN(parsedTtl) ? parsedTtl : 1800; // Default to 30 mins
+  }
 
   /**
    * Create a new interest for a pathway
@@ -114,6 +126,16 @@ export class InterestsService {
       });
 
       const savedInterest = await this.interestRepository.save(interest);
+
+      // Invalidate interest list cache after successful creation
+      try {
+        await this.cacheService.delByPattern('interest:list:*');
+        this.logger.debug('Invalidated interest list cache after creation');
+      } catch (cacheError: any) {
+        this.logger.warn(
+          `Failed to invalidate interest list cache: ${cacheError?.message || cacheError}`
+        );
+      }
 
       const result = {
         id: savedInterest.id,
@@ -247,6 +269,16 @@ export class InterestsService {
         );
       }
 
+      // Invalidate interest list cache after successful update
+      try {
+        await this.cacheService.delByPattern('interest:list:*');
+        this.logger.debug('Invalidated interest list cache after update');
+      } catch (cacheError: any) {
+        this.logger.warn(
+          `Failed to invalidate interest list cache: ${cacheError?.message || cacheError}`
+        );
+      }
+
       const result = {
         id: updatedInterest.id,
         pathway_id: updatedInterest.pathway_id,
@@ -319,6 +351,16 @@ export class InterestsService {
         is_active: false,
       };
 
+      // Invalidate interest list cache after successful delete (soft delete)
+      try {
+        await this.cacheService.delByPattern('interest:list:*');
+        this.logger.debug('Invalidated interest list cache after delete');
+      } catch (cacheError: any) {
+        this.logger.warn(
+          `Failed to invalidate interest list cache: ${cacheError?.message || cacheError}`
+        );
+      }
+
       return APIResponse.success(
         response,
         apiId,
@@ -353,34 +395,51 @@ export class InterestsService {
   ): Promise<Response> {
     const apiId = APIID.INTEREST_LIST_BY_PATHWAY;
     const { pathwayId, isActive, limit: requestedLimit, offset } = listInterestDto;
+
     try {
-      if (!pathwayId) {
-        return APIResponse.error(
-          response,
-          apiId,
-          API_RESPONSES.BAD_REQUEST,
-          "pathwayId is required in request body",
-          HttpStatus.BAD_REQUEST
-        );
-      }
-      // Check if pathway exists
-      const pathway = await this.pathwayRepository.findOne({
-        where: { id: pathwayId },
-        select: ['id'],
-      });
-
-      if (!pathway) {
-        return APIResponse.error(
-          response,
-          apiId,
-          API_RESPONSES.NOT_FOUND,
-          API_RESPONSES.PATHWAY_NOT_FOUND,
-          HttpStatus.NOT_FOUND
+      const cacheKey = this.generateInterestListCacheKey(listInterestDto);
+      let cachedResult: { count: number; totalCount: number; limit: number; offset: number; items: any[] } | null = null;
+      try {
+        cachedResult = await this.cacheService.get<{ count: number; totalCount: number; limit: number; offset: number; items: any[] }>(cacheKey);
+      } catch (cacheReadError: any) {
+        this.logger.warn(
+          `Interest list cache read failed, falling through to DB: ${cacheReadError?.message || cacheReadError}`
         );
       }
 
-      // Build filter
-      const whereCondition: any = { pathway_id: pathwayId };
+      if (cachedResult) {
+        this.logger.debug(`Cache HIT for interest list: ${cacheKey}`);
+        return APIResponse.success(
+          response,
+          apiId,
+          cachedResult,
+          HttpStatus.OK,
+          API_RESPONSES.INTEREST_LIST_SUCCESS
+        );
+      }
+      this.logger.debug(`Cache MISS for interest list: ${cacheKey}`);
+
+      // 1. Validate pathway extraction and existence IF provided
+      const whereCondition: any = {};
+      if (pathwayId) {
+        const pathway = await this.pathwayRepository.findOne({
+          where: { id: pathwayId },
+          select: ['id'],
+        });
+
+        if (!pathway) {
+          return APIResponse.error(
+            response,
+            apiId,
+            API_RESPONSES.NOT_FOUND,
+            API_RESPONSES.PATHWAY_NOT_FOUND,
+            HttpStatus.NOT_FOUND
+          );
+        }
+        whereCondition.pathway_id = pathwayId;
+      }
+
+      // 2. Build additional filters
       if (isActive !== undefined) {
         whereCondition.is_active = isActive;
       }
@@ -400,7 +459,7 @@ export class InterestsService {
       // OPTIMIZED: Use findAndCount for efficient pagination
       const [items, totalCount] = await this.interestRepository.findAndCount({
         where: whereCondition,
-        select: ['id', 'key', 'label', 'is_active', 'created_at'],
+        select: ['id', 'pathway_id', 'key', 'label', 'is_active', 'created_at'],
         order: {
           created_at: 'DESC',
         },
@@ -416,6 +475,15 @@ export class InterestsService {
         offset: skip,
         items: items,
       };
+
+      // Cache successful list response (best-effort, non-blocking)
+      try {
+        await this.cacheService.set(cacheKey, result, this.interestListCacheTtl);
+      } catch (cacheError: any) {
+        this.logger.warn(
+          `Failed to cache interest list result: ${cacheError?.message || cacheError}`
+        );
+      }
 
       return APIResponse.success(
         response,
@@ -648,6 +716,30 @@ export class InterestsService {
     }
   }
 
+  /**
+   * Generate a stable cache key for interest list.
+   */
+  private generateInterestListCacheKey(listInterestDto: ListInterestDto): string {
+    const requestedLimit = listInterestDto.limit ?? 10;
+    const limit = Math.min(requestedLimit, MAX_PAGINATION_LIMIT);
+    const offset = listInterestDto.offset ?? 0;
+    const cacheKeyObject = {
+      pathwayId: listInterestDto.pathwayId,
+      isActive: listInterestDto.isActive,
+      label: listInterestDto.label,
+      id: listInterestDto.id,
+      limit,
+      offset,
+    };
+    const sortedKeys = Object.keys(cacheKeyObject).sort((a, b) => a.localeCompare(b));
+    const sortedObject: any = {};
+    for (const key of sortedKeys) {
+      sortedObject[key] = cacheKeyObject[key as keyof typeof cacheKeyObject];
+    }
+    const keyString = JSON.stringify(sortedObject);
+    const hash = crypto.createHash('sha256').update(keyString).digest('hex');
+    return `interest:list:${hash}`;
+  }
 
   /**
    * Generate a unique key from label within a pathway
