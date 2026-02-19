@@ -33,6 +33,9 @@ export const API_RESPONSES = {
   ENDDATE_VALIDATION:
     "End Date should not be earlier than Start Date and can be equal to it.",
   TENANTID_VALIDATION: "Tenant ID is required and must be a valid UUID",
+  ORGANISATIONID_REQUIRED:
+    "Organisation ID is required (set organisationid header or DEFAULT_ORGANISATION_ID environment variable).",
+  ORGANISATIONID_VALIDATION: "Organisation ID must be a valid UUID when provided.",
   COHORT_NOT_AVAILABLE_FOR_ACADEMIC_YEAR:
     "No cohorts available for given Academic year",
   ACADEMICYEARID_VALIDATION:

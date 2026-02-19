@@ -497,10 +497,16 @@ export class PathwaysController {
   @ApiOperation({
     summary: "Assign / Activate Pathway for User",
     description:
-      "Assigns a pathway to a user. Deactivates any existing active pathway for the user.",
+      "Assigns a pathway to a user. Deactivates any existing active pathway for the user. Requires user to have completed_alumni tag; enrolls user in all pathway courses via LMS before assignment.",
   })
   @ApiHeader({ name: "Authorization", required: true })
-  @ApiHeader({ name: "tenantid", required: true })
+  @ApiHeader({ name: "tenantid", required: true, description: "Tenant UUID" })
+  @ApiHeader({
+    name: "organisationid",
+    required: false,
+    description:
+      "Organisation UUID. Optional if DEFAULT_ORGANISATION_ID is set; otherwise required for LMS enrollment.",
+  })
   @ApiBody({ type: AssignPathwayDto })
   @ApiResponse({ status: 200, description: "Pathway assigned successfully" })
   @ApiBadRequestResponse({ description: "Bad Request" })
@@ -515,7 +521,13 @@ export class PathwaysController {
     if (!tenantId || !isUUID(tenantId)) {
       throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
     }
-    const orgId = process.env.DEFAULT_ORGANISATION_ID || organisationId || '';
+    if (organisationId && !isUUID(organisationId)) {
+      throw new BadRequestException(API_RESPONSES.ORGANISATIONID_VALIDATION);
+    }
+    const orgId = (process.env.DEFAULT_ORGANISATION_ID || organisationId || '').trim();
+    if (!orgId) {
+      throw new BadRequestException(API_RESPONSES.ORGANISATIONID_REQUIRED);
+    }
     return this.pathwaysService.assignPathway(assignPathwayDto, tenantId, orgId, response);
   }
 
