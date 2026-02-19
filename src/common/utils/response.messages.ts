@@ -268,4 +268,8 @@ export const API_RESPONSES = {
   USER_INTERESTS_SAVED_SUCCESSFULLY: "User interests saved successfully",
   PATHWAY_SWITCHED_SUCCESSFULLY: "Pathway switched successfully",
   PATHWAY_ASSIGNED_SUCCESSFULLY: "Pathway assigned successfully",
+  PATHWAY_ASSIGN_REQUIRES_COMPLETED_ALUMNI:
+    "User must have completed_alumni tag to assign pathway.",
+  PATHWAY_ASSIGN_LMS_ENROLLMENT_FAILED:
+    "LMS enrollment failed. Pathway assignment aborted.",
 };

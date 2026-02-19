@@ -509,12 +509,14 @@ export class PathwaysController {
   async assign(
     @Body() assignPathwayDto: AssignPathwayDto,
     @Headers("tenantid") tenantId: string,
+    @Headers("organisationid") organisationId: string,
     @Res() response: Response
   ): Promise<Response> {
     if (!tenantId || !isUUID(tenantId)) {
       throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
     }
-    return this.pathwaysService.assignPathway(assignPathwayDto, response);
+    const orgId = process.env.DEFAULT_ORGANISATION_ID || organisationId || '';
+    return this.pathwaysService.assignPathway(assignPathwayDto, tenantId, orgId, response);
   }
 
 
