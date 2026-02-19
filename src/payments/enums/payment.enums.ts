@@ -53,6 +53,7 @@ export enum PaymentTargetType {
 export enum PaymentContextType {
   COHORT = 'COHORT',
   COURSE = 'COURSE',
+  BUNDLE = 'BUNDLE',
 }
 
 /**

@@ -26,6 +26,7 @@ import { APIID } from '../common/utils/api-id.config';
 import { PaymentService } from './services/payment.service';
 import { InitiatePaymentDto } from './dtos/initiate-payment.dto';
 import { PaymentStatusResponseDto } from './dtos/payment-status.dto';
+import { PaymentReportResponseDto } from './dtos/payment-report.dto';
 
 @ApiTags('Payments')
 @Controller('payments')
@@ -64,5 +65,22 @@ export class PaymentsController {
   @ApiNotFoundResponse({ description: 'Payment intent not found' })
   async getPaymentStatus(@Param('id', ParseUUIDPipe) paymentIntentId: string) {
     return await this.paymentService.getPaymentStatus(paymentIntentId);
+  }
+
+  @Get('report/:contextId')
+  @UseFilters(new AllExceptionsFilter(APIID.PAYMENT_STATUS))
+  @ApiOperation({ summary: 'Get payment report by contextId' })
+  @ApiOkResponse({
+    description: 'Payment report retrieved successfully',
+    type: PaymentReportResponseDto,
+  })
+  async getPaymentReport(
+    @Param('contextId', ParseUUIDPipe) contextId: string,
+  ): Promise<PaymentReportResponseDto> {
+    const data = await this.paymentService.getPaymentReportByContextId(contextId);
+    return {
+      data,
+      totalCount: data.length,
+    };
   }
 }
