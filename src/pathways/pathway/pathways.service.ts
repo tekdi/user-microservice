@@ -1353,15 +1353,18 @@ export class PathwaysService {
         );
       }
 
-      // 2. Build where condition based on whether pathwayId is provided
-      const whereCondition: any = { user_id: userId, is_active: true };
-      if (pathwayId) {
-        whereCondition.pathway_id = pathwayId;
-      }
+      // 2. Build where condition based on whether pathwayId is provided   
+     const whereCondition: any = {
+  user_id: userId,
+  ...(pathwayId ? { pathway_id: pathwayId } : { is_active: true }),
+};
+
+
 
       // 3. Get pathway from user_pathway_history
-      const userPathway = await this.userPathwayHistoryRepository.findOne({
+      const userPathways = await this.userPathwayHistoryRepository.find({
         where: whereCondition,
+        order: { activated_at: 'DESC' },
         select: [
           'id',
           'pathway_id',
@@ -1373,7 +1376,7 @@ export class PathwaysService {
         ],
       });
 
-      if (!userPathway) {
+      if (!userPathways || userPathways.length === 0) {
         const message = pathwayId
           ? 'Specified pathway assignment not found for this user'
           : 'No active pathway found for this user';
@@ -1386,22 +1389,22 @@ export class PathwaysService {
         );
       }
 
-      const result = {
-        id: userPathway.id,
-        pathwayId: userPathway.pathway_id,
-        activatedAt: userPathway.activated_at,
-        deactivatedAt: userPathway.deactivated_at,
-        userGoal: userPathway.user_goal,
-        isActive: userPathway.is_active,
-        updatedBy: userPathway.updated_by,
-      };
+      const result = userPathways.map((pathway) => ({
+        id: pathway.id,
+        pathwayId: pathway.pathway_id,
+        activatedAt: pathway.activated_at,
+        deactivatedAt: pathway.deactivated_at,
+        userGoal: pathway.user_goal,
+        isActive: pathway.is_active,
+        updatedBy: pathway.updated_by,
+      }));
 
       return APIResponse.success(
         response,
         apiId,
         result,
         HttpStatus.OK,
-        'Pathway retrieved successfully'
+        'Pathways retrieved successfully'
       );
     } catch (error) {
       const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
