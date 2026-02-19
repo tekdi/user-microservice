@@ -1353,15 +1353,18 @@ export class PathwaysService {
         );
       }
 
-      // 2. Build where condition based on whether pathwayId is provided
-      const whereCondition: any = { user_id: userId, is_active: true };
-      if (pathwayId) {
-        whereCondition.pathway_id = pathwayId;
-      }
+      // 2. Build where condition based on whether pathwayId is provided   
+     const whereCondition: any = {
+  user_id: userId,
+  ...(pathwayId ? { pathway_id: pathwayId } : { is_active: true }),
+};
+
+
 
       // 3. Get pathway from user_pathway_history
       const userPathway = await this.userPathwayHistoryRepository.findOne({
         where: whereCondition,
+        order: { activated_at: 'DESC' },
         select: [
           'id',
           'pathway_id',
