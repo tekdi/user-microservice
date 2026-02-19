@@ -41,6 +41,7 @@ import { Response } from "express";
 import { CohortService } from "./cohort.service";
 import { CohortCreateDto } from "./dto/cohort-create.dto";
 import { CohortUpdateDto } from "./dto/cohort-update.dto";
+import { GeographicalHierarchySearchDto } from "./dto/geographical-hierarchy-search.dto";
 import { JwtAuthGuard } from "src/common/guards/keycloak.guard";
 import { AllExceptionsFilter } from "src/common/filters/exception.filter";
 import { APIID } from "src/common/utils/api-id.config";
@@ -244,7 +245,8 @@ export class CohortController {
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.COHORT_READ))
-  @Get("/geographical-hierarchy/:userId")
+  @Post("/geographical-hierarchy")
+  @ApiBody({ type: GeographicalHierarchySearchDto })
   @ApiOkResponse({ description: "User geographical hierarchy fetched successfully" })
   @ApiNotFoundResponse({ description: "User Not Found" })
   @ApiInternalServerErrorResponse({ description: "Internal Server Error." })
@@ -254,9 +256,10 @@ export class CohortController {
     required: true,
     description: "Academic Year ID (required)"
   })
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   public async getUserGeographicalHierarchy(
     @Headers() headers,
-    @Param("userId", ParseUUIDPipe) userId: string,
+    @Body() geographicalHierarchySearchDto: GeographicalHierarchySearchDto,
     @Res() response: Response
   ) {
     const academicYearId = headers["academicyearid"];
@@ -264,8 +267,11 @@ export class CohortController {
       throw new BadRequestException(API_RESPONSES.ACADEMICYEARID_VALIDATION);
     }
     const requiredData = {
-      userId: userId,
+      userId: geographicalHierarchySearchDto.userId,
       academicYearId: academicYearId as string,
+      filters: geographicalHierarchySearchDto.filters,
+      limit: geographicalHierarchySearchDto.limit,
+      offset: geographicalHierarchySearchDto.offset,
     };
     return await this.cohortService
       .getUserGeographicalHierarchy(requiredData, response);

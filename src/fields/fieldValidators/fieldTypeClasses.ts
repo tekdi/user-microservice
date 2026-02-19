@@ -27,6 +27,23 @@ export class TextField extends Field {
   }
 }
 
+export class FileField extends Field {
+  validate(value: any): boolean {
+    // Accept both string (single file) and array of strings (multiple files)
+    if (typeof value === "string") {
+      return true;
+    }
+    if (Array.isArray(value)) {
+      // Validate that all elements in the array are strings
+      if (!value.every((item) => typeof item === "string")) {
+        throw new Error("All file values must be strings.");
+      }
+      return true;
+    }
+    throw new Error("Value must be a string or an array of strings.");
+  }
+}
+
 export class NumericField extends Field {
   validate(value: any): boolean {
     if (!(typeof value === "string" && this.isNumeric(value))) {

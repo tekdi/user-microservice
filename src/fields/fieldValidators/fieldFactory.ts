@@ -5,6 +5,7 @@ import {
   JsonField,
   RadioField,
   TextField,
+  FileField,
 } from "./fieldTypeClasses";
 import { FieldAttributes, FieldParams, Field } from "./fieldClass";
 export class FieldFactory {
@@ -26,6 +27,8 @@ export class FieldFactory {
         return new NumericField(fieldAttributes);
       case "json":
         return new JsonField(fieldAttributes);
+      case "file":
+        return new FileField(fieldAttributes);
       default:
         throw new Error(`Unsupported field type: ${type}`);
     }
