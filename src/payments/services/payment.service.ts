@@ -11,7 +11,7 @@ import {
   PaymentIntentStatus,
   PaymentTransactionStatus,
   PaymentTargetUnlockStatus,
-  PaymentTargetType,
+  PaymentPurpose,
   PaymentProvider as PaymentProviderEnum,
 } from '../enums/payment.enums';
 import { PaymentTransaction } from '../entities/payment-transaction.entity';
@@ -249,6 +249,7 @@ export class PaymentService {
   /**
    * Process payment targets after successful payment
    * Handles different target types (e.g., certificate generation for CERTIFICATE_BUNDLE)
+   * Uses metadata from webhook instead of fetching from database
    */
   private async processPaymentTargets(
     paymentIntentId: string,
@@ -257,50 +258,26 @@ export class PaymentService {
     purpose: string,
   ): Promise<void> {
     try {
-      // Fetch payment targets to get contextId (courseId)
-      const targets = await this.paymentTargetService.findByPaymentIntentId(
-        paymentIntentId,
-      );
+      // Only generate certificate for CERTIFICATE_BUNDLE purpose
+      if (purpose === PaymentPurpose.CERTIFICATE_BUNDLE) {
+        const issuanceDate = new Date().toISOString();
+        const expirationDate = '0000-00-00T00:00:00.000Z'; // Default expiration date as per API
 
-      if (!targets || targets.length === 0) {
-        this.logger.warn(
-          `No targets found for payment intent ${paymentIntentId}`,
+        await this.certificateService.generateCertificate({
+          userId: userId,
+          courseId: contextId, // contextId from webhook metadata
+          issuanceDate: issuanceDate,
+          expirationDate: expirationDate,
+        });
+
+        this.logger.log(
+          `Certificate generated for user ${userId} and course ${contextId}`,
         );
-        return;
+      } else {
+        this.logger.debug(
+          `Skipping certificate generation for purpose: ${purpose}`,
+        );
       }
-
-      // Process each target based on its type
-      const targetPromises = targets.map(async (target) => {
-        try {
-          // Only generate certificate for CERTIFICATE_BUNDLE target type
-          if (purpose === PaymentTargetType.CERTIFICATE_BUNDLE) {
-            const issuanceDate = new Date().toISOString();
-            const expirationDate = '0000-00-00T00:00:00.000Z'; // Default expiration date as per API
-
-            await this.certificateService.generateCertificate({
-              userId: userId,
-              courseId: contextId, // contextId from target table is the courseId
-              issuanceDate: issuanceDate,
-              expirationDate: expirationDate,
-            });
-
-            this.logger.log(
-              `Certificate generated for user ${userId} and course ${target.contextId}`,
-            );
-          } else {
-            this.logger.debug(
-              `Skipping certificate generation for target type: ${target.targetType}`,
-            );
-          }
-        } catch (error) {
-          this.logger.error(
-            `Failed to process target ${target.id} for user ${userId}: ${error.message}`,
-          );
-          // Continue with other targets even if one fails
-        }
-      });
-
-      await Promise.allSettled(targetPromises);
     } catch (error) {
       this.logger.error(
         `Error processing payment targets for payment ${paymentIntentId}: ${error.message}`,
