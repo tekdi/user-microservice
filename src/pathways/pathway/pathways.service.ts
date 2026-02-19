@@ -1362,7 +1362,7 @@ export class PathwaysService {
 
 
       // 3. Get pathway from user_pathway_history
-      const userPathways = await this.userPathwayHistoryRepository.find({
+      const userPathway = await this.userPathwayHistoryRepository.findOne({
         where: whereCondition,
         order: { activated_at: 'DESC' },
         select: [
@@ -1376,7 +1376,7 @@ export class PathwaysService {
         ],
       });
 
-      if (!userPathways || userPathways.length === 0) {
+      if (!userPathway) {
         const message = pathwayId
           ? 'Specified pathway assignment not found for this user'
           : 'No active pathway found for this user';
@@ -1389,22 +1389,22 @@ export class PathwaysService {
         );
       }
 
-      const result = userPathways.map((pathway) => ({
-        id: pathway.id,
-        pathwayId: pathway.pathway_id,
-        activatedAt: pathway.activated_at,
-        deactivatedAt: pathway.deactivated_at,
-        userGoal: pathway.user_goal,
-        isActive: pathway.is_active,
-        updatedBy: pathway.updated_by,
-      }));
+      const result = {
+        id: userPathway.id,
+        pathwayId: userPathway.pathway_id,
+        activatedAt: userPathway.activated_at,
+        deactivatedAt: userPathway.deactivated_at,
+        userGoal: userPathway.user_goal,
+        isActive: userPathway.is_active,
+        updatedBy: userPathway.updated_by,
+      };
 
       return APIResponse.success(
         response,
         apiId,
         result,
         HttpStatus.OK,
-        'Pathways retrieved successfully'
+        'Pathway retrieved successfully'
       );
     } catch (error) {
       const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
