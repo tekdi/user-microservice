@@ -1,11 +1,12 @@
 import { Injectable, Logger, BadRequestException, Inject } from '@nestjs/common';
-import { InjectDataSource } from '@nestjs/typeorm';
-import { DataSource, EntityManager } from 'typeorm';
+import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+import { DataSource, EntityManager, Repository } from 'typeorm';
 import { PaymentProvider } from '../interfaces/payment-provider.interface';
 import { PaymentIntentService } from './payment-intent.service';
 import { PaymentTransactionService } from './payment-transaction.service';
 import { PaymentTargetService } from './payment-target.service';
 import { CertificateService } from './certificate.service';
+import { CouponService } from './coupon.service';
 import { InitiatePaymentDto } from '../dtos/initiate-payment.dto';
 import {
   PaymentIntentStatus,
@@ -17,18 +18,23 @@ import {
 import { PaymentTransaction } from '../entities/payment-transaction.entity';
 import { PaymentIntent } from '../entities/payment-intent.entity';
 import { PaymentTarget } from '../entities/payment-target.entity';
+import { User } from '../../user/entities/user-entity';
+import { PaymentReportItemDto } from '../dtos/payment-report.dto';
 
 @Injectable()
 export class PaymentService {
   private readonly logger = new Logger(PaymentService.name);
 
   constructor(
-    private paymentIntentService: PaymentIntentService,
-    private paymentTransactionService: PaymentTransactionService,
-    private paymentTargetService: PaymentTargetService,
-    private certificateService: CertificateService,
-    @Inject('PaymentProvider') private paymentProvider: PaymentProvider,
-    @InjectDataSource() private dataSource: DataSource,
+    private readonly paymentIntentService: PaymentIntentService,
+    private readonly paymentTransactionService: PaymentTransactionService,
+    private readonly paymentTargetService: PaymentTargetService,
+    private readonly certificateService: CertificateService,
+    private readonly couponService: CouponService,
+    @Inject('PaymentProvider') private readonly paymentProvider: PaymentProvider,
+    @InjectDataSource() private readonly dataSource: DataSource,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
   ) {}
 
   /**
@@ -38,21 +44,88 @@ export class PaymentService {
   async initiatePayment(dto: InitiatePaymentDto) {
     this.logger.log(`Initiating payment for user ${dto.userId}`);
 
-    // Create payment intent
+    // Validate coupon if provided
+    let validatedCoupon = null;
+    let finalAmount = dto.amount;
+    let stripePromoCodeId: string | undefined = undefined;
+    
+    if (dto.promoCode) {
+      const target = dto.targets[0]; // Get first target for context validation
+      const validationResult = await this.couponService.validateCoupon({
+        couponCode: dto.promoCode,
+        userId: dto.userId,
+        contextType: target.contextType,
+        contextId: target.contextId,
+        originalAmount: dto.amount.toString(),
+        countryId: dto.metadata?.countryId,
+      });
+
+      if (!validationResult.isValid) {
+        throw new BadRequestException(
+          validationResult.error || 'Invalid coupon code',
+        );
+      }
+
+      validatedCoupon = validationResult.coupon;
+      finalAmount = validationResult.discountedAmount || dto.amount;
+      
+      // Get the full coupon to access stripePromoCodeId
+      const fullCoupon = await this.couponService.getCouponById(validatedCoupon.id);
+      
+      if (fullCoupon) {
+        // If coupon doesn't have Stripe promo code ID, sync it first
+        if (!fullCoupon.stripePromoCodeId) {
+          this.logger.log(`Coupon ${dto.promoCode} not synced to Stripe, syncing now...`);
+          try {
+            await this.couponService.syncCouponToStripe(fullCoupon);
+            // Reload to get the updated stripePromoCodeId
+            const updatedCoupon = await this.couponService.getCouponById(validatedCoupon.id);
+            if (updatedCoupon?.stripePromoCodeId) {
+              stripePromoCodeId = updatedCoupon.stripePromoCodeId;
+            }
+          } catch (error) {
+            this.logger.error(
+              `Failed to sync coupon ${dto.promoCode} to Stripe: ${error.message}`,
+            );
+            throw new BadRequestException(
+              `Coupon ${dto.promoCode} is not available in Stripe. Please sync it first.`,
+            );
+          }
+        } else {
+          stripePromoCodeId = fullCoupon.stripePromoCodeId;
+        }
+      }
+      
+      this.logger.log(
+        `Coupon ${dto.promoCode} validated. Original: ${dto.amount}, Discounted: ${finalAmount}, Stripe Promo Code ID: ${stripePromoCodeId}`,
+      );
+    }
+
+    // Create payment intent with final amount (after discount)
     const intent = await this.paymentIntentService.create({
       userId: dto.userId,
       purpose: dto.purpose,
-      amount: dto.amount,
+      amount: finalAmount,
       currency: dto.currency || 'USD',
       provider: PaymentProviderEnum.STRIPE, // Default to Stripe for now
-      metadata: dto.metadata || {},
+      metadata: {
+        ...dto.metadata,
+        originalAmount: dto.amount,
+        couponCode: validatedCoupon?.couponCode,
+        couponId: validatedCoupon?.id,
+      },
     });
 
     // Create payment targets (locked)
     await this.paymentTargetService.createMany(intent.id, dto.targets);
 
-    // Initiate payment with provider
-    const providerResult = await this.paymentProvider.initiatePayment(dto);
+    // Initiate payment with provider (pass original amount for Stripe, it will apply discount)
+    // Use Stripe promotion code ID if available, otherwise fall back to coupon code
+    const providerResult = await this.paymentProvider.initiatePayment({
+      ...dto,
+      amount: dto.amount, // Pass original amount, Stripe will apply discount via promo code
+      promoCode: stripePromoCodeId || dto.promoCode, // Use Stripe promo code ID if available
+    });
 
     // Create initial transaction
     await this.paymentTransactionService.create({
@@ -68,6 +141,13 @@ export class PaymentService {
       paymentIntentId: intent.id,
       checkoutUrl: providerResult.checkoutUrl,
       sessionId: providerResult.sessionId,
+      ...(validatedCoupon && {
+        coupon: {
+          code: validatedCoupon.couponCode,
+          discountAmount: dto.amount - finalAmount,
+          finalAmount,
+        },
+      }),
     };
   }
 
@@ -216,7 +296,6 @@ export class PaymentService {
             `Unlocked targets for payment intent ${intentInTransaction.id}`,
           );
         }
-        this.logger.log(`webhookEvent------------: ${JSON.stringify(webhookEvent)}`);
 
         return {
           processed: true,
@@ -225,13 +304,28 @@ export class PaymentService {
           status: webhookEvent.status,
           userId: intentInTransaction.userId,
           metadata: webhookEvent.metadata || {},
+          couponId: intentInTransaction.metadata?.couponId,
         };
       },
     );
-    this.logger.log(`result------------: ${JSON.stringify(result)}`);
 
     // Process payment targets after successful payment (outside transaction to avoid blocking)
     if (result.processed && result.status === 'success' && result.userId) {
+      // Record coupon redemption if coupon was used
+      if (result.couponId) {
+        this.couponService.recordRedemption(
+          result.couponId,
+          result.userId,
+          result.paymentIntentId,
+        ).catch((error) => {
+          // Log error but don't fail the webhook processing
+          this.logger.error(
+            `Failed to record coupon redemption for payment ${result.paymentIntentId}: ${error.message}`,
+            error.stack,
+          );
+        });
+      }
+
       this.processPaymentTargets(result.paymentIntentId, result.userId, result.metadata.contextId, result.metadata.purpose).catch(
         (error) => {
           // Log error but don't fail the webhook processing
@@ -322,6 +416,121 @@ export class PaymentService {
       createdAt: intent.createdAt,
       updatedAt: intent.updatedAt,
     };
+  }
+
+  /**
+   * Get payment report by contextId
+   * Returns payment transactions with user details, amounts, discounts, and status
+   */
+  async getPaymentReportByContextId(contextId: string): Promise<PaymentReportItemDto[]> {
+    this.logger.log(`Fetching payment report for contextId: ${contextId}`);
+
+    // Query payment targets by contextId and join with payment intents and transactions
+    // Using getMany() to get entities, then we'll process them
+    const targets = await this.dataSource
+      .getRepository(PaymentTarget)
+      .createQueryBuilder('target')
+      .innerJoinAndSelect('target.paymentIntent', 'intent')
+      .innerJoinAndSelect('intent.transactions', 'transaction')
+      .where('target.contextId = :contextId', { contextId })
+      .getMany();
+
+    if (targets.length === 0) {
+      this.logger.warn(`No payment transactions found for contextId: ${contextId}`);
+      return [];
+    }
+
+    // Extract all unique user IDs and payment intents
+    const userIds = new Set<string>();
+    interface ReportItemWithUserId extends PaymentReportItemDto {
+      _userId?: string; // Temporary field for mapping
+    }
+    const reportItems: ReportItemWithUserId[] = [];
+
+    targets.forEach((target) => {
+      if (target.paymentIntent) {
+        userIds.add(target.paymentIntent.userId);
+        
+        // Process each transaction for this payment intent
+        if (target.paymentIntent.transactions && target.paymentIntent.transactions.length > 0) {
+          target.paymentIntent.transactions.forEach((transaction) => {
+            const originalAmount = target.paymentIntent.metadata?.originalAmount
+              ? Number(target.paymentIntent.metadata.originalAmount)
+              : Number(target.paymentIntent.amount);
+            const paidAmount = Number(target.paymentIntent.amount);
+            const discountCode = target.paymentIntent.metadata?.couponCode || null;
+            const discountAmount =
+              discountCode === null ? null : originalAmount - paidAmount;
+
+            reportItems.push({
+              firstName: null, // Will be filled after fetching users
+              lastName: null, // Will be filled after fetching users
+              email: null, // Will be filled after fetching users
+              actualAmount: originalAmount,
+              paidAmount: paidAmount,
+              discountApplied: discountCode,
+              discountAmount: discountAmount,
+              transactionId: transaction.id,
+              transactionTime: transaction.createdAt,
+              status: this.mapTransactionStatusToReportStatus(transaction.status),
+              _userId: target.paymentIntent.userId, // Temporary field for mapping
+            });
+          });
+        }
+      }
+    });
+
+    // Fetch users separately
+    if (userIds.size > 0) {
+      const users = await this.userRepository.find({
+        where: Array.from(userIds).map((id) => ({ userId: id })),
+        select: ['userId', 'firstName', 'lastName', 'email'],
+      });
+
+      const userMap = new Map(users.map((u) => [u.userId, u]));
+
+      // Map user data to report items
+      reportItems.forEach((item) => {
+        const user = item._userId ? userMap.get(item._userId) : null;
+        if (user) {
+          item.firstName = user.firstName || null;
+          item.lastName = user.lastName || null;
+          item.email = user.email || null;
+        } else {
+          item.firstName = null;
+          item.lastName = null;
+          item.email = null;
+        }
+        delete item._userId; // Remove temporary field
+      });
+    } else {
+      // If no users found, values remain null
+      reportItems.forEach((item) => {
+        delete item._userId;
+      });
+    }
+
+    return reportItems as PaymentReportItemDto[];
+  }
+
+  /**
+   * Map transaction status to report status format
+   */
+  private mapTransactionStatusToReportStatus(
+    status: PaymentTransactionStatus,
+  ): string {
+    switch (status) {
+      case PaymentTransactionStatus.SUCCESS:
+        return 'PAID';
+      case PaymentTransactionStatus.FAILED:
+        return 'FAILED';
+      case PaymentTransactionStatus.INITIATED:
+        return 'PENDING';
+      case PaymentTransactionStatus.REFUNDED:
+        return 'REFUNDED';
+      default:
+        return 'PENDING';
+    }
   }
 
   /**
