@@ -343,4 +343,185 @@ export class LmsClientService {
       return countsMap;
     }
   }
+
+  /** UUID regex for validating course IDs */
+  private static readonly UUID_REGEX =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  /** Concurrency limit for enrollment API calls to avoid overwhelming LMS */
+  private static readonly ENROLL_CONCURRENCY = 15;
+
+  /**
+   * Get all course IDs for a pathway (published courses only).
+   * Uses same pagination as getVideoAndResourceCounts; no N+1.
+   *
+   * @param pathwayId - Pathway ID
+   * @param tenantId - Tenant ID
+   * @param organisationId - Organisation ID
+   * @returns Array of course IDs (may be empty)
+   */
+  async getCourseIdsForPathway(
+    pathwayId: string,
+    tenantId: string,
+    organisationId: string
+  ): Promise<string[]> {
+    if (!this.lmsServiceUrl) {
+      this.logger.warn(
+        `LMS_SERVICE_URL not configured. Returning empty course list for pathway ${pathwayId}`
+      );
+      return [];
+    }
+
+    const searchUrl = `${this.lmsServiceUrl}/lms-service/v1/courses/search`;
+    const headers = {
+      tenantid: tenantId,
+      organisationid: organisationId,
+      'Content-Type': 'application/json',
+    };
+
+    const limit = 1000;
+    const MAX_PAGES = 100;
+    const MAX_COURSES = 100000;
+    let offset = 0;
+    let allCourses: any[] = [];
+    let totalElements = 0;
+    let hasMore = true;
+    let pageCount = 0;
+
+    try {
+      while (hasMore) {
+        if (pageCount >= MAX_PAGES || allCourses.length >= MAX_COURSES) break;
+
+        const searchParams = {
+          pathwayId,
+          status: 'published',
+          limit,
+          offset,
+        };
+
+        const searchResponse = await axios.get(searchUrl, {
+          params: searchParams,
+          headers,
+          timeout: 10000,
+          validateStatus: (status) => status < 500,
+        });
+
+        if (searchResponse.status !== 200) {
+          if (allCourses.length === 0) return [];
+          break;
+        }
+
+        const responseData = searchResponse.data?.result || searchResponse.data;
+        const courses = responseData?.courses || [];
+        totalElements = responseData?.totalElements || 0;
+
+        if (courses.length === 0) break;
+
+        if (courses.length > 0 && allCourses.length > 0) {
+          const firstId = courses[0]?.courseId || courses[0]?.id;
+          const lastId =
+            allCourses[allCourses.length - 1]?.courseId ||
+            allCourses[allCourses.length - 1]?.id;
+          if (firstId === lastId) break;
+        }
+
+        allCourses = allCourses.concat(courses);
+        pageCount++;
+        hasMore =
+          courses.length === limit &&
+          (totalElements === 0 || offset + limit < totalElements);
+        if (hasMore) offset += limit;
+      }
+
+      return allCourses
+        .map((c: any) => c.courseId || c.id || c.course_id)
+        .filter(Boolean)
+        .filter((id: string) => LmsClientService.UUID_REGEX.test(id));
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(
+        `Failed to get course IDs for pathway ${pathwayId}: ${msg}`
+      );
+      return [];
+    }
+  }
+
+  /**
+   * Enroll a user to all given courses via LMS enrollment API.
+   * Uses batched parallelism (no N+1); if any enrollment fails, returns failure.
+   *
+   * @param userId - User (learner) ID
+   * @param courseIds - Course IDs to enroll in
+   * @param tenantId - Tenant ID
+   * @param organisationId - Organisation ID
+   * @returns Success and optional failed course IDs
+   */
+  async enrollUserToCourses(
+    userId: string,
+    courseIds: string[],
+    tenantId: string,
+    organisationId: string
+  ): Promise<{ success: boolean; failedCourseIds?: string[]; message?: string }> {
+    if (!this.lmsServiceUrl) {
+      return {
+        success: false,
+        message: 'LMS_SERVICE_URL not configured',
+      };
+    }
+    if (courseIds.length === 0) {
+      return { success: true };
+    }
+
+    const enrollUrl = `${this.lmsServiceUrl}/lms-service/v1/enrollments`;
+    const headers = {
+      tenantid: tenantId,
+      organisationid: organisationId,
+      'Content-Type': 'application/json',
+    };
+
+    const failedCourseIds: string[] = [];
+
+    const runChunk = async (chunk: string[]) => {
+      const results = await Promise.all(
+        chunk.map(async (courseId) => {
+          try {
+            const res = await axios.post(
+              enrollUrl,
+              { learnerId: userId, courseId, status: 'published' },
+              { headers, params: { userId }, timeout: 15000, validateStatus: () => true }
+            );
+            if (res.status >= 200 && res.status < 300) return { courseId, ok: true };
+            failedCourseIds.push(courseId);
+            this.logger.warn(
+              `LMS enrollment failed for user ${userId} course ${courseId}: status ${res.status}`
+            );
+            return { courseId, ok: false };
+          } catch (err) {
+            failedCourseIds.push(courseId);
+            const msg = err instanceof Error ? err.message : 'Unknown error';
+            this.logger.warn(
+              `LMS enrollment error for user ${userId} course ${courseId}: ${msg}`
+            );
+            return { courseId, ok: false };
+          }
+        })
+      );
+      return results;
+    };
+
+    const concurrency = LmsClientService.ENROLL_CONCURRENCY;
+    for (let i = 0; i < courseIds.length; i += concurrency) {
+      const chunk = courseIds.slice(i, i + concurrency);
+      await runChunk(chunk);
+    }
+
+    if (failedCourseIds.length > 0) {
+      return {
+        success: false,
+        failedCourseIds,
+        message: `Enrollment failed for ${failedCourseIds.length} course(s)`,
+      };
+    }
+    return { success: true };
+  }
 }

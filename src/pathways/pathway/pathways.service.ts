@@ -1112,10 +1112,12 @@ export class PathwaysService {
 
   /**
    * Assign / Activate Pathway for User
-   * Logic: Deactivate existing active pathway and reactivate or create new record
+   * Logic: Require completed_alumni tag → LMS enroll user in all pathway courses → then deactivate existing active pathway and reactivate or create new record.
    */
   async assignPathway(
     assignDto: AssignPathwayDto,
+    tenantId: string,
+    organisationId: string,
     response: Response
   ): Promise<Response> {
     const apiId = APIID.PATHWAY_ASSIGN;
@@ -1124,6 +1126,8 @@ export class PathwaysService {
       assignDto.pathwayId,
       apiId,
       response,
+      tenantId,
+      organisationId,
       assignDto.userGoal,
       assignDto.created_by,
       assignDto.updated_by
@@ -1134,22 +1138,26 @@ export class PathwaysService {
 
   /**
    * Shared internal method for Pathway Assignment and Switching
-   * Ensures strict reactivation of existing records to prevent duplicates
+   * Flow: 1) Validate user and that user has completed_alumni in auto_tags.
+   *       2) Get course IDs for pathway, enroll user in all courses via LMS; if enrollment fails, abort.
+   *       3) Then ensure strict reactivation of existing records to prevent duplicates.
    */
   private async handlePathwayAssignment(
     userId: string,
     pathwayId: string,
     apiId: string,
     response: Response,
+    tenantId: string,
+    organisationId: string,
     userGoal?: string,
     created_by?: string,
     updated_by?: string
   ): Promise<Response> {
     try {
-      // 1. Validate user existence
+      // 1. Validate user existence and completed_alumni tag
       const user = await this.userRepository.findOne({
         where: { userId },
-        select: ['userId'],
+        select: ['userId', 'auto_tags'],
       });
 
       if (!user) {
@@ -1159,6 +1167,19 @@ export class PathwaysService {
           API_RESPONSES.NOT_FOUND,
           'User not found',
           HttpStatus.NOT_FOUND
+        );
+      }
+
+      const autoTags = (user as any).auto_tags;
+      const hasCompletedAlumni =
+        Array.isArray(autoTags) && autoTags.includes('completed_alumni');
+      if (!hasCompletedAlumni) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          API_RESPONSES.PATHWAY_ASSIGN_REQUIRES_COMPLETED_ALUMNI,
+          HttpStatus.BAD_REQUEST
         );
       }
 
@@ -1178,12 +1199,37 @@ export class PathwaysService {
         );
       }
 
-      // 3. Find currently active pathway
+      // 3. Get all course IDs for pathway and enroll user via LMS (all must succeed before assignment)
+      const courseIds = await this.lmsClientService.getCourseIdsForPathway(
+        pathwayId,
+        tenantId,
+        organisationId
+      );
+      if (courseIds.length > 0) {
+        const enrollResult = await this.lmsClientService.enrollUserToCourses(
+          userId,
+          courseIds,
+          tenantId,
+          organisationId
+        );
+        if (!enrollResult.success) {
+          return APIResponse.error(
+            response,
+            apiId,
+            API_RESPONSES.BAD_REQUEST,
+            API_RESPONSES.PATHWAY_ASSIGN_LMS_ENROLLMENT_FAILED +
+              (enrollResult.message ? ` ${enrollResult.message}` : ''),
+            HttpStatus.BAD_REQUEST
+          );
+        }
+      }
+
+      // 4. Find currently active pathway
       const currentActive = await this.userPathwayHistoryRepository.findOne({
         where: { user_id: userId, is_active: true },
       });
 
-      // 4. Check if target pathway already has a history record for this user
+      // 5. Check if target pathway already has a history record for this user
       // If found, we will REACTIVATE it instead of creating a new one
       const existingTargetRecord = await this.userPathwayHistoryRepository.findOne({
         where: { user_id: userId, pathway_id: pathwayId },
