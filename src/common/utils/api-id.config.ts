@@ -142,6 +142,11 @@ export const APIID = {
   PATHWAY_STORAGE_DELETE: "api.pathway.storage.files.delete",
   PATHWAY_CONFIG: "api.pathway.config",
 
+  // Content Management APIs
+  CONTENT_CREATE: "api.Content.create",
+  CONTENT_UPDATE: "api.Content.update",
+  CONTENT_LIST: "api.Content.list",
+
   // Tag Management APIs
   TAG_CREATE: 'api.user.tag.create',
   TAG_UPDATE: 'api.user.tag.update',

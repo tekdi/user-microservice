@@ -33,6 +33,7 @@ import { HealthService } from './health/health.service';
 import { CacheModule } from './cache/cache.module';
 import { PaymentsModule } from './payments/payments.module';
 import { PathwaysModule } from './pathways/pathways.module';
+import { ContentModule } from './content/content.module';
 
 /**
  * Main Application Module
@@ -89,6 +90,7 @@ import { PathwaysModule } from './pathways/pathways.module';
     CacheModule,
     PaymentsModule,
     PathwaysModule,
+    ContentModule,
   ],
   controllers: [AppController, HealthController],
   providers: [
@@ -127,6 +129,7 @@ export class AppModule implements OnModuleInit {
       'CacheModule',
       'PaymentsModule',
       'PathwaysModule',
+      'ContentModule',
     ]);
   }
 }
