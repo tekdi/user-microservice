@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, IsUUID, IsOptional, IsNumber, Min } from 'class-validator';
+import { IsNotEmpty, IsString, IsUUID, IsOptional, IsNumber, Min, IsEnum } from 'class-validator';
+import { PaymentContextType } from '../enums/payment.enums';
 
 export class ValidateCouponDto {
   @ApiProperty({ description: 'Coupon code to validate', example: 'SAVE20' })
@@ -13,16 +14,17 @@ export class ValidateCouponDto {
   userId: string;
 
   @ApiProperty({
+    enum: PaymentContextType,
     description: 'Context type (COHORT, COURSE, or BUNDLE)',
     example: 'COHORT',
   })
   @IsNotEmpty()
-  @IsString()
-  contextType: string;
+  @IsEnum(PaymentContextType)
+  contextType: PaymentContextType;
 
   @ApiProperty({ description: 'Context ID (cohortId, courseId, or bundleId)' })
   @IsNotEmpty()
-  @IsString()
+  @IsUUID()
   contextId: string;
 
   @ApiProperty({

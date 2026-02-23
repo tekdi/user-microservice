@@ -9,12 +9,43 @@ import {
   IsUUID,
   IsBoolean,
   Min,
-  Max,
-  ValidateIf,
   IsDateString,
+  registerDecorator,
+  ValidationOptions,
+  ValidationArguments,
 } from 'class-validator';
 import { PaymentContextType } from '../enums/payment.enums';
 import { DiscountType } from '../entities/discount-coupon.entity';
+
+/**
+ * Custom validator for percentage discount max value
+ * Only applies Max(100) validation when discountType is PERCENT
+ */
+function MaxPercentDiscount(validationOptions?: ValidationOptions) {
+  return function (object: object, propertyName: string) {
+    registerDecorator({
+      name: 'maxPercentDiscount',
+      target: object.constructor,
+      propertyName: propertyName,
+      options: validationOptions,
+      constraints: [],
+      validator: {
+        validate(value: any, args: ValidationArguments) {
+          const obj = args.object as CreateCouponDto;
+          // Only validate max if discount type is PERCENT
+          if (obj.discountType === DiscountType.PERCENT) {
+            return typeof value === 'number' && value <= 100;
+          }
+          // For FIXED type, skip this validator (other validators still apply)
+          return true;
+        },
+        defaultMessage(args: ValidationArguments) {
+          return 'Percentage discount must be between 0 and 100';
+        },
+      },
+    });
+  };
+}
 
 export class CreateCouponDto {
   @ApiProperty({ description: 'Coupon code (e.g., SAVE20)', example: 'SAVE20' })
@@ -58,8 +89,7 @@ export class CreateCouponDto {
   @IsNotEmpty()
   @IsNumber()
   @Min(0)
-  @ValidateIf((o) => o.discountType === DiscountType.PERCENT)
-  @Max(100)
+  @MaxPercentDiscount()
   discountValue: number;
 
   @ApiProperty({ description: 'Currency code', default: 'USD', required: false })

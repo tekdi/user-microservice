@@ -1,6 +1,6 @@
 import { Injectable, Logger, BadRequestException, Inject } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, Repository } from 'typeorm';
+import { DataSource, EntityManager, Repository, In } from 'typeorm';
 import { PaymentProvider } from '../interfaces/payment-provider.interface';
 import { PaymentIntentService } from './payment-intent.service';
 import { PaymentTransactionService } from './payment-transaction.service';
@@ -440,6 +440,7 @@ export class PaymentService {
   /**
    * Get payment report by contextId with pagination
    * Returns payment transactions with user details, amounts, discounts, and status
+   * Pagination is applied to transactions, not targets, to ensure accurate item count
    */
   async getPaymentReportByContextId(
     contextId: string,
@@ -450,33 +451,42 @@ export class PaymentService {
       `Fetching payment report for contextId: ${contextId} with limit: ${limit}, offset: ${offset}`,
     );
 
-    // First, get total count efficiently
+    // Count total transactions (not targets) for accurate pagination
     const totalCount = await this.dataSource
-      .getRepository(PaymentTarget)
-      .createQueryBuilder('target')
-      .innerJoin('target.paymentIntent', 'intent')
-      .innerJoin('intent.transactions', 'transaction')
+      .getRepository(PaymentTransaction)
+      .createQueryBuilder('transaction')
+      .innerJoin('transaction.paymentIntent', 'intent')
+      .innerJoin('intent.targets', 'target')
       .where('target.contextId = :contextId', { contextId })
       .getCount();
 
-    // Query payment targets by contextId and join with payment intents and transactions
-    // Apply pagination at the database level
-    const targets = await this.dataSource
-      .getRepository(PaymentTarget)
-      .createQueryBuilder('target')
-      .innerJoinAndSelect('target.paymentIntent', 'intent')
-      .innerJoinAndSelect('intent.transactions', 'transaction')
+    if (totalCount === 0) {
+      this.logger.warn(`No payment transactions found for contextId: ${contextId}`);
+      return {
+        data: [],
+        totalCount: 0,
+      };
+    }
+
+    // Query transactions directly with pagination
+    // This ensures limit/offset apply to report items, not targets
+    const transactions = await this.dataSource
+      .getRepository(PaymentTransaction)
+      .createQueryBuilder('transaction')
+      .innerJoinAndSelect('transaction.paymentIntent', 'intent')
+      .innerJoin('intent.targets', 'target')
       .where('target.contextId = :contextId', { contextId })
       .orderBy('transaction.createdAt', 'DESC')
       .skip(offset)
       .take(limit)
       .getMany();
 
-    if (targets.length === 0) {
-      this.logger.warn(`No payment transactions found for contextId: ${contextId}`);
+    // If no transactions found for this page (e.g., offset beyond available data),
+    // return empty data but preserve the actual totalCount for correct pagination
+    if (transactions.length === 0) {
       return {
         data: [],
-        totalCount: 0,
+        totalCount, // Use computed totalCount, not 0, so callers know the actual record count
       };
     }
 
@@ -487,43 +497,38 @@ export class PaymentService {
     }
     const reportItems: ReportItemWithUserId[] = [];
 
-    targets.forEach((target) => {
-      if (target.paymentIntent) {
-        userIds.add(target.paymentIntent.userId);
-        
-        // Process each transaction for this payment intent
-        if (target.paymentIntent.transactions && target.paymentIntent.transactions.length > 0) {
-          target.paymentIntent.transactions.forEach((transaction) => {
-            const originalAmount = target.paymentIntent.metadata?.originalAmount
-              ? Number(target.paymentIntent.metadata.originalAmount)
-              : Number(target.paymentIntent.amount);
-            const paidAmount = Number(target.paymentIntent.amount);
-            const discountCode = target.paymentIntent.metadata?.couponCode || null;
-            const discountAmount =
-              discountCode === null ? null : originalAmount - paidAmount;
+    transactions.forEach((transaction) => {
+      if (transaction.paymentIntent) {
+        userIds.add(transaction.paymentIntent.userId);
 
-            reportItems.push({
-              firstName: null, // Will be filled after fetching users
-              lastName: null, // Will be filled after fetching users
-              email: null, // Will be filled after fetching users
-              actualAmount: originalAmount,
-              paidAmount: paidAmount,
-              discountApplied: discountCode,
-              discountAmount: discountAmount,
-              transactionId: transaction.id,
-              transactionTime: transaction.createdAt,
-              status: this.mapTransactionStatusToReportStatus(transaction.status),
-              _userId: target.paymentIntent.userId, // Temporary field for mapping
-            });
-          });
-        }
+        const originalAmount = transaction.paymentIntent.metadata?.originalAmount
+          ? Number(transaction.paymentIntent.metadata.originalAmount)
+          : Number(transaction.paymentIntent.amount);
+        const paidAmount = Number(transaction.paymentIntent.amount);
+        const discountCode = transaction.paymentIntent.metadata?.couponCode || null;
+        const discountAmount =
+          discountCode === null ? null : originalAmount - paidAmount;
+
+        reportItems.push({
+          firstName: null, // Will be filled after fetching users
+          lastName: null, // Will be filled after fetching users
+          email: null, // Will be filled after fetching users
+          actualAmount: originalAmount,
+          paidAmount: paidAmount,
+          discountApplied: discountCode,
+          discountAmount: discountAmount,
+          transactionId: transaction.id,
+          transactionTime: transaction.createdAt,
+          status: this.mapTransactionStatusToReportStatus(transaction.status),
+          _userId: transaction.paymentIntent.userId, // Temporary field for mapping
+        });
       }
     });
 
-    // Fetch users separately
+    // Fetch users separately using In operator for efficient querying
     if (userIds.size > 0) {
       const users = await this.userRepository.find({
-        where: Array.from(userIds).map((id) => ({ userId: id })),
+        where: { userId: In(Array.from(userIds)) },
         select: ['userId', 'firstName', 'lastName', 'email'],
       });
 

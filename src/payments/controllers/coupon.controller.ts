@@ -10,6 +10,8 @@ import {
   HttpCode,
   HttpStatus,
   NotFoundException,
+  UsePipes,
+  ValidationPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { CouponService } from '../services/coupon.service';
@@ -24,6 +26,7 @@ export class CouponController {
   constructor(private readonly couponService: CouponService) {}
 
   @Post()
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   @ApiOperation({ summary: 'Create a new discount coupon' })
   @ApiResponse({
     status: 201,
@@ -36,6 +39,7 @@ export class CouponController {
   }
 
   @Post('validate')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Validate a coupon code' })
   @ApiResponse({
@@ -110,6 +114,7 @@ export class CouponController {
   }
 
   @Put(':id')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   @ApiOperation({ summary: 'Update a coupon' })
   @ApiResponse({
     status: 200,
