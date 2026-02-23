@@ -99,6 +99,16 @@ export class ContentService {
       }
 
       const [items, totalCount] = await this.contentRepository.findAndCount({
+        select: [
+          'id',
+          'name',
+          'alias',
+          'isActive',
+          'createdBy',
+          'updatedBy',
+          'createdAt',
+          'updatedAt',
+        ],
         where: whereCondition,
         order: {
           createdAt: 'DESC',
