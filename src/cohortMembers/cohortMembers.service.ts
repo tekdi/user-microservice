@@ -767,6 +767,27 @@ ${whereCase}`;
         );
       }
 
+      const cohortDetails = await this.cohortRepository.findOne({
+        where: {
+          cohortId: cohortMembershipToUpdate.cohortId,
+        },
+      });
+      if (!cohortDetails) {
+        return APIResponse.error(
+          res,
+          apiId,
+          "Not Found",
+          "Invalid input: Cohort not found.",
+          HttpStatus.NOT_FOUND
+        );
+      }
+      const additionalData ={
+        tenantId: cohortDetails.tenantId,
+        contextType: "COHORTMEMBER",
+        createdBy: cohortMembershipToUpdate.createdBy,
+        updatedBy: cohortMembershipToUpdate.updatedBy,
+      }
+
       //update custom fields
       let responseForCustomField;
       if (
@@ -780,7 +801,8 @@ ${whereCase}`;
         responseForCustomField = await this.processCustomFields(
           customFields,
           cohortMembershipId,
-          cohortMembersUpdateDto
+          cohortMembersUpdateDto,
+          additionalData
         );
         if (result && responseForCustomField.success) {
           APIResponse.success(
@@ -1161,20 +1183,21 @@ ${whereCase}`;
     fieldId: string,
     value: any,
     itemId: string,
-    loggedInUserId: string
+    loggedInUserId: string,
+    additionalData?: { tenantId?: string, contextType?: string, createdBy?: string, updatedBy?: string }
   ) {
     //create
-    const registerResponse = await this.fieldsService.findAndSaveFieldValues({
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      fieldId: fieldId,
-      value: value,
-      itemId: itemId,
-      createdBy: loggedInUserId,
-      updatedBy: loggedInUserId,
-    });
-    //update
-    if (!registerResponse) {
+    // const registerResponse = await this.fieldsService.findAndSaveFieldValues({
+    //   createdAt: new Date(),
+    //   updatedAt: new Date(),
+    //   fieldId: fieldId,
+    //   value: value,
+    //   itemId: itemId,
+    //   createdBy: loggedInUserId,
+    //   updatedBy: loggedInUserId,
+    // });
+    // //update
+    // if (!registerResponse) {
       const updateResponse = await this.fieldsService.updateCustomFields(
         itemId,
         {
@@ -1183,19 +1206,21 @@ ${whereCase}`;
           fieldId: fieldId,
           updatedBy: loggedInUserId,
         },
-        {}
+        null,
+        additionalData
       );
       if (updateResponse) {
         return true;
       } else {
         return false;
-      }
+      // }
     }
   }
   async processCustomFields(
     customFields: FieldValuesOptionDto[],
     cohortMembershipId: string,
-    cohortMembersUpdateDto: CohortMembersUpdateDto
+    cohortMembersUpdateDto: CohortMembersUpdateDto,
+    additionalData: { tenantId?: string, contextType?: string, createdBy?: string, updatedBy?: string }
   ) {
     try {
       const promises = customFields.map((customField) =>
@@ -1203,7 +1228,8 @@ ${whereCase}`;
           customField.fieldId,
           customField.value,
           cohortMembershipId,
-          cohortMembersUpdateDto.userId
+          cohortMembersUpdateDto.userId,
+          additionalData
         )
       );
 
