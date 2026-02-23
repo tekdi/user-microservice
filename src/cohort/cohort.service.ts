@@ -606,10 +606,17 @@ export class CohortService {
                 fieldId: fieldValues["fieldId"],
                 value: fieldValues["value"],
               };
+              const additionalData ={
+                tenantId: existingCohorDetails.tenantId,
+                contextType: existingCohorDetails.type,
+                createdBy: existingCohorDetails.createdBy,
+                updatedBy: existingCohorDetails.updatedBy,
+              }
               await this.fieldsService.updateCustomFields(
                 cohortId,
                 fieldData,
                 customFieldAttributes[fieldData.fieldId],
+                additionalData
               );
             }
           }
