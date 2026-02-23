@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsBoolean, IsOptional, IsString, IsUUID, IsObject, ValidateNested, IsDateString } from 'class-validator';
-import { Expose, Type } from 'class-transformer';
+import { Expose, Type, Transform } from 'class-transformer';
 import { PaginationDto } from './pagination.dto';
 
 class ContentFiltersDto {
@@ -46,7 +46,11 @@ class ContentFiltersDto {
   })
   @Expose()
   @IsOptional()
-  @Type(() => Boolean)
+  @Transform(({ value }) => {
+    if (value === 'true' || value === true || value === 1) return true;
+    if (value === 'false' || value === false || value === 0) return false;
+    return value;
+  })
   @IsBoolean()
   isActive?: boolean;
 
