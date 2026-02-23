@@ -36,6 +36,11 @@ export class PaymentMetadataDto {
   @IsOptional()
   @IsNumber()
   priceSnapshot?: number;
+
+  @ApiProperty({ description: 'Country ID (for country-specific coupons)', required: false })
+  @IsOptional()
+  @IsUUID()
+  countryId?: string;
 }
 
 export class PaymentTargetDto {
