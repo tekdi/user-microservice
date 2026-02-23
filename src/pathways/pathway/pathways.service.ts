@@ -1224,19 +1224,6 @@ export class PathwaysService {
             HttpStatus.BAD_REQUEST
           );
         }
-        // All courses returned 409 (already enrolled) → return 409, do not assign/switch
-        if (
-          enrollResult.alreadyEnrolledCount !== undefined &&
-          enrollResult.alreadyEnrolledCount === courseIds.length
-        ) {
-          return APIResponse.error(
-            response,
-            apiId,
-            API_RESPONSES.CONFLICT,
-            API_RESPONSES.PATHWAY_ASSIGN_ALREADY_EXISTS,
-            HttpStatus.CONFLICT
-          );
-        }
         if (enrollResult.alreadyEnrolledCount) {
           alreadyEnrolledCourseCount = enrollResult.alreadyEnrolledCount;
         }
