@@ -7,14 +7,13 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { Content } from './entities/content.entity';
 import { CreateContentDto } from './dto/create-content.dto';
 import APIResponse from 'src/common/responses/response';
 import { APIID } from '@utils/api-id.config';
 import { Response } from 'express';
 import { StringUtil } from './utils/string.util';
-import { Not, Like, ILike } from 'typeorm';
+import { Repository, Not, Like, ILike, Between } from 'typeorm';
 import { UpdateContentDto } from './dto/update-content.dto';
 import { ListContentDto } from './dto/list-content.dto';
 import { MAX_PAGINATION_LIMIT } from './dto/pagination.dto';
@@ -87,8 +86,13 @@ export class ContentService {
         whereCondition.alias = ILike(`%${filters.alias}%`);
       }
       if (filters.createdAt) {
-        // Simple exact date match or could be range. For now, matching the day or using Like
-        whereCondition.createdAt = Like(`${filters.createdAt}%`);
+        const start = new Date(filters.createdAt);
+        if (!isNaN(start.getTime())) {
+          const end = new Date(filters.createdAt);
+          start.setHours(0, 0, 0, 0);
+          end.setHours(23, 59, 59, 999);
+          whereCondition.createdAt = Between(start, end);
+        }
       }
 
       const [items, totalCount] = await this.contentRepository.findAndCount({

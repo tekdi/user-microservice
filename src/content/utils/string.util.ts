@@ -9,11 +9,14 @@ export class StringUtil {
   static normalizeKey(text: string, maxLength: number = 400): string {
     if (!text) return '';
 
-    return text
+    // Cap input length immediately to prevent ReDoS on massive strings
+    const str = text.substring(0, maxLength + 100);
+
+    return str
       .toLowerCase()
-      .replace(/[^a-z0-9]/g, '_') // Replace non-alphanumeric with underscore
-      .replace(/_+/g, '_') // Collapse multiple underscores
-      .replace(/^_+|_+$/g, '') // Trim underscores from ends
-      .substring(0, maxLength); // Cap length
+      .replace(/[^a-z0-9]/g, '_')
+      .replace(/_{2,}/g, '_')
+      .replace(/(^_+)|(_+$)/g, '')
+      .substring(0, maxLength);   // Final truncate
   }
 }

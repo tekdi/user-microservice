@@ -4,9 +4,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsBoolean,
-  IsArray,
   IsUUID,
-  ArrayUnique,
 } from 'class-validator';
 
 export class CreateContentDto {

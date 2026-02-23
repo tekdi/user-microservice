@@ -27,8 +27,8 @@ export class Content {
   createdBy: string;
 
   @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz', nullable: true })
-  updatedAt: Date;
+  updatedAt: Date| null;
 
   @Column({ name: 'updated_by', type: 'uuid', nullable: true })
-  updatedBy: string;
+  updatedBy: string | null;
 }
