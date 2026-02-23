@@ -16,7 +16,7 @@ import { StringUtil } from './utils/string.util';
 import { Repository, Not, Like, ILike, Between, QueryFailedError } from 'typeorm';
 import { UpdateContentDto } from './dto/update-content.dto';
 import { ListContentDto } from './dto/list-content.dto';
-import { MAX_PAGINATION_LIMIT } from 'src/common/dto/pagination.dto';
+import { MAX_PAGINATION_LIMIT } from './dto/pagination.dto';
 import { CacheService } from 'src/cache/cache.service';
 
 @Injectable()
@@ -79,11 +79,14 @@ export class ContentService {
       if (filters.createdBy) {
         whereCondition.createdBy = filters.createdBy;
       }
+
+      const escapeLike = (s: string) => s.replace(/[\\%_]/g, '\\$&');
+
       if (filters.name) {
-        whereCondition.name = ILike(`%${filters.name}%`);
+        whereCondition.name = ILike(`%${escapeLike(filters.name)}%`);
       }
       if (filters.alias) {
-        whereCondition.alias = ILike(`%${filters.alias}%`);
+        whereCondition.alias = ILike(`%${escapeLike(filters.alias)}%`);
       }
       if (filters.createdAt) {
         const start = new Date(filters.createdAt);
@@ -276,9 +279,6 @@ export class ContentService {
         );
       }
 
-      if (error instanceof ConflictException) {
-        throw error;
-      }
       return APIResponse.error(
         response,
         APIID.CONTENT_CREATE,

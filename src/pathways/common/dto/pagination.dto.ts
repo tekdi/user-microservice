@@ -44,4 +44,3 @@ export class PaginationDto {
   @Min(0, { message: 'Offset must be non-negative' })
   offset?: number;
 }
-
