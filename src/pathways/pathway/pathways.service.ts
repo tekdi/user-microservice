@@ -1327,7 +1327,8 @@ export class PathwaysService {
       let successMessage = currentActive
         ? API_RESPONSES.PATHWAY_SWITCHED_SUCCESSFULLY
         : API_RESPONSES.PATHWAY_ASSIGNED_SUCCESSFULLY;
-      if (alreadyEnrolledCourseCount > 0) {
+      // Only append "already enrolled" for initial assignment, not when switching pathway
+      if (!currentActive && alreadyEnrolledCourseCount > 0) {
         successMessage += ` User was already enrolled in ${alreadyEnrolledCourseCount} course(s).`;
       }
 
