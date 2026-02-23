@@ -116,11 +116,15 @@ export class StripeWebhookController {
       );
 
       if (result.processed && 'paymentIntentId' in result) {
-        this.logger.log(`✅ Stripe Webhook Processed Successfully - Payment Intent ID: ${result.paymentIntentId}`);
+        this.logger.log(`✅ Stripe Webhook Processed Successfully - Result: ${JSON.stringify(result)}`);
         return {
           received: true,
           processed: result.processed,
           paymentIntentId: result.paymentIntentId,
+          transactionId: 'transactionId' in result ? result.transactionId : undefined,
+          status: 'status' in result ? result.status : undefined,
+          userId: 'userId' in result ? result.userId : undefined,
+          metadata: 'metadata' in result ? (result.metadata || {}) : {},
         };
       } else if ('reason' in result) {
         this.logger.log(`⚠️ Stripe Webhook Skipped - Reason: ${result.reason}`);

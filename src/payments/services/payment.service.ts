@@ -5,11 +5,13 @@ import { PaymentProvider } from '../interfaces/payment-provider.interface';
 import { PaymentIntentService } from './payment-intent.service';
 import { PaymentTransactionService } from './payment-transaction.service';
 import { PaymentTargetService } from './payment-target.service';
+import { CertificateService } from './certificate.service';
 import { InitiatePaymentDto } from '../dtos/initiate-payment.dto';
 import {
   PaymentIntentStatus,
   PaymentTransactionStatus,
   PaymentTargetUnlockStatus,
+  PaymentPurpose,
   PaymentProvider as PaymentProviderEnum,
 } from '../enums/payment.enums';
 import { PaymentTransaction } from '../entities/payment-transaction.entity';
@@ -24,6 +26,7 @@ export class PaymentService {
     private paymentIntentService: PaymentIntentService,
     private paymentTransactionService: PaymentTransactionService,
     private paymentTargetService: PaymentTargetService,
+    private certificateService: CertificateService,
     @Inject('PaymentProvider') private paymentProvider: PaymentProvider,
     @InjectDataSource() private dataSource: DataSource,
   ) {}
@@ -213,17 +216,75 @@ export class PaymentService {
             `Unlocked targets for payment intent ${intentInTransaction.id}`,
           );
         }
+        this.logger.log(`webhookEvent------------: ${JSON.stringify(webhookEvent)}`);
 
         return {
           processed: true,
           paymentIntentId: intentInTransaction.id,
           transactionId: transaction.id,
           status: webhookEvent.status,
+          userId: intentInTransaction.userId,
+          metadata: webhookEvent.metadata || {},
         };
       },
     );
+    this.logger.log(`result------------: ${JSON.stringify(result)}`);
+
+    // Process payment targets after successful payment (outside transaction to avoid blocking)
+    if (result.processed && result.status === 'success' && result.userId) {
+      this.processPaymentTargets(result.paymentIntentId, result.userId, result.metadata.contextId, result.metadata.purpose).catch(
+        (error) => {
+          // Log error but don't fail the webhook processing
+          this.logger.error(
+            `Failed to process payment targets for payment ${result.paymentIntentId}: ${error.message}`,
+            error.stack,
+          );
+        },
+      );
+    }
 
     return result;
+  }
+
+  /**
+   * Process payment targets after successful payment
+   * Handles different target types (e.g., certificate generation for CERTIFICATE_BUNDLE)
+   * Uses metadata from webhook instead of fetching from database
+   */
+  private async processPaymentTargets(
+    paymentIntentId: string,
+    userId: string,
+    contextId: string,
+    purpose: string,
+  ): Promise<void> {
+    try {
+      // Only generate certificate for CERTIFICATE_BUNDLE purpose
+      if (purpose === PaymentPurpose.CERTIFICATE_BUNDLE) {
+        const issuanceDate = new Date().toISOString();
+        const expirationDate = '0000-00-00T00:00:00.000Z'; // Default expiration date as per API
+
+        await this.certificateService.generateCertificate({
+          userId: userId,
+          courseId: contextId, // contextId from webhook metadata
+          issuanceDate: issuanceDate,
+          expirationDate: expirationDate,
+        });
+
+        this.logger.log(
+          `Certificate generated for user ${userId} and course ${contextId}`,
+        );
+      } else {
+        this.logger.debug(
+          `Skipping certificate generation for purpose: ${purpose}`,
+        );
+      }
+    } catch (error) {
+      this.logger.error(
+        `Error processing payment targets for payment ${paymentIntentId}: ${error.message}`,
+        error.stack,
+      );
+      throw error;
+    }
   }
 
   /**

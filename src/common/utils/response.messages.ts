@@ -33,6 +33,9 @@ export const API_RESPONSES = {
   ENDDATE_VALIDATION:
     "End Date should not be earlier than Start Date and can be equal to it.",
   TENANTID_VALIDATION: "Tenant ID is required and must be a valid UUID",
+  ORGANISATIONID_REQUIRED:
+    "Organisation ID is required (set organisationid header or DEFAULT_ORGANISATION_ID environment variable).",
+  ORGANISATIONID_VALIDATION: "Organisation ID must be a valid UUID when provided.",
   COHORT_NOT_AVAILABLE_FOR_ACADEMIC_YEAR:
     "No cohorts available for given Academic year",
   ACADEMICYEARID_VALIDATION:
@@ -268,4 +271,8 @@ export const API_RESPONSES = {
   USER_INTERESTS_SAVED_SUCCESSFULLY: "User interests saved successfully",
   PATHWAY_SWITCHED_SUCCESSFULLY: "Pathway switched successfully",
   PATHWAY_ASSIGNED_SUCCESSFULLY: "Pathway assigned successfully",
+  PATHWAY_ASSIGN_REQUIRES_COMPLETED_ALUMNI:
+    "User must have completed_alumni tag to assign pathway.",
+  PATHWAY_ASSIGN_LMS_ENROLLMENT_FAILED:
+    "LMS enrollment failed. Pathway assignment aborted.",
 };

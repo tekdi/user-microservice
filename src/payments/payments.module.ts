@@ -10,6 +10,10 @@ import { PaymentService } from './services/payment.service';
 import { PaymentIntentService } from './services/payment-intent.service';
 import { PaymentTransactionService } from './services/payment-transaction.service';
 import { PaymentTargetService } from './services/payment-target.service';
+import { CertificateService } from './services/certificate.service';
+import { UserAdapter } from '../user/useradapter';
+import { PostgresModule } from '../adapters/postgres/postgres-module';
+import { HttpService } from '../common/utils/http-service';
 import { StripeProvider } from './providers/stripe/stripe.provider';
 
 /**
@@ -29,6 +33,7 @@ import { StripeProvider } from './providers/stripe/stripe.provider';
   imports: [
     TypeOrmModule.forFeature([PaymentIntent, PaymentTransaction, PaymentTarget]),
     ConfigModule,
+    PostgresModule,
   ],
   controllers: [PaymentsController, StripeWebhookController],
   providers: [
@@ -36,6 +41,9 @@ import { StripeProvider } from './providers/stripe/stripe.provider';
     PaymentIntentService,
     PaymentTransactionService,
     PaymentTargetService,
+    CertificateService,
+    UserAdapter,
+    HttpService,
     {
       provide: 'PaymentProvider',
       useClass: StripeProvider,
