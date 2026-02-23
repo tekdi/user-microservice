@@ -275,4 +275,6 @@ export const API_RESPONSES = {
     "User must have completed_alumni tag to assign pathway.",
   PATHWAY_ASSIGN_LMS_ENROLLMENT_FAILED:
     "LMS enrollment failed. Pathway assignment aborted.",
+  PATHWAY_ASSIGN_ALREADY_EXISTS:
+    "Already exist. User is already enrolled in all pathway courses.",
 };

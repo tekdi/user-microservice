@@ -448,20 +448,26 @@ export class LmsClientService {
 
   /**
    * Enroll a user to all given courses via LMS enrollment API.
-   * Uses batched parallelism (no N+1); if any enrollment fails, returns failure.
+   * Uses batched parallelism (no N+1). Treats 409 (already enrolled) as success.
+   * Only real failures (e.g. 4xx other than 409, 5xx, network) cause abort.
    *
    * @param userId - User (learner) ID
    * @param courseIds - Course IDs to enroll in
    * @param tenantId - Tenant ID
    * @param organisationId - Organisation ID
-   * @returns Success and optional failed course IDs
+   * @returns Success, optional failed course IDs, and count already enrolled
    */
   async enrollUserToCourses(
     userId: string,
     courseIds: string[],
     tenantId: string,
     organisationId: string
-  ): Promise<{ success: boolean; failedCourseIds?: string[]; message?: string }> {
+  ): Promise<{
+    success: boolean;
+    failedCourseIds?: string[];
+    alreadyEnrolledCount?: number;
+    message?: string;
+  }> {
     if (!this.lmsServiceUrl) {
       return {
         success: false,
@@ -480,6 +486,7 @@ export class LmsClientService {
     };
 
     const failedCourseIds: string[] = [];
+    let alreadyEnrolledCount = 0;
 
     const runChunk = async (chunk: string[]) => {
       const results = await Promise.all(
@@ -490,19 +497,26 @@ export class LmsClientService {
               { learnerId: userId, courseId, status: 'published' },
               { headers, params: { userId }, timeout: 15000, validateStatus: () => true }
             );
-            if (res.status >= 200 && res.status < 300) return { courseId, ok: true };
+            if (res.status >= 200 && res.status < 300) return { courseId, ok: true, alreadyEnrolled: false };
+            // 409 Conflict = already enrolled; treat as success so assignment can proceed
+            if (res.status === 409) {
+              this.logger.debug(
+                `User ${userId} already enrolled in course ${courseId} (409); treating as success`
+              );
+              return { courseId, ok: true, alreadyEnrolled: true };
+            }
             failedCourseIds.push(courseId);
             this.logger.warn(
               `LMS enrollment failed for user ${userId} course ${courseId}: status ${res.status}`
             );
-            return { courseId, ok: false };
+            return { courseId, ok: false, alreadyEnrolled: false };
           } catch (err) {
             failedCourseIds.push(courseId);
             const msg = err instanceof Error ? err.message : 'Unknown error';
             this.logger.warn(
               `LMS enrollment error for user ${userId} course ${courseId}: ${msg}`
             );
-            return { courseId, ok: false };
+            return { courseId, ok: false, alreadyEnrolled: false };
           }
         })
       );
@@ -512,7 +526,8 @@ export class LmsClientService {
     const concurrency = LmsClientService.ENROLL_CONCURRENCY;
     for (let i = 0; i < courseIds.length; i += concurrency) {
       const chunk = courseIds.slice(i, i + concurrency);
-      await runChunk(chunk);
+      const chunkResults = await runChunk(chunk);
+      alreadyEnrolledCount += chunkResults.filter((r) => r.alreadyEnrolled).length;
     }
 
     if (failedCourseIds.length > 0) {
@@ -522,6 +537,8 @@ export class LmsClientService {
         message: `Enrollment failed for ${failedCourseIds.length} course(s)`,
       };
     }
-    return { success: true };
+    return alreadyEnrolledCount > 0
+      ? { success: true, alreadyEnrolledCount }
+      : { success: true };
   }
 }

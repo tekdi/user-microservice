@@ -1200,6 +1200,8 @@ export class PathwaysService {
       }
 
       // 3. Get all course IDs for pathway and enroll user via LMS (all must succeed before assignment)
+      // 409 "already enrolled" from LMS is treated as success; only real failures abort
+      let alreadyEnrolledCourseCount = 0;
       const courseIds = await this.lmsClientService.getCourseIdsForPathway(
         pathwayId,
         tenantId,
@@ -1221,6 +1223,22 @@ export class PathwaysService {
               (enrollResult.message ? ` ${enrollResult.message}` : ''),
             HttpStatus.BAD_REQUEST
           );
+        }
+        // All courses returned 409 (already enrolled) → return 409, do not assign/switch
+        if (
+          enrollResult.alreadyEnrolledCount !== undefined &&
+          enrollResult.alreadyEnrolledCount === courseIds.length
+        ) {
+          return APIResponse.error(
+            response,
+            apiId,
+            API_RESPONSES.CONFLICT,
+            API_RESPONSES.PATHWAY_ASSIGN_ALREADY_EXISTS,
+            HttpStatus.CONFLICT
+          );
+        }
+        if (enrollResult.alreadyEnrolledCount) {
+          alreadyEnrolledCourseCount = enrollResult.alreadyEnrolledCount;
         }
       }
 
@@ -1319,9 +1337,12 @@ export class PathwaysService {
         updated_by: created_by,
       };
 
-      const successMessage = currentActive
+      let successMessage = currentActive
         ? API_RESPONSES.PATHWAY_SWITCHED_SUCCESSFULLY
         : API_RESPONSES.PATHWAY_ASSIGNED_SUCCESSFULLY;
+      if (alreadyEnrolledCourseCount > 0) {
+        successMessage += ` User was already enrolled in ${alreadyEnrolledCourseCount} course(s).`;
+      }
 
       return APIResponse.success(
         response,
