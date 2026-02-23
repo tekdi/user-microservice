@@ -4,12 +4,16 @@ import {
   Get,
   Body,
   Param,
+  Query,
   UsePipes,
   ValidationPipe,
   HttpCode,
   HttpStatus,
   UseFilters,
   ParseUUIDPipe,
+  ParseIntPipe,
+  DefaultValuePipe,
+  BadRequestException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -20,6 +24,7 @@ import {
   ApiOkResponse,
   ApiBadRequestResponse,
   ApiNotFoundResponse,
+  ApiQuery,
 } from '@nestjs/swagger';
 import { AllExceptionsFilter } from '../common/filters/exception.filter';
 import { APIID } from '../common/utils/api-id.config';
@@ -69,18 +74,51 @@ export class PaymentsController {
 
   @Get('report/:contextId')
   @UseFilters(new AllExceptionsFilter(APIID.PAYMENT_STATUS))
-  @ApiOperation({ summary: 'Get payment report by contextId' })
+  @ApiOperation({ summary: 'Get payment report by contextId with pagination' })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Number of records to return (default: 50, max: 1000)',
+    example: 50,
+  })
+  @ApiQuery({
+    name: 'offset',
+    required: false,
+    type: Number,
+    description: 'Number of records to skip (default: 0)',
+    example: 0,
+  })
   @ApiOkResponse({
     description: 'Payment report retrieved successfully',
     type: PaymentReportResponseDto,
   })
+  @ApiBadRequestResponse({ description: 'Invalid pagination parameters' })
   async getPaymentReport(
     @Param('contextId', ParseUUIDPipe) contextId: string,
+    @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit: number,
+    @Query('offset', new DefaultValuePipe(0), ParseIntPipe) offset: number,
   ): Promise<PaymentReportResponseDto> {
-    const data = await this.paymentService.getPaymentReportByContextId(contextId);
+    // Validate pagination parameters
+    if (limit < 1 || limit > 1000) {
+      throw new BadRequestException('Limit must be between 1 and 1000');
+    }
+    if (offset < 0) {
+      throw new BadRequestException('Offset must be non-negative');
+    }
+
+    const result = await this.paymentService.getPaymentReportByContextId(
+      contextId,
+      limit,
+      offset,
+    );
+
     return {
-      data,
-      totalCount: data.length,
+      data: result.data,
+      totalCount: result.totalCount,
+      limit,
+      offset,
+      hasMore: offset + result.data.length < result.totalCount,
     };
   }
 }

@@ -10,22 +10,22 @@ import { ConfigService } from '@nestjs/config';
 import Stripe from 'stripe';
 import { DiscountCoupon, DiscountType } from '../entities/discount-coupon.entity';
 import { CouponRedemption } from '../entities/coupon-redemption.entity';
-import { CreateCouponDto } from '../dtos/create-coupon.dto';
+import { CreateCouponDto, UpdateCouponDto } from '../dtos/create-coupon.dto';
 import { ValidateCouponDto, ValidateCouponResponseDto } from '../dtos/validate-coupon.dto';
 import { PaymentContextType } from '../enums/payment.enums';
 
 @Injectable()
 export class CouponService {
   private readonly logger = new Logger(CouponService.name);
-  private stripe: Stripe;
+  private readonly stripe: Stripe;
 
   constructor(
     @InjectRepository(DiscountCoupon)
-    private couponRepository: Repository<DiscountCoupon>,
+    private readonly couponRepository: Repository<DiscountCoupon>,
     @InjectRepository(CouponRedemption)
-    private redemptionRepository: Repository<CouponRedemption>,
-    private configService: ConfigService,
-    private dataSource: DataSource,
+    private readonly redemptionRepository: Repository<CouponRedemption>,
+    private readonly configService: ConfigService,
+    private readonly dataSource: DataSource,
   ) {
     const stripeSecretKey = this.configService.get<string>('STRIPE_SECRET_KEY');
     if (stripeSecretKey) {
@@ -58,7 +58,7 @@ export class CouponService {
       discountValue: dto.discountValue,
       currency: dto.currency || 'USD',
       countryId: dto.countryId || null,
-      isActive: dto.isActive !== undefined ? dto.isActive : true,
+      isActive: dto.isActive ?? true,
       validFrom: dto.validFrom ? new Date(dto.validFrom) : null,
       validTill: dto.validTill ? new Date(dto.validTill) : null,
       maxRedemptions: dto.maxRedemptions || null,
@@ -97,12 +97,13 @@ export class CouponService {
       const stripeCouponParams: Stripe.CouponCreateParams = {
         id: coupon.couponCode.toLowerCase().replace(/[^a-z0-9]/g, '_'),
         name: coupon.couponCode,
-        currency: coupon.currency.toLowerCase(),
       };
 
       if (coupon.discountType === DiscountType.PERCENT) {
+        // For percentage discounts, Stripe doesn't accept currency parameter
         stripeCouponParams.percent_off = Number(coupon.discountValue);
       } else {
+        // For fixed amount discounts, currency is required
         stripeCouponParams.amount_off = Math.round(
           Number(coupon.discountValue) * 100, // Convert to cents
         );
@@ -136,21 +137,56 @@ export class CouponService {
         }
       }
 
-      // Create promotion code
-      const promoCode = await this.stripe.promotionCodes.create({
-        coupon: stripeCoupon.id,
-        code: coupon.couponCode,
-        active: coupon.isActive,
-        max_redemptions: coupon.maxRedemptions || undefined,
-      });
-
-      // Update coupon with Stripe promotion code ID
-      coupon.stripePromoCodeId = promoCode.id;
-      await this.couponRepository.save(coupon);
-
-      this.logger.log(
-        `Synced coupon ${coupon.couponCode} to Stripe (promo code: ${promoCode.id})`,
-      );
+      // Create or update promotion code
+      let promoCode: Stripe.PromotionCode;
+      if (coupon.stripePromoCodeId) {
+        // Update existing promotion code
+        // Note: max_redemptions is a coupon property, not a promotion code property
+        try {
+          promoCode = await this.stripe.promotionCodes.update(
+            coupon.stripePromoCodeId,
+            {
+              active: coupon.isActive,
+            },
+          );
+          this.logger.log(
+            `Updated existing Stripe promotion code ${promoCode.id} for coupon ${coupon.couponCode}`,
+          );
+        } catch (error) {
+          // If promotion code doesn't exist in Stripe, create a new one
+          if (error.code === 'resource_missing') {
+            this.logger.warn(
+              `Promotion code ${coupon.stripePromoCodeId} not found in Stripe, creating new one`,
+            );
+            promoCode = await this.stripe.promotionCodes.create({
+              coupon: stripeCoupon.id,
+              code: coupon.couponCode,
+              active: coupon.isActive,
+              max_redemptions: coupon.maxRedemptions || undefined,
+            });
+            coupon.stripePromoCodeId = promoCode.id;
+            await this.couponRepository.save(coupon);
+            this.logger.log(
+              `Created new Stripe promotion code ${promoCode.id} for coupon ${coupon.couponCode}`,
+            );
+          } else {
+            throw error;
+          }
+        }
+      } else {
+        // Create new promotion code
+        promoCode = await this.stripe.promotionCodes.create({
+          coupon: stripeCoupon.id,
+          code: coupon.couponCode,
+          active: coupon.isActive,
+          max_redemptions: coupon.maxRedemptions || undefined,
+        });
+        coupon.stripePromoCodeId = promoCode.id;
+        await this.couponRepository.save(coupon);
+        this.logger.log(
+          `Created new Stripe promotion code ${promoCode.id} for coupon ${coupon.couponCode}`,
+        );
+      }
     } catch (error) {
       this.logger.error(
         `Failed to sync coupon ${coupon.couponCode} to Stripe: ${error.message}`,
@@ -248,7 +284,7 @@ export class CouponService {
     }
 
     // Calculate discount
-    const originalAmount = parseFloat(dto.originalAmount);
+    const originalAmount = dto.originalAmount;
     let discountAmount = 0;
     let discountedAmount = originalAmount;
 
@@ -386,7 +422,7 @@ export class CouponService {
    */
   async updateCoupon(
     id: string,
-    updates: Partial<CreateCouponDto>,
+    updates: UpdateCouponDto,
   ): Promise<DiscountCoupon> {
     const coupon = await this.couponRepository.findOne({ where: { id } });
 
@@ -394,12 +430,47 @@ export class CouponService {
       throw new NotFoundException(`Coupon ${id} not found`);
     }
 
-    // Update fields
-    Object.assign(coupon, {
-      ...updates,
-      validFrom: updates.validFrom ? new Date(updates.validFrom) : coupon.validFrom,
-      validTill: updates.validTill ? new Date(updates.validTill) : coupon.validTill,
-    });
+    // Update fields explicitly to handle date conversions and null values properly
+    if (updates.couponCode !== undefined) {
+      coupon.couponCode = updates.couponCode;
+    }
+    if (updates.stripePromoCodeId !== undefined) {
+      coupon.stripePromoCodeId = updates.stripePromoCodeId;
+    }
+    if (updates.contextType !== undefined) {
+      coupon.contextType = updates.contextType;
+    }
+    if (updates.contextId !== undefined) {
+      coupon.contextId = updates.contextId;
+    }
+    if (updates.discountType !== undefined) {
+      coupon.discountType = updates.discountType;
+    }
+    if (updates.discountValue !== undefined) {
+      coupon.discountValue = updates.discountValue;
+    }
+    if (updates.currency !== undefined) {
+      coupon.currency = updates.currency;
+    }
+    if (updates.countryId !== undefined) {
+      coupon.countryId = updates.countryId;
+    }
+    if (updates.isActive !== undefined) {
+      coupon.isActive = updates.isActive;
+    }
+    // Handle date fields: allow explicit null values and convert strings to Date
+    if (updates.validFrom !== undefined) {
+      coupon.validFrom = updates.validFrom ? new Date(updates.validFrom) : null;
+    }
+    if (updates.validTill !== undefined) {
+      coupon.validTill = updates.validTill ? new Date(updates.validTill) : null;
+    }
+    if (updates.maxRedemptions !== undefined) {
+      coupon.maxRedemptions = updates.maxRedemptions;
+    }
+    if (updates.maxRedemptionsPerUser !== undefined) {
+      coupon.maxRedemptionsPerUser = updates.maxRedemptionsPerUser;
+    }
 
     const updated = await this.couponRepository.save(coupon);
 

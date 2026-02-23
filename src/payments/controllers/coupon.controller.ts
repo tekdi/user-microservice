@@ -13,7 +13,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { CouponService } from '../services/coupon.service';
-import { CreateCouponDto } from '../dtos/create-coupon.dto';
+import { CreateCouponDto, UpdateCouponDto } from '../dtos/create-coupon.dto';
 import { ValidateCouponDto, ValidateCouponResponseDto } from '../dtos/validate-coupon.dto';
 import { DiscountCoupon } from '../entities/discount-coupon.entity';
 import { PaymentContextType } from '../enums/payment.enums';
@@ -61,10 +61,19 @@ export class CouponController {
     @Query('contextId') contextId?: string,
     @Query('isActive') isActive?: string,
   ): Promise<DiscountCoupon[]> {
+    let isActiveBoolean: boolean | undefined;
+    if (isActive === 'true') {
+      isActiveBoolean = true;
+    } else if (isActive === 'false') {
+      isActiveBoolean = false;
+    } else {
+      isActiveBoolean = undefined;
+    }
+
     return await this.couponService.listCoupons({
       contextType,
       contextId,
-      isActive: isActive === 'true' ? true : isActive === 'false' ? false : undefined,
+      isActive: isActiveBoolean,
     });
   }
 
@@ -110,7 +119,7 @@ export class CouponController {
   @ApiResponse({ status: 404, description: 'Coupon not found' })
   async updateCoupon(
     @Param('id') id: string,
-    @Body() updates: Partial<CreateCouponDto>,
+    @Body() updates: UpdateCouponDto,
   ): Promise<DiscountCoupon> {
     return await this.couponService.updateCoupon(id, updates);
   }

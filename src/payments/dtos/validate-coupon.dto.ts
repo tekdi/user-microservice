@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, IsUUID, IsOptional } from 'class-validator';
+import { IsNotEmpty, IsString, IsUUID, IsOptional, IsNumber, Min } from 'class-validator';
 
 export class ValidateCouponDto {
   @ApiProperty({ description: 'Coupon code to validate', example: 'SAVE20' })
@@ -26,12 +26,14 @@ export class ValidateCouponDto {
   contextId: string;
 
   @ApiProperty({
+    type: 'number',
     description: 'Original amount before discount',
-    example: 100.0,
+    example: 100,
   })
   @IsNotEmpty()
-  @IsString()
-  originalAmount: string;
+  @IsNumber()
+  @Min(0)
+  originalAmount: number;
 
   @ApiProperty({
     description: 'Country ID (optional, for country-specific coupons)',

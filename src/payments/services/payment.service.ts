@@ -56,7 +56,7 @@ export class PaymentService {
         userId: dto.userId,
         contextType: target.contextType,
         contextId: target.contextId,
-        originalAmount: dto.amount.toString(),
+        originalAmount: dto.amount,
         countryId: dto.metadata?.countryId,
       });
 
@@ -67,33 +67,52 @@ export class PaymentService {
       }
 
       validatedCoupon = validationResult.coupon;
-      finalAmount = validationResult.discountedAmount || dto.amount;
+      // Use nullish coalescing to handle 100% discounts (discountedAmount = 0)
+      // Only fall back to original amount if discountedAmount is undefined/null
+      finalAmount = validationResult.discountedAmount ?? dto.amount;
       
       // Get the full coupon to access stripePromoCodeId
       const fullCoupon = await this.couponService.getCouponById(validatedCoupon.id);
       
-      if (fullCoupon) {
-        // If coupon doesn't have Stripe promo code ID, sync it first
-        if (!fullCoupon.stripePromoCodeId) {
-          this.logger.log(`Coupon ${dto.promoCode} not synced to Stripe, syncing now...`);
-          try {
-            await this.couponService.syncCouponToStripe(fullCoupon);
-            // Reload to get the updated stripePromoCodeId
-            const updatedCoupon = await this.couponService.getCouponById(validatedCoupon.id);
-            if (updatedCoupon?.stripePromoCodeId) {
-              stripePromoCodeId = updatedCoupon.stripePromoCodeId;
-            }
-          } catch (error) {
-            this.logger.error(
-              `Failed to sync coupon ${dto.promoCode} to Stripe: ${error.message}`,
-            );
+      if (fullCoupon === null) {
+        throw new BadRequestException(
+          `Coupon ${dto.promoCode} not found in database after validation`,
+        );
+      }
+
+      // If coupon doesn't have Stripe promo code ID, sync it first
+      if (!fullCoupon.stripePromoCodeId) {
+        this.logger.log(`Coupon ${dto.promoCode} not synced to Stripe, syncing now...`);
+        try {
+          await this.couponService.syncCouponToStripe(fullCoupon);
+          // Reload to get the updated stripePromoCodeId
+          const updatedCoupon = await this.couponService.getCouponById(validatedCoupon.id);
+          if (!updatedCoupon?.stripePromoCodeId) {
             throw new BadRequestException(
-              `Coupon ${dto.promoCode} is not available in Stripe. Please sync it first.`,
+              `Failed to sync coupon ${dto.promoCode} to Stripe. Stripe promotion code ID not available.`,
             );
           }
-        } else {
-          stripePromoCodeId = fullCoupon.stripePromoCodeId;
+          stripePromoCodeId = updatedCoupon.stripePromoCodeId;
+        } catch (error) {
+          this.logger.error(
+            `Failed to sync coupon ${dto.promoCode} to Stripe: ${error.message}`,
+          );
+          if (error instanceof BadRequestException) {
+            throw error;
+          }
+          throw new BadRequestException(
+            `Coupon ${dto.promoCode} is not available in Stripe. Please sync it first.`,
+          );
         }
+      } else {
+        stripePromoCodeId = fullCoupon.stripePromoCodeId;
+      }
+      
+      // Ensure we have a valid Stripe promotion code ID before proceeding
+      if (!stripePromoCodeId) {
+        throw new BadRequestException(
+          `Stripe promotion code ID is required for coupon ${dto.promoCode}. Please sync the coupon to Stripe first.`,
+        );
       }
       
       this.logger.log(
@@ -120,11 +139,11 @@ export class PaymentService {
     await this.paymentTargetService.createMany(intent.id, dto.targets);
 
     // Initiate payment with provider (pass original amount for Stripe, it will apply discount)
-    // Use Stripe promotion code ID if available, otherwise fall back to coupon code
+    // Stripe requires a promotion code ID, not a human-readable coupon code
     const providerResult = await this.paymentProvider.initiatePayment({
       ...dto,
       amount: dto.amount, // Pass original amount, Stripe will apply discount via promo code
-      promoCode: stripePromoCodeId || dto.promoCode, // Use Stripe promo code ID if available
+      promoCode: stripePromoCodeId, // Must be a Stripe promotion code ID (e.g., "promo_xxx")
     });
 
     // Create initial transaction
@@ -419,25 +438,46 @@ export class PaymentService {
   }
 
   /**
-   * Get payment report by contextId
+   * Get payment report by contextId with pagination
    * Returns payment transactions with user details, amounts, discounts, and status
    */
-  async getPaymentReportByContextId(contextId: string): Promise<PaymentReportItemDto[]> {
-    this.logger.log(`Fetching payment report for contextId: ${contextId}`);
+  async getPaymentReportByContextId(
+    contextId: string,
+    limit: number = 50,
+    offset: number = 0,
+  ): Promise<{ data: PaymentReportItemDto[]; totalCount: number }> {
+    this.logger.log(
+      `Fetching payment report for contextId: ${contextId} with limit: ${limit}, offset: ${offset}`,
+    );
+
+    // First, get total count efficiently
+    const totalCount = await this.dataSource
+      .getRepository(PaymentTarget)
+      .createQueryBuilder('target')
+      .innerJoin('target.paymentIntent', 'intent')
+      .innerJoin('intent.transactions', 'transaction')
+      .where('target.contextId = :contextId', { contextId })
+      .getCount();
 
     // Query payment targets by contextId and join with payment intents and transactions
-    // Using getMany() to get entities, then we'll process them
+    // Apply pagination at the database level
     const targets = await this.dataSource
       .getRepository(PaymentTarget)
       .createQueryBuilder('target')
       .innerJoinAndSelect('target.paymentIntent', 'intent')
       .innerJoinAndSelect('intent.transactions', 'transaction')
       .where('target.contextId = :contextId', { contextId })
+      .orderBy('transaction.createdAt', 'DESC')
+      .skip(offset)
+      .take(limit)
       .getMany();
 
     if (targets.length === 0) {
       this.logger.warn(`No payment transactions found for contextId: ${contextId}`);
-      return [];
+      return {
+        data: [],
+        totalCount: 0,
+      };
     }
 
     // Extract all unique user IDs and payment intents
@@ -510,7 +550,10 @@ export class PaymentService {
       });
     }
 
-    return reportItems as PaymentReportItemDto[];
+    return {
+      data: reportItems as PaymentReportItemDto[],
+      totalCount,
+    };
   }
 
   /**

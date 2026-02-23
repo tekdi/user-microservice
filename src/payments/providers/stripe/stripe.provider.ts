@@ -157,6 +157,9 @@ export class StripeProvider implements PaymentProvider {
             this.logger.log(`Retrieved coupon ${couponId} from promotion code ${paymentData.promoCode}`);
           } catch (promoError) {
             // If promotion code retrieval fails, try to find by code
+            this.logger.debug(
+              `Promotion code ID retrieval failed: ${promoError instanceof Error ? promoError.message : String(promoError)}. Searching by code: ${paymentData.promoCode}`,
+            );
             try {
               this.logger.log(`Promotion code ID retrieval failed, searching by code: ${paymentData.promoCode}`);
               const promotionCodes = await this.stripe.promotionCodes.list({
@@ -175,7 +178,9 @@ export class StripeProvider implements PaymentProvider {
               }
             } catch (listError) {
               // If listing fails, try using it as a coupon ID directly
-              this.logger.log(`Promotion code search failed, trying as coupon ID: ${paymentData.promoCode}`);
+              this.logger.warn(
+                `Promotion code search failed: ${listError instanceof Error ? listError.message : String(listError)}. Trying as coupon ID: ${paymentData.promoCode}`,
+              );
               couponId = paymentData.promoCode;
             }
           }

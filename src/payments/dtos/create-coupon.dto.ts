@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { PartialType } from '@nestjs/mapped-types';
 import {
   IsNotEmpty,
   IsString,
@@ -113,4 +114,10 @@ export class CreateCouponDto {
   @Min(1)
   maxRedemptionsPerUser?: number | null;
 }
+
+/**
+ * Update Coupon DTO
+ * All fields are optional, but validation decorators are preserved
+ */
+export class UpdateCouponDto extends PartialType(CreateCouponDto) {}
 
