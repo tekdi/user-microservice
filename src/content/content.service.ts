@@ -68,6 +68,9 @@ export class ContentService {
       const offset = listContentDto.offset ?? 0;
 
       const filters = listContentDto.filters || {};
+      const hasFilters = Object.values(filters).some(
+        (v) => v !== undefined && v !== null,
+      );
       const whereCondition: any = {};
 
       if (filters.id) {
@@ -99,6 +102,18 @@ export class ContentService {
       }
 
       const [items, totalCount] = await this.contentRepository.findAndCount({
+        select: {
+          id: true,
+          name: true,
+          alias: true,
+          isActive: true,
+          createdBy: true,
+          updatedBy: true,
+          createdAt: true,
+          updatedAt: true,
+          fulltext: hasFilters,
+          params: hasFilters,
+        },
         where: whereCondition,
         order: {
           createdAt: 'DESC',

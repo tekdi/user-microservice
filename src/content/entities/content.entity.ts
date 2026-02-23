@@ -11,10 +11,10 @@ export class Content {
   @Column({ type: 'varchar', length: 400, unique: true, nullable: true })
   alias: string;
 
-  @Column({ type: 'text' })
+  @Column({ type: 'text', select: false })
   fulltext: string;
 
-  @Column({ type: 'jsonb', nullable: true })
+  @Column({ type: 'jsonb', nullable: true, select: false })
   params: any;
 
   @Index()

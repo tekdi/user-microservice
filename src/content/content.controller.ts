@@ -129,33 +129,6 @@ export class ContentController {
     required: true,
   })
   @ApiBody({ type: CreateContentDto })
-  @ApiResponse({
-    status: 201,
-    description: 'Content created successfully',
-    schema: {
-      example: {
-        id: 'api.Content.create',
-        ver: '1.0',
-        ts: '2026-02-13T12:14:33.626Z',
-        params: {
-          resmsgid: '3ad71ea5-68ce-4576-a1c0-a1a4b8474916',
-          status: 'successful',
-          err: null,
-          errmsg: null,
-          successmessage: 'Content created successfully',
-        },
-        responseCode: 201,
-        result: {
-          id: '484299ec-317c-446a-a61d-58904e05be47',
-          name: 'Cricket',
-          alias: 'cricket',
-          isActive: true,
-          createdAt: '2026-02-13T06:44:32.540Z',
-          createdBy: 'fa023e44-7bcf-43fc-9099-7ca4193a985f',
-        },
-      },
-    },
-  })
   @ApiBadRequestResponse({ description: 'Bad Request' })
   @ApiConflictResponse({ description: 'Alias already exists' })
   @ApiInternalServerErrorResponse({ description: 'Internal Server Error' })
