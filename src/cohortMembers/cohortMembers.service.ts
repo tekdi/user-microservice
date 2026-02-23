@@ -24,6 +24,7 @@ import { UserService } from "src/user/user.service";
 import { isValid } from "date-fns";
 import { FieldValuesOptionDto } from "src/user/dto/user-create.dto";
 import { KafkaService } from "src/kafka/kafka.service";
+import { BulkCohortMember } from "src/cohortMembers/dto/bulkMember-create.dto";
 
 @Injectable()
 export class CohortMembersService {
@@ -923,11 +924,7 @@ ${whereCase}`;
 
   public async createBulkCohortMembers(
     loginUser: any,
-    cohortMembersDto: {
-      userId: string[];
-      cohortId: string[];
-      removeCohortId?: string[];
-    },
+    cohortMembersDto: BulkCohortMember,
     response: Response,
     tenantId: string,
     academicyearId: string
@@ -935,12 +932,15 @@ ${whereCase}`;
     const apiId = APIID.COHORT_MEMBER_CREATE;
     const results = [];
     const errors = [];
-    const cohortMembersBase = {
+    const cohortMembersBase: any = {
       createdBy: loginUser,
       updatedBy: loginUser,
       tenantId: tenantId,
       // cohortAcademicYearId: academicyearId
     };
+    if (cohortMembersDto.status) {
+      cohortMembersBase.status = cohortMembersDto.status;
+    }
 
     // Track users that were successfully added to cohorts for Kafka event publishing
     const affectedUsers = new Set<string>();
