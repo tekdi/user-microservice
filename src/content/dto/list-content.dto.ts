@@ -1,7 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsBoolean, IsOptional, IsString, IsUUID, IsObject, ValidateNested, IsDateString } from 'class-validator';
 import { Expose, Type } from 'class-transformer';
-import { PaginationDto } from './pagination.dto';
+import { PaginationDto } from 'src/common/dto/pagination.dto';
 
 class ContentFiltersDto {
   @ApiPropertyOptional({

@@ -14,9 +14,11 @@ export class StringUtil {
 
     return str
       .toLowerCase()
-      .replace(/[^a-z0-9]/g, '_')
-      .replace(/_{2,}/g, '_')
-      .replace(/(^_+)|(_+$)/g, '')
-      .substring(0, maxLength);   // Final truncate
+      .replace(/[^a-z0-9]/g, '_') // Linear: replaces each non-alphanumeric
+      .replace(/_{2,}/g, '_')     // Linear: replaces sequences of 2 or more underscores
+      .replace(/^_+/, '')         // Linear: Removes leading underscores
+      .replace(/_+$/, '')         // Linear: Removes trailing underscores
+      .substring(0, maxLength)    // Final truncate
+      .replace(/_+$/, '');        // Remove trailing underscores that may have appeared after truncation
   }
 }

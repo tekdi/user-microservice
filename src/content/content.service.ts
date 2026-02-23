@@ -13,10 +13,10 @@ import APIResponse from 'src/common/responses/response';
 import { APIID } from '@utils/api-id.config';
 import { Response } from 'express';
 import { StringUtil } from './utils/string.util';
-import { Repository, Not, Like, ILike, Between } from 'typeorm';
+import { Repository, Not, Like, ILike, Between, QueryFailedError } from 'typeorm';
 import { UpdateContentDto } from './dto/update-content.dto';
 import { ListContentDto } from './dto/list-content.dto';
-import { MAX_PAGINATION_LIMIT } from './dto/pagination.dto';
+import { MAX_PAGINATION_LIMIT } from 'src/common/dto/pagination.dto';
 import { CacheService } from 'src/cache/cache.service';
 
 @Injectable()
@@ -89,8 +89,8 @@ export class ContentService {
         const start = new Date(filters.createdAt);
         if (!isNaN(start.getTime())) {
           const end = new Date(filters.createdAt);
-          start.setHours(0, 0, 0, 0);
-          end.setHours(23, 59, 59, 999);
+          start.setUTCHours(0, 0, 0, 0);
+          end.setUTCHours(23, 59, 59, 999);
           whereCondition.createdAt = Between(start, end);
         }
       }
@@ -207,6 +207,18 @@ export class ContentService {
       );
     } catch (error) {
       this.logger.error(`Error in update content: ${error.message}`, error.stack);
+      
+      // Check for PostgreSQL unique_violation (e.g. alias collision during concurrent update)
+      if (error instanceof QueryFailedError && (error as any).code === '23505') {
+        return APIResponse.error(
+          response,
+          apiId,
+          'Conflict',
+          'Content with this alias already exists',
+          HttpStatus.CONFLICT,
+        );
+      }
+
       return APIResponse.error(
         response,
         apiId,
@@ -252,6 +264,18 @@ export class ContentService {
       );
     } catch (error) {
       this.logger.error(`Error in create content: ${error.message}`, error.stack);
+      
+      // Check for PostgreSQL unique_violation (e.g. alias collision during concurrent insert)
+      if (error instanceof QueryFailedError && (error as any).code === '23505') {
+        return APIResponse.error(
+          response,
+          APIID.CONTENT_CREATE,
+          'Conflict',
+          'Content with this alias already exists',
+          HttpStatus.CONFLICT,
+        );
+      }
+
       if (error instanceof ConflictException) {
         throw error;
       }

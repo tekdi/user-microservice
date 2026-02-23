@@ -2,8 +2,17 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsOptional, IsInt, Min, Max } from 'class-validator';
 import { Expose, Type } from 'class-transformer';
 
+/**
+ * Maximum allowed limit for pagination to prevent unbounded queries
+ * This protects against expensive database queries and performance degradation
+ */
 export const MAX_PAGINATION_LIMIT = 100;
 
+/**
+ * Base DTO for pagination fields (limit and offset)
+ * Reusable across list endpoints to avoid duplication
+ * Maximum limit of 100 to prevent unbounded queries and performance issues
+ */
 export class PaginationDto {
   @ApiPropertyOptional({
     description: 'Maximum number of items to return',
