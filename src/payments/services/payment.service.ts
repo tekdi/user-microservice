@@ -80,33 +80,33 @@ export class PaymentService {
         );
       }
 
-      // If coupon doesn't have Stripe promo code ID, sync it first
-      if (!fullCoupon.stripePromoCodeId) {
-        this.logger.log(`Coupon ${dto.promoCode} not synced to Stripe, syncing now...`);
-        try {
-          await this.couponService.syncCouponToStripe(fullCoupon);
-          // Reload to get the updated stripePromoCodeId
-          const updatedCoupon = await this.couponService.getCouponById(validatedCoupon.id);
+        // If coupon doesn't have Stripe promo code ID, sync it first
+        if (!fullCoupon.stripePromoCodeId) {
+          this.logger.log(`Coupon ${dto.promoCode} not synced to Stripe, syncing now...`);
+          try {
+            await this.couponService.syncCouponToStripe(fullCoupon);
+            // Reload to get the updated stripePromoCodeId
+            const updatedCoupon = await this.couponService.getCouponById(validatedCoupon.id);
           if (!updatedCoupon?.stripePromoCodeId) {
             throw new BadRequestException(
               `Failed to sync coupon ${dto.promoCode} to Stripe. Stripe promotion code ID not available.`,
             );
           }
-          stripePromoCodeId = updatedCoupon.stripePromoCodeId;
-        } catch (error) {
-          this.logger.error(
-            `Failed to sync coupon ${dto.promoCode} to Stripe: ${error.message}`,
-          );
+              stripePromoCodeId = updatedCoupon.stripePromoCodeId;
+          } catch (error) {
+            this.logger.error(
+              `Failed to sync coupon ${dto.promoCode} to Stripe: ${error.message}`,
+            );
           if (error instanceof BadRequestException) {
             throw error;
           }
-          throw new BadRequestException(
-            `Coupon ${dto.promoCode} is not available in Stripe. Please sync it first.`,
-          );
+            throw new BadRequestException(
+              `Coupon ${dto.promoCode} is not available in Stripe. Please sync it first.`,
+            );
+          }
+        } else {
+          stripePromoCodeId = fullCoupon.stripePromoCodeId;
         }
-      } else {
-        stripePromoCodeId = fullCoupon.stripePromoCodeId;
-      }
       
       // Ensure we have a valid Stripe promotion code ID before proceeding
       if (!stripePromoCodeId) {

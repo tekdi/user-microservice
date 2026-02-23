@@ -100,8 +100,12 @@ export class CouponService {
       };
 
       if (coupon.discountType === DiscountType.PERCENT) {
+        const percentOff = Number(coupon.discountValue);
+        if (percentOff < 0 || percentOff > 100) {
+          throw new BadRequestException('Percentage discount must be between 0 and 100');
+        }
         // For percentage discounts, Stripe doesn't accept currency parameter
-        stripeCouponParams.percent_off = Number(coupon.discountValue);
+        stripeCouponParams.percent_off = percentOff;
       } else {
         // For fixed amount discounts, currency is required
         stripeCouponParams.amount_off = Math.round(
@@ -289,8 +293,9 @@ export class CouponService {
     let discountedAmount = originalAmount;
 
     if (coupon.discountType === DiscountType.PERCENT) {
-      discountAmount = (originalAmount * Number(coupon.discountValue)) / 100;
-      discountedAmount = originalAmount - discountAmount;
+      const percentValue = Math.min(Number(coupon.discountValue), 100);
+      discountAmount = (originalAmount * percentValue) / 100;
+      discountedAmount = Math.max(0, originalAmount - discountAmount);
     } else {
       discountAmount = Number(coupon.discountValue);
       discountedAmount = Math.max(0, originalAmount - discountAmount);
@@ -341,6 +346,23 @@ export class CouponService {
 
     // Use transaction to ensure atomicity
     return await this.dataSource.transaction(async (manager) => {
+      // Re-check max redemptions within transaction with lock
+      const lockedCoupon = await manager.findOne(DiscountCoupon, {
+        where: { id: couponId },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (!lockedCoupon) {
+        throw new NotFoundException(`Coupon ${couponId} not found`);
+      }
+
+      if (
+        lockedCoupon.maxRedemptions &&
+        lockedCoupon.currentRedemptions >= lockedCoupon.maxRedemptions
+      ) {
+        throw new BadRequestException('Coupon has reached maximum redemptions');
+      }
+
       // Create redemption record
       const redemption = manager.create(CouponRedemption, {
         couponId,
@@ -432,6 +454,16 @@ export class CouponService {
 
     // Update fields explicitly to handle date conversions and null values properly
     if (updates.couponCode !== undefined) {
+      if (updates.couponCode !== coupon.couponCode) {
+        const existing = await this.couponRepository.findOne({
+          where: { couponCode: updates.couponCode },
+        });
+        if (existing) {
+          throw new BadRequestException(
+            `Coupon code ${updates.couponCode} already exists`,
+          );
+        }
+      }
       coupon.couponCode = updates.couponCode;
     }
     if (updates.stripePromoCodeId !== undefined) {

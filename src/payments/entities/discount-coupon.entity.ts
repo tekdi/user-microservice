@@ -49,7 +49,16 @@ export class DiscountCoupon {
   })
   discountType: DiscountType;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2, name: 'discount_value' })
+  @Column({
+    type: 'decimal',
+    precision: 10,
+    scale: 2,
+    name: 'discount_value',
+    transformer: {
+      to: (value: number) => value,
+      from: (value: string) => Number.parseFloat(value),
+    },
+  })
   discountValue: number;
 
   @Column({ type: 'varchar', length: 10, default: 'USD' })
