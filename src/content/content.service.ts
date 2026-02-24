@@ -13,7 +13,7 @@ import APIResponse from 'src/common/responses/response';
 import { APIID } from '@utils/api-id.config';
 import { Response } from 'express';
 import { StringUtil } from './utils/string.util';
-import { Repository, Not, Like, ILike, Between, QueryFailedError } from 'typeorm';
+import { Repository, Not, Like, ILike, Between, QueryFailedError, In } from 'typeorm';
 import { ContentType } from './entities/content-type.entity';
 import { ContentTagMap } from './entities/content-tag-map.entity';
 import { UpdateContentDto } from './dto/update-content.dto';
@@ -192,11 +192,35 @@ export class ContentService {
         skip: offset,
       });
 
+      // Step 2: Batch fetch tags to avoid N+1 query
+      const contentItemsWithTags = items as any[];
+      if (items.length > 0) {
+        const contentIds = items.map((item) => item.id);
+        const tagMappings = await this.contentTagMapRepository.find({
+          where: { contentId: In(contentIds) },
+          select: ['contentId', 'tagId'],
+        });
+
+        // Group tags by contentId
+        const tagMap: Record<string, string[]> = {};
+        tagMappings.forEach((mapping) => {
+          if (!tagMap[mapping.contentId]) {
+            tagMap[mapping.contentId] = [];
+          }
+          tagMap[mapping.contentId].push(mapping.tagId);
+        });
+
+        // Attach tagIds to each item
+        contentItemsWithTags.forEach((item) => {
+          item.tagIds = tagMap[item.id] || [];
+        });
+      }
+
       const result = {
         count: totalCount,
         limit,
         offset,
-        items,
+        items: contentItemsWithTags,
       };
 
       // Cache successful list response (best-effort, non-blocking)
