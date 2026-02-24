@@ -5,22 +5,6 @@ import { Expose, Type } from 'class-transformer';
 export const MAX_PAGINATION_LIMIT = 100;
 
 export class PaginationDto {
-  @ApiPropertyOptional({
-    description: 'Maximum number of items to return',
-    example: 10,
-    minimum: 1,
-    maximum: MAX_PAGINATION_LIMIT,
-    default: 10,
-  })
-  @Expose()
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt({ message: 'Limit must be an integer' })
-  @Min(1, { message: 'Limit must be at least 1' })
-  @Max(MAX_PAGINATION_LIMIT, {
-    message: `Limit cannot exceed ${MAX_PAGINATION_LIMIT}`,
-  })
-  limit?: number;
 
   @ApiPropertyOptional({
     description: 'Number of items to skip for pagination',
@@ -34,4 +18,24 @@ export class PaginationDto {
   @IsInt({ message: 'Offset must be an integer' })
   @Min(0, { message: 'Offset must be non-negative' })
   offset?: number;
+
+
+  @ApiPropertyOptional({
+    minimum: 1,
+    maximum: MAX_PAGINATION_LIMIT,
+    description: 'Maximum number of items to return',
+    default: 10,
+    example: 10,
+  })
+  @Expose()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt({ message: 'Limit must be an integer' })
+  @Min(1, { message: 'Limit must be at least 1' })
+  @Max(MAX_PAGINATION_LIMIT, {
+    message: `Limit cannot exceed ${MAX_PAGINATION_LIMIT}`,
+  })
+  limit?: number;
+
+
 }
