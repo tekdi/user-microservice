@@ -5,6 +5,7 @@ import {
   IsOptional,
   IsBoolean,
   IsUUID,
+  IsArray,
 } from 'class-validator';
 
 export class CreateContentDto {
@@ -67,4 +68,24 @@ export class CreateContentDto {
   @IsUUID()
   @IsOptional()
   updatedBy?: string;
+
+  @ApiProperty({
+    description: 'Array of Tag UUIDs',
+    example: ['fa023e44-7bcf-43fc-9099-7ca4193a985f'],
+    required: false,
+    type: [String],
+  })
+  @IsArray()
+  @IsUUID(undefined, { each: true })
+  @IsOptional()
+  tagIds?: string[];
+
+  @ApiProperty({
+    description: 'Title for the content type (auto-maps to alias)',
+    example: 'Career Development',
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  typeTitle?: string;
 }

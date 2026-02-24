@@ -14,6 +14,8 @@ import { APIID } from '@utils/api-id.config';
 import { Response } from 'express';
 import { StringUtil } from './utils/string.util';
 import { Repository, Not, Like, ILike, Between, QueryFailedError } from 'typeorm';
+import { ContentType } from './entities/content-type.entity';
+import { ContentTagMap } from './entities/content-tag-map.entity';
 import { UpdateContentDto } from './dto/update-content.dto';
 import { ListContentDto } from './dto/list-content.dto';
 import { MAX_PAGINATION_LIMIT } from './dto/pagination.dto';
@@ -27,12 +29,65 @@ export class ContentService {
   constructor(
     @InjectRepository(Content)
     private readonly contentRepository: Repository<Content>,
+    @InjectRepository(ContentType)
+    private readonly contentTypeRepository: Repository<ContentType>,
+    @InjectRepository(ContentTagMap)
+    private readonly contentTagMapRepository: Repository<ContentTagMap>,
     private readonly configService: ConfigService,
     private readonly cacheService: CacheService,
   ) {
     const ttlConfig = this.configService.get('CONTENT_LIST_CACHE_TTL_SECONDS');
     const parsedTtl = parseInt(ttlConfig, 10);
     this.contentListCacheTtl = !isNaN(parsedTtl) ? parsedTtl : 1800; // Default to 30 mins
+  }
+
+  /**
+   * Creates or resolves a content type by title.
+   * Auto-generates alias from title and creates type if missing.
+   */
+  private async createContentType(
+    payloadTitle?: string,
+    createdBy?: string,
+  ): Promise<string> {
+    const title =
+      payloadTitle ||
+      this.configService.get('DEFAULT_CONTENT_TYPE_TITLE') ||
+      'Default';
+    const alias = StringUtil.normalizeKey(title);
+
+    let contentType = await this.contentTypeRepository.findOne({
+      where: { typeAlias: alias },
+    });
+
+    if (!contentType) {
+      contentType = this.contentTypeRepository.create({
+        typeTitle: title,
+        typeAlias: alias,
+        createdBy: createdBy || '00000000-0000-0000-0000-000000000000', // System default if missing
+      });
+      contentType = await this.contentTypeRepository.save(contentType);
+    }
+
+    return contentType.typeId;
+  }
+
+  /**
+   * Creates entries in the content tag map.
+   */
+  private async createContentTagMap(
+    contentId: string,
+    tagIds: string[],
+    typeId: string,
+  ): Promise<void> {
+    const mappingEntries = tagIds.map((tagId) =>
+      this.contentTagMapRepository.create({
+        contentId,
+        tagId,
+        typeId,
+      }),
+    );
+
+    await this.contentTagMapRepository.save(mappingEntries);
   }
 
   async list(
@@ -252,16 +307,28 @@ export class ContentService {
     response: Response,
   ): Promise<Response> {
     try {
+      const { tagIds, typeTitle, ...contentData } = createContentDto;
+
       // Generate unique alias from name OR use provided custom alias
       const alias = await this.generateUniqueAlias(
-        createContentDto.alias || createContentDto.name,
+        contentData.alias || contentData.name,
       );
 
       const newContent = this.contentRepository.create({
-        ...createContentDto,
+        ...contentData,
         alias,
       });
       const savedContent = await this.contentRepository.save(newContent);
+
+      // Step 2: Handle tagging if tagIds are provided
+      if (tagIds && tagIds.length > 0) {
+        const typeId = await this.createContentType(
+          typeTitle,
+          contentData.createdBy,
+        );
+
+        await this.createContentTagMap(savedContent.id, tagIds, typeId);
+      }
 
       // Invalidate content list cache after successful creation
       try {
