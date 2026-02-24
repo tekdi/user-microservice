@@ -11,6 +11,7 @@ import {
   BadRequestException,
   Patch,
   Param,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -31,9 +32,11 @@ import { UpdateContentDto } from './dto/update-content.dto';
 import { ListContentDto } from './dto/list-content.dto';
 import { isUUID } from 'class-validator';
 import { API_RESPONSES } from '@utils/response.messages';
+import { JwtAuthGuard } from 'src/common/guards/keycloak.guard';
 
 @ApiTags('Content')
-@Controller('content') // Assuming global prefix user/v1 applies
+@Controller('content')
+@UseGuards(JwtAuthGuard)
 export class ContentController {
   constructor(private readonly contentService: ContentService) {}
 

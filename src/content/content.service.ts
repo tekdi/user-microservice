@@ -60,12 +60,27 @@ export class ContentService {
     });
 
     if (!contentType) {
-      contentType = this.contentTypeRepository.create({
-        typeTitle: title,
-        typeAlias: alias,
-        createdBy: createdBy || '00000000-0000-0000-0000-000000000000', // System default if missing
-      });
-      contentType = await this.contentTypeRepository.save(contentType);
+      try {
+        contentType = this.contentTypeRepository.create({
+          typeTitle: title,
+          typeAlias: alias,
+          createdBy: createdBy || '00000000-0000-0000-0000-000000000000', // System default if missing
+        });
+        contentType = await this.contentTypeRepository.save(contentType);
+      } catch (error) {
+        if (
+          error instanceof QueryFailedError &&
+          (error as any).code === '23505'
+        ) {
+          // Another concurrent request created it first; re-fetch
+          contentType = await this.contentTypeRepository.findOne({
+            where: { typeAlias: alias },
+          });
+          if (!contentType) throw error; // should not happen
+        } else {
+          throw error;
+        }
+      }
     }
 
     return contentType.typeId;
@@ -233,7 +248,7 @@ export class ContentService {
         );
       }
 
-      const updateData: Partial<Content> = { ...updateContentDto };
+      const { tagIds, typeTitle, ...updateData } = updateContentDto;
 
       // If alias is explicitly provided, check if it already exists in another record
       if (updateContentDto.alias && updateContentDto.alias !== existingContent.alias) {
