@@ -1,7 +1,6 @@
 import * as crypto from 'crypto';
 import {
   Injectable,
-  ConflictException,
   HttpStatus,
   Logger,
 } from '@nestjs/common';
@@ -37,8 +36,8 @@ export class ContentService {
     private readonly cacheService: CacheService,
   ) {
     const ttlConfig = this.configService.get('CONTENT_LIST_CACHE_TTL_SECONDS');
-    const parsedTtl = parseInt(ttlConfig, 10);
-    this.contentListCacheTtl = !isNaN(parsedTtl) ? parsedTtl : 1800; // Default to 30 mins
+    const parsedTtl = Number.parseInt(ttlConfig, 10);
+    this.contentListCacheTtl = Number.isNaN(parsedTtl) ? 1800 : parsedTtl; // Default to 30 mins
   }
 
   /**
@@ -153,7 +152,7 @@ export class ContentService {
         whereCondition.createdBy = filters.createdBy;
       }
 
-      const escapeLike = (s: string) => s.replace(/[\\%_]/g, '\\$&');
+      const escapeLike = (s: string) => s.replaceAll(/[\\%_]/g, String.raw`\$&`);
 
       if (filters.name) {
         whereCondition.name = ILike(`%${escapeLike(filters.name)}%`);
@@ -163,7 +162,7 @@ export class ContentService {
       }
       if (filters.createdAt) {
         const start = new Date(filters.createdAt);
-        if (!isNaN(start.getTime())) {
+        if (!Number.isNaN(start.getTime())) {
           const end = new Date(filters.createdAt);
           start.setUTCHours(0, 0, 0, 0);
           end.setUTCHours(23, 59, 59, 999);
@@ -421,7 +420,7 @@ export class ContentService {
     let alias = StringUtil.normalizeKey(name);
 
     if (!alias) {
-      alias = new Date().toISOString().replace(/\D/g, '').slice(0, 14);
+      alias = new Date().toISOString().replaceAll(/\D/g, '').slice(0, 14);
     }
 
     // Step 2: Optimized uniqueness check using prefix search

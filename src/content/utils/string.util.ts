@@ -14,8 +14,8 @@ export class StringUtil {
 
     let normalized = str
       .toLowerCase()
-      .replace(/[^a-z0-9]/g, '_')
-      .replace(/_{2,}/g, '_');
+      .replaceAll(/[^a-z0-9]/g, '_')
+      .replaceAll(/_{2,}/g, '_');
 
     // Safe, non-regex approach for trimming to guarantee linear runtime
     while (normalized.startsWith('_')) {
