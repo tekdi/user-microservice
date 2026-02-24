@@ -155,7 +155,7 @@ export class ContentService {
         whereCondition.createdBy = filters.createdBy;
       }
 
-      const escapeLike = (s: string) => s.replaceAll(/[\\%_]/g, String.raw`\$&`);
+      const escapeLike = (s: string) => s.replace(/[\\%_]/g, String.raw`\$&`);
 
       if (filters.name) {
         whereCondition.name = ILike(`%${escapeLike(filters.name)}%`);
@@ -435,7 +435,7 @@ export class ContentService {
     let alias = StringUtil.normalizeKey(name);
 
     if (!alias) {
-      alias = new Date().toISOString().replaceAll(/\D/g, '').slice(0, 14);
+      alias = new Date().toISOString().replace(/\D/g, '').slice(0, 14);
     }
 
     // Step 2: Optimized uniqueness check using prefix search
