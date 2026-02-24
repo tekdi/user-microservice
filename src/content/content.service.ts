@@ -310,6 +310,18 @@ export class ContentService {
 
       const updatedContent = await this.contentRepository.findOne({
         where: { id },
+        select: {
+          id: true,
+          name: true,
+          alias: true,
+          fulltext: true,
+          params: true,
+          isActive: true,
+          createdBy: true,
+          updatedBy: true,
+          createdAt: true,
+          updatedAt: true,
+        },
       });
 
       return APIResponse.success(
@@ -367,6 +379,23 @@ export class ContentService {
       });
       const savedContent = await this.contentRepository.save(newContent);
 
+      // Re-fetch to include select:false columns (fulltext, params) in the response
+      const savedContentWithAll = await this.contentRepository.findOne({
+        where: { id: savedContent.id },
+        select: {
+          id: true,
+          name: true,
+          alias: true,
+          fulltext: true,
+          params: true,
+          isActive: true,
+          createdBy: true,
+          updatedBy: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+
       // Step 2: Handle tagging if tagIds are provided
       if (tagIds && tagIds.length > 0) {
         const typeId = await this.createContentType(
@@ -390,7 +419,7 @@ export class ContentService {
       return APIResponse.success(
         response,
         APIID.CONTENT_CREATE,
-        savedContent,
+        savedContentWithAll,
         HttpStatus.CREATED,
         'Content created successfully',
       );
