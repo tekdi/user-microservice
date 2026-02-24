@@ -69,7 +69,10 @@ export class ContentService {
       } catch (error) {
         if (
           error instanceof QueryFailedError &&
-          (error as any).code === '23505'
+          typeof error.driverError === 'object' &&
+          error.driverError !== null &&
+          'code' in error.driverError &&
+          error.driverError.code === '23505'
         ) {
           // Another concurrent request created it first; re-fetch
           contentType = await this.contentTypeRepository.findOne({
@@ -320,7 +323,13 @@ export class ContentService {
       this.logger.error(`Error in update content: ${error.message}`, error.stack);
       
       // Check for PostgreSQL unique_violation (e.g. alias collision during concurrent update)
-      if (error instanceof QueryFailedError && (error as any).code === '23505') {
+      if (
+        error instanceof QueryFailedError &&
+        typeof error.driverError === 'object' &&
+        error.driverError !== null &&
+        'code' in error.driverError &&
+        error.driverError.code === '23505'
+      ) {
         return APIResponse.error(
           response,
           apiId,
@@ -389,7 +398,13 @@ export class ContentService {
       this.logger.error(`Error in create content: ${error.message}`, error.stack);
       
       // Check for PostgreSQL unique_violation (e.g. alias collision during concurrent insert)
-      if (error instanceof QueryFailedError && (error as any).code === '23505') {
+      if (
+        error instanceof QueryFailedError &&
+        typeof error.driverError === 'object' &&
+        error.driverError !== null &&
+        'code' in error.driverError &&
+        error.driverError.code === '23505'
+      ) {
         return APIResponse.error(
           response,
           APIID.CONTENT_CREATE,
