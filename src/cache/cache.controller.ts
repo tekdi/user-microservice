@@ -4,7 +4,6 @@ import {
   HttpStatus,
   UseGuards,
   Headers,
-  BadRequestException,
   Res,
   Logger,
 } from '@nestjs/common';
