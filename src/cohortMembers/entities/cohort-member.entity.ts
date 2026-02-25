@@ -12,6 +12,7 @@ export enum MemberStatus {
   DROPOUT = "dropout",
   ARCHIVED = "archived",
   REASSIGNED = "reassigned",
+  PENDING = "pending",
 }
 
 @Entity("CohortMembers")
