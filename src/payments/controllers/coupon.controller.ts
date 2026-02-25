@@ -140,7 +140,7 @@ export class CouponController {
     return await this.couponService.updateCoupon(id, updates);
   }
 
-  @Delete('delete/:id')
+  @Delete('archive/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete a coupon' })
   @ApiResponse({ status: 204, description: 'Coupon deleted successfully' })
