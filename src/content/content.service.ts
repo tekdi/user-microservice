@@ -395,6 +395,7 @@ export class ContentService {
           updatedAt: true,
         },
       });
+      const createdPayload = savedContentWithAll ?? savedContent;
 
       // Step 2: Handle tagging if tagIds are provided
       if (tagIds && tagIds.length > 0) {
@@ -419,7 +420,7 @@ export class ContentService {
       return APIResponse.success(
         response,
         APIID.CONTENT_CREATE,
-        savedContentWithAll,
+        createdPayload,
         HttpStatus.CREATED,
         'Content created successfully',
       );

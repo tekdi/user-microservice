@@ -80,16 +80,27 @@ export class CacheController {
     }
 
     try {
-      await this.cacheService.clearAllServicesCache();
+      const result = await this.cacheService.clearAllServicesCache();
 
-      this.logger.log('Successfully cleared all cache entries.');
-      return APIResponse.success(
-        response,
-        APIID.CACHE_CLEAR_ALL,
-        { cleared: true },
-        HttpStatus.OK,
-        'Cache cleared successfully',
-      );
+      if (result.cleared) {
+        this.logger.log('Successfully cleared all cache entries.');
+        return APIResponse.success(
+          response,
+          APIID.CACHE_CLEAR_ALL,
+          result,
+          HttpStatus.OK,
+          'Cache cleared successfully',
+        );
+      } else {
+        this.logger.warn('Cache clear skipped: Cache is disabled or not connected.');
+        return APIResponse.success(
+          response,
+          APIID.CACHE_CLEAR_ALL,
+          result,
+          HttpStatus.OK,
+          'Cache clear skipped: Cache is disabled or not connected',
+        );
+      }
     } catch (error: any) {
       this.logger.error(
         `Error clearing cache: ${error.message}`,
@@ -99,7 +110,7 @@ export class CacheController {
         response,
         APIID.CACHE_CLEAR_ALL,
         API_RESPONSES.INTERNAL_SERVER_ERROR,
-        `Error: ${error.message}`,
+        "Failed to clear cache",
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
