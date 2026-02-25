@@ -2,23 +2,22 @@ import {
   Controller,
   Post,
   Get,
-  Put,
+  Patch,
   Delete,
   Body,
   Param,
-  Query,
   HttpCode,
   HttpStatus,
   NotFoundException,
   UsePipes,
   ValidationPipe,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
 import { CouponService } from '../services/coupon.service';
 import { CreateCouponDto, UpdateCouponDto } from '../dtos/create-coupon.dto';
 import { ValidateCouponDto, ValidateCouponResponseDto } from '../dtos/validate-coupon.dto';
+import { CouponListRequestDto, CouponListResponseDto } from '../dtos/coupon-list.dto';
 import { DiscountCoupon } from '../entities/discount-coupon.entity';
-import { PaymentContextType } from '../enums/payment.enums';
 
 @ApiTags('Coupons')
 @Controller('coupons')
@@ -53,32 +52,44 @@ export class CouponController {
     return await this.couponService.validateCoupon(dto);
   }
 
-  @Get()
-  @ApiOperation({ summary: 'List all coupons' })
+  @Post('list')
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'List all coupons with pagination' })
+  @ApiBody({
+    type: CouponListRequestDto,
+    description: 'Filter and pagination parameters',
+    required: false,
+  })
   @ApiResponse({
     status: 200,
-    description: 'List of coupons',
-    type: [DiscountCoupon],
+    description: 'List of coupons retrieved successfully',
+    type: CouponListResponseDto,
   })
+  @ApiResponse({ status: 400, description: 'Invalid request parameters' })
   async listCoupons(
-    @Query('contextType') contextType?: PaymentContextType,
-    @Query('contextId') contextId?: string,
-    @Query('isActive') isActive?: string,
-  ): Promise<DiscountCoupon[]> {
-    let isActiveBoolean: boolean | undefined;
-    if (isActive === 'true') {
-      isActiveBoolean = true;
-    } else if (isActive === 'false') {
-      isActiveBoolean = false;
-    } else {
-      isActiveBoolean = undefined;
-    }
+    @Body() dto: CouponListRequestDto = {},
+  ): Promise<CouponListResponseDto> {
+    const limit = dto.limit ?? 10;
+    const offset = dto.offset ?? 0;
 
-    return await this.couponService.listCoupons({
-      contextType,
-      contextId,
-      isActive: isActiveBoolean,
-    });
+    const { data, totalCount } = await this.couponService.listCoupons(
+      {
+        contextType: dto.contextType,
+        contextId: dto.contextId,
+        isActive: dto.isActive,
+      },
+      limit,
+      offset,
+    );
+
+    return {
+      data,
+      totalCount,
+      limit,
+      offset,
+      hasMore: offset + data.length < totalCount,
+    };
   }
 
   @Get(':id')
@@ -113,9 +124,9 @@ export class CouponController {
     return coupon;
   }
 
-  @Put(':id')
+  @Patch(':id')
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
-  @ApiOperation({ summary: 'Update a coupon' })
+  @ApiOperation({ summary: 'Update a coupon (partial update)' })
   @ApiResponse({
     status: 200,
     description: 'Coupon updated successfully',
@@ -129,7 +140,7 @@ export class CouponController {
     return await this.couponService.updateCoupon(id, updates);
   }
 
-  @Delete(':id')
+  @Delete('delete/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete a coupon' })
   @ApiResponse({ status: 204, description: 'Coupon deleted successfully' })

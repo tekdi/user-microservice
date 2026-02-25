@@ -409,13 +409,17 @@ export class CouponService {
   }
 
   /**
-   * List all coupons with optional filters
+   * List all coupons with optional filters and pagination
    */
-  async listCoupons(filters?: {
-    contextType?: PaymentContextType;
-    contextId?: string;
-    isActive?: boolean;
-  }): Promise<DiscountCoupon[]> {
+  async listCoupons(
+    filters?: {
+      contextType?: PaymentContextType;
+      contextId?: string;
+      isActive?: boolean;
+    },
+    limit: number = 50,
+    offset: number = 0,
+  ): Promise<{ data: DiscountCoupon[]; totalCount: number }> {
     const query = this.couponRepository.createQueryBuilder('coupon');
 
     if (filters?.contextType) {
@@ -436,7 +440,17 @@ export class CouponService {
       });
     }
 
-    return await query.getMany();
+    // Get total count before pagination
+    const totalCount = await query.getCount();
+
+    // Apply pagination and ordering
+    const data = await query
+      .orderBy('coupon.createdAt', 'DESC')
+      .skip(offset)
+      .take(limit)
+      .getMany();
+
+    return { data, totalCount };
   }
 
   /**
