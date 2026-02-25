@@ -161,4 +161,6 @@ export const APIID = {
   INTEREST_LIST_BY_PATHWAY: "api.pathway.interests.list",
   USER_INTERESTS_SAVE: "api.user.pathway.interests.save",
   USER_INTERESTS_LIST: "api.user.pathway.interests.list",
+  // Cache Management APIs
+  CACHE_CLEAR_ALL: "api.cache.clear.all",
 } as const;
