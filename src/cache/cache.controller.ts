@@ -1,7 +1,6 @@
 import {
   Controller,
   Delete,
-  HttpCode,
   HttpStatus,
   UseGuards,
   Headers,
@@ -38,7 +37,6 @@ export class CacheController {
    * Clear all cache entries across services (LMS, Assessment, User Events)
    */
   @Delete('clear')
-  @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Clear all Redis cache',
     description:
@@ -76,7 +74,13 @@ export class CacheController {
     @Res() response: Response,
   ): Promise<Response> {
     if (!tenantId || !isUUID(tenantId)) {
-      throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
+      return APIResponse.error(
+        response,
+        APIID.CACHE_CLEAR_ALL,
+        'BAD_REQUEST',
+        API_RESPONSES.TENANTID_VALIDATION,
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
     try {
