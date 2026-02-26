@@ -477,6 +477,42 @@ export class CohortService {
     }
   }
 
+  public async updateCohortStatuses(
+    cohortIds: string[],
+    status: string,
+    updatedBy: string,
+    res
+  ) {
+    const apiId = APIID.COHORT_STATUS_UPDATE;
+    try {
+      const result = await this.cohortRepository.update(
+        { cohortId: In(cohortIds) },
+        { status, updatedBy }
+      );
+      LoggerUtil.log(`Cohort statuses updated: ${result.affected} rows`);
+      return APIResponse.success(
+        res,
+        apiId,
+        { affected: result.affected },
+        HttpStatus.OK,
+        "Cohort statuses updated successfully"
+      );
+    } catch (error) {
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${error.message}`,
+        apiId
+      );
+      return APIResponse.error(
+        res,
+        apiId,
+        API_RESPONSES.SERVER_ERROR,
+        error.message || API_RESPONSES.SERVER_ERROR,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
   public async updateCohort(
     cohortId: string,
     cohortUpdateDto: CohortUpdateDto,
@@ -740,11 +776,11 @@ export class CohortService {
 
       const whereClause = {};
       const searchCustomFields = {};
-      
+
       // SECURITY FIX: Always enforce tenantId from headers, not from filters
       // This prevents users from querying cohorts from other tenants
       whereClause["tenantId"] = tenantId;
-      
+
       if (academicYearId) {
         // check if the tenantId and academic year exist together
         cohortsByAcademicYear =
@@ -768,7 +804,7 @@ export class CohortService {
         const cleanedFilters = Object.fromEntries(
           Object.entries(filters).filter(([_, value]) => value !== undefined && value !== null)
         );
-        
+
         if (cleanedFilters?.customFieldsName) {
           Object.entries(cleanedFilters.customFieldsName).forEach(([key, value]) => {
             if (customFieldsKeys.includes(key)) {
@@ -782,7 +818,7 @@ export class CohortService {
           if (key === "tenantId") {
             return; // Ignore tenantId from request body filters
           }
-          
+
           if (!allowedKeys.includes(key) && key !== "customFieldsName") {
             return APIResponse.error(
               response,
@@ -1143,7 +1179,7 @@ export class CohortService {
       let findCohortId;
       if (checkAutomaticMember) {
         findCohortId = await this.automaticMemberCohortHierarchy(checkAutomaticMember, requiredData?.academicYearId);
-       
+
       } else {
         findCohortId = await this.findCohortName(requiredData.userId, requiredData?.academicYearId);
         if (!findCohortId.length) {
@@ -1304,7 +1340,7 @@ export class CohortService {
 
     try {
       const { userId, academicYearId, filters, limit, offset } = requiredData;
-      
+
       // Validate userId
       if (!userId || !isUUID(userId)) {
         return APIResponse.error(
@@ -1315,10 +1351,10 @@ export class CohortService {
           HttpStatus.NOT_FOUND
         );
       }
-      
+
       const paginationLimit = limit || 100;
       const paginationOffset = offset || 0;
-      
+
       LoggerUtil.log(
         `Getting geographical hierarchy for userId: ${userId}, academicYearId: ${academicYearId}`,
         apiId
@@ -1399,7 +1435,7 @@ export class CohortService {
 
       for (const cohort of userCohorts) {
         let centerId: string;
-        
+
         if (cohort.type?.toLowerCase() === 'batch' && cohort.parentId) {
           // Batch: get parent center
           centerId = cohort.parentId;
@@ -1419,7 +1455,7 @@ export class CohortService {
         } else {
           continue;
         }
-        
+
         centerIds.add(centerId);
       }
 
@@ -1456,7 +1492,7 @@ export class CohortService {
           center.cohortId,
           'Cohort'
         );
-        
+
         const geoData: any = {
           stateId: null,
           stateName: null,
@@ -1472,7 +1508,7 @@ export class CohortService {
         for (const field of customFields) {
           const fieldLabel = field.label?.toLowerCase();
           const fieldName = field.name?.toLowerCase();
-          
+
           // Check both label and name (as done in other services)
           if ((fieldLabel === 'state' || fieldName === 'state') && field.selectedValues?.[0]) {
             const val = field.selectedValues[0];
