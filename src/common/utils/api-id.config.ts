@@ -19,6 +19,7 @@ export const APIID = {
   PRIVILEGE_CREATE: "api.privilege.create",
   PRIVILEGE_DELETE: "api.privilege.delete",
   USERROLE_CREATE: "api.userRole.create",
+  USERROLE_BULK_UPDATE: "api.userRole.bulkUpdate",
   USERROLE_GET: "api.userRole.get",
   USERROLE_DELETE: "api.userRole.delete",
   COHORT_MEMBER_GET: "api.cohortmember.get",
