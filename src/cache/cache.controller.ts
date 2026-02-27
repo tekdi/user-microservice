@@ -72,6 +72,11 @@ export class CacheController {
     @Headers('tenantid') tenantId: string,
     @Res() response: Response,
   ): Promise<Response> {
+    // Note: tenantId is required and validated here primarily for gateway routing
+    // and authorization checks (ensuring the caller belongs to a valid tenant).
+    // The actual clearAllServicesCache() operation intentionally clears the global Redis 
+    // database (via FLUSHDB), affecting all tenants because cache keys across 
+    // LMS, Assessment, and User Events services may not strictly isolate by tenantId.
     if (!tenantId || !isUUID(tenantId)) {
       return APIResponse.error(
         response,
