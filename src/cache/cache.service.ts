@@ -213,6 +213,35 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  /**
+   * Clears all cache entries from the configured Redis database.
+   * This affects ALL services (LMS, Assessment, User Events) using this DB.
+   */
+  async clearAllServicesCache(): Promise<{ cleared: boolean }> {
+    if (!this.cacheEnabled || !this.redisClient) {
+      this.logger.debug(
+        'Cache is disabled or not connected, skipping clearAllServicesCache.'
+      );
+      return { cleared: false };
+    }
+
+    return new Promise<{ cleared: boolean }>((resolve, reject) => {
+      this.logger.log('Executing FLUSHDB to clear all cache entries.');
+      this.redisClient!.flushdb((err: Error | null, reply: string) => {
+        if (err) {
+          this.logger.error(
+            `Error clearing all cache (FLUSHDB): ${err.message}`,
+            err.stack
+          );
+          reject(err);
+        } else {
+          this.logger.log(`Successfully cleared all cache entries. Reply: ${reply}`);
+          resolve({ cleared: true });
+        }
+      });
+    });
+  }
+
   async onModuleDestroy() {
     if (this.redisClient) {
       this.redisClient.quit();
