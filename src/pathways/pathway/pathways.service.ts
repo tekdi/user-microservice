@@ -954,25 +954,19 @@ export class PathwaysService {
         }
       }
 
+      let newImageUrl: string | null = null;
+      const dtoImageUrl = updatePathwayDto.image_url;
+      if (dtoImageUrl !== undefined && dtoImageUrl !== null && typeof dtoImageUrl === 'string' && dtoImageUrl.trim() !== '') {
+        newImageUrl = dtoImageUrl.trim();
+        if (oldImageUrl) {
+          await this.deleteImageFromS3(oldImageUrl);
+        }
+      }
+
       // Prepare update data - filter out undefined values and map tags correctly
       // TypeORM update() doesn't handle undefined values, so we need to filter them
       // Tags stored as PostgreSQL text[] array: {tag_id1,tag_id2}
       const updateData: any = {};
-
-      if (updatePathwayDto.image_url !== undefined) {
-        const dtoImageUrl = updatePathwayDto.image_url;
-        if (dtoImageUrl === null || (typeof dtoImageUrl === 'string' && dtoImageUrl.trim() === '')) {
-          updateData.image_url = null;
-          if (oldImageUrl) {
-            await this.deleteImageFromS3(oldImageUrl);
-          }
-        } else if (typeof dtoImageUrl === 'string' && dtoImageUrl.trim() !== '') {
-          updateData.image_url = dtoImageUrl.trim();
-          if (oldImageUrl && oldImageUrl !== dtoImageUrl.trim()) {
-            await this.deleteImageFromS3(oldImageUrl);
-          }
-        }
-      }
 
       if (updatePathwayDto.name !== undefined) {
         // Check if an active pathway with same name (case-insensitive) already exists, excluding current pathway
@@ -1010,6 +1004,9 @@ export class PathwaysService {
       }
       if (updatePathwayDto.is_active !== undefined) {
         updateData.is_active = updatePathwayDto.is_active;
+      }
+      if (newImageUrl !== null) {
+        updateData.image_url = newImageUrl;
       }
 
       // Always set updated_by when updating

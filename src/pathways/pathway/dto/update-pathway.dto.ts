@@ -38,7 +38,7 @@ export class UpdatePathwayDto {
   @Expose()
   @IsOptional()
   @IsString()
-  image_url?: string | null;
+  image_url?: string;
 
   @ApiPropertyOptional({
     description: 'Array of tag IDs from tags table (stored as PostgreSQL text[] array)',
