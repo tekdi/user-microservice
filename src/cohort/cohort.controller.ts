@@ -16,6 +16,7 @@ import {
   Post,
   Body,
   Put,
+  Patch,
   Param,
   UseInterceptors,
   SerializeOptions,
@@ -41,6 +42,7 @@ import { Response } from "express";
 import { CohortService } from "./cohort.service";
 import { CohortCreateDto } from "./dto/cohort-create.dto";
 import { CohortUpdateDto } from "./dto/cohort-update.dto";
+import { CohortStatusUpdateDto } from "./dto/cohort-status-update.dto";
 import { GeographicalHierarchySearchDto } from "./dto/geographical-hierarchy-search.dto";
 import { JwtAuthGuard } from "src/common/guards/keycloak.guard";
 import { AllExceptionsFilter } from "src/common/filters/exception.filter";
@@ -54,7 +56,7 @@ import { GetUserId } from "src/common/decorators/getUserId.decorator";
 @Controller("cohort")
 @UseGuards(JwtAuthGuard)
 export class CohortController {
-  constructor(private readonly cohortService: CohortService) {}
+  constructor(private readonly cohortService: CohortService) { }
 
   @UseFilters(new AllExceptionsFilter(APIID.COHORT_READ))
   @Get("/cohortHierarchy/:cohortId")
@@ -106,9 +108,9 @@ export class CohortController {
     @Body() cohortCreateDto: CohortCreateDto,
     @UploadedFile() image,
     @Res() response: Response,
-    @GetUserId("userId", ParseUUIDPipe) userId: string  
+    @GetUserId("userId", ParseUUIDPipe) userId: string
   ) {
-      
+
     const tenantId = headers["tenantid"];
     const academicYearId = headers["academicyearid"];
     if (!tenantId || !isUUID(tenantId)) {
@@ -189,6 +191,26 @@ export class CohortController {
     cohortUpdateDto.updatedBy = userId;
     return await this.cohortService
       .updateCohort(cohortId, cohortUpdateDto, response);
+  }
+
+  @UseFilters(new AllExceptionsFilter(APIID.COHORT_STATUS_UPDATE))
+  @Patch("/updateStatus")
+  @ApiBody({ type: CohortStatusUpdateDto })
+  @ApiOkResponse({ description: "Cohort statuses updated successfully" })
+  @ApiBadRequestResponse({ description: "Bad request." })
+  @ApiInternalServerErrorResponse({ description: "Internal Server Error." })
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  public async updateCohortStatuses(
+    @Body() dto: CohortStatusUpdateDto,
+    @Res() response: Response,
+    @GetUserId("userId", ParseUUIDPipe) userId: string
+  ) {
+    return await this.cohortService.updateCohortStatuses(
+      dto.cohortIds,
+      dto.status,
+      userId,
+      response
+    );
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.COHORT_DELETE))

@@ -28,7 +28,7 @@ export class AssignRoleService {
     private userRoleMappingRepository: Repository<UserRoleMapping>,
     @InjectRepository(Role)
     private roleRepository: Repository<Role>
-  ) {}
+  ) { }
   public async createAssignRole(
     request: any,
     createAssignRoleDto: CreateAssignRoleDto,
@@ -273,6 +273,61 @@ export class AssignRoleService {
   //         let update  =
   //     }
   //    }
+
+  public async bulkUpdateUserRoles(
+    userIds: string[],
+    roleId: string,
+    tenantId: string,
+    updatedBy: string,
+    res: Response
+  ) {
+    const apiId = APIID.USERROLE_BULK_UPDATE;
+    try {
+      const errors: { userId: string; error: string }[] = [];
+      const updated: string[] = [];
+
+      for (const userId of userIds) {
+        const existing = await this.userRoleMappingRepository.findOne({
+          where: { userId },
+        });
+        if (!existing) {
+          errors.push({ userId, error: "User not found in UserRolesMapping" });
+          continue;
+        }
+        await this.userRoleMappingRepository.update(
+          { userId },
+          { roleId, tenantId, updatedBy }
+        );
+        updated.push(userId);
+      }
+
+      if (updated.length === 0) {
+        return APIResponse.error(
+          res,
+          apiId,
+          "None of the provided userIds exist in UserRolesMapping",
+          "Not found",
+          HttpStatus.NOT_FOUND
+        );
+      }
+
+      return APIResponse.success(
+        res,
+        apiId,
+        { updatedCount: updated.length, updated, errorCount: errors.length, errors },
+        HttpStatus.OK,
+        "User roles updated successfully"
+      );
+    } catch (error) {
+      return APIResponse.error(
+        res,
+        apiId,
+        "Internal Server Error",
+        error.message || "Internal server error",
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
 
   async checkExistingRole(userId) {
     const result = await this.userRoleMappingRepository.findOne({

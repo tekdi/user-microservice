@@ -14,6 +14,7 @@ import {
   Headers,
   UseGuards,
   UseFilters,
+  ParseUUIDPipe,
 } from "@nestjs/common";
 import { AssignRoleService } from "./assign-role.service";
 import { CreateAssignRoleDto } from "./dto/create-assign-role.dto";
@@ -33,14 +34,16 @@ import {
 } from "@nestjs/swagger";
 import { JwtAuthGuard } from "src/common/guards/keycloak.guard";
 import { DeleteAssignRoleDto } from "./dto/delete-assign-role.dto";
+import { BulkAssignRoleDto } from "./dto/bulk-assign-role.dto";
 import { AllExceptionsFilter } from "src/common/filters/exception.filter";
 import { APIID } from "src/common/utils/api-id.config";
+import { GetUserId } from "src/common/decorators/getUserId.decorator";
 
 @ApiTags("rbac")
 @Controller("rbac/usersRoles")
 @UseGuards(JwtAuthGuard)
 export class AssignRoleController {
-  constructor(private readonly assignRoleService: AssignRoleService) {}
+  constructor(private readonly assignRoleService: AssignRoleService) { }
 
   @UseFilters(new AllExceptionsFilter(APIID.USERROLE_CREATE))
   @Post()
@@ -98,6 +101,30 @@ export class AssignRoleController {
   ) {
     return await this.assignRoleService
       .deleteAssignedRole(deleteAssignRoleDto, response);
-    // return response.status(result.statusCode).json(result);
+  }
+
+  @UseFilters(new AllExceptionsFilter(APIID.USERROLE_BULK_UPDATE))
+  @Patch("/bulkUpdate")
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiBody({ type: BulkAssignRoleDto })
+  @ApiOkResponse({ description: "User roles updated successfully" })
+  @ApiBadRequestResponse({ description: "Bad request." })
+  @ApiNotFoundResponse({ description: "User not found in UserRolesMapping" })
+  @ApiInternalServerErrorResponse({ description: "Internal Server Error." })
+  @ApiHeader({ name: "tenantid", required: true })
+  public async bulkUpdateUserRoles(
+    @Body() dto: BulkAssignRoleDto,
+    @Headers() headers,
+    @Res() response: Response,
+    @GetUserId("userId", ParseUUIDPipe) userId: string
+  ) {
+    const tenantId = headers["tenantid"];
+    return await this.assignRoleService.bulkUpdateUserRoles(
+      dto.userIds,
+      dto.roleId,
+      tenantId,
+      userId,
+      response
+    );
   }
 }
