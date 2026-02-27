@@ -955,11 +955,19 @@ export class PathwaysService {
       }
 
       let newImageUrl: string | null = null;
-      const dtoImageUrl = updatePathwayDto.image_url;
-      if (dtoImageUrl !== undefined && dtoImageUrl !== null && typeof dtoImageUrl === 'string' && dtoImageUrl.trim() !== '') {
-        newImageUrl = dtoImageUrl.trim();
-        if (oldImageUrl) {
-          await this.deleteImageFromS3(oldImageUrl);
+      let clearImage = false;
+      if (updatePathwayDto.image_url !== undefined) {
+        const dtoImageUrl = updatePathwayDto.image_url;
+        if (dtoImageUrl === null || (typeof dtoImageUrl === 'string' && dtoImageUrl.trim() === '')) {
+          clearImage = true;
+          if (oldImageUrl) {
+            await this.deleteImageFromS3(oldImageUrl);
+          }
+        } else if (typeof dtoImageUrl === 'string' && dtoImageUrl.trim() !== '') {
+          newImageUrl = dtoImageUrl.trim();
+          if (oldImageUrl && oldImageUrl !== dtoImageUrl.trim()) {
+            await this.deleteImageFromS3(oldImageUrl);
+          }
         }
       }
 
@@ -1005,7 +1013,9 @@ export class PathwaysService {
       if (updatePathwayDto.is_active !== undefined) {
         updateData.is_active = updatePathwayDto.is_active;
       }
-      if (newImageUrl !== null) {
+      if (clearImage) {
+        updateData.image_url = null;
+      } else if (newImageUrl !== null) {
         updateData.image_url = newImageUrl;
       }
 
