@@ -30,7 +30,7 @@ import { AuthService } from "./auth.service";
 import { JwtAuthGuard } from "src/common/guards/keycloak.guard";
 import { APIID } from "src/common/utils/api-id.config";
 import { AllExceptionsFilter } from "src/common/filters/exception.filter";
-import { Response } from "express";
+import { Response, Request } from "express";
 
 @ApiTags("Auth")
 @Controller("auth")
@@ -43,8 +43,12 @@ export class AuthController {
   @UsePipes(ValidationPipe)
   @HttpCode(HttpStatus.OK)
   @ApiForbiddenResponse({ description: "Forbidden" })
-  public async login(@Body() authDto: AuthDto, @Res() response: Response) {
-    return this.authService.login(authDto, response);
+  public async login(
+    @Body() authDto: AuthDto,
+    @Req() request: Request,
+    @Res() response: Response
+  ) {
+    return this.authService.login(authDto, request, response);
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.USER_AUTH))
