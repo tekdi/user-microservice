@@ -23,7 +23,7 @@ export class PrivilegeDto {
 
   @ApiProperty({
     type: String,
-    description: "Privilege title",
+    description: "Privilege name",
     default: "",
   })
   @IsNotEmpty()
@@ -64,7 +64,7 @@ export class PrivilegeResponseDto {
   @Expose()
   code: string;
 
-  constructor(privilegeDto: PrivilegeDto) {
+  constructor(privilegeDto: PrivilegeDto | any) {
     this.privilegeId = privilegeDto.privilegeId;
     this.title = privilegeDto.title;
     this.code = privilegeDto.code;

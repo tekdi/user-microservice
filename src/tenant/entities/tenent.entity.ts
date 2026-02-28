@@ -5,6 +5,7 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
+  Generated,
 } from "typeorm";
 
 export enum TenantStatus {
@@ -16,68 +17,69 @@ export enum TenantStatus {
 @Entity("Tenants")
 export class Tenant {
   @PrimaryGeneratedColumn("uuid")
-  tenantId: string; // UUID field
+  tenantId: string;
 
-  @Column({ type: "text" })
-  name: string; // Text field for tenant's name
-
-  @Column({ type: "text", nullable: true })
-  type: string | null; // Text field for tenant's type
+  @Column({ type: "text", nullable: false })
+  name: string;
 
   @Column({ type: "text", nullable: true })
-  domain: string | null; // Text field for tenant's domain
+  domain: string | null;
 
-  @CreateDateColumn({ type: "timestamptz", default: () => "CURRENT_TIMESTAMP" })
-  createdAt: Date; // Timestamp for creation date with timezone
+  @CreateDateColumn({ type: "timestamptz", default: () => "now()", nullable: false })
+  createdAt: Date;
 
-  @UpdateDateColumn({ type: "timestamptz", default: () => "CURRENT_TIMESTAMP" })
-  updatedAt: Date; // Timestamp for last updated date with timezone
+  @UpdateDateColumn({ type: "timestamptz", default: () => "now()", nullable: false })
+  updatedAt: Date;
 
   @Column({ type: "jsonb", nullable: true })
-  params: Record<string, any>; // JSONB field for additional parameters
+  params: Record<string, any> | null;
 
-  @Column({ type: "json", nullable: true })
-  programImages: string[]; // JSON field to store array of program images
+  @Column({ type: "jsonb", nullable: true })
+  programImages: string[] | null;
 
-  @Column({ type: "text" })
-  description: string;
+  @Column({ type: "text", nullable: true })
+  description: string | null;
+
+  @Column({ type: "uuid", nullable: true })
+  createdBy: string | null;
+
+  @Column({ type: "uuid", nullable: true })
+  updatedBy: string | null;
+
+  @Column("int4", { nullable: false })
+  @Generated("increment")
+  @Min(0)
+  @Max(999999)
+  ordering: number;
+
+  @Column({ type: "text", nullable: true })
+  programHead: string | null;
 
   @Column({
-    type: "enum",
-    enum: TenantStatus,
+    type: "text",
     default: TenantStatus.ACTIVE,
+    nullable: false,
   })
   status: TenantStatus;
 
-  @Column("int4", { nullable: false })
-  @Min(0)
-  @Max(999999)
-  ordering: number = 0;
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  templateId: string | null;
 
   @Column({ type: "text", nullable: true })
-  programHead: string | null; // UUID of the user who created the tenant
+  contentFramework: string | null;
 
-  @Column({ type: 'varchar', length: 255, nullable: true })
-  templateId: string;
-    
-  @Column({ type: "text" })
-  contentFramework: string;
+  @Column({ type: "text", nullable: true })
+  collectionFramework: string | null;
 
-  @Column({ type: "text" })
-  channelId: string;
-
-  @Column({ type: "text" })
-  collectionFramework: string;
-
-  @Column({ type: "uuid", nullable: true })
-  createdBy: string | null; // UUID of the user who created the tenant
-
-  @Column({ type: "uuid", nullable: true })
-  updatedBy: string | null; // UUID of the user who last updated the tenant
+  @Column({ type: "text", nullable: true })
+  channelId: string | null;
 
   @Column({ type: 'json', nullable: true })
   contentFilter: any;
 
   @Column({ type: "uuid", nullable: true })
-  parentId: string | null; // UUID of the parent tenant
+  parentId: string | null;
+
+  @Column({ type: "text", nullable: true })
+  type: string | null;
 }

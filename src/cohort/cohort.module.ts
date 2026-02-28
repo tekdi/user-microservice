@@ -16,7 +16,7 @@ import { AcademicYearService } from "src/academicyears/academicyears.service";
 import { AcademicYear } from "src/academicyears/entities/academicyears-entity";
 import { CohortMembersService } from "src/cohortMembers/cohortMembers.service";
 import { User } from "src/user/entities/user-entity";
-import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
+import { Tenant } from "src/tenant/entities/tenent.entity";
 import { AutomaticMember } from "src/automatic-member/entity/automatic-member.entity";
 import { AutomaticMemberService } from "src/automatic-member/automatic-member.service";
 import { KafkaService } from "../kafka/kafka.service";
@@ -39,7 +39,7 @@ import { KafkaModule } from "../kafka/kafka.module";
       CohortAcademicYear,
       AcademicYear,
       User,
-      Tenants,
+      Tenant,
       AutomaticMember
     ]),
     HttpModule,

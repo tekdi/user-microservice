@@ -7,9 +7,13 @@ export class FieldValuesCreateDto {
 
   //value
   @Expose()
-  value: string;
+  value: string[];
 
   constructor(obj: any) {
     Object.assign(this, obj);
+    // Normalize value: convert string to array, keep array as is
+    if (this.value !== undefined && this.value !== null) {
+      this.value = Array.isArray(this.value) ? this.value : [this.value];
+    }
   }
 }

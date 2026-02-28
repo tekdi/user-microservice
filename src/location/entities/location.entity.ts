@@ -1,15 +1,19 @@
-import { Entity, Column, PrimaryColumn } from "typeorm";
+import { Entity, Column, PrimaryGeneratedColumn } from "typeorm";
 
 @Entity({ name: "location" })
 export class Location {
-  @PrimaryColumn({ type: "varchar" })
+  @PrimaryGeneratedColumn("uuid")
   id: string;
-  @Column({ type: "varchar" })
+
+  @Column({ type: "varchar", length: 50, nullable: false })
   code: string;
-  @Column({ type: "varchar" })
+
+  @Column({ type: "varchar", length: 255, nullable: false, name: "name" })
   name: string;
-  @Column({ type: "varchar" })
-  parentid: string;
-  @Column({ type: "varchar" })
+
+  @Column({ type: "uuid", nullable: true, name: "parentid" })
+  parentid: string | null;
+
+  @Column({ type: "varchar", length: 100, nullable: false })
   type: string;
 }
