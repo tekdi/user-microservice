@@ -251,4 +251,7 @@ export const API_RESPONSES = {
   TAG_NAME_EXISTS: 'Tag with this name already exists',
   TAG_LIST_SUCCESS: 'Tags retrieved successfully',
   TAG_GET_SUCCESS: 'Tag retrieved successfully',
+
+  // Country Management Messages
+  COUNTRY_LIST_SUCCESS: 'Countries retrieved successfully',
 };

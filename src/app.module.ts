@@ -33,6 +33,7 @@ import { HealthService } from './health/health.service';
 import { CacheModule } from './cache/cache.module';
 import { PaymentsModule } from './payments/payments.module';
 import { PathwaysModule } from './pathways/pathways.module';
+import { CountriesModule } from './countries/countries.module';
 
 /**
  * Main Application Module
@@ -89,6 +90,7 @@ import { PathwaysModule } from './pathways/pathways.module';
     CacheModule,
     PaymentsModule,
     PathwaysModule,
+    CountriesModule,
   ],
   controllers: [AppController, HealthController],
   providers: [

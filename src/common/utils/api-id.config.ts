@@ -141,4 +141,7 @@ export const APIID = {
   TAG_DELETE: 'api.user.tag.delete',
   TAG_LIST: 'api.user.tag.list',
   TAG_READ: 'api.user.tag.read',
+
+  // Country Management APIs
+  COUNTRY_LIST: 'api.country.list',
 } as const;
