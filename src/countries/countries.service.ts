@@ -63,17 +63,18 @@ export class CountriesService {
         API_RESPONSES.COUNTRY_LIST_SUCCESS,
       );
     } catch (error) {
-      const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+      const fullMessage = error?.message ?? String(error);
+      const stack = error?.stack;
       LoggerUtil.error(
         API_RESPONSES.SERVER_ERROR,
-        `Error listing countries: ${errorMessage}`,
+        `Error listing countries: ${fullMessage}${stack ? `\n${stack}` : ''}`,
         apiId,
       );
       return APIResponse.error(
         response,
         apiId,
         API_RESPONSES.INTERNAL_SERVER_ERROR,
-        errorMessage,
+        API_RESPONSES.INTERNAL_SERVER_ERROR,
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }

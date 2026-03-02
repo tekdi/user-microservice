@@ -2,11 +2,9 @@ import {
   Controller,
   Post,
   Body,
-  Headers,
   Res,
   HttpCode,
   HttpStatus,
-  BadRequestException,
   UseGuards,
   UsePipes,
   ValidationPipe,
@@ -24,8 +22,6 @@ import {
 import { CountriesService } from './countries.service';
 import { ListCountryDto } from './dto/list-country.dto';
 import { Response } from 'express';
-import { API_RESPONSES } from '@utils/response.messages';
-import { isUUID } from 'class-validator';
 
 @ApiTags('Countries')
 @Controller('country')
@@ -42,11 +38,6 @@ export class CountriesController {
   @ApiHeader({
     name: 'Authorization',
     description: 'Bearer token for authentication',
-    required: true,
-  })
-  @ApiHeader({
-    name: 'tenantid',
-    description: 'Tenant UUID',
     required: true,
   })
   @ApiBody({
@@ -103,10 +94,8 @@ export class CountriesController {
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   async list(
     @Body() listCountryDto: ListCountryDto,
-    @Headers('tenantid') tenantId: string,
     @Res() response: Response,
   ): Promise<Response> {
-   
     return this.countriesService.list(listCountryDto, response);
   }
 }

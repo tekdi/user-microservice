@@ -13,7 +13,7 @@ export class Country {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ type: 'varchar', length: 150, unique: true, nullable: false })
+  @Column({ type: 'varchar', length: 150, nullable: false })
   name: string;
 
   @Column({ type: 'boolean', default: true, nullable: false })
