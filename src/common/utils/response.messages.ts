@@ -75,7 +75,7 @@ export const API_RESPONSES = {
   TENANTID_MISMATCHED: "Tenant id mismatched",
   INVALID_CONTEXT: (context) => `Invalid context: ${context}`,
   INVALID_CONTEXTTYPE: (context, validContextTypes) =>
-    `Invalid contextType. For the context "${context}", it must be one of: ${validContextTypes}`,
+    `Invalid contextType. For the context '${context}', it must be one of: ${validContextTypes}`,
   COHORTID_NOTFOUND_FOT_THIS_YEAR: (cohortId) =>
     `Cohort with cohortId ${cohortId} does not exist for this academic year.`,
   MAPPING_EXIST_BW_USER_AND_COHORT: (userId, cohortId) =>
@@ -135,8 +135,8 @@ export const API_RESPONSES = {
     `User creation failed with error: ${error}. Phone: ${phone}`,
   USER_CREATE_FAILED_WITH_ERROR_AND_USERNAME: (error, username) =>
     `User creation failed with error: ${error}. Username: ${username}`,
-  USERID_NOT_FOUND: (userId) => `User Id "${userId}" does not exist.`,
-  TENANTID_NOT_FOUND: (tenantId) => `Tenant Id "${tenantId}" does not exist.`,
+  USERID_NOT_FOUND: (userId) => `User Id '${userId}' does not exist.`,
+  TENANTID_NOT_FOUND: (tenantId) => `Tenant Id '${tenantId}' does not exist.`,
 
   //UUID constants
   UUID_VALIDATION: "Please enter valid UUID",
@@ -153,10 +153,10 @@ export const API_RESPONSES = {
   INVALID_PARAMETERS:
     "Invalid parameters provided. Please ensure that tenantId, roleId, and cohortId (if applicable) are correctly provided.",
   COHORT_NOT_FOUND_IN_TENANT_ID: (cohortId, TenantId) =>
-    `Cohort Id "${cohortId}" does not exist for this tenant "${TenantId}".`,
+    `Cohort Id '${cohortId}' does not exist for this tenant '${TenantId}'.`,
 
   ROLE_NOT_FOUND_IN_TENANT: (roleId, tenantId) =>
-    `Role Id "${roleId}" does not exist for this tenant "${tenantId}".`,
+    `Role Id '${roleId}' does not exist for this tenant '${tenantId}'.`,
   USER_EXISTS_SEND_MAIL: "User Exists. Proceed with Sending Email.",
   INVALID_FIELD: (invalidateFields) =>
     `Invalid fields found: ${invalidateFields}`,
