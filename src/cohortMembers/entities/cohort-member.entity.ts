@@ -28,6 +28,9 @@ export class CohortMembers {
   @Column({ type: "uuid" })
   userId: string;
 
+  @Column({ type: "varchar", nullable: true })
+  cohortMemberRole: string;
+
   @CreateDateColumn({ type: "date", default: () => "CURRENT_DATE" })
   createdAt: Date;
 

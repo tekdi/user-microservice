@@ -53,7 +53,7 @@ export class CohortMembersController {
   //create cohort members
   @UseFilters(new AllExceptionsFilter(APIID.COHORT_MEMBER_CREATE))
   @Post("/create")
-  @UsePipes(new ValidationPipe())
+  @UsePipes(new ValidationPipe({ transform: true }))
   @ApiBasicAuth("access-token")
   @ApiCreatedResponse({
     description: "Cohort Member has been created successfully.",
@@ -194,7 +194,7 @@ export class CohortMembersController {
   @ApiNotFoundResponse({ description: "Data not found" })
   @ApiBadRequestResponse({ description: "Bad request" })
   @ApiBody({ type: CohortMembersUpdateDto })
-  @UsePipes(new ValidationPipe()) 
+  @UsePipes(new ValidationPipe())
   public async updateCohortMembers(
     @Param("cohortmembershipid") cohortMembersId: string,
     @Req() request,
@@ -245,7 +245,7 @@ export class CohortMembersController {
   @UseFilters(new AllExceptionsFilter(APIID.COHORT_MEMBER_CREATE))
   @Post("/bulkCreate")
   @ApiBody({ type: BulkCohortMember })
-  @UsePipes(new ValidationPipe())
+  @UsePipes(new ValidationPipe({ transform: true }))
   // @ApiBasicAuth("access-token")
   @ApiHeader({
     name: "tenantid", required: true
