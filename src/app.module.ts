@@ -34,6 +34,7 @@ import { CacheModule } from './cache/cache.module';
 import { PaymentsModule } from './payments/payments.module';
 import { PathwaysModule } from './pathways/pathways.module';
 import { CountriesModule } from './countries/countries.module';
+import { ContentModule } from './content/content.module';
 
 /**
  * Main Application Module
@@ -91,6 +92,7 @@ import { CountriesModule } from './countries/countries.module';
     PaymentsModule,
     PathwaysModule,
     CountriesModule,
+    ContentModule,
   ],
   controllers: [AppController, HealthController],
   providers: [
@@ -129,6 +131,7 @@ export class AppModule implements OnModuleInit {
       'CacheModule',
       'PaymentsModule',
       'PathwaysModule',
+      'ContentModule',
     ]);
   }
 }

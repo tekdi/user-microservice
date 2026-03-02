@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { StorageProvider } from '../interfaces/storage.provider';
 import { S3Client, PutObjectCommand, DeleteObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { createPresignedPost } from '@aws-sdk/s3-presigned-post';
 import { ConfigService } from '@nestjs/config';
 import { v4 as uuidv4 } from 'uuid';
 import * as path from 'path';
@@ -46,16 +47,17 @@ export class S3StorageProvider implements StorageProvider {
     this.bucket = this.configService.get<string>('AWS_BUCKET');
     this.region = this.configService.get<string>('AWS_REGION');
     // Remove leading and trailing slashes to avoid double slashes
-    this.uploadDir = this.configService.get<string>('AWS_STORAGE_UPLOAD_DIR')?.replace(/^\/|\/$/g, '') || 'uploads';
+    this.uploadDir = this.configService.get<string>('AWS_STORAGE_UPLOAD_DIR')?.replace(/(^\/|\/$)/g, '') || 'uploads';
   }
 
   /**
    * Ensures the user folder exists in S3 by creating a folder marker if needed.
+   * @param baseDir - Base directory (uploadDir or uploadDir/subpath)
    * @param userId - The user ID for the folder
    */
-  private async ensureUserFolderExists(userId: string): Promise<void> {
+  private async ensureUserFolderExists(baseDir: string, userId: string): Promise<void> {
     if (!userId) return;
-    const folderKey = `${this.uploadDir}/${userId}/`;
+    const folderKey = `${baseDir}/${userId}/`;
     try {
       // Try to check if folder exists by checking for a folder marker
       await this.s3Client.send(
@@ -80,30 +82,44 @@ export class S3StorageProvider implements StorageProvider {
    * Uploads a file to S3, placing it in a user-specific folder if userId is provided.
    * @param file - The file to upload
    * @param userId - Optional user ID for folder structure
+   * @param subpath - Optional subpath under upload dir (e.g. 'pathways') so key is uploadDir/subpath/...
    * @returns The S3 key of the uploaded file
    */
-  async upload(file: Express.Multer.File, userId?: string): Promise<string> {
+  async upload(file: Express.Multer.File, userId?: string, subpath?: string): Promise<string> {
+    if (subpath !== undefined && subpath !== null) {
+      const sanitized = String(subpath).replace(/(^\/|\/$)/g, '');
+      if (sanitized.includes('..') || sanitized.includes('/') || sanitized.includes('\\')) {
+        throw new Error('Invalid subpath: path traversal and path separators are not allowed');
+      }
+    }
     const fileExtension = path.extname(file.originalname);
     const timestamp = Date.now();
     const fileName = `${uuidv4()}_${timestamp}${fileExtension}`;
-    // Create the key with user folder if userId is provided
+    // Base dir: uploadDir or uploadDir/subpath (e.g. /uploads/userservice/application-form/pathways)
+    const baseDir = subpath
+      ? `${this.uploadDir}/${String(subpath).replace(/(^\/|\/$)/g, '')}`.replace(/\/+/g, '/')
+      : this.uploadDir;
     let key: string;
     if (userId) {
-      // Ensure user folder exists before uploading
-      await this.ensureUserFolderExists(userId);
-      key = `${this.uploadDir}/${userId}/${fileName}`;
+      await this.ensureUserFolderExists(baseDir, userId);
+      key = `${baseDir}/${userId}/${fileName}`;
     } else {
-      key = `${this.uploadDir}/${fileName}`;
+      key = `${baseDir}/${fileName}`;
     }
+    // Use Buffer so SDK knows length (avoids "Stream of unknown length" warning)
+    const body = Buffer.isBuffer(file.buffer) ? file.buffer : Buffer.from(file.buffer);
+    const contentLength = body.length;
+
     const command = new PutObjectCommand({
       Bucket: this.bucket,
       Key: key,
-      Body: file.buffer,
+      Body: body,
+      ContentLength: contentLength,
       ContentType: file.mimetype,
       ContentDisposition: `attachment; filename="${file.originalname}"`,
       Metadata: {
         originalFileName: file.originalname,
-        fileSize: file.size.toString(),
+        fileSize: String(contentLength),
         uploadedAt: new Date().toISOString()
       }
     });
@@ -160,7 +176,7 @@ export class S3StorageProvider implements StorageProvider {
     const uniqueFileName = `${uuidv4()}_${timestamp}${fileExtension}`;
     let key: string;
     if (userId) {
-      await this.ensureUserFolderExists(userId);
+      await this.ensureUserFolderExists(this.uploadDir, userId);
       key = `${this.uploadDir}/${userId}/${uniqueFileName}`;
     } else {
       key = `${this.uploadDir}/${uniqueFileName}`;
@@ -177,7 +193,7 @@ export class S3StorageProvider implements StorageProvider {
         originalFileName: fileName
       }
     });
-    const expiresIn = options?.expiresIn || parseInt(this.configService.get<string>('AWS_UPLOAD_FILE_EXPIRY') || '3600', 10);
+    const expiresIn = options?.expiresIn || Number.parseInt(this.configService.get<string>('AWS_UPLOAD_FILE_EXPIRY') || '3600', 10);
     // Generate pre-signed URL with only content-type as required header
     const url = await getSignedUrl(this.s3Client, command, {
       expiresIn,
@@ -190,6 +206,33 @@ export class S3StorageProvider implements StorageProvider {
   }
 
   /**
+   * Generates presigned POST (form) for upload – same shape as LMS: { url, fields }.
+   * Client POSTs form-data to url with fields + file. Use for pathway to match LMS response format.
+   */
+  async getPresignedPostForKey(
+    key: string,
+    contentType: string,
+    options?: { expiresIn?: number; sizeLimit?: number },
+  ): Promise<{ url: string; fields: Record<string, string> }> {
+    const cleanKey = key.replace(/(^\/|\/$)/g, '').replace(/\/+/g, '/');
+    const expiresIn = options?.expiresIn ?? Number.parseInt(this.configService.get<string>('AWS_UPLOAD_FILE_EXPIRY') || '3600', 10);
+    const sizeLimit = options?.sizeLimit ?? 5 * 1024 * 1024; // 5MB default
+    const { url, fields } = await createPresignedPost(this.s3Client, {
+      Bucket: this.bucket,
+      Key: cleanKey,
+      // Conditions: eq Content-Type and content-length-range (SDK union type is complex)
+      Conditions: [
+        ['eq', '$Content-Type', contentType],
+        ['content-length-range', 0, sizeLimit],
+      ] as Parameters<typeof createPresignedPost>[1]['Conditions'],
+      Fields: { 'Content-Type': contentType },
+      Expires: expiresIn,
+    });
+    const fieldsWithBucket: Record<string, string> = { ...fields, bucket: this.bucket };
+    return { url, fields: fieldsWithBucket };
+  }
+
+  /**
    * Verifies if a file exists in S3 and optionally checks its content type.
    * @param key - The S3 key
    * @param expectedContentType - Optional expected MIME type
@@ -197,65 +240,29 @@ export class S3StorageProvider implements StorageProvider {
    */
   async verifyFile(key: string, expectedContentType?: string): Promise<{ exists: boolean; contentType?: string; size?: number; error?: string }> {
     try {
-      // Log for debugging
-      console.log('Verifying file with key:', key);
-      console.log('Bucket:', this.bucket);
-      console.log('Region:', this.region);
-      
       const command = new HeadObjectCommand({
         Bucket: this.bucket,
         Key: key
       });
-      
       const result = await this.s3Client.send(command);
-      
-      console.log('File verification successful:', {
-        exists: true,
-        contentType: result.ContentType,
-        size: result.ContentLength
-      });
-      
       return {
         exists: true,
         contentType: result.ContentType,
         size: result.ContentLength
       };
     } catch (error) {
-      console.log('File verification failed:', {
-        key,
-        error: error.message,
-        statusCode: error.$metadata?.httpStatusCode,
-        errorCode: error.$metadata?.errorCode
-      });
-      
-      // Handle specific error types
       if (error.$metadata?.httpStatusCode === 404) {
-        return {
-          exists: false,
-          error: 'File not found'
-        };
+        return { exists: false, error: 'File not found' };
       }
-      
-      // Handle network/DNS errors
       if (error.message && (
-        error.message.includes('EAI_AGAIN') || 
+        error.message.includes('EAI_AGAIN') ||
         error.message.includes('getaddrinfo') ||
         error.message.includes('ENOTFOUND') ||
         error.message.includes('timeout')
       )) {
-        console.log('Network/DNS error detected, attempting alternative verification...');
-        // For network issues, we could implement a fallback verification
-        // For now, return a more specific error
-        return {
-          exists: false,
-          error: `Network connectivity issue: ${error.message}`
-        };
+        return { exists: false, error: `Network connectivity issue: ${error.message}` };
       }
-      
-      return {
-        exists: false,
-        error: error.message
-      };
+      return { exists: false, error: error.message };
     }
   }
 
@@ -286,31 +293,21 @@ export class S3StorageProvider implements StorageProvider {
       if (!verification.exists) {
         return { valid: false, deleted: false, reason: 'File not found' };
       }
-      // Check content type
       if (verification.contentType !== expectedContentType) {
-        console.log(`Content type mismatch for ${key}. Expected: ${expectedContentType}, Got: ${verification.contentType}. Deleting file.`);
         await this.delete(key);
         return { valid: false, deleted: true, reason: `Content type mismatch. Expected: ${expectedContentType}, Got: ${verification.contentType}` };
       }
-      // Check file size if provided
       if (expectedSize && verification.size && verification.size !== expectedSize) {
-        console.log(`File size mismatch for ${key}. Expected: ${expectedSize}, Got: ${verification.size}. Deleting file.`);
         await this.delete(key);
         return { valid: false, deleted: true, reason: `File size mismatch. Expected: ${expectedSize}, Got: ${verification.size}` };
       }
-      
-      // Get minimum file size from parameter, configuration, or use default
       const minSize = minimumFileSize ?? this.getMinFileSize();
-      
-      // Check if file is too small (likely corrupted or empty)
       if (verification.size !== undefined && verification.size < minSize) {
-        console.log(`File too small for ${key}. Size: ${verification.size}, Minimum: ${minSize}. Deleting file.`);
         await this.delete(key);
         return { valid: false, deleted: true, reason: `File too small (${verification.size} bytes), minimum required: ${minSize} bytes` };
       }
       return { valid: true, deleted: false };
     } catch (error) {
-      console.log(`Error verifying file ${key}:`, error);
       return { valid: false, deleted: false, reason: error.message };
     }
   }

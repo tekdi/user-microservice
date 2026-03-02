@@ -14,9 +14,10 @@ export interface StorageProvider {
    * Uploads a file to storage.
    * @param file - The file to upload
    * @param userId - Optional user ID for folder structure
+   * @param subpath - Optional subpath under upload dir (e.g. 'pathways') so key is uploadDir/subpath/...
    * @returns Promise resolving to the file path/key
    */
-  upload(file: Express.Multer.File, userId?: string): Promise<string>;
+  upload(file: Express.Multer.File, userId?: string, subpath?: string): Promise<string>;
 
   /**
    * Deletes a file from storage.

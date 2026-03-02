@@ -1,4 +1,4 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import {
   IsString,
   IsNotEmpty,
@@ -10,34 +10,34 @@ import {
   IsArray,
   IsUUID,
 } from 'class-validator';
-import { Expose } from 'class-transformer';
+import { Expose, Type } from 'class-transformer';
 
 export class CreatePathwayDto {
   @ApiProperty({
-    description: 'Unique key identifier for the pathway',
-    example: 'career_dev',
+    description: "Unique key identifier for the pathway",
+    example: "career_dev",
     maxLength: 50,
   })
   @Expose()
   @IsString()
-  @IsNotEmpty()
-  @MaxLength(50, { message: 'Key must not exceed 50 characters' })
+  @IsOptional()
+  @MaxLength(50, { message: "Key must not exceed 50 characters" })
   key: string;
 
   @ApiProperty({
-    description: 'Display name of the pathway',
-    example: 'Career Development',
+    description: "Display name of the pathway",
+    example: "Career Development",
     maxLength: 100,
   })
   @Expose()
   @IsString()
   @IsNotEmpty()
-  @MaxLength(100, { message: 'Name must not exceed 100 characters' })
+  @MaxLength(100, { message: "Name must not exceed 100 characters" })
   name: string;
 
   @ApiPropertyOptional({
-    description: 'Detailed description of the pathway',
-    example: 'Build skills for corporate success',
+    description: "Detailed description of the pathway",
+    example: "Build skills for corporate success",
   })
   @Expose()
   @IsOptional()
@@ -52,25 +52,36 @@ export class CreatePathwayDto {
     ],
     type: [String],
   })
+
+   @ApiPropertyOptional({
+    description: "Image URL (from presigned S3 upload). upload to S3, then send the returned fileUrl here.",
+  })
+  @Expose()
+  @IsOptional()
+  @IsString()
+  image_url?: string;
+
+
   @Expose()
   @IsOptional()
   @IsArray({ message: 'tags must be an array' })
   @IsUUID(undefined, { each: true, message: 'Each tag ID must be a valid UUID' })
   tags?: string[];
 
-  @ApiProperty({
-    description: 'Display order for sorting pathways',
+  @ApiPropertyOptional({
+    description: "Display order for sorting pathways (auto-incremented if not provided)",
     example: 1,
     minimum: 0,
   })
   @Expose()
+  @Type(() => Number)
   @IsNumber()
-  @IsNotEmpty()
-  @Min(0, { message: 'Display order must be a non-negative number' })
-  display_order: number;
+  @IsOptional()
+  @Min(0, { message: "Display order must be a non-negative number" })
+  display_order?: number;
 
   @ApiProperty({
-    description: 'Whether the pathway is active',
+    description: "Whether the pathway is active",
     example: true,
     default: true,
   })
@@ -79,4 +90,3 @@ export class CreatePathwayDto {
   @IsOptional()
   is_active?: boolean;
 }
-
