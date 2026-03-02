@@ -70,6 +70,9 @@ export class PaymentStatusResponseDto {
   @ApiProperty()
   provider: string;
 
+  @ApiProperty({ nullable: true, description: 'Reason for manual status override, if any' })
+  statusReason: string | null;
+
   @ApiProperty()
   metadata: any;
 
