@@ -35,6 +35,7 @@ import { PaymentsModule } from './payments/payments.module';
 import { PathwaysModule } from './pathways/pathways.module';
 import { CountriesModule } from './countries/countries.module';
 import { ContentModule } from './content/content.module';
+import { CountriesModule } from './countries/countries.module';
 
 /**
  * Main Application Module
@@ -93,6 +94,7 @@ import { ContentModule } from './content/content.module';
     PathwaysModule,
     CountriesModule,
     ContentModule,
+    CountriesModule,
   ],
   controllers: [AppController, HealthController],
   providers: [
