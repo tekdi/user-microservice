@@ -93,7 +93,6 @@ import { ContentModule } from './content/content.module';
     PathwaysModule,
     CountriesModule,
     ContentModule,
-    CountriesModule,
   ],
   controllers: [AppController, HealthController],
   providers: [
