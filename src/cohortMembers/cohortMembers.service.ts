@@ -347,6 +347,7 @@ ON CM."userId" = U."userId" ${whereCase}`;
         "name",
         "status",
         "cohortAcademicYearId",
+        "cohortMemberRole",
       ];
       whereKeys.forEach((key) => {
         if (whereClause[key]) {
@@ -627,6 +628,12 @@ ON CM."userId" = U."userId" ${whereCase}`;
               : `'${value}'`;
             return `CM."cohortAcademicYearId" IN (${cohortIdAcademicYear})`;
           }
+          case "cohortMemberRole": {
+            const roleValues = Array.isArray(value)
+              ? value.map((r) => `'${r}'`).join(", ")
+              : `'${value}'`;
+            return `CM."cohortMemberRole" IN (${roleValues})`;
+          }
           default: {
             return `CM."${key}"='${value}'`;
           }
@@ -652,6 +659,7 @@ ON CM."userId" = U."userId" ${whereCase}`;
   CM."status", 
   CM."statusReason",
   CM."cohortMembershipId",
+  CM."cohortMemberRole",
   CM."createdAt", 
   CM."updatedAt",
   U."createdBy",
@@ -754,10 +762,10 @@ ${whereCase}`;
         cohortMembershipToUpdate
       );
       await this.publishCohortMemberEvent(
-            "updated",
-            cohortMembershipToUpdate,
-            apiId
-          );
+        "updated",
+        cohortMembershipToUpdate,
+        apiId
+      );
       if (!result) {
         return APIResponse.error(
           res,
@@ -782,7 +790,7 @@ ${whereCase}`;
           HttpStatus.NOT_FOUND
         );
       }
-      const additionalData ={
+      const additionalData = {
         tenantId: cohortDetails.tenantId,
         contextType: "COHORTMEMBER",
         createdBy: cohortMembershipToUpdate.createdBy,
@@ -1056,6 +1064,7 @@ ${whereCase}`;
             ...cohortMembersBase,
             userId: userId,
             cohortId: cohortId,
+            ...(cohortMembersDto.cohortMemberRole && { cohortMemberRole: cohortMembersDto.cohortMemberRole }),
           };
           try {
             const cohortExists = await this.isCohortExistForYear(
@@ -1113,7 +1122,7 @@ ${whereCase}`;
               cohortMemberForAcademicYear
             );
             results.push(result);
-            
+
             // Track user for Kafka event publishing
             affectedUsers.add(userId);
           } catch (error) {
@@ -1166,7 +1175,7 @@ ${whereCase}`;
     });
 
     await Promise.allSettled(publishPromises);
-    
+
     if (errors.length > 0) {
       return APIResponse.success(
         response,
@@ -1198,21 +1207,21 @@ ${whereCase}`;
     // });
     // //update
     // if (!registerResponse) {
-      const updateResponse = await this.fieldsService.updateCustomFields(
-        itemId,
-        {
-          updatedAt: new Date(),
-          value: JSON.stringify(value),
-          fieldId: fieldId,
-          updatedBy: loggedInUserId,
-        },
-        null,
-        additionalData
-      );
-      if (updateResponse) {
-        return true;
-      } else {
-        return false;
+    const updateResponse = await this.fieldsService.updateCustomFields(
+      itemId,
+      {
+        updatedAt: new Date(),
+        value: JSON.stringify(value),
+        fieldId: fieldId,
+        updatedBy: loggedInUserId,
+      },
+      null,
+      additionalData
+    );
+    if (updateResponse) {
+      return true;
+    } else {
+      return false;
       // }
     }
   }
@@ -1256,7 +1265,7 @@ ${whereCase}`;
 
       if (eventType === "deleted") {
         cohortMemberData = {
-          cohortMembershipId : cohortMembershipToUpdate.cohortMembershipId,
+          cohortMembershipId: cohortMembershipToUpdate.cohortMembershipId,
           deletedAt: new Date().toISOString(),
         };
       } else {
@@ -1284,16 +1293,16 @@ ${whereCase}`;
                 f?.value ??
                 (Array.isArray(f?.selectedValues)
                   ? f.selectedValues
-                      .map(
-                        (v: any) =>
-                          v?.value ??
-                          v?.label ??
-                          v?.name ??
-                          v?.id ??
-                          (typeof v === "string" ? v : null)
-                      )
-                      .filter((v: any) => v != null)
-                      .join(",")
+                    .map(
+                      (v: any) =>
+                        v?.value ??
+                        v?.label ??
+                        v?.name ??
+                        v?.id ??
+                        (typeof v === "string" ? v : null)
+                    )
+                    .filter((v: any) => v != null)
+                    .join(",")
                   : null),
             }));
         } catch (cfError) {
@@ -1305,7 +1314,7 @@ ${whereCase}`;
         }
 
         cohortMemberData = {
-          cohortMembershipId : cohortMembershipToUpdate.cohortMembershipId,
+          cohortMembershipId: cohortMembershipToUpdate.cohortMembershipId,
           customFields: membershipCustomFields,
           eventTimestamp: new Date().toISOString(),
         };
