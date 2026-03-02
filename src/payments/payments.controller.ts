@@ -89,6 +89,13 @@ export class PaymentsController {
     description: 'Number of records to skip (default: 0)',
     example: 0,
   })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    type: String,
+    description: 'Free text search on firstName, lastName, and email (case-insensitive)',
+    example: 'john',
+  })
   @ApiOkResponse({
     description: 'Payment report retrieved successfully',
     type: PaymentReportResponseDto,
@@ -98,6 +105,7 @@ export class PaymentsController {
     @Param('contextId', ParseUUIDPipe) contextId: string,
     @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit: number,
     @Query('offset', new DefaultValuePipe(0), ParseIntPipe) offset: number,
+    @Query('search') search?: string,
   ): Promise<PaymentReportResponseDto> {
     // Validate pagination parameters
     if (limit < 1 || limit > 1000) {
@@ -107,10 +115,13 @@ export class PaymentsController {
       throw new BadRequestException('Offset must be non-negative');
     }
 
+    const searchTerm = typeof search === 'string' ? search.trim() : undefined;
+
     const result = await this.paymentService.getPaymentReportByContextId(
       contextId,
       limit,
       offset,
+      searchTerm,
     );
 
     return {
