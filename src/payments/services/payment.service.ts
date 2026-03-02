@@ -454,10 +454,7 @@ export class PaymentService {
         ? search.trim().toLowerCase()
         : undefined;
     const searchLog = searchTerm ? `, search: ${searchTerm}` : '';
-    this.logger.log(
-      `Fetching payment report for contextId: ${contextId} with limit: ${limit}, offset: ${offset}${searchLog}`,
-    );
-
+    
     const countQb = this.dataSource
       .getRepository(PaymentTransaction)
       .createQueryBuilder('transaction')
