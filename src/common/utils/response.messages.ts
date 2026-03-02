@@ -35,7 +35,8 @@ export const API_RESPONSES = {
   TENANTID_VALIDATION: "Tenant ID is required and must be a valid UUID",
   ORGANISATIONID_REQUIRED:
     "Organisation ID is required (set organisationid header or DEFAULT_ORGANISATION_ID environment variable).",
-  ORGANISATIONID_VALIDATION: "Organisation ID must be a valid UUID when provided.",
+  ORGANISATIONID_VALIDATION:
+    "Organisation ID must be a valid UUID when provided.",
   COHORT_NOT_AVAILABLE_FOR_ACADEMIC_YEAR:
     "No cohorts available for given Academic year",
   ACADEMICYEARID_VALIDATION:
@@ -48,7 +49,7 @@ export const API_RESPONSES = {
   CONFLICT: "CONFLICT",
   INVALID_USERID: "Invalid input: User Id does not exist.",
   INVALID_COHORTID: "Invalid input: Cohort Id does not exist.",
-  TENANT_ID_NOTFOUND: '"Invalid input: TenantId must be a valid UUID."',
+  TENANT_ID_NOTFOUND: "'Invalid input: TenantId must be a valid UUID.'",
   COHORT_NOTFOUND: "Cohort not exist for this year.",
   USER_NOTFOUND: "User not exist for this year.",
   USER_DETAIL_NOTFOUND: "User details not found",
@@ -275,4 +276,7 @@ export const API_RESPONSES = {
     "User must have completed_alumni tag to assign pathway.",
   PATHWAY_ASSIGN_LMS_ENROLLMENT_FAILED:
     "LMS enrollment failed. Pathway assignment aborted.",
+
+  // Country Management Messages
+  COUNTRY_LIST_SUCCESS: "Countries retrieved successfully",
 };

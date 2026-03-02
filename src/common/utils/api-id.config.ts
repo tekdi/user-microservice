@@ -9,8 +9,8 @@
  * - Performance tracking and analytics
  *
  * Naming Convention:
- * - Format: 'api.{module}.{action}'
- * - Examples: 'api.user.create', 'api.cohortmember.search'
+ * - Format: "api.{module}.{action}"
+ * - Examples: "api.user.create", "api.cohortmember.search"
  * - All IDs are lowercase with dots as separators
  *
  * Usage:
@@ -126,9 +126,9 @@ export const APIID = {
   FORM_SUBMISSION_LIST: "api.formSubmission.list",
 
   // Payment APIs
-  PAYMENT_INITIATE: 'api.payment.initiate',
-  PAYMENT_STATUS: 'api.payment.status',
-  PAYMENT_WEBHOOK: 'api.payment.webhook',
+  PAYMENT_INITIATE: "api.payment.initiate",
+  PAYMENT_STATUS: "api.payment.status",
+  PAYMENT_WEBHOOK: "api.payment.webhook",
   // Pathway Management APIs
   PATHWAY_CREATE: "api.pathway.create",
   PATHWAY_LIST: "api.pathway.list",
@@ -148,12 +148,13 @@ export const APIID = {
   CONTENT_LIST: "api.content.list",
 
   // Tag Management APIs
-  TAG_CREATE: 'api.user.tag.create',
-  TAG_UPDATE: 'api.user.tag.update',
-  TAG_DELETE: 'api.user.tag.delete',
-  TAG_LIST: 'api.user.tag.list',
-  TAG_READ: 'api.user.tag.read',
+  TAG_CREATE: "api.user.tag.create",
+  TAG_UPDATE: "api.user.tag.update",
+  TAG_DELETE: "api.user.tag.delete",
+  TAG_LIST: "api.user.tag.list",
+  TAG_READ: "api.user.tag.read",
 
+  
   // Interest Management APIs
   INTEREST_CREATE: "api.interest.create",
   INTEREST_UPDATE: "api.interest.update",
@@ -163,4 +164,6 @@ export const APIID = {
   USER_INTERESTS_LIST: "api.user.pathway.interests.list",
   // Cache Management APIs
   CACHE_CLEAR_ALL: "api.cache.clear.all",
+  // Country Management APIs
+  COUNTRY_LIST: "api.country.list",
 } as const;

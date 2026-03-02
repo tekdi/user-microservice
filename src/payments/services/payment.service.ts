@@ -441,24 +441,38 @@ export class PaymentService {
    * Get payment report by contextId with pagination
    * Returns payment transactions with user details, amounts, discounts, and status
    * Pagination is applied to transactions, not targets, to ensure accurate item count
+   * Optional search filters by firstName, lastName, or email (case-insensitive).
    */
   async getPaymentReportByContextId(
     contextId: string,
     limit: number = 50,
     offset: number = 0,
+    search?: string,
   ): Promise<{ data: PaymentReportItemDto[]; totalCount: number }> {
-    this.logger.log(
-      `Fetching payment report for contextId: ${contextId} with limit: ${limit}, offset: ${offset}`,
-    );
-
-    // Count total transactions (not targets) for accurate pagination
-    const totalCount = await this.dataSource
+    const searchTerm =
+      typeof search === 'string' && search.trim().length > 0
+        ? search.trim().toLowerCase()
+        : undefined;
+    const searchLog = searchTerm ? `, search: ${searchTerm}` : '';
+    
+    const countQb = this.dataSource
       .getRepository(PaymentTransaction)
       .createQueryBuilder('transaction')
       .innerJoin('transaction.paymentIntent', 'intent')
       .innerJoin('intent.targets', 'target')
-      .where('target.contextId = :contextId', { contextId })
-      .getCount();
+      .where('target.contextId = :contextId', { contextId });
+
+    if (searchTerm) {
+      const searchPattern = `%${searchTerm}%`;
+      countQb
+        .innerJoin(User, 'user', 'user.userId = intent.userId')
+        .andWhere(
+          '(LOWER(COALESCE(user.firstName, \'\')) LIKE :searchPattern OR LOWER(COALESCE(user.lastName, \'\')) LIKE :searchPattern OR LOWER(COALESCE(user.email, \'\')) LIKE :searchPattern)',
+          { searchPattern },
+        );
+    }
+
+    const totalCount = await countQb.getCount();
 
     if (totalCount === 0) {
       this.logger.warn(`No payment transactions found for contextId: ${contextId}`);
@@ -469,8 +483,7 @@ export class PaymentService {
     }
 
     // Query transactions directly with pagination
-    // This ensures limit/offset apply to report items, not targets
-    const transactions = await this.dataSource
+    const dataQb = this.dataSource
       .getRepository(PaymentTransaction)
       .createQueryBuilder('transaction')
       .innerJoinAndSelect('transaction.paymentIntent', 'intent')
@@ -478,8 +491,19 @@ export class PaymentService {
       .where('target.contextId = :contextId', { contextId })
       .orderBy('transaction.createdAt', 'DESC')
       .skip(offset)
-      .take(limit)
-      .getMany();
+      .take(limit);
+
+    if (searchTerm) {
+      const searchPattern = `%${searchTerm}%`;
+      dataQb
+        .innerJoin(User, 'user', 'user.userId = intent.userId')
+        .andWhere(
+          '(LOWER(COALESCE(user.firstName, \'\')) LIKE :searchPattern OR LOWER(COALESCE(user.lastName, \'\')) LIKE :searchPattern OR LOWER(COALESCE(user.email, \'\')) LIKE :searchPattern)',
+          { searchPattern },
+        );
+    }
+
+    const transactions = await dataQb.getMany();
 
     // If no transactions found for this page (e.g., offset beyond available data),
     // return empty data but preserve the actual totalCount for correct pagination
