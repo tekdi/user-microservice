@@ -10,6 +10,8 @@ import { ConfigService } from '@nestjs/config';
 import Stripe from 'stripe';
 import { DiscountCoupon, DiscountType } from '../entities/discount-coupon.entity';
 import { CouponRedemption } from '../entities/coupon-redemption.entity';
+import { User } from '../../user/entities/user-entity';
+import { Country } from '../../countries/entities/country.entity';
 import { CreateCouponDto, UpdateCouponDto } from '../dtos/create-coupon.dto';
 import { ValidateCouponDto, ValidateCouponResponseDto } from '../dtos/validate-coupon.dto';
 import { PaymentContextType } from '../enums/payment.enums';
@@ -24,6 +26,10 @@ export class CouponService {
     private readonly couponRepository: Repository<DiscountCoupon>,
     @InjectRepository(CouponRedemption)
     private readonly redemptionRepository: Repository<CouponRedemption>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
+    @InjectRepository(Country)
+    private readonly countryRepository: Repository<Country>,
     private readonly configService: ConfigService,
     private readonly dataSource: DataSource,
   ) {
@@ -251,12 +257,31 @@ export class CouponService {
       };
     }
 
-    // Check country restriction
-    if (coupon.countryId && coupon.countryId !== dto.countryId) {
-      return {
-        isValid: false,
-        error: 'Coupon is not valid for this country',
-      };
+    // Check country restriction: coupon stores countryId; user's country comes from users table.
+    // Resolve user's country to countries table id and compare with coupon.countryId.
+    if (coupon.countryId) {
+      const user = await this.userRepository.findOne({
+        where: { userId: dto.userId },
+        select: ['userId', 'country'],
+      });
+      const userCountryValue = user?.country?.trim();
+      if (!userCountryValue) {
+        return {
+          isValid: false,
+          error: 'Coupon is not valid for this country',
+        };
+      }
+      const country = await this.countryRepository
+        .createQueryBuilder('country')
+        .where('LOWER(country.name) = LOWER(:name)', { name: userCountryValue })
+        .andWhere('country.is_active = :isActive', { isActive: true })
+        .getOne();
+      if (!country || country.id !== coupon.countryId) {
+        return {
+          isValid: false,
+          error: 'Coupon is not valid for this country',
+        };
+      }
     }
 
     // Check max redemptions

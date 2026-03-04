@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, IsUUID, IsOptional, IsNumber, Min, IsEnum } from 'class-validator';
+import { IsNotEmpty, IsString, IsUUID, IsNumber, Min, IsEnum } from 'class-validator';
 import { PaymentContextType } from '../enums/payment.enums';
 
 export class ValidateCouponDto {
@@ -36,14 +36,6 @@ export class ValidateCouponDto {
   @IsNumber()
   @Min(0)
   originalAmount: number;
-
-  @ApiProperty({
-    description: 'Country ID (optional, for country-specific coupons)',
-    required: false,
-  })
-  @IsOptional()
-  @IsUUID()
-  countryId?: string;
 }
 
 export class ValidateCouponResponseDto {
