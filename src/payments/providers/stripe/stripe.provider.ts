@@ -95,11 +95,11 @@ export class StripeProvider implements PaymentProvider {
       
       const defaultSuccessUrl = this.configService.get<string>(
         'STRIPE_SUCCESS_URL',
-        `${baseUrl}profile?session_id={CHECKOUT_SESSION_ID}`,
+        `${baseUrl}payment-success?session_id={CHECKOUT_SESSION_ID}`,
       );
       const defaultCancelUrl = this.configService.get<string>(
         'STRIPE_CANCEL_URL',
-        `${baseUrl}profile`,
+        `${baseUrl}payment-failed`,
       );
 
       // If successUrl is provided without the placeholder, append it
