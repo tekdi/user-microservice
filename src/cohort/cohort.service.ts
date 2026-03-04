@@ -485,8 +485,24 @@ export class CohortService {
   ) {
     const apiId = APIID.COHORT_STATUS_UPDATE;
     try {
+      const uniqueCohortIds = [...new Set(cohortIds)];
+
+      const existingCohortsCount = await this.cohortRepository.count({
+        where: { cohortId: In(uniqueCohortIds) },
+      });
+
+      if (existingCohortsCount !== uniqueCohortIds.length) {
+        return APIResponse.error(
+          res,
+          apiId,
+          "One or more cohort IDs do not exist",
+          "Invalid cohortId",
+          HttpStatus.NOT_FOUND
+        );
+      }
+
       const result = await this.cohortRepository.update(
-        { cohortId: In(cohortIds) },
+        { cohortId: In(uniqueCohortIds) },
         { status, updatedBy }
       );
       LoggerUtil.log(`Cohort statuses updated: ${result.affected} rows`);

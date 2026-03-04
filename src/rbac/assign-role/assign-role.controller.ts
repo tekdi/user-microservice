@@ -15,6 +15,7 @@ import {
   UseGuards,
   UseFilters,
   ParseUUIDPipe,
+  BadRequestException,
 } from "@nestjs/common";
 import { AssignRoleService } from "./assign-role.service";
 import { CreateAssignRoleDto } from "./dto/create-assign-role.dto";
@@ -119,6 +120,9 @@ export class AssignRoleController {
     @GetUserId("userId", ParseUUIDPipe) userId: string
   ) {
     const tenantId = headers["tenantid"];
+    if (!tenantId) {
+      throw new BadRequestException("Tenant ID is required.");
+    }
     return await this.assignRoleService.bulkUpdateUserRoles(
       dto.userIds,
       dto.roleId,
