@@ -8,11 +8,6 @@ export class ValidateCouponDto {
   @IsString()
   couponCode: string;
 
-  @ApiProperty({ description: 'User ID applying the coupon' })
-  @IsNotEmpty()
-  @IsUUID()
-  userId: string;
-
   @ApiProperty({
     enum: PaymentContextType,
     description: 'Context type (COHORT, COURSE, or BUNDLE)',
@@ -37,6 +32,9 @@ export class ValidateCouponDto {
   @Min(0)
   originalAmount: number;
 }
+
+/** Body + userId from query; used internally by CouponService.validateCoupon */
+export type ValidateCouponInput = ValidateCouponDto & { userId: string };
 
 export class ValidateCouponResponseDto {
   @ApiProperty({ description: 'Whether the coupon is valid' })

@@ -13,7 +13,7 @@ import { CouponRedemption } from '../entities/coupon-redemption.entity';
 import { User } from '../../user/entities/user-entity';
 import { Country } from '../../countries/entities/country.entity';
 import { CreateCouponDto, UpdateCouponDto } from '../dtos/create-coupon.dto';
-import { ValidateCouponDto, ValidateCouponResponseDto } from '../dtos/validate-coupon.dto';
+import { ValidateCouponDto, ValidateCouponResponseDto, ValidateCouponInput } from '../dtos/validate-coupon.dto';
 import { PaymentContextType } from '../enums/payment.enums';
 
 @Injectable()
@@ -209,7 +209,7 @@ export class CouponService {
    * Validate a coupon for a specific user and context
    */
   async validateCoupon(
-    dto: ValidateCouponDto,
+    dto: ValidateCouponInput,
   ): Promise<ValidateCouponResponseDto> {
     const coupon = await this.couponRepository.findOne({
       where: { couponCode: dto.couponCode },

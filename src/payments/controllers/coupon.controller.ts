@@ -6,13 +6,15 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   HttpCode,
   HttpStatus,
   NotFoundException,
   UsePipes,
   ValidationPipe,
+  ParseUUIDPipe,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiQuery } from '@nestjs/swagger';
 import { CouponService } from '../services/coupon.service';
 import { CreateCouponDto, UpdateCouponDto } from '../dtos/create-coupon.dto';
 import { ValidateCouponDto, ValidateCouponResponseDto } from '../dtos/validate-coupon.dto';
@@ -41,6 +43,11 @@ export class CouponController {
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Validate a coupon code' })
+  @ApiQuery({
+    name: 'userId',
+    description: 'Authenticated user ID (set by auth middleware)',
+    required: true,
+  })
   @ApiResponse({
     status: 200,
     description: 'Coupon validation result',
@@ -48,8 +55,9 @@ export class CouponController {
   })
   async validateCoupon(
     @Body() dto: ValidateCouponDto,
+    @Query('userId', new ParseUUIDPipe()) userId: string,
   ): Promise<ValidateCouponResponseDto> {
-    return await this.couponService.validateCoupon(dto);
+    return await this.couponService.validateCoupon({ ...dto, userId });
   }
 
   @Post('list')
