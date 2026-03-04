@@ -1,4 +1,4 @@
-import { Injectable, Logger, BadRequestException, Inject } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, NotFoundException, Inject } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository, In } from 'typeorm';
 import { PaymentProvider } from '../interfaces/payment-provider.interface';
@@ -435,6 +435,23 @@ export class PaymentService {
       createdAt: intent.createdAt,
       updatedAt: intent.updatedAt,
     };
+  }
+
+  /**
+   * Get payment status by Stripe Checkout Session ID (e.g. from success URL session_id query param).
+   * Returns same shape as getPaymentStatus; use when redirect lands with ?session_id=cs_test_...
+   */
+  async getPaymentStatusBySessionId(sessionId: string) {
+    const intent = await this.paymentIntentService.findByProviderSessionId(
+      'stripe',
+      sessionId,
+    );
+    if (!intent) {
+      throw new NotFoundException(
+        `No payment found for session_id ${sessionId}`,
+      );
+    }
+    return this.getPaymentStatus(intent.id);
   }
 
   /**

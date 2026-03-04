@@ -88,6 +88,29 @@ export class PaymentsController {
     );
   }
 
+  @Get('by-session')
+  @UseFilters(new AllExceptionsFilter(APIID.PAYMENT_STATUS))
+  @ApiOperation({
+    summary: 'Get payment status by Stripe Checkout Session ID',
+    description:
+      'Use the session_id from the success URL (e.g. profile?session_id=cs_test_...) to get contextId, transaction details, and full payment status. Same response as GET :id/status.',
+  })
+  @ApiQuery({
+    name: 'session_id',
+    required: true,
+    type: String,
+    description: 'Stripe Checkout Session ID from success URL query param',
+    example: 'cs_test_a1PRQRjSo2iGpwg8921beksc6sMDhMHhl9rZxBAVVkba6WWu8HUQD6fqGk',
+  })
+  @ApiOkResponse({
+    description: 'Payment status retrieved successfully',
+    type: PaymentStatusResponseDto,
+  })
+  @ApiNotFoundResponse({ description: 'No payment found for the given session_id' })
+  async getPaymentStatusBySession(@Query('session_id') sessionId: string) {
+    return await this.paymentService.getPaymentStatusBySessionId(sessionId);
+  }
+
   @Get(':id/status')
   @UseFilters(new AllExceptionsFilter(APIID.PAYMENT_STATUS))
   @ApiOperation({ summary: 'Get payment status' })
