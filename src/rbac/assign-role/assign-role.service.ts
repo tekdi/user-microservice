@@ -288,15 +288,16 @@ export class AssignRoleService {
 
       for (const userId of userIds) {
         const existing = await this.userRoleMappingRepository.findOne({
-          where: { userId },
+          where: { userId, tenantId },
         });
         if (!existing) {
-          errors.push({ userId, error: "User not found in UserRolesMapping" });
+          errors.push({ userId, error: "User not found in UserRolesMapping for the specified tenant" });
           continue;
         }
+
         await this.userRoleMappingRepository.update(
-          { userId },
-          { roleId, tenantId, updatedBy }
+          { userId, tenantId },
+          { roleId, updatedBy }
         );
         updated.push(userId);
       }
