@@ -7,6 +7,7 @@ import { PaymentTarget } from './entities/payment-target.entity';
 import { DiscountCoupon } from './entities/discount-coupon.entity';
 import { CouponRedemption } from './entities/coupon-redemption.entity';
 import { User } from '../user/entities/user-entity';
+import { Country } from '../countries/entities/country.entity';
 import { PaymentsController } from './payments.controller';
 import { CouponController } from './controllers/coupon.controller';
 import { StripeWebhookController } from './webhooks/stripe.webhook.controller';
@@ -43,6 +44,7 @@ import { StripeProvider } from './providers/stripe/stripe.provider';
       DiscountCoupon,
       CouponRedemption,
       User,
+      Country,
     ]),
     ConfigModule,
     PostgresModule,

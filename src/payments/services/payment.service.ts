@@ -57,7 +57,6 @@ export class PaymentService {
         contextType: target.contextType,
         contextId: target.contextId,
         originalAmount: dto.amount,
-        countryId: dto.metadata?.countryId,
       });
 
       if (!validationResult.isValid) {
