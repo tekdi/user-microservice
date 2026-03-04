@@ -1,6 +1,7 @@
 import { Expose, Transform } from "class-transformer";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { IsNotEmpty, IsOptional, IsString, IsUUID } from "class-validator";
+import { IsNotEmpty, IsOptional, IsUUID, IsEnum, IsString } from "class-validator";
+import { MemberStatus } from "../entities/cohort-member.entity";
 
 export class CohortMembersDto {
   //generated fields
@@ -59,6 +60,16 @@ export class CohortMembersDto {
   @IsString()
   @Transform(({ value }) => (value ? value.toUpperCase() : value))
   cohortMemberRole: string;
+
+  @ApiProperty({
+    enum: MemberStatus,
+    description: "Member status (e.g. pending, active)",
+    required: false,
+  })
+  @Expose()
+  @IsOptional()
+  @IsEnum(MemberStatus)
+  status?: MemberStatus;
 
   constructor(obj: any) {
     Object.assign(this, obj);

@@ -6,8 +6,10 @@ import {
   IsOptional,
   IsNotEmpty,
   ArrayMaxSize,
+  IsEnum,
   IsString,
 } from "class-validator";
+import { MemberStatus } from "../entities/cohort-member.entity";
 import { Expose, Transform } from "class-transformer";
 
 export class BulkCohortMember {
@@ -54,6 +56,15 @@ export class BulkCohortMember {
   @IsString()
   @Transform(({ value }) => (value ? value.toUpperCase() : value))
   cohortMemberRole: string;
+
+  @ApiProperty({
+    enum: MemberStatus,
+    description: "Member status (e.g. pending, active)",
+    required: false,
+  })
+  @IsOptional()
+  @IsEnum(MemberStatus)
+  status?: MemberStatus;
 
   constructor(obj: any) {
     Object.assign(this, obj);
