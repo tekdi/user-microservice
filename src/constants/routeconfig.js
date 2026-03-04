@@ -701,6 +701,32 @@
 					"packageName": "shiksha-user"
 				}
 			]
+		},
+		{
+			"sourceRoute": "/interface/v1/cohort/updateStatus",
+			"type": "PATCH",
+			"priority": "MUST_HAVE",
+			"inSequence": false,
+			"orchestrated": false,
+			"targetPackages": [
+				{
+					"basePackageName": "user",
+					"packageName": "shiksha-user"
+				}
+			]
+		},
+		{
+			"sourceRoute": "/interface/v1/rbac/usersRoles/bulkUpdate",
+			"type": "PATCH",
+			"priority": "MUST_HAVE",
+			"inSequence": false,
+			"orchestrated": false,
+			"targetPackages": [
+				{
+					"basePackageName": "user",
+					"packageName": "shiksha-user"
+				}
+			]
 		}
 	]
 }

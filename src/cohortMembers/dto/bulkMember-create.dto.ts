@@ -6,7 +6,9 @@ import {
   IsOptional,
   IsNotEmpty,
   ArrayMaxSize,
+  IsEnum,
 } from "class-validator";
+import { MemberStatus } from "../entities/cohort-member.entity";
 
 export class BulkCohortMember {
   @ApiProperty({
@@ -41,6 +43,15 @@ export class BulkCohortMember {
   @IsUUID("4", { each: true })
   @ArrayMaxSize(1000)
   removeCohortId: string[];
+
+  @ApiProperty({
+    enum: MemberStatus,
+    description: "Member status (e.g. pending, active)",
+    required: false,
+  })
+  @IsOptional()
+  @IsEnum(MemberStatus)
+  status?: MemberStatus;
 
   constructor(obj: any) {
     Object.assign(this, obj);

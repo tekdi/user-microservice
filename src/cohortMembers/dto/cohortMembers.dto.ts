@@ -1,6 +1,7 @@
 import { Expose } from "class-transformer";
 import { ApiProperty } from "@nestjs/swagger";
-import { IsNotEmpty, IsOptional, IsUUID } from "class-validator";
+import { IsNotEmpty, IsOptional, IsUUID, IsEnum } from "class-validator";
+import { MemberStatus } from "../entities/cohort-member.entity";
 
 export class CohortMembersDto {
   //generated fields
@@ -48,6 +49,16 @@ export class CohortMembersDto {
   @IsNotEmpty()
   @IsUUID(undefined, { message: "User Id must be a valid UUID" })
   userId: string;
+
+  @ApiProperty({
+    enum: MemberStatus,
+    description: "Member status (e.g. pending, active)",
+    required: false,
+  })
+  @Expose()
+  @IsOptional()
+  @IsEnum(MemberStatus)
+  status?: MemberStatus;
 
   constructor(obj: any) {
     Object.assign(this, obj);
