@@ -6,6 +6,7 @@ import {
   UpdateDateColumn,
   ManyToOne,
   JoinColumn,
+  Unique,
 } from 'typeorm';
 import {
   PaymentTransactionStatus,
@@ -15,9 +16,14 @@ import { PaymentIntent } from './payment-intent.entity';
 
 /**
  * Payment Transaction Entity
- * Represents individual gateway attempts (1 intent can have many retries)
+ * Represents individual gateway attempts (1 intent can have many retries).
+ * (provider, provider_session_id) is unique when provider_session_id is set, so session lookup is unambiguous.
  */
 @Entity({ name: 'payment_transactions' })
+@Unique('UQ_payment_transactions_provider_session', [
+  'provider',
+  'providerSessionId',
+])
 export class PaymentTransaction {
   @PrimaryGeneratedColumn('uuid')
   id: string;
