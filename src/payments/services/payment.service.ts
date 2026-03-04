@@ -414,6 +414,7 @@ export class PaymentService {
       currency: intent.currency,
       status: intent.status,
       provider: intent.provider,
+      statusReason: intent.statusReason ?? null,
       metadata: intent.metadata,
       transactions: intent.transactions.map((t) => ({
         id: t.id,
@@ -639,6 +640,149 @@ export class PaymentService {
       default:
         return PaymentIntentStatus.FAILED;
     }
+  }
+
+  /**
+   * Map payment intent status to transaction status (for manual override)
+   */
+  private mapIntentStatusToTransactionStatus(
+    status: PaymentIntentStatus,
+  ): PaymentTransactionStatus {
+    switch (status) {
+      case PaymentIntentStatus.CREATED:
+        return PaymentTransactionStatus.INITIATED;
+      case PaymentIntentStatus.PAID:
+        return PaymentTransactionStatus.SUCCESS;
+      case PaymentIntentStatus.FAILED:
+        return PaymentTransactionStatus.FAILED;
+      case PaymentIntentStatus.REFUNDED:
+        return PaymentTransactionStatus.REFUNDED;
+      default:
+        return PaymentTransactionStatus.INITIATED;
+    }
+  }
+
+  /**
+   * Manually override payment status (admin/support use).
+   * Updates payment intent status and status_reason, all related transactions, and optionally unlocks targets when set to PAID.
+   */
+  async overridePaymentStatus(
+    paymentIntentId: string,
+    status: PaymentIntentStatus,
+    reason: string,
+  ) {
+    const intent = await this.paymentIntentService.findById(paymentIntentId);
+    const transactionStatus =
+      this.mapIntentStatusToTransactionStatus(status);
+
+    await this.dataSource.transaction(async (manager: EntityManager) => {
+      const intentInTx = await manager.findOne(PaymentIntent, {
+        where: { id: intent.id },
+        relations: ['transactions', 'targets'],
+      });
+
+      if (!intentInTx) {
+        throw new BadRequestException(
+          `Payment intent ${paymentIntentId} not found`,
+        );
+      }
+
+      intentInTx.status = status;
+      intentInTx.statusReason = reason;
+      await manager.save(PaymentIntent, intentInTx);
+
+      for (const tx of intentInTx.transactions) {
+        tx.status = transactionStatus;
+        if (status === PaymentIntentStatus.FAILED && !tx.failureReason) {
+          tx.failureReason = 'Status manually overridden';
+        }
+        await manager.save(PaymentTransaction, tx);
+      }
+
+      if (status === PaymentIntentStatus.PAID) {
+        await manager.update(
+          PaymentTarget,
+          {
+            paymentIntentId: intentInTx.id,
+            unlockStatus: PaymentTargetUnlockStatus.LOCKED,
+          },
+          {
+            unlockStatus: PaymentTargetUnlockStatus.UNLOCKED,
+            unlockedAt: new Date(),
+          },
+        );
+        this.logger.log(
+          `Manual override: unlocked targets for payment intent ${intentInTx.id}`,
+        );
+      }
+    });
+
+    if (status === PaymentIntentStatus.PAID && intent.userId) {
+      const purpose = intent.purpose;
+      // Run after-payment success steps: certificate generation per target (same as webhook flow)
+      if (purpose === PaymentPurpose.CERTIFICATE_BUNDLE && intent.targets?.length) {
+        for (const target of intent.targets) {
+          this.processPaymentTargets(
+            paymentIntentId,
+            intent.userId,
+            target.contextId,
+            purpose,
+          ).catch((error) => {
+            this.logger.error(
+              `Failed to process payment target (certificate) after manual override for ${paymentIntentId}, contextId ${target.contextId}: ${error.message}`,
+              error.stack,
+            );
+          });
+        }
+      } else if (purpose && intent.metadata?.contextId) {
+        // Fallback: single context from metadata (e.g. when targets not loaded or legacy)
+        this.processPaymentTargets(
+          paymentIntentId,
+          intent.userId,
+          intent.metadata.contextId,
+          purpose,
+        ).catch((error) => {
+          this.logger.error(
+            `Failed to process payment targets after manual override for ${paymentIntentId}: ${error.message}`,
+            error.stack,
+          );
+        });
+      }
+      if (intent.metadata?.couponId) {
+        this.couponService
+          .recordRedemption(
+            intent.metadata.couponId,
+            intent.userId,
+            paymentIntentId,
+          )
+          .catch((error) => {
+            this.logger.error(
+              `Failed to record coupon redemption after manual override for ${paymentIntentId}: ${error.message}`,
+              error.stack,
+            );
+          });
+      }
+    }
+
+    return this.getPaymentStatus(paymentIntentId);
+  }
+
+  /**
+   * Manually override payment status by transaction ID (admin/support use).
+   * Resolves the payment intent from the transaction and performs the same override as overridePaymentStatus.
+   */
+  async overridePaymentStatusByTransactionId(
+    transactionId: string,
+    status: PaymentIntentStatus,
+    reason: string,
+  ) {
+    const transaction =
+      await this.paymentTransactionService.findById(transactionId);
+    return this.overridePaymentStatus(
+      transaction.paymentIntentId,
+      status,
+      reason,
+    );
   }
 }
 

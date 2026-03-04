@@ -2,6 +2,7 @@ import {
   Controller,
   Post,
   Get,
+  Patch,
   Body,
   Param,
   Query,
@@ -30,6 +31,7 @@ import { AllExceptionsFilter } from '../common/filters/exception.filter';
 import { APIID } from '../common/utils/api-id.config';
 import { PaymentService } from './services/payment.service';
 import { InitiatePaymentDto } from './dtos/initiate-payment.dto';
+import { OverridePaymentStatusDto } from './dtos/override-payment-status.dto';
 import { PaymentStatusResponseDto } from './dtos/payment-status.dto';
 import { PaymentReportResponseDto } from './dtos/payment-report.dto';
 
@@ -60,6 +62,32 @@ export class PaymentsController {
     return await this.paymentService.initiatePayment(dto);
   }
 
+  @Patch('transactions/:transactionId/status/override')
+  @UseFilters(new AllExceptionsFilter(APIID.PAYMENT_STATUS_OVERRIDE))
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiOperation({
+    summary: 'Manually override payment status by transaction ID',
+    description:
+      'Same as override by payment intent ID but identified by transaction ID. Resolves the payment intent from the transaction, then overrides intent and all its transactions. When set to PAID, targets are unlocked and certificate generation is triggered if applicable.',
+  })
+  @ApiBody({ type: OverridePaymentStatusDto })
+  @ApiOkResponse({
+    description: 'Payment status overridden successfully',
+    type: PaymentStatusResponseDto,
+  })
+  @ApiBadRequestResponse({ description: 'Invalid transaction or status' })
+  @ApiNotFoundResponse({ description: 'Transaction not found' })
+  async overridePaymentStatusByTransactionId(
+    @Param('transactionId', ParseUUIDPipe) transactionId: string,
+    @Body() dto: OverridePaymentStatusDto,
+  ) {
+    return await this.paymentService.overridePaymentStatusByTransactionId(
+      transactionId,
+      dto.status,
+      dto.reason,
+    );
+  }
+
   @Get(':id/status')
   @UseFilters(new AllExceptionsFilter(APIID.PAYMENT_STATUS))
   @ApiOperation({ summary: 'Get payment status' })
@@ -70,6 +98,32 @@ export class PaymentsController {
   @ApiNotFoundResponse({ description: 'Payment intent not found' })
   async getPaymentStatus(@Param('id', ParseUUIDPipe) paymentIntentId: string) {
     return await this.paymentService.getPaymentStatus(paymentIntentId);
+  }
+
+  @Patch(':id/status/override')
+  @UseFilters(new AllExceptionsFilter(APIID.PAYMENT_STATUS_OVERRIDE))
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiOperation({
+    summary: 'Manually override payment status',
+    description:
+      'Override payment intent and transaction status. When set to PAID, targets are unlocked and certificate generation is triggered if applicable. Use for admin/support corrections.',
+  })
+  @ApiBody({ type: OverridePaymentStatusDto })
+  @ApiOkResponse({
+    description: 'Payment status overridden successfully',
+    type: PaymentStatusResponseDto,
+  })
+  @ApiBadRequestResponse({ description: 'Invalid payment intent or status' })
+  @ApiNotFoundResponse({ description: 'Payment intent not found' })
+  async overridePaymentStatus(
+    @Param('id', ParseUUIDPipe) paymentIntentId: string,
+    @Body() dto: OverridePaymentStatusDto,
+  ) {
+    return await this.paymentService.overridePaymentStatus(
+      paymentIntentId,
+      dto.status,
+      dto.reason,
+    );
   }
 
   @Get('report/:contextId')

@@ -2,8 +2,7 @@ import { Injectable, HttpStatus } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, ILike } from 'typeorm';
 import { Country } from './entities/country.entity';
-import { ListCountryDto } from './dto/list-country.dto';
-import { MAX_PAGINATION_LIMIT } from '../pathways/common/dto/pagination.dto';
+import { ListCountryDto, COUNTRY_LIST_MAX_LIMIT } from './dto/list-country.dto';
 import APIResponse from 'src/common/responses/response';
 import { API_RESPONSES } from '@utils/response.messages';
 import { APIID } from '@utils/api-id.config';
@@ -36,7 +35,7 @@ export class CountriesService {
       }
 
       const requestedLimit = listCountryDto.limit ?? 10;
-      const limit = Math.min(requestedLimit, MAX_PAGINATION_LIMIT);
+      const limit = Math.min(requestedLimit, COUNTRY_LIST_MAX_LIMIT);
       const offset = listCountryDto.offset ?? 0;
 
       const [items, totalCount] = await this.countryRepository.findAndCount({

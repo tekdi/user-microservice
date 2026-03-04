@@ -37,6 +37,21 @@ export class PaymentTransactionService {
   }
 
   /**
+   * Find transaction by ID
+   */
+  async findById(id: string): Promise<PaymentTransaction> {
+    const transaction = await this.paymentTransactionRepository.findOne({
+      where: { id },
+    });
+
+    if (!transaction) {
+      throw new NotFoundException(`Transaction with ID ${id} not found`);
+    }
+
+    return transaction;
+  }
+
+  /**
    * Find transaction by provider payment ID
    */
   async findByProviderPaymentId(
