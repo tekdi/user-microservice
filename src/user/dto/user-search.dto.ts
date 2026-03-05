@@ -47,10 +47,11 @@ export class setFilters {
   village: string;
 
   @ApiPropertyOptional({
-    type: String,
-    description: "Role",
+    type: [String],
+    description: "Role names - accepts single string or array of strings",
   })
-  role: string;
+  @IsOptional()
+  role: string | string[];
 
   @ApiPropertyOptional({
     type: [String],
