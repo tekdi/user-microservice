@@ -362,25 +362,25 @@ export class CohortService {
         cohortCreateDto.metadata = JSON.stringify(cohortCreateDto.metadata);
       }
 
-      const existData = await this.cohortRepository.find({
-        where: {
-          name: cohortCreateDto.name,
-          status: "active",
-          type: cohortCreateDto.type,
-          parentId: cohortCreateDto.parentId
-            ? cohortCreateDto.parentId
-            : IsNull(),
-        },
-      });
-      if (existData.length > 0) {
-        return APIResponse.error(
-          res,
-          apiId,
-          API_RESPONSES.COHORT_NAME_EXIST,
-          API_RESPONSES.COHORT_EXISTS,
-          HttpStatus.CONFLICT
-        );
-      }
+      // const existData = await this.cohortRepository.find({
+      //   where: {
+      //     name: cohortCreateDto.name,
+      //     status: In(["active", "pending"]),
+      //     type: cohortCreateDto.type,
+      //     parentId: cohortCreateDto.parentId
+      //       ? cohortCreateDto.parentId
+      //       : IsNull(),
+      //   },
+      // });
+      // if (existData.length > 0) {
+      //   return APIResponse.error(
+      //     res,
+      //     apiId,
+      //     API_RESPONSES.COHORT_NAME_EXIST,
+      //     API_RESPONSES.COHORT_EXISTS,
+      //     HttpStatus.CONFLICT
+      //   );
+      // }
       const response = await this.cohortRepository.save(cohortCreateDto);
 
       const createFailures = [];
