@@ -1300,9 +1300,10 @@ export class PostgresUserService implements IServicelocator {
         }
       }
 
-      // Prepare userData for DB: createdBy stays from DB (do not overwrite on update); updatedBy from token when present
+      // Prepare userData for DB: createdBy and updatedBy are never taken from body (audit is server-controlled from token).
       const sanitizedUserData = { ...userDto.userData };
       delete sanitizedUserData['createdBy'];
+      delete sanitizedUserData['updatedBy'];
       if (loggedInUserId) {
         sanitizedUserData['updatedBy'] = loggedInUserId;
       }
@@ -1345,14 +1346,14 @@ export class PostgresUserService implements IServicelocator {
                 });
 
               if (existingFieldValue) {
-                // Step 2: Update existing field value using the new updateFieldValues method
-                // This method properly updates both 'value' and type-specific columns (like 'radioValue')
+                // Step 2: Update existing field value with audit metadata from token when present
                 const result = await this.fieldsService.updateFieldValues(
                   existingFieldValue.fieldValuesId, // ID of the existing field value record
                   {
                     fieldValuesId: existingFieldValue.fieldValuesId,
                     value: data.value, // New value from request
                     status: 'active' as any,
+                    ...(loggedInUserId && { updatedBy: loggedInUserId }),
                   }
                 );
 
