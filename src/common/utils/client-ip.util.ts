@@ -18,35 +18,27 @@ export function normalizeIpForForwarding(ip: string | undefined): string | undef
 /**
  * True if the IP is private/internal or loopback. Used to decide when it's safe
  * to trust X-Forwarded-For (only when the direct connection is from our infra).
+ * Only 172.16.0.0/12 (172.16.x - 172.31.x) is private; other 172.x are public.
  */
 function isPrivateOrLoopback(ip: string | undefined): boolean {
   if (!ip || typeof ip !== 'string') return false;
-  const s = ip.trim().toLowerCase();
-  if (s === '127.0.0.1' || s === '::1' || s === '::ffff:127.0.0.1') return true;
-  if (s.startsWith('10.')) return true;
-  if (s.startsWith('172.')) {
-    const second = parseInt(s.slice(4, 7), 10);
-    if (second >= 16 && second <= 31) return true;
+  const normalized = normalizeIpForForwarding(ip)?.toLowerCase() ?? ip.trim().toLowerCase();
+  if (normalized === '127.0.0.1' || normalized === '::1') return true;
+  if (normalized.startsWith('10.')) return true;
+  if (normalized.startsWith('172.')) {
+    const second = parseInt(normalized.slice(4, 7), 10);
+    return second >= 16 && second <= 31;
   }
-  if (s.startsWith('192.168.')) return true;
-  if (s.startsWith('::ffff:10.') || s.startsWith('::ffff:192.168.') || s.startsWith('::ffff:172.')) return true;
+  if (normalized.startsWith('192.168.')) return true;
   return false;
 }
 
 /**
  * True if the IP looks like a public (non-private, non-loopback) address.
+ * Only 172.16.0.0/12 is treated as private for 172.x.
  */
 function isPublicIp(ip: string | undefined): boolean {
-  if (!ip || typeof ip !== 'string') return false;
-  const s = ip.trim().toLowerCase();
-  if (s === '127.0.0.1' || s === '::1' || s === '::ffff:127.0.0.1') return false;
-  if (s.startsWith('10.') || s.startsWith('::ffff:10.')) return false;
-  if (s.startsWith('172.')) {
-    const second = parseInt(s.slice(4, 7), 10);
-    if (second >= 16 && second <= 31) return false;
-  }
-  if (s.startsWith('192.168.') || s.startsWith('::ffff:192.168.') || s.startsWith('::ffff:172.')) return false;
-  return true;
+  return !isPrivateOrLoopback(ip);
 }
 
 /**
@@ -64,7 +56,8 @@ function parseForwardedIps(forwarded: string | string[] | undefined): string[] {
  * - Standard (ALB): X-Forwarded-For: 27.107.73.230, 10.0.4.15 → first = real user.
  * - Reversed (some ingresses): X-Forwarded-For: 10.0.4.15, 27.107.73.230 → last = real user.
  * We use: if the first IP is public, use it; else (first is private/internal proxy) use the last IP.
- * Fallback: req.socket.remoteAddress when header missing or not trusted.
+ * Fallback: req.socket.remoteAddress only when header missing or not trusted.
+ * We do not use req.ip here so that trust proxy cannot bypass this validation.
  */
 export function getClientIp(req: Request | undefined | null): string | undefined {
   if (!req) return undefined;
@@ -84,7 +77,7 @@ export function getClientIp(req: Request | undefined | null): string | undefined
       }
     }
 
-    return req.ip || remoteAddress;
+    return remoteAddress;
   } catch {
     return undefined;
   }
