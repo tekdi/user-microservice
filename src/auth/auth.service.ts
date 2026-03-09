@@ -33,7 +33,7 @@ export class AuthService {
 
     const debug = getClientIpDebug(request ?? undefined);
     LoggerUtil.log(
-      `[Login] client IP forwarding: x-forwarded-for="${debug.xForwardedFor}" | extracted clientIp="${debug.clientIp}" | req.ip="${debug.reqIp}" | remoteAddress="${debug.remoteAddress}"`,
+      `[Login] client IP forwarding: x-forwarded-for="${debug.xForwardedFor ?? '(none)'}" | extracted clientIp="${debug.clientIp ?? '(none)'}" | req.ip="${debug.reqIp ?? '(none)'}" | remoteAddress="${debug.remoteAddress ?? '(none)'}"`,
       apiId
     );
 

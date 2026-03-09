@@ -34,12 +34,37 @@ function isPrivateOrLoopback(ip: string | undefined): boolean {
 }
 
 /**
+ * True if the IP looks like a public (non-private, non-loopback) address.
+ */
+function isPublicIp(ip: string | undefined): boolean {
+  if (!ip || typeof ip !== 'string') return false;
+  const s = ip.trim().toLowerCase();
+  if (s === '127.0.0.1' || s === '::1' || s === '::ffff:127.0.0.1') return false;
+  if (s.startsWith('10.') || s.startsWith('::ffff:10.')) return false;
+  if (s.startsWith('172.')) {
+    const second = parseInt(s.slice(4, 7), 10);
+    if (second >= 16 && second <= 31) return false;
+  }
+  if (s.startsWith('192.168.') || s.startsWith('::ffff:192.168.') || s.startsWith('::ffff:172.')) return false;
+  return true;
+}
+
+/**
+ * Parse X-Forwarded-For into an array of IPs (left to right).
+ */
+function parseForwardedIps(forwarded: string | string[] | undefined): string[] {
+  if (!forwarded) return [];
+  const raw = typeof forwarded === 'string' ? forwarded : Array.isArray(forwarded) ? forwarded.join(',') : '';
+  return raw.split(',').map((s) => s.trim()).filter(Boolean);
+}
+
+/**
  * Correct way to extract real client IP (for Keycloak and logging).
- * - If X-Forwarded-For header exists: use the FIRST IP (real user). Example:
- *   X-Forwarded-For: 27.107.73.230, 10.0.4.15  -> 27.107.73.230
- * - Else: fallback to req.socket.remoteAddress
- * We only trust the header when the direct connection is from a private/internal IP
- * (e.g. behind AWS ALB + Kubernetes ingress), so we do not trust spoofed headers from the internet.
+ * Handles both header orders:
+ * - Standard (ALB): X-Forwarded-For: 27.107.73.230, 10.0.4.15 → first = real user.
+ * - Reversed (some ingresses): X-Forwarded-For: 10.0.4.15, 27.107.73.230 → last = real user.
+ * We use: if the first IP is public, use it; else (first is private/internal proxy) use the last IP.
+ * Fallback: req.socket.remoteAddress when header missing or not trusted.
  */
 export function getClientIp(req: Request | undefined | null): string | undefined {
   if (!req) return undefined;
@@ -48,14 +73,14 @@ export function getClientIp(req: Request | undefined | null): string | undefined
     const remoteAddress = req.socket?.remoteAddress;
 
     if (forwarded) {
-      const first = typeof forwarded === 'string'
-        ? forwarded.split(',')[0].trim()
-        : String(forwarded[0] ?? '').split(',')[0].trim();
-      if (first) {
-        // Only trust header when direct connection is from our infra (ALB/ingress)
-        if (isPrivateOrLoopback(remoteAddress)) {
-          return first;
-        }
+      const ips = parseForwardedIps(forwarded);
+      if (ips.length > 0 && isPrivateOrLoopback(remoteAddress)) {
+        const first = ips[0];
+        const last = ips[ips.length - 1];
+        if (ips.length === 1) return first;
+        if (isPublicIp(first)) return first;
+        if (isPublicIp(last)) return last;
+        return first;
       }
     }
 
