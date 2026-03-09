@@ -1,7 +1,6 @@
 import {
   HttpStatus,
   Injectable,
-  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { UserAdapter } from 'src/user/useradapter';
@@ -9,8 +8,9 @@ import axios from 'axios';
 import jwt_decode from 'jwt-decode';
 import APIResponse from 'src/common/responses/response';
 import { KeycloakService } from 'src/common/utils/keycloak.service';
-import { getClientIp } from 'src/common/utils/client-ip.util';
+import { getClientIp, getClientIpDebug } from 'src/common/utils/client-ip.util';
 import { APIID } from 'src/common/utils/api-id.config';
+import { LoggerUtil } from 'src/common/logger/LoggerUtil';
 import { Response } from 'express';
 
 type LoginResponse = {
@@ -30,6 +30,13 @@ export class AuthService {
     const apiId = APIID.LOGIN;
     const { username, password } = authDto;
     const clientIp = getClientIp(request ?? undefined);
+
+    const debug = getClientIpDebug(request ?? undefined);
+    LoggerUtil.log(
+      `[Login] client IP forwarding: x-forwarded-for="${debug.xForwardedFor}" | extracted clientIp="${debug.clientIp}" | req.ip="${debug.reqIp}" | remoteAddress="${debug.remoteAddress}"`,
+      apiId
+    );
+
     try {
       // Optimized: Only check user status (no tenant/role data needed for login)
       const userData = await this.useradapter
@@ -77,7 +84,7 @@ export class AuthService {
       );
     } catch (error: any) {
       if (error?.response?.status === 401) {
-        throw new NotFoundException('Invalid username or password');
+        throw new UnauthorizedException('Invalid username or password');
       } else {
         const errorMessage =
           error?.response?.data?.error_description ||
