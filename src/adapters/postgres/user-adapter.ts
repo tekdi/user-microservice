@@ -1213,18 +1213,10 @@ export class PostgresUserService implements IServicelocator {
       const updatedData = {};
       const editIssues = {};
 
-      // Resolve logged-in user from token when present (e.g. learner UI). Not set for server-to-server calls (certificate cron, etc.)
+      // Resolve logged-in user from auth middleware (request.user set by guard/middleware). Used for updatedBy audit.
       let loggedInUserId: string | null = null;
       if (request?.user?.userId) {
         loggedInUserId = request.user.userId;
-      } else if (request?.headers?.authorization) {
-        try {
-          const token = request.headers.authorization.replace(/^Bearer\s+/i, '').trim();
-          const decoded: any = token ? jwt_decode(token) : null;
-          loggedInUserId = decoded?.sub ?? null;
-        } catch {
-          loggedInUserId = null;
-        }
       }
 
       const user = await this.usersRepository.findOne({
