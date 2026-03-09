@@ -55,7 +55,8 @@ export class KeycloakService {
       "Content-Type": "application/x-www-form-urlencoded",
     };
     if (clientIp) {
-      // Normalize e.g. ::ffff:127.0.0.1 -> 127.0.0.1 so Keycloak logs a clean IP
+      // Send only the single real client IP to Keycloak (do not forward the full chain or internal IPs).
+      // Keycloak will log this as ipAddress in LOGIN/LOGIN_ERROR events.
       const normalized = normalizeIpForForwarding(clientIp);
       if (normalized) {
         headers["X-Forwarded-For"] = normalized;
