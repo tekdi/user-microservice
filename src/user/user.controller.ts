@@ -180,7 +180,7 @@ export class UserController {
   @Patch('update/:userid')
   @UsePipes(new ValidationPipe())
   // JwtAuthGuard not applied: certificate cron and server-to-server callers hit this without a user token
-  // @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard)
   @ApiBasicAuth('access-token')
   @ApiBody({ type: UserUpdateDTO })
   @ApiOkResponse({ description: API_RESPONSES.USER_UPDATED_SUCCESSFULLY })

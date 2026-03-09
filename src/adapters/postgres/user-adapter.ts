@@ -1213,7 +1213,7 @@ export class PostgresUserService implements IServicelocator {
       const updatedData = {};
       const editIssues = {};
 
-      // Resolve logged-in user from auth middleware (request.user set by guard/middleware). Used for updatedBy audit.
+      // Resolve logged-in user: from auth middleware (request.user) or from Bearer token when guard is not applied.
       let loggedInUserId: string | null = null;
       if (request?.user?.userId) {
         loggedInUserId = request.user.userId;
