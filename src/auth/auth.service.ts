@@ -9,6 +9,7 @@ import axios from 'axios';
 import jwt_decode from 'jwt-decode';
 import APIResponse from 'src/common/responses/response';
 import { KeycloakService } from 'src/common/utils/keycloak.service';
+import { getClientIp } from 'src/common/utils/client-ip.util';
 import { APIID } from 'src/common/utils/api-id.config';
 import { Response } from 'express';
 
@@ -25,9 +26,10 @@ export class AuthService {
     private readonly keycloakService: KeycloakService
   ) {}
 
-  async login(authDto, response: Response) {
+  async login(authDto, request: any, response: Response) {
     const apiId = APIID.LOGIN;
     const { username, password } = authDto;
+    const clientIp = getClientIp(request ?? undefined);
     try {
       // Optimized: Only check user status (no tenant/role data needed for login)
       const userData = await this.useradapter
@@ -56,7 +58,7 @@ export class AuthService {
         refresh_token,
         refresh_expires_in,
         token_type,
-      } = await this.keycloakService.login(username, password);
+      } = await this.keycloakService.login(username, password, clientIp);
 
       const res = {
         access_token,
@@ -73,11 +75,14 @@ export class AuthService {
         HttpStatus.OK,
         'Auth Token fetched Successfully.'
       );
-    } catch (error) {
-      if (error.response && error.response.status === 401) {
+    } catch (error: any) {
+      if (error?.response?.status === 401) {
         throw new NotFoundException('Invalid username or password');
       } else {
-        const errorMessage = error?.message || 'Something went wrong';
+        const errorMessage =
+          error?.response?.data?.error_description ||
+          error?.message ||
+          'Something went wrong';
         return APIResponse.error(
           response,
           apiId,
