@@ -1310,9 +1310,9 @@ export class PostgresUserService implements IServicelocator {
 
       // Prepare userData for DB: createdBy stays from DB (do not overwrite on update); updatedBy from token when present
       const sanitizedUserData = { ...userDto.userData };
-      delete (sanitizedUserData as any).createdBy;
+      delete sanitizedUserData['createdBy'];
       if (loggedInUserId) {
-        (sanitizedUserData as any).updatedBy = loggedInUserId;
+        sanitizedUserData['updatedBy'] = loggedInUserId;
       }
 
       if (userDto.userData) {
