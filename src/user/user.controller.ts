@@ -179,6 +179,7 @@ export class UserController {
   @UseFilters(new AllExceptionsFilter(APIID.USER_UPDATE))
   @Patch('update/:userid')
   @UsePipes(new ValidationPipe())
+  // JwtAuthGuard not applied: certificate cron and server-to-server callers hit this without a user token
   // @UseGuards(JwtAuthGuard)
   @ApiBasicAuth('access-token')
   @ApiBody({ type: UserUpdateDTO })
@@ -190,13 +191,14 @@ export class UserController {
     @Headers() headers,
     @Param('userid') userId: string,
     @Body() userUpdateDto: UserUpdateDTO,
+    @Req() request: Request,
     @Res() response: Response
   ) {
     // userDto.tenantId = headers["tenantid"];
     userUpdateDto.userId = userId;
     return await this.userAdapter
       .buildUserAdapter()
-      .updateUser(userUpdateDto, response);
+      .updateUser(userUpdateDto, response, request);
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.USER_LIST))

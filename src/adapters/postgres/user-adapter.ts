@@ -1207,11 +1207,25 @@ export class PostgresUserService implements IServicelocator {
     return combinedResult;
   }
 
-  async updateUser(userDto, response: Response) {
+  async updateUser(userDto, response: Response, request?: any) {
     const apiId = APIID.USER_UPDATE;
     try {
       const updatedData = {};
       const editIssues = {};
+
+      // Resolve logged-in user from token when present (e.g. learner UI). Not set for server-to-server calls (certificate cron, etc.)
+      let loggedInUserId: string | null = null;
+      if (request?.user?.userId) {
+        loggedInUserId = request.user.userId;
+      } else if (request?.headers?.authorization) {
+        try {
+          const token = request.headers.authorization.replace(/^Bearer\s+/i, '').trim();
+          const decoded: any = token ? jwt_decode(token) : null;
+          loggedInUserId = decoded?.sub ?? null;
+        } catch {
+          loggedInUserId = null;
+        }
+      }
 
       const user = await this.usersRepository.findOne({
         where: { userId: userDto.userId },
@@ -1294,8 +1308,15 @@ export class PostgresUserService implements IServicelocator {
         }
       }
 
+      // Prepare userData for DB: createdBy stays from DB (do not overwrite on update); updatedBy from token when present
+      const sanitizedUserData = { ...userDto.userData };
+      delete (sanitizedUserData as any).createdBy;
+      if (loggedInUserId) {
+        (sanitizedUserData as any).updatedBy = loggedInUserId;
+      }
+
       if (userDto.userData) {
-        await this.updateBasicUserDetails(userDto.userId, userDto.userData);
+        await this.updateBasicUserDetails(userDto.userId, sanitizedUserData);
         updatedData['basicDetails'] = userDto.userData;
       }
 
@@ -1368,8 +1389,8 @@ export class PostgresUserService implements IServicelocator {
                     fieldId: data.fieldId, // Field ID from request
                     value: data.value, // Value from request
                     itemId: userDto.userId, // User ID
-                    createdBy: userDto.userId, // Who is creating (for audit)
-                    updatedBy: userDto.userId, // Who is updating (for audit)
+                    createdBy: loggedInUserId ?? undefined, // Who is creating (from token when present)
+                    updatedBy: loggedInUserId ?? undefined, // Who is updating (from token when present)
                     createdAt: new Date(), // Current timestamp
                     updatedAt: new Date(), // Current timestamp
                   },
@@ -1424,10 +1445,15 @@ export class PostgresUserService implements IServicelocator {
         userDto?.userId
       );
 
-      const updatedUser = await this.updateBasicUserDetails(userId, userDto);
+      // Get updated user for Elasticsearch sync (no second save; createdBy preserved, updatedBy already set in first save)
+      const updatedUser = await this.usersRepository.findOne({
+        where: { userId },
+      });
 
       // Sync to Elasticsearch
-      await this.syncUserToElasticsearch(updatedUser);
+      if (updatedUser) {
+        await this.syncUserToElasticsearch(updatedUser);
+      }
 
       return await APIResponse.success(
         response,
