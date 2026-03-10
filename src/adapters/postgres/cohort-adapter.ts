@@ -146,7 +146,7 @@ export class PostgresCohortService {
     try {
       const parsed = JSON.parse(metadata);
       const criteria = parsed.eventCriteria;
-      if (typeof criteria === 'number' && criteria >= 0 && criteria <= 3) {
+      if (typeof criteria === 'number') {
         return criteria;
       }
       return 0;
