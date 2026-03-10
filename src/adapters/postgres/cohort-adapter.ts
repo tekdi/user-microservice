@@ -178,6 +178,17 @@ export class PostgresCohortService {
         );
       }
 
+      const invalidCohortIds = cohortIds.filter((id) => !isUUID(id));
+      if (invalidCohortIds.length > 0) {
+        return APIResponse.error(
+          res,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          `Invalid cohortIds: ${invalidCohortIds.join(', ')}`,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
       const cohorts = await this.cohortRepository
         .createQueryBuilder('cohort')
         .select(['cohort.cohortId', 'cohort.metadata'])
