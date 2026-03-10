@@ -94,11 +94,20 @@ export class PostgresCohortService {
     // }
 
     try {
-      const cohorts = await this.cohortRepository.find({
-        where: {
+      const cohorts = await this.cohortRepository
+        .createQueryBuilder('cohort')
+        .innerJoin(
+          CohortAcademicYear,
+          'cay',
+          'cohort.cohortId = cay.cohortId'
+        )
+        .where('cohort.cohortId = :cohortId', {
           cohortId: requiredData.cohortId,
-        },
-      });
+        })
+        .andWhere('cay.academicYearId = :academicYearId', {
+          academicYearId: requiredData.academicYearId,
+        })
+        .getMany();
 
       if (!cohorts.length) {
         return APIResponse.error(
@@ -169,10 +178,18 @@ export class PostgresCohortService {
         );
       }
 
-      const cohorts = await this.cohortRepository.find({
-        where: { cohortId: In(cohortIds), tenantId: tenantId },
-        select: ['cohortId', 'metadata'],
-      });
+      const cohorts = await this.cohortRepository
+        .createQueryBuilder('cohort')
+        .select(['cohort.cohortId', 'cohort.metadata'])
+        .innerJoin(
+          CohortAcademicYear,
+          'cay',
+          'cohort.cohortId = cay.cohortId'
+        )
+        .where('cohort.cohortId IN (:...cohortIds)', { cohortIds })
+        .andWhere('cohort.tenantId = :tenantId', { tenantId })
+        .andWhere('cay.academicYearId = :academicYearId', { academicYearId })
+        .getMany();
 
       const result: Record<string, number | null> = {};
       cohortIds.forEach((id) => {
