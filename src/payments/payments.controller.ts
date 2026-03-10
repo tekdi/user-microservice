@@ -2,6 +2,7 @@ import {
   Controller,
   Post,
   Get,
+  Patch,
   Body,
   Param,
   Query,
@@ -30,6 +31,7 @@ import { AllExceptionsFilter } from '../common/filters/exception.filter';
 import { APIID } from '../common/utils/api-id.config';
 import { PaymentService } from './services/payment.service';
 import { InitiatePaymentDto } from './dtos/initiate-payment.dto';
+import { OverridePaymentStatusDto } from './dtos/override-payment-status.dto';
 import { PaymentStatusResponseDto } from './dtos/payment-status.dto';
 import { PaymentReportResponseDto } from './dtos/payment-report.dto';
 
@@ -60,6 +62,55 @@ export class PaymentsController {
     return await this.paymentService.initiatePayment(dto);
   }
 
+  @Patch('transactions/:transactionId/status/override')
+  @UseFilters(new AllExceptionsFilter(APIID.PAYMENT_STATUS_OVERRIDE))
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiOperation({
+    summary: 'Manually override payment status by transaction ID',
+    description:
+      'Same as override by payment intent ID but identified by transaction ID. Resolves the payment intent from the transaction, then overrides intent and all its transactions. When set to PAID, targets are unlocked and certificate generation is triggered if applicable.',
+  })
+  @ApiBody({ type: OverridePaymentStatusDto })
+  @ApiOkResponse({
+    description: 'Payment status overridden successfully',
+    type: PaymentStatusResponseDto,
+  })
+  @ApiBadRequestResponse({ description: 'Invalid transaction or status' })
+  @ApiNotFoundResponse({ description: 'Transaction not found' })
+  async overridePaymentStatusByTransactionId(
+    @Param('transactionId', ParseUUIDPipe) transactionId: string,
+    @Body() dto: OverridePaymentStatusDto,
+  ) {
+    return await this.paymentService.overridePaymentStatusByTransactionId(
+      transactionId,
+      dto.status,
+      dto.reason,
+    );
+  }
+
+  @Get('by-session')
+  @UseFilters(new AllExceptionsFilter(APIID.PAYMENT_STATUS))
+  @ApiOperation({
+    summary: 'Get payment status by Stripe Checkout Session ID',
+    description:
+      'Use the session_id from the success URL (e.g. profile?session_id=cs_test_...) to get contextId, transaction details, and full payment status. Same response as GET :id/status.',
+  })
+  @ApiQuery({
+    name: 'session_id',
+    required: true,
+    type: String,
+    description: 'Stripe Checkout Session ID from success URL query param',
+    example: 'cs_test_a1PRQRjSo2iGpwg8921beksc6sMDhMHhl9rZxBAVVkba6WWu8HUQD6fqGk',
+  })
+  @ApiOkResponse({
+    description: 'Payment status retrieved successfully',
+    type: PaymentStatusResponseDto,
+  })
+  @ApiNotFoundResponse({ description: 'No payment found for the given session_id' })
+  async getPaymentStatusBySession(@Query('session_id') sessionId: string) {
+    return await this.paymentService.getPaymentStatusBySessionId(sessionId);
+  }
+
   @Get(':id/status')
   @UseFilters(new AllExceptionsFilter(APIID.PAYMENT_STATUS))
   @ApiOperation({ summary: 'Get payment status' })
@@ -70,6 +121,32 @@ export class PaymentsController {
   @ApiNotFoundResponse({ description: 'Payment intent not found' })
   async getPaymentStatus(@Param('id', ParseUUIDPipe) paymentIntentId: string) {
     return await this.paymentService.getPaymentStatus(paymentIntentId);
+  }
+
+  @Patch(':id/status/override')
+  @UseFilters(new AllExceptionsFilter(APIID.PAYMENT_STATUS_OVERRIDE))
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @ApiOperation({
+    summary: 'Manually override payment status',
+    description:
+      'Override payment intent and transaction status. When set to PAID, targets are unlocked and certificate generation is triggered if applicable. Use for admin/support corrections.',
+  })
+  @ApiBody({ type: OverridePaymentStatusDto })
+  @ApiOkResponse({
+    description: 'Payment status overridden successfully',
+    type: PaymentStatusResponseDto,
+  })
+  @ApiBadRequestResponse({ description: 'Invalid payment intent or status' })
+  @ApiNotFoundResponse({ description: 'Payment intent not found' })
+  async overridePaymentStatus(
+    @Param('id', ParseUUIDPipe) paymentIntentId: string,
+    @Body() dto: OverridePaymentStatusDto,
+  ) {
+    return await this.paymentService.overridePaymentStatus(
+      paymentIntentId,
+      dto.status,
+      dto.reason,
+    );
   }
 
   @Get('report/:contextId')
@@ -89,6 +166,13 @@ export class PaymentsController {
     description: 'Number of records to skip (default: 0)',
     example: 0,
   })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    type: String,
+    description: 'Free text search on firstName, lastName, and email (case-insensitive)',
+    example: 'john',
+  })
   @ApiOkResponse({
     description: 'Payment report retrieved successfully',
     type: PaymentReportResponseDto,
@@ -98,6 +182,7 @@ export class PaymentsController {
     @Param('contextId', ParseUUIDPipe) contextId: string,
     @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit: number,
     @Query('offset', new DefaultValuePipe(0), ParseIntPipe) offset: number,
+    @Query('search') search?: string,
   ): Promise<PaymentReportResponseDto> {
     // Validate pagination parameters
     if (limit < 1 || limit > 1000) {
@@ -107,10 +192,13 @@ export class PaymentsController {
       throw new BadRequestException('Offset must be non-negative');
     }
 
+    const searchTerm = typeof search === 'string' ? search.trim() : undefined;
+
     const result = await this.paymentService.getPaymentReportByContextId(
       contextId,
       limit,
       offset,
+      searchTerm,
     );
 
     return {

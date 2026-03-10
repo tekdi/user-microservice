@@ -53,6 +53,9 @@ export class PaymentIntent {
   })
   provider: PaymentProvider;
 
+  @Column({ type: 'text', nullable: true, name: 'status_reason' })
+  statusReason: string;
+
   @Column({ type: 'jsonb', nullable: true })
   metadata: {
     cohortId?: string;

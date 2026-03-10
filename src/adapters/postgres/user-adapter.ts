@@ -1207,11 +1207,17 @@ export class PostgresUserService implements IServicelocator {
     return combinedResult;
   }
 
-  async updateUser(userDto, response: Response) {
+  async updateUser(userDto, response: Response, request?: any) {
     const apiId = APIID.USER_UPDATE;
     try {
       const updatedData = {};
       const editIssues = {};
+
+      // Resolve logged-in user: from auth middleware (request.user) or from Bearer token when guard is not applied.
+      let loggedInUserId: string | null = null;
+      if (request?.user?.userId) {
+        loggedInUserId = request.user.userId;
+      }
 
       const user = await this.usersRepository.findOne({
         where: { userId: userDto.userId },
@@ -1294,8 +1300,16 @@ export class PostgresUserService implements IServicelocator {
         }
       }
 
+      // Prepare userData for DB: createdBy and updatedBy are never taken from body (audit is server-controlled from token).
+      const sanitizedUserData = { ...userDto.userData };
+      delete sanitizedUserData['createdBy'];
+      delete sanitizedUserData['updatedBy'];
+      if (loggedInUserId) {
+        sanitizedUserData['updatedBy'] = loggedInUserId;
+      }
+
       if (userDto.userData) {
-        await this.updateBasicUserDetails(userDto.userId, userDto.userData);
+        await this.updateBasicUserDetails(userDto.userId, sanitizedUserData);
         updatedData['basicDetails'] = userDto.userData;
       }
 
@@ -1332,14 +1346,14 @@ export class PostgresUserService implements IServicelocator {
                 });
 
               if (existingFieldValue) {
-                // Step 2: Update existing field value using the new updateFieldValues method
-                // This method properly updates both 'value' and type-specific columns (like 'radioValue')
+                // Step 2: Update existing field value with audit metadata from token when present
                 const result = await this.fieldsService.updateFieldValues(
                   existingFieldValue.fieldValuesId, // ID of the existing field value record
                   {
                     fieldValuesId: existingFieldValue.fieldValuesId,
                     value: data.value, // New value from request
                     status: 'active' as any,
+                    ...(loggedInUserId && { updatedBy: loggedInUserId }),
                   }
                 );
 
@@ -1368,8 +1382,8 @@ export class PostgresUserService implements IServicelocator {
                     fieldId: data.fieldId, // Field ID from request
                     value: data.value, // Value from request
                     itemId: userDto.userId, // User ID
-                    createdBy: userDto.userId, // Who is creating (for audit)
-                    updatedBy: userDto.userId, // Who is updating (for audit)
+                    createdBy: loggedInUserId ?? undefined, // Who is creating (from token when present)
+                    updatedBy: loggedInUserId ?? undefined, // Who is updating (from token when present)
                     createdAt: new Date(), // Current timestamp
                     updatedAt: new Date(), // Current timestamp
                   },
@@ -1424,10 +1438,15 @@ export class PostgresUserService implements IServicelocator {
         userDto?.userId
       );
 
-      const updatedUser = await this.updateBasicUserDetails(userId, userDto);
+      // Get updated user for Elasticsearch sync (no second save; createdBy preserved, updatedBy already set in first save)
+      const updatedUser = await this.usersRepository.findOne({
+        where: { userId },
+      });
 
       // Sync to Elasticsearch
-      await this.syncUserToElasticsearch(updatedUser);
+      if (updatedUser) {
+        await this.syncUserToElasticsearch(updatedUser);
+      }
 
       return await APIResponse.success(
         response,

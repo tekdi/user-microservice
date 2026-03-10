@@ -3,6 +3,7 @@ import { Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import axios from "axios";
 import qs from "qs";
+import { normalizeIpForForwarding } from "./client-ip.util";
 
 type LoginResponse = {
   access_token: string;
@@ -37,7 +38,11 @@ export class KeycloakService {
     this.axios = axios.create();
   }
 
-  async login(username: string, password: string): Promise<LoginResponse> {
+  async login(
+    username: string,
+    password: string,
+    clientIp?: string
+  ): Promise<LoginResponse> {
     const data = qs.stringify({
       client_id: this.clientId,
       client_secret: this.clientSecret,
@@ -46,12 +51,22 @@ export class KeycloakService {
       password,
     });
 
+    const headers: Record<string, string> = {
+      "Content-Type": "application/x-www-form-urlencoded",
+    };
+    if (clientIp) {
+      // Send only the single real client IP to Keycloak (do not forward the full chain or internal IPs).
+      // Keycloak will log this as ipAddress in LOGIN/LOGIN_ERROR events.
+      const normalized = normalizeIpForForwarding(clientIp);
+      if (normalized) {
+        headers["X-Forwarded-For"] = normalized;
+      }
+    }
+
     const axiosConfig = {
       method: "post",
       url: `${this.baseURL}realms/${this.realm}/protocol/openid-connect/token`,
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
+      headers,
       data: data,
       timeout: 15000, // 15 second timeout to prevent hanging
     };

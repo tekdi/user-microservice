@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { PaymentIntent } from '../entities/payment-intent.entity';
@@ -52,22 +52,31 @@ export class PaymentIntentService {
   }
 
   /**
-   * Find payment intent by provider session ID
+   * Find payment intent by provider session ID.
+   * Uses getMany() + explicit handling so duplicate (provider, providerSessionId) rows
+   * result in a clear ConflictException instead of arbitrary getOne() result.
    */
   async findByProviderSessionId(
     provider: string,
     sessionId: string,
   ): Promise<PaymentIntent | null> {
-    // Find through transaction
-    const intent = await this.paymentIntentRepository
+    const intents = await this.paymentIntentRepository
       .createQueryBuilder('intent')
       .leftJoinAndSelect('intent.transactions', 'transaction')
       .leftJoinAndSelect('intent.targets', 'target')
       .where('transaction.provider = :provider', { provider })
       .andWhere('transaction.providerSessionId = :sessionId', { sessionId })
-      .getOne();
+      .getMany();
 
-    return intent || null;
+    if (intents.length === 0) {
+      return null;
+    }
+    if (intents.length > 1) {
+      throw new ConflictException(
+        `Multiple payment intents found for session_id ${sessionId}. Please contact support.`,
+      );
+    }
+    return intents[0];
   }
 
   /**

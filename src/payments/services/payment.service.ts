@@ -1,4 +1,4 @@
-import { Injectable, Logger, BadRequestException, Inject } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, NotFoundException, Inject } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository, In } from 'typeorm';
 import { PaymentProvider } from '../interfaces/payment-provider.interface';
@@ -57,7 +57,6 @@ export class PaymentService {
         contextType: target.contextType,
         contextId: target.contextId,
         originalAmount: dto.amount,
-        countryId: dto.metadata?.countryId,
       });
 
       if (!validationResult.isValid) {
@@ -414,6 +413,7 @@ export class PaymentService {
       currency: intent.currency,
       status: intent.status,
       provider: intent.provider,
+      statusReason: intent.statusReason ?? null,
       metadata: intent.metadata,
       transactions: intent.transactions.map((t) => ({
         id: t.id,
@@ -438,27 +438,58 @@ export class PaymentService {
   }
 
   /**
+   * Get payment status by Stripe Checkout Session ID (e.g. from success URL session_id query param).
+   * Returns same shape as getPaymentStatus; use when redirect lands with ?session_id=cs_test_...
+   */
+  async getPaymentStatusBySessionId(sessionId: string) {
+    const intent = await this.paymentIntentService.findByProviderSessionId(
+      'stripe',
+      sessionId,
+    );
+    if (!intent) {
+      throw new NotFoundException(
+        `No payment found for session_id ${sessionId}`,
+      );
+    }
+    return this.getPaymentStatus(intent.id);
+  }
+
+  /**
    * Get payment report by contextId with pagination
    * Returns payment transactions with user details, amounts, discounts, and status
    * Pagination is applied to transactions, not targets, to ensure accurate item count
+   * Optional search filters by firstName, lastName, or email (case-insensitive).
    */
   async getPaymentReportByContextId(
     contextId: string,
     limit: number = 50,
     offset: number = 0,
+    search?: string,
   ): Promise<{ data: PaymentReportItemDto[]; totalCount: number }> {
-    this.logger.log(
-      `Fetching payment report for contextId: ${contextId} with limit: ${limit}, offset: ${offset}`,
-    );
-
-    // Count total transactions (not targets) for accurate pagination
-    const totalCount = await this.dataSource
+    const searchTerm =
+      typeof search === 'string' && search.trim().length > 0
+        ? search.trim().toLowerCase()
+        : undefined;
+    const searchLog = searchTerm ? `, search: ${searchTerm}` : '';
+    
+    const countQb = this.dataSource
       .getRepository(PaymentTransaction)
       .createQueryBuilder('transaction')
       .innerJoin('transaction.paymentIntent', 'intent')
       .innerJoin('intent.targets', 'target')
-      .where('target.contextId = :contextId', { contextId })
-      .getCount();
+      .where('target.contextId = :contextId', { contextId });
+
+    if (searchTerm) {
+      const searchPattern = `%${searchTerm}%`;
+      countQb
+        .innerJoin(User, 'user', 'user.userId = intent.userId')
+        .andWhere(
+          '(LOWER(COALESCE(user.firstName, \'\')) LIKE :searchPattern OR LOWER(COALESCE(user.lastName, \'\')) LIKE :searchPattern OR LOWER(COALESCE(user.email, \'\')) LIKE :searchPattern)',
+          { searchPattern },
+        );
+    }
+
+    const totalCount = await countQb.getCount();
 
     if (totalCount === 0) {
       this.logger.warn(`No payment transactions found for contextId: ${contextId}`);
@@ -469,8 +500,7 @@ export class PaymentService {
     }
 
     // Query transactions directly with pagination
-    // This ensures limit/offset apply to report items, not targets
-    const transactions = await this.dataSource
+    const dataQb = this.dataSource
       .getRepository(PaymentTransaction)
       .createQueryBuilder('transaction')
       .innerJoinAndSelect('transaction.paymentIntent', 'intent')
@@ -478,8 +508,19 @@ export class PaymentService {
       .where('target.contextId = :contextId', { contextId })
       .orderBy('transaction.createdAt', 'DESC')
       .skip(offset)
-      .take(limit)
-      .getMany();
+      .take(limit);
+
+    if (searchTerm) {
+      const searchPattern = `%${searchTerm}%`;
+      dataQb
+        .innerJoin(User, 'user', 'user.userId = intent.userId')
+        .andWhere(
+          '(LOWER(COALESCE(user.firstName, \'\')) LIKE :searchPattern OR LOWER(COALESCE(user.lastName, \'\')) LIKE :searchPattern OR LOWER(COALESCE(user.email, \'\')) LIKE :searchPattern)',
+          { searchPattern },
+        );
+    }
+
+    const transactions = await dataQb.getMany();
 
     // If no transactions found for this page (e.g., offset beyond available data),
     // return empty data but preserve the actual totalCount for correct pagination
@@ -615,6 +656,149 @@ export class PaymentService {
       default:
         return PaymentIntentStatus.FAILED;
     }
+  }
+
+  /**
+   * Map payment intent status to transaction status (for manual override)
+   */
+  private mapIntentStatusToTransactionStatus(
+    status: PaymentIntentStatus,
+  ): PaymentTransactionStatus {
+    switch (status) {
+      case PaymentIntentStatus.CREATED:
+        return PaymentTransactionStatus.INITIATED;
+      case PaymentIntentStatus.PAID:
+        return PaymentTransactionStatus.SUCCESS;
+      case PaymentIntentStatus.FAILED:
+        return PaymentTransactionStatus.FAILED;
+      case PaymentIntentStatus.REFUNDED:
+        return PaymentTransactionStatus.REFUNDED;
+      default:
+        return PaymentTransactionStatus.INITIATED;
+    }
+  }
+
+  /**
+   * Manually override payment status (admin/support use).
+   * Updates payment intent status and status_reason, all related transactions, and optionally unlocks targets when set to PAID.
+   */
+  async overridePaymentStatus(
+    paymentIntentId: string,
+    status: PaymentIntentStatus,
+    reason: string,
+  ) {
+    const intent = await this.paymentIntentService.findById(paymentIntentId);
+    const transactionStatus =
+      this.mapIntentStatusToTransactionStatus(status);
+
+    await this.dataSource.transaction(async (manager: EntityManager) => {
+      const intentInTx = await manager.findOne(PaymentIntent, {
+        where: { id: intent.id },
+        relations: ['transactions', 'targets'],
+      });
+
+      if (!intentInTx) {
+        throw new BadRequestException(
+          `Payment intent ${paymentIntentId} not found`,
+        );
+      }
+
+      intentInTx.status = status;
+      intentInTx.statusReason = reason;
+      await manager.save(PaymentIntent, intentInTx);
+
+      for (const tx of intentInTx.transactions) {
+        tx.status = transactionStatus;
+        if (status === PaymentIntentStatus.FAILED && !tx.failureReason) {
+          tx.failureReason = 'Status manually overridden';
+        }
+        await manager.save(PaymentTransaction, tx);
+      }
+
+      if (status === PaymentIntentStatus.PAID) {
+        await manager.update(
+          PaymentTarget,
+          {
+            paymentIntentId: intentInTx.id,
+            unlockStatus: PaymentTargetUnlockStatus.LOCKED,
+          },
+          {
+            unlockStatus: PaymentTargetUnlockStatus.UNLOCKED,
+            unlockedAt: new Date(),
+          },
+        );
+        this.logger.log(
+          `Manual override: unlocked targets for payment intent ${intentInTx.id}`,
+        );
+      }
+    });
+
+    if (status === PaymentIntentStatus.PAID && intent.userId) {
+      const purpose = intent.purpose;
+      // Run after-payment success steps: certificate generation per target (same as webhook flow)
+      if (purpose === PaymentPurpose.CERTIFICATE_BUNDLE && intent.targets?.length) {
+        for (const target of intent.targets) {
+          this.processPaymentTargets(
+            paymentIntentId,
+            intent.userId,
+            target.contextId,
+            purpose,
+          ).catch((error) => {
+            this.logger.error(
+              `Failed to process payment target (certificate) after manual override for ${paymentIntentId}, contextId ${target.contextId}: ${error.message}`,
+              error.stack,
+            );
+          });
+        }
+      } else if (purpose && intent.metadata?.contextId) {
+        // Fallback: single context from metadata (e.g. when targets not loaded or legacy)
+        this.processPaymentTargets(
+          paymentIntentId,
+          intent.userId,
+          intent.metadata.contextId,
+          purpose,
+        ).catch((error) => {
+          this.logger.error(
+            `Failed to process payment targets after manual override for ${paymentIntentId}: ${error.message}`,
+            error.stack,
+          );
+        });
+      }
+      if (intent.metadata?.couponId) {
+        this.couponService
+          .recordRedemption(
+            intent.metadata.couponId,
+            intent.userId,
+            paymentIntentId,
+          )
+          .catch((error) => {
+            this.logger.error(
+              `Failed to record coupon redemption after manual override for ${paymentIntentId}: ${error.message}`,
+              error.stack,
+            );
+          });
+      }
+    }
+
+    return this.getPaymentStatus(paymentIntentId);
+  }
+
+  /**
+   * Manually override payment status by transaction ID (admin/support use).
+   * Resolves the payment intent from the transaction and performs the same override as overridePaymentStatus.
+   */
+  async overridePaymentStatusByTransactionId(
+    transactionId: string,
+    status: PaymentIntentStatus,
+    reason: string,
+  ) {
+    const transaction =
+      await this.paymentTransactionService.findById(transactionId);
+    return this.overridePaymentStatus(
+      transaction.paymentIntentId,
+      status,
+      reason,
+    );
   }
 }
 
