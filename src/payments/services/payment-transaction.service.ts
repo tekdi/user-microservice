@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 import { PaymentTransaction } from '../entities/payment-transaction.entity';
 import { PaymentTransactionStatus } from '../enums/payment.enums';
 
@@ -82,8 +82,24 @@ export class PaymentTransactionService {
   }
 
   /**
-   * Update transaction status
+   * Find transaction for a payment intent that has no provider payment ID yet.
+   * Used to attach webhook payload to the transaction created at initiation
+   * (e.g. when Stripe did not return payment_intent at session create, or when
+   * webhook event is payment_intent.succeeded and has no session ID).
    */
+  async findOneByPaymentIntentIdWithNullProviderPaymentId(
+    paymentIntentId: string,
+    provider: string,
+  ): Promise<PaymentTransaction | null> {
+    return await this.paymentTransactionRepository.findOne({
+      where: {
+        paymentIntentId,
+        provider: provider as any,
+        providerPaymentId: IsNull(),
+      },
+      order: { createdAt: 'DESC' },
+    });
+  }
   async updateStatus(
     id: string,
     status: PaymentTransactionStatus,
