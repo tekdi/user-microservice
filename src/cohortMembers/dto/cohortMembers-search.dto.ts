@@ -29,7 +29,7 @@ class FiltersDto {
   @IsString()
   @IsUUID()
   @ValidateIf((o) => !o.cohortId)
-  userId?: string; 
+  userId?: string;
 
   @ApiPropertyOptional({ type: String, description: "Role", example: "" })
   @IsOptional()
@@ -54,7 +54,17 @@ class FiltersDto {
   @ApiPropertyOptional({ type: Array, description: "Status", example: [] })
   @IsOptional()
   @IsArray()
-  status?: string[]; // Assuming status is an array of strings
+  status?: string[];
+
+  @ApiPropertyOptional({
+    type: [String],
+    description: "Filter by cohort member role(s) e.g. POC, PTM",
+    example: ["POC", "PTM"],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  cohortMemberRole?: string[];
 }
 export class CohortMembersSearchDto {
   @ApiProperty({
@@ -79,6 +89,7 @@ export class CohortMembersSearchDto {
       name: "",
       status: [],
       academicYearIds: [],
+      cohortMemberRole: ["POC", "PTM"],
     }, // Adding example for Swagger
   })
   @IsOptional()

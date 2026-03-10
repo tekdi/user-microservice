@@ -864,7 +864,15 @@ export class UserService {
             break;
 
           case "role":
-            queryBuilder.andWhere(`R.name = :role`, { role: String(value) });
+            // normalize single or array to uppercase list
+            const roles = (Array.isArray(value) ? value : [value])
+              .filter((item) => typeof item === "string")
+              .map((item) => item.trim().toUpperCase())
+              .filter(Boolean);
+
+            if (roles.length > 0) {
+              queryBuilder.andWhere(`UPPER(R.name) IN (:...roles)`, { roles });
+            }
             break;
 
           case "fromDate":

@@ -1,4 +1,4 @@
-import { ApiProperty } from "@nestjs/swagger";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import {
   IsArray,
   IsUUID,
@@ -7,8 +7,10 @@ import {
   IsNotEmpty,
   ArrayMaxSize,
   IsEnum,
+  IsString,
 } from "class-validator";
 import { MemberStatus } from "../entities/cohort-member.entity";
+import { Expose, Transform } from "class-transformer";
 
 export class BulkCohortMember {
   @ApiProperty({
@@ -43,6 +45,17 @@ export class BulkCohortMember {
   @IsUUID("4", { each: true })
   @ArrayMaxSize(1000)
   removeCohortId: string[];
+
+  @ApiPropertyOptional({
+    type: String,
+    description: "Role of the cohort member (stored in uppercase, e.g. POC, PTM)",
+    example: "ptm",
+  })
+  @Expose()
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => (value ? value.toUpperCase() : value))
+  cohortMemberRole: string;
 
   @ApiProperty({
     enum: MemberStatus,

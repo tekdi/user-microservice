@@ -75,8 +75,8 @@ export class CohortCreateDto {
     description: "The status of Cohort",
   })
   @IsOptional()
-  @IsEnum(["active", "archived", "inactive"], {
-    message: "Status must be one of: active, archived, inactive",
+  @IsEnum(["active", "archived", "inactive", "pending"], {
+    message: "Status must be one of: active, archived, inactive, pending",
   })
   @Expose()
   status: string;
