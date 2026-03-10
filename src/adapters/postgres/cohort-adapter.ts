@@ -142,6 +142,11 @@ export class PostgresCohortService {
       }
       return 0;
     } catch (e) {
+      LoggerUtil.error(
+        'Error parsing cohort metadata',
+        e.message,
+        'PostgresCohortService.parseEventCriteriaFromMetadata'
+      );
       return 0;
     }
   }
