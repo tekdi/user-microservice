@@ -151,7 +151,12 @@ export class PostgresCohortService {
     }
   }
 
-  public async getBatchEventCriteria(cohortIds: string[], res) {
+  public async getBatchEventCriteria(
+    tenantId: string,
+    academicYearId: string,
+    cohortIds: string[],
+    res
+  ) {
     const apiId = APIID.COHORT_BATCH_EVENT_CRITERIA;
     try {
       if (!Array.isArray(cohortIds) || cohortIds.length === 0) {
@@ -165,13 +170,13 @@ export class PostgresCohortService {
       }
 
       const cohorts = await this.cohortRepository.find({
-        where: { cohortId: In(cohortIds) },
+        where: { cohortId: In(cohortIds), tenantId: tenantId },
         select: ['cohortId', 'metadata'],
       });
 
-      const result = {};
+      const result: Record<string, number | null> = {};
       cohortIds.forEach((id) => {
-        result[id] = 0;
+        result[id] = null;
       });
 
       cohorts.forEach((cohort) => {
@@ -180,10 +185,12 @@ export class PostgresCohortService {
         );
       });
 
+      const notFoundIds = cohortIds.filter((id) => result[id] === null);
+
       return APIResponse.success(
         res,
         apiId,
-        result,
+        { criteriaByCohortId: result, notFoundIds },
         HttpStatus.OK,
         'Batch event criteria fetched successfully'
       );

@@ -261,6 +261,12 @@ export class CohortController {
   @ApiOkResponse({ description: 'Batch event criteria fetched successfully' })
   @ApiBadRequestResponse({ description: 'Bad Request' })
   @ApiInternalServerErrorResponse({ description: 'Internal Server Error.' })
+  @ApiHeader({
+    name: 'tenantid',
+  })
+  @ApiHeader({
+    name: 'academicyearid',
+  })
   @ApiBody({
     schema: {
       type: 'object',
@@ -273,12 +279,23 @@ export class CohortController {
     },
   })
   public async getBatchEventCriteria(
+    @Headers() headers,
     @Body() body: { cohortIds: string[] },
     @Res() response: Response
   ) {
+    const tenantId = headers['tenantid'];
+    const academicYearId = headers['academicyearid'];
+
+    if (!tenantId || !isUUID(tenantId)) {
+      throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
+    }
+    if (!academicYearId || !isUUID(academicYearId)) {
+      throw new BadRequestException(API_RESPONSES.ACADEMICYEARID_VALIDATION);
+    }
+
     const { cohortIds } = body;
     return await this.cohortAdapter
       .buildCohortAdapter()
-      .getBatchEventCriteria(cohortIds, response);
+      .getBatchEventCriteria(tenantId, academicYearId, cohortIds, response);
   }
 }

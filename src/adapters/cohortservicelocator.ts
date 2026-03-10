@@ -16,5 +16,10 @@ export interface IServicelocatorcohort {
   updateCohort(cohortId: string, cohortUpdateDto: CohortUpdateDto, response);
   updateCohortStatus(cohortId: string, response, userId: string);
   getCohortHierarchyData(requiredData, response);
-  getBatchEventCriteria(cohortIds: string[], response);
+  getBatchEventCriteria(
+    tenantId: string,
+    academicYearId: string,
+    cohortIds: string[],
+    response
+  );
 }
