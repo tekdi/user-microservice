@@ -255,4 +255,30 @@ export class CohortController {
       .buildCohortAdapter()
       .getCohortHierarchyData(requiredData, response);
   }
+
+  @UseFilters(new AllExceptionsFilter(APIID.COHORT_BATCH_EVENT_CRITERIA))
+  @Post('/batch-event-criteria')
+  @ApiOkResponse({ description: 'Batch event criteria fetched successfully' })
+  @ApiBadRequestResponse({ description: 'Bad Request' })
+  @ApiInternalServerErrorResponse({ description: 'Internal Server Error.' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        cohortIds: {
+          type: 'array',
+          items: { type: 'string' },
+        },
+      },
+    },
+  })
+  public async getBatchEventCriteria(
+    @Body() body: { cohortIds: string[] },
+    @Res() response: Response
+  ) {
+    const { cohortIds } = body;
+    return await this.cohortAdapter
+      .buildCohortAdapter()
+      .getBatchEventCriteria(cohortIds, response);
+  }
 }

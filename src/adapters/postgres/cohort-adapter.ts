@@ -132,6 +132,72 @@ export class PostgresCohortService {
     }
   }
 
+  private parseEventCriteriaFromMetadata(metadata: string | null): number {
+    if (!metadata) return 0;
+    try {
+      const parsed = JSON.parse(metadata);
+      const criteria = parsed.eventCriteria;
+      if (typeof criteria === 'number' && criteria >= 0 && criteria <= 3) {
+        return criteria;
+      }
+      return 0;
+    } catch (e) {
+      return 0;
+    }
+  }
+
+  public async getBatchEventCriteria(cohortIds: string[], res) {
+    const apiId = APIID.COHORT_BATCH_EVENT_CRITERIA;
+    try {
+      if (!Array.isArray(cohortIds) || cohortIds.length === 0) {
+        return APIResponse.success(
+          res,
+          apiId,
+          {},
+          HttpStatus.OK,
+          'No cohort IDs provided'
+        );
+      }
+
+      const cohorts = await this.cohortRepository.find({
+        where: { cohortId: In(cohortIds) },
+        select: ['cohortId', 'metadata'],
+      });
+
+      const result = {};
+      cohortIds.forEach((id) => {
+        result[id] = 0;
+      });
+
+      cohorts.forEach((cohort) => {
+        result[cohort.cohortId] = this.parseEventCriteriaFromMetadata(
+          cohort.metadata
+        );
+      });
+
+      return APIResponse.success(
+        res,
+        apiId,
+        result,
+        HttpStatus.OK,
+        'Batch event criteria fetched successfully'
+      );
+    } catch (error) {
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${error.message}`,
+        apiId
+      );
+      return APIResponse.error(
+        res,
+        apiId,
+        API_RESPONSES.SERVER_ERROR,
+        error.message,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
   private async handleCohortDataResponse(cohorts, res, apiId) {
     const result = { cohortData: [] };
 
@@ -142,6 +208,7 @@ export class PostgresCohortService {
         parentId: data.parentId,
         type: data.type,
         status: data.status,
+        eventCriteria: this.parseEventCriteriaFromMetadata(data.metadata),
         customField: await this.getCohortCustomFieldDetails(data.cohortId),
       };
       result.cohortData.push(cohortData);
@@ -166,6 +233,7 @@ export class PostgresCohortService {
         parentID: cohort.parentId,
         type: cohort.type,
         status: cohort?.status,
+        eventCriteria: this.parseEventCriteriaFromMetadata(cohort.metadata),
         customField: requiredData.customField
           ? await this.getCohortCustomFieldDetails(cohort.cohortId)
           : undefined,
