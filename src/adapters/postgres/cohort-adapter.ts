@@ -142,21 +142,21 @@ export class PostgresCohortService {
   }
 
   private parseEventCriteriaFromMetadata(metadata: string | null): number {
-    if (!metadata) return 0;
+    if (!metadata) return 1;
     try {
       const parsed = JSON.parse(metadata);
       const criteria = parsed.eventCriteria;
-      if (typeof criteria === 'number') {
+      if (typeof criteria === 'number' && criteria >= 0) {
         return criteria;
       }
-      return 0;
+      return 1;
     } catch (e) {
       LoggerUtil.error(
         'Error parsing cohort metadata',
         e.message,
         'PostgresCohortService.parseEventCriteriaFromMetadata'
       );
-      return 0;
+      return 1;
     }
   }
 
@@ -202,18 +202,23 @@ export class PostgresCohortService {
         .andWhere('cay.academicYearId = :academicYearId', { academicYearId })
         .getMany();
 
-      const result: Record<string, number | null> = {};
-      cohortIds.forEach((id) => {
-        result[id] = null;
-      });
+      const result: Record<string, number> = {};
+      const foundIds = new Set();
 
       cohorts.forEach((cohort) => {
         result[cohort.cohortId] = this.parseEventCriteriaFromMetadata(
           cohort.metadata
         );
+        foundIds.add(cohort.cohortId);
       });
 
-      const notFoundIds = cohortIds.filter((id) => result[id] === null);
+      cohortIds.forEach((id) => {
+        if (!foundIds.has(id)) {
+          result[id] = 1;
+        }
+      });
+
+      const notFoundIds = cohortIds.filter((id) => !foundIds.has(id));
 
       return APIResponse.success(
         res,
@@ -242,15 +247,18 @@ export class PostgresCohortService {
     const result = { cohortData: [] };
 
     for (const data of cohorts) {
-      const cohortData = {
+      const parsedCriteria = this.parseEventCriteriaFromMetadata(data.metadata);
+      const cohortData: any = {
         cohortId: data.cohortId,
         name: data.name,
         parentId: data.parentId,
         type: data.type,
         status: data.status,
-        eventCriteria: this.parseEventCriteriaFromMetadata(data.metadata),
         customField: await this.getCohortCustomFieldDetails(data.cohortId),
       };
+      
+      cohortData.eventCriteria = parsedCriteria;
+      
       result.cohortData.push(cohortData);
     }
     LoggerUtil.log(API_RESPONSES.COHORT_DATA_RESPONSE);
@@ -267,13 +275,13 @@ export class PostgresCohortService {
     const resultDataList = [];
 
     for (const cohort of cohorts) {
-      const resultData = {
+      const parsedCriteria = this.parseEventCriteriaFromMetadata(cohort.metadata);
+      const resultData: any = {
         cohortName: cohort.name,
         cohortId: cohort.cohortId,
         parentID: cohort.parentId,
         type: cohort.type,
         status: cohort?.status,
-        eventCriteria: this.parseEventCriteriaFromMetadata(cohort.metadata),
         customField: requiredData.customField
           ? await this.getCohortCustomFieldDetails(cohort.cohortId)
           : undefined,
@@ -282,6 +290,9 @@ export class PostgresCohortService {
           requiredData.customField
         ),
       };
+
+      resultData.eventCriteria = parsedCriteria;
+
       resultDataList.push(resultData);
 
       LoggerUtil.log(API_RESPONSES.CHILD_DATA);
