@@ -86,6 +86,7 @@ export class CouponController {
         contextType: dto.contextType,
         contextId: dto.contextId,
         isActive: dto.isActive,
+        search: dto.search,
       },
       limit,
       offset,

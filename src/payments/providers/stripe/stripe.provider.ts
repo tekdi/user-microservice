@@ -84,6 +84,10 @@ export class StripeProvider implements PaymentProvider {
     return PaymentProviderEnum.STRIPE;
   }
 
+  /**
+   * Create a Checkout Session. The charge is in the currency and amount provided so the customer
+   * pays in their local currency and never sees or pays a conversion fee (merchant absorbs FX).
+   */
   async initiatePayment(paymentData: InitiatePaymentDto): Promise<PaymentInitiationResult> {
     try {
       // Use URLs from request body, fallback to environment variables or defaults
@@ -114,10 +118,11 @@ export class StripeProvider implements PaymentProvider {
       const cancelUrl = paymentData.cancelUrl || defaultCancelUrl;
 
       // Prepare checkout session configuration
+      // Charge in the customer's currency so they never see or pay a conversion fee (merchant absorbs FX)
       const currency = (paymentData.currency?.toLowerCase() || 'inr');
       const unitAmount = this.convertToUnitAmount(paymentData.amount, currency);
       
-      const sessionConfig: Stripe.Checkout.SessionCreateParams = {
+      const sessionConfig: Stripe.Checkout.SessionCreateParams & { adaptive_pricing?: { enabled: boolean } } = {
         payment_method_types: ['card'],
         line_items: [
           {
@@ -136,6 +141,8 @@ export class StripeProvider implements PaymentProvider {
         success_url: successUrl,
         cancel_url: cancelUrl,
         client_reference_id: paymentData.userId,
+        // Disable Adaptive Pricing so the customer does not see "Choose a currency" or "includes X% conversion fee"
+        adaptive_pricing: { enabled: false },
         metadata: {
           userId: paymentData.userId,
           purpose: paymentData.purpose,

@@ -197,11 +197,21 @@ export class PaymentService {
     // Parse webhook event
     const webhookEvent = this.paymentProvider.parseWebhookEvent(event);
 
-    // Check idempotency - ensure we haven't processed this event
-    const existingTransaction = await this.paymentTransactionService.findByProviderPaymentId(
+    // Check idempotency / find existing transaction: by provider payment ID first, then by session ID.
+    // At initiation we create a transaction with providerSessionId but providerPaymentId may be null
+    // (Stripe may not return payment_intent until later). Webhooks then send paymentId; lookup by
+    // paymentId can miss the initial transaction, causing a second row. So we also look up by
+    // sessionId to update the same transaction and avoid duplicates.
+    let existingTransaction = await this.paymentTransactionService.findByProviderPaymentId(
       provider,
       webhookEvent.paymentId,
     );
+    if (!existingTransaction && webhookEvent.sessionId) {
+      existingTransaction = await this.paymentTransactionService.findByProviderSessionId(
+        provider,
+        webhookEvent.sessionId,
+      );
+    }
 
     if (existingTransaction) {
       // Check if this is a duplicate event - compare mapped statuses
@@ -232,6 +242,20 @@ export class PaymentService {
         `Payment intent not found for payment ${webhookEvent.paymentId}`,
       );
       throw new BadRequestException('Payment intent not found');
+    }
+
+    // If we still haven't found an existing transaction (e.g. payment_intent.succeeded has no sessionId),
+    // look for the transaction created at initiation (it has providerPaymentId null).
+    if (
+      !existingTransaction &&
+      webhookEvent.paymentId &&
+      webhookEvent.paymentId.trim() !== ''
+    ) {
+      existingTransaction =
+        await this.paymentTransactionService.findOneByPaymentIntentIdWithNullProviderPaymentId(
+          intent.id,
+          provider,
+        );
     }
 
     // Wrap all database operations in a transaction to ensure atomicity
@@ -287,6 +311,14 @@ export class PaymentService {
           if (webhookEvent.status === 'failed') {
             transactionToUpdate.failureReason = 'Payment failed via webhook';
           }
+          // Populate providerPaymentId if it was null (e.g. transaction was found by sessionId)
+          if (webhookEvent.paymentId && !transactionToUpdate.providerPaymentId) {
+            transactionToUpdate.providerPaymentId = webhookEvent.paymentId;
+          }
+          if (webhookEvent.sessionId && !transactionToUpdate.providerSessionId) {
+            transactionToUpdate.providerSessionId = webhookEvent.sessionId;
+          }
+          transactionToUpdate.rawResponse = webhookEvent.rawEvent;
           transaction = await manager.save(
             PaymentTransaction,
             transactionToUpdate,
