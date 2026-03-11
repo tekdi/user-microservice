@@ -3768,63 +3768,29 @@ export class UserService {
 
   /**
    * Get user IDs by center through cohort relationships
-   * Flow: Center IDs → Cohort table (parentId) → CohortMembers table → User IDs
+   * Includes: (1) users directly in center (CohortMembers.cohortId = center ID),
+   *           (2) users in batches under center (Cohort.parentId = center ID)
    */
   private async getUserIdsByCenter(centerIds: string[], tenantId: string): Promise<string[]> {
     const apiId = APIID.USER_LIST;
 
     try {
-      LoggerUtil.log(`Filtering by center through cohort relationships: ${centerIds.length} centers: [${centerIds.join(', ')}]`, apiId);
+      LoggerUtil.log(`Filtering by center (direct + batches): ${centerIds.length} centers: [${centerIds.join(', ')}]`, apiId);
 
-      // Step 1: Get all cohort IDs where parentId matches the center IDs
-      // Using string comparison to avoid type casting issues
-      const cohortQuery = `
-        SELECT DISTINCT "cohortId" 
-        FROM public."Cohort" 
-        WHERE "parentId"::text = ANY($1::text[])
-      `;
-
-      const cohortResult = await this.usersRepository.query(cohortQuery, [centerIds]);
-      const cohortIds = cohortResult.map((row: any) => String(row.cohortId));
-
-      LoggerUtil.log(`Found ${cohortIds.length} cohorts under ${centerIds.length} centers: [${cohortIds.join(', ')}]`, apiId);
-
-      if (cohortIds.length === 0) {
-        LoggerUtil.warn(`No cohorts found for center IDs: ${centerIds.join(', ')}`, apiId);
-        return [];
-      }
-
-      // Debug query to understand the filtering breakdown
-      const debugQuery = `
-        SELECT 
-          COUNT(*) as total_memberships,
-          COUNT(CASE WHEN cm."status" = 'active' THEN 1 END) as active_memberships,
-          COUNT(CASE WHEN cm."status" = 'inactive' THEN 1 END) as inactive_memberships,
-          COUNT(CASE WHEN u."status" = 'archived' THEN 1 END) as archived_users_memberships,
-          COUNT(DISTINCT cm."userId") as unique_all_users
-        FROM public."CohortMembers" cm
-        JOIN public."Users" u ON cm."userId" = u."userId"
-        WHERE cm."cohortId"::text = ANY($1::text[])
-      `;
-
-      const debugResult = await this.usersRepository.query(debugQuery, [cohortIds]);
-      const stats = debugResult[0];
-
-      LoggerUtil.log(`Debug breakdown - Total: ${stats.total_memberships}, Active: ${stats.active_memberships}, Inactive: ${stats.inactive_memberships}, Archived users: ${stats.archived_users_memberships}, Unique all users: ${stats.unique_all_users}`, apiId);
-
-      // Step 2: Get all user IDs from CohortMembers for those cohort IDs (no status filtering)
+      // Get user IDs: in CohortMembers with cohortId = center OR with cohortId in a cohort whose parentId = center
       const userQuery = `
-        SELECT DISTINCT cm."userId" 
+        SELECT DISTINCT cm."userId"
         FROM public."CohortMembers" cm
         JOIN public."Users" u ON cm."userId" = u."userId"
+        LEFT JOIN public."Cohort" cohort ON cm."cohortId" = cohort."cohortId"
         WHERE cm."cohortId"::text = ANY($1::text[])
+           OR cohort."parentId" = ANY($1::text[])
       `;
 
-      const userResult = await this.usersRepository.query(userQuery, [cohortIds]);
+      const userResult = await this.usersRepository.query(userQuery, [centerIds]);
       const userIds: string[] = userResult.map((row: any) => String(row.userId));
 
-      LoggerUtil.log(`Center filter final result: ${userIds.length} unique users (all statuses) from ${cohortIds.length} cohorts`, apiId);
-      LoggerUtil.log(`Next: These ${userIds.length} users will be filtered by tenant (${tenantId}) only - no status filtering`, apiId);
+      LoggerUtil.log(`Center filter: ${userIds.length} unique users (direct center + batches)`, apiId);
       return userIds;
 
     } catch (error) {
@@ -4141,13 +4107,12 @@ export class UserService {
         params.push(locationFilter.ids);
         paramIndex++;
       } else if (this.isCenterFilter(locationFilter.level)) {
-        // Center filtering through cohort relationships
+        // Center filtering: users in center directly (cm.cohortId = center) OR in batches under center (batch.parentId = center)
         baseQuery += `
           JOIN "CohortMembers" cm ON u."userId" = cm."userId"
-          JOIN "Cohort" batch ON cm."cohortId" = batch."cohortId"
-          JOIN "Cohort" center ON batch."parentId"::text = center."cohortId"::text
+          LEFT JOIN "Cohort" cohort ON cm."cohortId" = cohort."cohortId"
         `;
-        conditions.push(`center."cohortId" = ANY($${paramIndex})`);
+        conditions.push(`(cm."cohortId"::text = ANY($${paramIndex}::text[]) OR cohort."parentId" = ANY($${paramIndex}::text[]))`);
         params.push(locationFilter.ids);
         paramIndex++;
       } else {
