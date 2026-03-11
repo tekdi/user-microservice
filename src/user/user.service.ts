@@ -2275,6 +2275,28 @@ export class UserService {
     return tenant && tenant.parentId === null;
   }
 
+  /**
+   * Check if user already has a specific role in a tenant
+   * @param userId - User ID
+   * @param roleId - Role ID
+   * @param tenantId - Tenant ID
+   * @returns Promise<boolean> - true if user has the role in the tenant
+   */
+  async checkIfUserHasRoleInTenant(userId: string, roleId: string, tenantId: string): Promise<boolean> {
+    try {
+      const roleMapping = await this.userRoleMappingRepository.findOne({
+        where: { userId, roleId, tenantId }
+      });
+      return !!roleMapping;
+    } catch (error) {
+      LoggerUtil.error(
+        `Failed to check if user has role in tenant: ${error.message}`,
+        'USER_SERVICE'
+      );
+      return false;
+    }
+  }
+
   private async handleRoleMappingForUser(
     userId: string,
     tenantId: string,
