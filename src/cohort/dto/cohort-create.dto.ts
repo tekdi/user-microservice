@@ -114,6 +114,11 @@ export class CohortCreateDto {
   // image: string;
 
   //metadata
+  @ApiPropertyOptional({
+    type: String,
+    description: 'Metadata for the cohort',
+    default: '',
+  })
   @Expose()
   metadata: string;
 

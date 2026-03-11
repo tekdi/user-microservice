@@ -109,6 +109,10 @@ export class CohortUpdateDto {
   // image: string;
 
   //metadata
+  @ApiPropertyOptional({
+    type: String,
+    description: 'Metadata for the cohort',
+  })
   @Expose()
   metadata: string;
 
