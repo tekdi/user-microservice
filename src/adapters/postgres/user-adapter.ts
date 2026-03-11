@@ -1213,12 +1213,21 @@ export class PostgresUserService implements IServicelocator {
       const updatedData = {};
       const editIssues = {};
 
-      // Resolve logged-in user: from auth middleware (request.user) or from Bearer token when guard is not applied.
+      // Resolve logged-in user for updatedBy: from query param (middleware), request.user (guard), or Bearer token.
       let loggedInUserId: string | null = null;
-      if (request?.user?.userId) {
+      if (request?.query?.userId && typeof request.query.userId === 'string') {
+        loggedInUserId = request.query.userId.trim() || null;
+      } else if (request?.user?.userId) {
         loggedInUserId = request.user.userId;
+      } else if (request?.headers?.authorization) {
+        try {
+          const token = request.headers.authorization.replace(/^Bearer\s+/i, '').trim();
+          const decoded: { sub?: string } = token ? jwt_decode(token) : null;
+          loggedInUserId = decoded?.sub ?? null;
+        } catch {
+          loggedInUserId = null;
+        }
       }
-
       const user = await this.usersRepository.findOne({
         where: { userId: userDto.userId },
       });

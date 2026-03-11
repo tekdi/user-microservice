@@ -441,6 +441,7 @@ export class CouponService {
       contextType?: PaymentContextType;
       contextId?: string;
       isActive?: boolean;
+      search?: string;
     },
     limit: number = 50,
     offset: number = 0,
@@ -462,6 +463,13 @@ export class CouponService {
     if (filters?.isActive !== undefined) {
       query.andWhere('coupon.isActive = :isActive', {
         isActive: filters.isActive,
+      });
+    }
+
+    const searchTrimmed = filters?.search?.trim();
+    if (searchTrimmed) {
+      query.andWhere('LOWER(coupon.couponCode) LIKE LOWER(:search)', {
+        search: `%${searchTrimmed}%`,
       });
     }
 

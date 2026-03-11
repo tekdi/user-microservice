@@ -1,6 +1,7 @@
 import {
   HttpStatus,
   Injectable,
+  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { UserAdapter } from 'src/user/useradapter';
@@ -8,13 +9,8 @@ import axios from 'axios';
 import jwt_decode from 'jwt-decode';
 import APIResponse from 'src/common/responses/response';
 import { KeycloakService } from 'src/common/utils/keycloak.service';
-import { getClientIp, getClientIpDebug } from 'src/common/utils/client-ip.util';
 import { APIID } from 'src/common/utils/api-id.config';
-import { LoggerUtil } from 'src/common/logger/LoggerUtil';
 import { Response } from 'express';
-
-/** When set to 'true', log client IP forwarding details at debug level (avoid PII on default info path). */
-const LOG_CLIENT_IP_DEBUG = process.env.LOG_CLIENT_IP_DEBUG === 'true';
 
 type LoginResponse = {
   access_token: string;
@@ -29,19 +25,10 @@ export class AuthService {
     private readonly keycloakService: KeycloakService
   ) {}
 
-  async login(authDto, request: any, response: Response) {
+  async login(authDto, response: Response) {
     const apiId = APIID.LOGIN;
     const { username, password } = authDto;
-    const clientIp = getClientIp(request ?? undefined);
-
-    if (LOG_CLIENT_IP_DEBUG) {
-      const debug = getClientIpDebug(request ?? undefined);
-      LoggerUtil.debug(
-        `[Login] client IP forwarding: x-forwarded-for="${debug.xForwardedFor ?? '(none)'}" | extracted clientIp="${debug.clientIp ?? '(none)'}" | req.ip="${debug.reqIp ?? '(none)'}" | remoteAddress="${debug.remoteAddress ?? '(none)'}"`,
-        apiId
-      );
-    }
-
+   
     try {
       // Optimized: Only check user status (no tenant/role data needed for login)
       const userData = await this.useradapter
@@ -70,7 +57,7 @@ export class AuthService {
         refresh_token,
         refresh_expires_in,
         token_type,
-      } = await this.keycloakService.login(username, password, clientIp);
+      } = await this.keycloakService.login(username, password);
 
       const res = {
         access_token,
@@ -87,14 +74,11 @@ export class AuthService {
         HttpStatus.OK,
         'Auth Token fetched Successfully.'
       );
-    } catch (error: any) {
-      if (error?.response?.status === 401) {
-        throw new UnauthorizedException('Invalid username or password');
+    }  catch (error) {
+        if (error.response && error.response.status === 401) {
+        throw new NotFoundException('Invalid username or password');
       } else {
-        const errorMessage =
-          error?.response?.data?.error_description ||
-          error?.message ||
-          'Something went wrong';
+        const errorMessage = error?.message || 'Something went wrong';
         return APIResponse.error(
           response,
           apiId,

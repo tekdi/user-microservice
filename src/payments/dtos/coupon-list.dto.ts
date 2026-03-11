@@ -34,6 +34,15 @@ export class CouponListRequestDto {
   isActive?: boolean;
 
   @ApiProperty({
+    type: String,
+    required: false,
+    description: 'Search by coupon code (case-insensitive partial match)',
+  })
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @ApiProperty({
     type: Number,
     required: false,
     default: 10,
