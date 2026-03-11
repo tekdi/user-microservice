@@ -572,6 +572,35 @@ export class SsoService {
         effectiveTenantId
       );
 
+      // Handle manager role update for existing users (avoid redundant assignments)
+      if(newtonResponse.newtonData?.IS_MANAGER?.toUpperCase() === 'YES'){
+        const hasManagerRole = await this.userService.checkIfUserHasRoleInTenant(
+          userId,
+          SSO_DEFAULTS.MANAGER_ROLE_ID,
+          effectiveTenantId
+        );
+
+        if (!hasManagerRole) {
+          const tenantsData = {
+            userId: userId,
+            tenantRoleMapping: {
+              tenantId: effectiveTenantId,
+              roleId: SSO_DEFAULTS.MANAGER_ROLE_ID
+            }
+          };
+          await this.userService.assignUserToTenantAndRoll(tenantsData, userId, true);
+          this.logger.log(
+            `Manager role assigned to existing user: ${userId} in tenant: ${effectiveTenantId}`,
+            'SSO_SERVICE'
+          );
+        } else {
+          this.logger.log(
+            `User ${userId} already has manager role in tenant ${effectiveTenantId}, skipping assignment`,
+            'SSO_SERVICE'
+          );
+        }
+      }
+
       // Publish user updated event to Kafka
       this.userService.publishUserEvent('updated', userId, 'api.sso.service')
         .catch(error => {
