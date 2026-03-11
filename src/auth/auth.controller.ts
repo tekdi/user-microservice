@@ -43,12 +43,8 @@ export class AuthController {
   @UsePipes(ValidationPipe)
   @HttpCode(HttpStatus.OK)
   @ApiForbiddenResponse({ description: "Forbidden" })
-  public async login(
-    @Body() authDto: AuthDto,
-    @Req() request: any,
-    @Res() response: Response
-  ) {
-    return this.authService.login(authDto, request, response);
+  public async login(@Body() authDto: AuthDto, @Res() response: Response) {
+     return this.authService.login(authDto, response);
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.USER_AUTH))

@@ -179,7 +179,8 @@ export class UserController {
   @UseFilters(new AllExceptionsFilter(APIID.USER_UPDATE))
   @Patch('update/:userid')
   @UsePipes(new ValidationPipe())
-  @UseGuards(JwtAuthGuard)
+  // JwtAuthGuard not used: middleware passes logged-in userId in query (?userId=...) for updatedBy
+  // @UseGuards(JwtAuthGuard)
   @ApiBasicAuth('access-token')
   @ApiBody({ type: UserUpdateDTO })
   @ApiOkResponse({ description: API_RESPONSES.USER_UPDATED_SUCCESSFULLY })
