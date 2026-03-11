@@ -142,6 +142,7 @@ export const APIID = {
   PATHWAY_PRESIGNED_URL: "api.pathway.storage.presigned-url",
   PATHWAY_STORAGE_DELETE: "api.pathway.storage.files.delete",
   PATHWAY_CONFIG: "api.pathway.config",
+  PATHWAY_USER_LIST: "api.pathway.user.list",
 
   // Content Management APIs
   CONTENT_CREATE: "api.content.create",

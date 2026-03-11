@@ -11,6 +11,7 @@ import { UpdateOrderDto, BulkUpdateOrderDto } from './dto/update-pathway-order.d
 import { StringUtil } from '../common/utils/string.util';
 import { MAX_PAGINATION_LIMIT } from '../common/dto/pagination.dto';
 import { AssignPathwayDto } from './dto/assign-pathway.dto';
+import { ListPathwayUsersDto } from './dto/list-pathway-users.dto';
 import { UserPathwayHistory } from './entities/user-pathway-history.entity';
 import { User } from '../../user/entities/user-entity';
 import { LmsClientService } from '../common/services/lms-client.service';
@@ -1629,6 +1630,119 @@ export class PathwaysService {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error updating pathway order structure: ${errorMessage}`,
+        apiId
+      );
+      return APIResponse.error(
+        response,
+        apiId,
+        API_RESPONSES.INTERNAL_SERVER_ERROR,
+        errorMessage,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  /**
+   * List users related to a specific pathway with pagination, filters, and sorting.
+   */
+  async listPathwayUsers(
+    dto: ListPathwayUsersDto,
+    response: Response
+  ): Promise<Response> {
+    const apiId = APIID.PATHWAY_USER_LIST;
+    try {
+      const { pathwayId, limit, offset, filters, sort } = dto;
+
+      const queryBuilder = this.userPathwayHistoryRepository
+        .createQueryBuilder('history')
+        .innerJoinAndSelect('history.user', 'user')
+        .where('history.pathway_id = :pathwayId', { pathwayId });
+
+      // Apply Filters
+      if (filters) {
+        if (filters.name) {
+          queryBuilder.andWhere(
+            "(user.firstName ILIKE :name OR user.lastName ILIKE :name)",
+            { name: `%${filters.name}%` }
+          );
+        }
+        if (filters.email) {
+          queryBuilder.andWhere("user.email ILIKE :email", {
+            email: `%${filters.email}%`,
+          });
+        }
+        if (filters.status !== undefined) {
+          queryBuilder.andWhere("history.is_active = :isActive", {
+            isActive: filters.status,
+          });
+        }
+      }
+
+      // Selective projection to minimize data transfer (Performance Optimization)
+      queryBuilder.select([
+        'history.id',
+        'history.user_id',
+        'history.pathway_id',
+        'history.is_active',
+        'history.activated_at',
+        'user.userId',
+        'user.firstName',
+        'user.lastName',
+        'user.email',
+        'user.gender',
+      ]);
+
+      // Apply Sorting
+      if (sort && sort.column) {
+        const order = sort.order || 'DESC';
+        let sortColumn = sort.column;
+        // Map common fields to their table source
+        if (sortColumn === 'activatedAt' || sortColumn === 'activated_at') {
+          sortColumn = 'history.activated_at';
+        } else if (['firstName', 'lastName', 'email', 'gender'].includes(sortColumn)) {
+          sortColumn = `user.${sortColumn}`;
+        } else {
+          sortColumn = `history.${sortColumn}`;
+        }
+        queryBuilder.orderBy(sortColumn, order);
+      } else {
+        queryBuilder.orderBy('history.activated_at', 'DESC');
+      }
+
+      // Apply Pagination
+      const take = limit || 10;
+      const skip = offset || 0;
+      queryBuilder.skip(skip).take(take);
+
+      const [items, count] = await queryBuilder.getManyAndCount();
+
+      const result = {
+        count,
+        limit: take,
+        offset: skip,
+        items: items.map((item: any) => ({
+          userId: item.user_id,
+          firstName: item.user?.firstName,
+          lastName: item.user?.lastName,
+          email: item.user?.email,
+          gender: item.user?.gender,
+          activatedAt: item.activated_at,
+          status: item.is_active,
+        })),
+      };
+
+      return APIResponse.success(
+        response,
+        apiId,
+        result,
+        HttpStatus.OK,
+        API_RESPONSES.PATHWAY_USER_LIST_SUCCESS
+      );
+    } catch (error) {
+      const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error listing pathway users: ${errorMessage}`,
         apiId
       );
       return APIResponse.error(
