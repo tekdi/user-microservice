@@ -1710,8 +1710,9 @@ export class PathwaysService {
       }
 
       // Apply Pagination
-      const take = limit || 10;
-      const skip = offset || 0;
+      const requestedLimit = limit ?? 10;
+      const take = Math.min(Math.max(requestedLimit, 1), MAX_PAGINATION_LIMIT);
+      const skip = Math.max(offset ?? 0, 0);
       queryBuilder.skip(skip).take(take);
 
       const [items, count] = await queryBuilder.getManyAndCount();
