@@ -1653,6 +1653,19 @@ export class PathwaysService {
     try {
       const { pathwayId, limit, offset, filters, sort } = dto;
 
+      // Validate UUID format
+      const uuidRegex =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(pathwayId)) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          API_RESPONSES.UUID_VALIDATION,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
       const queryBuilder = this.userPathwayHistoryRepository
         .createQueryBuilder('history')
         .innerJoinAndSelect('history.user', 'user')
