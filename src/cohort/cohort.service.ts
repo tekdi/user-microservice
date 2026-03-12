@@ -1395,6 +1395,10 @@ export class CohortService {
         );
       }
 
+      // Step 1.2: Keep only active memberships so the same batch does not appear multiple times (reassigned rows excluded)
+      const memberStatus = (c: any) => (c.cohortmemberstatus || c.cohortMemberStatus || "").toString().toLowerCase();
+      userCohorts = userCohorts.filter((c) => memberStatus(c) === "active");
+
       // Step 1.5: Apply filters to user cohorts if provided
       if (filters && Object.keys(filters).length > 0) {
         const cleanedFilters = Object.fromEntries(
@@ -1465,10 +1469,14 @@ export class CohortService {
           if (!centerBatchMap.has(centerId)) {
             centerBatchMap.set(centerId, []);
           }
-          centerBatchMap.get(centerId).push({
-            batchId: cohort.cohortId,
-            batchName: cohort.name
-          });
+          const batches = centerBatchMap.get(centerId);
+          const alreadyAdded = batches.some((b) => b.batchId === cohort.cohortId);
+          if (!alreadyAdded) {
+            batches.push({
+              batchId: cohort.cohortId,
+              batchName: cohort.name
+            });
+          }
         } else if (cohort.type?.toLowerCase() === 'center' || cohort.type?.toLowerCase() === 'cohort') {
           // Direct center assignment
           centerId = cohort.cohortId;
