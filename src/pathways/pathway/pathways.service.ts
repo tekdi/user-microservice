@@ -1695,7 +1695,7 @@ export class PathwaysService {
       // Apply Sorting
       if (sort && sort.column) {
         const order = sort.order || 'DESC';
-        let sortColumn = sort.column;
+        let sortColumn: string = sort.column;
         // Map common fields to their table source
         if (sortColumn === 'activatedAt' || sortColumn === 'activated_at') {
           sortColumn = 'history.activated_at';

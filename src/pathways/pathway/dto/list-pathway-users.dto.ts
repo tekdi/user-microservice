@@ -1,7 +1,22 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, IsUUID, IsObject, ValidateNested, IsBoolean } from 'class-validator';
+import { IsOptional, IsString, IsUUID, IsObject, ValidateNested, IsBoolean, IsEnum } from 'class-validator';
 import { Expose, Type } from 'class-transformer';
 import { PaginationDto } from '../../common/dto/pagination.dto';
+
+export enum SortOrder {
+  ASC = 'ASC',
+  DESC = 'DESC',
+}
+
+export enum PathwayUserSortColumn {
+  ACTIVATED_AT = 'activated_at',
+  ACTIVATED_AT_CAMEL = 'activatedAt',
+  FIRST_NAME = 'firstName',
+  LAST_NAME = 'lastName',
+  EMAIL = 'email',
+  GENDER = 'gender',
+  IS_ACTIVE = 'is_active',
+}
 
 class ListPathwayUsersFiltersDto {
   @ApiPropertyOptional({
@@ -36,21 +51,22 @@ class ListPathwayUsersSortDto {
   @ApiPropertyOptional({
     description: 'Column to sort by',
     example: 'activated_at',
+    enum: PathwayUserSortColumn,
   })
   @Expose()
   @IsOptional()
-  @IsString()
-  column?: string;
+  @IsEnum(PathwayUserSortColumn)
+  column?: PathwayUserSortColumn;
 
   @ApiPropertyOptional({
     description: 'Sort order',
     example: 'DESC',
-    enum: ['ASC', 'DESC'],
+    enum: SortOrder,
   })
   @Expose()
   @IsOptional()
-  @IsString()
-  order?: 'ASC' | 'DESC';
+  @IsEnum(SortOrder)
+  order?: SortOrder;
 }
 
 export class ListPathwayUsersDto extends PaginationDto {
