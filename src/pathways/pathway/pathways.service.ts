@@ -1693,7 +1693,7 @@ export class PathwaysService {
       ]);
 
       // Apply Sorting
-      if (sort && sort.column) {
+      if (sort?.column) {
         const order = sort.order || 'DESC';
         let sortColumn: string = sort.column;
         // Map common fields to their table source
