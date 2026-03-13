@@ -1666,6 +1666,20 @@ export class PathwaysService {
         );
       }
 
+      const pathway = await this.pathwayRepository.findOne({
+        where: { id: pathwayId },
+        select: ['id'],
+      });
+      if (!pathway) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.NOT_FOUND,
+          API_RESPONSES.PATHWAY_NOT_FOUND,
+          HttpStatus.NOT_FOUND
+        );
+      }
+
       const queryBuilder = this.userPathwayHistoryRepository
         .createQueryBuilder('history')
         .innerJoinAndSelect('history.user', 'user')
@@ -1706,20 +1720,25 @@ export class PathwaysService {
       ]);
 
       // Apply Sorting
+      // Explicit column map prevents fragile fallback and silently broken sorts
+      const sortColumns: Record<string, string> = {
+        activatedAt: 'history.activated_at',
+        activated_at: 'history.activated_at',
+        firstName: 'user.firstName',
+        lastName: 'user.lastName',
+        email: 'user.email',
+        gender: 'user.gender',
+        is_active: 'history.is_active',
+      };
+      const order = sort?.order === 'ASC' ? 'ASC' : 'DESC';
+      const resolvedSortColumn = sort?.column
+        ? sortColumns[sort.column]
+        : 'history.activated_at';
+
       if (sort?.column) {
-        const order = sort.order || 'DESC';
-        let sortColumn: string = sort.column;
-        // Map common fields to their table source
-        if (sortColumn === 'activatedAt' || sortColumn === 'activated_at') {
-          sortColumn = 'history.activated_at';
-        } else if (['firstName', 'lastName', 'email', 'gender'].includes(sortColumn)) {
-          sortColumn = `user.${sortColumn}`;
-        } else {
-          sortColumn = `history.${sortColumn}`;
-        }
-        queryBuilder.orderBy(sortColumn, order);
+        queryBuilder.orderBy(resolvedSortColumn, order).addOrderBy('history.id', order);
       } else {
-        queryBuilder.orderBy('history.activated_at', 'DESC');
+        queryBuilder.orderBy('history.activated_at', 'DESC').addOrderBy('history.id', 'DESC');
       }
 
       // Apply Pagination
