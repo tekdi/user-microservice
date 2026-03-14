@@ -24,7 +24,17 @@ function getUserGroup(role: string) {
   }
 }
 
+const TOKEN_BUFFER_SECONDS = 3;
+
+let cachedAdminToken: { response: any; expiresAt: number } | null = null;
+
 async function getKeycloakAdminToken() {
+  const now = Date.now();
+
+  if (cachedAdminToken && now < cachedAdminToken.expiresAt) {
+    return cachedAdminToken.response;
+  }
+
   const axios = require("axios");
   const qs = require("qs");
   const data = qs.stringify({
@@ -46,7 +56,16 @@ async function getKeycloakAdminToken() {
   let res;
   try {
     res = await axios(config);
+
+    if (res?.data?.expires_in) {
+      const expiresInMs = (res.data.expires_in - TOKEN_BUFFER_SECONDS) * 1000;
+      cachedAdminToken = {
+        response: res,
+        expiresAt: now + expiresInMs,
+      };
+    }
   } catch (error) {
+    cachedAdminToken = null;
     LoggerUtil.error(
       `${API_RESPONSES.SERVER_ERROR}`,
       `Error: ${error.message},`

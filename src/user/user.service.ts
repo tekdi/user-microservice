@@ -1635,8 +1635,6 @@ export class UserService {
     response: Response
   ) {
     const apiId = APIID.USER_CREATE;
-    const startTime = Date.now();
-    const stepTimings = {};
 
     const userContext = {
       username: userCreateDto?.username,
@@ -1653,17 +1651,12 @@ export class UserService {
     );
 
     try {
-      // Step 1: Extract user info from JWT token
-      const jwtStartTime = Date.now();
       if (request.headers.authorization) {
         const decoded: any = jwt_decode(request.headers.authorization);
         userCreateDto.createdBy = decoded?.sub;
         userCreateDto.updatedBy = decoded?.sub;
       }
-      stepTimings['jwt_extraction'] = Date.now() - jwtStartTime;
 
-      // Step 2: Validate custom fields
-      const customFieldStartTime = Date.now();
       let customFieldError;
       if (userCreateDto.customFields && userCreateDto.customFields.length > 0) {
         customFieldError = await this.validateCustomField(
@@ -1682,10 +1675,7 @@ export class UserService {
           );
         }
       }
-      stepTimings['custom_field_validation'] = Date.now() - customFieldStartTime;
 
-      // Step 3: Validate request body and roles
-      const validationStartTime = Date.now();
       const validatedRoles: any = await this.validateRequestBody(
         userCreateDto,
         academicYearId
@@ -1710,10 +1700,7 @@ export class UserService {
           HttpStatus.BAD_REQUEST
         );
       }
-      stepTimings['request_validation'] = Date.now() - validationStartTime;
 
-      // Step 4: Validate automatic member vs cohort assignment
-      const businessLogicStartTime = Date.now();
       if (userCreateDto.automaticMember?.value === true && userCreateDto.tenantCohortRoleMapping?.[0]?.cohortIds?.length > 0) {
         LoggerUtil.error(
           `Invalid operation for ${userContext.username}: Cannot assign automatic member with cohort`,
@@ -1729,38 +1716,12 @@ export class UserService {
           HttpStatus.BAD_REQUEST
         );
       }
-      stepTimings['business_logic_validation'] = Date.now() - businessLogicStartTime;
 
-      // Step 5: Prepare username and check Keycloak
-      const keycloakCheckStartTime = Date.now();
-      userCreateDto.username = userCreateDto.username;
       const userSchema = new UserCreateDto(userCreateDto);
 
       const keycloakResponse = await getKeycloakAdminToken();
       const token = keycloakResponse.data.access_token;
-      const checkUserinKeyCloakandDb = await this.checkUserinKeyCloakandDb(
-        userCreateDto
-      );
 
-      if (checkUserinKeyCloakandDb) {
-        LoggerUtil.error(
-          `User ${userContext.username} already exists`,
-          `User with username ${userCreateDto.username} or email ${userCreateDto.email} already exists`,
-          apiId,
-          userContext.username
-        );
-        return APIResponse.error(
-          response,
-          apiId,
-          API_RESPONSES.BAD_REQUEST,
-          API_RESPONSES.USER_EXISTS,
-          HttpStatus.BAD_REQUEST
-        );
-      }
-      stepTimings['keycloak_user_check'] = Date.now() - keycloakCheckStartTime;
-
-      // Step 6: Create user in Keycloak
-      const keycloakCreateStartTime = Date.now();
       LoggerUtil.log(
         `Creating user ${userContext.username} in Keycloak`,
         apiId,
@@ -1769,10 +1730,7 @@ export class UserService {
 
       const resKeycloak = await createUserInKeyCloak(userSchema, token, validatedRoles[0]?.title)
 
-      // Capture Keycloak creation timing immediately after the call
-      stepTimings['keycloak_user_creation'] = Date.now() - keycloakCreateStartTime;
 
-      // Handle the case where createUserInKeyCloak returns a string (error)
       if (typeof resKeycloak === 'string') {
         LoggerUtil.error(
           `Keycloak user creation failed for ${userContext.username}`,
@@ -1830,8 +1788,6 @@ export class UserService {
 
       userCreateDto.userId = resKeycloak.userId;
 
-      // Step 7: Create user in database
-      const dbCreateStartTime = Date.now();
       LoggerUtil.log(
         `Creating user ${userContext.username} in database`,
         apiId,
@@ -1844,7 +1800,6 @@ export class UserService {
         academicYearId,
         response
       );
-      stepTimings['database_user_creation'] = Date.now() - dbCreateStartTime;
 
       LoggerUtil.log(
         `User ${userContext.username} created successfully in database`,
@@ -1852,8 +1807,6 @@ export class UserService {
         userContext.username
       );
 
-      // Step 8: Handle custom fields
-      const customFieldsStartTime = Date.now();
       const createFailures = [];
       if (
         result &&
@@ -1917,24 +1870,14 @@ export class UserService {
           }
         }
       }
-      stepTimings['custom_fields_processing'] = Date.now() - customFieldsStartTime;
 
-      // Step 9: Log performance metrics
-      const totalTime = Date.now() - startTime;
       LoggerUtil.log(
         `User ${userContext.username} created successfully with ID: ${result.userId}`,
         apiId,
         userContext.username
       );
 
-      // Log performance breakdown
-      LoggerUtil.log(
-        `Performance breakdown for user creation (${userContext.username}): Total: ${totalTime}ms | JWT: ${stepTimings['jwt_extraction']}ms | Custom Fields Validation: ${stepTimings['custom_field_validation']}ms | Request Validation: ${stepTimings['request_validation']}ms | Business Logic: ${stepTimings['business_logic_validation']}ms | Keycloak Check: ${stepTimings['keycloak_user_check']}ms | Keycloak Creation: ${stepTimings['keycloak_user_creation']}ms | Database Creation: ${stepTimings['database_user_creation']}ms | Custom Fields Processing: ${stepTimings['custom_fields_processing']}ms`,
-        apiId,
-        userContext.username
-      );
 
-      // Send response to the client
       APIResponse.success(
         response,
         apiId,
@@ -2038,26 +1981,14 @@ export class UserService {
           );
         }
 
-        // check academic year exists for tenant
-        const checkAcadmicYear =
-          await this.academicYearService.getActiveAcademicYear(
-            academicYearId,
-            tenantId
-          );
-
-        if (!checkAcadmicYear && cohortIds) {
-          errorCollector.addError(API_RESPONSES.ACADEMIC_YEAR_NOT_FOUND);
-        }
-
         if (duplicateTenet.includes(tenantId)) {
           errorCollector.addError(API_RESPONSES.DUPLICAT_TENANTID);
         }
 
-        // if ((tenantId && !roleId) || (!tenantId && roleId)) {
-        //   errorCollector.addError(API_RESPONSES.INVALID_PARAMETERS);
-        // }
-
-        const [tenantExists, notExistCohort, roleExists] = await Promise.all([
+        const [checkAcadmicYear, tenantExists, notExistCohort, roleExists] = await Promise.all([
+          academicYearId
+            ? this.academicYearService.getActiveAcademicYear(academicYearId, tenantId)
+            : Promise.resolve(null),
           tenantId
             ? this.tenantsRepository.find({ where: { tenantId } })
             : Promise.resolve([]),
@@ -2068,6 +1999,10 @@ export class UserService {
             ? this.roleRepository.find({ where: { roleId } })
             : Promise.resolve([]),
         ]);
+
+        if (!checkAcadmicYear && cohortIds) {
+          errorCollector.addError(API_RESPONSES.ACADEMIC_YEAR_NOT_FOUND);
+        }
 
         if (tenantExists.length === 0) {
           errorCollector.addError(`Tenant Id '${tenantId}' does not exist.`);
@@ -2121,8 +2056,6 @@ export class UserService {
 
     return notExistCohort.length > 0 ? notExistCohort : [];
   }
-
-
   // Can be Implemented after we know what are the unique entities
   async checkUserinKeyCloakandDb(userDto) {
     const keycloakResponse = await getKeycloakAdminToken();
@@ -2304,11 +2237,8 @@ export class UserService {
     createdBy: string,
     shouldUpdateIfRoot: boolean
   ): Promise<void> {
-    const existingMapping = await this.userRoleMappingRepository.findOne({
-      where: { userId }
-    });
-
-    if (!shouldUpdateIfRoot || !existingMapping) {
+ 
+    if (!shouldUpdateIfRoot) {
       await this.userRoleMappingRepository.save({
         userId,
         tenantId,
@@ -2317,7 +2247,9 @@ export class UserService {
       });
       return;
     }
-
+    const existingMapping = await this.userRoleMappingRepository.findOne({
+      where: { userId }
+    });
     const isRoot = await this.isRootTenant(existingMapping.tenantId);
     
     if (isRoot) {
@@ -2343,11 +2275,9 @@ export class UserService {
     shouldUpdateIfRoot: boolean,
     userTenantStatus?: string
   ): Promise<void> {
-    const existingMapping = await this.userTenantMappingRepository.findOne({
-      where: { userId }
-    });
+   
 
-    if (!shouldUpdateIfRoot || !existingMapping) {
+    if (!shouldUpdateIfRoot) {
       await this.userTenantMappingRepository.save({
         userId,
         tenantId,
@@ -2356,7 +2286,10 @@ export class UserService {
       });
       return;
     }
-
+    console.log("Shubham TEst")
+    const existingMapping = await this.userTenantMappingRepository.findOne({
+      where: { userId }
+    });
     const isRoot = await this.isRootTenant(existingMapping.tenantId);
     
     if (isRoot) {
@@ -2700,120 +2633,101 @@ export class UserService {
   }
 
   public async validateCustomField(userCreateDto, response, apiId) {
-    // Taking Consideration of One tenant id
-    const tenantId = userCreateDto.tenantCohortRoleMapping[0]?.tenantId;
-    const fieldValues = userCreateDto ? userCreateDto.customFields : [];
-    const encounteredKeys = [];
+    const fieldValues = userCreateDto?.customFields || [];
+
+    const encounteredKeys = new Set();
     const invalidateFields = [];
     const duplicateFieldKeys = [];
-    let error = "";
-    for (const fieldsData of fieldValues) {
-      const fieldId = fieldsData["fieldId"];
-      const getFieldDetails: any = await this.fieldsService.getFieldByIds(
-        fieldId
-      );
+
+    const fieldDetailsResults = await Promise.all(
+      fieldValues.map(fieldsData => this.fieldsService.getFieldByIds(fieldsData.fieldId))
+    );
+
+    const validationPromises = fieldValues.map(async (fieldsData, index) => {
+      const fieldId = fieldsData.fieldId;
+      const getFieldDetails: any = fieldDetailsResults[index];
 
       if (getFieldDetails == null) {
-        return API_RESPONSES.FIELD_NOT_FOUND;
+        return { error: API_RESPONSES.FIELD_NOT_FOUND };
       }
 
-      if (encounteredKeys.includes(fieldId)) {
-        duplicateFieldKeys.push(`${fieldId} - ${getFieldDetails["name"]}`);
+      if (encounteredKeys.has(fieldId)) {
+        duplicateFieldKeys.push(`${fieldId} - ${getFieldDetails.name}`);
       } else {
-        encounteredKeys.push(fieldId);
+        encounteredKeys.add(fieldId);
       }
-      const fieldAttributes = getFieldDetails?.fieldAttributes || {};
-      // getFieldDetails["fieldAttributes"] = fieldAttributes[tenantId] || fieldAttributes["default"];
-      getFieldDetails["fieldAttributes"] = fieldAttributes;
+
+      getFieldDetails.fieldAttributes = getFieldDetails?.fieldAttributes || {};
 
       if (
-        (getFieldDetails.type == "checkbox" ||
-          getFieldDetails.type == "drop_down" ||
-          getFieldDetails.type == "radio") &&
-        getFieldDetails?.sourceDetails?.source == "table"
+        ["checkbox", "drop_down", "radio"].includes(getFieldDetails.type) &&
+        getFieldDetails?.sourceDetails?.source === "table"
       ) {
-        let fieldValue = fieldsData["value"][0];
+        const fieldValue = fieldsData.value[0];
         const getOption = await this.fieldsService.findDynamicOptions(
           getFieldDetails.sourceDetails.table,
-          `"${getFieldDetails?.sourceDetails?.table}_id"='${fieldValue}'`,
+          `"${getFieldDetails?.sourceDetails?.table}_id"='${fieldValue}'`
         );
-        if (!getOption?.length) {
-          return APIResponse.error(
-            response,
-            apiId,
-            API_RESPONSES.BAD_REQUEST,
-            API_RESPONSES.UUID_VALIDATION, // which uuid is needed ?
-            HttpStatus.BAD_REQUEST
-          );
-        }
-        const transformedFieldParams = {
-          options: getOption.flatMap((param) => {
-            return Object.keys(param)
-              .filter((key) => key.endsWith("_id"))
-              .map((idKey) => {
-                const nameKey = idKey.replace("_id", "_name");
-                return {
-                  value: param[idKey],
-                  label: param[nameKey] || "Unknown",
-                };
-              });
-          }),
-        };
 
-        getFieldDetails["fieldParams"] = transformedFieldParams;
-        // getFieldDetails['fieldParams'] = getOption
+        if (!getOption?.length) {
+          return { error: API_RESPONSES.UUID_VALIDATION };
+        }
+
+        getFieldDetails.fieldParams = {
+          options: getOption.flatMap((param) =>
+            Object.keys(param)
+              .filter((key) => key.endsWith("_id"))
+              .map((idKey) => ({
+                value: param[idKey],
+                label: param[idKey.replace("_id", "_name")] || "Unknown",
+              }))
+          ),
+        };
       } else {
-        getFieldDetails["fieldParams"] = getFieldDetails?.fieldParams || {};
+        getFieldDetails.fieldParams = getFieldDetails?.fieldParams || {};
       }
+
       const checkValidation = this.fieldsService.validateFieldValue(
         getFieldDetails,
-        fieldsData["value"]
+        fieldsData.value
       );
 
       if (typeof checkValidation === "object" && "error" in checkValidation) {
         invalidateFields.push(
-          `${fieldId}: ${getFieldDetails["name"]} - ${checkValidation?.error?.message}`
+          `${fieldId}: ${getFieldDetails.name} - ${checkValidation?.error?.message}`
         );
       }
+
+      return { success: true };
+    });
+
+    const validationResults = await Promise.all(validationPromises);
+
+    for (const res of validationResults) {
+      if (res?.error) return res.error;
     }
 
-    //Validation for duplicate fields
     if (duplicateFieldKeys.length > 0) {
-      error = API_RESPONSES.DUPLICATE_FIELD(duplicateFieldKeys);
-      return error;
+      return API_RESPONSES.DUPLICATE_FIELD(duplicateFieldKeys);
     }
 
-    //Validation for fields values
     if (invalidateFields.length > 0) {
-      error = API_RESPONSES.INVALID_FIELD(invalidateFields);
-      return error;
+      return API_RESPONSES.INVALID_FIELD(invalidateFields);
     }
 
-    //Verifying whether these fields correspond to their respective roles.
-    const roleIds =
-      userCreateDto && userCreateDto.tenantCohortRoleMapping
-        ? userCreateDto.tenantCohortRoleMapping.map(
-          (userRole) => userRole.roleId
-        )
-        : [];
+    const roleIds = userCreateDto?.tenantCohortRoleMapping?.map((userRole) => userRole.roleId) || [];
 
-    let contextType;
-    if (roleIds) {
+    let contextType = "";
+    if (roleIds.length > 0) {
       const getRoleName = await this.roleRepository.find({
         where: { roleId: In(roleIds) },
         select: ["title"],
       });
-      contextType = getRoleName
-        .map((role) => role?.title.toUpperCase())
-        .join(", ");
+      contextType = getRoleName.map((role) => role?.title.toUpperCase()).join(", ");
     }
 
     const context = "USERS";
-    const getFieldIds = await this.fieldsService.getFieldIds(
-      context,
-      contextType
-    );
-
+    const getFieldIds = await this.fieldsService.getFieldIds(context, contextType);
     const validFieldIds = new Set(getFieldIds.map((field) => field.fieldId));
 
     const invalidFieldIds = userCreateDto.customFields
@@ -2821,16 +2735,13 @@ export class UserService {
       .map((fieldValue) => fieldValue.fieldId);
 
     if (invalidFieldIds.length > 0) {
-      // Log the invalid field validation error with role context
       LoggerUtil.error(
         `Invalid custom fields provided for role`,
         `Role: ${contextType || 'Unknown'}, Invalid Field IDs: ${invalidFieldIds.join(", ")}, User: ${userCreateDto.username || 'Unknown'}`,
         apiId,
         userCreateDto.username
       );
-      return `The following fields are not valid for this user: ${invalidFieldIds.join(
-        ", "
-      )}.`;
+      return `The following fields are not valid for this user: ${invalidFieldIds.join(", ")}.`;
     }
   }
 
