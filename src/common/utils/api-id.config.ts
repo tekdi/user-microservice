@@ -67,6 +67,7 @@ export const APIID = {
   COHORT_READ: "api.cohort.read",
   COHORT_UPDATE: "api.cohort.update",
   COHORT_DELETE: "api.cohort.delete",
+  COHORT_BATCH_EVENT_CRITERIA: "api.cohort.batchEventCriteria",
 
   // Tenant Assignment APIs
   ASSIGN_TENANT_CREATE: "api.assigntenant.create",

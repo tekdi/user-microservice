@@ -94,11 +94,20 @@ export class PostgresCohortService {
     // }
 
     try {
-      const cohorts = await this.cohortRepository.find({
-        where: {
+      const cohorts = await this.cohortRepository
+        .createQueryBuilder('cohort')
+        .innerJoin(
+          CohortAcademicYear,
+          'cay',
+          'cohort.cohortId = cay.cohortId'
+        )
+        .where('cohort.cohortId = :cohortId', {
           cohortId: requiredData.cohortId,
-        },
-      });
+        })
+        .andWhere('cay.academicYearId = :academicYearId', {
+          academicYearId: requiredData.academicYearId,
+        })
+        .getMany();
 
       if (!cohorts.length) {
         return APIResponse.error(
@@ -132,11 +141,114 @@ export class PostgresCohortService {
     }
   }
 
+  private parseEventCriteriaFromMetadata(metadata: string | null): number {
+    if (!metadata) return 1;
+    try {
+      const parsed = JSON.parse(metadata);
+      const criteria = parsed.eventCriteria;
+      if (typeof criteria === 'number' && criteria >= 0) {
+        return criteria;
+      }
+      return 1;
+    } catch (e) {
+      LoggerUtil.error(
+        'Error parsing cohort metadata',
+        e.message,
+        'PostgresCohortService.parseEventCriteriaFromMetadata'
+      );
+      return 1;
+    }
+  }
+
+  public async getBatchEventCriteria(
+    tenantId: string,
+    academicYearId: string,
+    cohortIds: string[],
+    res
+  ) {
+    const apiId = APIID.COHORT_BATCH_EVENT_CRITERIA;
+    try {
+      if (!Array.isArray(cohortIds) || cohortIds.length === 0) {
+        return APIResponse.success(
+          res,
+          apiId,
+          {},
+          HttpStatus.OK,
+          'No cohort IDs provided'
+        );
+      }
+
+      const invalidCohortIds = cohortIds.filter((id) => !isUUID(id));
+      if (invalidCohortIds.length > 0) {
+        return APIResponse.error(
+          res,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          `Invalid cohortIds: ${invalidCohortIds.join(', ')}`,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      const cohorts = await this.cohortRepository
+        .createQueryBuilder('cohort')
+        .select(['cohort.cohortId', 'cohort.metadata'])
+        .innerJoin(
+          CohortAcademicYear,
+          'cay',
+          'cohort.cohortId = cay.cohortId'
+        )
+        .where('cohort.cohortId IN (:...cohortIds)', { cohortIds })
+        .andWhere('cohort.tenantId = :tenantId', { tenantId })
+        .andWhere('cay.academicYearId = :academicYearId', { academicYearId })
+        .getMany();
+
+      const result: Record<string, number> = {};
+      const foundIds = new Set();
+
+      cohorts.forEach((cohort) => {
+        result[cohort.cohortId] = this.parseEventCriteriaFromMetadata(
+          cohort.metadata
+        );
+        foundIds.add(cohort.cohortId);
+      });
+
+      cohortIds.forEach((id) => {
+        if (!foundIds.has(id)) {
+          result[id] = 1;
+        }
+      });
+
+      const notFoundIds = cohortIds.filter((id) => !foundIds.has(id));
+
+      return APIResponse.success(
+        res,
+        apiId,
+        { criteriaByCohortId: result, notFoundIds },
+        HttpStatus.OK,
+        'Batch event criteria fetched successfully'
+      );
+    } catch (error) {
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${error.message}`,
+        apiId
+      );
+      return APIResponse.error(
+        res,
+        apiId,
+        API_RESPONSES.SERVER_ERROR,
+        error.message,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
   private async handleCohortDataResponse(cohorts, res, apiId) {
     const result = { cohortData: [] };
 
     for (const data of cohorts) {
-      const cohortData = {
+      const parsedCriteria = this.parseEventCriteriaFromMetadata(data.metadata);
+      const cohortData: any = {
         cohortId: data.cohortId,
         name: data.name,
         parentId: data.parentId,
@@ -144,6 +256,9 @@ export class PostgresCohortService {
         status: data.status,
         customField: await this.getCohortCustomFieldDetails(data.cohortId),
       };
+      
+      cohortData.eventCriteria = parsedCriteria;
+      
       result.cohortData.push(cohortData);
     }
     LoggerUtil.log(API_RESPONSES.COHORT_DATA_RESPONSE);
@@ -160,7 +275,8 @@ export class PostgresCohortService {
     const resultDataList = [];
 
     for (const cohort of cohorts) {
-      const resultData = {
+      const parsedCriteria = this.parseEventCriteriaFromMetadata(cohort.metadata);
+      const resultData: any = {
         cohortName: cohort.name,
         cohortId: cohort.cohortId,
         parentID: cohort.parentId,
@@ -174,6 +290,9 @@ export class PostgresCohortService {
           requiredData.customField
         ),
       };
+
+      resultData.eventCriteria = parsedCriteria;
+
       resultDataList.push(resultData);
 
       LoggerUtil.log(API_RESPONSES.CHILD_DATA);

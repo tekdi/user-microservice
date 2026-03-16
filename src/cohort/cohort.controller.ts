@@ -255,4 +255,47 @@ export class CohortController {
       .buildCohortAdapter()
       .getCohortHierarchyData(requiredData, response);
   }
+
+  @UseFilters(new AllExceptionsFilter(APIID.COHORT_BATCH_EVENT_CRITERIA))
+  @Post('/batch-event-criteria')
+  @ApiOkResponse({ description: 'Batch event criteria fetched successfully' })
+  @ApiBadRequestResponse({ description: 'Bad Request' })
+  @ApiInternalServerErrorResponse({ description: 'Internal Server Error.' })
+  @ApiHeader({
+    name: 'tenantid',
+  })
+  @ApiHeader({
+    name: 'academicyearid',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        cohortIds: {
+          type: 'array',
+          items: { type: 'string' },
+        },
+      },
+    },
+  })
+  public async getBatchEventCriteria(
+    @Headers() headers,
+    @Body() body: { cohortIds: string[] },
+    @Res() response: Response
+  ) {
+    const tenantId = headers['tenantid'];
+    const academicYearId = headers['academicyearid'];
+
+    if (!tenantId || !isUUID(tenantId)) {
+      throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
+    }
+    if (!academicYearId || !isUUID(academicYearId)) {
+      throw new BadRequestException(API_RESPONSES.ACADEMICYEARID_VALIDATION);
+    }
+
+    const { cohortIds } = body;
+    return await this.cohortAdapter
+      .buildCohortAdapter()
+      .getBatchEventCriteria(tenantId, academicYearId, cohortIds, response);
+  }
 }
