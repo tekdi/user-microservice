@@ -20,22 +20,13 @@ export enum PathwayUserSortColumn {
 
 class ListPathwayUsersFiltersDto {
   @ApiPropertyOptional({
-    description: 'Filter by user name (partial match on firstName or lastName)',
+    description: 'Free-text search (matches against firstName, lastName, or email)',
     example: 'John',
   })
   @Expose()
   @IsOptional()
   @IsString()
-  name?: string;
-
-  @ApiPropertyOptional({
-    description: 'Filter by email (partial match)',
-    example: 'john@example.com',
-  })
-  @Expose()
-  @IsOptional()
-  @IsString()
-  email?: string;
+  search?: string;
 
   @ApiPropertyOptional({
     description: 'Filter by active status in pathway',

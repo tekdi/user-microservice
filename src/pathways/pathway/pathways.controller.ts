@@ -541,7 +541,6 @@ export class PathwaysController {
     summary: "List users related to a specific pathway",
     description: "Retrieves a paginated list of users associated with a pathway, with optional filters and sorting.",
   })
-  @ApiHeader({ name: "Authorization", required: true })
   @ApiHeader({ name: "tenantid", required: true })
   @ApiBody({ type: ListPathwayUsersDto })
   @ApiResponse({

@@ -1687,16 +1687,11 @@ export class PathwaysService {
 
       // Apply Filters
       if (filters) {
-        if (filters.name) {
+        if (filters.search) {
           queryBuilder.andWhere(
-            "(user.firstName ILIKE :name OR user.lastName ILIKE :name)",
-            { name: `%${filters.name}%` }
+            "(user.firstName ILIKE :search OR user.lastName ILIKE :search OR user.email ILIKE :search)",
+            { search: `%${filters.search}%` }
           );
-        }
-        if (filters.email) {
-          queryBuilder.andWhere("user.email ILIKE :email", {
-            email: `%${filters.email}%`,
-          });
         }
         if (filters.status !== undefined) {
           queryBuilder.andWhere("history.is_active = :isActive", {
