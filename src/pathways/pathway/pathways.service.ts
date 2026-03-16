@@ -11,6 +11,7 @@ import { UpdateOrderDto, BulkUpdateOrderDto } from './dto/update-pathway-order.d
 import { StringUtil } from '../common/utils/string.util';
 import { MAX_PAGINATION_LIMIT } from '../common/dto/pagination.dto';
 import { AssignPathwayDto } from './dto/assign-pathway.dto';
+import { ListPathwayUsersDto } from './dto/list-pathway-users.dto';
 import { UserPathwayHistory } from './entities/user-pathway-history.entity';
 import { User } from '../../user/entities/user-entity';
 import { LmsClientService } from '../common/services/lms-client.service';
@@ -1629,6 +1630,146 @@ export class PathwaysService {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
         `Error updating pathway order structure: ${errorMessage}`,
+        apiId
+      );
+      return APIResponse.error(
+        response,
+        apiId,
+        API_RESPONSES.INTERNAL_SERVER_ERROR,
+        errorMessage,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  /**
+   * List users related to a specific pathway with pagination, filters, and sorting.
+   */
+  async listPathwayUsers(
+    dto: ListPathwayUsersDto,
+    response: Response
+  ): Promise<Response> {
+    const apiId = APIID.PATHWAY_USER_LIST;
+    try {
+      const { pathwayId, limit, offset, filters, sort } = dto;
+
+      // Validate UUID format
+      const uuidRegex =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(pathwayId)) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          API_RESPONSES.UUID_VALIDATION,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      const pathway = await this.pathwayRepository.findOne({
+        where: { id: pathwayId },
+        select: ['id'],
+      });
+      if (!pathway) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.NOT_FOUND,
+          API_RESPONSES.PATHWAY_NOT_FOUND,
+          HttpStatus.NOT_FOUND
+        );
+      }
+
+      const queryBuilder = this.userPathwayHistoryRepository
+        .createQueryBuilder('history')
+        .innerJoinAndSelect('history.user', 'user')
+        .where('history.pathway_id = :pathwayId', { pathwayId });
+
+      // Apply Filters
+      if (filters) {
+        if (filters.search) {
+          queryBuilder.andWhere(
+            "(user.firstName ILIKE :search OR user.lastName ILIKE :search OR user.email ILIKE :search)",
+            { search: `%${filters.search}%` }
+          );
+        }
+        if (filters.status !== undefined) {
+          queryBuilder.andWhere("history.is_active = :isActive", {
+            isActive: filters.status,
+          });
+        }
+      }
+
+      // Selective projection to minimize data transfer (Performance Optimization)
+      queryBuilder.select([
+        'history.id',
+        'history.user_id',
+        'history.pathway_id',
+        'history.is_active',
+        'history.activated_at',
+        'user.userId',
+        'user.firstName',
+        'user.lastName',
+        'user.email',
+        'user.gender',
+      ]);
+
+      // Apply Sorting
+      // Explicit column map prevents fragile fallback and silently broken sorts
+      const sortColumns: Record<string, string> = {
+        activatedAt: 'history.activated_at',
+        firstName: 'user.firstName',
+        lastName: 'user.lastName',
+        email: 'user.email',
+        gender: 'user.gender',
+        isActive: 'history.is_active',
+      };
+      const order = sort?.order === 'ASC' ? 'ASC' : 'DESC';
+      const resolvedSortColumn = sort?.column
+        ? sortColumns[sort.column]
+        : 'history.activated_at';
+
+      if (sort?.column) {
+        queryBuilder.orderBy(resolvedSortColumn, order).addOrderBy('history.id', order);
+      } else {
+        queryBuilder.orderBy('history.activated_at', 'DESC').addOrderBy('history.id', 'DESC');
+      }
+
+      // Apply Pagination
+      const requestedLimit = limit ?? 10;
+      const take = Math.min(Math.max(requestedLimit, 1), MAX_PAGINATION_LIMIT);
+      const skip = Math.max(offset ?? 0, 0);
+      queryBuilder.skip(skip).take(take);
+
+      const [items, count] = await queryBuilder.getManyAndCount();
+
+      const result = {
+        count,
+        limit: take,
+        offset: skip,
+        items: items.map((item: any) => ({
+          userId: item.user_id,
+          firstName: item.user?.firstName,
+          lastName: item.user?.lastName,
+          email: item.user?.email,
+          gender: item.user?.gender,
+          activatedAt: item.activated_at,
+          status: item.is_active,
+        })),
+      };
+
+      return APIResponse.success(
+        response,
+        apiId,
+        result,
+        HttpStatus.OK,
+        API_RESPONSES.PATHWAY_USER_LIST_SUCCESS
+      );
+    } catch (error) {
+      const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error listing pathway users: ${errorMessage}`,
         apiId
       );
       return APIResponse.error(

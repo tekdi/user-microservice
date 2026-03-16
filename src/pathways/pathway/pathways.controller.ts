@@ -41,6 +41,7 @@ import { PathwayPresignedUrlDto } from './dto/presigned-url.dto';
 import { AssignPathwayDto } from './dto/assign-pathway.dto';
 import { BulkUpdateOrderDto } from './dto/update-pathway-order.dto';
 import { ActivePathwayDto } from './dto/active-pathway.dto';
+import { ListPathwayUsersDto } from './dto/list-pathway-users.dto';
 import { Response, Request } from 'express';
 import { JwtAuthGuard } from 'src/common/guards/keycloak.guard';
 import { InterestsService } from '../interests/interests.service';
@@ -531,7 +532,33 @@ export class PathwaysController {
     return this.pathwaysService.assignPathway(assignPathwayDto, tenantId, orgId, response);
   }
 
-
-
+  /**
+   * List users related to a specific pathway
+   */
+  @Post("list-pathway-users")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: "List users related to a specific pathway",
+    description: "Retrieves a paginated list of users associated with a pathway, with optional filters and sorting.",
+  })
+  @ApiHeader({ name: "tenantid", required: true })
+  @ApiBody({ type: ListPathwayUsersDto })
+  @ApiResponse({
+    status: 200,
+    description: "List of pathway users retrieved successfully",
+  })
+  @ApiBadRequestResponse({ description: "Bad Request" })
+  @ApiInternalServerErrorResponse({ description: "Internal Server Error" })
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  async listPathwayUsers(
+    @Body() listPathwayUsersDto: ListPathwayUsersDto,
+    @Headers("tenantid") tenantId: string,
+    @Res() response: Response
+  ): Promise<Response> {
+    if (!tenantId || !isUUID(tenantId)) {
+      throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
+    }
+    return this.pathwaysService.listPathwayUsers(listPathwayUsersDto, response);
+  }
 
 }
