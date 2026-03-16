@@ -1650,6 +1650,7 @@ export class UserService {
       userContext.username
     );
 
+    const totalStart = Date.now();
     try {
       if (request.headers.authorization) {
         const decoded: any = jwt_decode(request.headers.authorization);
@@ -1659,11 +1660,13 @@ export class UserService {
 
       let customFieldError;
       if (userCreateDto.customFields && userCreateDto.customFields.length > 0) {
+        const cfStart = Date.now();
         customFieldError = await this.validateCustomField(
           userCreateDto,
           response,
           apiId
         );
+        LoggerUtil.log(`[TIMING] validateCustomField: ${Date.now() - cfStart}ms`, apiId);
 
         if (customFieldError) {
           return APIResponse.error(
@@ -1676,10 +1679,12 @@ export class UserService {
         }
       }
 
+      const rbStart = Date.now();
       const validatedRoles: any = await this.validateRequestBody(
         userCreateDto,
         academicYearId
       );
+      LoggerUtil.log(`[TIMING] validateRequestBody: ${Date.now() - rbStart}ms`, apiId);
 
       // check if roles are invalid and academic year is provided
       if (
@@ -1719,8 +1724,10 @@ export class UserService {
 
       const userSchema = new UserCreateDto(userCreateDto);
 
+      const kcTokenStart = Date.now();
       const keycloakResponse = await getKeycloakAdminToken();
       const token = keycloakResponse.data.access_token;
+      LoggerUtil.log(`[TIMING] getKeycloakAdminToken: ${Date.now() - kcTokenStart}ms`, apiId);
 
       LoggerUtil.log(
         `Creating user ${userContext.username} in Keycloak`,
@@ -1728,8 +1735,11 @@ export class UserService {
         userContext.username
       );
 
+      const kcCreateStart = Date.now();
       const resKeycloak = await createUserInKeyCloak(userSchema, token, validatedRoles[0]?.title)
 
+
+      LoggerUtil.log(`[TIMING] createUserInKeyCloak: ${Date.now() - kcCreateStart}ms`, apiId);
 
       if (typeof resKeycloak === 'string') {
         LoggerUtil.error(
@@ -1794,12 +1804,14 @@ export class UserService {
         userContext.username
       );
 
+      const dbStart = Date.now();
       const result = await this.createUserInDatabase(
         request,
         userCreateDto,
         academicYearId,
         response
       );
+      LoggerUtil.log(`[TIMING] createUserInDatabase: ${Date.now() - dbStart}ms`, apiId);
 
       LoggerUtil.log(
         `User ${userContext.username} created successfully in database`,
@@ -1837,6 +1849,7 @@ export class UserService {
             {}
           );
 
+          const cfInsertStart = Date.now();
           for (const fieldValues of userCreateDto.customFields) {
 
             const fieldData = {
@@ -1844,7 +1857,6 @@ export class UserService {
               value: fieldValues["value"],
             };
 
-            // Prepare additional data for FieldValues table
             const additionalData = {
               tenantId: userCreateDto.tenantCohortRoleMapping?.[0]?.tenantId || null,
               contextType: "USER",
@@ -1858,18 +1870,12 @@ export class UserService {
               customFieldAttributes[fieldData.fieldId],
               additionalData
             );
-
-            // if (res.correctValue) {
-            //   if (!result["customFields"]) result["customFields"] = [];
-            //   result["customFields"].push(res);
-            // } else {
-            //   createFailures.push(
-            //     `${fieldData.fieldId}: ${res?.valueIssue} - ${res.fieldName}`
-            //   );
-            // }
           }
+          LoggerUtil.log(`[TIMING] customFieldsInsert: ${Date.now() - cfInsertStart}ms`, apiId);
         }
       }
+
+      LoggerUtil.log(`[TIMING] TOTAL createUser: ${Date.now() - totalStart}ms`, apiId);
 
       LoggerUtil.log(
         `User ${userContext.username} created successfully with ID: ${result.userId}`,
