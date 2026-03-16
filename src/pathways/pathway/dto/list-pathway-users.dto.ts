@@ -9,13 +9,12 @@ export enum SortOrder {
 }
 
 export enum PathwayUserSortColumn {
-  ACTIVATED_AT = 'activated_at',
-  ACTIVATED_AT_CAMEL = 'activatedAt',
+  ACTIVATED_AT = 'activatedAt',
   FIRST_NAME = 'firstName',
   LAST_NAME = 'lastName',
   EMAIL = 'email',
   GENDER = 'gender',
-  IS_ACTIVE = 'is_active',
+  IS_ACTIVE = 'isActive',
 }
 
 class ListPathwayUsersFiltersDto {

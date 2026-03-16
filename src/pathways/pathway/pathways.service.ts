@@ -1718,12 +1718,11 @@ export class PathwaysService {
       // Explicit column map prevents fragile fallback and silently broken sorts
       const sortColumns: Record<string, string> = {
         activatedAt: 'history.activated_at',
-        activated_at: 'history.activated_at',
         firstName: 'user.firstName',
         lastName: 'user.lastName',
         email: 'user.email',
         gender: 'user.gender',
-        is_active: 'history.is_active',
+        isActive: 'history.is_active',
       };
       const order = sort?.order === 'ASC' ? 'ASC' : 'DESC';
       const resolvedSortColumn = sort?.column
