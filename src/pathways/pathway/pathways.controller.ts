@@ -548,7 +548,6 @@ export class PathwaysController {
     description: "List of pathway users retrieved successfully",
   })
   @ApiBadRequestResponse({ description: "Bad Request" })
-  @ApiUnauthorizedResponse({ description: "Unauthorized" })
   @ApiInternalServerErrorResponse({ description: "Internal Server Error" })
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   async listPathwayUsers(
