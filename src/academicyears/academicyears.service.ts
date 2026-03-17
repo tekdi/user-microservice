@@ -167,7 +167,7 @@ export class AcademicYearService {
   async getAcademicYearById(id, response) {
     const apiId = APIID.ACADEMICYEAR_GET;
     try {
-      const academicYearResult = await this.academicYearRespository.findOne({ where: { id: id } });
+      const academicYearResult = await this.academicYearRespository.findOne({ where: { id } });
       if (!academicYearResult) {
         return APIResponse.error(
           response,
