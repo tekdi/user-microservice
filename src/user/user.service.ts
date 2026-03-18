@@ -2292,7 +2292,6 @@ export class UserService {
       });
       return;
     }
-    console.log("Shubham TEst")
     const existingMapping = await this.userTenantMappingRepository.findOne({
       where: { userId }
     });

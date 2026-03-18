@@ -314,7 +314,6 @@ export class SsoService {
         for (const [fieldLabel, fieldValue] of Object.entries(newtonResponse.newtonData)) {
           if (fieldValue) {
             const fieldId = await this.fieldsService.getFieldIdByLabel(fieldLabel, ssoRequestDto.tenantId);
-            console.log("fieldId", fieldId);
             if (fieldId) {
               await this.fieldsService.updateUserCustomFields(
                 createdUser.userId, 

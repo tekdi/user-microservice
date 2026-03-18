@@ -237,7 +237,6 @@ export class UserTenantMappingService {
 
       return apiResponse;
     } catch (error) {
-      console.log('error', error);
       const errorMessage = error?.message || "Something went wrong";
       LoggerUtil.error(
         API_RESPONSES.ERROR_IN_USER_TENANT_MAPPING(assignTenantMappingDto.userId),
@@ -407,7 +406,6 @@ export class UserTenantMappingService {
 
       return apiResponse;
     } catch (error) {
-      console.log('error', error);
       const errorMessage = error?.message || "Something went wrong";
       LoggerUtil.error(
         API_RESPONSES.ERROR_IN_UPDATE_TENANT_STATUS(userId, tenantId),
