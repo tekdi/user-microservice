@@ -337,7 +337,6 @@ export class CohortService {
         cohortCreateDto.customFields &&
         cohortCreateDto.customFields.length > 0
       ) {
-        console.log("cohortCreateDto.type", cohortCreateDto.type);
         const validationResponse = await this.fieldsService.validateCustomField(
           cohortCreateDto,
           cohortCreateDto.type || "COHORT"
