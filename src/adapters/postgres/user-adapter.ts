@@ -2287,7 +2287,7 @@ export class PostgresUserService implements IServicelocator {
         return usernameExistsInKeycloak;
       }
       return false;
-    } else {
+    } else if (userDto?.email) {
       const usernameExistsInKeycloak = await checkIfEmailExistsInKeycloak(
         userDto?.email,
         token
