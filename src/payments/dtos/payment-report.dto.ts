@@ -30,6 +30,13 @@ export class PaymentReportItemDto {
 
   @ApiProperty({ type: 'string', description: 'Payment status (PAID, FAILED, PENDING)' })
   status: string;
+
+  @ApiProperty({
+    type: 'boolean',
+    description:
+      'Whether payment target(s) for this report context are unlocked (UNLOCKED) for the payment intent tied to this transaction',
+  })
+  targetUnlocked: boolean;
 }
 
 export class PaymentReportResponseDto {
