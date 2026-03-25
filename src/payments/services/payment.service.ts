@@ -883,6 +883,12 @@ export class PaymentService {
       transaction.paymentIntentId,
     );
 
+    if (intent.status !== PaymentIntentStatus.PAID) {
+      throw new BadRequestException(
+        'Certificate generation is allowed only for PAID payment intents',
+      );
+    }
+
     if (intent.userId !== dto.userId) {
       throw new BadRequestException(
         'userId does not match the payment intent for this transaction',
