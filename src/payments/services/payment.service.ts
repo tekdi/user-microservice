@@ -877,57 +877,125 @@ export class PaymentService {
     expirationDate: string;
     transactionId: string;
   }) {
-    const transaction =
-      await this.paymentTransactionService.findById(dto.transactionId);
-    const intent = await this.paymentIntentService.findById(
-      transaction.paymentIntentId,
-    );
+    const idempotencyKey = `${dto.transactionId}:${dto.courseId}`;
 
-    if (intent.status !== PaymentIntentStatus.PAID) {
-      throw new BadRequestException(
-        'Certificate generation is allowed only for PAID payment intents',
-      );
-    }
+    return this.dataSource.transaction(async (manager: EntityManager) => {
+      const transaction = await manager.findOne(PaymentTransaction, {
+        where: { id: dto.transactionId },
+        lock: { mode: 'pessimistic_write' },
+      });
 
-    if (intent.userId !== dto.userId) {
-      throw new BadRequestException(
-        'userId does not match the payment intent for this transaction',
-      );
-    }
+      if (!transaction) {
+        throw new NotFoundException(
+          `Transaction with ID ${dto.transactionId} not found`,
+        );
+      }
 
-    const targets = intent.targets ?? [];
-    if (targets.length === 0) {
-      throw new BadRequestException(
-        'No payment targets found for this payment intent',
-      );
-    }
-    const courseIdMatchesTargetContext = targets.some(
-      (t) => t.contextId === dto.courseId,
-    );
-    if (!courseIdMatchesTargetContext) {
-      throw new BadRequestException(
-        'courseId does not match context_id on payment targets for this transaction',
-      );
-    }
+      const intent = await manager.findOne(PaymentIntent, {
+        where: { id: transaction.paymentIntentId },
+        relations: ['targets'],
+      });
 
-    const certificateData = await this.certificateService.generateCertificate({
-      userId: dto.userId,
-      courseId: dto.courseId,
-      issuanceDate: dto.issuanceDate,
-      expirationDate: dto.expirationDate,
+      if (!intent) {
+        throw new NotFoundException(
+          `Payment intent with ID ${transaction.paymentIntentId} not found`,
+        );
+      }
+
+      if (intent.status !== PaymentIntentStatus.PAID) {
+        throw new BadRequestException(
+          'Certificate generation is allowed only for PAID payment intents',
+        );
+      }
+
+      if (intent.userId !== dto.userId) {
+        throw new BadRequestException(
+          'userId does not match the payment intent for this transaction',
+        );
+      }
+
+      const targets = intent.targets ?? [];
+      if (targets.length === 0) {
+        throw new BadRequestException(
+          'No payment targets found for this payment intent',
+        );
+      }
+
+      const courseIdMatchesTargetContext = targets.some(
+        (t) => t.contextId === dto.courseId,
+      );
+      if (!courseIdMatchesTargetContext) {
+        throw new BadRequestException(
+          'courseId does not match context_id on payment targets for this transaction',
+        );
+      }
+
+      const certificateGenerationByCourse =
+        (transaction.rawResponse?.certificateGenerationByCourse as
+          | Record<
+              string,
+              { idempotencyKey: string; certificate: any; generatedAt: string }
+            >
+          | undefined) ?? {};
+      const existingGeneration = certificateGenerationByCourse[dto.courseId];
+
+      if (existingGeneration?.idempotencyKey === idempotencyKey) {
+        this.logger.warn(
+          `Idempotent replay detected for certificate generation key ${idempotencyKey}; returning cached certificate response`,
+        );
+        return {
+          certificate: existingGeneration.certificate,
+          paymentIntentId: intent.id,
+          transactionId: dto.transactionId,
+        };
+      }
+
+      const certificateData = await this.certificateService.generateCertificate({
+        userId: dto.userId,
+        courseId: dto.courseId,
+        issuanceDate: dto.issuanceDate,
+        expirationDate: dto.expirationDate,
+      });
+
+      const rawResponseSnapshot = transaction.rawResponse
+        ? { ...transaction.rawResponse }
+        : undefined;
+
+      transaction.rawResponse = {
+        ...rawResponseSnapshot,
+        certificateGenerationByCourse: {
+          ...certificateGenerationByCourse,
+          [dto.courseId]: {
+            idempotencyKey,
+            certificate: certificateData,
+            generatedAt: new Date().toISOString(),
+          },
+        },
+      };
+      await manager.save(PaymentTransaction, transaction);
+
+      await manager.update(
+        PaymentTarget,
+        {
+          paymentIntentId: intent.id,
+          unlockStatus: PaymentTargetUnlockStatus.LOCKED,
+        },
+        {
+          unlockStatus: PaymentTargetUnlockStatus.UNLOCKED,
+          unlockedAt: new Date(),
+        },
+      );
+
+      this.logger.log(
+        `Certificate generated and targets unlocked for transaction ${dto.transactionId} (intent ${intent.id})`,
+      );
+
+      return {
+        certificate: certificateData,
+        paymentIntentId: intent.id,
+        transactionId: dto.transactionId,
+      };
     });
-
-    await this.paymentTargetService.unlockAll(intent.id);
-
-    this.logger.log(
-      `Certificate generated and targets unlocked for transaction ${dto.transactionId} (intent ${intent.id})`,
-    );
-
-    return {
-      certificate: certificateData,
-      paymentIntentId: intent.id,
-      transactionId: dto.transactionId,
-    };
   }
 }
 

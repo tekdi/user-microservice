@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, IsUUID } from 'class-validator';
+import { IsISO8601, IsNotEmpty, IsString, IsUUID } from 'class-validator';
 
 export class GenerateCertificateRequestDto {
   @ApiProperty({ format: 'uuid', example: '51d8e436-8d83-4805-b63f-377af6c9b0a6' })
@@ -18,6 +18,10 @@ export class GenerateCertificateRequestDto {
   })
   @IsNotEmpty()
   @IsString()
+  @IsISO8601(
+    { strict: true, strictSeparator: true },
+    { message: 'issuanceDate must be a valid ISO 8601 date-time string' },
+  )
   issuanceDate: string;
 
   @ApiProperty({
