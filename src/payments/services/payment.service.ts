@@ -502,8 +502,6 @@ export class PaymentService {
       typeof search === 'string' && search.trim().length > 0
         ? search.trim().toLowerCase()
         : undefined;
-    const searchLog = searchTerm ? `, search: ${searchTerm}` : '';
-    
     const countQb = this.dataSource
       .getRepository(PaymentTransaction)
       .createQueryBuilder('transaction')
@@ -521,7 +519,10 @@ export class PaymentService {
         );
     }
 
-    const totalCount = await countQb.getCount();
+    const countResult = await countQb
+      .select('COUNT(DISTINCT transaction.id)', 'cnt')
+      .getRawOne();
+    const totalCount = Number.parseInt(String(countResult?.cnt ?? '0'), 10);
 
     if (totalCount === 0) {
       this.logger.warn(`No payment transactions found for contextId: ${contextId}`);
@@ -531,20 +532,22 @@ export class PaymentService {
       };
     }
 
-    // Query transactions directly with pagination
-    const dataQb = this.dataSource
+    // Distinct transaction IDs for this page (one row per transaction even if multiple targets share contextId)
+    const idsQb = this.dataSource
       .getRepository(PaymentTransaction)
       .createQueryBuilder('transaction')
-      .innerJoinAndSelect('transaction.paymentIntent', 'intent')
+      .select('transaction.id', 'id')
+      .innerJoin('transaction.paymentIntent', 'intent')
       .innerJoin('intent.targets', 'target')
       .where('target.contextId = :contextId', { contextId })
-      .orderBy('transaction.createdAt', 'DESC')
-      .skip(offset)
-      .take(limit);
+      .groupBy('transaction.id')
+      .orderBy('MAX(transaction.createdAt)', 'DESC')
+      .offset(offset)
+      .limit(limit);
 
     if (searchTerm) {
       const searchPattern = `%${searchTerm}%`;
-      dataQb
+      idsQb
         .innerJoin(User, 'user', 'user.userId = intent.userId')
         .andWhere(
           '(LOWER(COALESCE(user.firstName, \'\')) LIKE :searchPattern OR LOWER(COALESCE(user.lastName, \'\')) LIKE :searchPattern OR LOWER(COALESCE(user.email, \'\')) LIKE :searchPattern)',
@@ -552,16 +555,26 @@ export class PaymentService {
         );
     }
 
-    const transactions = await dataQb.getMany();
+    const idRows = await idsQb.getRawMany();
+    const orderedIds = idRows.map((row) => row.id as string);
 
     // If no transactions found for this page (e.g., offset beyond available data),
     // return empty data but preserve the actual totalCount for correct pagination
-    if (transactions.length === 0) {
+    if (orderedIds.length === 0) {
       return {
         data: [],
         totalCount, // Use computed totalCount, not 0, so callers know the actual record count
       };
     }
+
+    const transactions = await this.dataSource.getRepository(PaymentTransaction).find({
+      where: { id: In(orderedIds) },
+      relations: ['paymentIntent', 'paymentIntent.targets'],
+    });
+    const orderIndex = new Map(orderedIds.map((id, idx) => [id, idx]));
+    transactions.sort(
+      (a, b) => (orderIndex.get(a.id) ?? 0) - (orderIndex.get(b.id) ?? 0),
+    );
 
     // Extract all unique user IDs and payment intents
     const userIds = new Set<string>();
@@ -593,6 +606,10 @@ export class PaymentService {
           transactionId: transaction.id,
           transactionTime: transaction.createdAt,
           status: this.mapTransactionStatusToReportStatus(transaction.status),
+          targetUnlocked: this.computeTargetUnlockedForContext(
+            transaction.paymentIntent,
+            contextId,
+          ),
           _userId: transaction.paymentIntent.userId, // Temporary field for mapping
         });
       }
@@ -632,6 +649,21 @@ export class PaymentService {
       data: reportItems as PaymentReportItemDto[],
       totalCount,
     };
+  }
+
+  private computeTargetUnlockedForContext(
+    intent: PaymentIntent,
+    reportContextId: string,
+  ): boolean {
+    const targets = (intent.targets ?? []).filter(
+      (t) => t.contextId === reportContextId,
+    );
+    if (targets.length === 0) {
+      return false;
+    }
+    return targets.every(
+      (t) => t.unlockStatus === PaymentTargetUnlockStatus.UNLOCKED,
+    );
   }
 
   /**
