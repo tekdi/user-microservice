@@ -1,6 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
 
 export class PaymentReportItemDto {
+  @ApiProperty({ type: 'string', format: 'uuid', description: 'User ID' })
+  userId: string;
+
   @ApiProperty({ type: 'string', description: 'First Name of the user', nullable: true })
   firstName: string | null;
 

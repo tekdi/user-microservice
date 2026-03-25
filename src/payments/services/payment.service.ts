@@ -597,6 +597,7 @@ export class PaymentService {
           discountCode === null ? null : originalAmount - paidAmount;
 
         reportItems.push({
+          userId: transaction.paymentIntent.userId,
           firstName: null, // Will be filled after fetching users
           lastName: null, // Will be filled after fetching users
           email: null, // Will be filled after fetching users
