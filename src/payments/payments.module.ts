@@ -9,6 +9,7 @@ import { CouponRedemption } from './entities/coupon-redemption.entity';
 import { User } from '../user/entities/user-entity';
 import { Country } from '../countries/entities/country.entity';
 import { PaymentsController } from './payments.controller';
+import { CertificateController } from './certificate.controller';
 import { CouponController } from './controllers/coupon.controller';
 import { StripeWebhookController } from './webhooks/stripe.webhook.controller';
 import { PaymentService } from './services/payment.service';
@@ -49,7 +50,12 @@ import { StripeProvider } from './providers/stripe/stripe.provider';
     ConfigModule,
     PostgresModule,
   ],
-  controllers: [PaymentsController, CouponController, StripeWebhookController],
+  controllers: [
+    PaymentsController,
+    CertificateController,
+    CouponController,
+    StripeWebhookController,
+  ],
   providers: [
     PaymentService,
     PaymentIntentService,
@@ -71,7 +77,7 @@ export class PaymentsModule implements OnModuleInit {
 
   onModuleInit() {
     this.logger.log('PaymentsModule initialized successfully');
-    this.logger.log('PaymentsModule controllers loaded: PaymentsController, CouponController, StripeWebhookController');
+    this.logger.log('PaymentsModule controllers loaded: PaymentsController, CertificateController, CouponController, StripeWebhookController');
     this.logger.log('PaymentsModule providers loaded: PaymentService, PaymentIntentService, PaymentTransactionService, PaymentTargetService, CouponService, StripeProvider');
     this.logger.log('PaymentsModule entities registered: PaymentIntent, PaymentTransaction, PaymentTarget, DiscountCoupon, CouponRedemption');
     this.logger.debug('PaymentsModule is properly configured and ready to handle payment requests');

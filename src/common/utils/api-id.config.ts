@@ -131,6 +131,7 @@ export const APIID = {
   PAYMENT_STATUS: "api.payment.status",
   PAYMENT_STATUS_OVERRIDE: "api.payment.status.override",
   PAYMENT_WEBHOOK: "api.payment.webhook",
+  CERTIFICATE_GENERATE: "api.certificate.generate",
   // Pathway Management APIs
   PATHWAY_CREATE: "api.pathway.create",
   PATHWAY_LIST: "api.pathway.list",

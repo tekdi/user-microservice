@@ -542,6 +542,7 @@ export class PaymentService {
       .where('target.contextId = :contextId', { contextId })
       .groupBy('transaction.id')
       .orderBy('MAX(transaction.createdAt)', 'DESC')
+      .addOrderBy('transaction.id', 'ASC')
       .offset(offset)
       .limit(limit);
 
@@ -863,6 +864,138 @@ export class PaymentService {
       status,
       reason,
     );
+  }
+
+  /**
+   * Calls Aspire certificate generate API; on success unlocks all locked targets
+   * for the payment intent linked to the given transaction.
+   */
+  async generateCertificateAndUnlockTargets(dto: {
+    userId: string;
+    courseId: string;
+    issuanceDate: string;
+    expirationDate: string;
+    transactionId: string;
+  }) {
+    const idempotencyKey = `${dto.transactionId}:${dto.courseId}`;
+
+    return this.dataSource.transaction(async (manager: EntityManager) => {
+      const transaction = await manager.findOne(PaymentTransaction, {
+        where: { id: dto.transactionId },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (!transaction) {
+        throw new NotFoundException(
+          `Transaction with ID ${dto.transactionId} not found`,
+        );
+      }
+
+      const intent = await manager.findOne(PaymentIntent, {
+        where: { id: transaction.paymentIntentId },
+        relations: ['targets'],
+      });
+
+      if (!intent) {
+        throw new NotFoundException(
+          `Payment intent with ID ${transaction.paymentIntentId} not found`,
+        );
+      }
+
+      if (intent.status !== PaymentIntentStatus.PAID) {
+        throw new BadRequestException(
+          'Certificate generation is allowed only for PAID payment intents',
+        );
+      }
+
+      if (intent.userId !== dto.userId) {
+        throw new BadRequestException(
+          'userId does not match the payment intent for this transaction',
+        );
+      }
+
+      const targets = intent.targets ?? [];
+      if (targets.length === 0) {
+        throw new BadRequestException(
+          'No payment targets found for this payment intent',
+        );
+      }
+
+      const courseIdMatchesTargetContext = targets.some(
+        (t) => t.contextId === dto.courseId,
+      );
+      if (!courseIdMatchesTargetContext) {
+        throw new BadRequestException(
+          'courseId does not match context_id on payment targets for this transaction',
+        );
+      }
+
+      const certificateGenerationByCourse =
+        (transaction.rawResponse?.certificateGenerationByCourse as
+          | Record<
+              string,
+              { idempotencyKey: string; certificate: any; generatedAt: string }
+            >
+          | undefined) ?? {};
+      const existingGeneration = certificateGenerationByCourse[dto.courseId];
+
+      if (existingGeneration?.idempotencyKey === idempotencyKey) {
+        this.logger.warn(
+          `Idempotent replay detected for certificate generation key ${idempotencyKey}; returning cached certificate response`,
+        );
+        return {
+          certificate: existingGeneration.certificate,
+          paymentIntentId: intent.id,
+          transactionId: dto.transactionId,
+        };
+      }
+
+      const certificateData = await this.certificateService.generateCertificate({
+        userId: dto.userId,
+        courseId: dto.courseId,
+        issuanceDate: dto.issuanceDate,
+        expirationDate: dto.expirationDate,
+      });
+
+      const rawResponseSnapshot = transaction.rawResponse
+        ? { ...transaction.rawResponse }
+        : undefined;
+
+      transaction.rawResponse = {
+        ...rawResponseSnapshot,
+        certificateGenerationByCourse: {
+          ...certificateGenerationByCourse,
+          [dto.courseId]: {
+            idempotencyKey,
+            certificate: certificateData,
+            generatedAt: new Date().toISOString(),
+          },
+        },
+      };
+      await manager.save(PaymentTransaction, transaction);
+
+      await manager.update(
+        PaymentTarget,
+        {
+          paymentIntentId: intent.id,
+          unlockStatus: PaymentTargetUnlockStatus.LOCKED,
+        },
+        {
+          unlockStatus: PaymentTargetUnlockStatus.UNLOCKED,
+          unlockedAt: new Date(),
+        },
+      );
+
+      this.logger.log(
+        `Certificate generated and targets unlocked for transaction ${dto.transactionId} (intent ${intent.id})`,
+      );
+
+      return {
+        certificate: certificateData,
+        paymentIntentId: intent.id,
+        transactionId: dto.transactionId,
+      };
+    });
   }
 }
 
