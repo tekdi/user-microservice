@@ -34,7 +34,7 @@ export class PaymentReportItemDto {
   @ApiProperty({
     type: 'boolean',
     description:
-      'Whether payment target(s) for this report context are unlocked (UNLOCKED) for the payment intent tied to this transaction',
+      'True only when every payment target for the intent (filtered to those whose context_id equals the report contextId) has unlock status UNLOCKED; false if any matching target is locked, or if there are no targets for that context',
   })
   targetUnlocked: boolean;
 }
