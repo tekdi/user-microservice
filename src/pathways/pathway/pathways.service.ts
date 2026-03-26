@@ -1651,12 +1651,16 @@ export class PathwaysService {
   ): Promise<Response> {
     const apiId = APIID.PATHWAY_USER_LIST;
     try {
-      const { pathwayId, limit, offset, filters, sort } = dto;
+      const { pathwayIds, limit, offset, filters, sort } = dto;
 
       // Validate UUID format
       const uuidRegex =
         /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      if (!uuidRegex.test(pathwayId)) {
+      if (
+        !Array.isArray(pathwayIds) ||
+        pathwayIds.length === 0 ||
+        pathwayIds.some((id) => !uuidRegex.test(id))
+      ) {
         return APIResponse.error(
           response,
           apiId,
@@ -1666,11 +1670,12 @@ export class PathwaysService {
         );
       }
 
-      const pathway = await this.pathwayRepository.findOne({
-        where: { id: pathwayId },
-        select: ['id'],
-      });
-      if (!pathway) {
+      const existingPathways = await this.pathwayRepository
+        .createQueryBuilder('pathway')
+        .select('pathway.id', 'id')
+        .where('pathway.id IN (:...pathwayIds)', { pathwayIds })
+        .getRawMany<{ id: string }>();
+      if (!existingPathways.length) {
         return APIResponse.error(
           response,
           apiId,
@@ -1684,7 +1689,7 @@ export class PathwaysService {
         .createQueryBuilder('history')
         .innerJoinAndSelect('history.user', 'user')
         .leftJoinAndSelect('history.pathway', 'pathway')
-        .where('history.pathway_id = :pathwayId', { pathwayId });
+        .where('history.pathway_id IN (:...pathwayIds)', { pathwayIds });
 
       // Apply Filters
       if (filters) {
