@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, IsUUID, IsObject, ValidateNested, IsBoolean, IsEnum } from 'class-validator';
+import { IsOptional, IsString, IsUUID, IsObject, ValidateNested, IsBoolean, IsEnum, IsArray, ArrayNotEmpty } from 'class-validator';
 import { Expose, Type } from 'class-transformer';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 
@@ -15,6 +15,8 @@ export enum PathwayUserSortColumn {
   EMAIL = 'email',
   GENDER = 'gender',
   IS_ACTIVE = 'isActive',
+  PATHWAY_NAME = 'pathwayName',
+  DEACTIVATED_AT = 'deactivatedAt',
 }
 
 class ListPathwayUsersFiltersDto {
@@ -61,12 +63,17 @@ class ListPathwayUsersSortDto {
 
 export class ListPathwayUsersDto extends PaginationDto {
   @ApiProperty({
-    description: 'Pathway UUID',
-    example: 'c3b6e50e-40ab-4148-8ca9-3b2296ca11e5',
+    description: 'List of pathway UUIDs',
+    example: ['c3b6e50e-40ab-4148-8ca9-3b2296ca11e5'],
   })
   @Expose()
-  @IsUUID(undefined, { message: 'pathwayId must be a valid UUID' })
-  pathwayId: string;
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsUUID(undefined, {
+    each: true,
+    message: 'each value in pathwayIds must be a valid UUID',
+  })
+  pathwayIds: string[];
 
   @ApiPropertyOptional({
     description: 'Filters for pathway users',
