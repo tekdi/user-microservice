@@ -15,6 +15,8 @@ export enum PathwayUserSortColumn {
   EMAIL = 'email',
   GENDER = 'gender',
   IS_ACTIVE = 'isActive',
+  PATHWAY_NAME = 'pathwayName',
+  DEACTIVATED_AT = 'deactivatedAt',
 }
 
 class ListPathwayUsersFiltersDto {

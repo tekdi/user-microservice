@@ -1683,6 +1683,7 @@ export class PathwaysService {
       const queryBuilder = this.userPathwayHistoryRepository
         .createQueryBuilder('history')
         .innerJoinAndSelect('history.user', 'user')
+        .leftJoinAndSelect('history.pathway', 'pathway')
         .where('history.pathway_id = :pathwayId', { pathwayId });
 
       // Apply Filters
@@ -1707,11 +1708,14 @@ export class PathwaysService {
         'history.pathway_id',
         'history.is_active',
         'history.activated_at',
+        'history.deactivated_at',
         'user.userId',
         'user.firstName',
         'user.lastName',
         'user.email',
         'user.gender',
+        'pathway.id',
+        'pathway.name',
       ]);
 
       // Apply Sorting
@@ -1723,6 +1727,8 @@ export class PathwaysService {
         email: 'user.email',
         gender: 'user.gender',
         isActive: 'history.is_active',
+        pathwayName: 'pathway.name',
+        deactivatedAt: 'history.deactivated_at',
       };
       const order = sort?.order === 'ASC' ? 'ASC' : 'DESC';
       const resolvedSortColumn = sort?.column
@@ -1749,11 +1755,14 @@ export class PathwaysService {
         offset: skip,
         items: items.map((item: any) => ({
           userId: item.user_id,
+          pathwayId: item.pathway_id,
+          pathwayName: item.pathway?.name ?? null,
           firstName: item.user?.firstName,
           lastName: item.user?.lastName,
           email: item.user?.email,
           gender: item.user?.gender,
           activatedAt: item.activated_at,
+          deactivatedAt: item.deactivated_at ?? null,
           status: item.is_active,
         })),
       };
