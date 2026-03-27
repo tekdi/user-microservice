@@ -836,20 +836,25 @@ export class UserService {
             });
             break;
 
+          case "username":
+            if (Array.isArray(value) && value.every((item) => typeof item === "string")) {
+              queryBuilder.andWhere(`U.${key} IN (:...${key})`, {
+                [key]: value.map((item) => item.trim()),
+              });
+            } else {
+              queryBuilder.andWhere(`U.${key} ILIKE :${key}`, { [key]: String(value) });
+            }
+            break;
+
           case "status":
           case "email":
-          case "username":
           case "userId":
             if (Array.isArray(value) && value.every((item) => typeof item === "string")) {
               queryBuilder.andWhere(`U.${key} IN (:...${key})`, {
                 [key]: value.map((item) => item.trim().toLowerCase()),
               });
             } else {
-              if (key === "username") {
-                queryBuilder.andWhere(`U.${key} ILIKE :${key}`, { [key]: String(value) });
-              } else {
-                queryBuilder.andWhere(`U.${key} = :${key}`, { [key]: String(value) });
-              }
+              queryBuilder.andWhere(`U.${key} = :${key}`, { [key]: String(value) });
             }
             break;
 
