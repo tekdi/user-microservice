@@ -208,8 +208,24 @@ export class UserElasticsearchService implements OnModuleInit {
     fetchUserFromDb?: (userId: string) => Promise<IUser | null>
   ): Promise<any> {
     try {
-      // Try to update the profile field in Elasticsearch
-      const normalizedProfile = this.normalizeProfileForElasticsearch(profile);
+      const existing = await this.getUser(userId);
+      let profileToNormalize = profile;
+      if (
+        existing?._source &&
+        profile &&
+        typeof profile === 'object' &&
+        (existing._source as IUser).profile
+      ) {
+        profileToNormalize = this.mergeProfileForUpdate(
+          (existing._source as IUser).profile as Record<string, any>,
+          profile as Record<string, any>
+        );
+      }
+      const applications = (existing?._source as IUser)?.applications;
+      const normalizedProfile = this.normalizeProfileForElasticsearch(
+        profileToNormalize,
+        Array.isArray(applications) ? applications : undefined
+      );
       return await this.updateUser(userId, {
         doc: { profile: normalizedProfile },
       });
@@ -230,6 +246,23 @@ export class UserElasticsearchService implements OnModuleInit {
       // Rethrow other errors
       throw error;
     }
+  }
+
+  /**
+   * Merge a profile patch onto the stored profile. Only keys present on `incoming`
+   * with value !== undefined are applied, so omitted fields keep their indexed values.
+   */
+  private mergeProfileForUpdate(
+    previous: Record<string, any>,
+    incoming: Record<string, any>
+  ): Record<string, any> {
+    const merged = { ...previous };
+    for (const key of Object.keys(incoming)) {
+      if (incoming[key] !== undefined) {
+        merged[key] = incoming[key];
+      }
+    }
+    return merged;
   }
 
   /**
