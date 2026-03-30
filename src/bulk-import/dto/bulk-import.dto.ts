@@ -32,6 +32,8 @@ export interface BulkImportUserData {
   gender?: string;
   dob?: string;
   country?: string;
+  permanentCountry?: string;
+  currentCountry?: string;
   address?: string;
   district?: string;
   state?: string;
