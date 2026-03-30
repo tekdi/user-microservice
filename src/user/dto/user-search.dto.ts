@@ -31,6 +31,18 @@ export class setFilters {
 
   @ApiPropertyOptional({
     type: String,
+    description: 'Permanent country (Users.permanentCountry)',
+  })
+  permanentCountry: string | string[];
+
+  @ApiPropertyOptional({
+    type: String,
+    description: 'Current country (Users.currentCountry)',
+  })
+  currentCountry: string | string[];
+
+  @ApiPropertyOptional({
+    type: String,
     description: 'Block',
   })
   block: string;

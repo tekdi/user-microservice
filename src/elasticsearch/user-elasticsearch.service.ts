@@ -57,6 +57,8 @@ export class UserElasticsearchService implements OnModuleInit {
                 gender: { type: 'keyword' },
                 dob: { type: 'date', null_value: null },
                 country: { type: 'keyword' },
+                permanentCountry: { type: 'keyword' },
+                currentCountry: { type: 'keyword' },
                 customFields: {
                   type: 'nested',
                   properties: {
@@ -256,6 +258,8 @@ export class UserElasticsearchService implements OnModuleInit {
       gender: profile.gender,
       dob: profile.dob,
       country: profile.country,
+      permanentCountry: profile.permanentCountry ?? '',
+      currentCountry: profile.currentCountry ?? '',
       status: profile.status,
     };
 
@@ -541,6 +545,56 @@ export class UserElasticsearchService implements OnModuleInit {
                     },
                   },
                 },
+                {
+                  prefix: {
+                    'profile.permanentCountry': {
+                      value: searchTerm.toLowerCase(),
+                      boost: 3.0,
+                    },
+                  },
+                },
+                {
+                  prefix: {
+                    'profile.currentCountry': {
+                      value: searchTerm.toLowerCase(),
+                      boost: 3.0,
+                    },
+                  },
+                },
+                {
+                  wildcard: {
+                    'profile.permanentCountry': {
+                      value: `*${searchTerm.toLowerCase()}*`,
+                      boost: 2.0,
+                    },
+                  },
+                },
+                {
+                  wildcard: {
+                    'profile.currentCountry': {
+                      value: `*${searchTerm.toLowerCase()}*`,
+                      boost: 2.0,
+                    },
+                  },
+                },
+                {
+                  fuzzy: {
+                    'profile.permanentCountry': {
+                      value: searchTerm,
+                      fuzziness: 'AUTO',
+                      boost: 1.0,
+                    },
+                  },
+                },
+                {
+                  fuzzy: {
+                    'profile.currentCountry': {
+                      value: searchTerm,
+                      fuzziness: 'AUTO',
+                      boost: 1.0,
+                    },
+                  },
+                },
                 // Search in custom fields
                 {
                   nested: {
@@ -661,10 +715,16 @@ export class UserElasticsearchService implements OnModuleInit {
                 'gender',
                 'address',
                 'country',
+                'permanentCountry',
+                'currentCountry',
               ].includes(field)
             ) {
-              // Special handling for country to support multiple countries
-              if (field === 'country') {
+              // Special handling for country-like fields to support multiple values (arrays)
+              if (
+                field === 'country' ||
+                field === 'permanentCountry' ||
+                field === 'currentCountry'
+              ) {
                 // Check if value is an array (multiple countries)
                 if (Array.isArray(value) && value.length > 0) {
                   const countries = value

@@ -185,6 +185,8 @@ export class ElasticsearchService {
               gender: source?.profile?.gender || '',
               dob:source?.profile?.dob || '',
               country:source?.profile?.country || '',
+              permanentCountry: source?.profile?.permanentCountry || '',
+              currentCountry: source?.profile?.currentCountry || '',
               status: source?.profile?.status || 'active',
               customFields: source?.profile?.customFields || [],
             },
@@ -260,6 +262,8 @@ export class ElasticsearchService {
         gender: "",
         dob: null,
         country:'',
+        permanentCountry: '',
+        currentCountry: '',
         status: 'active',
         customFields: [],
       };

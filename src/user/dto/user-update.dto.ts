@@ -110,6 +110,16 @@ class UserDataDTO {
   @IsString()
   state: string | null;
 
+  @ApiProperty({ type: () => String, required: false })
+  @IsOptional()
+  @IsString()
+  permanentCountry?: string | null;
+
+  @ApiProperty({ type: () => String, required: false })
+  @IsOptional()
+  @IsString()
+  currentCountry?: string | null;
+
   @ApiProperty({ type: () => String })
   @IsOptional()
   @IsString()

@@ -164,6 +164,24 @@ export class UserCreateDto {
 
   @ApiPropertyOptional({
     type: String,
+    description: 'Permanent country of residence',
+  })
+  @Expose()
+  @IsOptional()
+  @IsString()
+  permanentCountry?: string;
+
+  @ApiPropertyOptional({
+    type: String,
+    description: 'Current country of residence',
+  })
+  @Expose()
+  @IsOptional()
+  @IsString()
+  currentCountry?: string;
+
+  @ApiPropertyOptional({
+    type: String,
     description: 'The state of the user',
   })
   @Expose()

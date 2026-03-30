@@ -450,6 +450,8 @@ export class PostgresCohortMembersService {
         'lastName',
         'email',
         'country',
+        'permanentCountry',
+        'currentCountry',
         'auto_tags',
         'createdAt',
         'updatedAt',
@@ -971,6 +973,26 @@ export class PostgresCohortMembersService {
               return `U."country"=$${paramIndex++}`;
             }
           }
+          case 'permanentCountry': {
+            if (Array.isArray(value)) {
+              const placeholders = value.map(() => `$${paramIndex++}`).join(', ');
+              queryParams.push(...value);
+              return `U."permanentCountry" IN (${placeholders})`;
+            } else {
+              queryParams.push(value);
+              return `U."permanentCountry"=$${paramIndex++}`;
+            }
+          }
+          case 'currentCountry': {
+            if (Array.isArray(value)) {
+              const placeholders = value.map(() => `$${paramIndex++}`).join(', ');
+              queryParams.push(...value);
+              return `U."currentCountry" IN (${placeholders})`;
+            } else {
+              queryParams.push(value);
+              return `U."currentCountry"=$${paramIndex++}`;
+            }
+          }
           case 'cohortAcademicYearId': {
             // FIXED: Use parameterized query for array values
             if (Array.isArray(value)) {
@@ -1115,7 +1137,7 @@ export class PostgresCohortMembersService {
     let query = `SELECT DISTINCT ON (U."userId", CM."cohortMembershipId") 
       U."userId", U."username", U."email", U."firstName", U."middleName", U."lastName", 
       R."name" AS role, U."district", U."state", U."mobile", U."deviceId", U."gender", 
-      U."dob", U."country", U."auto_tags",
+      U."dob", U."country", U."permanentCountry", U."currentCountry", U."auto_tags",
       CM."status", CM."statusReason", CM."cohortMembershipId", CM."cohortId", 
       CM."createdAt", CM."updatedAt", U."createdBy", U."updatedBy", 
       COUNT(*) OVER() AS total_count  
@@ -1217,6 +1239,18 @@ export class PostgresCohortMembersService {
               : `'${value}'`;
             return `U."country" IN (${countryValues})`;
           }
+          case 'permanentCountry': {
+            const vals = Array.isArray(value)
+              ? value.map((v) => `'${v}'`).join(', ')
+              : `'${value}'`;
+            return `U."permanentCountry" IN (${vals})`;
+          }
+          case 'currentCountry': {
+            const vals = Array.isArray(value)
+              ? value.map((v) => `'${v}'`).join(', ')
+              : `'${value}'`;
+            return `U."currentCountry" IN (${vals})`;
+          }
           case 'cohortAcademicYearId': {
             const cohortIdAcademicYear = Array.isArray(value)
               ? value.map((id) => `'${id}'`).join(', ')
@@ -1264,7 +1298,7 @@ export class PostgresCohortMembersService {
       }
     }
 
-    let query = `SELECT U."userId", U."username",U."email", U."firstName", U."middleName", U."lastName", R."name" AS role, U."district", U."state",U."mobile",U."deviceId",U."gender",U."dob",U."country",U."auto_tags",
+    let query = `SELECT U."userId", U."username",U."email", U."firstName", U."middleName", U."lastName", R."name" AS role, U."district", U."state",U."mobile",U."deviceId",U."gender",U."dob",U."country",U."permanentCountry", U."currentCountry",U."auto_tags",
       CM."status", CM."statusReason",CM."cohortMembershipId",CM."cohortId",CM."status",CM."createdAt", CM."updatedAt",U."createdBy",U."updatedBy", COUNT(*) OVER() AS total_count  
       FROM public."CohortMembers" CM
       INNER JOIN public."Users" U
@@ -2774,6 +2808,8 @@ export class PostgresCohortMembersService {
           'lastName',
           'email',
           'country',
+          'permanentCountry',
+          'currentCountry',
           'auto_tags',
           'createdAt',
           'updatedAt',
@@ -2995,6 +3031,8 @@ export class PostgresCohortMembersService {
       'lastName',
       'email',
       'country',
+      'permanentCountry',
+      'currentCountry',
       'auto_tags',
       'createdAt',
       'updatedAt',

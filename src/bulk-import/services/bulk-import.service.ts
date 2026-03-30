@@ -1720,6 +1720,8 @@ export class BulkImportService {
         gender: userCreateDto.gender,
         email: userCreateDto.email,
         country: userCreateDto.country,
+        permanentCountry: userCreateDto.permanentCountry,
+        currentCountry: userCreateDto.currentCountry,
         state: userCreateDto.state,
         dob: userCreateDto.dob ? new Date(userCreateDto.dob) : undefined,
         mobile: userCreateDto.mobile ? Number(userCreateDto.mobile) : undefined,

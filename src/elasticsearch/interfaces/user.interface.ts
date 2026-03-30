@@ -51,6 +51,8 @@ export interface IProfile {
   gender: string;
   dob: string;
   country: string;
+  permanentCountry?: string;
+  currentCountry?: string;
 
   status: string;
   customFields: Record<string, any>;
