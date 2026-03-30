@@ -1234,22 +1234,37 @@ export class PostgresCohortMembersService {
             return `U."email" ILIKE $${parameterIndex++}`;
           }
           case 'country': {
-            const countryValues = Array.isArray(value)
-              ? value.map((country) => `'${country}'`).join(', ')
-              : `'${value}'`;
-            return `U."country" IN (${countryValues})`;
+            if (Array.isArray(value)) {
+              const placeholders = value
+                .map(() => `$${parameterIndex++}`)
+                .join(', ');
+              parameters.push(...value);
+              return `U."country" IN (${placeholders})`;
+            }
+            parameters.push(value);
+            return `U."country"=$${parameterIndex++}`;
           }
           case 'permanentCountry': {
-            const vals = Array.isArray(value)
-              ? value.map((v) => `'${v}'`).join(', ')
-              : `'${value}'`;
-            return `U."permanentCountry" IN (${vals})`;
+            if (Array.isArray(value)) {
+              const placeholders = value
+                .map(() => `$${parameterIndex++}`)
+                .join(', ');
+              parameters.push(...value);
+              return `U."permanentCountry" IN (${placeholders})`;
+            }
+            parameters.push(value);
+            return `U."permanentCountry"=$${parameterIndex++}`;
           }
           case 'currentCountry': {
-            const vals = Array.isArray(value)
-              ? value.map((v) => `'${v}'`).join(', ')
-              : `'${value}'`;
-            return `U."currentCountry" IN (${vals})`;
+            if (Array.isArray(value)) {
+              const placeholders = value
+                .map(() => `$${parameterIndex++}`)
+                .join(', ');
+              parameters.push(...value);
+              return `U."currentCountry" IN (${placeholders})`;
+            }
+            parameters.push(value);
+            return `U."currentCountry"=$${parameterIndex++}`;
           }
           case 'cohortAcademicYearId': {
             const cohortIdAcademicYear = Array.isArray(value)
