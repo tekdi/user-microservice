@@ -41,6 +41,16 @@ export class UserElasticsearchService implements OnModuleInit {
 
       // Explicitly map all possible fields in customFields as text/keyword to avoid mapping conflicts
       const mapping = {
+        settings: {
+          analysis: {
+            normalizer: {
+              country_keyword_normalizer: {
+                type: 'custom',
+                filter: ['lowercase', 'asciifolding'],
+              },
+            },
+          },
+        },
         mappings: {
           properties: {
             userId: { type: 'keyword' },
@@ -56,9 +66,18 @@ export class UserElasticsearchService implements OnModuleInit {
                 mobile_country_code: { type: 'keyword' },
                 gender: { type: 'keyword' },
                 dob: { type: 'date', null_value: null },
-                country: { type: 'keyword' },
-                permanentCountry: { type: 'keyword' },
-                currentCountry: { type: 'keyword' },
+                country: {
+                  type: 'keyword',
+                  normalizer: 'country_keyword_normalizer',
+                },
+                permanentCountry: {
+                  type: 'keyword',
+                  normalizer: 'country_keyword_normalizer',
+                },
+                currentCountry: {
+                  type: 'keyword',
+                  normalizer: 'country_keyword_normalizer',
+                },
                 customFields: {
                   type: 'nested',
                   properties: {
@@ -266,6 +285,17 @@ export class UserElasticsearchService implements OnModuleInit {
   }
 
   /**
+   * Country-like keyword fields: lowercase + trim at index time so _source matches
+   * prefix/wildcard queries that use lowercased terms, and align with the index normalizer.
+   */
+  private normalizeCountryKeyword(value: unknown): string {
+    if (value == null || value === '') {
+      return '';
+    }
+    return String(value).trim().toLowerCase();
+  }
+
+  /**
    * Normalize profile object before indexing/updating in Elasticsearch.
    * Ensures `customFields` match the compact shape expected in the index
    * and that internal DB-only fields (fieldValuesId, context, state, etc.)
@@ -290,9 +320,9 @@ export class UserElasticsearchService implements OnModuleInit {
       mobile_country_code: profile.mobile_country_code,
       gender: profile.gender,
       dob: profile.dob,
-      country: profile.country,
-      permanentCountry: profile.permanentCountry ?? '',
-      currentCountry: profile.currentCountry ?? '',
+      country: this.normalizeCountryKeyword(profile.country),
+      permanentCountry: this.normalizeCountryKeyword(profile.permanentCountry),
+      currentCountry: this.normalizeCountryKeyword(profile.currentCountry),
       status: profile.status,
     };
 
