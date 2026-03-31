@@ -7,6 +7,23 @@ import { isElasticsearchEnabled } from '../common/utils/elasticsearch.util';
 export class UserElasticsearchService implements OnModuleInit {
   private readonly indexName = 'users';
   private readonly logger = new Logger(UserElasticsearchService.name);
+
+  /**
+   * Merge profile fields on the cluster from params.profilePatch so concurrent
+   * writers only apply their deltas (no read-modify-write in the app).
+   */
+  private static readonly PROFILE_PATCH_SCRIPT = `
+    if (ctx._source.profile == null) {
+      ctx._source.profile = [:];
+    }
+    for (def entry : params.profilePatch.entrySet()) {
+      ctx._source.profile[entry.getKey()] = entry.getValue();
+    }
+    if (params.updatedAt != null) {
+      ctx._source.updatedAt = params.updatedAt;
+    }
+  `;
+
   constructor(private readonly elasticsearchService: ElasticsearchService) {}
 
   async isAvailable(): Promise<boolean> {
@@ -216,72 +233,114 @@ export class UserElasticsearchService implements OnModuleInit {
 
   /**
    * Update only the profile field in the Elasticsearch document for a user.
-   * If the document does not exist, fetch the user from the database and create it.
-   * @param userId
-   * @param profile
-   * @param fetchUserFromDb Optional callback to fetch user from DB if needed
+   * Uses a Painless script to merge each defined field into ctx._source.profile (same
+   * indexed shape as before via normalizeProfilePatchForScript). No GET/merge in app.
+   * If the document does not exist, creates from DB.
+   *
+   * @param options.applicationsForCustomFieldNormalization Optional applications list
+   *   when patch includes customFields (same filtering as full profile normalize).
    */
   async updateUserProfile(
     userId: string,
     profile: any,
-    fetchUserFromDb?: (userId: string) => Promise<IUser | null>
+    fetchUserFromDb?: (userId: string) => Promise<IUser | null>,
+    options?: { applicationsForCustomFieldNormalization?: IApplication[] }
   ): Promise<any> {
     try {
-      const existing = await this.getUser(userId);
-      let profileToNormalize = profile;
-      if (
-        existing?._source &&
-        profile &&
-        typeof profile === 'object' &&
-        (existing._source as IUser).profile
-      ) {
-        profileToNormalize = this.mergeProfileForUpdate(
-          (existing._source as IUser).profile as Record<string, any>,
-          profile as Record<string, any>
+      const rawPatch = this.buildProfilePatch(profile);
+      if (Object.keys(rawPatch).length === 0) {
+        this.logger.debug(
+          `updateUserProfile: empty patch for ${userId}, skipping ES update`
         );
+        return { result: 'noop', skipped: true };
       }
-      const applications = (existing?._source as IUser)?.applications;
-      const normalizedProfile = this.normalizeProfileForElasticsearch(
-        profileToNormalize,
-        Array.isArray(applications) ? applications : undefined
+      const profilePatch = this.normalizeProfilePatchForScript(
+        rawPatch,
+        options?.applicationsForCustomFieldNormalization
       );
-      return await this.updateUser(userId, {
-        doc: { profile: normalizedProfile },
-      });
+      const updatedAt = new Date().toISOString();
+      return await this.updateUser(
+        userId,
+        {
+          script: {
+            lang: 'painless',
+            source: UserElasticsearchService.PROFILE_PATCH_SCRIPT,
+            params: {
+              profilePatch,
+              updatedAt,
+            },
+          },
+        },
+        fetchUserFromDb
+      );
     } catch (error: any) {
-      // If the document is missing, create it from DB
       if (
-        error?.meta?.body?.error?.type === 'document_missing_exception' &&
+        this.isElasticsearchDocumentMissingError(error) &&
         fetchUserFromDb
       ) {
-        // Fetch user from DB
         const userFromDb = await fetchUserFromDb(userId);
         if (userFromDb) {
           return await this.createUser(userFromDb);
-        } else {
-          throw new Error(`User with ID ${userId} not found in DB for upsert.`);
         }
+        throw new Error(`User with ID ${userId} not found in DB for upsert.`);
       }
-      // Rethrow other errors
       throw error;
     }
   }
 
-  /**
-   * Merge a profile patch onto the stored profile. Only keys present on `incoming`
-   * with value !== undefined are applied, so omitted fields keep their indexed values.
-   */
-  private mergeProfileForUpdate(
-    previous: Record<string, any>,
-    incoming: Record<string, any>
+  private buildProfilePatch(
+    profile: Record<string, any> | null | undefined
   ): Record<string, any> {
-    const merged = { ...previous };
-    for (const key of Object.keys(incoming)) {
-      if (incoming[key] !== undefined) {
-        merged[key] = incoming[key];
+    if (!profile || typeof profile !== 'object') {
+      return {};
+    }
+    const patch: Record<string, any> = {};
+    for (const key of Object.keys(profile)) {
+      if (profile[key] !== undefined) {
+        patch[key] = profile[key];
       }
     }
-    return merged;
+    return patch;
+  }
+
+  private normalizeProfilePatchForScript(
+    patch: Record<string, any>,
+    applications?: IApplication[]
+  ): Record<string, any> {
+    const out = { ...patch };
+    for (const k of [
+      'country',
+      'permanentCountry',
+      'currentCountry',
+    ] as const) {
+      if (k in out) {
+        out[k] = this.normalizeCountryKeyword(out[k]);
+      }
+    }
+    if ('customFields' in out) {
+      out.customFields = this.normalizeCustomFieldsForElasticsearch(
+        out.customFields,
+        applications
+      );
+    }
+    return out;
+  }
+
+  private isElasticsearchDocumentMissingError(error: any): boolean {
+    const t = error?.meta?.body?.error?.type;
+    if (t === 'document_missing_exception') {
+      return true;
+    }
+    const root = error?.body?.error ?? error?.meta?.body?.error;
+    if (root?.type === 'document_missing_exception') {
+      return true;
+    }
+    if (Array.isArray(root?.root_cause)) {
+      return root.root_cause.some(
+        (c: any) => c?.type === 'document_missing_exception'
+      );
+    }
+    return false;
   }
 
   /**
@@ -327,12 +386,20 @@ export class UserElasticsearchService implements OnModuleInit {
       status: profile.status,
     };
 
-    const rawCustomFields = profile.customFields || [];
+    normalized.customFields = this.normalizeCustomFieldsForElasticsearch(
+      profile.customFields,
+      applications
+    );
 
-    // Build a set of fieldIds that are clearly part of application forms,
-    // based on the application.progress.pages[*].fields maps. Any customField
-    // whose fieldId appears here will be treated as an application field
-    // and excluded from profile.customFields.
+    return normalized;
+  }
+
+  private normalizeCustomFieldsForElasticsearch(
+    rawCustomFields: any,
+    applications?: any[]
+  ): any[] {
+    const raw = rawCustomFields || [];
+
     const applicationFieldIds = new Set<string>();
     if (Array.isArray(applications)) {
       for (const app of applications) {
@@ -348,53 +415,45 @@ export class UserElasticsearchService implements OnModuleInit {
       }
     }
 
-    normalized.customFields = Array.isArray(rawCustomFields)
-      ? rawCustomFields
-          .filter((field: any) => {
-            if (!field) return false;
-            const fieldId =
-              field.fieldId ?? field.fieldid ?? field.id ?? undefined;
+    if (!Array.isArray(raw)) {
+      return [];
+    }
 
-            // If context is present and is not USERS, treat this as a non-profile
-            // field (e.g., form/application field) and exclude it from
-            // profile.customFields. This ensures that only true profile-level
-            // custom fields remain under profile, even when applications array
-            // is empty or not yet populated.
-            const context = field.context ?? field.contextType;
-            if (context && context !== 'USERS') {
-              return false;
-            }
+    return raw
+      .filter((field: any) => {
+        if (!field) return false;
+        const fieldId =
+          field.fieldId ?? field.fieldid ?? field.id ?? undefined;
 
-            // If this fieldId is used inside any application.progress page,
-            // we consider it an application field and do NOT keep it under
-            // profile.customFields.
-            if (fieldId && applicationFieldIds.has(String(fieldId))) {
-              return false;
-            }
-            return true;
-          })
-          .map((field: any) => {
-            if (!field) {
-              return field;
-            }
+        const context = field.context ?? field.contextType;
+        if (context && context !== 'USERS') {
+          return false;
+        }
 
-            const fieldId = field.fieldId ?? field.fieldid ?? field.id;
-            const label = field.label ?? field.fieldname ?? field.name ?? '';
-            const value = field.value ?? '';
-            const code = field.code ?? value ?? '';
-            const type = field.type ?? null;
+        if (fieldId && applicationFieldIds.has(String(fieldId))) {
+          return false;
+        }
+        return true;
+      })
+      .map((field: any) => {
+        if (!field) {
+          return field;
+        }
 
-            return {
-              fieldId,
-              code,
-              label,
-              type,
-              value,
-            };
-          })
-      : [];
+        const fieldId = field.fieldId ?? field.fieldid ?? field.id;
+        const label = field.label ?? field.fieldname ?? field.name ?? '';
+        const value = field.value ?? '';
+        const code = field.code ?? value ?? '';
+        const type = field.type ?? null;
 
-    return normalized;
+        return {
+          fieldId,
+          code,
+          label,
+          type,
+          value,
+        };
+      });
   }
 
   /**
@@ -416,17 +475,15 @@ export class UserElasticsearchService implements OnModuleInit {
         { retry_on_conflict: 3 }
       );
     } catch (error: any) {
-      // If the document is missing, create it from DB
       if (
-        error?.meta?.body?.error?.type === 'document_missing_exception' &&
+        this.isElasticsearchDocumentMissingError(error) &&
         fetchUserFromDb
       ) {
         const userFromDb = await fetchUserFromDb(userId);
         if (userFromDb) {
           return await this.createUser(userFromDb);
-        } else {
-          throw new Error(`User with ID ${userId} not found in DB for upsert.`);
         }
+        throw new Error(`User with ID ${userId} not found in DB for upsert.`);
       }
       throw error;
     }
