@@ -2131,10 +2131,10 @@ export class UserService {
       for (const mapData of tenantCohortRoleMapping) {
         if (mapData.cohortIds) {
           for (const cohortIds of mapData.cohortIds) {
-            let query = `SELECT * FROM public."CohortAcademicYear" WHERE "cohortId"= '${cohortIds}' AND "academicYearId" = '${academicYearId}'`;
+            let query = `SELECT * FROM public."CohortAcademicYear" WHERE "cohortId"= $1 AND "academicYearId" = $2`;
 
             let getCohortAcademicYearId = await this.usersRepository.query(
-              query
+              query, [cohortIds, academicYearId]
             );
 
             // will add data only if cohort is found with academic year

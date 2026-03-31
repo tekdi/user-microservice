@@ -65,15 +65,18 @@ export class FieldsService {
         );
       }
 
+      const params = [];
       if (requiredData.context) {
-        whereClause += ` OR context = '${requiredData.context}' AND "contextType" IS NULL`;
+        params.push(requiredData.context);
+        whereClause += ` OR context = $${params.length} AND "contextType" IS NULL`;
       }
 
       if (requiredData.contextType) {
-        whereClause += ` OR "contextType" = '${requiredData.contextType}'`;
+        params.push(requiredData.contextType);
+        whereClause += ` OR "contextType" = $${params.length}`;
       }
 
-      const data = await this.getFieldData(whereClause);
+      const data = await this.getFieldData(whereClause, params);
       if (!data) {
         return APIResponse.error(
           response,
@@ -314,10 +317,10 @@ export class FieldsService {
     };
   }
 
-  async getFieldData(whereClause: any, tenantId?: string): Promise<any> {
+  async getFieldData(whereClause: any, params: any[] = [], tenantId?: string): Promise<any> {
     const query = `select * from public."Fields" where ${whereClause}`;
 
-    const result = await this.fieldsRepository.query(query);
+    const result = await this.fieldsRepository.query(query, params);
     if (!result) {
       return false;
     }
@@ -393,13 +396,13 @@ export class FieldsService {
             storeWithoutControllingField.push(sourceFieldName["name"]);
           }
 
-          const query = `SELECT "name", "value" 
-          FROM public.${fieldsData.sourceDetails.table} 
-          WHERE value = '${sourceFieldName["value"]}' 
+          const query = `SELECT "name", "value"
+          FROM public.${fieldsData.sourceDetails.table}
+          WHERE value = $1
           GROUP BY  "name", "value"`;
 
           const checkSourceData = await this.fieldsValuesRepository.query(
-            query
+            query, [sourceFieldName["value"]]
           );
 
           //If code is not exist in db
@@ -532,13 +535,13 @@ export class FieldsService {
           }
 
           // check options exits in source table column or not
-          const query = `SELECT "name", "value" 
-          FROM public.${getSourceDetails.sourceDetails.table} 
-          WHERE value = '${sourceFieldName["value"]}' 
+          const query = `SELECT "name", "value"
+          FROM public.${getSourceDetails.sourceDetails.table}
+          WHERE value = $1
           GROUP BY  "name", "value"`;
 
           const checkSourceData = await this.fieldsValuesRepository.query(
-            query
+            query, [sourceFieldName["value"]]
           );
 
           //If code is not exist in db
@@ -604,8 +607,8 @@ export class FieldsService {
           }
 
           // check options exits in fieldParams column or not
-          const query = `SELECT COUNT(*) FROM public."Fields" WHERE "fieldId"='${fieldId}' AND "fieldParams" -> 'options' @> '[{"value": "${sourceFieldName["value"]}"}]' `;
-          const checkSourceData = await this.fieldsRepository.query(query);
+          const query = `SELECT COUNT(*) FROM public."Fields" WHERE "fieldId"=$1 AND "fieldParams" -> 'options' @> $2::jsonb`;
+          const checkSourceData = await this.fieldsRepository.query(query, [fieldId, JSON.stringify([{ value: sourceFieldName["value"] }])]);
 
           //If fields is not present then create a new options
           if (checkSourceData[0].count == 0) {
@@ -694,6 +697,7 @@ export class FieldsService {
     controllingfieldfk?: string,
     dependsOn?: string
   ) {
+    const params = [name, value, createdBy];
     let createSourceFields = `INSERT INTO public.${tableName} ("name", "value", "createdBy"`;
 
     // Add controllingfieldfk to the columns if it is defined
@@ -701,11 +705,12 @@ export class FieldsService {
       createSourceFields += `, controllingfieldfk`;
     }
 
-    createSourceFields += `) VALUES ('${name}', '${value}', '${createdBy}'`;
+    createSourceFields += `) VALUES ($1, $2, $3`;
 
     // Add controllingfieldfk to the values if it is defined
     if (controllingfieldfk !== undefined && controllingfieldfk !== "") {
-      createSourceFields += `, '${controllingfieldfk}'`;
+      params.push(controllingfieldfk);
+      createSourceFields += `, $${params.length}`;
     }
 
     createSourceFields += `);`;
@@ -716,7 +721,7 @@ export class FieldsService {
 
     //Insert data into source table
     const checkSourceData = await this.fieldsValuesRepository.query(
-      createSourceFields
+      createSourceFields, params
     );
     if (checkSourceData.length == 0) {
       return false;
@@ -730,16 +735,19 @@ export class FieldsService {
     updatedBy: string,
     controllingfieldfk?: string
   ) {
-    let updateSourceDetails = `UPDATE public.${tableName} SET "name"='${name}',"updatedBy"='${updatedBy}'`;
+    const params = [name, updatedBy];
+    let updateSourceDetails = `UPDATE public.${tableName} SET "name"=$1,"updatedBy"=$2`;
 
     if (controllingfieldfk !== undefined) {
-      updateSourceDetails += `, controllingfieldfk='${controllingfieldfk}'`;
+      params.push(controllingfieldfk);
+      updateSourceDetails += `, controllingfieldfk=$${params.length}`;
     }
 
-    updateSourceDetails += ` WHERE value='${value}';`;
+    params.push(value);
+    updateSourceDetails += ` WHERE value=$${params.length};`;
 
     const updateSourceData = await this.fieldsValuesRepository.query(
-      updateSourceDetails
+      updateSourceDetails, params
     );
     if (updateSourceData.length == 0) {
       return false;
@@ -797,9 +805,14 @@ export class FieldsService {
       const fieldKeys = this.fieldsRepository.metadata.columns.map(
         (column) => column.propertyName
       );
-      let tenantCond = tenantId
-        ? `"tenantId" = '${tenantId}'`
-        : `"tenantId" IS NULL`;
+      const params = [];
+      let tenantCond;
+      if (tenantId) {
+        params.push(tenantId);
+        tenantCond = `"tenantId" = $${params.length}`;
+      } else {
+        tenantCond = `"tenantId" IS NULL`;
+      }
       let whereClause = tenantCond;
       if (filters && Object.keys(filters).length > 0) {
         Object.entries(filters).forEach(([key, value]) => {
@@ -808,9 +821,11 @@ export class FieldsService {
               key === "context" &&
               (value === "USERS" || value === "COHORT")
             ) {
-              whereClause += ` AND "context" = '${value}'`;
+              params.push(value);
+              whereClause += ` AND "context" = $${params.length}`;
             } else {
-              whereClause += ` AND "${key}" = '${value}'`;
+              params.push(value);
+              whereClause += ` AND "${key}" = $${params.length}`;
             }
           } else {
             return APIResponse.error(
@@ -824,7 +839,7 @@ export class FieldsService {
         });
       }
 
-      const fieldData = await this.getFieldData(whereClause);
+      const fieldData = await this.getFieldData(whereClause, params);
       if (!fieldData.length) {
         return APIResponse.error(
           response,
@@ -1381,10 +1396,11 @@ export class FieldsService {
       //Delete data from source table
       if (getField?.sourceDetails?.source == "table") {
         const whereCond = requiredData.option
-          ? `WHERE "value"='${requiredData.option}'`
+          ? `WHERE "value"=$1`
           : "";
+        const deleteParams = requiredData.option ? [requiredData.option] : [];
         const query = `DELETE FROM public.${getField?.sourceDetails?.table} ${whereCond}`;
-        const [_, affectedRow] = await this.fieldsRepository.query(query);
+        const [_, affectedRow] = await this.fieldsRepository.query(query, deleteParams);
 
         if (affectedRow === 0) {
           return await APIResponse.error(
@@ -1400,8 +1416,8 @@ export class FieldsService {
       //Delete data from fieldParams column
       if (getField?.sourceDetails?.source == "fieldparams") {
         // check options exits in fieldParams column or not
-        const query = `SELECT * FROM public."Fields" WHERE "fieldId"='${getField.fieldId}' AND "fieldParams" -> 'options' @> '[{"value": "${removeOption}"}]' `;
-        const checkSourceData = await this.fieldsRepository.query(query);
+        const query = `SELECT * FROM public."Fields" WHERE "fieldId"=$1 AND "fieldParams" -> 'options' @> $2::jsonb`;
+        const checkSourceData = await this.fieldsRepository.query(query, [getField.fieldId, JSON.stringify([{ value: removeOption }])]);
 
         if (checkSourceData.length > 0) {
           let fieldParamsOptions = checkSourceData[0].fieldParams.options;
@@ -1466,6 +1482,7 @@ export class FieldsService {
       const offsetCond = offset ? `offset ${offset}` : "";
       const limitCond = limit ? `limit ${limit}` : "";
       const conditions = [];
+      const params = [];
 
       if (whereClause) {
         conditions.push(`${whereClause}`);
@@ -1475,14 +1492,15 @@ export class FieldsService {
       conditions.push(`is_active=1`);
 
       if (optionSelected) {
-        conditions.push(`"${tableName}_name" ILike '%${optionSelected}%'`);
+        params.push(`%${optionSelected}%`);
+        conditions.push(`"${tableName}_name" ILike $${params.length}`);
       }
 
       const whereCond = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
 
       const query = `SELECT *,COUNT(*) OVER() AS total_count FROM public."${tableName}" ${whereCond} ${orderCond} ${offsetCond} ${limitCond}`;
 
-      const result = await this.fieldsRepository.query(query);
+      const result = await this.fieldsRepository.query(query, params);
       if (!result) {
         return null;
       }
@@ -1603,7 +1621,7 @@ export class FieldsService {
   }
 
   async filterUserUsingCustomFields(context: string, stateDistBlockData: any) {
-    const searchKey = [];
+    const params = [];
     let whereCondition = ` WHERE `;
     let index = 0;
     const tableName = "";
@@ -1617,21 +1635,26 @@ export class FieldsService {
       joinCond = ``;
     }
 
+    const searchKeys = Object.keys(stateDistBlockData);
     for (const [key, value] of Object.entries(stateDistBlockData)) {
-      searchKey.push(`'${key}'`);
       if (index > 0) {
         whereCondition += ` AND `;
       }
 
       // using the ?| array[] operator to search for both single and multiple values in a JSONB column.
-      whereCondition += `fields->'${key}' ?| array[${(Array.isArray(value)
-        ? value
-        : [value]
-      )
-        .map((v) => `'${v}'`)
-        .join(",")}]`;
+      params.push(key);
+      const keyParam = params.length;
+      const values = Array.isArray(value) ? value : [value];
+      params.push(values);
+      const valParam = params.length;
+      whereCondition += `fields->$${keyParam} ?| $${valParam}::text[]`;
       index++;
     }
+
+    params.push(searchKeys);
+    const searchKeyParam = params.length;
+    params.push(context);
+    const contextParam = params.length;
 
     const query = `WITH user_fields AS (
         SELECT
@@ -1640,13 +1663,13 @@ export class FieldsService {
         FROM "FieldValues" fv
         JOIN "Fields" f ON fv."fieldId" = f."fieldId"
         ${joinCond}
-        WHERE f."name" IN (${searchKey}) AND (f.context IN('${context}', 'NULL', 'null', '') OR f.context IS NULL)
+        WHERE f."name" = ANY($${searchKeyParam}) AND (f.context IN($${contextParam}, 'NULL', 'null', '') OR f.context IS NULL)
         GROUP BY fv."itemId"
         )
         SELECT "itemId"
         FROM user_fields ${whereCondition}`;
 
-    const queryData = await this.fieldsValuesRepository.query(query);
+    const queryData = await this.fieldsValuesRepository.query(query, params);
     const result =
       queryData.length > 0 ? queryData.map((item) => item.itemId) : null;
     return result;
