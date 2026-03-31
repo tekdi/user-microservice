@@ -285,14 +285,15 @@ export class UserElasticsearchService implements OnModuleInit {
   }
 
   /**
-   * Country-like keyword fields: lowercase + trim at index time so _source matches
-   * prefix/wildcard queries that use lowercased terms, and align with the index normalizer.
+   * Country-like fields: trim only. Preserve original casing in _source for API responses.
+   * The index `country_keyword_normalizer` lowercases indexed terms for matching; queries
+   * should use lowercased terms where the search layer applies `.toLowerCase()`.
    */
   private normalizeCountryKeyword(value: unknown): string {
     if (value == null || value === '') {
       return '';
     }
-    return String(value).trim().toLowerCase();
+    return String(value).trim();
   }
 
   /**
