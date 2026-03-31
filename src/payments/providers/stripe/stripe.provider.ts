@@ -285,7 +285,6 @@ export class StripeProvider implements PaymentProvider {
         const expiredSession = event.data.object as Stripe.Checkout.Session;
         sessionId = expiredSession.id;
         paymentId = (expiredSession.payment_intent as string) || '';
-        status = 'failed';
         currency = expiredSession.currency || 'inr';
         amount = this.convertFromUnitAmount(
           expiredSession.amount_total || 0,
@@ -307,7 +306,6 @@ export class StripeProvider implements PaymentProvider {
       case 'payment_intent.payment_failed':
         const failedPayment = event.data.object as Stripe.PaymentIntent;
         paymentId = failedPayment.id;
-        status = 'failed';
         currency = failedPayment.currency;
         amount = this.convertFromUnitAmount(failedPayment.amount, currency);
         metadata = failedPayment.metadata || {};

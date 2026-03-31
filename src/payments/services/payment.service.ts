@@ -313,9 +313,8 @@ export class PaymentService {
         } else {
           // Update existing transaction
           transactionToUpdate.status = transactionStatus;
-          if (failedWebhookReason) {
-            transactionToUpdate.failureReason = failedWebhookReason;
-          }
+          // Clear stale failure reason when status transitions away from failed.
+          transactionToUpdate.failureReason = failedWebhookReason;
           // Populate providerPaymentId if it was null (e.g. transaction was found by sessionId)
           if (webhookEvent.paymentId && !transactionToUpdate.providerPaymentId) {
             transactionToUpdate.providerPaymentId = webhookEvent.paymentId;
