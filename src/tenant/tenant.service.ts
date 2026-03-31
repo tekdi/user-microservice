@@ -48,8 +48,8 @@ export class TenantService {
     
                 // Fetch roles only for child tenants (skip for parent tenants)
                 if (tenantData.parentId) {
-                    let query = `SELECT * FROM public."Roles" WHERE "tenantId" = '${tenantData.tenantId}'`;
-                    let getRole = await this.tenantRepository.query(query);
+                    let query = `SELECT * FROM public."Roles" WHERE "tenantId" = $1`;
+                    let getRole = await this.tenantRepository.query(query, [tenantData.tenantId]);
     
                     if (getRole.length === 0) {
                         // fallback if tenant-specific roles not found
