@@ -1244,17 +1244,6 @@ export class PostgresCohortMembersService {
             parameters.push(value);
             return `U."country"=$${parameterIndex++}`;
           }
-          case 'permanentCountry': {
-            if (Array.isArray(value)) {
-              const placeholders = value
-                .map(() => `$${parameterIndex++}`)
-                .join(', ');
-              parameters.push(...value);
-              return `U."permanentCountry" IN (${placeholders})`;
-            }
-            parameters.push(value);
-            return `U."permanentCountry"=$${parameterIndex++}`;
-          }
           case 'currentCountry': {
             if (Array.isArray(value)) {
               const placeholders = value
@@ -1265,6 +1254,17 @@ export class PostgresCohortMembersService {
             }
             parameters.push(value);
             return `U."currentCountry"=$${parameterIndex++}`;
+          }
+           case 'permanentCountry': {
+            if (Array.isArray(value)) {
+              const placeholders = value
+                .map(() => `$${parameterIndex++}`)
+                .join(', ');
+              parameters.push(...value);
+              return `U."permanentCountry" IN (${placeholders})`;
+            }
+            parameters.push(value);
+            return `U."permanentCountry"=$${parameterIndex++}`;
           }
           case 'cohortAcademicYearId': {
             const cohortIdAcademicYear = Array.isArray(value)
