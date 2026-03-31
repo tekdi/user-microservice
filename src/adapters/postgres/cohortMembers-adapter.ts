@@ -59,6 +59,11 @@ export class PostgresCohortMembersService {
     private readonly userElasticsearchService: UserElasticsearchService
   ) {}
 
+  /** Empty arrays would produce invalid SQL `IN ()`; skip the filter. */
+  private isEmptyInFilterArray(value: unknown): boolean {
+    return Array.isArray(value) && value.length === 0;
+  }
+
   //Get cohort member
   async getCohortMembers(
     cohortId: any,
@@ -944,6 +949,9 @@ export class PostgresCohortMembersService {
           case 'status': {
             // FIXED: Use parameterized query for array values
             if (Array.isArray(value)) {
+              if (this.isEmptyInFilterArray(value)) {
+                return null;
+              }
               const placeholders = value.map(() => `$${paramIndex++}`).join(', ');
               queryParams.push(...value);
               return `CM."status" IN (${placeholders})`;
@@ -965,6 +973,9 @@ export class PostgresCohortMembersService {
           case 'country': {
             // FIXED: Use parameterized query for array values
             if (Array.isArray(value)) {
+              if (this.isEmptyInFilterArray(value)) {
+                return null;
+              }
               const placeholders = value.map(() => `$${paramIndex++}`).join(', ');
               queryParams.push(...value);
               return `U."country" IN (${placeholders})`;
@@ -975,6 +986,9 @@ export class PostgresCohortMembersService {
           }
           case 'permanentCountry': {
             if (Array.isArray(value)) {
+              if (this.isEmptyInFilterArray(value)) {
+                return null;
+              }
               const placeholders = value.map(() => `$${paramIndex++}`).join(', ');
               queryParams.push(...value);
               return `U."permanentCountry" IN (${placeholders})`;
@@ -985,6 +999,9 @@ export class PostgresCohortMembersService {
           }
           case 'currentCountry': {
             if (Array.isArray(value)) {
+              if (this.isEmptyInFilterArray(value)) {
+                return null;
+              }
               const placeholders = value.map(() => `$${paramIndex++}`).join(', ');
               queryParams.push(...value);
               return `U."currentCountry" IN (${placeholders})`;
@@ -996,6 +1013,9 @@ export class PostgresCohortMembersService {
           case 'cohortAcademicYearId': {
             // FIXED: Use parameterized query for array values
             if (Array.isArray(value)) {
+              if (this.isEmptyInFilterArray(value)) {
+                return null;
+              }
               const placeholders = value.map(() => `$${paramIndex++}`).join(', ');
               queryParams.push(...value);
               return `CM."cohortAcademicYearId" IN (${placeholders})`;
@@ -1007,6 +1027,9 @@ export class PostgresCohortMembersService {
           case 'cohortId': {
             // FIXED: Use parameterized query for array values
             if (Array.isArray(value)) {
+              if (this.isEmptyInFilterArray(value)) {
+                return null;
+              }
               const placeholders = value.map(() => `$${paramIndex++}`).join(', ');
               queryParams.push(...value);
               return `CM."cohortId" IN (${placeholders})`;
@@ -1016,6 +1039,9 @@ export class PostgresCohortMembersService {
             }
           }
           case 'auto_tags': {
+            if (this.isEmptyInFilterArray(value)) {
+              return null;
+            }
             // FIXED: Use parameterized query for array values
             const escapedTags = value.map((tag) => tag.trim().replace(/'/g, "''"));
             queryParams.push(escapedTags);
@@ -1038,6 +1064,9 @@ export class PostgresCohortMembersService {
           case 'userId': {
             // FIXED: Handle userId as array (wrapped by searchCohortMembers logic) or single value
             if (Array.isArray(value)) {
+              if (this.isEmptyInFilterArray(value)) {
+                return null;
+              }
               const placeholders = value.map(() => `$${paramIndex++}`).join(', ');
               queryParams.push(...value);
               return `CM."userId" IN (${placeholders})`;
@@ -1050,6 +1079,9 @@ export class PostgresCohortMembersService {
             // FIXED: Use parameterized query to prevent SQL injection
             // Handle both array and single value cases
             if (Array.isArray(value)) {
+              if (this.isEmptyInFilterArray(value)) {
+                return null;
+              }
               const placeholders = value.map(() => `$${paramIndex++}`).join(', ');
               queryParams.push(...value);
               return `CM."${key}" IN (${placeholders})`;
@@ -1123,6 +1155,10 @@ export class PostgresCohortMembersService {
       } else {
         whereCase = `WHERE ${dateConditionsStr}`;
       }
+    }
+
+    if (whereCase === 'WHERE ' || whereCase.trim() === 'WHERE') {
+      whereCase = '';
     }
 
     // Determine if we need to JOIN Cohort table (only if date filters are present)
@@ -1220,10 +1256,18 @@ export class PostgresCohortMembersService {
             parameters.push(value);
             return `R."name"=$${parameterIndex++}`;
           case 'status': {
-            const statusValues = Array.isArray(value)
-              ? value.map((status) => `'${status}'`).join(', ')
-              : `'${value}'`;
-            return `CM."status" IN (${statusValues})`;
+            if (Array.isArray(value) && this.isEmptyInFilterArray(value)) {
+              return null;
+            }
+            if (Array.isArray(value)) {
+              const placeholders = value
+                .map(() => `$${parameterIndex++}`)
+                .join(', ');
+              parameters.push(...value);
+              return `CM."status" IN (${placeholders})`;
+            }
+            parameters.push(value);
+            return `CM."status"=$${parameterIndex++}`;
           }
           case 'firstName': {
             parameters.push(`%${value}%`);
@@ -1235,6 +1279,9 @@ export class PostgresCohortMembersService {
           }
           case 'country': {
             if (Array.isArray(value)) {
+              if (this.isEmptyInFilterArray(value)) {
+                return null;
+              }
               const placeholders = value
                 .map(() => `$${parameterIndex++}`)
                 .join(', ');
@@ -1246,6 +1293,9 @@ export class PostgresCohortMembersService {
           }
           case 'currentCountry': {
             if (Array.isArray(value)) {
+              if (this.isEmptyInFilterArray(value)) {
+                return null;
+              }
               const placeholders = value
                 .map(() => `$${parameterIndex++}`)
                 .join(', ');
@@ -1257,6 +1307,9 @@ export class PostgresCohortMembersService {
           }
            case 'permanentCountry': {
             if (Array.isArray(value)) {
+              if (this.isEmptyInFilterArray(value)) {
+                return null;
+              }
               const placeholders = value
                 .map(() => `$${parameterIndex++}`)
                 .join(', ');
@@ -1267,19 +1320,37 @@ export class PostgresCohortMembersService {
             return `U."permanentCountry"=$${parameterIndex++}`;
           }
           case 'cohortAcademicYearId': {
-            const cohortIdAcademicYear = Array.isArray(value)
-              ? value.map((id) => `'${id}'`).join(', ')
-              : `'${value}'`;
-            return `CM."cohortAcademicYearId" IN (${cohortIdAcademicYear})`;
+            if (Array.isArray(value) && this.isEmptyInFilterArray(value)) {
+              return null;
+            }
+            if (Array.isArray(value)) {
+              const placeholders = value
+                .map(() => `$${parameterIndex++}`)
+                .join(', ');
+              parameters.push(...value);
+              return `CM."cohortAcademicYearId" IN (${placeholders})`;
+            }
+            parameters.push(value);
+            return `CM."cohortAcademicYearId"=$${parameterIndex++}`;
           }
           case 'cohortId': {
-            //Handles UUID array properly
-            const formattedIds = Array.isArray(value)
-              ? value.map((id) => `'${id}'`).join(', ')
-              : `'${value}'`;
-            return `CM."${key}" IN (${formattedIds})`;
+            if (Array.isArray(value) && this.isEmptyInFilterArray(value)) {
+              return null;
+            }
+            if (Array.isArray(value)) {
+              const placeholders = value
+                .map(() => `$${parameterIndex++}`)
+                .join(', ');
+              parameters.push(...value);
+              return `CM."cohortId" IN (${placeholders})`;
+            }
+            parameters.push(value);
+            return `CM."cohortId"=$${parameterIndex++}`;
           }
           case 'auto_tags': {
+            if (this.isEmptyInFilterArray(value)) {
+              return null;
+            }
             // Handle auto_tags with PostgreSQL array overlap operator
             const escaped = value
               .map((tag) => `'${tag.trim().replace(/'/g, "''")}'`)
@@ -1298,10 +1369,16 @@ export class PostgresCohortMembersService {
           }
         }
       };
-      const conditions = where.map(processCondition).filter((c) => c !== null);
+      const conditions = where
+        .map(processCondition)
+        .filter((c) => c !== null && c !== '');
       if (conditions.length > 0) {
         whereCase += conditions.join(' AND ');
       }
+    }
+
+    if (whereCase === 'WHERE ' || whereCase.trim() === 'WHERE') {
+      whereCase = '';
     }
 
     // Add additional where conditions if provided

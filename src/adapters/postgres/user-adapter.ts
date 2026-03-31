@@ -583,6 +583,21 @@ export class PostgresUserService implements IServicelocator {
         }
 
         if (userKeys.includes(key) || (key === 'country' && !isRegionalAdmin)) {
+          if (
+            key !== 'firstName' &&
+            Array.isArray(value) &&
+            value.every((item) => typeof item === 'string') &&
+            value.length === 0 &&
+            (key === 'status' ||
+              key === 'email' ||
+              key === 'userId' ||
+              key === 'country' ||
+              key === 'permanentCountry' ||
+              key === 'currentCountry' ||
+              key === 'auto_tags')
+          ) {
+            continue;
+          }
           if (index > 0) {
             whereCondition += ` AND `;
           }
