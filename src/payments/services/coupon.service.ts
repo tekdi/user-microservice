@@ -45,13 +45,45 @@ export class CouponService {
    * Create a new coupon
    */
   async createCoupon(dto: CreateCouponDto): Promise<DiscountCoupon> {
-    // Check if coupon code already exists
     const existing = await this.couponRepository.findOne({
       where: { couponCode: dto.couponCode },
     });
 
     if (existing) {
-      throw new BadRequestException(`Coupon code ${dto.couponCode} already exists`);
+      if (existing.isActive) {
+        throw new BadRequestException(`Coupon code ${dto.couponCode} already exists`);
+      }
+      // Same code is reserved by an inactive row (unique constraint). Reuse the row:
+      // stable couponId for reporting/redemptions, new terms from this payload.
+      existing.contextType = dto.contextType;
+      existing.contextId = dto.contextId;
+      existing.discountType = dto.discountType;
+      existing.discountValue = dto.discountValue;
+      existing.currency = dto.currency || 'USD';
+      existing.countryId = dto.countryId ?? null;
+      existing.isActive = dto.isActive ?? true;
+      existing.validFrom = dto.validFrom ? new Date(dto.validFrom) : null;
+      existing.validTill = dto.validTill ? new Date(dto.validTill) : null;
+      existing.maxRedemptions = dto.maxRedemptions ?? null;
+      existing.maxRedemptionsPerUser = dto.maxRedemptionsPerUser ?? null;
+      if (dto.stripePromoCodeId !== undefined) {
+        existing.stripePromoCodeId = dto.stripePromoCodeId ?? null;
+      }
+
+      const savedCoupon = await this.couponRepository.save(existing);
+      if (this.stripe && !dto.stripePromoCodeId) {
+        try {
+          await this.syncCouponToStripe(savedCoupon);
+        } catch (error) {
+          this.logger.warn(
+            `Failed to sync reactivated coupon ${savedCoupon.id} to Stripe: ${error.message}`,
+          );
+        }
+      }
+      this.logger.log(
+        `Reactivated inactive coupon: ${savedCoupon.couponCode} (${savedCoupon.id})`,
+      );
+      return savedCoupon;
     }
 
     // Create coupon in database
@@ -91,6 +123,52 @@ export class CouponService {
   }
 
   /**
+   * Stripe coupons are immutable: percent_off, amount_off, max_redemptions, redeem_by cannot be
+   * changed after creation. Compare DB state to the Stripe coupon we would create.
+   */
+  private stripeCouponMatchesEntity(
+    stripeCoupon: Stripe.Coupon,
+    entity: DiscountCoupon,
+  ): boolean {
+    if (entity.discountType === DiscountType.PERCENT) {
+      if (stripeCoupon.percent_off == null) {
+        return false;
+      }
+      if (Number(stripeCoupon.percent_off) !== Number(entity.discountValue)) {
+        return false;
+      }
+    } else {
+      const expectedCents = Math.round(Number(entity.discountValue) * 100);
+      if (
+        stripeCoupon.amount_off !== expectedCents ||
+        stripeCoupon.currency !== entity.currency.toLowerCase()
+      ) {
+        return false;
+      }
+    }
+
+    const entityMax = entity.maxRedemptions ?? null;
+    const stripeMax = stripeCoupon.max_redemptions ?? null;
+    if (entityMax !== stripeMax) {
+      return false;
+    }
+
+    const expectedRedeemBy = entity.validTill
+      ? Math.floor(new Date(entity.validTill).getTime() / 1000)
+      : null;
+    const stripeRedeemBy = stripeCoupon.redeem_by ?? null;
+    if (expectedRedeemBy !== stripeRedeemBy) {
+      return false;
+    }
+
+    return true;
+  }
+
+  private promotionCodeCouponId(promo: Stripe.PromotionCode): string {
+    return typeof promo.coupon === 'string' ? promo.coupon : promo.coupon.id;
+  }
+
+  /**
    * Sync coupon to Stripe
    */
   async syncCouponToStripe(coupon: DiscountCoupon): Promise<void> {
@@ -99,9 +177,10 @@ export class CouponService {
     }
 
     try {
-      // Create or update Stripe coupon
+      const desiredCouponId = coupon.couponCode.toLowerCase().replace(/[^a-z0-9]/g, '_');
+
       const stripeCouponParams: Stripe.CouponCreateParams = {
-        id: coupon.couponCode.toLowerCase().replace(/[^a-z0-9]/g, '_'),
+        id: desiredCouponId,
         name: coupon.couponCode,
       };
 
@@ -110,93 +189,105 @@ export class CouponService {
         if (percentOff < 0 || percentOff > 100) {
           throw new BadRequestException('Percentage discount must be between 0 and 100');
         }
-        // For percentage discounts, Stripe doesn't accept currency parameter
         stripeCouponParams.percent_off = percentOff;
       } else {
-        // For fixed amount discounts, currency is required
         stripeCouponParams.amount_off = Math.round(
-          Number(coupon.discountValue) * 100, // Convert to cents
+          Number(coupon.discountValue) * 100,
         );
         stripeCouponParams.currency = coupon.currency.toLowerCase();
       }
 
-      // Set redemption limits
       if (coupon.maxRedemptions) {
         stripeCouponParams.max_redemptions = coupon.maxRedemptions;
       }
 
-      // Set validity period
       if (coupon.validFrom || coupon.validTill) {
         stripeCouponParams.redeem_by = coupon.validTill
           ? Math.floor(new Date(coupon.validTill).getTime() / 1000)
           : undefined;
       }
 
-      // Try to create the coupon
+      const paramsForNewCoupon: Stripe.CouponCreateParams = { ...stripeCouponParams };
+      delete paramsForNewCoupon.id;
+
       let stripeCoupon: Stripe.Coupon;
       try {
         stripeCoupon = await this.stripe.coupons.create(stripeCouponParams);
       } catch (error) {
-        // If coupon already exists, retrieve it
         if (error.code === 'resource_already_exists') {
-          stripeCoupon = await this.stripe.coupons.retrieve(
-            stripeCouponParams.id as string,
-          );
+          const existing = await this.stripe.coupons.retrieve(desiredCouponId);
+          if (this.stripeCouponMatchesEntity(existing, coupon)) {
+            stripeCoupon = existing;
+          } else {
+            this.logger.log(
+              `Stripe coupon ${desiredCouponId} exists but does not match DB; creating new Stripe coupon (immutable fields changed)`,
+            );
+            if (coupon.stripePromoCodeId) {
+              try {
+                await this.stripe.promotionCodes.update(coupon.stripePromoCodeId, {
+                  active: false,
+                });
+              } catch (deactErr) {
+                if (deactErr.code !== 'resource_missing') {
+                  throw deactErr;
+                }
+              }
+            }
+            stripeCoupon = await this.stripe.coupons.create(paramsForNewCoupon);
+          }
         } else {
           throw error;
         }
       }
 
-      // Create or update promotion code
-      let promoCode: Stripe.PromotionCode;
       if (coupon.stripePromoCodeId) {
-        // Update existing promotion code
-        // Note: max_redemptions is a coupon property, not a promotion code property
         try {
-          promoCode = await this.stripe.promotionCodes.update(
+          const existingPromo = await this.stripe.promotionCodes.retrieve(
             coupon.stripePromoCodeId,
-            {
+          );
+          if (this.promotionCodeCouponId(existingPromo) === stripeCoupon.id) {
+            await this.stripe.promotionCodes.update(coupon.stripePromoCodeId, {
               active: coupon.isActive,
-            },
-          );
-          this.logger.log(
-            `Updated existing Stripe promotion code ${promoCode.id} for coupon ${coupon.couponCode}`,
-          );
+            });
+            this.logger.log(
+              `Updated existing Stripe promotion code ${coupon.stripePromoCodeId} for coupon ${coupon.couponCode}`,
+            );
+            return;
+          }
+          try {
+            await this.stripe.promotionCodes.update(coupon.stripePromoCodeId, {
+              active: false,
+            });
+            this.logger.log(
+              `Deactivated Stripe promotion code ${coupon.stripePromoCodeId} (replaced after coupon terms change)`,
+            );
+          } catch (deactErr) {
+            if (deactErr.code !== 'resource_missing') {
+              throw deactErr;
+            }
+          }
         } catch (error) {
-          // If promotion code doesn't exist in Stripe, create a new one
           if (error.code === 'resource_missing') {
             this.logger.warn(
               `Promotion code ${coupon.stripePromoCodeId} not found in Stripe, creating new one`,
-            );
-            promoCode = await this.stripe.promotionCodes.create({
-              coupon: stripeCoupon.id,
-              code: coupon.couponCode,
-              active: coupon.isActive,
-              max_redemptions: coupon.maxRedemptions || undefined,
-            });
-            coupon.stripePromoCodeId = promoCode.id;
-            await this.couponRepository.save(coupon);
-            this.logger.log(
-              `Created new Stripe promotion code ${promoCode.id} for coupon ${coupon.couponCode}`,
             );
           } else {
             throw error;
           }
         }
-      } else {
-        // Create new promotion code
-        promoCode = await this.stripe.promotionCodes.create({
-          coupon: stripeCoupon.id,
-          code: coupon.couponCode,
-          active: coupon.isActive,
-          max_redemptions: coupon.maxRedemptions || undefined,
-        });
-        coupon.stripePromoCodeId = promoCode.id;
-        await this.couponRepository.save(coupon);
-        this.logger.log(
-          `Created new Stripe promotion code ${promoCode.id} for coupon ${coupon.couponCode}`,
-        );
       }
+
+      const promoCode = await this.stripe.promotionCodes.create({
+        coupon: stripeCoupon.id,
+        code: coupon.couponCode,
+        active: coupon.isActive,
+        max_redemptions: coupon.maxRedemptions || undefined,
+      });
+      coupon.stripePromoCodeId = promoCode.id;
+      await this.couponRepository.save(coupon);
+      this.logger.log(
+        `Created Stripe promotion code ${promoCode.id} for coupon ${coupon.couponCode}`,
+      );
     } catch (error) {
       this.logger.error(
         `Failed to sync coupon ${coupon.couponCode} to Stripe: ${error.message}`,
@@ -553,8 +644,7 @@ export class CouponService {
 
     const updated = await this.couponRepository.save(coupon);
 
-    // Sync to Stripe if needed
-    if (this.stripe && coupon.stripePromoCodeId) {
+    if (this.stripe) {
       try {
         await this.syncCouponToStripe(updated);
       } catch (error) {
