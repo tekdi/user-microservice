@@ -616,19 +616,20 @@ export class UserElasticsearchService implements OnModuleInit {
                     },
                   },
                 },
-                {
-                  prefix: {
-                    'profile.currentCountry': {
-                      value: searchTerm.toLowerCase(),
-                      boost: 3.0,
-                    },
-                  },
-                },
+                
                 {
                   wildcard: {
                     'profile.permanentCountry': {
                       value: `*${searchTerm.toLowerCase()}*`,
                       boost: 2.0,
+                    },
+                  },
+                },
+                {
+                  prefix: {
+                    'profile.currentCountry': {
+                      value: searchTerm.toLowerCase(),
+                      boost: 3.0,
                     },
                   },
                 },
