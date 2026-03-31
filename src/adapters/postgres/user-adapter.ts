@@ -583,6 +583,21 @@ export class PostgresUserService implements IServicelocator {
         }
 
         if (userKeys.includes(key) || (key === 'country' && !isRegionalAdmin)) {
+          if (
+            key !== 'firstName' &&
+            Array.isArray(value) &&
+            value.every((item) => typeof item === 'string') &&
+            value.length === 0 &&
+            (key === 'status' ||
+              key === 'email' ||
+              key === 'userId' ||
+              key === 'country' ||
+              key === 'permanentCountry' ||
+              key === 'currentCountry' ||
+              key === 'auto_tags')
+          ) {
+            continue;
+          }
           if (index > 0) {
             whereCondition += ` AND `;
           }
@@ -596,6 +611,8 @@ export class PostgresUserService implements IServicelocator {
               key === 'email' ||
               key === 'userId' ||
               key === 'country' ||
+              key === 'permanentCountry' ||
+              key === 'currentCountry' ||
               key === 'auto_tags'
             ) {
               if (
@@ -612,7 +629,9 @@ export class PostgresUserService implements IServicelocator {
                   const status = value
                     .map((item) => {
                       const trimmed =
-                        key === 'country'
+                        key === 'country' ||
+                        key === 'permanentCountry' ||
+                        key === 'currentCountry'
                           ? item.trim()
                           : item.trim().toLowerCase();
                       // Escape SQL special characters to prevent SQL injection (e.g., "Côte d'Ivoire")
@@ -738,7 +757,7 @@ export class PostgresUserService implements IServicelocator {
     // Fix the SQL query construction - add proper WHERE clause
     const whereClause =
       whereCondition && whereCondition !== 'WHERE' ? whereCondition : '';
-    const query = `SELECT U."userId", U."username",U."email", U."firstName", U."middleName", U."lastName", U."gender", U."dob", R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", U.status,U.country,U.auto_tags, COUNT(*) OVER() AS total_count 
+    const query = `SELECT U."userId", U."username",U."email", U."firstName", U."middleName", U."lastName", U."gender", U."dob", R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", U.status,U.country,U."permanentCountry" , U."currentCountry" ,U.auto_tags, COUNT(*) OVER() AS total_count 
       FROM  public."Users" U
       LEFT JOIN public."UserRolesMapping" UR
       ON UR."userId" = U."userId"
@@ -972,6 +991,8 @@ export class PostgresUserService implements IServicelocator {
         'deviceId',
         'mobile_country_code',
         'country',
+        'permanentCountry',
+        'currentCountry',
         'auto_tags',
       ],
     });
@@ -1994,6 +2015,8 @@ export class PostgresUserService implements IServicelocator {
                   ? result.dob.toISOString()
                   : result.dob ?? '',
               country: result.country || '',
+              permanentCountry: result.permanentCountry || '',
+              currentCountry: result.currentCountry || '',
               status: result.status,
               customFields: elasticCustomFields,
             },
@@ -2065,6 +2088,8 @@ export class PostgresUserService implements IServicelocator {
     user.createdBy = userDto?.createdBy ?? null;
     user.updatedBy = userDto?.updatedBy ?? null;
     user.country = userDto?.country ?? null;
+    user.permanentCountry = userDto?.permanentCountry ?? null;
+    user.currentCountry = userDto?.currentCountry ?? null;
 
     // Handle SSO-specific fields
     if ('provider' in userDto) {
@@ -3377,6 +3402,8 @@ export class PostgresUserService implements IServicelocator {
         mobile_country_code: user.mobile_country_code || '',
         dob: formattedDob,
         country: user.country,
+        permanentCountry: user.permanentCountry || '',
+        currentCountry: user.currentCountry || '',
         gender: user.gender,
         status: user.status,
         customFields, // Now filtered to exclude form schema fields
@@ -3415,6 +3442,8 @@ export class PostgresUserService implements IServicelocator {
                 dob: formattedDob,
                 gender: dbUser.gender,
                 country: dbUser.country || '',
+                permanentCountry: dbUser.permanentCountry || '',
+                currentCountry: dbUser.currentCountry || '',
                 status: dbUser.status,
                 customFields,
               },

@@ -3173,6 +3173,8 @@ export class FormSubmissionService {
         gender: user.gender,
         dob: user.dob instanceof Date ? user.dob.toISOString() : user.dob || '',
         country: user.country,
+        permanentCountry: user.permanentCountry || '',
+        currentCountry: user.currentCountry || '',
         status: user.status,
         customFields: profileCustomFields, // Only user profile custom fields
       },
