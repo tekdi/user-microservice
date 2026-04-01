@@ -258,6 +258,14 @@ export class PaymentService {
         );
     }
 
+    let failedWebhookReason: string | null = null;
+    if (webhookEvent.status === 'failed') {
+      failedWebhookReason =
+        eventType === 'checkout.session.expired'
+          ? 'Checkout session expired'
+          : 'Payment failed via webhook';
+    }
+
     // Wrap all database operations in a transaction to ensure atomicity
     const result = await this.dataSource.transaction(
       async (manager: EntityManager) => {
@@ -298,19 +306,15 @@ export class PaymentService {
             providerPaymentId: webhookEvent.paymentId,
             providerSessionId: webhookEvent.sessionId,
             status: transactionStatus,
-            failureReason:
-              webhookEvent.status === 'failed'
-                ? 'Payment failed via webhook'
-                : null,
+            failureReason: failedWebhookReason,
             rawResponse: webhookEvent.rawEvent,
           });
           transaction = await manager.save(PaymentTransaction, transactionEntity);
         } else {
           // Update existing transaction
           transactionToUpdate.status = transactionStatus;
-          if (webhookEvent.status === 'failed') {
-            transactionToUpdate.failureReason = 'Payment failed via webhook';
-          }
+          // Clear stale failure reason when status transitions away from failed.
+          transactionToUpdate.failureReason = failedWebhookReason;
           // Populate providerPaymentId if it was null (e.g. transaction was found by sessionId)
           if (webhookEvent.paymentId && !transactionToUpdate.providerPaymentId) {
             transactionToUpdate.providerPaymentId = webhookEvent.paymentId;

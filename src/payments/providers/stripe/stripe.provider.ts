@@ -281,6 +281,19 @@ export class StripeProvider implements PaymentProvider {
         metadata = session.metadata || {};
         break;
 
+      case 'checkout.session.expired': {
+        const expiredSession = event.data.object as Stripe.Checkout.Session;
+        sessionId = expiredSession.id;
+        paymentId = (expiredSession.payment_intent as string) || '';
+        currency = expiredSession.currency || 'inr';
+        amount = this.convertFromUnitAmount(
+          expiredSession.amount_total || 0,
+          currency,
+        );
+        metadata = expiredSession.metadata || {};
+        break;
+      }
+
       case 'payment_intent.succeeded':
         const paymentIntent = event.data.object as Stripe.PaymentIntent;
         paymentId = paymentIntent.id;
@@ -293,7 +306,6 @@ export class StripeProvider implements PaymentProvider {
       case 'payment_intent.payment_failed':
         const failedPayment = event.data.object as Stripe.PaymentIntent;
         paymentId = failedPayment.id;
-        status = 'failed';
         currency = failedPayment.currency;
         amount = this.convertFromUnitAmount(failedPayment.amount, currency);
         metadata = failedPayment.metadata || {};
