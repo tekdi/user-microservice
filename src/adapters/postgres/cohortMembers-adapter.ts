@@ -2186,14 +2186,14 @@ export class PostgresCohortMembersService {
         cohortId: In(cohortIds),
       },
       select: [
-        'cohortId',
-        'name',
-        'parentId',
-        'type',
-        'status',
-        'metadata',
-        'cohort_startDate',
-        'cohort_endDate',
+        "cohortId",
+        "name",
+        "parentId",
+        "type",
+        "status",
+        "metadata",
+        "cohort_startDate",
+        "cohort_endDate",
       ],
     });
 
