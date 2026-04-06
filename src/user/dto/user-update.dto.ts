@@ -49,13 +49,13 @@ class UserDataDTO {
 
   @ApiProperty({
     type: String,
-    description: 'Last name of the user',
+    description: 'Last name of the user (may be empty)',
     maxLength: 50,
   })
   @Expose()
   @IsOptional()
   @IsString()
-  @Length(1, 50)
+  @Length(0, 50)
   lastName?: string;
 
   @ApiProperty({

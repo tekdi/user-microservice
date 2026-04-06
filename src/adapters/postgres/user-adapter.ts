@@ -1288,8 +1288,15 @@ export class PostgresUserService implements IServicelocator {
       const userId = userDto.userId;
       const keycloakReqBody = { username, firstName, lastName, userId, email };
 
-      //Update userdetails on keycloak
-      if (username || firstName || lastName || email) {
+      const ud = userDto.userData;
+      const shouldSyncKeycloak =
+        (ud && Object.prototype.hasOwnProperty.call(ud, 'username')) ||
+        (ud && Object.prototype.hasOwnProperty.call(ud, 'firstName')) ||
+        (ud && Object.prototype.hasOwnProperty.call(ud, 'lastName')) ||
+        (ud && Object.prototype.hasOwnProperty.call(ud, 'email'));
+
+      //Update userdetails on keycloak (include when a field is explicitly sent, e.g. lastName: "")
+      if (shouldSyncKeycloak) {
         try {
           const keycloakUpdateResult = await this.updateUsernameInKeycloak(
             keycloakReqBody
