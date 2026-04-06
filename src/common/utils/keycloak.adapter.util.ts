@@ -266,6 +266,17 @@ interface UpdateUserResponse {
   message: string;
 }
 
+/** Keycloak PATCH: include field when the caller set it (even ""); omit only when undefined/null. */
+function keycloakOptionalString<K extends keyof UpdateUserQuery>(
+  key: K,
+  value: UpdateUserQuery[K],
+): Partial<Pick<UpdateUserQuery, K>> {
+  if (value === undefined || value === null) {
+    return {};
+  }
+  return { [key]: value } as Partial<Pick<UpdateUserQuery, K>>;
+}
+
 async function updateUserInKeyCloak(
   query: UpdateUserQuery,
   token: string
@@ -279,16 +290,29 @@ async function updateUserInKeyCloak(
     };
   }
 
-  // Prepare the payload for the update
-  const data = JSON.stringify({
+  const payload: Record<string, unknown> = {
     enabled: true,
-    ...(query.firstName && { firstName: query.firstName }),
-    ...(query.lastName === undefined || query.lastName === null
-      ? {}
-      : { lastName: query.lastName }),
-    ...(query.username && { username: query.username }),
-    ...(query.email && { email: query.email }),
-  });
+    ...keycloakOptionalString('firstName', query.firstName),
+    ...keycloakOptionalString('lastName', query.lastName),
+    ...keycloakOptionalString('username', query.username),
+    ...keycloakOptionalString('email', query.email),
+  };
+
+  const hasProfileField =
+    Object.prototype.hasOwnProperty.call(payload, 'firstName') ||
+    Object.prototype.hasOwnProperty.call(payload, 'lastName') ||
+    Object.prototype.hasOwnProperty.call(payload, 'username') ||
+    Object.prototype.hasOwnProperty.call(payload, 'email');
+
+  if (!hasProfileField) {
+    return {
+      success: true,
+      statusCode: 204,
+      message: 'No Keycloak profile fields to update; skipped',
+    };
+  }
+
+  const data = JSON.stringify(payload);
 
   // Axios request configuration
   const config: AxiosRequestConfig = {
