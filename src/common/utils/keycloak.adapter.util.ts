@@ -283,7 +283,9 @@ async function updateUserInKeyCloak(
   const data = JSON.stringify({
     enabled: true,
     ...(query.firstName && { firstName: query.firstName }),
-    ...(query.lastName != null ? { lastName: query.lastName } : {}),
+    ...(query.lastName === undefined || query.lastName === null
+      ? {}
+      : { lastName: query.lastName }),
     ...(query.username && { username: query.username }),
     ...(query.email && { email: query.email }),
   });
