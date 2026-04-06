@@ -1288,8 +1288,28 @@ export class PostgresUserService implements IServicelocator {
       const userId = userDto.userId;
       const keycloakReqBody = { username, firstName, lastName, userId, email };
 
-      //Update userdetails on keycloak
-      if (username || firstName || lastName || email) {
+      const userData = userDto.userData;
+
+      // Decide whether to call Keycloak on this update.
+      // - We must not use `if (username || firstName || ...)` alone: empty string is falsy, so e.g. lastName: ""
+      //   would skip Keycloak and leave IdP out of sync with the DB.
+      // - We must not sync on "key exists" only: JSON may send null/undefined; the Keycloak client omits those
+      //   fields, so the request becomes a no-op PUT that can still fail and block the whole update.
+      const keycloakFieldWouldSync = (key: string): boolean => {
+        if (!userData || !Object.prototype.hasOwnProperty.call(userData, key)) {
+          return false;
+        }
+        const v = (userData as Record<string, unknown>)[key];
+        // Include empty string (explicit clear); exclude only missing/nullish values.
+        return v !== undefined && v !== null;
+      };
+      const shouldSyncKeycloak =
+        keycloakFieldWouldSync('username') ||
+        keycloakFieldWouldSync('firstName') ||
+        keycloakFieldWouldSync('lastName') ||
+        keycloakFieldWouldSync('email');
+
+      if (shouldSyncKeycloak) {
         try {
           const keycloakUpdateResult = await this.updateUsernameInKeycloak(
             keycloakReqBody
