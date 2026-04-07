@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { PaymentIntent } from '../entities/payment-intent.entity';
 import { PaymentIntentStatus } from '../enums/payment.enums';
 
@@ -95,6 +95,65 @@ export class PaymentIntentService {
       .getOne();
 
     return intent || null;
+  }
+
+  /**
+   * All payment intents for this user that have a target with the given contextId.
+   * Ordered by intent updatedAt descending (newest first).
+   */
+  /**
+   * Latest PAID intent for this user with a target for the given contextId, if any.
+   */
+  async findPaidByUserIdAndContextId(
+    userId: string,
+    contextId: string,
+  ): Promise<Pick<PaymentIntent, 'id'> | null> {
+    const row = await this.paymentIntentRepository
+      .createQueryBuilder('intent')
+      .select('intent.id', 'id')
+      .innerJoin('intent.targets', 't')
+      .where('intent.userId = :userId', { userId })
+      .andWhere('t.contextId = :contextId', { contextId })
+      .andWhere('intent.status = :status', { status: PaymentIntentStatus.PAID })
+      .groupBy('intent.id')
+      .orderBy('MAX(intent.updatedAt)', 'DESC')
+      .addOrderBy('intent.id', 'DESC')
+      .limit(1)
+      .getRawOne();
+
+    const id = row?.id as string | undefined;
+    return id ? { id } : null;
+  }
+
+  async findAllByUserIdAndContextId(
+    userId: string,
+    contextId: string,
+  ): Promise<PaymentIntent[]> {
+    const rows = await this.paymentIntentRepository
+      .createQueryBuilder('intent')
+      .select('intent.id', 'id')
+      .innerJoin('intent.targets', 't')
+      .where('intent.userId = :userId', { userId })
+      .andWhere('t.contextId = :contextId', { contextId })
+      .groupBy('intent.id')
+      .orderBy('MAX(intent.updatedAt)', 'DESC')
+      .addOrderBy('intent.id', 'DESC')
+      .getRawMany();
+
+    const ids = rows.map((r) => r.id as string).filter(Boolean);
+    if (ids.length === 0) {
+      return [];
+    }
+
+    const intents = await this.paymentIntentRepository.find({
+      where: { id: In(ids) },
+      relations: ['transactions', 'targets'],
+    });
+    const order = new Map(ids.map((id, i) => [id, i]));
+    intents.sort(
+      (a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0),
+    );
+    return intents;
   }
 
   /**

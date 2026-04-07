@@ -129,6 +129,7 @@ export const APIID = {
   // Payment APIs
   PAYMENT_INITIATE: "api.payment.initiate",
   PAYMENT_STATUS: "api.payment.status",
+  PAYMENT_STATUS_BY_USER_CONTEXT: "api.payment.status.byUserContext",
   PAYMENT_STATUS_OVERRIDE: "api.payment.status.override",
   PAYMENT_WEBHOOK: "api.payment.webhook",
   CERTIFICATE_GENERATE: "api.certificate.generate",

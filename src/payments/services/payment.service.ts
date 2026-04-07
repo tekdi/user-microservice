@@ -1,4 +1,11 @@
-import { Injectable, Logger, BadRequestException, NotFoundException, Inject } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  BadRequestException,
+  NotFoundException,
+  ConflictException,
+  Inject,
+} from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository, In } from 'typeorm';
 import { PaymentProvider } from '../interfaces/payment-provider.interface';
@@ -43,6 +50,20 @@ export class PaymentService {
    */
   async initiatePayment(dto: InitiatePaymentDto) {
     this.logger.log(`Initiating payment for user ${dto.userId}`);
+
+    const primaryContextId = dto.targets[0].contextId;
+    const existingPaid =
+      await this.paymentIntentService.findPaidByUserIdAndContextId(
+        dto.userId,
+        primaryContextId,
+      );
+    if (existingPaid) {
+      throw new ConflictException({
+        message: 'Already paid for this context.',
+        alreadyPaid: true,
+        paymentIntentId: existingPaid.id,
+      });
+    }
 
     // Validate coupon if provided
     let validatedCoupon = null;
@@ -440,7 +461,10 @@ export class PaymentService {
    */
   async getPaymentStatus(paymentIntentId: string) {
     const intent = await this.paymentIntentService.findById(paymentIntentId);
-    
+    return this.formatIntentToStatusResponse(intent);
+  }
+
+  private formatIntentToStatusResponse(intent: PaymentIntent) {
     return {
       id: intent.id,
       userId: intent.userId,
@@ -487,7 +511,30 @@ export class PaymentService {
         `No payment found for session_id ${sessionId}`,
       );
     }
-    return this.getPaymentStatus(intent.id);
+    return this.formatIntentToStatusResponse(intent);
+  }
+
+  /**
+   * All payment intents for userId with a target for contextId; same item shape as getPaymentStatus.
+   * Newest intent first (by updatedAt).
+   */
+  async getPaymentStatusByUserIdAndContextId(
+    userId: string,
+    contextId: string,
+  ) {
+    const intents =
+      await this.paymentIntentService.findAllByUserIdAndContextId(
+        userId,
+        contextId,
+      );
+    if (intents.length === 0) {
+      throw new NotFoundException(
+        `No payment found for userId ${userId} and contextId ${contextId}`,
+      );
+    }
+    return {
+      data: intents.map((intent) => this.formatIntentToStatusResponse(intent)),
+    };
   }
 
   /**
