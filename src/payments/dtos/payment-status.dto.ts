@@ -89,3 +89,8 @@ export class PaymentStatusResponseDto {
   updatedAt: Date;
 }
 
+export class PaymentStatusesByUserContextResponseDto {
+  @ApiProperty({ type: [PaymentStatusResponseDto] })
+  data: PaymentStatusResponseDto[];
+}
+

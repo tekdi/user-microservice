@@ -24,6 +24,7 @@ import {
   ApiCreatedResponse,
   ApiOkResponse,
   ApiBadRequestResponse,
+  ApiConflictResponse,
   ApiNotFoundResponse,
   ApiQuery,
 } from '@nestjs/swagger';
@@ -32,7 +33,10 @@ import { APIID } from '../common/utils/api-id.config';
 import { PaymentService } from './services/payment.service';
 import { InitiatePaymentDto } from './dtos/initiate-payment.dto';
 import { OverridePaymentStatusDto } from './dtos/override-payment-status.dto';
-import { PaymentStatusResponseDto } from './dtos/payment-status.dto';
+import {
+  PaymentStatusResponseDto,
+  PaymentStatusesByUserContextResponseDto,
+} from './dtos/payment-status.dto';
 import { PaymentReportResponseDto } from './dtos/payment-report.dto';
 
 @ApiTags('Payments')
@@ -58,6 +62,10 @@ export class PaymentsController {
     },
   })
   @ApiBadRequestResponse({ description: 'Invalid payment data' })
+  @ApiConflictResponse({
+    description:
+      'A completed (PAID) payment already exists for this user and context; includes alreadyPaid and paymentIntentId',
+  })
   async initiatePayment(@Body() dto: InitiatePaymentDto) {
     return await this.paymentService.initiatePayment(dto);
   }
@@ -109,6 +117,42 @@ export class PaymentsController {
   @ApiNotFoundResponse({ description: 'No payment found for the given session_id' })
   async getPaymentStatusBySession(@Query('session_id') sessionId: string) {
     return await this.paymentService.getPaymentStatusBySessionId(sessionId);
+  }
+
+  @Get('by-user-context')
+  @UseFilters(new AllExceptionsFilter(APIID.PAYMENT_STATUS_BY_USER_CONTEXT))
+  @ApiOperation({
+    summary: 'Get payment status by userId and contextId',
+    description:
+      'Returns every payment intent for this user that includes a target with the given contextId (e.g. cohort/course id). Each element matches GET :id/status. Ordered by intent updatedAt descending (newest first).',
+  })
+  @ApiQuery({
+    name: 'userId',
+    required: true,
+    type: String,
+    description: 'User UUID',
+  })
+  @ApiQuery({
+    name: 'contextId',
+    required: true,
+    type: String,
+    description: 'Context UUID from payment target (e.g. cohort id)',
+  })
+  @ApiOkResponse({
+    description: 'Payment statuses retrieved successfully',
+    type: PaymentStatusesByUserContextResponseDto,
+  })
+  @ApiNotFoundResponse({
+    description: 'No payment intent found for this user and context',
+  })
+  async getPaymentStatusByUserAndContext(
+    @Query('userId', ParseUUIDPipe) userId: string,
+    @Query('contextId', ParseUUIDPipe) contextId: string,
+  ) {
+    return await this.paymentService.getPaymentStatusByUserIdAndContextId(
+      userId,
+      contextId,
+    );
   }
 
   @Get(':id/status')
