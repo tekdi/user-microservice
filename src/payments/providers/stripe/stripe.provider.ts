@@ -85,6 +85,19 @@ export class StripeProvider implements PaymentProvider {
   }
 
   /**
+   * Checkout-created PaymentIntents often carry the session id in payment_details.order_reference.
+   * Metadata may be empty on the PaymentIntent while our initiation row only has provider_session_id.
+   */
+  private checkoutSessionIdFromPaymentIntent(pi: Stripe.PaymentIntent): string {
+    const ref = (
+      pi as Stripe.PaymentIntent & {
+        payment_details?: { order_reference?: string | null };
+      }
+    ).payment_details?.order_reference;
+    return typeof ref === 'string' && ref.startsWith('cs_') ? ref : '';
+  }
+
+  /**
    * Create a Checkout Session. The charge is in the currency and amount provided so the customer
    * pays in their local currency and never sees or pays a conversion fee (merchant absorbs FX).
    */
@@ -297,6 +310,7 @@ export class StripeProvider implements PaymentProvider {
       case 'payment_intent.succeeded':
         const paymentIntent = event.data.object as Stripe.PaymentIntent;
         paymentId = paymentIntent.id;
+        sessionId = this.checkoutSessionIdFromPaymentIntent(paymentIntent);
         status = 'success';
         currency = paymentIntent.currency;
         amount = this.convertFromUnitAmount(paymentIntent.amount, currency);
@@ -306,6 +320,7 @@ export class StripeProvider implements PaymentProvider {
       case 'payment_intent.payment_failed':
         const failedPayment = event.data.object as Stripe.PaymentIntent;
         paymentId = failedPayment.id;
+        sessionId = this.checkoutSessionIdFromPaymentIntent(failedPayment);
         currency = failedPayment.currency;
         amount = this.convertFromUnitAmount(failedPayment.amount, currency);
         metadata = failedPayment.metadata || {};
