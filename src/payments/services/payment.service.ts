@@ -419,19 +419,15 @@ export class PaymentService {
     const userId = intent.userId;
 
     if (purpose === PaymentPurpose.CERTIFICATE_BUNDLE && intent.targets?.length) {
-      for (const target of intent.targets) {
-        this.processPaymentTargets(
-          paymentIntentId,
-          userId,
-          target.contextId,
-          purpose,
-        ).catch((error) => {
+      const contextIds = intent.targets.map((t) => t.contextId);
+      this.issueCertificateBundleForContexts(paymentIntentId, userId, contextIds).catch(
+        (error) => {
           this.logger.error(
-            `Failed to process payment targets for payment ${paymentIntentId}, contextId ${target.contextId}: ${error.message}`,
+            `Failed to process payment targets for payment ${paymentIntentId}: ${error.message}`,
             error.stack,
           );
-        });
-      }
+        },
+      );
     } else if (purpose && intent.metadata?.contextId) {
       this.processPaymentTargets(
         paymentIntentId,
@@ -452,6 +448,35 @@ export class PaymentService {
   }
 
   /**
+   * One certificate per distinct course (contextId), then a single unlock for the whole intent.
+   * Avoids duplicate external certificate calls and repeated unlockAll when targets share a context.
+   */
+  private async issueCertificateBundleForContexts(
+    paymentIntentId: string,
+    userId: string,
+    contextIds: string[],
+  ): Promise<void> {
+    const uniqueCourseIds = [...new Set(contextIds)];
+    const issuanceDate = new Date().toISOString();
+    const expirationDate = '0000-00-00T00:00:00.000Z'; // Default expiration date as per API
+
+    for (const courseId of uniqueCourseIds) {
+      await this.certificateService.generateCertificate({
+        userId,
+        courseId,
+        issuanceDate,
+        expirationDate,
+      });
+    }
+
+    await this.paymentTargetService.unlockAll(paymentIntentId);
+
+    this.logger.log(
+      `Certificate(s) generated and targets unlocked for user ${userId} (intent ${paymentIntentId}, courses: ${uniqueCourseIds.join(', ')})`,
+    );
+  }
+
+  /**
    * After payment success: for CERTIFICATE_BUNDLE, calls certificate API then unlocks targets on success.
    */
   private async processPaymentTargets(
@@ -461,23 +486,10 @@ export class PaymentService {
     purpose: string,
   ): Promise<void> {
     try {
-      // Only generate certificate for CERTIFICATE_BUNDLE purpose
       if (purpose === PaymentPurpose.CERTIFICATE_BUNDLE) {
-        const issuanceDate = new Date().toISOString();
-        const expirationDate = '0000-00-00T00:00:00.000Z'; // Default expiration date as per API
-
-        await this.certificateService.generateCertificate({
-          userId: userId,
-          courseId: contextId, // contextId from webhook metadata
-          issuanceDate: issuanceDate,
-          expirationDate: expirationDate,
-        });
-
-        await this.paymentTargetService.unlockAll(paymentIntentId);
-
-        this.logger.log(
-          `Certificate generated and targets unlocked for user ${userId} and course ${contextId} (intent ${paymentIntentId})`,
-        );
+        await this.issueCertificateBundleForContexts(paymentIntentId, userId, [
+          contextId,
+        ]);
       } else {
         this.logger.debug(
           `Skipping certificate generation for purpose: ${purpose}`,
