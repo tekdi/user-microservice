@@ -192,7 +192,7 @@ export class PaymentService {
 
   /**
    * Handle webhook event
-   * Updates payment status and unlocks targets on success
+   * Updates payment status to PAID on success; targets unlock only after certificate API succeeds.
    */
   async handleWebhook(
     provider: string,
@@ -354,23 +354,7 @@ export class PaymentService {
         intentInTransaction.status = intentStatus;
         await manager.save(PaymentIntent, intentInTransaction);
 
-        // Unlock targets only on success
-        if (webhookEvent.status === 'success') {
-          await manager.update(
-            PaymentTarget,
-            {
-              paymentIntentId: intentInTransaction.id,
-              unlockStatus: PaymentTargetUnlockStatus.LOCKED,
-            },
-            {
-              unlockStatus: PaymentTargetUnlockStatus.UNLOCKED,
-              unlockedAt: new Date(),
-            },
-          );
-          this.logger.log(
-            `Unlocked targets for payment intent ${intentInTransaction.id}`,
-          );
-        }
+        // Targets stay LOCKED until certificate generation succeeds (see processPaymentTargets).
 
         return {
           processed: true,
@@ -416,9 +400,8 @@ export class PaymentService {
   }
 
   /**
-   * Process payment targets after successful payment
-   * Handles different target types (e.g., certificate generation for CERTIFICATE_BUNDLE)
-   * Uses metadata from webhook instead of fetching from database
+   * After payment success: for CERTIFICATE_BUNDLE, calls certificate API then unlocks targets on success.
+   * Uses metadata from webhook / override instead of fetching from database.
    */
   private async processPaymentTargets(
     paymentIntentId: string,
@@ -439,8 +422,10 @@ export class PaymentService {
           expirationDate: expirationDate,
         });
 
+        await this.paymentTargetService.unlockAll(paymentIntentId);
+
         this.logger.log(
-          `Certificate generated for user ${userId} and course ${contextId}`,
+          `Certificate generated and targets unlocked for user ${userId} and course ${contextId} (intent ${paymentIntentId})`,
         );
       } else {
         this.logger.debug(
@@ -797,7 +782,7 @@ export class PaymentService {
 
   /**
    * Manually override payment status (admin/support use).
-   * Updates payment intent status and status_reason, all related transactions, and optionally unlocks targets when set to PAID.
+   * Updates payment intent status and status_reason, all related transactions. For CERTIFICATE_BUNDLE, targets unlock only after certificate generation succeeds (async).
    */
   async overridePaymentStatus(
     paymentIntentId: string,
@@ -832,22 +817,6 @@ export class PaymentService {
         await manager.save(PaymentTransaction, tx);
       }
 
-      if (status === PaymentIntentStatus.PAID) {
-        await manager.update(
-          PaymentTarget,
-          {
-            paymentIntentId: intentInTx.id,
-            unlockStatus: PaymentTargetUnlockStatus.LOCKED,
-          },
-          {
-            unlockStatus: PaymentTargetUnlockStatus.UNLOCKED,
-            unlockedAt: new Date(),
-          },
-        );
-        this.logger.log(
-          `Manual override: unlocked targets for payment intent ${intentInTx.id}`,
-        );
-      }
     });
 
     if (status === PaymentIntentStatus.PAID && intent.userId) {
