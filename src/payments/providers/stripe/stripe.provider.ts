@@ -101,7 +101,10 @@ export class StripeProvider implements PaymentProvider {
    * Create a Checkout Session. The charge is in the currency and amount provided so the customer
    * pays in their local currency and never sees or pays a conversion fee (merchant absorbs FX).
    */
-  async initiatePayment(paymentData: InitiatePaymentDto): Promise<PaymentInitiationResult> {
+  async initiatePayment(
+    paymentData: InitiatePaymentDto,
+    options?: { appPaymentIntentId?: string },
+  ): Promise<PaymentInitiationResult> {
     try {
       // Use URLs from request body, fallback to environment variables or defaults
       const frontendUrl = this.configService.get<string>(
@@ -162,6 +165,15 @@ export class StripeProvider implements PaymentProvider {
           contextId: paymentData.targets[0].contextId,
           ...(paymentData.metadata || {}),
         },
+        ...(options?.appPaymentIntentId
+          ? {
+              payment_intent_data: {
+                metadata: {
+                  appPaymentIntentId: options.appPaymentIntentId,
+                },
+              },
+            }
+          : {}),
       };
 
       // Support for promo codes and discounts
@@ -310,6 +322,7 @@ export class StripeProvider implements PaymentProvider {
       case 'payment_intent.succeeded':
         const paymentIntent = event.data.object as Stripe.PaymentIntent;
         paymentId = paymentIntent.id;
+        sessionId = this.checkoutSessionIdFromPaymentIntent(paymentIntent);
         status = 'success';
         currency = paymentIntent.currency;
         amount = this.convertFromUnitAmount(paymentIntent.amount, currency);
