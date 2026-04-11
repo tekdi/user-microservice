@@ -310,7 +310,6 @@ export class StripeProvider implements PaymentProvider {
       case 'payment_intent.succeeded':
         const paymentIntent = event.data.object as Stripe.PaymentIntent;
         paymentId = paymentIntent.id;
-        sessionId = this.checkoutSessionIdFromPaymentIntent(paymentIntent);
         status = 'success';
         currency = paymentIntent.currency;
         amount = this.convertFromUnitAmount(paymentIntent.amount, currency);
