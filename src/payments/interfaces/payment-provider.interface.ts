@@ -33,9 +33,13 @@ export interface PaymentProvider {
   /**
    * Initialize a payment session
    * @param paymentData Payment initiation data
+   * @param options Optional provider-specific options (e.g. DB correlation id for webhooks)
    * @returns Checkout URL and session details
    */
-  initiatePayment(paymentData: InitiatePaymentDto): Promise<PaymentInitiationResult>;
+  initiatePayment(
+    paymentData: InitiatePaymentDto,
+    options?: { appPaymentIntentId?: string },
+  ): Promise<PaymentInitiationResult>;
 
   /**
    * Verify webhook signature

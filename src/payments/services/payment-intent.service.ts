@@ -157,6 +157,33 @@ export class PaymentIntentService {
   }
 
   /**
+   * Resolve intent when Stripe emits payment_intent.* before checkout.session.completed
+   * and the transaction row only has providerSessionId. Stripe PI metadata must carry
+   * appPaymentIntentId (set at Checkout session creation).
+   */
+  async findForWebhookCorrelation(
+    id: string,
+    provider: string,
+  ): Promise<PaymentIntent | null> {
+    const uuidRe =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!id?.trim() || !uuidRe.test(id.trim())) {
+      return null;
+    }
+
+    const intent = await this.paymentIntentRepository.findOne({
+      where: { id: id.trim(), provider: provider as any },
+      relations: ['transactions', 'targets'],
+    });
+
+    if (!intent || intent.status !== PaymentIntentStatus.CREATED) {
+      return null;
+    }
+
+    return intent;
+  }
+
+  /**
    * Update payment intent status
    */
   async updateStatus(

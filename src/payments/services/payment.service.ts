@@ -160,11 +160,14 @@ export class PaymentService {
 
     // Initiate payment with provider (pass original amount for Stripe, it will apply discount)
     // Stripe requires a promotion code ID, not a human-readable coupon code
-    const providerResult = await this.paymentProvider.initiatePayment({
-      ...dto,
-      amount: dto.amount, // Pass original amount, Stripe will apply discount via promo code
-      promoCode: stripePromoCodeId, // Must be a Stripe promotion code ID (e.g., "promo_xxx")
-    });
+    const providerResult = await this.paymentProvider.initiatePayment(
+      {
+        ...dto,
+        amount: dto.amount, // Pass original amount, Stripe will apply discount via promo code
+        promoCode: stripePromoCodeId, // Must be a Stripe promotion code ID (e.g., "promo_xxx")
+      },
+      { appPaymentIntentId: intent.id },
+    );
 
     // Create initial transaction
     await this.paymentTransactionService.create({
@@ -255,6 +258,13 @@ export class PaymentService {
       intent = await this.paymentIntentService.findByProviderSessionId(
         provider,
         webhookEvent.sessionId,
+      );
+    }
+
+    if (!intent && webhookEvent.metadata?.appPaymentIntentId) {
+      intent = await this.paymentIntentService.findForWebhookCorrelation(
+        String(webhookEvent.metadata.appPaymentIntentId),
+        provider,
       );
     }
 
