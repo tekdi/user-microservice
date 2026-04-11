@@ -395,23 +395,89 @@ export class PaymentService {
         });
       }
 
-      this.processPaymentTargets(result.paymentIntentId, result.userId, result.metadata.contextId, result.metadata.purpose).catch(
-        (error) => {
-          // Log error but don't fail the webhook processing
+      this.paymentIntentService
+        .findById(result.paymentIntentId)
+        .then((intent) => this.schedulePostSuccessCertificateAndUnlock(intent))
+        .catch((error) => {
           this.logger.error(
-            `Failed to process payment targets for payment ${result.paymentIntentId}: ${error.message}`,
+            `Failed to load payment intent after webhook for ${result.paymentIntentId}: ${error.message}`,
             error.stack,
           );
-        },
-      );
+        });
     }
 
     return result;
   }
 
   /**
+   * Certificate + unlock using persisted intent (purpose, targets). Stripe PI webhooks often omit
+   * session metadata, so we must not rely on webhookEvent.metadata for this path.
+   */
+  private schedulePostSuccessCertificateAndUnlock(intent: PaymentIntent): void {
+    const purpose = intent.purpose;
+    const paymentIntentId = intent.id;
+    const userId = intent.userId;
+
+    if (purpose === PaymentPurpose.CERTIFICATE_BUNDLE && intent.targets?.length) {
+      const contextIds = intent.targets.map((t) => t.contextId);
+      this.issueCertificateBundleForContexts(paymentIntentId, userId, contextIds).catch(
+        (error) => {
+          this.logger.error(
+            `Failed to process payment targets for payment ${paymentIntentId}: ${error.message}`,
+            error.stack,
+          );
+        },
+      );
+    } else if (purpose && intent.metadata?.contextId) {
+      this.processPaymentTargets(
+        paymentIntentId,
+        userId,
+        intent.metadata.contextId,
+        purpose,
+      ).catch((error) => {
+        this.logger.error(
+          `Failed to process payment targets for payment ${paymentIntentId}: ${error.message}`,
+          error.stack,
+        );
+      });
+    } else {
+      this.logger.debug(
+        `Skipping certificate generation for purpose: ${purpose} (no targets or metadata.contextId)`,
+      );
+    }
+  }
+
+  /**
+   * One certificate per distinct course (contextId), then a single unlock for the whole intent.
+   * Avoids duplicate external certificate calls and repeated unlockAll when targets share a context.
+   */
+  private async issueCertificateBundleForContexts(
+    paymentIntentId: string,
+    userId: string,
+    contextIds: string[],
+  ): Promise<void> {
+    const uniqueCourseIds = [...new Set(contextIds)];
+    const issuanceDate = new Date().toISOString();
+    const expirationDate = '0000-00-00T00:00:00.000Z'; // Default expiration date as per API
+
+    for (const courseId of uniqueCourseIds) {
+      await this.certificateService.generateCertificate({
+        userId,
+        courseId,
+        issuanceDate,
+        expirationDate,
+      });
+    }
+
+    await this.paymentTargetService.unlockAll(paymentIntentId);
+
+    this.logger.log(
+      `Certificate(s) generated and targets unlocked for user ${userId} (intent ${paymentIntentId}, courses: ${uniqueCourseIds.join(', ')})`,
+    );
+  }
+
+  /**
    * After payment success: for CERTIFICATE_BUNDLE, calls certificate API then unlocks targets on success.
-   * Uses metadata from webhook / override instead of fetching from database.
    */
   private async processPaymentTargets(
     paymentIntentId: string,
@@ -420,23 +486,10 @@ export class PaymentService {
     purpose: string,
   ): Promise<void> {
     try {
-      // Only generate certificate for CERTIFICATE_BUNDLE purpose
       if (purpose === PaymentPurpose.CERTIFICATE_BUNDLE) {
-        const issuanceDate = new Date().toISOString();
-        const expirationDate = '0000-00-00T00:00:00.000Z'; // Default expiration date as per API
-
-        await this.certificateService.generateCertificate({
-          userId: userId,
-          courseId: contextId, // contextId from webhook metadata
-          issuanceDate: issuanceDate,
-          expirationDate: expirationDate,
-        });
-
-        await this.paymentTargetService.unlockAll(paymentIntentId);
-
-        this.logger.log(
-          `Certificate generated and targets unlocked for user ${userId} and course ${contextId} (intent ${paymentIntentId})`,
-        );
+        await this.issueCertificateBundleForContexts(paymentIntentId, userId, [
+          contextId,
+        ]);
       } else {
         this.logger.debug(
           `Skipping certificate generation for purpose: ${purpose}`,
@@ -830,36 +883,7 @@ export class PaymentService {
     });
 
     if (status === PaymentIntentStatus.PAID && intent.userId) {
-      const purpose = intent.purpose;
-      // Run after-payment success steps: certificate generation per target (same as webhook flow)
-      if (purpose === PaymentPurpose.CERTIFICATE_BUNDLE && intent.targets?.length) {
-        for (const target of intent.targets) {
-          this.processPaymentTargets(
-            paymentIntentId,
-            intent.userId,
-            target.contextId,
-            purpose,
-          ).catch((error) => {
-            this.logger.error(
-              `Failed to process payment target (certificate) after manual override for ${paymentIntentId}, contextId ${target.contextId}: ${error.message}`,
-              error.stack,
-            );
-          });
-        }
-      } else if (purpose && intent.metadata?.contextId) {
-        // Fallback: single context from metadata (e.g. when targets not loaded or legacy)
-        this.processPaymentTargets(
-          paymentIntentId,
-          intent.userId,
-          intent.metadata.contextId,
-          purpose,
-        ).catch((error) => {
-          this.logger.error(
-            `Failed to process payment targets after manual override for ${paymentIntentId}: ${error.message}`,
-            error.stack,
-          );
-        });
-      }
+      this.schedulePostSuccessCertificateAndUnlock(intent);
       if (intent.metadata?.couponId) {
         this.couponService
           .recordRedemption(
