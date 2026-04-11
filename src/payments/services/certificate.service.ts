@@ -29,7 +29,7 @@ export interface GenerateCertificateDto {
 export class CertificateService {
   private readonly logger = new Logger(CertificateService.name);
   private readonly certificateServiceUrl: string;
-  private static readonly MAX_GENERATE_ATTEMPTS = 3;
+  private static readonly MAX_GENERATE_ATTEMPTS = 5;
   private static readonly RETRY_BASE_DELAY_MS = 1000;
 
   constructor(
@@ -77,6 +77,9 @@ export class CertificateService {
           throw error;
         }
         const delayMs = baseDelayMs * Math.pow(2, attempt - 1);
+        this.logger.log(
+          `Retrying certificate generation for user ${data.userId}, course ${data.courseId} (attempt ${attempt + 1}/${maxAttempts} after ${delayMs}ms backoff)`,
+        );
         this.logger.warn(
           `Certificate generate attempt ${attempt}/${maxAttempts} failed (${err.message}), retrying in ${delayMs}ms`,
         );
@@ -106,6 +109,9 @@ export class CertificateService {
       }
 
       const delayMs = baseDelayMs * Math.pow(2, attempt - 1);
+      this.logger.log(
+        `Retrying certificate generation for user ${data.userId}, course ${data.courseId} (attempt ${attempt + 1}/${maxAttempts} after ${delayMs}ms backoff, HTTP ${response.status})`,
+      );
       this.logger.warn(
         `Certificate generate attempt ${attempt}/${maxAttempts} returned status ${response.status}, retrying in ${delayMs}ms`,
       );
