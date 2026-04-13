@@ -69,6 +69,8 @@ export class UserService {
   private readonly otpExpiry: number;
   private readonly otpDigits: number;
   private readonly smsKey: string;
+  private readonly staticOtpEnabled: boolean;
+  private readonly staticOtp: string;
   private readonly dataSource: DataSource;
   private readonly msg91TemplateKey: string;
 
@@ -109,6 +111,8 @@ export class UserService {
     this.otpExpiry = this.configService.get<number>('OTP_EXPIRY') || 10; // default: 10 minutes
     this.otpDigits = this.configService.get<number>('OTP_DIGITS') || 6;
     this.smsKey = this.configService.get<string>('SMS_KEY');
+    this.staticOtpEnabled = this.configService.get<string>('STATIC_OTP_ENABLED') === 'true';
+    this.staticOtp = this.configService.get<string>('STATIC_OTP') || '1234';
     this.msg91TemplateKey = this.configService.get<string>('MSG91_TEMPLATE_KEY');
     this.dataSource = dataSource; // Store dataSource in class property
   }
@@ -2863,7 +2867,8 @@ export class UserService {
     const expires = Date.now() + ttl;
     const expiresInMinutes = ttl / (60 * 1000);
     const data = `${mobileOrUsername}.${otp}.${reason}.${expires}`;
-    const hash = this.authUtils.calculateHash(data, this.smsKey); // Create hash
+    const hashKey = this.smsKey || 'static-otp-fallback-key';
+    const hash = this.authUtils.calculateHash(data, hashKey); // Create hash
     return { hash, expires, expiresInMinutes };
   }
 
@@ -2920,13 +2925,19 @@ export class UserService {
     try {
       // Step 1: Format mobile number and generate OTP
       const mobileWithCode = this.formatMobileNumber(mobile);
-      const otp = this.authUtils.generateOtp(this.otpDigits).toString();
+      const otp = this.staticOtpEnabled ? this.staticOtp : this.authUtils.generateOtp(this.otpDigits).toString();
       const { hash, expires, expiresInMinutes } = this.generateOtpHash(mobileWithCode, otp, reason);
+
+      // Step 2: Skip actual SMS when static OTP is enabled (e.g. for load testing)
+      if (this.staticOtpEnabled) {
+        return { notificationPayload: { result: { sms: { data: [{ status: 'skipped (static OTP mode)' }] } } }, hash, expires, expiresInMinutes };
+      }
+
       const replacements = {
         "{OTP}": otp,
         "{otpExpiry}": expiresInMinutes
       };
-      // Step 2:send SMS notification
+      // Step 3: send SMS notification
       const notificationPayload = await this.smsNotification("OTP", "SEND_OTP", replacements, [mobile]);
       return { notificationPayload, hash, expires, expiresInMinutes };
     }
@@ -3141,33 +3152,39 @@ export class UserService {
 
       const programName = userData?.tenantData[0]?.tenantName ?? '';
       const reason = "forgot";
-      const otp = this.authUtils.generateOtp(this.otpDigits).toString();
+      const otp = this.staticOtpEnabled ? this.staticOtp : this.authUtils.generateOtp(this.otpDigits).toString();
       const { hash, expires, expiresInMinutes } = this.generateOtpHash(username, otp, reason);
-      if (userData.mobile) {
-        const replacements = {
-          "{OTP}": otp,
-          "{otpExpiry}": expiresInMinutes
-        };
-        try {
-          await this.smsNotification("OTP", "Reset_OTP", replacements, [userData.mobile]);
-          success.push({ type: 'SMS', message: API_RESPONSES.MOBILE_SENT_OTP });
-        } catch (e) {
-          error.push({ type: 'SMS', message: `${API_RESPONSES.MOBILE_OTP_SEND_FAILED} ${e.message}` })
-        }
-      }
 
-      if (userData.email) {
-        const replacements = {
-          "{OTP}": otp,
-          "{otpExpiry}": expiresInMinutes,
-          "{programName}": programName,
-          "{username}": username
-        };
-        try {
-          await this.sendEmailNotification("OTP", "Reset_OTP", replacements, [userData.email]);
-          success.push({ type: 'Email', message: API_RESPONSES.EMAIL_SENT_OTP })
-        } catch (e) {
-          error.push({ type: 'Email', message: `${API_RESPONSES.EMAIL_OTP_SEND_FAILED}: ${e.message}` })
+      if (this.staticOtpEnabled) {
+        // Skip actual notifications in static OTP mode (e.g. for load testing)
+        success.push({ type: 'SMS', message: 'skipped (static OTP mode)' });
+      } else {
+        if (userData.mobile) {
+          const replacements = {
+            "{OTP}": otp,
+            "{otpExpiry}": expiresInMinutes
+          };
+          try {
+            await this.smsNotification("OTP", "Reset_OTP", replacements, [userData.mobile]);
+            success.push({ type: 'SMS', message: API_RESPONSES.MOBILE_SENT_OTP });
+          } catch (e) {
+            error.push({ type: 'SMS', message: `${API_RESPONSES.MOBILE_OTP_SEND_FAILED} ${e.message}` })
+          }
+        }
+
+        if (userData.email) {
+          const replacements = {
+            "{OTP}": otp,
+            "{otpExpiry}": expiresInMinutes,
+            "{programName}": programName,
+            "{username}": username
+          };
+          try {
+            await this.sendEmailNotification("OTP", "Reset_OTP", replacements, [userData.email]);
+            success.push({ type: 'Email', message: API_RESPONSES.EMAIL_SENT_OTP })
+          } catch (e) {
+            error.push({ type: 'Email', message: `${API_RESPONSES.EMAIL_OTP_SEND_FAILED}: ${e.message}` })
+          }
         }
       }
       // Error 
@@ -3247,8 +3264,13 @@ export class UserService {
   async sendOtpOnMail(email: string, username: string, reason: string) {
     try {
       // Step 1: Generate OTP and hash
-      const otp = this.authUtils.generateOtp(this.otpDigits).toString();
+      const otp = this.staticOtpEnabled ? this.staticOtp : this.authUtils.generateOtp(this.otpDigits).toString();
       const { hash, expires, expiresInMinutes } = this.generateOtpHash(email, otp, reason);
+
+      // Skip actual email when static OTP is enabled (e.g. for load testing)
+      if (this.staticOtpEnabled) {
+        return { notificationPayload: { result: { email: { data: [{ status: 'skipped (static OTP mode)' }] } } }, hash, expires, expiresInMinutes };
+      }
 
       // Step 2: Get program name from user's tenant data
       const userData: any = await this.findUserDetails(null, username);
@@ -3263,7 +3285,6 @@ export class UserService {
         "{eventName}": "Shiksha Graha OTP",
         "{action}": "register"
       };
-      // console.log("hii",replacements,email)
 
       // Step 4: Send email notification
       const notificationPayload = await this.sendEmailNotification("OTP", "SendOtpOnMail", replacements, [email]);
