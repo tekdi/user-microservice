@@ -2513,7 +2513,7 @@ export class PostgresUserService implements IServicelocator {
     userId: string
   ) {
     const data = JSON.stringify({
-      temporary: 'false',
+      temporary: false,
       type: 'password',
       value: newPassword,
     });

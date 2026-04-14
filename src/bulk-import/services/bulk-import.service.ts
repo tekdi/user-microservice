@@ -798,6 +798,43 @@ export class BulkImportService {
       dto.dob = userData['date of birth (yyyy-mm-dd)'];
     }
 
+    const trimOrEmpty = (v: unknown): string | undefined => {
+      if (v === undefined || v === null) return undefined;
+      const s = String(v).trim();
+      return s === '' ? undefined : s;
+    };
+
+    const countryOfOrigin =
+      trimOrEmpty(userData['country of origin']) ??
+      trimOrEmpty(userData.country);
+    if (countryOfOrigin) {
+      dto.country = countryOfOrigin;
+    } else {
+      dto.country = undefined;
+    }
+
+    const permanent =
+      trimOrEmpty(userData['permanent address country']) ??
+      trimOrEmpty(userData.permanentCountry);
+    if (permanent) {
+      dto.permanentCountry = permanent;
+    } else {
+      dto.permanentCountry = undefined;
+    }
+
+    const current =
+      trimOrEmpty(userData['current address country']) ??
+      trimOrEmpty(userData.currentCountry);
+    if (current) {
+      dto.currentCountry = current;
+    } else {
+      dto.currentCountry = undefined;
+    }
+
+    delete (dto as any)['country of origin'];
+    delete (dto as any)['permanent country'];
+    delete (dto as any)['current country'];
+
     return dto;
   }
 
@@ -1050,6 +1087,12 @@ export class BulkImportService {
       }
       if (!userData.userId) {
         throw new Error('User ID not found');
+      }
+
+      // Do not email users who are already active (no forgot-password noise on re-import).
+      // Inactive → welcome (onBulkStudentCreated). Any other non-active status → old flow (OnForgotPasswordReset).
+      if (userData?.status === 'active') {
+        return;
       }
 
       // Generate token for password reset
@@ -1316,6 +1359,8 @@ export class BulkImportService {
       'gender',
       'dob',
       'country',
+      'permanentCountry',
+      'currentCountry',
     ];
 
     // Helper function to extract fields from a form
@@ -1456,7 +1501,9 @@ export class BulkImportService {
       'email',
       'gender',
       'date of birth (yyyy-mm-dd)',
-      'country',
+      'country of origin',
+      'permanent address country',
+      'current address country',
     ];
 
     const allColumns = [...defaultColumns, ...dynamicColumns];
