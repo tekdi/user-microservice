@@ -798,6 +798,60 @@ export class BulkImportService {
       dto.dob = userData['date of birth (yyyy-mm-dd)'];
     }
 
+    const trimOrEmpty = (v: unknown): string | undefined => {
+      if (v === undefined || v === null) return undefined;
+      if (typeof v === 'string') {
+        const s = v.trim();
+        return s === '' ? undefined : s;
+      }
+      if (
+        typeof v === 'number' ||
+        typeof v === 'boolean' ||
+        typeof v === 'bigint'
+      ) {
+        const s = String(v).trim();
+        return s === '' ? undefined : s;
+      }
+      if (v instanceof Date) {
+        const s = v.toISOString().trim();
+        return s === '' ? undefined : s;
+      }
+      return undefined;
+    };
+
+    const countryOfOrigin =
+      trimOrEmpty(userData['country of origin']) ??
+      trimOrEmpty(userData.country);
+    if (countryOfOrigin) {
+      dto.country = countryOfOrigin;
+    } else {
+      dto.country = undefined;
+    }
+
+    const permanent =
+      trimOrEmpty(userData['permanent address country']) ??
+      trimOrEmpty(userData.permanentCountry);
+    if (permanent) {
+      dto.permanentCountry = permanent;
+    } else {
+      dto.permanentCountry = undefined;
+    }
+
+    const current =
+      trimOrEmpty(userData['current address country']) ??
+      trimOrEmpty(userData.currentCountry);
+    if (current) {
+      dto.currentCountry = current;
+    } else {
+      dto.currentCountry = undefined;
+    }
+
+    delete (dto as any)['country of origin'];
+    delete (dto as any)['permanent address country'];
+    delete (dto as any)['current address country'];
+    delete (dto as any)['permanent country'];
+    delete (dto as any)['current country'];
+
     return dto;
   }
 
@@ -1052,7 +1106,12 @@ export class BulkImportService {
         throw new Error('User ID not found');
       }
 
-      // Generate token for password reset
+      // Only inactive users get onBulkStudentCreated (welcome). Active (or any other status): no email.
+      if (userData?.status !== 'inactive') {
+        return;
+      }
+
+      // Generate token for password reset (welcome / set-password flow)
       const tokenPayload = {
         sub: user.userId,
         email: userData.email,
@@ -1090,11 +1149,7 @@ export class BulkImportService {
         resetPasswordUrlPath = backEndUrl;
       }
 
-      // Use bulk import specific notification key
-      const notificationKey =
-        userData?.status === 'inactive'
-          ? 'onBulkStudentCreated'
-          : 'OnForgotPasswordReset';
+      const notificationKey = 'onBulkStudentCreated';
 
       // Send Notification with bulk import specific template
       const notificationPayload = {
@@ -1316,6 +1371,8 @@ export class BulkImportService {
       'gender',
       'dob',
       'country',
+      'permanentCountry',
+      'currentCountry',
     ];
 
     // Helper function to extract fields from a form
@@ -1456,7 +1513,9 @@ export class BulkImportService {
       'email',
       'gender',
       'date of birth (yyyy-mm-dd)',
-      'country',
+      'country of origin',
+      'permanent address country',
+      'current address country',
     ];
 
     const allColumns = [...defaultColumns, ...dynamicColumns];
