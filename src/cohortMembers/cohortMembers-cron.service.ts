@@ -209,4 +209,45 @@ export class CohortMembersCronService {
       throw error;
     }
   }
+
+  /**
+   * Manual trigger for shortlisted-user email notifications (onStudentShortlisted).
+   * Same operational pattern as rejection emails: separate cron endpoint updates
+   * CohortMembers.rejection_email_sent after a successful send (shortlisted rows only).
+   */
+  async triggerShortlistingEmailNotification(
+    tenantId: string,
+    academicYearId: string,
+    userId: string,
+    filter?: { cohortId: string; userId: string }
+  ): Promise<any> {
+    this.logger.log(
+      `Manual trigger of shortlisting email notification for tenant: ${tenantId}, academic year: ${academicYearId}, user: ${userId}` +
+        (filter
+          ? `, filter cohortId=${filter.cohortId} applicantUserId=${filter.userId}`
+          : '')
+    );
+
+    try {
+      const result =
+        await this.cohortMembersService.sendShortlistingEmailNotificationsInternal(
+          tenantId,
+          academicYearId,
+          userId,
+          filter
+        );
+
+      this.logger.log(
+        `Manual shortlisting email notification completed successfully`
+      );
+      return result;
+    } catch (error) {
+      this.logger.error(
+        `Manual shortlisting email notification failed: ${error.message}`,
+        error.stack
+      );
+
+      throw error;
+    }
+  }
 }

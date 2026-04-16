@@ -42,6 +42,7 @@ import APIResponse from 'src/common/responses/response';
 import { ShortlistingLogger } from 'src/common/logger/ShortlistingLogger';
 import { CohortMembersCronService } from './cohortMembers-cron.service';
 import { EvaluateShortlistingDto } from './dto/evaluate-shortlisting.dto';
+import { SendShortlistingEmailsDto } from './dto/send-shortlisting-emails.dto';
 
 // Extend Express Request type to include user
 interface RequestWithUser extends Request {
@@ -605,6 +606,138 @@ export class CohortMembersController {
       );
 
       // Return error response
+      return APIResponse.error(
+        res,
+        apiId,
+        `Error: ${error.message}`,
+        API_RESPONSES.INTERNAL_SERVER_ERROR,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  /**
+   * Cron-style endpoint: send shortlisted-user emails (onStudentShortlisted) and set
+   * rejection_email_sent on success (same column as rejection cron; only shortlisted rows are selected).
+   *
+   * Optional body: both `cohortId` and `userId` (applicant) to send at most one email for that member;
+   * cohort must still be in the shortlist-notification-date window (SHORTLIST_NOTIFICATION_DATE_FIELD_ID).
+   * Omit both for default multi-cohort behavior.
+   */
+  @Post('cron/send-shortlisting-emails')
+  @ApiBody({ type: SendShortlistingEmailsDto, required: false })
+  @UsePipes(
+    new ValidationPipe({
+      transform: true,
+      skipMissingProperties: true,
+      whitelist: true,
+    })
+  )
+  async sendShortlistingEmails(
+    @Req() req: RequestWithUser,
+    @Res() res: Response,
+    @Body() body?: SendShortlistingEmailsDto,
+    @Query('userid') queryUserId?: string
+  ) {
+    const apiId = APIID.COHORT_MEMBER_SEND_SHORTLISTING_EMAILS;
+
+    try {
+      const tenantId = req.headers['tenantid'] as string;
+      const academicyearId = req.headers['academicyearid'] as string;
+      const headerUserId = req.headers['userid'] as string;
+      const userId = headerUserId || queryUserId;
+
+      const filterCohortId = body?.cohortId;
+      const filterApplicantUserId = body?.userId;
+      if (filterCohortId || filterApplicantUserId) {
+        if (!filterCohortId || !filterApplicantUserId) {
+          return APIResponse.error(
+            res,
+            apiId,
+            API_RESPONSES.BAD_REQUEST,
+            'cohortId and userId must both be provided in the body for a targeted send, or omit both for default processing.',
+            HttpStatus.BAD_REQUEST
+          );
+        }
+      }
+
+      if (!userId) {
+        return APIResponse.error(
+          res,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          'User ID not found in request. Please ensure you are authenticated.',
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      if (!tenantId) {
+        return APIResponse.error(
+          res,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          API_RESPONSES.TANANT_ID_REQUIRED,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      if (!academicyearId) {
+        return APIResponse.error(
+          res,
+          apiId,
+          'Academic year ID is required in headers',
+          API_RESPONSES.BAD_REQUEST,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      if (!isUUID(tenantId)) {
+        return APIResponse.error(
+          res,
+          apiId,
+          'Invalid tenant ID format. Must be a valid UUID.',
+          API_RESPONSES.BAD_REQUEST,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      if (!isUUID(academicyearId)) {
+        return APIResponse.error(
+          res,
+          apiId,
+          'Invalid academic year ID format. Must be a valid UUID.',
+          API_RESPONSES.BAD_REQUEST,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      const result =
+        await this.cohortMembersCronService.triggerShortlistingEmailNotification(
+          tenantId,
+          academicyearId,
+          userId,
+          filterCohortId && filterApplicantUserId
+            ? {
+                cohortId: filterCohortId,
+                userId: filterApplicantUserId,
+              }
+            : undefined
+        );
+
+      return APIResponse.success(
+        res,
+        apiId,
+        result,
+        HttpStatus.OK,
+        'Shortlisting email notifications completed successfully'
+      );
+    } catch (error) {
+      ShortlistingLogger.logShortlistingError(
+        'Error in manual shortlisting email notification endpoint',
+        `Error: ${error.message}`,
+        apiId
+      );
+
       return APIResponse.error(
         res,
         apiId,
