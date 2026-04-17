@@ -3319,12 +3319,13 @@ export class PostgresCohortMembersService {
 
       // Step 1: Process Active Cohorts
       const currentDateUTC = new Date().toISOString(); // Use UTC date for timezone consistency
-      let activeCohorts = await this.processActiveCohorts(
+      const activeCohorts = await this.processActiveCohorts(
         tenantId,
         academicyearId,
         userId,
         shortlistDateFieldId,
-        currentDateUTC
+        currentDateUTC,
+        cohortId
       );
 
       if (activeCohorts.length === 0) {
@@ -3334,43 +3335,6 @@ export class PostgresCohortMembersService {
         );
         return [];
       }
-
-      if (cohortId) {
-        const inWindow = activeCohorts.some(
-          (c: { cohortId: string }) => c.cohortId === cohortId
-        );
-        if (!inWindow) {
-          ShortlistingLogger.logShortlisting(
-            `Requested cohort ${cohortId} is not active or shortlist date is not on/before today`,
-            'ShortlistingEvaluation'
-          );
-          const totalTime = Date.now() - startTime;
-          const performanceMetrics = this.calculatePerformanceMetrics(
-            0,
-            totalTime,
-            effectiveBatchSize,
-            maxConcurrentBatches
-          );
-          return {
-            totalProcessed: 0,
-            totalShortlisted: 0,
-            totalRejected: 0,
-            totalFailures: 0,
-            totalProcessingTime: 0,
-            message:
-              'Target cohort is not in the shortlist date window or is not active',
-            ...performanceMetrics,
-          };
-        }
-        activeCohorts = activeCohorts.filter(
-          (c: { cohortId: string }) => c.cohortId === cohortId
-        );
-      }
-
-      ShortlistingLogger.logShortlisting(
-        `Found ${activeCohorts.length} active cohort(s) with shortlist date today or earlier`,
-        'ShortlistingEvaluation'
-      );
 
       // Step 2: Evaluate Each Cohort
       const cohortResults = [];
@@ -3897,13 +3861,21 @@ export class PostgresCohortMembersService {
    *
    * @param shortlistDateFieldId - The field ID for the shortlist date field
    * @param currentDateUTC - Current UTC date in YYYY-MM-DD format
+   * @param cohortId - When set, only this cohort is queried (must still meet date + active rules)
    * @returns Promise with array of active cohorts for processing
    */
   private async getActiveCohortsWithShortlistDate(
     shortlistDateFieldId: string,
-    currentDateUTC: string
+    currentDateUTC: string,
+    cohortId?: string
   ) {
-    // Optimized query with better indexing and reduced data transfer
+    const params: unknown[] = [shortlistDateFieldId, currentDateUTC];
+    const cohortFilter = cohortId
+      ? ' AND c."cohortId" = $3'
+      : '';
+    if (cohortId) {
+      params.push(cohortId);
+    }
     const query = `
       SELECT DISTINCT 
         c."cohortId", 
@@ -3931,8 +3903,19 @@ export class PostgresCohortMembersService {
    */
   private async getActiveCohortsWithShortlistNotificationDate(
     shortlistNotificationDateFieldId: string,
-    currentDateUTC: string
+    currentDateUTC: string,
+    cohortId?: string
   ) {
+    const params: unknown[] = [
+      shortlistNotificationDateFieldId,
+      currentDateUTC,
+    ];
+    const cohortFilter = cohortId
+      ? ' AND c."cohortId" = $3'
+      : '';
+    if (cohortId) {
+      params.push(cohortId);
+    }
     const query = `
       SELECT DISTINCT 
         c."cohortId", 
@@ -3944,13 +3927,11 @@ export class PostgresCohortMembersService {
       AND fv."fieldId" = $1
       AND fv."calendarValue"::date <= $2::date
       AND fv."itemId" IS NOT NULL
+      ${cohortFilter}
       ORDER BY c."cohortId"
     `;
 
-    return this.cohortRepository.query(query, [
-      shortlistNotificationDateFieldId,
-      currentDateUTC,
-    ]);
+    return this.cohortRepository.query(query, params);
   }
 
   /**
@@ -4551,31 +4532,34 @@ export class PostgresCohortMembersService {
    * @param userId - The user ID from the authenticated request
    * @param shortlistDateFieldId - The field ID for shortlist date
    * @param currentDateUTC - Current UTC date in YYYY-MM-DD format
-   * @returns Promise with active cohorts to process
+   * @param cohortId - When set, the query scopes to this cohort only (active + date window in SQL)
    */
   private async processActiveCohorts(
     tenantId: string,
     academicyearId: string,
     userId: string,
     shortlistDateFieldId: string,
-    currentDateUTC: string
-  ) {
-    // Step 1: Fetch Active Cohorts with Shortlist Date = Today
+    currentDateUTC: string,
+    cohortId?: string
+  ): Promise<any[]> {
     const activeCohorts = await this.getActiveCohortsWithShortlistDate(
       shortlistDateFieldId,
-      currentDateUTC
+      currentDateUTC,
+      cohortId
     );
 
     if (activeCohorts.length === 0) {
       ShortlistingLogger.logShortlisting(
-        'No active cohorts found with shortlist date today or earlier',
+        cohortId
+          ? `No active cohort in shortlist date window for cohortId=${cohortId}`
+          : 'No active cohorts found with shortlist date today or earlier',
         'ShortlistingEvaluation'
       );
       return [];
     }
 
     ShortlistingLogger.logShortlisting(
-      `Found ${activeCohorts.length} active cohorts with shortlist date today or earlier`,
+      `Found ${activeCohorts.length} active cohort(s) with shortlist date today or earlier`,
       'ShortlistingEvaluation'
     );
 
@@ -4905,12 +4889,13 @@ export class PostgresCohortMembersService {
 
       // Step 1: Process Active Cohorts with Rejection Notification Date
       const currentDateUTC = new Date().toISOString().split('T')[0]; // Use UTC date for timezone consistency
-      let activeCohorts = await this.processActiveCohortsForRejectionEmails(
+      const activeCohorts = await this.processActiveCohortsForRejectionEmails(
         tenantId,
         academicyearId,
         userId,
         rejectionNotificationDateFieldId,
-        currentDateUTC
+        currentDateUTC,
+        cohortId
       );
 
       if (activeCohorts.length === 0) {
@@ -4920,43 +4905,10 @@ export class PostgresCohortMembersService {
         );
         return [];
       }
-
-      if (cohortId) {
-        const inWindow = activeCohorts.some(
-          (c: { cohortId: string }) => c.cohortId === cohortId
-        );
-        if (!inWindow) {
-          ShortlistingLogger.logShortlisting(
-            `Requested cohort ${cohortId} is not active or rejection notification date is not on/before today (UTC)`,
-            'RejectionEmailNotification'
-          );
-          const totalTime = Date.now() - startTime;
-          const performanceMetrics = this.calculatePerformanceMetrics(
-            0,
-            totalTime,
-            batchSize,
-            maxConcurrentBatches
-          );
-          return {
-            totalProcessed: 0,
-            totalEmailsSent: 0,
-            totalFailures: 0,
-            totalProcessingTime: 0,
-            message:
-              'Target cohort is not in the rejection-notification-date window or is not active',
-            ...performanceMetrics,
-          };
-        }
-        activeCohorts = activeCohorts.filter(
-          (c: { cohortId: string }) => c.cohortId === cohortId
-        );
-      }
-
       ShortlistingLogger.logShortlisting(
         `Found ${activeCohorts.length} active cohort(s) with rejection notification date today or earlier`,
         'RejectionEmailNotification'
       );
-
       // Step 2: Process Each Cohort for Rejection Emails
       const cohortResults = [];
       for (const cohort of activeCohorts) {
@@ -5045,10 +4997,13 @@ export class PostgresCohortMembersService {
       );
 
       const currentDateUTC = new Date().toISOString().split('T')[0];
+      const cohortIdForQuery =
+        filter?.userId && !filter?.cohortId ? undefined : filter?.cohortId;
       const activeCohorts =
         await this.getActiveCohortsWithShortlistNotificationDate(
           shortlistNotificationDateFieldId,
-          currentDateUTC
+          currentDateUTC,
+          cohortIdForQuery
         );
 
       if (activeCohorts.length === 0) {
@@ -5131,37 +5086,7 @@ export class PostgresCohortMembersService {
           cohortResults.push(cohortResult);
         }
       } else {
-        let cohortsToProcess = activeCohorts;
-        if (f?.cohortId) {
-          const inWindow = activeCohorts.some(
-            (c: { cohortId: string }) => c.cohortId === f.cohortId
-          );
-          if (!inWindow) {
-            ShortlistingLogger.logShortlisting(
-              `Target cohort ${f.cohortId} is not active or shortlist notification date is not on/before today (UTC)`,
-              'ShortlistingEmailNotification'
-            );
-            const totalTime = Date.now() - startTime;
-            const performanceMetrics = this.calculatePerformanceMetrics(
-              0,
-              totalTime,
-              batchSize,
-              maxConcurrentBatches
-            );
-            return {
-              totalProcessed: 0,
-              totalEmailsSent: 0,
-              totalFailures: 0,
-              totalProcessingTime: 0,
-              message:
-                'Target cohort is not in the shortlist-notification-date window or is not active',
-              ...performanceMetrics,
-            };
-          }
-          cohortsToProcess = activeCohorts.filter(
-            (c: { cohortId: string }) => c.cohortId === f.cohortId
-          );
-        }
+        const cohortsToProcess = activeCohorts;
 
         ShortlistingLogger.logShortlisting(
           `Found ${cohortsToProcess.length} cohort(s) to process for shortlisting emails`,
@@ -5595,32 +5520,35 @@ export class PostgresCohortMembersService {
    * @param userId - The user ID from the authenticated request
    * @param rejectionNotificationDateFieldId - The field ID for rejection notification date
    * @param currentDateUTC - Current UTC date in YYYY-MM-DD format
-   * @returns Promise with active cohorts to process
+   * @param cohortId - When set, the query scopes to this cohort only (active + date window in SQL)
    */
   private async processActiveCohortsForRejectionEmails(
     tenantId: string,
     academicyearId: string,
     userId: string,
     rejectionNotificationDateFieldId: string,
-    currentDateUTC: string
-  ) {
-    // Step 1: Fetch Active Cohorts with Rejection Notification Date = Today or Earlier
+    currentDateUTC: string,
+    cohortId?: string
+  ): Promise<any[]> {
     const activeCohorts =
       await this.getActiveCohortsWithRejectionNotificationDate(
         rejectionNotificationDateFieldId,
-        currentDateUTC
+        currentDateUTC,
+        cohortId
       );
 
     if (activeCohorts.length === 0) {
       ShortlistingLogger.logShortlisting(
-        'No active cohorts found with rejection notification date today or earlier',
+        cohortId
+          ? `No active cohort in rejection-notification date window for cohortId=${cohortId}`
+          : 'No active cohorts found with rejection notification date today or earlier',
         'RejectionEmailNotification'
       );
       return [];
     }
 
     ShortlistingLogger.logShortlisting(
-      `Found ${activeCohorts.length} active cohorts with rejection notification date today or earlier`,
+      `Found ${activeCohorts.length} active cohort(s) with rejection notification date today or earlier`,
       'RejectionEmailNotification'
     );
 
@@ -5636,13 +5564,24 @@ export class PostgresCohortMembersService {
    *
    * @param rejectionNotificationDateFieldId - The field ID for the rejection notification date field
    * @param currentDateUTC - Current UTC date in YYYY-MM-DD format
+   * @param cohortId - When set, only this cohort is queried (must still meet date + active rules)
    * @returns Promise with array of active cohorts for processing
    */
   private async getActiveCohortsWithRejectionNotificationDate(
     rejectionNotificationDateFieldId: string,
-    currentDateUTC: string
+    currentDateUTC: string,
+    cohortId?: string
   ) {
-    // Optimized query with better indexing and reduced data transfer
+    const params: unknown[] = [
+      rejectionNotificationDateFieldId,
+      currentDateUTC,
+    ];
+    const cohortFilter = cohortId
+      ? ' AND c."cohortId" = $3'
+      : '';
+    if (cohortId) {
+      params.push(cohortId);
+    }
     const query = `
       SELECT DISTINCT 
         c."cohortId", 
@@ -5654,15 +5593,11 @@ export class PostgresCohortMembersService {
       AND fv."fieldId" = $1
       AND fv."calendarValue"::date <= $2::date
       AND fv."itemId" IS NOT NULL
+      ${cohortFilter}
       ORDER BY c."cohortId"
     `;
 
-    const results = await this.cohortRepository.query(query, [
-      rejectionNotificationDateFieldId,
-      currentDateUTC,
-    ]);
-
-    return results;
+    return this.cohortRepository.query(query, params);
   }
 
   /**
