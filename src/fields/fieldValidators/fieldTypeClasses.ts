@@ -65,7 +65,7 @@ export class NumericField extends Field {
 
 export class JsonField extends Field {
   validate(value: any): boolean {
-    if (!(typeof value === "object")) {
+    if (!(value !== null && typeof value === "object")) {
       throw new Error("Value must be object.");
     }
     return true;
