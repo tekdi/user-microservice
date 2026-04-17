@@ -37,6 +37,16 @@ export class EvaluateShortlistingDto {
   @IsUUID('4', { each: true, message: 'Each userId must be a valid UUID' })
   userId?: string[];
 
+  @ApiProperty({
+    type: String,
+    description:
+      'Optional cohort UUID. When set, evaluation runs only for this cohort (must be in shortlist-date window).',
+    required: false,
+  })
+  @IsOptional()
+  @IsUUID('4', { message: 'cohortId must be a valid UUID' })
+  cohortId?: string;
+
   constructor(obj: any) {
     Object.assign(this, obj);
   }

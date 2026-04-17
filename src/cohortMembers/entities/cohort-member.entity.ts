@@ -54,9 +54,9 @@ export class CohortMembers {
   status: MemberStatus;
 
   /**
-  * Indicates whether a rejection email notification has been sent to this cohort member
-  * Used to prevent duplicate rejection email notifications
-  */
+   * For rejected members: whether the rejection email was sent.
+   * For shortlisted members: reused by send-shortlisting-emails cron to mark onStudentShortlisted sent.
+   */
   @Column({ name: 'rejection_email_sent', type: 'boolean', default: false })
   rejectionEmailSent: boolean;
 }
