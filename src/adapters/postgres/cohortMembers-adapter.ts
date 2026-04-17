@@ -670,7 +670,7 @@ export class PostgresCohortMembersService {
     );
 
     if (getUserDetails.length > 0) {
-      results.totalCount = parseInt(getUserDetails[0].total_count, 10);
+      results.totalCount = Number.parseInt(getUserDetails[0].total_count, 10);
       
       if (fieldShowHide === 'false') {
         // No custom fields needed, just push all data
@@ -2941,7 +2941,7 @@ export class PostgresCohortMembersService {
         );
 
         if (optimizedResults.length > 0) {
-          totalCount = parseInt(optimizedResults[0].total_count, 10);
+          totalCount = Number.parseInt(optimizedResults[0].total_count, 10);
 
           // Enrich the results with form data and custom fields
           finalUserDetails = await Promise.all(
@@ -3293,9 +3293,9 @@ export class PostgresCohortMembersService {
     const apiId = APIID.COHORT_MEMBER_EVALUATE_SHORTLISTING;
     // Configurable performance parameters with environment variable fallbacks
     // Use provided batchSize or fall back to environment variable or default
-    const effectiveBatchSize = batchSize || parseInt(process.env.BATCH_SIZE) || 5000;
+    const effectiveBatchSize = batchSize || Number.parseInt(process.env.BATCH_SIZE) || 5000;
     const maxConcurrentBatches =
-      parseInt(process.env.MAX_CONCURRENT_BATCHES) || 10;
+      Number.parseInt(process.env.MAX_CONCURRENT_BATCHES) || 10;
     const enableEmailNotifications =
       process.env.ENABLE_SHORTLISTING_EMAILS === 'true';
     const notifyStatuses = ['shortlisted', 'rejected'];
@@ -4059,7 +4059,7 @@ export class PostgresCohortMembersService {
       queryParams.push(batchSize);
     } else if (!userIds || userIds.length === 0) {
       // No batchSize and no userIds filter - use environment variable or default
-      const defaultBatchSize = parseInt(process.env.BATCH_SIZE) || 5000;
+      const defaultBatchSize = Number.parseInt(process.env.BATCH_SIZE) || 5000;
       query += ` LIMIT $${queryParams.length + 1}`;
       queryParams.push(defaultBatchSize);
     }
@@ -4837,9 +4837,7 @@ export class PostgresCohortMembersService {
       const result = await this.sendRejectionEmailNotificationsInternal(
         tenantId,
         academicyearId,
-        userId,
-        undefined,
-        undefined
+        userId
       );
 
       return APIResponse.success(
@@ -4881,9 +4879,9 @@ export class PostgresCohortMembersService {
     // Configurable performance parameters with environment variable fallbacks
     const batchSize =
       batchSizeFromPayload ??
-      (parseInt(process.env.BATCH_SIZE) || 5000);
+      (Number.parseInt(process.env.BATCH_SIZE) || 5000);
     const maxConcurrentBatches =
-      parseInt(process.env.MAX_CONCURRENT_BATCHES) || 10;
+      Number.parseInt(process.env.MAX_CONCURRENT_BATCHES) || 10;
     const enableEmailNotifications =
       process.env.ENABLE_SHORTLISTING_EMAILS !== 'false';
 
@@ -5020,9 +5018,9 @@ export class PostgresCohortMembersService {
     const apiId = APIID.COHORT_MEMBER_SEND_SHORTLISTING_EMAILS;
     const batchSize =
       batchSizeFromPayload ??
-      (parseInt(process.env.BATCH_SIZE) || 5000);
+      (Number.parseInt(process.env.BATCH_SIZE) || 5000);
     const maxConcurrentBatches =
-      parseInt(process.env.MAX_CONCURRENT_BATCHES) || 10;
+      Number.parseInt(process.env.MAX_CONCURRENT_BATCHES) || 10;
 
     const shortlistNotificationDateFieldId =
       process.env.SHORTLIST_NOTIFICATION_DATE_FIELD_ID;
@@ -5179,8 +5177,7 @@ export class PostgresCohortMembersService {
             maxConcurrentBatches,
             apiId,
             userId,
-            f?.userId,
-            undefined
+            f?.userId
           );
           cohortResults.push(cohortResult);
         }
@@ -5284,7 +5281,7 @@ export class PostgresCohortMembersService {
     fetchLimit?: number
   ) {
     const limit =
-      fetchLimit ?? (parseInt(process.env.BATCH_SIZE) || 5000);
+      fetchLimit ?? (Number.parseInt(process.env.BATCH_SIZE) || 5000);
 
     if (applicantUserId) {
       const query = `
@@ -6664,9 +6661,9 @@ export class PostgresCohortMembersService {
       }
 
       // Validate time components
-      const hourNum = parseInt(hour, 10);
-      const minuteNum = parseInt(minute, 10);
-      const secondNum = parseInt(second, 10);
+      const hourNum = Number.parseInt(hour, 10);
+      const minuteNum = Number.parseInt(minute, 10);
+      const secondNum = Number.parseInt(second, 10);
 
       if (
         hourNum >= 0 &&

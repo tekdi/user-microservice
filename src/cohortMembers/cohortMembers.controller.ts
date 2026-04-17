@@ -457,8 +457,8 @@ export class CohortMembersController {
         return APIResponse.error(
           res,
           apiId,
-          API_RESPONSES.BAD_REQUEST,
           'Invalid cohortId format. Must be a valid UUID.',
+          API_RESPONSES.BAD_REQUEST,
           HttpStatus.BAD_REQUEST
         );
       }
