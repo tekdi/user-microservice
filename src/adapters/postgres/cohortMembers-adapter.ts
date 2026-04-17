@@ -3335,7 +3335,7 @@ export class PostgresCohortMembersService {
         );
         return [];
       }
-      
+
        ShortlistingLogger.logShortlisting(
         `Found ${activeCohorts.length} active cohorts with shortlist date today or earlier`,
         'ShortlistingEvaluation'
@@ -3892,14 +3892,11 @@ export class PostgresCohortMembersService {
       AND fv."fieldId" = $1
       AND fv."calendarValue"::date <= $2::date
       AND fv."itemId" IS NOT NULL
+      ${cohortFilter}
       ORDER BY c."cohortId"
     `;
 
-    const results = await this.cohortRepository.query(query, [
-      shortlistDateFieldId,
-      currentDateUTC,
-    ]);
-    return results;
+   return this.cohortRepository.query(query, params);
   }
 
   /**
