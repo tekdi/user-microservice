@@ -5126,8 +5126,7 @@ export class PostgresCohortMembersService {
             maxConcurrentBatches,
             apiId,
             userId,
-            undefined,
-            cohortMembers
+            { preloadedMembers: cohortMembers }
           );
           cohortResults.push(cohortResult);
         }
@@ -5177,7 +5176,7 @@ export class PostgresCohortMembersService {
             maxConcurrentBatches,
             apiId,
             userId,
-            f?.userId
+            f?.userId ? { applicantUserId: f.userId } : undefined
           );
           cohortResults.push(cohortResult);
         }
@@ -5219,21 +5218,24 @@ export class PostgresCohortMembersService {
     maxConcurrentBatches: number,
     apiId: string,
     userId: string,
-    applicantUserId?: string,
-    preloadedMembers?: any[]
+    options?: {
+      applicantUserId?: string;
+      preloadedMembers?: any[];
+    }
   ) {
     const processingStartTime = Date.now();
     const cohortId = cohort.cohortId;
+    const applicantUserId = options?.applicantUserId;
+    const preloadedMembers = options?.preloadedMembers;
 
     try {
       const members =
-        preloadedMembers !== undefined
-          ? preloadedMembers
-          : await this.getShortlistedMembersForEmailNotification(
-              cohortId,
-              applicantUserId,
-              batchSize
-            );
+        preloadedMembers ??
+        (await this.getShortlistedMembersForEmailNotification(
+          cohortId,
+          applicantUserId,
+          batchSize
+        ));
 
       if (members.length === 0) {
         return {
