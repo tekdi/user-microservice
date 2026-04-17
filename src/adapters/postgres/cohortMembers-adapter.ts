@@ -3335,6 +3335,11 @@ export class PostgresCohortMembersService {
         );
         return [];
       }
+      
+       ShortlistingLogger.logShortlisting(
+        `Found ${activeCohorts.length} active cohorts with shortlist date today or earlier`,
+        'ShortlistingEvaluation'
+      );
 
       // Step 2: Evaluate Each Cohort
       const cohortResults = [];
