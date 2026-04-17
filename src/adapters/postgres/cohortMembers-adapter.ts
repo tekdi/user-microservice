@@ -3279,6 +3279,7 @@ export class PostgresCohortMembersService {
    * @param userId - The user ID from the authenticated request
    * @param batchSize - Optional batch size for processing (overrides environment variable)
    * @param userIds - Optional array of user IDs to filter processing (only these users will be processed)
+   * @param cohortId - Optional cohort UUID; when set, only that cohort is evaluated (must be in shortlist window)
    * @returns Promise with evaluation results and performance metrics
    */
   public async evaluateCohortMemberShortlistingStatusInternal(
@@ -3286,7 +3287,8 @@ export class PostgresCohortMembersService {
     academicyearId: string,
     userId: string,
     batchSize?: number,
-    userIds?: string[]
+    userIds?: string[],
+    cohortId?: string
   ) {
     const apiId = APIID.COHORT_MEMBER_EVALUATE_SHORTLISTING;
     // Configurable performance parameters with environment variable fallbacks
@@ -3311,13 +3313,13 @@ export class PostgresCohortMembersService {
 
     try {
       ShortlistingLogger.logShortlisting(
-        `Starting cohort member shortlisting evaluation with batch size: ${effectiveBatchSize}, max concurrent batches: ${maxConcurrentBatches}, userIds filter: ${userIds ? userIds.length + ' users' : 'all users'}`,
+        `Starting cohort member shortlisting evaluation with batch size: ${effectiveBatchSize}, max concurrent batches: ${maxConcurrentBatches}, userIds filter: ${userIds ? userIds.length + ' users' : 'all users'}, cohortId: ${cohortId ?? 'all'}`,
         'ShortlistingEvaluation'
       );
 
       // Step 1: Process Active Cohorts
       const currentDateUTC = new Date().toISOString(); // Use UTC date for timezone consistency
-      const activeCohorts = await this.processActiveCohorts(
+      let activeCohorts = await this.processActiveCohorts(
         tenantId,
         academicyearId,
         userId,
@@ -3333,8 +3335,40 @@ export class PostgresCohortMembersService {
         return [];
       }
 
+      if (cohortId) {
+        const inWindow = activeCohorts.some(
+          (c: { cohortId: string }) => c.cohortId === cohortId
+        );
+        if (!inWindow) {
+          ShortlistingLogger.logShortlisting(
+            `Requested cohort ${cohortId} is not active or shortlist date is not on/before today`,
+            'ShortlistingEvaluation'
+          );
+          const totalTime = Date.now() - startTime;
+          const performanceMetrics = this.calculatePerformanceMetrics(
+            0,
+            totalTime,
+            effectiveBatchSize,
+            maxConcurrentBatches
+          );
+          return {
+            totalProcessed: 0,
+            totalShortlisted: 0,
+            totalRejected: 0,
+            totalFailures: 0,
+            totalProcessingTime: 0,
+            message:
+              'Target cohort is not in the shortlist date window or is not active',
+            ...performanceMetrics,
+          };
+        }
+        activeCohorts = activeCohorts.filter(
+          (c: { cohortId: string }) => c.cohortId === cohortId
+        );
+      }
+
       ShortlistingLogger.logShortlisting(
-        `Found ${activeCohorts.length} active cohorts with shortlist date today or earlier`,
+        `Found ${activeCohorts.length} active cohort(s) with shortlist date today or earlier`,
         'ShortlistingEvaluation'
       );
 
@@ -4803,7 +4837,9 @@ export class PostgresCohortMembersService {
       const result = await this.sendRejectionEmailNotificationsInternal(
         tenantId,
         academicyearId,
-        userId
+        userId,
+        undefined,
+        undefined
       );
 
       return APIResponse.success(
@@ -4837,11 +4873,15 @@ export class PostgresCohortMembersService {
   public async sendRejectionEmailNotificationsInternal(
     tenantId: string,
     academicyearId: string,
-    userId: string
+    userId: string,
+    cohortId?: string,
+    batchSizeFromPayload?: number
   ) {
     const apiId = APIID.COHORT_MEMBER_SEND_REJECTION_EMAILS;
     // Configurable performance parameters with environment variable fallbacks
-    const batchSize = parseInt(process.env.BATCH_SIZE) || 5000;
+    const batchSize =
+      batchSizeFromPayload ??
+      (parseInt(process.env.BATCH_SIZE) || 5000);
     const maxConcurrentBatches =
       parseInt(process.env.MAX_CONCURRENT_BATCHES) || 10;
     const enableEmailNotifications =
@@ -4861,13 +4901,13 @@ export class PostgresCohortMembersService {
 
     try {
       ShortlistingLogger.logShortlisting(
-        `Starting rejection email notifications with batch size: ${batchSize}, max concurrent batches: ${maxConcurrentBatches}`,
+        `Starting rejection email notifications with batch size: ${batchSize}, max concurrent batches: ${maxConcurrentBatches}, cohortId: ${cohortId ?? 'all'}`,
         'RejectionEmailNotification'
       );
 
       // Step 1: Process Active Cohorts with Rejection Notification Date
       const currentDateUTC = new Date().toISOString().split('T')[0]; // Use UTC date for timezone consistency
-      const activeCohorts = await this.processActiveCohortsForRejectionEmails(
+      let activeCohorts = await this.processActiveCohortsForRejectionEmails(
         tenantId,
         academicyearId,
         userId,
@@ -4883,8 +4923,39 @@ export class PostgresCohortMembersService {
         return [];
       }
 
+      if (cohortId) {
+        const inWindow = activeCohorts.some(
+          (c: { cohortId: string }) => c.cohortId === cohortId
+        );
+        if (!inWindow) {
+          ShortlistingLogger.logShortlisting(
+            `Requested cohort ${cohortId} is not active or rejection notification date is not on/before today (UTC)`,
+            'RejectionEmailNotification'
+          );
+          const totalTime = Date.now() - startTime;
+          const performanceMetrics = this.calculatePerformanceMetrics(
+            0,
+            totalTime,
+            batchSize,
+            maxConcurrentBatches
+          );
+          return {
+            totalProcessed: 0,
+            totalEmailsSent: 0,
+            totalFailures: 0,
+            totalProcessingTime: 0,
+            message:
+              'Target cohort is not in the rejection-notification-date window or is not active',
+            ...performanceMetrics,
+          };
+        }
+        activeCohorts = activeCohorts.filter(
+          (c: { cohortId: string }) => c.cohortId === cohortId
+        );
+      }
+
       ShortlistingLogger.logShortlisting(
-        `Found ${activeCohorts.length} active cohorts with rejection notification date today or earlier`,
+        `Found ${activeCohorts.length} active cohort(s) with rejection notification date today or earlier`,
         'RejectionEmailNotification'
       );
 
@@ -4943,10 +5014,13 @@ export class PostgresCohortMembersService {
     tenantId: string,
     academicyearId: string,
     userId: string,
-    filter?: { cohortId: string; userId: string }
+    filter?: { cohortId?: string; userId?: string },
+    batchSizeFromPayload?: number
   ) {
     const apiId = APIID.COHORT_MEMBER_SEND_SHORTLISTING_EMAILS;
-    const batchSize = parseInt(process.env.BATCH_SIZE) || 5000;
+    const batchSize =
+      batchSizeFromPayload ??
+      (parseInt(process.env.BATCH_SIZE) || 5000);
     const maxConcurrentBatches =
       parseInt(process.env.MAX_CONCURRENT_BATCHES) || 10;
 
@@ -4965,7 +5039,9 @@ export class PostgresCohortMembersService {
       ShortlistingLogger.logShortlisting(
         `Starting shortlisting email notifications with batch size: ${batchSize}, max concurrent batches: ${maxConcurrentBatches}` +
           (filter
-            ? ` (targeted cohortId=${filter.cohortId} applicantUserId=${filter.userId})`
+            ? ` (filter cohortId=${filter.cohortId ?? '—'} applicantUserId=${
+                filter.userId ?? '—'
+              })`
             : ''),
         'ShortlistingEmailNotification'
       );
@@ -4999,16 +5075,25 @@ export class PostgresCohortMembersService {
         };
       }
 
-      let cohortsToProcess = activeCohorts;
-      if (filter) {
-        const inWindow = activeCohorts.some(
-          (c: { cohortId: string }) => c.cohortId === filter.cohortId
+      const f = filter;
+      const cohortResults: {
+        processed: number;
+        emailsSent: number;
+        failures: number;
+        processingTime: number;
+      }[] = [];
+
+      // Applicant only: shortlisted rows for this user across all notification-window cohorts
+      if (f?.userId && !f.cohortId) {
+        const activeIds = activeCohorts.map(
+          (c: { cohortId: string }) => c.cohortId
         );
-        if (!inWindow) {
-          ShortlistingLogger.logShortlisting(
-            `Target cohort ${filter.cohortId} is not active or shortlist notification date is not on/before today (UTC)`,
-            'ShortlistingEmailNotification'
+        const members =
+          await this.getShortlistedMembersForApplicantInActiveCohorts(
+            f.userId,
+            activeIds
           );
+        if (members.length === 0) {
           const totalTime = Date.now() - startTime;
           const performanceMetrics = this.calculatePerformanceMetrics(
             0,
@@ -5022,32 +5107,83 @@ export class PostgresCohortMembersService {
             totalFailures: 0,
             totalProcessingTime: 0,
             message:
-              'Target cohort is not in the shortlist-notification-date window or is not active',
+              'No eligible shortlisted memberships for applicant in notification-window cohorts',
             ...performanceMetrics,
           };
         }
-        cohortsToProcess = activeCohorts.filter(
-          (c: { cohortId: string }) => c.cohortId === filter.cohortId
-        );
-      }
+        const byCohort = new Map<string, any[]>();
+        for (const m of members) {
+          const cid = m.cohortId;
+          if (!byCohort.has(cid)) {
+            byCohort.set(cid, []);
+          }
+          byCohort.get(cid).push(m);
+        }
+        for (const [, cohortMembers] of byCohort) {
+          const cohortId = cohortMembers[0].cohortId;
+          const cohortResult = await this.processCohortForShortlistingEmails(
+            { cohortId },
+            tenantId,
+            batchSize,
+            maxConcurrentBatches,
+            apiId,
+            userId,
+            undefined,
+            cohortMembers
+          );
+          cohortResults.push(cohortResult);
+        }
+      } else {
+        let cohortsToProcess = activeCohorts;
+        if (f?.cohortId) {
+          const inWindow = activeCohorts.some(
+            (c: { cohortId: string }) => c.cohortId === f.cohortId
+          );
+          if (!inWindow) {
+            ShortlistingLogger.logShortlisting(
+              `Target cohort ${f.cohortId} is not active or shortlist notification date is not on/before today (UTC)`,
+              'ShortlistingEmailNotification'
+            );
+            const totalTime = Date.now() - startTime;
+            const performanceMetrics = this.calculatePerformanceMetrics(
+              0,
+              totalTime,
+              batchSize,
+              maxConcurrentBatches
+            );
+            return {
+              totalProcessed: 0,
+              totalEmailsSent: 0,
+              totalFailures: 0,
+              totalProcessingTime: 0,
+              message:
+                'Target cohort is not in the shortlist-notification-date window or is not active',
+              ...performanceMetrics,
+            };
+          }
+          cohortsToProcess = activeCohorts.filter(
+            (c: { cohortId: string }) => c.cohortId === f.cohortId
+          );
+        }
 
-      ShortlistingLogger.logShortlisting(
-        `Found ${cohortsToProcess.length} cohort(s) to process for shortlisting emails`,
-        'ShortlistingEmailNotification'
-      );
-
-      const cohortResults = [];
-      for (const cohort of cohortsToProcess) {
-        const cohortResult = await this.processCohortForShortlistingEmails(
-          cohort,
-          tenantId,
-          batchSize,
-          maxConcurrentBatches,
-          apiId,
-          userId,
-          filter?.userId
+        ShortlistingLogger.logShortlisting(
+          `Found ${cohortsToProcess.length} cohort(s) to process for shortlisting emails`,
+          'ShortlistingEmailNotification'
         );
-        cohortResults.push(cohortResult);
+
+        for (const cohort of cohortsToProcess) {
+          const cohortResult = await this.processCohortForShortlistingEmails(
+            cohort,
+            tenantId,
+            batchSize,
+            maxConcurrentBatches,
+            apiId,
+            userId,
+            f?.userId,
+            undefined
+          );
+          cohortResults.push(cohortResult);
+        }
       }
 
       const aggregatedResults =
@@ -5086,16 +5222,21 @@ export class PostgresCohortMembersService {
     maxConcurrentBatches: number,
     apiId: string,
     userId: string,
-    applicantUserId?: string
+    applicantUserId?: string,
+    preloadedMembers?: any[]
   ) {
     const processingStartTime = Date.now();
     const cohortId = cohort.cohortId;
 
     try {
-      const members = await this.getShortlistedMembersForEmailNotification(
-        cohortId,
-        applicantUserId
-      );
+      const members =
+        preloadedMembers !== undefined
+          ? preloadedMembers
+          : await this.getShortlistedMembersForEmailNotification(
+              cohortId,
+              applicantUserId,
+              batchSize
+            );
 
       if (members.length === 0) {
         return {
@@ -5139,9 +5280,11 @@ export class PostgresCohortMembersService {
 
   private async getShortlistedMembersForEmailNotification(
     cohortId: string,
-    applicantUserId?: string
+    applicantUserId?: string,
+    fetchLimit?: number
   ) {
-    const batchSize = parseInt(process.env.BATCH_SIZE) || 5000;
+    const limit =
+      fetchLimit ?? (parseInt(process.env.BATCH_SIZE) || 5000);
 
     if (applicantUserId) {
       const query = `
@@ -5188,10 +5331,44 @@ export class PostgresCohortMembersService {
 
     const members = await this.cohortMembersRepository.query(query, [
       cohortId,
-      batchSize,
+      limit,
     ]);
 
     return members;
+  }
+
+  /**
+   * Shortlisted members for one applicant across cohorts that are in the notification window.
+   */
+  private async getShortlistedMembersForApplicantInActiveCohorts(
+    applicantUserId: string,
+    cohortIds: string[]
+  ) {
+    if (!cohortIds.length) {
+      return [];
+    }
+    const query = `
+      SELECT 
+        cm."cohortMembershipId",
+        cm."cohortId",
+        cm."userId",
+        cm."status",
+        cm."statusReason",
+        cm."rejection_email_sent",
+        cm."createdAt",
+        cm."updatedAt"
+      FROM public."CohortMembers" cm
+      WHERE cm."userId" = $1
+      AND cm."cohortId" = ANY($2::uuid[])
+      AND cm."status" = 'shortlisted'
+      AND (cm."rejection_email_sent" IS NULL OR cm."rejection_email_sent" = false)
+      ORDER BY cm."cohortId", cm."createdAt" ASC
+    `;
+
+    return this.cohortMembersRepository.query(query, [
+      applicantUserId,
+      cohortIds,
+    ]);
   }
 
   private async processShortlistingEmailBatchesInParallel(
@@ -5515,7 +5692,8 @@ export class PostgresCohortMembersService {
     try {
       // Get rejected members that need email notifications
       const members = await this.getRejectedMembersForEmailNotification(
-        cohortId
+        cohortId,
+        batchSize
       );
 
       if (members.length === 0) {
@@ -5566,7 +5744,10 @@ export class PostgresCohortMembersService {
    * @param cohortId - The cohort ID to fetch members for
    * @returns Promise with array of rejected cohort members
    */
-  private async getRejectedMembersForEmailNotification(cohortId: string) {
+  private async getRejectedMembersForEmailNotification(
+    cohortId: string,
+    fetchLimit: number
+  ) {
     // Optimized query with proper indexing and LIMIT for batch processing
     const query = `
       SELECT 
@@ -5586,10 +5767,9 @@ export class PostgresCohortMembersService {
       LIMIT $2
     `;
 
-    const batchSize = parseInt(process.env.BATCH_SIZE) || 5000;
     const members = await this.cohortMembersRepository.query(query, [
       cohortId,
-      batchSize,
+      fetchLimit,
     ]);
 
     return members;

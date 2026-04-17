@@ -43,6 +43,7 @@ import { ShortlistingLogger } from 'src/common/logger/ShortlistingLogger';
 import { CohortMembersCronService } from './cohortMembers-cron.service';
 import { EvaluateShortlistingDto } from './dto/evaluate-shortlisting.dto';
 import { SendShortlistingEmailsDto } from './dto/send-shortlisting-emails.dto';
+import { SendRejectionEmailsDto } from './dto/send-rejection-emails.dto';
 
 // Extend Express Request type to include user
 interface RequestWithUser extends Request {
@@ -376,7 +377,7 @@ export class CohortMembersController {
    *
    * @param req - Express request object containing headers
    * @param res - Express response object
-   * @param body - Request body containing optional batchSize and userId array
+   * @param body - Request body containing optional batchSize, userId array, and cohortId
    * @param queryUserId - Optional userId from query parameter (for backward compatibility)
    * @returns JSON response with processing results and performance metrics
    */
@@ -452,6 +453,16 @@ export class CohortMembersController {
         );
       }
 
+      if (body?.cohortId && !isUUID(body.cohortId)) {
+        return APIResponse.error(
+          res,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          'Invalid cohortId format. Must be a valid UUID.',
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
       // Trigger the shortlisting evaluation process with user ID, batchSize, and userId array
       // If body is not provided or empty, use undefined to maintain backward compatibility
       const result =
@@ -460,7 +471,8 @@ export class CohortMembersController {
           academicyearId,
           userId,
           body?.batchSize,
-          body?.userId
+          body?.userId,
+          body?.cohortId
         );
 
       // Return success response with the result data
@@ -510,12 +522,22 @@ export class CohortMembersController {
    *
    * @param req - Express request object containing headers
    * @param res - Express response object
+   * @param body - Optional cohortId (scope to one cohort in window) and batchSize
    * @returns JSON response with processing results and performance metrics
    */
   @Post('cron/send-rejection-emails')
+  @ApiBody({ type: SendRejectionEmailsDto, required: false })
+  @UsePipes(
+    new ValidationPipe({
+      transform: true,
+      skipMissingProperties: true,
+      whitelist: true,
+    })
+  )
   async sendRejectionEmails(
     @Req() req: RequestWithUser,
     @Res() res: Response,
+    @Body() body?: SendRejectionEmailsDto,
     @Query('userid') queryUserId?: string
   ) {
     const apiId = APIID.COHORT_MEMBER_SEND_REJECTION_EMAILS;
@@ -581,12 +603,24 @@ export class CohortMembersController {
         );
       }
 
+      if (body?.cohortId && !isUUID(body.cohortId)) {
+        return APIResponse.error(
+          res,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          'Invalid cohortId format. Must be a valid UUID.',
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
       // Trigger the rejection email notification process with user ID
       const result =
         await this.cohortMembersCronService.triggerRejectionEmailNotification(
           tenantId,
           academicyearId,
-          userId
+          userId,
+          body?.cohortId,
+          body?.batchSize
         );
 
       // Return success response with the result data
@@ -620,9 +654,8 @@ export class CohortMembersController {
    * Cron-style endpoint: send shortlisted-user emails (onStudentShortlisted) and set
    * rejection_email_sent on success (same column as rejection cron; only shortlisted rows are selected).
    *
-   * Optional body: both `cohortId` and `userId` (applicant) to send at most one email for that member;
-   * cohort must still be in the shortlist-notification-date window (SHORTLIST_NOTIFICATION_DATE_FIELD_ID).
-   * Omit both for default multi-cohort behavior.
+   * Optional JSON body: `cohortId` / `userId` filters; optional `batchSize` (else BATCH_SIZE env).
+   * Cohorts must be in the shortlist-notification-date window (SHORTLIST_NOTIFICATION_DATE_FIELD_ID).
    */
   @Post('cron/send-shortlisting-emails')
   @ApiBody({ type: SendShortlistingEmailsDto, required: false })
@@ -649,16 +682,23 @@ export class CohortMembersController {
 
       const filterCohortId = body?.cohortId;
       const filterApplicantUserId = body?.userId;
-      if (filterCohortId || filterApplicantUserId) {
-        if (!filterCohortId || !filterApplicantUserId) {
-          return APIResponse.error(
-            res,
-            apiId,
-            API_RESPONSES.BAD_REQUEST,
-            'cohortId and userId must both be provided in the body for a targeted send, or omit both for default processing.',
-            HttpStatus.BAD_REQUEST
-          );
-        }
+      if (filterCohortId && !isUUID(filterCohortId)) {
+        return APIResponse.error(
+          res,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          'Invalid cohortId format. Must be a valid UUID.',
+          HttpStatus.BAD_REQUEST
+        );
+      }
+      if (filterApplicantUserId && !isUUID(filterApplicantUserId)) {
+        return APIResponse.error(
+          res,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          'Invalid userId format. Must be a valid UUID.',
+          HttpStatus.BAD_REQUEST
+        );
       }
 
       if (!userId) {
@@ -711,17 +751,23 @@ export class CohortMembersController {
         );
       }
 
+      const filterPayload =
+        filterCohortId || filterApplicantUserId
+          ? {
+              ...(filterCohortId ? { cohortId: filterCohortId } : {}),
+              ...(filterApplicantUserId
+                ? { userId: filterApplicantUserId }
+                : {}),
+            }
+          : undefined;
+
       const result =
         await this.cohortMembersCronService.triggerShortlistingEmailNotification(
           tenantId,
           academicyearId,
           userId,
-          filterCohortId && filterApplicantUserId
-            ? {
-                cohortId: filterCohortId,
-                userId: filterApplicantUserId,
-              }
-            : undefined
+          filterPayload,
+          body?.batchSize
         );
 
       return APIResponse.success(

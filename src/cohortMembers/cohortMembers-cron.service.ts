@@ -133,6 +133,7 @@ export class CohortMembersCronService {
    * @param userId - The user ID from the authenticated request
    * @param batchSize - Optional batch size for processing (overrides environment variable)
    * @param userIds - Optional array of user IDs to filter processing (only these users will be processed)
+   * @param cohortId - Optional cohort UUID to scope evaluation to one cohort
    * @returns Promise with evaluation results
    */
   async triggerShortlistingEvaluation(
@@ -140,10 +141,11 @@ export class CohortMembersCronService {
     academicYearId: string,
     userId: string,
     batchSize?: number,
-    userIds?: string[]
+    userIds?: string[],
+    cohortId?: string
   ): Promise<any> {
     this.logger.log(
-      `Manual trigger of shortlisting evaluation for tenant: ${tenantId}, academic year: ${academicYearId}, user: ${userId}, batchSize: ${batchSize || 'default'}, userIds filter: ${userIds ? userIds.length + ' users' : 'all users'}`
+      `Manual trigger of shortlisting evaluation for tenant: ${tenantId}, academic year: ${academicYearId}, user: ${userId}, batchSize: ${batchSize || 'default'}, userIds filter: ${userIds ? userIds.length + ' users' : 'all users'}, cohortId: ${cohortId ?? 'all'}`
     );
 
     try {
@@ -154,7 +156,8 @@ export class CohortMembersCronService {
           academicYearId,
           userId,
           batchSize,
-          userIds
+          userIds,
+          cohortId
         );
 
       this.logger.log(`Manual shortlisting evaluation completed successfully`);
@@ -182,10 +185,12 @@ export class CohortMembersCronService {
   async triggerRejectionEmailNotification(
     tenantId: string,
     academicYearId: string,
-    userId: string
+    userId: string,
+    cohortId?: string,
+    batchSize?: number
   ): Promise<any> {
     this.logger.log(
-      `Manual trigger of rejection email notification for tenant: ${tenantId}, academic year: ${academicYearId}, user: ${userId}`
+      `Manual trigger of rejection email notification for tenant: ${tenantId}, academic year: ${academicYearId}, user: ${userId}, cohortId: ${cohortId ?? 'all'}, batchSize: ${batchSize ?? 'default'}`
     );
 
     try {
@@ -194,7 +199,9 @@ export class CohortMembersCronService {
         await this.cohortMembersService.sendRejectionEmailNotificationsInternal(
           tenantId,
           academicYearId,
-          userId
+          userId,
+          cohortId,
+          batchSize
         );
 
       this.logger.log(`Manual rejection email notification completed successfully`);
@@ -219,13 +226,17 @@ export class CohortMembersCronService {
     tenantId: string,
     academicYearId: string,
     userId: string,
-    filter?: { cohortId: string; userId: string }
+    filter?: { cohortId?: string; userId?: string },
+    batchSize?: number
   ): Promise<any> {
     this.logger.log(
       `Manual trigger of shortlisting email notification for tenant: ${tenantId}, academic year: ${academicYearId}, user: ${userId}` +
         (filter
-          ? `, filter cohortId=${filter.cohortId} applicantUserId=${filter.userId}`
-          : '')
+          ? `, filter cohortId=${filter.cohortId ?? '—'} applicantUserId=${
+              filter.userId ?? '—'
+            }`
+          : '') +
+        `, batchSize: ${batchSize ?? 'env'}`
     );
 
     try {
@@ -234,7 +245,8 @@ export class CohortMembersCronService {
           tenantId,
           academicYearId,
           userId,
-          filter
+          filter,
+          batchSize
         );
 
       this.logger.log(
