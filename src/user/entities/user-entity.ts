@@ -16,7 +16,7 @@ export enum UserStatus {
 
 @Entity({ name: "Users" })
 export class User {
-  @PrimaryColumn({ type: "uuid" })
+  @PrimaryColumn({ type: "varchar" })
   userId: string;
 
   @Column({ unique: true })

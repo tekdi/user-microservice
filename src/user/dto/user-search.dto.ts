@@ -69,7 +69,7 @@ export class setFilters {
   @IsOptional()
   @IsArray()
   @IsNotEmpty({ each: true })
-  @IsUUID(undefined, { each: true })
+  @IsString({ each: true })
   userId?: string[]; //This is dynamically used in db query
 
   @ApiPropertyOptional({
@@ -116,7 +116,7 @@ export class excludeFields {
   @IsOptional()
   @IsArray()
   @IsNotEmpty({ each: true })
-  @IsUUID(undefined, { each: true })
+  @IsString({ each: true })
   userIds?: string[];
 
   @ApiProperty({
