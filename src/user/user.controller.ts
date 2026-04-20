@@ -95,7 +95,7 @@ export class UserController {
     @Headers() headers,
     @Req() request: Request,
     @Res() response: Response,
-    @Param("userId", ParseUUIDPipe) userId: string,
+    @Param("userId") userId: string,
     @Query("fieldvalue") fieldvalue: string | null = null
   ) {
     const tenantId = headers["tenantid"];
@@ -166,7 +166,7 @@ export class UserController {
   public async updateUser(
     @Headers() headers,
     @Param("userid") userId: string,
-    @GetUserId("loginUserId", ParseUUIDPipe) loginUserId: string,
+    @GetUserId("loginUserId") loginUserId: string,
     @Body() userUpdateDto: UserUpdateDTO,
     @Res() response: Response
   ) {

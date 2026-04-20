@@ -973,15 +973,15 @@ export class UserService {
   async getUsersDetailsById(userData: UserData, response: any) {
     const apiId = APIID.USER_GET;
     try {
-      if (!isUUID(userData.userId)) {
-        return APIResponse.error(
-          response,
-          apiId,
-          API_RESPONSES.BAD_REQUEST,
-          `Error: ${API_RESPONSES.UUID_VALIDATION}`,
-          HttpStatus.BAD_REQUEST
-        );
-      }
+      // if (!isUUID(userData.userId)) {
+      //   return APIResponse.error(
+      //     response,
+      //     apiId,
+      //     API_RESPONSES.BAD_REQUEST,
+      //     `Error: ${API_RESPONSES.UUID_VALIDATION}`,
+      //     HttpStatus.BAD_REQUEST
+      //   );
+      // }
       const checkExistUser = await this.usersRepository.find({
         where: {
           userId: userData.userId,
