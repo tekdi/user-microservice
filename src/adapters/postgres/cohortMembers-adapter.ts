@@ -6162,70 +6162,29 @@ export class PostgresCohortMembersService {
   }
 
   /**
-   * Enrolls a user to multiple courses
-   * Uses for...of loop for proper async handling
+   * Enrolls a user to multiple courses in bulk
+   * Makes API call to LMS service to create enrollments
    *
    * @param userId - The user ID to enroll
    * @param courses - Array of courses to enroll the user in
-   * @returns Promise with enrollment results for each course
+   * @returns Promise with enrollment results
    */
   private async enrollUserToCourses(
     userId: string,
     courses: any[],
     cohortId: string
-  ) {
-    const enrollmentResults = [];
-
-    // Use for...of loop for proper async handling
-    for (let i = 0; i < courses.length; i++) {
-      const course = courses[i];
-
-      try {
-        const enrollmentResult = await this.enrollUserToSingleCourse(
-          userId,
-          course.courseId,
-          cohortId
-        );
-
-        enrollmentResults.push({
-          courseId: course.courseId,
-          status: 'success',
-          result: enrollmentResult,
-        });
-      } catch (error) {
-        enrollmentResults.push({
-          courseId: course.courseId,
-          status: 'failed',
-          error: error.message,
-        });
-      }
-    }
-
-    return enrollmentResults;
-  }
-
-  /**
-   * Enrolls a user to a single course
-   * Makes API call to LMS service to create enrollment
-   *
-   * @param userId - The user ID to enroll
-   * @param courseId - The course ID to enroll in
-   * @returns Promise with enrollment result
-   */
-  private async enrollUserToSingleCourse(
-    userId: string,
-    courseId: string,
-    cohortId: string
-  ) {
+  ): Promise<Array<{ courseId: string; status: 'success' | 'failed'; result?: any; error?: any }>> {
     const lmsBaseUrl = process.env.LMS_SERVICE_URL;
     const tenantId = process.env.DEFAULT_TENANT_ID;
     const organisationId = process.env.DEFAULT_ORGANISATION_ID;
+
+    const courseIds = courses.map((c) => c.courseId);
 
     try {
       const requestUrl = `${lmsBaseUrl}/lms-service/v1/enrollments`;
 
       const requestBody = {
-        courseId: courseId,
+        courseId: courseIds,
         learnerId: userId,
         status: 'published',
       };
@@ -6242,28 +6201,37 @@ export class PostgresCohortMembersService {
         },
       });
 
-      // Log successful enrollment
+      // Log successful enrollment for all courses in bulk
       ShortlistingLogger.logLMSEnrollmentSuccess({
         dateTime: new Date().toISOString(),
         userId: userId,
         cohortId: cohortId,
-        courseId: courseId,
-        enrollmentId: response.data?.enrollmentId || response.data?.id,
+        courseId: courseIds.join(','),
+        enrollmentId: 'bulk', // response.data is an array now
       });
 
-      return response.data;
+      // Map to the expected return format
+      return courseIds.map(id => ({
+        courseId: id,
+        status: 'success',
+        result: response.data,
+      }));
     } catch (error) {
       // Log failed enrollment
       ShortlistingLogger.logLMSEnrollmentFailure({
         dateTime: new Date().toISOString(),
         userId: userId,
         cohortId: cohortId,
-        courseId: courseId,
+        courseId: courseIds.join(','),
         failureReason: error.message,
         errorCode: error.response?.status?.toString() || 'UNKNOWN',
       });
 
-      throw error;
+      return courseIds.map(id => ({
+        courseId: id,
+        status: 'failed',
+        error: error.message,
+      }));
     }
   }
 

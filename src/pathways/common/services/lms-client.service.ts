@@ -485,60 +485,37 @@ export class LmsClientService {
       'Content-Type': 'application/json',
     };
 
-    const failedCourseIds: string[] = [];
-    let alreadyEnrolledCount = 0;
-
-    const runChunk = async (chunk: string[]) => {
-      const results = await Promise.all(
-        chunk.map(async (courseId) => {
-          try {
-            const res = await axios.post(
-              enrollUrl,
-              { learnerId: userId, courseId, status: 'published' },
-              { headers, params: { userId }, timeout: 15000, validateStatus: () => true }
-            );
-            if (res.status >= 200 && res.status < 300) return { courseId, ok: true, alreadyEnrolled: false };
-            // 409 Conflict = already enrolled; treat as success so assignment can proceed
-            if (res.status === 409) {
-              this.logger.debug(
-                `User ${userId} already enrolled in course ${courseId} (409); treating as success`
-              );
-              return { courseId, ok: true, alreadyEnrolled: true };
-            }
-            failedCourseIds.push(courseId);
-            this.logger.warn(
-              `LMS enrollment failed for user ${userId} course ${courseId}: status ${res.status}`
-            );
-            return { courseId, ok: false, alreadyEnrolled: false };
-          } catch (err) {
-            failedCourseIds.push(courseId);
-            const msg = err instanceof Error ? err.message : 'Unknown error';
-            this.logger.warn(
-              `LMS enrollment error for user ${userId} course ${courseId}: ${msg}`
-            );
-            return { courseId, ok: false, alreadyEnrolled: false };
-          }
-        })
+    try {
+      this.logger.debug(`Enrolling user ${userId} to ${courseIds.length} courses in bulk`);
+      const res = await axios.post(
+        enrollUrl,
+        { learnerId: userId, courseId: courseIds, status: 'published' },
+        { headers, params: { userId }, timeout: 30000, validateStatus: () => true }
       );
-      return results;
-    };
 
-    const concurrency = LmsClientService.ENROLL_CONCURRENCY;
-    for (let i = 0; i < courseIds.length; i += concurrency) {
-      const chunk = courseIds.slice(i, i + concurrency);
-      const chunkResults = await runChunk(chunk);
-      alreadyEnrolledCount += chunkResults.filter((r) => r.alreadyEnrolled).length;
-    }
+      if (res.status >= 200 && res.status < 300) {
+        const alreadyEnrolledCount = res.data?.alreadyEnrolledCourseIds?.length || 0;
+        return { success: true, alreadyEnrolledCount };
+      }
 
-    if (failedCourseIds.length > 0) {
+      this.logger.warn(
+        `LMS bulk enrollment failed for user ${userId}: status ${res.status}`
+      );
       return {
         success: false,
-        failedCourseIds,
-        message: `Enrollment failed for ${failedCourseIds.length} course(s)`,
+        failedCourseIds: courseIds,
+        message: `LMS bulk enrollment failed with status ${res.status}`,
+      };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      this.logger.error(
+        `LMS bulk enrollment error for user ${userId}: ${msg}`
+      );
+      return {
+        success: false,
+        failedCourseIds: courseIds,
+        message: `LMS bulk enrollment error: ${msg}`,
       };
     }
-    return alreadyEnrolledCount > 0
-      ? { success: true, alreadyEnrolledCount }
-      : { success: true };
   }
 }
