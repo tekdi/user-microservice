@@ -6178,7 +6178,9 @@ export class PostgresCohortMembersService {
     const tenantId = process.env.DEFAULT_TENANT_ID;
     const organisationId = process.env.DEFAULT_ORGANISATION_ID;
 
-    const courseIds = courses.map((c) => c.courseId);
+    const courseIds = courses
+      .map((c) => c.courseId || c.id || c.course_id)
+      .filter((id) => !!id);
 
     try {
       const requestUrl = `${lmsBaseUrl}/lms-service/v1/enrollments`;
@@ -6319,22 +6321,25 @@ export class PostgresCohortMembersService {
     // Use for...of loop for proper async handling
     for (let i = 0; i < courses.length; i++) {
       const course = courses[i];
+      const courseId = course.courseId || course.id || course.course_id;
+
+      if (!courseId) continue;
 
       try {
         const deenrollmentResult = await this.deenrollUserFromSingleCourse(
           userId,
-          course.courseId,
+          courseId,
           cohortId
         );
 
         deenrollmentResults.push({
-          courseId: course.courseId,
+          courseId: courseId,
           status: 'success',
           result: deenrollmentResult,
         });
       } catch (error) {
         deenrollmentResults.push({
-          courseId: course.courseId,
+          courseId: courseId,
           status: 'error',
           error: error.message,
         });
