@@ -3506,7 +3506,7 @@ export class UserService {
               // Enhanced query to fetch batch, parent cohort, and academic year details
               const cohortQuery = `
                 WITH BatchData AS (
-                  SELECT 
+                  SELECT
                     cm."cohortId" as "batchId",
                     cm."createdAt" as "joinedAt",
                     cm."status" as "cohortMemberStatus",
@@ -3518,17 +3518,22 @@ export class UserService {
                     batch."parentId" as "cohortId"
                   FROM public."CohortMembers" cm
                   JOIN public."Cohort" batch ON cm."cohortId" = batch."cohortId"
-                  WHERE cm."userId" = $1 AND batch."type" = 'BATCH'
+                  WHERE cm."userId" = $1 AND batch."type" IN ('BATCH', 'COHORT')
                 )
-                SELECT 
+                SELECT
                   bd.*,
-                  cohort."name" as "cohortName",
-                  cohort."type" as "cohortType",
+                  COALESCE(
+                    parent_cohort."name",
+                    CASE WHEN bd."batchType" = 'COHORT' THEN bd."batchName" END
+                  ) as "cohortName",
+                  COALESCE(parent_cohort."type", CASE WHEN bd."batchType" = 'COHORT' THEN 'COHORT' END) as "cohortType",
                   cay."academicYearId",
                   ay."session" as "academicYearSession"
                 FROM BatchData bd
-                LEFT JOIN public."Cohort" cohort ON bd."cohortId":: UUID = cohort."cohortId" AND cohort."type" = 'COHORT'
-                LEFT JOIN public."CohortAcademicYear" cay ON bd."cohortId":: UUID = cay."cohortId"
+                LEFT JOIN public."Cohort" parent_cohort ON bd."cohortId"::uuid = parent_cohort."cohortId" AND parent_cohort."type" = 'COHORT'
+                LEFT JOIN public."CohortAcademicYear" cay ON (
+                  CASE WHEN bd."batchType" = 'BATCH' THEN bd."cohortId"::uuid ELSE bd."batchId"::uuid END
+                ) = cay."cohortId"
                 LEFT JOIN public."AcademicYears" ay ON cay."academicYearId" = ay."id"
               `;
 
