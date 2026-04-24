@@ -6173,7 +6173,14 @@ export class PostgresCohortMembersService {
     userId: string,
     courses: any[],
     cohortId: string
-  ): Promise<Array<{ courseId: string; status: 'success' | 'failed'; result?: any; error?: any }>> {
+  ): Promise<
+    Array<{
+      courseId: string;
+      status: 'success' | 'failed';
+      result?: any;
+      error?: any;
+    }>
+  > {
     const lmsBaseUrl = process.env.LMS_SERVICE_URL;
     const tenantId = process.env.DEFAULT_TENANT_ID;
     const organisationId = process.env.DEFAULT_ORGANISATION_ID;
@@ -6212,12 +6219,37 @@ export class PostgresCohortMembersService {
         enrollmentId: 'bulk', // response.data is an array now
       });
 
-      // Map to the expected return format
-      return courseIds.map(id => ({
-        courseId: id,
-        status: 'success',
-        result: response.data,
-      }));
+      // Map to the expected return format extracting individual course results
+      const successfullyEnrolled = response.data?.successfullyEnrolled || [];
+      const alreadyEnrolledCourseIds = response.data?.alreadyEnrolledCourseIds || [];
+      const failedCourseIds = response.data?.failedCourseIds || [];
+
+      return courseIds.map((id) => {
+        if (failedCourseIds.includes(id)) {
+          return {
+            courseId: id,
+            status: 'failed',
+            error: 'LMS API reported failure for this course',
+          };
+        }
+        if (alreadyEnrolledCourseIds.includes(id)) {
+          // Previously, a 409 threw an error and was recorded as 'failed' in the loop
+          return {
+            courseId: id,
+            status: 'failed',
+            error: 'User already enrolled (409 Conflict)',
+          };
+        }
+
+        const successMatch = successfullyEnrolled.find(
+          (e: any) => e.courseId === id
+        );
+        return {
+          courseId: id,
+          status: 'success',
+          result: successMatch || { status: 'PUBLISHED' },
+        };
+      });
     } catch (error) {
       // Log failed enrollment
       ShortlistingLogger.logLMSEnrollmentFailure({

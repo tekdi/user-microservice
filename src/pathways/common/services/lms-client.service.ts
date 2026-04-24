@@ -486,15 +486,32 @@ export class LmsClientService {
     };
 
     try {
-      this.logger.debug(`Enrolling user ${userId} to ${courseIds.length} courses in bulk`);
+      this.logger.debug(
+        `Enrolling user ${userId} to ${courseIds.length} courses in bulk`
+      );
       const res = await axios.post(
         enrollUrl,
         { learnerId: userId, courseId: courseIds, status: 'published' },
-        { headers, params: { userId }, timeout: 30000, validateStatus: () => true }
+        {
+          headers,
+          params: { userId },
+          timeout: 30000,
+          validateStatus: () => true,
+        }
       );
 
       if (res.status >= 200 && res.status < 300) {
-        const alreadyEnrolledCount = res.data?.alreadyEnrolledCourseIds?.length || 0;
+        const alreadyEnrolledCount =
+          res.data?.alreadyEnrolledCourseIds?.length || 0;
+        return { success: true, alreadyEnrolledCount };
+      }
+
+      // 409 Conflict = already enrolled; treat as success so assignment can proceed
+      if (res.status === 409) {
+        this.logger.debug(
+          `User ${userId} already enrolled in courses (409); treating as success`
+        );
+        const alreadyEnrolledCount = courseIds.length;
         return { success: true, alreadyEnrolledCount };
       }
 
