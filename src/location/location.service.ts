@@ -44,7 +44,7 @@ export class LocationService {
     const apiId = "api.find.location";
     try {
       const location = await this.locationRepository.find({
-        where: { id: id },
+        where: { id },
       });
       if (!location) {
         return APIResponse.error(
@@ -82,7 +82,7 @@ export class LocationService {
     const apiId = "api.update.location";
     try {
       const location = await this.locationRepository.find({
-        where: { id: id },
+        where: { id },
       });
       if (!location) {
         return APIResponse.error(
@@ -117,7 +117,7 @@ export class LocationService {
     const apiId = "api.delete.location";
     try {
       const location = await this.locationRepository.find({
-        where: { id: id },
+        where: { id },
       });
       if (!location) {
         return APIResponse.error(

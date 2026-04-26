@@ -1048,7 +1048,7 @@ export class CohortService {
         return APIResponse.error(
           response,
           apiId,
-          `Invalid Cohort Id format. It must be a valid UUID`,
+          `Invalid Cohort ID format. It must be a valid UUID`,
           "Invalid cohortId",
           HttpStatus.BAD_REQUEST
         );
