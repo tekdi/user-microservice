@@ -55,6 +55,7 @@ export interface IProfile {
   currentCountry?: string;
 
   status: string;
+  auto_tags?: string[];
   customFields: Record<string, any>;
 }
 

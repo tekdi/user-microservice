@@ -188,6 +188,7 @@ export class ElasticsearchService {
               permanentCountry: source?.profile?.permanentCountry || '',
               currentCountry: source?.profile?.currentCountry || '',
               status: source?.profile?.status || 'active',
+              auto_tags: source?.profile?.auto_tags || [],
               customFields: source?.profile?.customFields || [],
             },
             applications:
@@ -265,6 +266,7 @@ export class ElasticsearchService {
         permanentCountry: '',
         currentCountry: '',
         status: 'active',
+        auto_tags: [],
         customFields: [],
       };
 

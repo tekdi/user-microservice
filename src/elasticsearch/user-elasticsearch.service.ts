@@ -95,6 +95,7 @@ export class UserElasticsearchService implements OnModuleInit {
                   type: 'keyword',
                   normalizer: 'country_keyword_normalizer',
                 },
+                auto_tags: { type: 'keyword' },
                 customFields: {
                   type: 'nested',
                   properties: {
@@ -383,6 +384,7 @@ export class UserElasticsearchService implements OnModuleInit {
       country: this.normalizeCountryKeyword(profile.country),
       permanentCountry: this.normalizeCountryKeyword(profile.permanentCountry),
       currentCountry: this.normalizeCountryKeyword(profile.currentCountry),
+      auto_tags: profile.auto_tags || [],
       status: profile.status,
     };
 
@@ -766,6 +768,19 @@ export class UserElasticsearchService implements OnModuleInit {
               field === 'completionPercentage'
             ) {
               appFilters[field] = value;
+              return;
+            }
+
+            // Handle auto_tags filtering
+            if (field === 'auto_tags') {
+              const tags = Array.isArray(value) ? value : [value];
+              if (tags.length > 0) {
+                searchQuery.bool.filter.push({
+                  terms: {
+                    'profile.auto_tags': tags,
+                  },
+                });
+              }
               return;
             }
 

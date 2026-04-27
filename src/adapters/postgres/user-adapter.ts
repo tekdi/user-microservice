@@ -3426,6 +3426,7 @@ export class PostgresUserService implements IServicelocator {
         currentCountry: user.currentCountry || '',
         gender: user.gender,
         status: user.status,
+        auto_tags: user.auto_tags || [],
         customFields, // Now filtered to exclude form schema fields
       };
 
@@ -3465,6 +3466,7 @@ export class PostgresUserService implements IServicelocator {
                 permanentCountry: dbUser.permanentCountry || '',
                 currentCountry: dbUser.currentCountry || '',
                 status: dbUser.status,
+                auto_tags: dbUser.auto_tags || [],
                 customFields,
               },
               applications: [],
