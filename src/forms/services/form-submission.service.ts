@@ -3176,6 +3176,7 @@ export class FormSubmissionService {
         permanentCountry: user.permanentCountry || '',
         currentCountry: user.currentCountry || '',
         status: user.status,
+        auto_tags: user.auto_tags || [],
         customFields: profileCustomFields, // Only user profile custom fields
       },
       applications,
