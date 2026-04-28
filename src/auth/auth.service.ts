@@ -10,7 +10,8 @@ import jwt_decode from 'jwt-decode';
 import APIResponse from 'src/common/responses/response';
 import { KeycloakService } from 'src/common/utils/keycloak.service';
 import { APIID } from 'src/common/utils/api-id.config';
-import { Response } from 'express';
+import { Request, Response } from 'express';
+import { normalizeIpForForwarding } from 'src/common/utils/client-ip.util';
 
 type LoginResponse = {
   access_token: string;
@@ -25,9 +26,38 @@ export class AuthService {
     private readonly keycloakService: KeycloakService
   ) {}
 
-  async login(authDto, response: Response) {
+  private getClientIpForKeycloak(request: Request): string | undefined {
+    const ipFromExpress = normalizeIpForForwarding(request?.ip);
+    if (ipFromExpress) return ipFromExpress;
+
+    // Fallback: only trust X-Forwarded-For if the direct connection is internal (proxy hop).
+    const remoteAddress = normalizeIpForForwarding(request?.socket?.remoteAddress);
+    const isInternal =
+      !!remoteAddress &&
+      (remoteAddress === '127.0.0.1' ||
+        remoteAddress === '::1' ||
+        remoteAddress.startsWith('10.') ||
+        remoteAddress.startsWith('192.168.') ||
+        (remoteAddress.startsWith('172.') &&
+          (() => {
+            const second = parseInt(remoteAddress.slice(4, 7), 10);
+            return second >= 16 && second <= 31;
+          })()));
+
+    if (!isInternal) return undefined;
+
+    const xff = request?.headers?.['x-forwarded-for'];
+    const raw =
+      typeof xff === 'string' ? xff : Array.isArray(xff) ? xff.join(',') : undefined;
+    if (!raw) return undefined;
+    const first = raw.split(',')[0]?.trim();
+    return normalizeIpForForwarding(first);
+  }
+
+  async login(request: Request, authDto, response: Response) {
     const apiId = APIID.LOGIN;
     const { username, password } = authDto;
+    const clientIp = this.getClientIpForKeycloak(request);
    
     try {
       // Optimized: Only check user status (no tenant/role data needed for login)
@@ -57,7 +87,7 @@ export class AuthService {
         refresh_token,
         refresh_expires_in,
         token_type,
-      } = await this.keycloakService.login(username, password);
+      } = await this.keycloakService.login(username, password, clientIp);
 
       const res = {
         access_token,
@@ -119,12 +149,14 @@ export class AuthService {
   }
 
   async refreshToken(
+    request: Request,
     refreshToken: string,
     response: Response
   ): Promise<LoginResponse> {
     const apiId = APIID.REFRESH;
+    const clientIp = this.getClientIpForKeycloak(request);
     const { access_token, expires_in, refresh_token, refresh_expires_in } =
-      await this.keycloakService.refreshToken(refreshToken).catch(() => {
+      await this.keycloakService.refreshToken(refreshToken, clientIp).catch(() => {
         throw new UnauthorizedException();
       });
 
@@ -143,10 +175,11 @@ export class AuthService {
     );
   }
 
-  async logout(refreshToken: string, response: Response) {
+  async logout(request: Request, refreshToken: string, response: Response) {
     const apiId = APIID.LOGOUT;
+    const clientIp = this.getClientIpForKeycloak(request);
     try {
-      const logout = await this.keycloakService.logout(refreshToken);
+      const logout = await this.keycloakService.logout(refreshToken, clientIp);
       return APIResponse.success(
         response,
         apiId,

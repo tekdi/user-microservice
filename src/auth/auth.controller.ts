@@ -30,7 +30,7 @@ import { AuthService } from "./auth.service";
 import { JwtAuthGuard } from "src/common/guards/keycloak.guard";
 import { APIID } from "src/common/utils/api-id.config";
 import { AllExceptionsFilter } from "src/common/filters/exception.filter";
-import { Response } from "express";
+import { Request, Response } from "express";
 
 @ApiTags("Auth")
 @Controller("auth")
@@ -43,8 +43,12 @@ export class AuthController {
   @UsePipes(ValidationPipe)
   @HttpCode(HttpStatus.OK)
   @ApiForbiddenResponse({ description: "Forbidden" })
-  public async login(@Body() authDto: AuthDto, @Res() response: Response) {
-     return this.authService.login(authDto, response);
+  public async login(
+    @Req() request: Request,
+    @Body() authDto: AuthDto,
+    @Res() response: Response,
+  ) {
+     return this.authService.login(request, authDto, response);
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.USER_AUTH))
@@ -67,12 +71,13 @@ export class AuthController {
   @ApiBody({ type: RefreshTokenRequestBody })
   @UsePipes(ValidationPipe)
   refreshToken(
+    @Req() request: Request,
     @Body() body: RefreshTokenRequestBody,
     @Res() response: Response
   ) {
     const { refresh_token: refreshToken } = body;
 
-    return this.authService.refreshToken(refreshToken, response);
+    return this.authService.refreshToken(request, refreshToken, response);
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.LOGOUT))
@@ -80,9 +85,13 @@ export class AuthController {
   @UsePipes(ValidationPipe)
   @HttpCode(HttpStatus.OK)
   @ApiBody({ type: LogoutRequestBody })
-  async logout(@Body() body: LogoutRequestBody, @Res() response: Response) {
+  async logout(
+    @Req() request: Request,
+    @Body() body: LogoutRequestBody,
+    @Res() response: Response,
+  ) {
     const { refresh_token: refreshToken } = body;
 
-    await this.authService.logout(refreshToken, response);
+    await this.authService.logout(request, refreshToken, response);
   }
 }

@@ -39,6 +39,8 @@ import { AllExceptionsFilter } from './common/filters/exception.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  // Ensure Express reads X-Forwarded-* behind ALB/Ingress
+  (app.getHttpAdapter().getInstance() as any).set('trust proxy', 1);
 
   // Configure raw body for webhook routes
   app.use(

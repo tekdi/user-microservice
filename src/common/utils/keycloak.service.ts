@@ -37,7 +37,7 @@ export class KeycloakService {
     this.axios = axios.create();
   }
 
- async login(username: string, password: string): Promise<LoginResponse> {
+ async login(username: string, password: string, clientIp?: string): Promise<LoginResponse> {
     const data = qs.stringify({
       client_id: this.clientId,
       client_secret: this.clientSecret,
@@ -51,6 +51,7 @@ export class KeycloakService {
       url: `${this.baseURL}realms/${this.realm}/protocol/openid-connect/token`,
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
+        ...(clientIp ? { "X-Forwarded-For": clientIp } : {}),
       },
       data: data,
       timeout: 15000, // 15 second timeout to prevent hanging
@@ -136,7 +137,7 @@ export class KeycloakService {
     return res.data;
   }
 
-  async refreshToken(refreshToken: string): Promise<LoginResponse> {
+  async refreshToken(refreshToken: string, clientIp?: string): Promise<LoginResponse> {
     const data = qs.stringify({
       client_id: this.clientId,
       client_secret: this.clientSecret,
@@ -149,6 +150,7 @@ export class KeycloakService {
       url: `${this.baseURL}realms/${this.realm}/protocol/openid-connect/token`,
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
+        ...(clientIp ? { "X-Forwarded-For": clientIp } : {}),
       },
       data: data,
       timeout: 15000, // 15 second timeout
@@ -159,7 +161,7 @@ export class KeycloakService {
     return res.data;
   }
 
-  async logout(refreshToken: string) {
+  async logout(refreshToken: string, clientIp?: string) {
     const data = qs.stringify({
       client_id: this.clientId,
       client_secret: this.clientSecret,
@@ -171,6 +173,7 @@ export class KeycloakService {
       url: `${this.baseURL}realms/${this.realm}/protocol/openid-connect/logout`,
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
+        ...(clientIp ? { "X-Forwarded-For": clientIp } : {}),
       },
       data: data,
       timeout: 10000, // 10 second timeout
