@@ -10,7 +10,8 @@ import jwt_decode from 'jwt-decode';
 import APIResponse from 'src/common/responses/response';
 import { KeycloakService } from 'src/common/utils/keycloak.service';
 import { APIID } from 'src/common/utils/api-id.config';
-import { Response } from 'express';
+import { Request, Response } from 'express';
+import { getClientIp, normalizeIpForForwarding } from 'src/common/utils/client-ip.util';
 
 type LoginResponse = {
   access_token: string;
@@ -25,9 +26,10 @@ export class AuthService {
     private readonly keycloakService: KeycloakService
   ) {}
 
-  async login(authDto, response: Response) {
+  async login(request: Request, authDto, response: Response) {
     const apiId = APIID.LOGIN;
     const { username, password } = authDto;
+    const clientIp = normalizeIpForForwarding(getClientIp(request));
    
     try {
       // Optimized: Only check user status (no tenant/role data needed for login)
@@ -57,7 +59,7 @@ export class AuthService {
         refresh_token,
         refresh_expires_in,
         token_type,
-      } = await this.keycloakService.login(username, password);
+      } = await this.keycloakService.login(username, password, clientIp);
 
       const res = {
         access_token,
@@ -119,12 +121,14 @@ export class AuthService {
   }
 
   async refreshToken(
+    request: Request,
     refreshToken: string,
     response: Response
   ): Promise<LoginResponse> {
     const apiId = APIID.REFRESH;
+    const clientIp = normalizeIpForForwarding(getClientIp(request));
     const { access_token, expires_in, refresh_token, refresh_expires_in } =
-      await this.keycloakService.refreshToken(refreshToken).catch(() => {
+      await this.keycloakService.refreshToken(refreshToken, clientIp).catch(() => {
         throw new UnauthorizedException();
       });
 
@@ -143,10 +147,11 @@ export class AuthService {
     );
   }
 
-  async logout(refreshToken: string, response: Response) {
+  async logout(request: Request, refreshToken: string, response: Response) {
     const apiId = APIID.LOGOUT;
+    const clientIp = normalizeIpForForwarding(getClientIp(request));
     try {
-      const logout = await this.keycloakService.logout(refreshToken);
+      const logout = await this.keycloakService.logout(refreshToken, clientIp);
       return APIResponse.success(
         response,
         apiId,
