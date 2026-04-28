@@ -598,6 +598,7 @@ export class PaymentService {
     search?: string,
     statusFilters?: string[],
     certificateGenerated?: boolean,
+    couponCode?: string,
   ): Promise<{ data: PaymentReportItemDto[]; totalCount: number }> {
     const searchTerm =
       typeof search === 'string' && search.trim().length > 0
@@ -614,6 +615,7 @@ export class PaymentService {
       searchTerm,
       transactionStatuses,
       certificateGenerated,
+      couponCode,
     );
 
     const countResult = await countQb
@@ -645,6 +647,7 @@ export class PaymentService {
       searchTerm,
       transactionStatuses,
       certificateGenerated,
+      couponCode,
     );
 
     const idRows = await idsQb.getRawMany();
@@ -750,6 +753,7 @@ export class PaymentService {
     searchTerm?: string,
     transactionStatuses?: PaymentTransactionStatus[],
     certificateGenerated?: boolean,
+    couponCode?: string,
   ): void {
     qb
       .innerJoin('transaction.paymentIntent', 'intent')
@@ -791,6 +795,13 @@ export class PaymentService {
           unlockedStatus: PaymentTargetUnlockStatus.UNLOCKED,
         });
       }
+    }
+
+    if (couponCode) {
+      qb.andWhere(
+        "LOWER(COALESCE(intent.metadata->>'couponCode', '')) = :couponCode",
+        { couponCode: couponCode.toLowerCase() },
+      );
     }
   }
 

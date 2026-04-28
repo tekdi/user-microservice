@@ -192,45 +192,55 @@ export class PaymentsController {
     );
   }
 
-  @Get('report/:contextId')
+  @Post('report/:contextId')
   @UseFilters(new AllExceptionsFilter(APIID.PAYMENT_STATUS))
-  @ApiOperation({ summary: 'Get payment report by contextId with pagination' })
-  @ApiQuery({
-    name: 'limit',
-    required: false,
-    type: Number,
-    description: 'Number of records to return (default: 50, max: 1000)',
-    example: 50,
-  })
-  @ApiQuery({
-    name: 'offset',
-    required: false,
-    type: Number,
-    description: 'Number of records to skip (default: 0)',
-    example: 0,
-  })
-  @ApiQuery({
-    name: 'search',
-    required: false,
-    type: String,
-    description: 'Free text search on firstName, lastName, and email (case-insensitive)',
-    example: 'john',
-  })
-  @ApiQuery({
-    name: 'status',
-    required: false,
-    type: String,
-    description:
-      'Filter by transaction status. Accepts SUCCESS, INITIATED, FAILED (single value or comma-separated list)',
-    example: 'SUCCESS,FAILED',
-  })
-  @ApiQuery({
-    name: 'certificateGenerated',
-    required: false,
-    type: String,
-    description:
-      'Filter by certificate generation status for the given context (accepts true/false)',
-    example: 'true',
+  @ApiOperation({ summary: 'Get payment report by contextId with filters and pagination' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        limit: {
+          type: 'number',
+          example: 50,
+          description: 'Number of records to return (default: 50, max: 1000)',
+        },
+        offset: {
+          type: 'number',
+          example: 0,
+          description: 'Number of records to skip (default: 0)',
+        },
+        search: {
+          type: 'string',
+          example: 'john',
+          description:
+            'Free text search on firstName, lastName, and email (case-insensitive)',
+        },
+        status: {
+          oneOf: [
+            { type: 'string', example: 'SUCCESS,FAILED' },
+            {
+              type: 'array',
+              items: { type: 'string', enum: ['SUCCESS', 'INITIATED', 'FAILED'] },
+              example: ['SUCCESS', 'FAILED'],
+            },
+          ],
+          description:
+            'Filter by transaction status. Accepts SUCCESS, INITIATED, FAILED',
+        },
+        certificateGenerated: {
+          oneOf: [
+            { type: 'boolean', example: true },
+            { type: 'string', example: 'true' },
+          ],
+          description: 'Filter by certificate generation status (true/false)',
+        },
+        couponCode: {
+          type: 'string',
+          example: 'WELCOME10',
+          description: 'Filter by applied coupon code (case-insensitive exact match)',
+        },
+      },
+    },
   })
   @ApiOkResponse({
     description: 'Payment report retrieved successfully',
@@ -239,11 +249,12 @@ export class PaymentsController {
   @ApiBadRequestResponse({ description: 'Invalid pagination parameters' })
   async getPaymentReport(
     @Param('contextId', ParseUUIDPipe) contextId: string,
-    @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit: number,
-    @Query('offset', new DefaultValuePipe(0), ParseIntPipe) offset: number,
-    @Query('search') search?: string,
-    @Query('status') status?: string,
-    @Query('certificateGenerated') certificateGenerated?: string,
+    @Body('limit', new DefaultValuePipe(50), ParseIntPipe) limit: number,
+    @Body('offset', new DefaultValuePipe(0), ParseIntPipe) offset: number,
+    @Body('search') search?: string,
+    @Body('status') status?: string | string[],
+    @Body('certificateGenerated') certificateGenerated?: string | boolean,
+    @Body('couponCode') couponCode?: string,
   ): Promise<PaymentReportResponseDto> {
     // Validate pagination parameters
     if (limit < 1 || limit > 1000) {
@@ -254,13 +265,7 @@ export class PaymentsController {
     }
 
     const searchTerm = typeof search === 'string' ? search.trim() : undefined;
-    const normalizedStatuses =
-      typeof status === 'string'
-        ? status
-            .split(',')
-            .map((value) => value.trim().toUpperCase())
-            .filter((value) => value.length > 0)
-        : [];
+    const normalizedStatuses = this.normalizeStatuses(status);
 
     const allowedStatuses = new Set(['SUCCESS', 'INITIATED', 'FAILED']);
     const invalidStatuses = normalizedStatuses.filter(
@@ -274,6 +279,10 @@ export class PaymentsController {
 
     const certificateGeneratedFilter =
       this.parseBooleanLikeQueryParam(certificateGenerated);
+    const couponCodeFilter =
+      typeof couponCode === 'string' && couponCode.trim().length > 0
+        ? couponCode.trim()
+        : undefined;
 
     const result = await this.paymentService.getPaymentReportByContextId(
       contextId,
@@ -282,6 +291,7 @@ export class PaymentsController {
       searchTerm,
       normalizedStatuses.length > 0 ? normalizedStatuses : undefined,
       certificateGeneratedFilter,
+      couponCodeFilter,
     );
 
     return {
@@ -293,7 +303,11 @@ export class PaymentsController {
     };
   }
 
-  private parseBooleanLikeQueryParam(value?: string): boolean | undefined {
+  private parseBooleanLikeQueryParam(value?: string | boolean): boolean | undefined {
+    if (typeof value === 'boolean') {
+      return value;
+    }
+
     if (typeof value !== 'string') {
       return undefined;
     }
@@ -314,5 +328,22 @@ export class PaymentsController {
     throw new BadRequestException(
       'certificateGenerated must be one of: true, false',
     );
+  }
+
+  private normalizeStatuses(status?: string | string[]): string[] {
+    if (Array.isArray(status)) {
+      return status
+        .map((value) => value.trim().toUpperCase())
+        .filter((value) => value.length > 0);
+    }
+
+    if (typeof status === 'string') {
+      return status
+        .split(',')
+        .map((value) => value.trim().toUpperCase())
+        .filter((value) => value.length > 0);
+    }
+
+    return [];
   }
 }
