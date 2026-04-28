@@ -7,7 +7,7 @@ import {
   Inject,
 } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, Repository, In } from 'typeorm';
+import { DataSource, EntityManager, Repository, In, SelectQueryBuilder } from 'typeorm';
 import { PaymentProvider } from '../interfaces/payment-provider.interface';
 import { PaymentIntentService } from './payment-intent.service';
 import { PaymentTransactionService } from './payment-transaction.service';
@@ -596,27 +596,25 @@ export class PaymentService {
     limit: number = 50,
     offset: number = 0,
     search?: string,
+    statusFilters?: string[],
+    certificateGenerated?: boolean,
   ): Promise<{ data: PaymentReportItemDto[]; totalCount: number }> {
     const searchTerm =
       typeof search === 'string' && search.trim().length > 0
         ? search.trim().toLowerCase()
         : undefined;
+    const transactionStatuses =
+      this.mapReportStatusFiltersToTransactionStatuses(statusFilters);
     const countQb = this.dataSource
       .getRepository(PaymentTransaction)
-      .createQueryBuilder('transaction')
-      .innerJoin('transaction.paymentIntent', 'intent')
-      .innerJoin('intent.targets', 'target')
-      .where('target.contextId = :contextId', { contextId });
-
-    if (searchTerm) {
-      const searchPattern = `%${searchTerm}%`;
-      countQb
-        .innerJoin(User, 'user', 'user.userId = intent.userId')
-        .andWhere(
-          '(LOWER(COALESCE(user.firstName, \'\')) LIKE :searchPattern OR LOWER(COALESCE(user.lastName, \'\')) LIKE :searchPattern OR LOWER(COALESCE(user.email, \'\')) LIKE :searchPattern)',
-          { searchPattern },
-        );
-    }
+      .createQueryBuilder('transaction');
+    this.applyReportFilters(
+      countQb,
+      contextId,
+      searchTerm,
+      transactionStatuses,
+      certificateGenerated,
+    );
 
     const countResult = await countQb
       .select('COUNT(DISTINCT transaction.id)', 'cnt')
@@ -636,24 +634,18 @@ export class PaymentService {
       .getRepository(PaymentTransaction)
       .createQueryBuilder('transaction')
       .select('transaction.id', 'id')
-      .innerJoin('transaction.paymentIntent', 'intent')
-      .innerJoin('intent.targets', 'target')
-      .where('target.contextId = :contextId', { contextId })
       .groupBy('transaction.id')
       .orderBy('MAX(transaction.createdAt)', 'DESC')
       .addOrderBy('transaction.id', 'ASC')
       .offset(offset)
       .limit(limit);
-
-    if (searchTerm) {
-      const searchPattern = `%${searchTerm}%`;
-      idsQb
-        .innerJoin(User, 'user', 'user.userId = intent.userId')
-        .andWhere(
-          '(LOWER(COALESCE(user.firstName, \'\')) LIKE :searchPattern OR LOWER(COALESCE(user.lastName, \'\')) LIKE :searchPattern OR LOWER(COALESCE(user.email, \'\')) LIKE :searchPattern)',
-          { searchPattern },
-        );
-    }
+    this.applyReportFilters(
+      idsQb,
+      contextId,
+      searchTerm,
+      transactionStatuses,
+      certificateGenerated,
+    );
 
     const idRows = await idsQb.getRawMany();
     const orderedIds = idRows.map((row) => row.id as string);
@@ -750,6 +742,83 @@ export class PaymentService {
       data: reportItems as PaymentReportItemDto[],
       totalCount,
     };
+  }
+
+  private applyReportFilters(
+    qb: SelectQueryBuilder<PaymentTransaction>,
+    contextId: string,
+    searchTerm?: string,
+    transactionStatuses?: PaymentTransactionStatus[],
+    certificateGenerated?: boolean,
+  ): void {
+    qb
+      .innerJoin('transaction.paymentIntent', 'intent')
+      .innerJoin('intent.targets', 'target')
+      .where('target.contextId = :contextId', { contextId });
+
+    if (searchTerm) {
+      const searchPattern = `%${searchTerm}%`;
+      qb
+        .innerJoin(User, 'user', 'user.userId = intent.userId')
+        .andWhere(
+          '(LOWER(COALESCE(user.firstName, \'\')) LIKE :searchPattern OR LOWER(COALESCE(user.lastName, \'\')) LIKE :searchPattern OR LOWER(COALESCE(user.email, \'\')) LIKE :searchPattern)',
+          { searchPattern },
+        );
+    }
+
+    if (transactionStatuses && transactionStatuses.length > 0) {
+      qb.andWhere('transaction.status IN (:...transactionStatuses)', {
+        transactionStatuses,
+      });
+    }
+
+    if (typeof certificateGenerated === 'boolean') {
+      const lockedTargetSubquery = qb
+        .subQuery()
+        .select('1')
+        .from(PaymentTarget, 'target_unlock_filter')
+        .where('target_unlock_filter.paymentIntentId = intent.id')
+        .andWhere('target_unlock_filter.contextId = :contextId')
+        .andWhere('target_unlock_filter.unlockStatus != :unlockedStatus')
+        .getQuery();
+
+      if (certificateGenerated) {
+        qb.andWhere(`NOT EXISTS ${lockedTargetSubquery}`, {
+          unlockedStatus: PaymentTargetUnlockStatus.UNLOCKED,
+        });
+      } else {
+        qb.andWhere(`EXISTS ${lockedTargetSubquery}`, {
+          unlockedStatus: PaymentTargetUnlockStatus.UNLOCKED,
+        });
+      }
+    }
+  }
+
+  private mapReportStatusFiltersToTransactionStatuses(
+    statusFilters?: string[],
+  ): PaymentTransactionStatus[] | undefined {
+    if (!statusFilters || statusFilters.length === 0) {
+      return undefined;
+    }
+
+    const statuses = new Set<PaymentTransactionStatus>();
+    statusFilters.forEach((status) => {
+      switch (status) {
+        case 'SUCCESS':
+          statuses.add(PaymentTransactionStatus.SUCCESS);
+          break;
+        case 'INITIATED':
+          statuses.add(PaymentTransactionStatus.INITIATED);
+          break;
+        case 'FAILED':
+          statuses.add(PaymentTransactionStatus.FAILED);
+          break;
+        default:
+          break;
+      }
+    });
+
+    return Array.from(statuses);
   }
 
   private computeTargetUnlockedForContext(

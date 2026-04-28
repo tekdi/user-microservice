@@ -19,7 +19,6 @@ import {
 import {
   ApiTags,
   ApiOperation,
-  ApiResponse,
   ApiBody,
   ApiCreatedResponse,
   ApiOkResponse,
@@ -42,7 +41,7 @@ import { PaymentReportResponseDto } from './dtos/payment-report.dto';
 @ApiTags('Payments')
 @Controller('payments')
 export class PaymentsController {
-  constructor(private paymentService: PaymentService) {}
+  constructor(private readonly paymentService: PaymentService) {}
 
   @Post('initiate')
   @UseFilters(new AllExceptionsFilter(APIID.PAYMENT_INITIATE))
@@ -217,6 +216,22 @@ export class PaymentsController {
     description: 'Free text search on firstName, lastName, and email (case-insensitive)',
     example: 'john',
   })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    type: String,
+    description:
+      'Filter by transaction status. Accepts SUCCESS, INITIATED, FAILED (single value or comma-separated list)',
+    example: 'SUCCESS,FAILED',
+  })
+  @ApiQuery({
+    name: 'certificateGenerated',
+    required: false,
+    type: String,
+    description:
+      'Filter by certificate generation status for the given context (accepts true/false)',
+    example: 'true',
+  })
   @ApiOkResponse({
     description: 'Payment report retrieved successfully',
     type: PaymentReportResponseDto,
@@ -227,6 +242,8 @@ export class PaymentsController {
     @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit: number,
     @Query('offset', new DefaultValuePipe(0), ParseIntPipe) offset: number,
     @Query('search') search?: string,
+    @Query('status') status?: string,
+    @Query('certificateGenerated') certificateGenerated?: string,
   ): Promise<PaymentReportResponseDto> {
     // Validate pagination parameters
     if (limit < 1 || limit > 1000) {
@@ -237,12 +254,34 @@ export class PaymentsController {
     }
 
     const searchTerm = typeof search === 'string' ? search.trim() : undefined;
+    const normalizedStatuses =
+      typeof status === 'string'
+        ? status
+            .split(',')
+            .map((value) => value.trim().toUpperCase())
+            .filter((value) => value.length > 0)
+        : [];
+
+    const allowedStatuses = new Set(['SUCCESS', 'INITIATED', 'FAILED']);
+    const invalidStatuses = normalizedStatuses.filter(
+      (value) => !allowedStatuses.has(value),
+    );
+    if (invalidStatuses.length > 0) {
+      throw new BadRequestException(
+        `Invalid status filter(s): ${invalidStatuses.join(', ')}. Allowed values are SUCCESS, INITIATED, FAILED`,
+      );
+    }
+
+    const certificateGeneratedFilter =
+      this.parseBooleanLikeQueryParam(certificateGenerated);
 
     const result = await this.paymentService.getPaymentReportByContextId(
       contextId,
       limit,
       offset,
       searchTerm,
+      normalizedStatuses.length > 0 ? normalizedStatuses : undefined,
+      certificateGeneratedFilter,
     );
 
     return {
@@ -252,5 +291,28 @@ export class PaymentsController {
       offset,
       hasMore: offset + result.data.length < result.totalCount,
     };
+  }
+
+  private parseBooleanLikeQueryParam(value?: string): boolean | undefined {
+    if (typeof value !== 'string') {
+      return undefined;
+    }
+
+    const normalized = value.trim().toLowerCase();
+    if (normalized === '') {
+      return undefined;
+    }
+
+    if (normalized === 'true') {
+      return true;
+    }
+
+    if (normalized === 'false') {
+      return false;
+    }
+
+    throw new BadRequestException(
+      'certificateGenerated must be one of: true, false',
+    );
   }
 }
