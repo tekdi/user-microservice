@@ -41,15 +41,6 @@ function extractDownloadUrlFromCertificateResponse(data: unknown): string {
   return '';
 }
 
-function formatPaidAtIst(date: Date): string {
-  return new Intl.DateTimeFormat('en-US', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-    timeZone: 'Asia/Kolkata',
-    timeZoneName: 'short',
-  }).format(date);
-}
-
 function displayNameFromUser(user: User): string {
   const first = (user.firstName || '').trim();
   const last = (user.lastName || '').trim();
@@ -108,6 +99,18 @@ export class PremiumCertificatePurchaseEmailService {
       )[0];
       const providerPaymentId = latestSuccess?.providerPaymentId ?? '';
 
+      let paidAtDate: Date;
+      if (latestSuccess?.createdAt) {
+        paidAtDate = new Date(latestSuccess.createdAt);
+      } else {
+        this.logger.warn(
+          `No SUCCESS transaction with createdAt for intent ${params.paymentIntentId}; paidAt falls back to payment intent timestamps`,
+        );
+        paidAtDate = intent.updatedAt
+          ? new Date(intent.updatedAt)
+          : new Date(intent.createdAt);
+      }
+
       const certificateName =
         (typeof intent.metadata?.certificateName === 'string' &&
           intent.metadata.certificateName.trim()) ||
@@ -115,7 +118,7 @@ export class PremiumCertificatePurchaseEmailService {
 
       const amountPaid = Number(intent.amount).toFixed(2);
       const currency = (intent.currency || 'USD').toUpperCase();
-      const paidAt = formatPaidAtIst(new Date());
+      const paidAt = paidAtDate.toISOString();
       const downloadUrl = extractDownloadUrlFromCertificateResponse(
         params.certificateApiResponse,
       );
