@@ -153,10 +153,6 @@ export class PremiumCertificatePurchaseEmailService {
         );
         return;
       }
-
-      this.logger.log(
-        `Premium certificate purchase email sent for intent ${params.paymentIntentId} to ${user.email}`,
-      );
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this.logger.error(
