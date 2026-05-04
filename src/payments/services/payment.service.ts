@@ -477,7 +477,7 @@ export class PaymentService {
     this.logger.log(
       `Certificate(s) generated and targets unlocked for user ${userId} (intent ${paymentIntentId}, courses: ${uniqueCourseIds.join(', ')})`,
     );
-this.logger.log(uniqueCourseIds.length,"uniqueCourseIds.length")
+
     if (uniqueCourseIds.length > 0) {
       void this.premiumCertificatePurchaseEmailService
         .sendPremiumCertificatePurchasedIfEnabled({
