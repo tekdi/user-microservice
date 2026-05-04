@@ -13,6 +13,7 @@ import { PaymentIntentService } from './payment-intent.service';
 import { PaymentTransactionService } from './payment-transaction.service';
 import { PaymentTargetService } from './payment-target.service';
 import { CertificateService } from './certificate.service';
+import { PremiumCertificatePurchaseEmailService } from './premium-certificate-purchase-email.service';
 import { CouponService } from './coupon.service';
 import { InitiatePaymentDto } from '../dtos/initiate-payment.dto';
 import {
@@ -37,6 +38,7 @@ export class PaymentService {
     private readonly paymentTransactionService: PaymentTransactionService,
     private readonly paymentTargetService: PaymentTargetService,
     private readonly certificateService: CertificateService,
+    private readonly premiumCertificatePurchaseEmailService: PremiumCertificatePurchaseEmailService,
     private readonly couponService: CouponService,
     @Inject('PaymentProvider') private readonly paymentProvider: PaymentProvider,
     @InjectDataSource() private readonly dataSource: DataSource,
@@ -460,8 +462,9 @@ export class PaymentService {
     const issuanceDate = new Date().toISOString();
     const expirationDate = '0000-00-00T00:00:00.000Z'; // Default expiration date as per API
 
+    let lastCertificateResponse: unknown;
     for (const courseId of uniqueCourseIds) {
-      await this.certificateService.generateCertificate({
+      lastCertificateResponse = await this.certificateService.generateCertificate({
         userId,
         courseId,
         issuanceDate,
@@ -474,6 +477,21 @@ export class PaymentService {
     this.logger.log(
       `Certificate(s) generated and targets unlocked for user ${userId} (intent ${paymentIntentId}, courses: ${uniqueCourseIds.join(', ')})`,
     );
+
+    if (uniqueCourseIds.length > 0) {
+      void this.premiumCertificatePurchaseEmailService
+        .sendPremiumCertificatePurchasedIfEnabled({
+          userId,
+          paymentIntentId,
+          certificateApiResponse: lastCertificateResponse,
+        })
+        .catch((err) => {
+          this.logger.error(
+            `Unexpected error scheduling premium certificate email for intent ${paymentIntentId}: ${err?.message ?? err}`,
+            err?.stack,
+          );
+        });
+    }
   }
 
   /**
@@ -1013,8 +1031,9 @@ export class PaymentService {
     transactionId: string;
   }) {
     const idempotencyKey = `${dto.transactionId}:${dto.courseId}`;
+    const premiumEmailContext = { sendAfterNewCertificate: false };
 
-    return this.dataSource.transaction(async (manager: EntityManager) => {
+    const result = await this.dataSource.transaction(async (manager: EntityManager) => {
       const transaction = await manager.findOne(PaymentTransaction, {
         where: { id: dto.transactionId },
         lock: { mode: 'pessimistic_write' },
@@ -1091,6 +1110,7 @@ export class PaymentService {
         issuanceDate: dto.issuanceDate,
         expirationDate: dto.expirationDate,
       });
+      premiumEmailContext.sendAfterNewCertificate = true;
 
       const rawResponseSnapshot = transaction.rawResponse
         ? { ...transaction.rawResponse }
@@ -1131,6 +1151,23 @@ export class PaymentService {
         transactionId: dto.transactionId,
       };
     });
+
+    if (premiumEmailContext.sendAfterNewCertificate) {
+      void this.premiumCertificatePurchaseEmailService
+        .sendPremiumCertificatePurchasedIfEnabled({
+          userId: dto.userId,
+          paymentIntentId: result.paymentIntentId,
+          certificateApiResponse: result.certificate,
+        })
+        .catch((err) => {
+          this.logger.error(
+            `Unexpected error scheduling premium certificate email for intent ${result.paymentIntentId}: ${err?.message ?? err}`,
+            err?.stack,
+          );
+        });
+    }
+
+    return result;
   }
 }
 
