@@ -72,6 +72,9 @@ export class PremiumCertificatePurchaseEmailService {
     certificateApiResponse: unknown;
   }): Promise<void> {
     if (!isSendEmailAfterPaymentSuccessEnabled(this.configService)) {
+      this.logger.log(
+        `Skipping premium certificate purchase email for intent ${params.paymentIntentId} because SEND_EMAIL_AFTER_PAYMENT_SUCCESS is not enabled`,
+      );
       return;
     }
 
