@@ -72,9 +72,6 @@ export class PremiumCertificatePurchaseEmailService {
     certificateApiResponse: unknown;
   }): Promise<void> {
     if (!isSendEmailAfterPaymentSuccessEnabled(this.configService)) {
-      this.logger.log(
-        `Skipping premium certificate purchase email for intent ${params.paymentIntentId} because SEND_EMAIL_AFTER_PAYMENT_SUCCESS is not enabled`,
-      );
       return;
     }
 
@@ -139,10 +136,6 @@ export class PremiumCertificatePurchaseEmailService {
         },
       };
 
-      this.logger.log(
-        `Sending premium certificate purchase email (OnPremiumCertificatePurchased) for intent ${params.paymentIntentId}`,
-      );
-
       const mailSend = await this.notificationRequest.sendNotification(
         notificationPayload,
       );
@@ -154,10 +147,6 @@ export class PremiumCertificatePurchaseEmailService {
         );
         return;
       }
-
-      this.logger.log(
-        `Premium certificate purchase email sent for intent ${params.paymentIntentId}`,
-      );
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this.logger.error(
