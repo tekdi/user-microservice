@@ -111,11 +111,6 @@ export class PremiumCertificatePurchaseEmailService {
           : new Date(intent.createdAt);
       }
 
-      const certificateName =
-        (typeof intent.metadata?.certificateName === 'string' &&
-          intent.metadata.certificateName.trim()) ||
-        'Leadership Premium Certificate';
-
       const amountPaid = Number(intent.amount).toFixed(2);
       const currency = (intent.currency || 'USD').toUpperCase();
       const paidAt = paidAtDate.toISOString();
@@ -129,7 +124,6 @@ export class PremiumCertificatePurchaseEmailService {
         key: 'OnPremiumCertificatePurchased',
         replacements: {
           '{userName}': displayNameFromUser(user),
-          '{certificateName}': certificateName,
           '{downloadUrl}': downloadUrl,
           '{orderId}': params.paymentIntentId,
           '{transactionId}': providerPaymentId,
