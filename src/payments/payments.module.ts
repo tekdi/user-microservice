@@ -17,6 +17,7 @@ import { PaymentIntentService } from './services/payment-intent.service';
 import { PaymentTransactionService } from './services/payment-transaction.service';
 import { PaymentTargetService } from './services/payment-target.service';
 import { CertificateService } from './services/certificate.service';
+import { PremiumCertificatePurchaseEmailService } from './services/premium-certificate-purchase-email.service';
 import { CouponService } from './services/coupon.service';
 import { UserAdapter } from '../user/useradapter';
 import { PostgresModule } from '../adapters/postgres/postgres-module';
@@ -62,6 +63,7 @@ import { StripeProvider } from './providers/stripe/stripe.provider';
     PaymentTransactionService,
     PaymentTargetService,
     CertificateService,
+    PremiumCertificatePurchaseEmailService,
     CouponService,
     UserAdapter,
     HttpService,
