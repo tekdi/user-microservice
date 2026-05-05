@@ -36,11 +36,11 @@ import { JwtAuthGuard } from 'src/common/guards/keycloak.guard';
 
 @ApiTags('Content')
 @Controller('content')
-@UseGuards(JwtAuthGuard)
 export class ContentController {
   constructor(private readonly contentService: ContentService) {}
 
   @Patch('update/:id')
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({
     summary: 'Update existing content',
     description: 'Updates an existing content entry with the provided information.',
@@ -86,11 +86,7 @@ export class ContentController {
     summary: 'List content',
     description: 'Retrieves a list of content based on filters and pagination.',
   })
-  @ApiHeader({
-    name: 'Authorization',
-    description: 'Bearer token for authentication',
-    required: true,
-  })
+  
   @ApiHeader({
     name: 'tenantid',
     description: 'Tenant UUID',
@@ -116,6 +112,7 @@ export class ContentController {
   }
 
   @Post('create')
+  @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: 'Create new content',
