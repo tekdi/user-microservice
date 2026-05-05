@@ -6,6 +6,7 @@ import {
   ConflictException,
   Inject,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository, In, SelectQueryBuilder } from 'typeorm';
 import { PaymentProvider } from '../interfaces/payment-provider.interface';
@@ -28,12 +29,15 @@ import { PaymentIntent } from '../entities/payment-intent.entity';
 import { PaymentTarget } from '../entities/payment-target.entity';
 import { User } from '../../user/entities/user-entity';
 import { PaymentReportItemDto } from '../dtos/payment-report.dto';
+import { LmsClientService } from '../../pathways/common/services/lms-client.service';
 
 @Injectable()
 export class PaymentService {
   private readonly logger = new Logger(PaymentService.name);
 
   constructor(
+    private readonly configService: ConfigService,
+    private readonly lmsClientService: LmsClientService,
     private readonly paymentIntentService: PaymentIntentService,
     private readonly paymentTransactionService: PaymentTransactionService,
     private readonly paymentTargetService: PaymentTargetService,
@@ -45,6 +49,89 @@ export class PaymentService {
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
   ) {}
+
+  /** Compare monetary amounts to the cent (avoids float drift). */
+  private amountsMatchClientTotal(a: number, b: number): boolean {
+    return Math.round(a * 100) === Math.round(b * 100);
+  }
+
+  /**
+   * For certificate bundle checkout, total must match LMS course list prices (sum per distinct course).
+   * Coupon discounts are applied afterward against this canonical original total.
+   */
+  private async resolveCanonicalOriginalAmount(
+    dto: InitiatePaymentDto,
+  ): Promise<number> {
+    if (dto.purpose !== PaymentPurpose.CERTIFICATE_BUNDLE) {
+      return dto.amount;
+    }
+
+    const tenantId = this.configService.get<string>('DEFAULT_TENANT_ID');
+    const organisationId = this.configService.get<string>(
+      'DEFAULT_ORGANISATION_ID',
+    );
+    const lmsUrl = this.configService.get<string>('LMS_SERVICE_URL');
+    const academicYearId =
+      this.configService.get<string>('DEFAULT_ACADEMIC_YEAR_ID') || undefined;
+
+    if (!lmsUrl || !tenantId || !organisationId) {
+      throw new BadRequestException(
+        'Course pricing cannot be verified: configure LMS_SERVICE_URL, DEFAULT_TENANT_ID, and DEFAULT_ORGANISATION_ID.',
+      );
+    }
+
+    const uniqueCourseIds = [...new Set(dto.targets.map((t) => t.contextId))];
+    if (uniqueCourseIds.length === 0) {
+      throw new BadRequestException(
+        'Payment targets must include at least one course context.',
+      );
+    }
+
+    let total = 0;
+    let pricingCurrency: string | undefined;
+
+    for (const courseId of uniqueCourseIds) {
+      const pricing = await this.lmsClientService.getCoursePricing(
+        courseId,
+        tenantId,
+        organisationId,
+        academicYearId,
+      );
+      if (!pricing) {
+        throw new BadRequestException(
+          `Unable to verify pricing for course ${courseId}.`,
+        );
+      }
+      if (pricingCurrency === undefined) {
+        pricingCurrency = pricing.currency;
+      } else if (pricing.currency !== pricingCurrency) {
+        throw new BadRequestException(
+          'Cannot combine courses with different pricing currencies in a single payment.',
+        );
+      }
+      total += pricing.amount;
+    }
+
+    total = Math.round(total * 100) / 100;
+
+    const requestedCurrency = (dto.currency || 'USD').toUpperCase().slice(0, 3);
+    const canonicalCurrency = (pricingCurrency || 'USD').toUpperCase().slice(0, 3);
+    if (requestedCurrency !== canonicalCurrency) {
+      throw new BadRequestException(
+        `Currency ${requestedCurrency} does not match course pricing (${canonicalCurrency}).`,
+      );
+    }
+
+    if (!this.amountsMatchClientTotal(dto.amount, total)) {
+      throw new BadRequestException({
+        message: 'Payment amount does not match current course pricing.',
+        expectedAmount: total,
+        currency: canonicalCurrency,
+      });
+    }
+
+    return total;
+  }
 
   /**
    * Initiate a payment
@@ -67,9 +154,12 @@ export class PaymentService {
       });
     }
 
+    const canonicalOriginalAmount =
+      await this.resolveCanonicalOriginalAmount(dto);
+
     // Validate coupon if provided
     let validatedCoupon = null;
-    let finalAmount = dto.amount;
+    let finalAmount = canonicalOriginalAmount;
     let stripePromoCodeId: string | undefined = undefined;
     
     if (dto.promoCode) {
@@ -79,7 +169,7 @@ export class PaymentService {
         userId: dto.userId,
         contextType: target.contextType,
         contextId: target.contextId,
-        originalAmount: dto.amount,
+        originalAmount: canonicalOriginalAmount,
       });
 
       if (!validationResult.isValid) {
@@ -91,7 +181,8 @@ export class PaymentService {
       validatedCoupon = validationResult.coupon;
       // Use nullish coalescing to handle 100% discounts (discountedAmount = 0)
       // Only fall back to original amount if discountedAmount is undefined/null
-      finalAmount = validationResult.discountedAmount ?? dto.amount;
+      finalAmount =
+        validationResult.discountedAmount ?? canonicalOriginalAmount;
       
       // Get the full coupon to access stripePromoCodeId
       const fullCoupon = await this.couponService.getCouponById(validatedCoupon.id);
@@ -138,7 +229,7 @@ export class PaymentService {
       }
       
       this.logger.log(
-        `Coupon ${dto.promoCode} validated. Original: ${dto.amount}, Discounted: ${finalAmount}, Stripe Promo Code ID: ${stripePromoCodeId}`,
+        `Coupon ${dto.promoCode} validated. Original: ${canonicalOriginalAmount}, Discounted: ${finalAmount}, Stripe Promo Code ID: ${stripePromoCodeId}`,
       );
     }
 
@@ -151,7 +242,7 @@ export class PaymentService {
       provider: PaymentProviderEnum.STRIPE, // Default to Stripe for now
       metadata: {
         ...dto.metadata,
-        originalAmount: dto.amount,
+        originalAmount: canonicalOriginalAmount,
         couponCode: validatedCoupon?.couponCode,
         couponId: validatedCoupon?.id,
       },
@@ -165,7 +256,7 @@ export class PaymentService {
     const providerResult = await this.paymentProvider.initiatePayment(
       {
         ...dto,
-        amount: dto.amount, // Pass original amount, Stripe will apply discount via promo code
+        amount: canonicalOriginalAmount, // LMS-verified list total; Stripe applies promo on top
         promoCode: stripePromoCodeId, // Must be a Stripe promotion code ID (e.g., "promo_xxx")
       },
       { appPaymentIntentId: intent.id },
@@ -188,7 +279,7 @@ export class PaymentService {
       ...(validatedCoupon && {
         coupon: {
           code: validatedCoupon.couponCode,
-          discountAmount: dto.amount - finalAmount,
+          discountAmount: canonicalOriginalAmount - finalAmount,
           finalAmount,
         },
       }),
