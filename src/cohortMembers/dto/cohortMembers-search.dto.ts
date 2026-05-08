@@ -51,6 +51,11 @@ class FiltersDto {
   @IsString()
   lastName?: string;
 
+  @ApiPropertyOptional({ type: String, description: "Partial match on firstName" })
+  @IsOptional()
+  @IsString()
+  name?: string;
+
   @ApiPropertyOptional({ type: Array, description: "Status", example: [] })
   @IsOptional()
   @IsArray()
