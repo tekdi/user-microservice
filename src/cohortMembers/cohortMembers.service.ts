@@ -345,6 +345,9 @@ ON CM."userId" = U."userId" ${whereCase}`;
         "userId",
         "role",
         "name",
+        "firstName",
+        "middleName",
+        "lastName",
         "status",
         "cohortAcademicYearId",
         "cohortMemberRole",
@@ -621,6 +624,15 @@ ON CM."userId" = U."userId" ${whereCase}`;
           }
           case "firstName": {
             return `U."firstName" ILIKE '%${value}%'`;
+          }
+          case "middleName": {
+            return `U."middleName" ILIKE '%${value}%'`;
+          }
+          case "lastName": {
+            return `U."lastName" ILIKE '%${value}%'`;
+          }
+          case "name": {
+            return `U."name" ILIKE '%${value}%'`;
           }
           case "cohortAcademicYearId": {
             const cohortIdAcademicYear = Array.isArray(value)
