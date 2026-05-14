@@ -3511,6 +3511,7 @@ export class UserService {
                     cm."createdAt" as "joinedAt",
                     cm."status" as "cohortMemberStatus",
                     cm."cohortMembershipId" as "cohortMemberId",
+                    cm."statusReason" as "statusReason",
                     batch."name" as "batchName",
                     batch."type" as "batchType",
                     batch."status" as "batchStatus",
@@ -3546,6 +3547,7 @@ export class UserService {
                   batchStatus: result.batchStatus,
                   joinedAt: result.joinedAt,
                   cohortMemberStatus: result.cohortMemberStatus,
+                  statusReason: result.statusReason,
                   cohortMemberId: result.cohortMemberId,
                   tenantId: result.tenantId,
 
