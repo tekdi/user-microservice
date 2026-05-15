@@ -24,6 +24,7 @@ import { HttpModule } from '@nestjs/axios';
 import { ConfigModule } from '@nestjs/config';
 import { NotificationRequest } from 'src/common/utils/notification.axios';
 import { CohortModule } from 'src/cohort/cohort.module';
+import { ReferralsModule } from 'src/referrals/referrals.module';
 @Module({
   controllers: [FormsController, FormSubmissionController],
   imports: [
@@ -44,6 +45,7 @@ import { CohortModule } from 'src/cohort/cohort.module';
     HttpModule,
     ConfigModule,
     forwardRef(() => CohortModule),
+    ReferralsModule,
   ],
   providers: [
     FormsService,

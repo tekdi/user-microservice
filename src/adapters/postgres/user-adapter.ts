@@ -52,6 +52,8 @@ import { UserCreateSsoDto } from 'src/user/dto/user-create-sso.dto';
 import { UserElasticsearchService } from '../../elasticsearch/user-elasticsearch.service';
 import { IUser } from '../../elasticsearch/interfaces/user.interface';
 import { isElasticsearchEnabled } from 'src/common/utils/elasticsearch.util';
+import { ReferralsService } from 'src/referrals/referrals.service';
+import { buildReferLink } from 'src/referrals/utils/referral-slug.util';
 
 interface UpdateField {
   userId: string; // Required
@@ -96,7 +98,8 @@ export class PostgresUserService implements IServicelocator {
     private postgresAcademicYearService: PostgresAcademicYearService,
     private readonly cohortAcademicYearService: CohortAcademicYearService,
     private readonly authUtils: AuthUtils,
-    private readonly userElasticsearchService: UserElasticsearchService
+    private readonly userElasticsearchService: UserElasticsearchService,
+    private readonly referralsService: ReferralsService
   ) {
     this.jwt_secret = this.configService.get<string>('RBAC_JWT_SECRET');
     this.jwt_password_reset_expires_In = this.configService.get<string>(
@@ -1991,6 +1994,21 @@ export class PostgresUserService implements IServicelocator {
       }
       LoggerUtil.log(API_RESPONSES.USER_CREATE_SUCCESSFULLY, apiId);
 
+      // Referral attribution (first-touch provided by client; do not block registration)
+      let referLinkForElastic: string | null = null;
+      try {
+        const incomingSlug = (userCreateDto as any)?.referralSlug ?? null;
+        const attr = await this.referralsService.createUserAttribution({
+          userId: result.userId,
+          incomingSlug,
+        });
+        referLinkForElastic =
+          attr.referLink ??
+          (attr.resolvedSlug ? buildReferLink(attr.resolvedSlug) : null);
+      } catch (refError: any) {
+        LoggerUtil.error('Referral attribution failed', refError);
+      }
+
       // Add Elasticsearch sync with custom fields
       try {
         if (isElasticsearchEnabled()) {
@@ -2029,6 +2047,7 @@ export class PostgresUserService implements IServicelocator {
               email: result.email || '',
               mobile: result.mobile ? result.mobile.toString() : '',
               mobile_country_code: result.mobile_country_code || '',
+              referLink: referLinkForElastic ?? undefined,
               gender: result.gender,
               dob:
                 result.dob instanceof Date
@@ -2039,7 +2058,7 @@ export class PostgresUserService implements IServicelocator {
               currentCountry: result.currentCountry || '',
               status: result.status,
               customFields: elasticCustomFields,
-            },
+            } as any,
             applications: [],
             courses: [],
             createdAt: result.createdAt
