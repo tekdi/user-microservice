@@ -810,7 +810,7 @@ export class PaymentService {
           paidAmount: paidAmount,
           discountApplied: discountCode,
           discountAmount: discountAmount,
-          transactionId: transaction.id,
+          transactionId: transaction.providerPaymentId,
           transactionTime: transaction.createdAt,
           status: this.mapTransactionStatusToReportStatus(transaction.status),
           targetUnlocked: this.computeTargetUnlockedForContext(
