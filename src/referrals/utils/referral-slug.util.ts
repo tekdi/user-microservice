@@ -1,4 +1,4 @@
-import { randomBytes } from 'crypto';
+import { randomBytes } from 'node:crypto';
 import { ReferralEntitySubType, ReferralEntityType } from '../referrals.types';
 
 export const DEFAULT_REFERRAL_BASE_URL = () =>

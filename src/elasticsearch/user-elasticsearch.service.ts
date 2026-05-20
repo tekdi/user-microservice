@@ -775,9 +775,10 @@ export class UserElasticsearchService implements OnModuleInit {
 
             // Handle referLink filtering — match by slug or full URL
             if (field === 'referLink') {
+              const referLinkValue = typeof value === 'string' ? value : JSON.stringify(value);
               searchQuery.bool.filter.push({
                 wildcard: {
-                  'profile.referLink': `*${String(value).toLowerCase()}*`,
+                  'profile.referLink': `*${referLinkValue.toLowerCase()}*`,
                 },
               });
               return;

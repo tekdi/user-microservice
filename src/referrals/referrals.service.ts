@@ -339,7 +339,7 @@ export class ReferralsService {
       throw new BadRequestException('Payload must be a non-empty array of referrals');
     }
 
-    const batchSize = parseInt(this.configService.get('REFERRAL_BULK_BATCH_SIZE') || '100', 10);
+    const batchSize = Number.parseInt(this.configService.get('REFERRAL_BULK_BATCH_SIZE') || '100', 10);
     const created: any[] = [];
     const errors: any[] = [];
 
@@ -364,7 +364,7 @@ export class ReferralsService {
 
   private normalizeReferral(entity: ReferralEntity & { referLink?: string }) {
     const emailsArr = entity.additionalEmails
-      ? (entity.additionalEmails as string).split(',').map((e) => e.trim()).filter(Boolean)
+      ? String(entity.additionalEmails).split(',').map((e) => e.trim()).filter(Boolean)
       : [];
     return {
       ...entity,
@@ -467,7 +467,7 @@ export class ReferralsService {
     const membershipMap = new Map<string, { cohortId: string; cohortName: string | null; status: string }[]>();
     for (const m of memberships) {
       if (!membershipMap.has(m.userId)) membershipMap.set(m.userId, []);
-      membershipMap.get(m.userId)!.push({ cohortId: m.cohortId, cohortName: m.cohortName ?? null, status: m.status });
+      membershipMap.get(m.userId)?.push({ cohortId: m.cohortId, cohortName: m.cohortName ?? null, status: m.status });
     }
 
     const data = userRows.map((row) => {
@@ -544,24 +544,24 @@ export class ReferralsService {
       if (s.includes(ReferralUserStatus.REGISTERED)) sc.push(`u."temporaryPassword" = true`);
       if (s.includes(ReferralUserStatus.ACTIVATED))  sc.push(`u."temporaryPassword" = false`);
 
-      const accountStatuses = s.filter((x) => [
-        ReferralUserStatus.ACTIVE, ReferralUserStatus.INACTIVE, ReferralUserStatus.ARCHIVED,
-      ].includes(x as ReferralUserStatus));
+      const accountStatuses = s.filter((x) => (
+        [ReferralUserStatus.ACTIVE, ReferralUserStatus.INACTIVE, ReferralUserStatus.ARCHIVED] as string[]
+      ).includes(x));
       if (accountStatuses.length) {
         sc.push(`u."status" = ANY($${idx++})`);
         params.push(accountStatuses);
       }
 
-      const cohortStatuses = s.filter((x) => [
-        ReferralUserStatus.APPLIED, ReferralUserStatus.SUBMITTED,
-        ReferralUserStatus.SHORTLISTED, ReferralUserStatus.REJECTED, ReferralUserStatus.DROPOUT,
-      ].includes(x as ReferralUserStatus));
+      const cohortStatuses = s.filter((x) => (
+        [ReferralUserStatus.APPLIED, ReferralUserStatus.SUBMITTED,
+          ReferralUserStatus.SHORTLISTED, ReferralUserStatus.REJECTED, ReferralUserStatus.DROPOUT] as string[]
+      ).includes(x));
       if (cohortStatuses.length) {
         // When cohortIds filter is also active, scope status check to those same cohorts.
         // This prevents a user with "applied" in cohort B from passing when cohort A is filtered.
-        const cohortScope = cohortIdsParamIdx !== null
-          ? `AND csf."cohortId" = ANY($${cohortIdsParamIdx})`
-          : '';
+        const cohortScope = cohortIdsParamIdx === null
+          ? ''
+          : `AND csf."cohortId" = ANY($${cohortIdsParamIdx})`;
         sc.push(
           `EXISTS (SELECT 1 FROM "CohortMembers" csf WHERE csf."userId" = ua."userId" AND csf."status" = ANY($${idx++}) ${cohortScope})`,
         );
