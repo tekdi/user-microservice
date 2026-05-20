@@ -88,46 +88,23 @@ export class TenantController {
     ): Promise<Response> {
         const tenantId = id;        
         const uploadedFiles = [];
-          // Parse programImages if sent as JSON string in form-data
-    if (
-        tenantUpdateDto.programImages &&
-        typeof tenantUpdateDto.programImages === 'string'
-    ) {
-        try {
-            tenantUpdateDto.programImages = JSON.parse(
-                tenantUpdateDto.programImages as any
-            );
-        } catch (error) {
-            tenantUpdateDto.programImages = [];
+// Parse programImages if sent as JSON string in form-data
+if (typeof tenantUpdateDto.programImages === 'string') {
+    try {
+        const parsed = JSON.parse(
+            tenantUpdateDto.programImages as any
+        );
+
+        if (!Array.isArray(parsed)) {
+            throw new Error();
         }
+        tenantUpdateDto.programImages = parsed;
+    } catch (error) {
+        throw new BadRequestException(
+            'Invalid format for programImages. Expected a JSON array string.'
+        );
     }
-
-    // Upload new files if provided
-    if (files && files.length > 0) {
-
-        for (const file of files) {
-            const uploadedFile =
-                await this.filesUploadService.saveFile(file);
-
-            uploadedFiles.push(uploadedFile.filePath);
-        }
-
-        // Merge existing + uploaded images
-        tenantUpdateDto.programImages = [
-            ...(tenantUpdateDto.programImages || []),
-            ...uploadedFiles
-        ];
-    }
-
-    tenantUpdateDto.updatedBy = userId;
-
-    return await this.tenantService.updateTenants(
-        tenantId,
-        tenantUpdateDto,
-        response
-    );
-  }
-
+}  }
 
     //Delete a tenant
     @Delete("/delete")
