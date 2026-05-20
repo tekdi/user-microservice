@@ -5,6 +5,7 @@ import { CreateReferralEntityDto } from './dto/create-referral-entity.dto';
 import { ImportReferralsDto } from './dto/import-referrals.dto';
 import { UpdateReferralSlugDto } from './dto/update-referral-slug.dto';
 import { ListReferralsDto } from './dto/list-referrals.dto';
+import { ReferralReportRequestDto } from './dto/referral-report.dto';
 import { ReferralsService } from './referrals.service';
 import APIResponse from '../common/responses/response';
 import { APIID } from '../common/utils/api-id.config';
@@ -117,6 +118,22 @@ export class ReferralsController {
       result,
       HttpStatus.CREATED,
       API_RESPONSES.REFERRAL_BULK_SUCCESS
+    );
+  }
+
+  @UseFilters(new AllExceptionsFilter(APIID.REFERRAL_REPORT))
+  @Post('report')
+  @UsePipes(new ValidationPipe({ transform: true }))
+  @ApiBody({ type: ReferralReportRequestDto })
+  @ApiOkResponse({ description: 'Referral tracking report with per-slug user counts aggregated by status, cohort and tag' })
+  async getReport(@Body() dto: ReferralReportRequestDto, @Res() response: Response) {
+    const result = await this.referralsService.getReferralReport(dto);
+    return APIResponse.success(
+      response,
+      APIID.REFERRAL_REPORT,
+      result,
+      HttpStatus.OK,
+      API_RESPONSES.REFERRAL_REPORT_SUCCESS
     );
   }
 }

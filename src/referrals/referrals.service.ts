@@ -1,7 +1,8 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
+import { ReferralReportFiltersDto, ReferralReportRequestDto, ReferralUserStatus } from './dto/referral-report.dto';
 import { ReferralEntity } from './entities/referral-entity.entity';
 import { ReferralSlugHistory } from './entities/referral-slug-history.entity';
 import { UserAttribution } from './entities/user-attribution.entity';
@@ -29,7 +30,8 @@ export class ReferralsService {
     private readonly attributionRepo: Repository<UserAttribution>,
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
-    private readonly configService: ConfigService
+    private readonly configService: ConfigService,
+    private readonly dataSource: DataSource,
   ) {}
 
   async createReferralEntity(dto: CreateReferralEntityDto, createdBy?: string) {
@@ -403,5 +405,181 @@ export class ReferralsService {
     const hist = await this.historyRepo.count({ where: { oldSlug: slug } });
     return hist > 0;
   }
+
+  // ── Referral Report (user-centric) ────────────────────────────────────────
+
+  async getReferralReport(dto: ReferralReportRequestDto) {
+    const { limit = 10, offset = 0, filters = {} } = dto;
+
+    const { fromSql, whereClause, params } = this.buildReportBase(filters);
+
+    const listSql = `
+      SELECT
+        re."id"                  AS "slug_id",
+        re."slug",
+        re."firstName"           AS "referralName",
+        re."lastName"            AS "referralLastName",
+        re."contactEmail"        AS "referralContactEmail",
+        re."type"                AS "referralType",
+        re."subType"             AS "referralSubType",
+        u."userId",
+        u."firstName",
+        u."lastName",
+        u."email",
+        u."status"               AS "accountStatus",
+        u."country",
+        u."createdAt",
+        u."auto_tags"            AS "tags",
+        ua."createdAt"           AS "attributedAt"
+      ${fromSql}
+      ${whereClause}
+      ORDER BY ua."createdAt" DESC
+      LIMIT $${params.length + 1} OFFSET $${params.length + 2}
+    `;
+
+    const countSql = `SELECT COUNT(DISTINCT ua."userId")::int AS count ${fromSql} ${whereClause}`;
+
+    const [[countRow], userRows] = await Promise.all([
+      this.dataSource.query<any[]>(countSql, params),
+      this.dataSource.query<any[]>(listSql, [...params, limit, offset]),
+    ]);
+
+    const totalCount = countRow?.count ?? 0;
+
+    if (userRows.length === 0) {
+      return { data: [], totalCount, limit, offset, hasMore: false };
+    }
+
+    // Fetch cohort memberships for returned users — scoped to filtered cohorts if provided
+    const userIds = [...new Set(userRows.map((r) => r.userId))];
+    const membershipQuery = filters.cohortIds?.length
+      ? `SELECT cm."userId", cm."cohortId", cm."status", c."name" AS "cohortName"
+         FROM "CohortMembers" cm
+         LEFT JOIN "Cohort" c ON c."cohortId" = cm."cohortId"
+         WHERE cm."userId" = ANY($1) AND cm."cohortId" = ANY($2)`
+      : `SELECT cm."userId", cm."cohortId", cm."status", c."name" AS "cohortName"
+         FROM "CohortMembers" cm
+         LEFT JOIN "Cohort" c ON c."cohortId" = cm."cohortId"
+         WHERE cm."userId" = ANY($1)`;
+    const membershipParams = filters.cohortIds?.length ? [userIds, filters.cohortIds] : [userIds];
+
+    const memberships = await this.dataSource.query<any[]>(membershipQuery, membershipParams);
+    const membershipMap = new Map<string, { cohortId: string; cohortName: string | null; status: string }[]>();
+    for (const m of memberships) {
+      if (!membershipMap.has(m.userId)) membershipMap.set(m.userId, []);
+      membershipMap.get(m.userId)!.push({ cohortId: m.cohortId, cohortName: m.cohortName ?? null, status: m.status });
+    }
+
+    const data = userRows.map((row) => {
+      const cohortMemberships = membershipMap.get(row.userId) ?? [];
+
+      return {
+        slug_id: row.slug_id,
+        slug: row.slug,
+        referralName: [row.referralName, row.referralLastName].filter(Boolean).join(' '),
+        referralContactEmail: row.referralContactEmail,
+        referralType: row.referralType,
+        referralSubType: row.referralSubType,
+        userId: row.userId,
+        firstName: row.firstName,
+        lastName: row.lastName,
+        email: row.email,
+        country: row.country,
+        createdAt: row.createdAt,
+        attributedAt: row.attributedAt,
+        accountStatus: row.accountStatus,
+        tags: row.tags ?? [],
+        cohortMemberships,
+      };
+    });
+
+    return { data, totalCount, limit, offset, hasMore: offset + limit < totalCount };
+  }
+
+
+  private buildReportBase(filters: ReferralReportFiltersDto): { fromSql: string; whereClause: string; params: any[] } {
+    const conds: string[] = [];
+    const params: any[] = [];
+    let idx = 1;
+
+    // ── Slug / slug_id filter ─────────────────────────────────────────────────
+    if (filters.slug_id && filters.slug) {
+      conds.push(
+        `(re."id" = $${idx} OR re."slug" = $${idx + 1} OR EXISTS(SELECT 1 FROM "ReferralSlugHistory" rsh WHERE rsh."referralEntityId" = re."id" AND rsh."oldSlug" = $${idx + 1}))`,
+      );
+      params.push(filters.slug_id, filters.slug);
+      idx += 2;
+    } else if (filters.slug_id) {
+      conds.push(`re."id" = $${idx++}`);
+      params.push(filters.slug_id);
+    } else if (filters.slug) {
+      conds.push(
+        `(re."slug" = $${idx} OR EXISTS(SELECT 1 FROM "ReferralSlugHistory" rsh WHERE rsh."referralEntityId" = re."id" AND rsh."oldSlug" = $${idx}))`,
+      );
+      params.push(filters.slug);
+      idx++;
+    }
+
+    // ── Cohort filter ─────────────────────────────────────────────────────────
+    let cohortIdsParamIdx: number | null = null;
+    if (filters.cohortIds?.length) {
+      cohortIdsParamIdx = idx; // remember position so status filter can reuse it
+      conds.push(
+        `EXISTS (SELECT 1 FROM "CohortMembers" cf WHERE cf."userId" = ua."userId" AND cf."cohortId" = ANY($${idx++}))`,
+      );
+      params.push(filters.cohortIds);
+    }
+
+    // ── Tags filter ───────────────────────────────────────────────────────────
+    if (filters.tags?.length) {
+      conds.push(`u."auto_tags" && $${idx++}`);
+      params.push(filters.tags);
+    }
+
+    // ── Status filter (OR across all provided statuses) ───────────────────────
+    if (filters.statuses?.length) {
+      const sc: string[] = [];
+      const s = filters.statuses;
+
+      if (s.includes(ReferralUserStatus.REGISTERED)) sc.push(`u."temporaryPassword" = true`);
+      if (s.includes(ReferralUserStatus.ACTIVATED))  sc.push(`u."temporaryPassword" = false`);
+
+      const accountStatuses = s.filter((x) => [
+        ReferralUserStatus.ACTIVE, ReferralUserStatus.INACTIVE, ReferralUserStatus.ARCHIVED,
+      ].includes(x as ReferralUserStatus));
+      if (accountStatuses.length) {
+        sc.push(`u."status" = ANY($${idx++})`);
+        params.push(accountStatuses);
+      }
+
+      const cohortStatuses = s.filter((x) => [
+        ReferralUserStatus.APPLIED, ReferralUserStatus.SUBMITTED,
+        ReferralUserStatus.SHORTLISTED, ReferralUserStatus.REJECTED, ReferralUserStatus.DROPOUT,
+      ].includes(x as ReferralUserStatus));
+      if (cohortStatuses.length) {
+        // When cohortIds filter is also active, scope status check to those same cohorts.
+        // This prevents a user with "applied" in cohort B from passing when cohort A is filtered.
+        const cohortScope = cohortIdsParamIdx !== null
+          ? `AND csf."cohortId" = ANY($${cohortIdsParamIdx})`
+          : '';
+        sc.push(
+          `EXISTS (SELECT 1 FROM "CohortMembers" csf WHERE csf."userId" = ua."userId" AND csf."status" = ANY($${idx++}) ${cohortScope})`,
+        );
+        params.push(cohortStatuses);
+      }
+
+      if (sc.length) conds.push(`(${sc.join(' OR ')})`);
+    }
+
+    const whereClause = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
+    const fromSql = `
+      FROM "UserAttribution" ua
+      JOIN "ReferralEntities" re ON re."id" = ua."referralEntityId"
+      JOIN "Users" u ON u."userId" = ua."userId"
+    `;
+
+    return { fromSql, whereClause, params };
+  }
+
 }
 
