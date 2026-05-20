@@ -876,7 +876,7 @@ export class PaymentService {
       qb
         .innerJoin(User, 'user', 'user.userId = intent.userId')
         .andWhere(
-          '(LOWER(COALESCE(user.firstName, \'\')) LIKE :searchPattern OR LOWER(COALESCE(user.lastName, \'\')) LIKE :searchPattern OR LOWER(COALESCE(user.email, \'\')) LIKE :searchPattern)',
+          "(LOWER(COALESCE(user.firstName, '')) LIKE :searchPattern OR LOWER(COALESCE(user.lastName, '')) LIKE :searchPattern OR LOWER(COALESCE(user.email, '')) LIKE :searchPattern OR LOWER(COALESCE(transaction.providerPaymentId, '')) LIKE :searchPattern)",
           { searchPattern },
         );
     }
