@@ -88,19 +88,45 @@ export class TenantController {
     ): Promise<Response> {
         const tenantId = id;        
         const uploadedFiles = [];
-
-        // Loop through each file and upload it
-        if (files && files.length > 0) {
-            for (const file of files) {
-                const uploadedFile = await this.filesUploadService.saveFile(file);
-                uploadedFiles.push(uploadedFile);
-            }
-            // Assuming tenantCreateDto needs an array of file paths
-            tenantUpdateDto.programImages = uploadedFiles.map(file => file.filePath); // Adjust field as needed
+          // Parse programImages if sent as JSON string in form-data
+    if (
+        tenantUpdateDto.programImages &&
+        typeof tenantUpdateDto.programImages === 'string'
+    ) {
+        try {
+            tenantUpdateDto.programImages = JSON.parse(
+                tenantUpdateDto.programImages as any
+            );
+        } catch (error) {
+            tenantUpdateDto.programImages = [];
         }
-        tenantUpdateDto.updatedBy = userId;
-        return await this.tenantService.updateTenants(tenantId, tenantUpdateDto, response);
     }
+
+    // Upload new files if provided
+    if (files && files.length > 0) {
+
+        for (const file of files) {
+            const uploadedFile =
+                await this.filesUploadService.saveFile(file);
+
+            uploadedFiles.push(uploadedFile.filePath);
+        }
+
+        // Merge existing + uploaded images
+        tenantUpdateDto.programImages = [
+            ...(tenantUpdateDto.programImages || []),
+            ...uploadedFiles
+        ];
+    }
+
+    tenantUpdateDto.updatedBy = userId;
+
+    return await this.tenantService.updateTenants(
+        tenantId,
+        tenantUpdateDto,
+        response
+    );
+  }
 
 
     //Delete a tenant
