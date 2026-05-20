@@ -2,6 +2,8 @@ import {
   Injectable,
   Logger,
   BadRequestException,
+  InternalServerErrorException,
+  ServiceUnavailableException,
   NotFoundException,
   ConflictException,
   Inject,
@@ -75,8 +77,8 @@ export class PaymentService {
       this.configService.get<string>('DEFAULT_ACADEMIC_YEAR_ID') || undefined;
 
     if (!lmsUrl || !tenantId || !organisationId) {
-      throw new BadRequestException(
-        'Course pricing cannot be verified: configure LMS_SERVICE_URL, DEFAULT_TENANT_ID, and DEFAULT_ORGANISATION_ID.',
+      throw new InternalServerErrorException(
+        "Course pricing service is not configured correctly."
       );
     }
 
@@ -98,8 +100,8 @@ export class PaymentService {
         academicYearId,
       );
       if (!pricing) {
-        throw new BadRequestException(
-          `Unable to verify pricing for course ${courseId}.`,
+        throw new ServiceUnavailableException(
+          "Course pricing service is temporarily unavailable. Please try again later."
         );
       }
       if (pricingCurrency === undefined) {
