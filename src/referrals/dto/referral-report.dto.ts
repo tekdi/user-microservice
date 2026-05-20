@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsArray, IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsArray, IsEnum, IsInt, IsOptional, IsString, IsUUID, Max, Min, ValidateNested } from 'class-validator';
 
 export enum ReferralUserStatus {
   // Derived from users.temporaryPassword
@@ -21,7 +21,7 @@ export enum ReferralUserStatus {
 export class ReferralReportFiltersDto {
   @ApiPropertyOptional({ description: 'Filter by referral entity UUID (slug_id)' })
   @IsOptional()
-  @IsString()
+  @IsUUID()
   slug_id?: string;
 
   @ApiPropertyOptional({ description: 'Filter by slug string (also checks slug history for old slugs)' })
@@ -70,5 +70,7 @@ export class ReferralReportRequestDto {
 
   @ApiPropertyOptional({ type: ReferralReportFiltersDto })
   @IsOptional()
+  @ValidateNested()
+  @Type(() => ReferralReportFiltersDto)
   filters?: ReferralReportFiltersDto;
 }

@@ -38,7 +38,7 @@ export class ReferralsService {
     if (dto.contactEmail) {
       const existingEmail = await this.referralRepo.findOne({ where: { contactEmail: dto.contactEmail } });
       if (existingEmail) {
-        throw new ConflictException(`Referral slug already exists for email ${dto.contactEmail}`);
+        throw new ConflictException(`Referral already exists for email ${dto.contactEmail}`);
       }
 
       if (dto.type === ReferralEntityType.INTERNAL) {
@@ -53,7 +53,7 @@ export class ReferralsService {
       ...dto,
       lastName: dto.lastName ?? null,
       region: dto.region ?? null,
-      linkedEntityId: (dto as any).linkedEntityId ?? null,
+      linkedEntityId: dto.linkedEntityId ?? null,
       contactEmail: dto.contactEmail ?? null,
       additionalEmails: Array.isArray(dto.additionalEmails)
         ? dto.additionalEmails.join(',') || null
@@ -195,12 +195,12 @@ export class ReferralsService {
     }
 
     // ── contactEmail: check uniqueness + internal user validation ────────────
+    const resolvedType = dto.type ?? entity.type;
     if (dto.contactEmail !== undefined && dto.contactEmail !== entity.contactEmail) {
       const existingEmail = await this.referralRepo.findOne({ where: { contactEmail: dto.contactEmail } });
       if (existingEmail && existingEmail.id !== entity.id) {
         throw new ConflictException(`Contact email '${dto.contactEmail}' is already used by another referral`);
       }
-      const resolvedType = dto.type ?? entity.type;
       if (resolvedType === ReferralEntityType.INTERNAL) {
         const existingUser = await this.userRepo.findOne({ where: { email: dto.contactEmail.toLowerCase() } });
         if (!existingUser) {
@@ -208,9 +208,16 @@ export class ReferralsService {
         }
       }
       entity.contactEmail = dto.contactEmail;
+    } else if (dto.type === ReferralEntityType.INTERNAL && entity.contactEmail) {
+      // Type changed to INTERNAL without changing email — validate existing contact email
+      const existingUser = await this.userRepo.findOne({ where: { email: entity.contactEmail.toLowerCase() } });
+      if (!existingUser) {
+        throw new BadRequestException(`Internal user email ${entity.contactEmail} does not exist in the system`);
+      }
     }
 
     // ── Slug: normalize any format, check uniqueness, preserve history ───────
+    let pendingSlug: string | null = null;
     if (dto.slug !== undefined) {
       const newSlug = standardizeSlugInput(dto.slug);
       if (!newSlug) {
@@ -221,19 +228,25 @@ export class ReferralsService {
       }
       if (newSlug !== entity.slug) {
         await this.assertSlugUnique(newSlug);
-        await this.historyRepo.save(
-          this.historyRepo.create({
-            referralEntityId: entity.id,
-            oldSlug: entity.slug,
-            newSlug,
-            changedBy: changedBy ?? null,
-          })
-        );
-        entity.slug = newSlug;
+        pendingSlug = newSlug;
       }
     }
 
-    const saved = await this.referralRepo.save(entity);
+    // Wrap history record + entity save in a transaction so they succeed or fail together
+    const saved = await this.dataSource.transaction(async (manager) => {
+      if (pendingSlug !== null) {
+        await manager.save(
+          this.historyRepo.create({
+            referralEntityId: entity.id,
+            oldSlug: entity.slug,
+            newSlug: pendingSlug,
+            changedBy: changedBy ?? null,
+          }),
+        );
+        entity.slug = pendingSlug;
+      }
+      return manager.save(entity);
+    });
     return this.normalizeReferral({ ...saved, referLink: buildReferLink(saved.slug) });
   }
 
@@ -339,7 +352,8 @@ export class ReferralsService {
       throw new BadRequestException('Payload must be a non-empty array of referrals');
     }
 
-    const batchSize = Number.parseInt(this.configService.get('REFERRAL_BULK_BATCH_SIZE') || '100', 10);
+    const rawBatchSize = Number.parseInt(this.configService.get('REFERRAL_BULK_BATCH_SIZE') || '100', 10);
+    const batchSize = Number.isFinite(rawBatchSize) && rawBatchSize > 0 ? rawBatchSize : 100;
     const created: any[] = [];
     const errors: any[] = [];
 

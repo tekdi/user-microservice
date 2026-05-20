@@ -1,13 +1,17 @@
 import { randomBytes } from 'node:crypto';
 import { ReferralEntitySubType, ReferralEntityType } from '../referrals.types';
 
-export const DEFAULT_REFERRAL_BASE_URL = () =>
-  `${process.env.FRONTEND_URL}registration`;
+export const DEFAULT_REFERRAL_BASE_URL = () => {
+  const frontendUrl = (process.env.FRONTEND_URL ?? '').replace(/\/$/, '');
+  return `${frontendUrl}/registration`;
+};
 
-export function buildReferLink(slug: string, baseUrl?: string) {
+export function buildReferLink(slug: string, baseUrl?: string): string {
   const base = baseUrl ?? DEFAULT_REFERRAL_BASE_URL();
   const s = String(slug || '').trim();
-  return `${base}?refer=${encodeURIComponent(s)}`;
+  if (!s) return base;
+  const sep = base.includes('?') ? '&' : '?';
+  return `${base}${sep}refer=${encodeURIComponent(s)}`;
 }
 
 function randomBase36(length: number): string {
