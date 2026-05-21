@@ -89,15 +89,42 @@ export class TenantController {
         const tenantId = id;        
         const uploadedFiles = [];
 
-        // Loop through each file and upload it
-        if (files && files.length > 0) {
-            for (const file of files) {
-                const uploadedFile = await this.filesUploadService.saveFile(file);
-                uploadedFiles.push(uploadedFile);
+           // Parse programImages if sent as JSON string in form-data
+    if (typeof tenantUpdateDto.programImages === 'string') {
+        try {
+            const parsed = JSON.parse(
+                tenantUpdateDto.programImages as any
+            );
+
+            if (!Array.isArray(parsed)) {
+                throw new Error();
             }
-            // Assuming tenantCreateDto needs an array of file paths
-            tenantUpdateDto.programImages = uploadedFiles.map(file => file.filePath); // Adjust field as needed
+            tenantUpdateDto.programImages = parsed;
+
+        } catch (error) {
+            throw new BadRequestException(
+                'Invalid format for programImages. Expected a JSON array string.'
+            );
         }
+    }
+
+        // Upload files if provided
+    if (files && files.length > 0) {
+
+        for (const file of files) {
+
+            const uploadedFile =
+                await this.filesUploadService.saveFile(file);
+
+            uploadedFiles.push(uploadedFile.filePath);
+        }
+
+        // Merge existing images + uploaded images
+        tenantUpdateDto.programImages = [
+            ...(tenantUpdateDto.programImages || []),
+            ...uploadedFiles
+        ];
+    }
         tenantUpdateDto.updatedBy = userId;
         return await this.tenantService.updateTenants(tenantId, tenantUpdateDto, response);
     }
