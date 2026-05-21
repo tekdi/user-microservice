@@ -23,6 +23,7 @@ import { UserAdapter } from '../user/useradapter';
 import { PostgresModule } from '../adapters/postgres/postgres-module';
 import { HttpService } from '../common/utils/http-service';
 import { StripeProvider } from './providers/stripe/stripe.provider';
+import { PathwaysModule } from '../pathways/pathways.module';
 
 /**
  * Payments Module
@@ -50,6 +51,7 @@ import { StripeProvider } from './providers/stripe/stripe.provider';
     ]),
     ConfigModule,
     PostgresModule,
+    PathwaysModule,
   ],
   controllers: [
     PaymentsController,

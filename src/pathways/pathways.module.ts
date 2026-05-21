@@ -24,6 +24,6 @@ import { CacheModule } from '../cache/cache.module';
   ],
   controllers: [PathwaysController, TagsController],
   providers: [PathwaysService, TagsService, LmsClientService],
-  exports: [PathwaysService, TagsService],
+  exports: [PathwaysService, TagsService, LmsClientService],
 })
 export class PathwaysModule { }

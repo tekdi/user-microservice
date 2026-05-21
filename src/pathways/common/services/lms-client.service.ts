@@ -535,4 +535,75 @@ export class LmsClientService {
       };
     }
   }
+
+  /**
+   * GET /lms-service/v1/courses/:courseId — returns authoritative list price for checkout validation.
+   */
+  async getCoursePricing(
+    courseId: string,
+    tenantId: string,
+    organisationId: string,
+    academicYearId?: string,
+  ): Promise<{ courseId: string; amount: number; currency: string } | null> {
+    if (!this.lmsServiceUrl) {
+      this.logger.warn('LMS_SERVICE_URL not configured');
+      return null;
+    }
+
+    const url = `${this.lmsServiceUrl}/lms-service/v1/courses/${courseId}`;
+    const headers: Record<string, string> = {
+      tenantid: tenantId,
+      organisationid: organisationId,
+      'Content-Type': 'application/json',
+    };
+    if (academicYearId) {
+      headers.academicyearid = academicYearId;
+    }
+
+    try {
+      const res = await axios.get(url, {
+        headers,
+        timeout: 15000,
+        validateStatus: (status) => status < 500,
+      });
+
+      if (res.status !== 200) {
+        this.logger.warn(
+          `LMS get course ${courseId} returned HTTP ${res.status}`,
+        );
+        return null;
+      }
+
+      const result = res.data?.result;
+      if (!result) {
+        return null;
+      }
+
+      const pricing = result.pricing;
+      const resolvedCourseId = result.courseId || courseId;
+      if (!pricing || pricing.amount === undefined || pricing.amount === null) {
+        return {
+          courseId: resolvedCourseId,
+          amount: 0,
+          currency: String(pricing?.currency || 'USD')
+            .toUpperCase()
+            .slice(0, 3),
+        };
+      }
+
+      return {
+        courseId: resolvedCourseId,
+        amount: Number(pricing.amount),
+        currency: String(pricing.currency || 'USD')
+          .toUpperCase()
+          .slice(0, 3),
+      };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(
+        `LMS getCoursePricing failed for course ${courseId}: ${msg}`,
+      );
+      return null;
+    }
+  }
 }
