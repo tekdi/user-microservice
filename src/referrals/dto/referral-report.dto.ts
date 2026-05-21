@@ -50,6 +50,17 @@ export class ReferralReportFiltersDto {
   @IsArray()
   @IsString({ each: true })
   tags?: string[];
+
+  @ApiPropertyOptional({ description: 'Filter attributed users by country (exact match, multiple OR)', type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  countries?: string[];
+
+  @ApiPropertyOptional({ description: 'Search by user first/last name or referral entity name (case-insensitive)' })
+  @IsOptional()
+  @IsString()
+  name?: string;
 }
 
 export class ReferralReportRequestDto {

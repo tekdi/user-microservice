@@ -550,6 +550,22 @@ export class ReferralsService {
       params.push(filters.tags);
     }
 
+    // ── Country filter ────────────────────────────────────────────────────────
+    if (filters.countries?.length) {
+      conds.push(`u."country" = ANY($${idx++})`);
+      params.push(filters.countries);
+    }
+
+    // ── Name search (user firstName/lastName or referral entity name) ─────────
+    if (filters.name?.trim()) {
+      const pattern = `%${filters.name.trim()}%`;
+      conds.push(
+        `(u."firstName" ILIKE $${idx} OR u."lastName" ILIKE $${idx} OR re."firstName" ILIKE $${idx} OR re."lastName" ILIKE $${idx})`,
+      );
+      params.push(pattern);
+      idx++;
+    }
+
     // ── Status filter (OR across all provided statuses) ───────────────────────
     if (filters.statuses?.length) {
       const sc: string[] = [];
