@@ -29,7 +29,7 @@ export class TenantController {
     public async getTenants(
         @Req() request: Request,
         @Res() response: Response
-    ): Promise<Response>{
+    ): Promise<Response> {
         return await this.tenantService.getTenants(request, response);
     }
 
@@ -86,45 +86,40 @@ export class TenantController {
         @UploadedFiles() files: Express.Multer.File[],
         @GetUserId("userId", ParseUUIDPipe) userId: string,
     ): Promise<Response> {
-        const tenantId = id;        
+        const tenantId = id;
         const uploadedFiles = [];
 
-           // Parse programImages if sent as JSON string in form-data
-    if (typeof tenantUpdateDto.programImages === 'string') {
-        try {
-            const parsed = JSON.parse(
-                tenantUpdateDto.programImages as any
-            );
+        // Parse programImages if sent as JSON string in form-data
+        if (typeof (tenantUpdateDto.programImages as unknown) === 'string') {
+            try {
+                const parsed = JSON.parse(tenantUpdateDto.programImages as unknown as string);
 
-            if (!Array.isArray(parsed)) {
-                throw new Error();
+                if (!Array.isArray(parsed)) {
+                    throw new Error();
+                }
+                tenantUpdateDto.programImages = parsed;
+
+            } catch (error) {
+                throw new BadRequestException(
+                    'Invalid format for programImages. Expected a JSON array string.'
+                );
             }
-            tenantUpdateDto.programImages = parsed;
-
-        } catch (error) {
-            throw new BadRequestException(
-                'Invalid format for programImages. Expected a JSON array string.'
-            );
         }
-    }
 
         // Upload files if provided
-    if (files && files.length > 0) {
+        if (files && files.length > 0) {
 
-        for (const file of files) {
+            for (const file of files) {
+                const uploadedFile = await this.filesUploadService.saveFile(file);
+                uploadedFiles.push(uploadedFile.filePath);
+            }
 
-            const uploadedFile =
-                await this.filesUploadService.saveFile(file);
-
-            uploadedFiles.push(uploadedFile.filePath);
+            // Merge existing images + uploaded images
+            tenantUpdateDto.programImages = [
+                ...(Array.isArray(tenantUpdateDto.programImages) ? tenantUpdateDto.programImages : []),
+                ...uploadedFiles
+            ];
         }
-
-        // Merge existing images + uploaded images
-        tenantUpdateDto.programImages = [
-            ...(tenantUpdateDto.programImages || []),
-            ...uploadedFiles
-        ];
-    }
         tenantUpdateDto.updatedBy = userId;
         return await this.tenantService.updateTenants(tenantId, tenantUpdateDto, response);
     }
@@ -144,7 +139,7 @@ export class TenantController {
         @Param("id", new ParseUUIDPipe()) id: string,
         @GetUserId("userId", ParseUUIDPipe) userId: string,
     ) {
-        const tenantId = id;        
+        const tenantId = id;
         return await this.tenantService.deleteTenants(request, tenantId, response);
     }
 
