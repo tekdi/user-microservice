@@ -62,6 +62,20 @@ export class ReferralsController {
     );
   }
 
+  @UseFilters(new AllExceptionsFilter(APIID.REFERRAL_GET))
+  @Get(':id')
+  @ApiOkResponse({ description: 'Get a referral entity by its UUID' })
+  async getById(@Param('id') id: string, @Res() response: Response) {
+    const result = await this.referralsService.getReferralById(id);
+    return APIResponse.success(
+      response,
+      APIID.REFERRAL_GET,
+      result,
+      HttpStatus.OK,
+      API_RESPONSES.REFERRAL_GET_SUCCESS
+    );
+  }
+
   @UseFilters(new AllExceptionsFilter(APIID.REFERRAL_UPDATE))
   @Patch(':id')
   @UsePipes(new ValidationPipe({ transform: true }))

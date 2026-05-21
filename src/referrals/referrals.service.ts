@@ -46,6 +46,7 @@ export class ReferralsService {
         if (!existingUser) {
           throw new BadRequestException(`Internal user email ${dto.contactEmail} does not exist in the system`);
         }
+        dto.linkedEntityId = existingUser.userId;
       }
     }
 
@@ -88,6 +89,14 @@ export class ReferralsService {
       // Unique constraint race/collision
       throw new ConflictException(e?.message ?? 'Failed to create referral entity');
     }
+  }
+
+  async getReferralById(id: string) {
+    const entity = await this.referralRepo.findOne({ where: { id } });
+    if (!entity) {
+      throw new NotFoundException(`Referral with id '${id}' not found`);
+    }
+    return this.normalizeReferral({ ...entity, referLink: buildReferLink(entity.slug) });
   }
 
   async listReferralEntities(dto: ListReferralsDto = {}) {
