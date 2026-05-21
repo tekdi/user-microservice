@@ -32,6 +32,7 @@ export const APIID = {
 
   // Referral Management APIs
   REFERRAL_CREATE: "api.referral.create",
+  REFERRAL_GET: "api.referral.get",
   REFERRAL_LIST: "api.referral.list",
   REFERRAL_RESOLVE: "api.referral.resolve",
   REFERRAL_UPDATE: "api.referral.update",

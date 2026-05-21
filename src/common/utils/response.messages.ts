@@ -283,6 +283,7 @@ export const API_RESPONSES = {
 
   // Referral Management Messages
   REFERRAL_CREATED_SUCCESSFULLY: "Referral created successfully",
+  REFERRAL_GET_SUCCESS: "Referral retrieved successfully",
   REFERRAL_LIST_SUCCESS: "Referrals retrieved successfully",
   REFERRAL_RESOLVED_SUCCESSFULLY: "Referral resolved successfully",
   REFERRAL_UPDATED_SUCCESSFULLY: "Referral updated successfully",

@@ -35,6 +35,8 @@ export class ReferralsService {
   ) {}
 
   async createReferralEntity(dto: CreateReferralEntityDto, createdBy?: string) {
+    let resolvedLinkedEntityId: string | null = dto.linkedEntityId ?? null;
+
     if (dto.contactEmail) {
       const existingEmail = await this.referralRepo.findOne({ where: { contactEmail: dto.contactEmail } });
       if (existingEmail) {
@@ -46,6 +48,7 @@ export class ReferralsService {
         if (!existingUser) {
           throw new BadRequestException(`Internal user email ${dto.contactEmail} does not exist in the system`);
         }
+        resolvedLinkedEntityId = existingUser.userId;
       }
     }
 
@@ -53,7 +56,7 @@ export class ReferralsService {
       ...dto,
       lastName: dto.lastName ?? null,
       region: dto.region ?? null,
-      linkedEntityId: dto.linkedEntityId ?? null,
+      linkedEntityId: resolvedLinkedEntityId,
       contactEmail: dto.contactEmail ?? null,
       additionalEmails: Array.isArray(dto.additionalEmails)
         ? dto.additionalEmails.join(',') || null
@@ -88,6 +91,14 @@ export class ReferralsService {
       // Unique constraint race/collision
       throw new ConflictException(e?.message ?? 'Failed to create referral entity');
     }
+  }
+
+  async getReferralById(id: string) {
+    const entity = await this.referralRepo.findOne({ where: { id } });
+    if (!entity) {
+      throw new NotFoundException(`Referral with id '${id}' not found`);
+    }
+    return this.normalizeReferral({ ...entity, referLink: buildReferLink(entity.slug) });
   }
 
   async listReferralEntities(dto: ListReferralsDto = {}) {
