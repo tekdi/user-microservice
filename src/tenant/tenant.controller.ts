@@ -29,7 +29,7 @@ export class TenantController {
     public async getTenants(
         @Req() request: Request,
         @Res() response: Response
-    ): Promise<Response>{
+    ): Promise<Response> {
         return await this.tenantService.getTenants(request, response);
     }
 
@@ -72,68 +72,63 @@ export class TenantController {
         tenantCreateDto.createdBy = userId;
         return await this.tenantService.createTenants(tenantCreateDto, response);
     }
-    
-//Update a tenant
-@Patch("/update/:id")
-@ApiCreatedResponse({ description: "Tenant Data Fetch" })
-@ApiForbiddenResponse({ description: "Forbidden" })
-@UseInterceptors(FilesInterceptor('programImages', 10))
-@UsePipes(ValidationPipe)
-public async updateTenants(
-    @Res() response: Response,
-    @Param("id", new ParseUUIDPipe()) id: string,
-    @Body() tenantUpdateDto: TenantUpdateDto,
-    @UploadedFiles() files: Express.Multer.File[],
-    @GetUserId("userId", ParseUUIDPipe) userId: string,
-): Promise<Response> {
 
-    const tenantId = id;
+    //Update a tenant
+    @Patch("/update/:id")
+    @ApiCreatedResponse({ description: "Tenant Data Fetch" })
+    @ApiForbiddenResponse({ description: "Forbidden" })
+    @UseInterceptors(FilesInterceptor('programImages', 10))
+    @UsePipes(ValidationPipe)
+    public async updateTenants(
+        @Res() response: Response,
+        @Param("id", new ParseUUIDPipe()) id: string,
+        @Body() tenantUpdateDto: TenantUpdateDto,
+        @UploadedFiles() files: Express.Multer.File[],
+        @GetUserId("userId", ParseUUIDPipe) userId: string,
+    ): Promise<Response> {
+        const tenantId = id;
+        const uploadedFiles = [];
 
-    // Parse programImages if sent as JSON string in form-data
-    if (typeof tenantUpdateDto.programImages === 'string') {
-        try {
-            const parsed = JSON.parse(
-                tenantUpdateDto.programImages as any
-            );
+        // Parse programImages if sent as JSON string in form-data
+        if (typeof tenantUpdateDto.programImages === 'string') {
+            try {
+                const parsed = JSON.parse(
+                    tenantUpdateDto.programImages as any
+                );
 
-            if (!Array.isArray(parsed)) {
-                throw new Error();
+                if (!Array.isArray(parsed)) {
+                    throw new Error();
+                }
+                tenantUpdateDto.programImages = parsed;
+
+            } catch (error) {
+                throw new BadRequestException(
+                    'Invalid format for programImages. Expected a JSON array string.'
+                );
             }
-            tenantUpdateDto.programImages = parsed;
-
-        } catch (error) {
-            throw new BadRequestException(
-                'Invalid format for programImages. Expected a JSON array string.'
-            );
-        }
-    }
-
-    const uploadedFiles: string[] = [];
-
-    // Upload files if provided
-    if (files && files.length > 0) {
-
-        for (const file of files) {
-
-            const uploadedFile =
-                await this.filesUploadService.saveFile(file);
-
-            uploadedFiles.push(uploadedFile.filePath);
         }
 
-        // Merge existing images + uploaded images
-        tenantUpdateDto.programImages = [
-            ...(tenantUpdateDto.programImages || []),
-            ...uploadedFiles
-        ];
+        // Upload files if provided
+        if (files && files.length > 0) {
+
+            for (const file of files) {
+
+                const uploadedFile =
+                    await this.filesUploadService.saveFile(file);
+
+                uploadedFiles.push(uploadedFile.filePath);
+            }
+
+            // Merge existing images + uploaded images
+            tenantUpdateDto.programImages = [
+                ...(tenantUpdateDto.programImages || []),
+                ...uploadedFiles
+            ];
+        }
+        tenantUpdateDto.updatedBy = userId;
+        return await this.tenantService.updateTenants(tenantId, tenantUpdateDto, response);
     }
-    tenantUpdateDto.updatedBy = userId;
-    return await this.tenantService.updateTenants(
-        tenantId,
-        tenantUpdateDto,
-        response
-    );
-}
+
 
     //Delete a tenant
     @Delete("/delete")
@@ -149,7 +144,7 @@ public async updateTenants(
         @Param("id", new ParseUUIDPipe()) id: string,
         @GetUserId("userId", ParseUUIDPipe) userId: string,
     ) {
-        const tenantId = id;        
+        const tenantId = id;
         return await this.tenantService.deleteTenants(request, tenantId, response);
     }
 
