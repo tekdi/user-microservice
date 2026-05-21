@@ -280,4 +280,13 @@ export const API_RESPONSES = {
 
   // Country Management Messages
   COUNTRY_LIST_SUCCESS: "Countries retrieved successfully",
+
+  // Referral Management Messages
+  REFERRAL_CREATED_SUCCESSFULLY: "Referral created successfully",
+  REFERRAL_LIST_SUCCESS: "Referrals retrieved successfully",
+  REFERRAL_RESOLVED_SUCCESSFULLY: "Referral resolved successfully",
+  REFERRAL_UPDATED_SUCCESSFULLY: "Referral updated successfully",
+  REFERRAL_IMPORT_SUCCESS: "Referrals imported successfully",
+  REFERRAL_BULK_SUCCESS: "Bulk referrals processed successfully",
+  REFERRAL_REPORT_SUCCESS: "Referral report retrieved successfully",
 };

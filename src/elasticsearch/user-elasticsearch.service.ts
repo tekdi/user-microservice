@@ -81,6 +81,7 @@ export class UserElasticsearchService implements OnModuleInit {
                 email: { type: 'keyword' },
                 mobile: { type: 'keyword' },
                 mobile_country_code: { type: 'keyword' },
+                referLink: { type: 'keyword' },
                 gender: { type: 'keyword' },
                 dob: { type: 'date', null_value: null },
                 country: {
@@ -379,6 +380,7 @@ export class UserElasticsearchService implements OnModuleInit {
       email: profile.email,
       mobile: profile.mobile,
       mobile_country_code: profile.mobile_country_code,
+      ...(profile.referLink ? { referLink: profile.referLink } : {}),
       gender: profile.gender,
       dob: profile.dob,
       country: this.normalizeCountryKeyword(profile.country),
@@ -768,6 +770,17 @@ export class UserElasticsearchService implements OnModuleInit {
               field === 'completionPercentage'
             ) {
               appFilters[field] = value;
+              return;
+            }
+
+            // Handle referLink filtering — match by slug or full URL
+            if (field === 'referLink') {
+              const referLinkValue = typeof value === 'string' ? value : JSON.stringify(value);
+              searchQuery.bool.filter.push({
+                wildcard: {
+                  'profile.referLink': `*${referLinkValue.toLowerCase()}*`,
+                },
+              });
               return;
             }
 

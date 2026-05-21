@@ -182,6 +182,7 @@ export class ElasticsearchService {
               email: source?.profile?.email || '',
               mobile: source?.profile?.mobile || '',
               mobile_country_code: source?.profile?.mobile_country_code || '',
+              ...(source?.profile?.referLink ? { referLink: source.profile.referLink } : {}),
               gender: source?.profile?.gender || '',
               dob:source?.profile?.dob || '',
               country:source?.profile?.country || '',

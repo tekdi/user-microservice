@@ -37,6 +37,7 @@ import { isElasticsearchEnabled } from 'src/common/utils/elasticsearch.util';
 import { CohortMembers } from 'src/cohortMembers/entities/cohort-member.entity';
 import { Cohort } from 'src/cohort/entities/cohort.entity';
 import { FieldValueConverter } from 'src/utils/field-value-converter';
+import { ReferralsService } from 'src/referrals/referrals.service';
 
 interface DateRange {
   start: string;
@@ -94,7 +95,8 @@ export class FormSubmissionService {
     private readonly userElasticsearchService: UserElasticsearchService,
     private readonly formsService: FormsService,
     @Inject(forwardRef(() => PostgresCohortService))
-    private readonly postgresCohortService: PostgresCohortService
+    private readonly postgresCohortService: PostgresCohortService,
+    private readonly referralsService: ReferralsService
   ) {}
 
   async create(
@@ -3158,6 +3160,8 @@ export class FormSubmissionService {
         }
       }
     }
+    const referLink = await this.referralsService.getUserReferLink(user.userId);
+
     // Build the IUser object
     return {
       userId: user.userId,
@@ -3170,6 +3174,7 @@ export class FormSubmissionService {
         email: user.email || '',
         mobile: user.mobile ? user.mobile.toString() : '',
         mobile_country_code: user.mobile_country_code || '',
+        ...(referLink ? { referLink } : {}),
         gender: user.gender,
         dob: user.dob instanceof Date ? user.dob.toISOString() : user.dob || '',
         country: user.country,

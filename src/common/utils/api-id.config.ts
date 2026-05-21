@@ -30,6 +30,15 @@ export const APIID = {
   USER_DELETE: "api.user.delete",
   USER_BULK_IMPORT: "api.user.bulkImport",
 
+  // Referral Management APIs
+  REFERRAL_CREATE: "api.referral.create",
+  REFERRAL_LIST: "api.referral.list",
+  REFERRAL_RESOLVE: "api.referral.resolve",
+  REFERRAL_UPDATE: "api.referral.update",
+  REFERRAL_IMPORT: "api.referral.import",
+  REFERRAL_BULK: "api.referral.bulk",
+  REFERRAL_REPORT: "api.referral.report",
+
   // Role Management APIs
   ROLE_GET: "api.role.get",
   ROLE_CREATE: "api.role.create",

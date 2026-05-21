@@ -262,4 +262,15 @@ export class UserCreateDto {
   @Expose()
   @IsOptional()
   recaptchaToken?: string;
+
+  @ApiPropertyOptional({
+    type: String,
+    description:
+      'Referral slug from /apply?refer={slug} (stored as first-touch attribution)',
+  })
+  @Expose()
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  referralSlug?: string;
 }
