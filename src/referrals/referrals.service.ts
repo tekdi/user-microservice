@@ -35,6 +35,8 @@ export class ReferralsService {
   ) {}
 
   async createReferralEntity(dto: CreateReferralEntityDto, createdBy?: string) {
+    let resolvedLinkedEntityId: string | null = dto.linkedEntityId ?? null;
+
     if (dto.contactEmail) {
       const existingEmail = await this.referralRepo.findOne({ where: { contactEmail: dto.contactEmail } });
       if (existingEmail) {
@@ -46,7 +48,7 @@ export class ReferralsService {
         if (!existingUser) {
           throw new BadRequestException(`Internal user email ${dto.contactEmail} does not exist in the system`);
         }
-        dto.linkedEntityId = existingUser.userId;
+        resolvedLinkedEntityId = existingUser.userId;
       }
     }
 
@@ -54,7 +56,7 @@ export class ReferralsService {
       ...dto,
       lastName: dto.lastName ?? null,
       region: dto.region ?? null,
-      linkedEntityId: dto.linkedEntityId ?? null,
+      linkedEntityId: resolvedLinkedEntityId,
       contactEmail: dto.contactEmail ?? null,
       additionalEmails: Array.isArray(dto.additionalEmails)
         ? dto.additionalEmails.join(',') || null

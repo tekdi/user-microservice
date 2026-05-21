@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UsePipes, ValidationPipe, UseFilters, Res, HttpStatus } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query, UsePipes, ValidationPipe, UseFilters, Res, HttpStatus } from '@nestjs/common';
 import { ApiBody, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { Response } from 'express';
 import { CreateReferralEntityDto } from './dto/create-referral-entity.dto';
@@ -65,7 +65,7 @@ export class ReferralsController {
   @UseFilters(new AllExceptionsFilter(APIID.REFERRAL_GET))
   @Get(':id')
   @ApiOkResponse({ description: 'Get a referral entity by its UUID' })
-  async getById(@Param('id') id: string, @Res() response: Response) {
+  async getById(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string, @Res() response: Response) {
     const result = await this.referralsService.getReferralById(id);
     return APIResponse.success(
       response,
