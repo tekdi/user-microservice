@@ -119,12 +119,29 @@ export class ReferralsService {
     query.skip(offset).take(limit);
 
     const [rows, total] = await query.getManyAndCount();
-    
+
+    const signupCounts = rows.length
+      ? await this.dataSource.query<{ referralEntityId: string; signups: number }[]>(
+          `SELECT ua."referralEntityId", COUNT(DISTINCT ua."userId")::int AS signups
+           FROM "UserAttribution" ua
+           JOIN "Users" u ON u."userId" = ua."userId"
+           WHERE ua."referralEntityId" = ANY($1)
+             AND u."status" IN ('active', 'inactive')
+           GROUP BY ua."referralEntityId"`,
+          [rows.map((r) => r.id)],
+        )
+      : [];
+
+    const signupMap = new Map(signupCounts.map((s) => [s.referralEntityId, s.signups]));
+
     return {
-      data: rows.map((r) => this.normalizeReferral({ ...r, referLink: buildReferLink(r.slug) })),
+      data: rows.map((r) => ({
+        ...this.normalizeReferral({ ...r, referLink: buildReferLink(r.slug) }),
+        signups: signupMap.get(r.id) ?? 0,
+      })),
       total,
       limit,
-      offset
+      offset,
     };
   }
 
