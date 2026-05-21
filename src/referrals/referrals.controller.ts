@@ -1,6 +1,6 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UsePipes, ValidationPipe, UseFilters, Res, HttpStatus, UseGuards, Req } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, UsePipes, ValidationPipe, UseFilters, Res, HttpStatus } from '@nestjs/common';
 import { ApiBody, ApiOkResponse, ApiTags } from '@nestjs/swagger';
-import { Response, Request } from 'express';
+import { Response } from 'express';
 import { CreateReferralEntityDto } from './dto/create-referral-entity.dto';
 import { ImportReferralsDto } from './dto/import-referrals.dto';
 import { UpdateReferralSlugDto } from './dto/update-referral-slug.dto';
@@ -11,15 +11,9 @@ import APIResponse from '../common/responses/response';
 import { APIID } from '../common/utils/api-id.config';
 import { API_RESPONSES } from '../common/utils/response.messages';
 import { AllExceptionsFilter } from '../common/filters/exception.filter';
-import { JwtAuthGuard } from '../common/guards/keycloak.guard';
-
-interface RequestWithUser extends Request {
-  user?: { userId: string; name?: string; username?: string; [key: string]: any };
-}
 
 @ApiTags('Referrals')
 @Controller('referrals')
-@UseGuards(JwtAuthGuard)
 export class ReferralsController {
   constructor(private readonly referralsService: ReferralsService) {}
 
@@ -27,8 +21,8 @@ export class ReferralsController {
   @Post()
   @UsePipes(new ValidationPipe({ transform: true }))
   @ApiBody({ type: CreateReferralEntityDto })
-  async create(@Body() dto: CreateReferralEntityDto, @Req() request: RequestWithUser, @Res() response: Response) {
-    const createdBy = request.user?.userId ?? null;
+  async create(@Body() dto: CreateReferralEntityDto, @Query('userId') userId: string, @Res() response: Response) {
+    const createdBy = userId ?? null;
     const result = await this.referralsService.createReferralEntity(dto, createdBy);
     return APIResponse.success(
       response,
@@ -75,10 +69,10 @@ export class ReferralsController {
   async updateSlug(
     @Param('id') id: string,
     @Body() dto: UpdateReferralSlugDto,
-    @Req() request: RequestWithUser,
+    @Query('userId') userId: string,
     @Res() response: Response
   ) {
-    const changedBy = request.user?.userId ?? null;
+    const changedBy = userId ?? null;
     const result = await this.referralsService.updateSlug(id, dto, changedBy);
     return APIResponse.success(
       response,
@@ -93,8 +87,8 @@ export class ReferralsController {
   @Post('import')
   @UsePipes(new ValidationPipe({ transform: true }))
   @ApiBody({ type: ImportReferralsDto })
-  async import(@Body() dto: ImportReferralsDto, @Req() request: RequestWithUser, @Res() response: Response) {
-    const createdBy = request.user?.userId ?? null;
+  async import(@Body() dto: ImportReferralsDto, @Query('userId') userId: string, @Res() response: Response) {
+    const createdBy = userId ?? null;
     const result = await this.referralsService.importFromCsv(dto, createdBy);
     return APIResponse.success(
       response,
@@ -109,8 +103,8 @@ export class ReferralsController {
   @Post('bulk')
   @UsePipes(new ValidationPipe({ transform: true }))
   @ApiBody({ type: [CreateReferralEntityDto] })
-  async bulkInsert(@Body() dtos: CreateReferralEntityDto[], @Req() request: RequestWithUser, @Res() response: Response) {
-    const createdBy = request.user?.userId ?? null;
+  async bulkInsert(@Body() dtos: CreateReferralEntityDto[], @Query('userId') userId: string, @Res() response: Response) {
+    const createdBy = userId ?? null;
     const result = await this.referralsService.bulkInsert(dtos, createdBy);
     return APIResponse.success(
       response,
