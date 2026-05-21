@@ -72,7 +72,7 @@ export class TenantController {
         tenantCreateDto.createdBy = userId;
         return await this.tenantService.createTenants(tenantCreateDto, response);
     }
-
+    
 //Update a tenant
 @Patch("/update/:id")
 @ApiCreatedResponse({ description: "Tenant Data Fetch" })
