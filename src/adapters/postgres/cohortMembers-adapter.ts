@@ -779,10 +779,11 @@ export class PostgresCohortMembersService {
         );
       }
 
-      // Validate Application End Date before creating cohort member (only if configured)
+      // Validate Application End Date before creating cohort member (only if configured and not admin)
       const applicationEndDateFieldId = process.env.APPLICATION_END_FIELD_ID;
+      const callerIsAdmin = await this.isUserAdmin(loginUser, tenantId);
 
-      if (applicationEndDateFieldId) {
+      if (applicationEndDateFieldId && !callerIsAdmin) {
         const cohortId = cohortMembers.cohortId;
 
         // Query FieldValues table for the Application End Date field
@@ -6880,5 +6881,16 @@ export class PostgresCohortMembersService {
       console.error('Error in buildSearchTextWhereClause:', error);
       return { condition: '', params: [] };
     }
+  }
+
+  private async isUserAdmin(userId: string, tenantId: string): Promise<boolean> {
+    const result = await this.usersRepository.query(
+      `SELECT 1 FROM "UserRolesMapping" URM
+       JOIN "Roles" R ON R."roleId" = URM."roleId"
+       WHERE URM."userId" = $1 AND URM."tenantId" = $2 AND R."code" = 'admin'
+       LIMIT 1`,
+      [userId, tenantId]
+    );
+    return result.length > 0;
   }
 }
