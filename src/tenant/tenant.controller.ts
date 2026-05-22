@@ -91,19 +91,28 @@ export class TenantController {
 
         // Parse programImages if sent as JSON string in form-data
         if (typeof (tenantUpdateDto.programImages as unknown) === 'string') {
+            let parsed: any;
             try {
-                const parsed = JSON.parse(tenantUpdateDto.programImages as unknown as string);
-
-                if (!Array.isArray(parsed)) {
-                    throw new Error();
-                }
-                tenantUpdateDto.programImages = parsed;
-
-            } catch (error) {
+                parsed = JSON.parse(tenantUpdateDto.programImages as unknown as string);
+            } catch {
                 throw new BadRequestException(
                     'Invalid format for programImages. Expected a JSON array string.'
                 );
             }
+
+            if (!Array.isArray(parsed)) {
+                throw new BadRequestException(
+                    'Invalid format for programImages. Expected a JSON array string.'
+                );
+            }
+
+            if (!parsed.every((item: any) => typeof item === 'string')) {
+                throw new BadRequestException(
+                    'programImages must be an array of strings.'
+                );
+            }
+
+            tenantUpdateDto.programImages = parsed;
         }
 
         // Upload files if provided
