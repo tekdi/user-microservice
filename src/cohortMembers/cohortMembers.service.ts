@@ -567,14 +567,30 @@ ON CM."userId" = U."userId" ${whereCase}`;
       const savedCohortMember = await this.cohortMembersRepository.save(
         cohortMembers
       );
-
-      return APIResponse.success(
+      
+if (savedCohortMember){
+    const apiResponse= APIResponse.success(
         res,
         apiId,
         savedCohortMember,
         HttpStatus.OK,
         API_RESPONSES.COHORTMEMBER_CREATED_SUCCESSFULLY
       );
+
+      const enrichedData = {
+  ...savedCohortMember,
+  academicyearId,
+};
+
+this.kafkaService.publishCohortMemberEvent('created', enrichedData, apiId).catch(error => {
+  LoggerUtil.error(
+    `Failed to publish cohort member created event to Kafka`,
+    `Error: ${error.message}`,
+    apiId
+  )
+})
+return apiResponse;
+}
     } catch (e) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,

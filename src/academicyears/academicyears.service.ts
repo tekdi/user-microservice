@@ -66,7 +66,10 @@ export class AcademicYearService {
       if (getCurrentActiveYear) {
         const updateStatus = await this.academicYearRespository.update(
           { id: getCurrentActiveYear.id },
-          { isActive: false }
+          {
+            isActive: false,
+            updatedBy: academicYearDto.updatedBy
+          }
         );
       }
       //save record
