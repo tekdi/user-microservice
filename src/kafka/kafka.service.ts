@@ -511,7 +511,7 @@ export class KafkaService implements OnModuleInit, OnModuleDestroy {
       this.logger.warn('Kafka is disabled. Skipping cohort academic year event publish.');
       return;
     }
-console.log(cohortAcademicYearData)
+    
     const topic = this.configService.get<string>('KAFKA_TOPIC', 'user-topic');
 
     let fullEventType = '';
