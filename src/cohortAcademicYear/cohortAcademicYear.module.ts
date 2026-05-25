@@ -7,11 +7,13 @@ import { Cohort } from "src/cohort/entities/cohort.entity";
 import { AcademicYear } from "src/academicyears/entities/academicyears-entity";
 import { Tenants } from "src/userTenantMapping/entities/tenant.entity";
 import { AcademicyearsModule } from "src/academicyears/academicyears.module";
+import { KafkaModule } from "src/kafka/kafka.module";
 
 
 @Module({
   imports: [
     AcademicyearsModule,
+    KafkaModule,
     TypeOrmModule.forFeature([
       CohortAcademicYear,
       Cohort,
