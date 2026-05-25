@@ -580,7 +580,7 @@ ON CM."userId" = U."userId" ${whereCase}`;
         const enrichedData = {
           ...savedCohortMember,
           academicYearId,
-        };
+        }; 
 
         this.kafkaService.publishCohortMemberEvent('created', enrichedData, enrichedData.cohortAcademicYearId).catch(error => {
           LoggerUtil.error(
