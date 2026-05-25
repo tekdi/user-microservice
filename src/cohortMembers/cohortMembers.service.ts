@@ -477,7 +477,7 @@ ON CM."userId" = U."userId" ${whereCase}`;
           ...savedCohortMember,
           academicYearId,
         }; 
-
+ 
         this.kafkaService.publishCohortMemberEvent('created', enrichedData, enrichedData.cohortMembershipId).catch(error => {
           LoggerUtil.error(
             `Failed to publish cohort member created event to Kafka`,
