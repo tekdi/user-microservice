@@ -29,7 +29,7 @@ export class TenantController {
     public async getTenants(
         @Req() request: Request,
         @Res() response: Response
-    ): Promise<Response>{
+    ): Promise<Response> {
         return await this.tenantService.getTenants(request, response);
     }
 
@@ -86,17 +86,48 @@ export class TenantController {
         @UploadedFiles() files: Express.Multer.File[],
         @GetUserId("userId", ParseUUIDPipe) userId: string,
     ): Promise<Response> {
-        const tenantId = id;        
+        const tenantId = id;
         const uploadedFiles = [];
 
-        // Loop through each file and upload it
+        // Parse programImages if sent as JSON string in form-data
+        if (typeof (tenantUpdateDto.programImages as unknown) === 'string') {
+            let parsed: any;
+            try {
+                parsed = JSON.parse(tenantUpdateDto.programImages as unknown as string);
+            } catch {
+                throw new BadRequestException(
+                    'Invalid format for programImages. Expected a JSON array string.'
+                );
+            }
+
+            if (!Array.isArray(parsed)) {
+                throw new BadRequestException(
+                    'Invalid format for programImages. Expected a JSON array string.'
+                );
+            }
+
+            if (!parsed.every((item: any) => typeof item === 'string')) {
+                throw new BadRequestException(
+                    'programImages must be an array of strings.'
+                );
+            }
+
+            tenantUpdateDto.programImages = parsed;
+        }
+
+        // Upload files if provided
         if (files && files.length > 0) {
+
             for (const file of files) {
                 const uploadedFile = await this.filesUploadService.saveFile(file);
-                uploadedFiles.push(uploadedFile);
+                uploadedFiles.push(uploadedFile.filePath);
             }
-            // Assuming tenantCreateDto needs an array of file paths
-            tenantUpdateDto.programImages = uploadedFiles.map(file => file.filePath); // Adjust field as needed
+
+            // Merge existing images + uploaded images
+            tenantUpdateDto.programImages = [
+                ...(Array.isArray(tenantUpdateDto.programImages) ? tenantUpdateDto.programImages : []),
+                ...uploadedFiles
+            ];
         }
         tenantUpdateDto.updatedBy = userId;
         return await this.tenantService.updateTenants(tenantId, tenantUpdateDto, response);
@@ -117,7 +148,7 @@ export class TenantController {
         @Param("id", new ParseUUIDPipe()) id: string,
         @GetUserId("userId", ParseUUIDPipe) userId: string,
     ) {
-        const tenantId = id;        
+        const tenantId = id;
         return await this.tenantService.deleteTenants(request, tenantId, response);
     }
 
