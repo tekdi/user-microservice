@@ -1539,63 +1539,35 @@ export class FieldsService {
 
   // OPTIMIZED VERSION - Much faster alternative to avoid JSON aggregation
   async filterUserUsingCustomFieldsOptimized(context: string, stateDistBlockData: any) {
-    let joinCond = "";
-    let targetTable = "";
-    
-    if (context === "COHORT") {
-      joinCond = `JOIN "Cohort" u ON fv."itemId" = u."cohortId"`;
-      targetTable = "Cohort";
-    } else if (context === "USERS") {
-      joinCond = `JOIN "Users" u ON fv."itemId" = u."userId"`;
-      targetTable = "Users";
-    } else {
-      // Generic case - no specific table join
-      targetTable = "FieldValues";
+    if (context !== "COHORT" && context !== "USERS") {
+      return this.filterUserUsingCustomFields(context, stateDistBlockData);
     }
 
-    // Build EXISTS conditions for each field filter
-    const conditions = [];
+    const idColumn = context === "COHORT" ? `c."cohortId"` : `u."userId"`;
+    const baseTable = context === "COHORT" ? `"Cohort" c` : `"Users" u`;
+
+    // Each field filter becomes one JOIN — replaces correlated EXISTS subqueries
+    const joins: string[] = [];
     let paramIndex = 1;
-    const queryParams = [];
+    const queryParams: any[] = [];
 
     for (const [fieldName, fieldValues] of Object.entries(stateDistBlockData)) {
       const values = Array.isArray(fieldValues) ? fieldValues : [fieldValues];
-      
-      // Create placeholders for parameterized query
       const valuePlaceholders = values.map(() => `$${paramIndex++}`);
       queryParams.push(...values);
-      
-      const condition = `
-        EXISTS (
-          SELECT 1 
-          FROM "FieldValues" fv_inner
-          JOIN "Fields" f_inner ON fv_inner."fieldId" = f_inner."fieldId"
-          WHERE fv_inner."itemId" = ${context === 'COHORT' ? 'c."cohortId"' : 'u."userId"'}
-            AND f_inner."name" = $${paramIndex}
-            AND (f_inner.context IN($${paramIndex + 1}, 'NULL', 'null', '') OR f_inner.context IS NULL)
-            AND fv_inner."value" && ARRAY[${valuePlaceholders.join(',')}]
-        )`;
-      
       queryParams.push(fieldName, context);
-      paramIndex += 2;
-      conditions.push(condition);
+      const nameParam = paramIndex++;
+      const ctxParam = paramIndex++;
+
+      joins.push(`
+        JOIN "FieldValues" fv${joins.length} ON fv${joins.length}."itemId" = ${idColumn}
+          AND fv${joins.length}."value" && ARRAY[${valuePlaceholders.join(",")}]
+        JOIN "Fields" f${joins.length} ON f${joins.length}."fieldId" = fv${joins.length}."fieldId"
+          AND f${joins.length}."name" = $${nameParam}
+          AND (f${joins.length}.context IN($${ctxParam}, 'NULL', 'null', '') OR f${joins.length}.context IS NULL)`);
     }
 
-    let query;
-    if (context === "COHORT") {
-      query = `
-        SELECT DISTINCT c."cohortId" as "itemId"
-        FROM "Cohort" c
-        WHERE ${conditions.join(' AND ')}`;
-    } else if (context === "USERS") {
-      query = `
-        SELECT DISTINCT u."userId" as "itemId"
-        FROM "Users" u
-        WHERE ${conditions.join(' AND ')}`;
-    } else {
-      // Fallback to original logic for unknown context
-      return this.filterUserUsingCustomFields(context, stateDistBlockData);
-    }
+    const query = `SELECT DISTINCT ${idColumn} as "itemId" FROM ${baseTable} ${joins.join(" ")}`;
 
     const queryData = await this.fieldsValuesRepository.query(query, queryParams);
     const result = queryData.length > 0 ? queryData.map((item) => item.itemId) : null;
@@ -1603,53 +1575,7 @@ export class FieldsService {
   }
 
   async filterUserUsingCustomFields(context: string, stateDistBlockData: any) {
-    const searchKey = [];
-    let whereCondition = ` WHERE `;
-    let index = 0;
-    const tableName = "";
-    let joinCond = "";
-
-    if (context === "COHORT") {
-      joinCond = `JOIN "Cohort" u ON fv."itemId" = u."cohortId"`;
-    } else if (context === "USERS") {
-      joinCond = `JOIN "Users" u ON fv."itemId" = u."userId"`;
-    } else {
-      joinCond = ``;
-    }
-
-    for (const [key, value] of Object.entries(stateDistBlockData)) {
-      searchKey.push(`'${key}'`);
-      if (index > 0) {
-        whereCondition += ` AND `;
-      }
-
-      // using the ?| array[] operator to search for both single and multiple values in a JSONB column.
-      whereCondition += `fields->'${key}' ?| array[${(Array.isArray(value)
-        ? value
-        : [value]
-      )
-        .map((v) => `'${v}'`)
-        .join(",")}]`;
-      index++;
-    }
-
-    const query = `WITH user_fields AS (
-        SELECT
-            fv."itemId",
-            jsonb_object_agg(f."name", fv."value") AS fields
-        FROM "FieldValues" fv
-        JOIN "Fields" f ON fv."fieldId" = f."fieldId"
-        ${joinCond}
-        WHERE f."name" IN (${searchKey}) AND (f.context IN('${context}', 'NULL', 'null', '') OR f.context IS NULL)
-        GROUP BY fv."itemId"
-        )
-        SELECT "itemId"
-        FROM user_fields ${whereCondition}`;
-
-    const queryData = await this.fieldsValuesRepository.query(query);
-    const result =
-      queryData.length > 0 ? queryData.map((item) => item.itemId) : null;
-    return result;
+    return this.filterUserUsingCustomFieldsOptimized(context, stateDistBlockData);
   }
 
   async getFieldValuesData(
