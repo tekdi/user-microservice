@@ -15,7 +15,8 @@ import { ReferralEntitySubType, ReferralEntityType } from './referrals.types';
 import {
   buildReferLink,
   generateReferralSlug,
-  isValidStandardSlug,
+  isValidUserProvidedSlug,
+  normalizeUserProvidedSlug,
   standardizeSlugInput,
 } from './utils/referral-slug.util';
 
@@ -66,9 +67,9 @@ export class ReferralsService {
     });
 
     if (dto.slug) {
-      const normalizedSlug = standardizeSlugInput(dto.slug);
-      if (!normalizedSlug) {
-        throw new BadRequestException('Provided slug is invalid after normalization');
+      const normalizedSlug = normalizeUserProvidedSlug(dto.slug);
+      if (!normalizedSlug || !isValidUserProvidedSlug(normalizedSlug)) {
+        throw new BadRequestException('Slug may only contain letters, digits, hyphens (-), underscores (_), dots (.) and tildes (~)');
       }
       const slugExists = await this.slugExistsAnywhere(normalizedSlug);
       if (slugExists) {
@@ -247,16 +248,13 @@ export class ReferralsService {
     // ── Slug: normalize any format, check uniqueness, preserve history ───────
     let pendingSlug: string | null = null;
     if (dto.slug !== undefined) {
-      const newSlug = standardizeSlugInput(dto.slug);
-      if (!newSlug) {
-        throw new BadRequestException('Provided slug is invalid after normalization');
+      const normalizedSlug = normalizeUserProvidedSlug(dto.slug);
+      if (!normalizedSlug || !isValidUserProvidedSlug(normalizedSlug)) {
+        throw new BadRequestException('Slug may only contain letters, digits, hyphens (-), underscores (_), dots (.) and tildes (~)');
       }
-      if (!isValidStandardSlug(newSlug)) {
-        throw new BadRequestException('Slug must contain only lowercase a-z, 0-9, and _');
-      }
-      if (newSlug !== entity.slug) {
-        await this.assertSlugUnique(newSlug);
-        pendingSlug = newSlug;
+      if (normalizedSlug !== entity.slug) {
+        await this.assertSlugUnique(normalizedSlug);
+        pendingSlug = normalizedSlug;
       }
     }
 

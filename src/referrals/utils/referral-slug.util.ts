@@ -22,22 +22,39 @@ function randomBase36(length: number): string {
   return asBase36.padStart(length, '0').slice(0, length);
 }
 
-export function standardizeSlugInput(input: string): string {
-  // Lowercase, remove accents, keep [a-z0-9_], collapse spaces to nothing.
-  // Use NFKD so accents become combining marks; then strip them.
-  const s = String(input ?? '')
+// Allowed chars after lowercasing: digits, a-z, -, _, ., ~
+// Input may contain uppercase letters \u2014 they are lowercased before validation and storage.
+const USER_SLUG_PATTERN = /^[a-z0-9\-_\.~]+$/;
+
+// Normalize a user-provided slug: trim whitespace and lowercase.
+export function normalizeUserProvidedSlug(slug: string): string {
+  return String(slug ?? '').trim().toLowerCase();
+}
+
+// Returns true when the slug (already normalized) contains only allowed chars.
+export function isValidUserProvidedSlug(slug: string): boolean {
+  return USER_SLUG_PATTERN.test(slug);
+}
+
+// Used only for name-based auto-generation (strips to safe base36-compatible chars)
+function normalizeNamePart(input: string): string {
+  return String(input ?? '')
     .trim()
     .toLowerCase()
     .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, '') // diacritics
-    .replace(/\s+/g, '') // remove spaces
-    .replace(/[^a-z0-9_]/g, ''); // remove special chars
-  return s;
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, '')
+    .replace(/[^a-z0-9_]/g, '');
+}
+
+// Trim + lowercase: used by resolveSlug for consistent lookup against stored slugs.
+export function standardizeSlugInput(input: string): string {
+  return String(input ?? '').trim().toLowerCase();
 }
 
 export function standardizeNameForSlug(firstName: string, lastName?: string) {
-  const a = standardizeSlugInput(firstName);
-  const b = lastName ? standardizeSlugInput(lastName) : '';
+  const a = normalizeNamePart(firstName);
+  const b = lastName ? normalizeNamePart(lastName) : '';
   if (a && b) return `${a}_${b}`;
   return a || b;
 }
@@ -51,11 +68,9 @@ export function generateReferralSlug(params: {
   const { type, subType, firstName, lastName } = params;
 
   if (type === ReferralEntityType.INTERNAL && subType === ReferralEntitySubType.ALUMNI) {
-    // Internal alumni: random, non-identifiable
     return randomBase36(8);
   }
 
-  // External: human-readable name + random suffix
   const base = standardizeNameForSlug(firstName, lastName ?? undefined);
   const suffix = randomBase36(6);
   return `${base}_${suffix}`;
@@ -64,7 +79,6 @@ export function generateReferralSlug(params: {
 export function isValidStandardSlug(slug: string): boolean {
   const s = String(slug || '').trim();
   if (!s) return false;
-  if (s !== s.toLowerCase()) return false;
   return /^[a-z0-9_]+$/.test(s);
 }
 
