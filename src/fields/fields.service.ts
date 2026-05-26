@@ -1540,7 +1540,12 @@ export class FieldsService {
   // OPTIMIZED VERSION - Much faster alternative to avoid JSON aggregation
   async filterUserUsingCustomFieldsOptimized(context: string, stateDistBlockData: any) {
     if (context !== "COHORT" && context !== "USERS") {
-      return this.filterUserUsingCustomFields(context, stateDistBlockData);
+      return null;
+    }
+
+    // No filters provided — return null so callers treat it as no custom field constraint
+    if (!stateDistBlockData || Object.keys(stateDistBlockData).length === 0) {
+      return null;
     }
 
     const idColumn = context === "COHORT" ? `c."cohortId"` : `u."userId"`;
