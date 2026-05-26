@@ -138,7 +138,7 @@ export class ReferralsService {
            FROM "UserAttribution" ua
            JOIN "Users" u ON u."userId" = ua."userId"
            WHERE ua."referralEntityId" = ANY($1)
-             AND u."status" IN ('active', 'inactive')
+             AND u."status" = 'active'
            GROUP BY ua."referralEntityId"`,
           [rows.map((r) => r.id)],
         )
