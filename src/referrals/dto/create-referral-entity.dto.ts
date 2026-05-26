@@ -7,7 +7,7 @@ import {
 } from '../referrals.types';
 
 export class CreateReferralEntityDto {
-  @ApiPropertyOptional({ description: 'Custom slug (any format accepted; will be normalized to lowercase a-z0-9_). If omitted, auto-generated.' })
+  @ApiPropertyOptional({ description: 'Custom slug. Allowed characters: letters (A-Z, a-z), digits, hyphens (-), underscores (_), dots (.) and tildes (~). Input is lowercased before storage. If omitted, auto-generated.' })
   @IsOptional()
   @IsString()
   @MaxLength(100)

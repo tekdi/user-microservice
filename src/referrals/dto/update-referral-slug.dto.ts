@@ -3,7 +3,7 @@ import { IsArray, IsEmail, IsEnum, IsOptional, IsString, MaxLength } from 'class
 import { ReferralEntityStatus, ReferralEntitySubType, ReferralEntityType } from '../referrals.types';
 
 export class UpdateReferralSlugDto {
-  @ApiPropertyOptional({ description: 'New slug (any format accepted; will be normalized to lowercase a-z0-9_)' })
+  @ApiPropertyOptional({ description: 'New slug. Allowed characters: letters (A-Z, a-z), digits, hyphens (-), underscores (_), dots (.) and tildes (~). Input is lowercased before storage.' })
   @IsOptional()
   @IsString()
   @MaxLength(100)

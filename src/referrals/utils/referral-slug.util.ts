@@ -22,9 +22,16 @@ function randomBase36(length: number): string {
   return asBase36.padStart(length, '0').slice(0, length);
 }
 
-// Allowed chars in a user-provided slug: letters, digits, -, _, ., ~
-const USER_SLUG_PATTERN = /^[a-zA-Z0-9\-_\.~]+$/;
+// Allowed chars after lowercasing: digits, a-z, -, _, ., ~
+// Input may contain uppercase letters \u2014 they are lowercased before validation and storage.
+const USER_SLUG_PATTERN = /^[a-z0-9\-_\.~]+$/;
 
+// Normalize a user-provided slug: trim whitespace and lowercase.
+export function normalizeUserProvidedSlug(slug: string): string {
+  return String(slug ?? '').trim().toLowerCase();
+}
+
+// Returns true when the slug (already normalized) contains only allowed chars.
 export function isValidUserProvidedSlug(slug: string): boolean {
   return USER_SLUG_PATTERN.test(slug);
 }
@@ -40,9 +47,9 @@ function normalizeNamePart(input: string): string {
     .replace(/[^a-z0-9_]/g, '');
 }
 
-// Keep for resolveSlug backward compat \u2014 only trims, no stripping
+// Trim + lowercase: used by resolveSlug for consistent lookup against stored slugs.
 export function standardizeSlugInput(input: string): string {
-  return String(input ?? '').trim();
+  return String(input ?? '').trim().toLowerCase();
 }
 
 export function standardizeNameForSlug(firstName: string, lastName?: string) {

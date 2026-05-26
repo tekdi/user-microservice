@@ -16,6 +16,7 @@ import {
   buildReferLink,
   generateReferralSlug,
   isValidUserProvidedSlug,
+  normalizeUserProvidedSlug,
   standardizeSlugInput,
 } from './utils/referral-slug.util';
 
@@ -66,15 +67,15 @@ export class ReferralsService {
     });
 
     if (dto.slug) {
-      const trimmedSlug = dto.slug.trim();
-      if (!trimmedSlug || !isValidUserProvidedSlug(trimmedSlug)) {
+      const normalizedSlug = normalizeUserProvidedSlug(dto.slug);
+      if (!normalizedSlug || !isValidUserProvidedSlug(normalizedSlug)) {
         throw new BadRequestException('Slug may only contain letters, digits, hyphens (-), underscores (_), dots (.) and tildes (~)');
       }
-      const slugExists = await this.slugExistsAnywhere(trimmedSlug);
+      const slugExists = await this.slugExistsAnywhere(normalizedSlug);
       if (slugExists) {
-        throw new ConflictException(`Slug '${trimmedSlug}' already exists`);
+        throw new ConflictException(`Slug '${normalizedSlug}' already exists`);
       }
-      entity.slug = trimmedSlug;
+      entity.slug = normalizedSlug;
     } else {
       entity.slug = await this.generateUniqueSlug({
         type: dto.type,
@@ -247,13 +248,13 @@ export class ReferralsService {
     // ── Slug: normalize any format, check uniqueness, preserve history ───────
     let pendingSlug: string | null = null;
     if (dto.slug !== undefined) {
-      const trimmedSlug = dto.slug.trim();
-      if (!trimmedSlug || !isValidUserProvidedSlug(trimmedSlug)) {
+      const normalizedSlug = normalizeUserProvidedSlug(dto.slug);
+      if (!normalizedSlug || !isValidUserProvidedSlug(normalizedSlug)) {
         throw new BadRequestException('Slug may only contain letters, digits, hyphens (-), underscores (_), dots (.) and tildes (~)');
       }
-      if (trimmedSlug !== entity.slug) {
-        await this.assertSlugUnique(trimmedSlug);
-        pendingSlug = trimmedSlug;
+      if (normalizedSlug !== entity.slug) {
+        await this.assertSlugUnique(normalizedSlug);
+        pendingSlug = normalizedSlug;
       }
     }
 
