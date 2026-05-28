@@ -164,6 +164,16 @@ export class filtersProperty {
   @IsDateString()
   cohort_endDate?: string;
 
+  @ApiPropertyOptional({
+    type: Number,
+    description: 'Filter cohorts by the year of cohort_startDate',
+    example: 2026,
+  })
+  @Expose()
+  @IsOptional()
+  @IsNumber()
+  start_year?: number;
+
   //customFieldsName
   @ApiProperty({
     type: Object,
