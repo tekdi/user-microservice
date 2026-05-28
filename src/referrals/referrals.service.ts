@@ -133,23 +133,29 @@ export class ReferralsService {
     const [rows, total] = await query.getManyAndCount();
 
     const signupCounts = rows.length
-      ? await this.dataSource.query<{ referralEntityId: string; signups: number }[]>(
-          `SELECT ua."referralEntityId", COUNT(DISTINCT ua."userId")::int AS signups
+      ? await this.dataSource.query<{ referralEntityId: string; status: string; count: number }[]>(
+          `SELECT ua."referralEntityId", u."status", COUNT(DISTINCT ua."userId")::int AS count
            FROM "UserAttribution" ua
            JOIN "Users" u ON u."userId" = ua."userId"
            WHERE ua."referralEntityId" = ANY($1)
-             AND u."status" = 'active'
-           GROUP BY ua."referralEntityId"`,
+             AND u."status" IN ('active', 'inactive')
+           GROUP BY ua."referralEntityId", u."status"`,
           [rows.map((r) => r.id)],
         )
       : [];
 
-    const signupMap = new Map(signupCounts.map((s) => [s.referralEntityId, s.signups]));
+    const activeMap = new Map<string, number>();
+    const inactiveMap = new Map<string, number>();
+    for (const row of signupCounts) {
+      if (row.status === 'active') activeMap.set(row.referralEntityId, row.count);
+      else if (row.status === 'inactive') inactiveMap.set(row.referralEntityId, row.count);
+    }
 
     return {
       data: rows.map((r) => ({
         ...this.normalizeReferral({ ...r, referLink: buildReferLink(r.slug) }),
-        signups: signupMap.get(r.id) ?? 0,
+        signups: activeMap.get(r.id) ?? 0,
+        inactive_signups: inactiveMap.get(r.id) ?? 0,
       })),
       total,
       limit,

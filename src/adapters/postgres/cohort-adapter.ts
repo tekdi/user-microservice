@@ -16,6 +16,7 @@ import {
   LessThanOrEqual,
   Equal,
   Not,
+  Between,
 } from 'typeorm';
 import { Cohort } from 'src/cohort/entities/cohort.entity';
 import { Fields } from 'src/fields/entities/fields.entity';
@@ -1380,7 +1381,7 @@ export class PostgresCohortService {
       );
 
       // Combine the arrays
-      const allowedKeys = ['userId', ...cohortAllKeys, ...customFieldsKeys];
+      const allowedKeys = ['userId', 'start_year', ...cohortAllKeys, ...customFieldsKeys];
 
       const whereClause = {};
       const searchCustomFields = {};
@@ -1565,6 +1566,20 @@ export class PostgresCohortService {
               }
               whereClause[key] = normalizedDate;
             }
+          } else if (key === 'start_year') {
+            const year = Number(value);
+            if (!Number.isInteger(year) || year <= 0) {
+              return APIResponse.error(
+                response,
+                apiId,
+                `Invalid start_year value: ${value}. Must be a valid positive integer year.`,
+                'Invalid filter value',
+                HttpStatus.BAD_REQUEST
+              );
+            }
+            const startOfYear = `${year}-01-01T00:00:00.000Z`;
+            const endOfYear = `${year}-12-31T23:59:59.999Z`;
+            whereClause['cohort_startDate'] = Between(startOfYear, endOfYear);
           } else if (cohortAllKeys.includes(key)) {
             whereClause[key] = value;
           }
