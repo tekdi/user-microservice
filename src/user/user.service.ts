@@ -3608,7 +3608,8 @@ export class UserService {
     tenantId: string,
     request: Request,
     response: Response,
-    hierarchicalFiltersDto: HierarchicalLocationFiltersDto
+    hierarchicalFiltersDto: HierarchicalLocationFiltersDto,
+    academicYearId?: string
   ): Promise<any> {
     const apiId = APIID.USER_LIST;
 
@@ -3639,7 +3640,8 @@ export class UserService {
         role && role.length > 0 ? role : undefined,
         nameFilter,
         statusFilter,
-        filteredCustomFields
+        filteredCustomFields,
+        academicYearId
       );
 
       // Return early if no users found
@@ -3977,7 +3979,8 @@ export class UserService {
     roleFilter?: string[],
     nameFilter?: string,
     statusFilter?: string[],
-    customFieldNames?: string[]
+    customFieldNames?: string[],
+    academicYearId?: string
   ): Promise<{ totalCount: number; users: any[] }> {
     const apiId = APIID.USER_LIST;
 
@@ -3992,7 +3995,8 @@ export class UserService {
         sortField,
         sortDirection,
         limit,
-        offset
+        offset,
+        academicYearId
       );
       const result = await this.usersRepository.query(queryBuilder.query, queryBuilder.params);
       const totalCount = result.length > 0 ? parseInt(result[0].total_count) : 0;
@@ -4045,18 +4049,21 @@ export class UserService {
     sortField: string = 'name',
     sortDirection: string = 'ASC',
     limit: number = 10,
-    offset: number = 0
+    offset: number = 0,
+    academicYearId?: string
   ): { query: string; params: any[] } {
 
     const conditions: string[] = [];
     const params: any[] = [];
     let paramIndex = 1;
 
+    const hasAcademicYear = !!(academicYearId && academicYearId.trim());
+
     // Base query structure
     let baseQuery = `
       WITH filtered_users AS (
-        SELECT DISTINCT u."userId", u."username", u."firstName", u."name", u."middleName", 
-          u."lastName", u."email", u."mobile", u."gender", u."dob", 
+        SELECT DISTINCT u."userId", u."username", u."firstName", u."name", u."middleName",
+          u."lastName", u."email", u."mobile", u."gender", u."dob",
           u."status", u."createdAt", utm."tenantId", utm."status" as "tenantStatus"
         FROM "Users" u
         LEFT JOIN "UserTenantMapping" utm ON u."userId" = utm."userId"
@@ -4067,6 +4074,9 @@ export class UserService {
     params.push(tenantId);
     paramIndex++;
 
+    // Track whether CohortMembers (alias cm) has already been joined
+    let cmJoined = false;
+
     // Add location filter if provided
     if (locationFilter && locationFilter.level && locationFilter.ids.length > 0) {
       if (this.isBatchFilter(locationFilter.level)) {
@@ -4074,15 +4084,17 @@ export class UserService {
         baseQuery += `
           JOIN "CohortMembers" cm ON u."userId" = cm."userId"
         `;
+        cmJoined = true;
         conditions.push(`cm."cohortId" = ANY($${paramIndex})`);
         params.push(locationFilter.ids);
         paramIndex++;
       } else if (this.isCenterFilter(locationFilter.level)) {
-        // Center filtering: users in center directly (cm.cohortId = center) OR in batches under center (batch.parentId = center)
+        // Center filtering: users in center directly OR in batches under center
         baseQuery += `
           JOIN "CohortMembers" cm ON u."userId" = cm."userId"
           LEFT JOIN "Cohort" cohort ON cm."cohortId" = cohort."cohortId"
         `;
+        cmJoined = true;
         conditions.push(`(cm."cohortId"::text = ANY($${paramIndex}::text[]) OR cohort."parentId" = ANY($${paramIndex}::text[]))`);
         params.push(locationFilter.ids);
         paramIndex++;
@@ -4104,6 +4116,22 @@ export class UserService {
         params.push(tenantId);
         paramIndex++;
       }
+    }
+
+    // Academic year filter: join CohortMembers (if not already joined) and CohortAcademicYear
+    if (hasAcademicYear) {
+      if (!cmJoined) {
+        baseQuery += `
+          JOIN "CohortMembers" cm ON u."userId" = cm."userId" AND cm."cohortAcademicYearId" IS NOT NULL
+        `;
+        cmJoined = true;
+      }
+      baseQuery += `
+        JOIN "CohortAcademicYear" cay ON cm."cohortAcademicYearId" = cay."cohortAcademicYearId"
+      `;
+      conditions.push(`cay."academicYearId" = $${paramIndex}`);
+      params.push(academicYearId);
+      paramIndex++;
     }
 
     // Add role filter if provided
