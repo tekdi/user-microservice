@@ -412,6 +412,7 @@ export class UserController {
     @Body() hierarchicalFiltersDto: HierarchicalLocationFiltersDto
   ) {
     const tenantId = headers["tenantid"];
+    const academicYearId = headers["academicyearid"] || undefined;
     const apiId = APIID.USER_LIST;
     
     // Comprehensive tenantId validation
@@ -439,7 +440,7 @@ export class UserController {
     }
     
     return await this.userService
-      .getUsersByHierarchicalLocation(tenantId, request, response, hierarchicalFiltersDto);
+      .getUsersByHierarchicalLocation(tenantId, request, response, hierarchicalFiltersDto, academicYearId);
   }
 
   /**
