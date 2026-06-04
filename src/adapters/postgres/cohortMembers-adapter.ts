@@ -397,7 +397,9 @@ export class PostgresCohortMembersService {
           return APIResponse.error(
             res,
             apiId,
-            API_RESPONSES.USER_NOTFOUND,
+            whereClause['cohortId']
+              ? API_RESPONSES.COHORT_USER_NOTFOUND
+              : API_RESPONSES.USER_NOTFOUND,
             API_RESPONSES.NOT_FOUND,
             HttpStatus.OK
           );
@@ -1808,7 +1810,9 @@ export class PostgresCohortMembersService {
           ? ['submitted']
           : ['dropout', 'shortlisted', 'rejected'];
 
-      if (notifyStatuses.includes(status)) {
+      const shouldSendNotification = cohortMembersUpdateDto.send_notification !== false;
+
+      if (shouldSendNotification && notifyStatuses.includes(status)) {
         // Fetch user and cohort data in parallel
         const [userData, cohortData] = await Promise.all([
           this.usersRepository.findOne({

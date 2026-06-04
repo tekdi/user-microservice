@@ -1,6 +1,7 @@
 import { Exclude, Expose, Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 import {
+  IsBoolean,
   IsEnum,
   IsOptional,
   IsString,
@@ -79,6 +80,15 @@ export class CohortMembersUpdateDto {
       'Reason is mandatory while dropout, shortlisted, and rejected statuses',
   })
   statusReason?: string;
+  @ApiProperty({
+    type: Boolean,
+    description: 'Whether to send notification on status change. Defaults to true if not provided.',
+    required: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  send_notification?: boolean;
+
   @ApiProperty({
     type: FieldValuesOptionDto,
     description: 'Array of Custom fields',
