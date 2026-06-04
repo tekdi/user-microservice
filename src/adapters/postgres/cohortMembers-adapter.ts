@@ -397,9 +397,7 @@ export class PostgresCohortMembersService {
           return APIResponse.error(
             res,
             apiId,
-            whereClause['cohortId']
-              ? API_RESPONSES.COHORT_USER_NOTFOUND
-              : API_RESPONSES.USER_NOTFOUND,
+            API_RESPONSES.USER_NOTFOUND,
             API_RESPONSES.NOT_FOUND,
             HttpStatus.OK
           );
