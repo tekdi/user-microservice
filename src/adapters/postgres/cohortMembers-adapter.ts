@@ -1808,7 +1808,9 @@ export class PostgresCohortMembersService {
           ? ['submitted']
           : ['dropout', 'shortlisted', 'rejected'];
 
-      if (notifyStatuses.includes(status)) {
+      const shouldSendNotification = cohortMembersUpdateDto.sendNotification !== false;
+
+      if (shouldSendNotification && notifyStatuses.includes(status)) {
         // Fetch user and cohort data in parallel
         const [userData, cohortData] = await Promise.all([
           this.usersRepository.findOne({
