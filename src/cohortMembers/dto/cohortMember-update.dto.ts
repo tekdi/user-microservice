@@ -87,7 +87,7 @@ export class CohortMembersUpdateDto {
   })
   @IsOptional()
   @IsBoolean()
-  send_notification?: boolean;
+  sendNotification?: boolean;
 
   @ApiProperty({
     type: FieldValuesOptionDto,

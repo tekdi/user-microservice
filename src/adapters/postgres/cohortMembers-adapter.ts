@@ -1810,7 +1810,7 @@ export class PostgresCohortMembersService {
           ? ['submitted']
           : ['dropout', 'shortlisted', 'rejected'];
 
-      const shouldSendNotification = cohortMembersUpdateDto.send_notification !== false;
+      const shouldSendNotification = cohortMembersUpdateDto.sendNotification !== false;
 
       if (shouldSendNotification && notifyStatuses.includes(status)) {
         // Fetch user and cohort data in parallel
