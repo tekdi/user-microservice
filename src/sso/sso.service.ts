@@ -102,9 +102,18 @@ export class SsoService {
       
       // Step 3: Call Newton API to authenticate and get user data (with roles)
       const newtonResponse = await this.callNewtonApi(ssoRequestDto, roleName);
+      this.logger.log(
+        `Newton API response for userId: ${ssoRequestDto.userId} | success: ${newtonResponse.success} | isNewUser: ${newtonResponse.isNewUser}`,
+        'SSO_SERVICE'
+      );
       if (!newtonResponse.success) {
+        this.logger.error(
+          `[SPI] Newton authentication failed for userId: ${ssoRequestDto.userId} | Reason: ${newtonResponse.message}`,
+          null,
+          'SSO_SERVICE'
+        );
         throw new HttpException(
-          `Newton API authentication failed: ${newtonResponse.message}`,
+          'Email address is not registered in ERP for this user. Please contact your administrator.',
           HttpStatus.UNAUTHORIZED
         );
       }
@@ -207,7 +216,30 @@ export class SsoService {
         }
       );
 
+      this.logger.log(
+        `Newton API responded with status ${response.status} for userId: ${ssoRequestDto.userId}`,
+        'SSO_SERVICE'
+      );
+
+      // If Newton returned a structured response (has success field), pass it through
+      // so the caller can handle success/failure with a proper user-facing message
+      if (response.data && typeof response.data.success === 'boolean') {
+        if (!response.data.success) {
+          this.logger.error(
+            `[SPI] Newton API returned failure for userId: ${ssoRequestDto.userId} | HTTP Status: ${response.status} | Newton Message: ${response.data.message}`,
+            null,
+            'SSO_SERVICE'
+          );
+        }
+        return response.data;
+      }
+
       if (response.status !== 200) {
+        this.logger.error(
+          `[SPI] Newton API non-200 response for userId: ${ssoRequestDto.userId} | Status: ${response.status} ${response.statusText}`,
+          null,
+          'SSO_SERVICE'
+        );
         throw new HttpException(
           `Newton API returned status ${response.status}: ${response.statusText}`,
           HttpStatus.BAD_REQUEST
