@@ -18,6 +18,10 @@ export class LoggerUtil {
             .replace(/\b[A-Z0-9_]*PASSWORD[A-Z0-9_]*\b/g, '[REDACTED]');
     }
 
+    private static sanitizeContext(context?: string): string | undefined {
+        return context ? '[REDACTED_CONTEXT]' : undefined;
+    }
+
     static getLogger() {
         if (!this.logger) {
             const customFormat = winston.format.printf(
@@ -72,8 +76,8 @@ export class LoggerUtil {
     ) {
         this.getLogger().error({
             message: this.sanitizeLogValue(message),
-            error: this.sanitizeLogValue(error),
-            context: this.sanitizeLogValue(context),
+            error: error ? '[REDACTED_ERROR]' : undefined,
+            context: this.sanitizeContext(context),
             user: this.sanitizeLogValue(user),
             timestamp: new Date().toISOString(),
         });
