@@ -6,6 +6,8 @@ import { Request, Response } from "express";
 import { CohortAcademicYearDto } from "src/cohortAcademicYear/dto/cohort-academicyear.dto";
 import { APIID } from "@utils/api-id.config";
 import APIResponse from "src/common/responses/response";
+import { KafkaService } from "src/kafka/kafka.service";
+import { LoggerUtil } from "src/common/logger/LoggerUtil";
 import { API_RESPONSES } from "@utils/response.messages";
 import { AcademicYearService } from "src/academicyears/academicyears.service";
 import { Cohort } from "src/cohort/entities/cohort.entity";
@@ -19,6 +21,7 @@ export class CohortAcademicYearService {
     private readonly cohortRepository: Repository<Cohort>,
     @InjectRepository(CohortAcademicYear)
     private readonly cohortAcademicYearRepository: Repository<CohortAcademicYear>,
+    private readonly kafkaService: KafkaService,
   ) { }
 
   async createCohortAcademicYear(tenantId: string, request: Request, cohortAcademicYearDto: CohortAcademicYearDto, response: Response) {
@@ -68,13 +71,27 @@ export class CohortAcademicYearService {
       const createdAcademicYear = await this.insertCohortAcademicYear(cohortAcademicYearDto.cohortId, cohortAcademicYearDto.academicYearId, cohortAcademicYearDto.createdBy, cohortAcademicYearDto.updatedBy);
 
       if (createdAcademicYear) {
-        return APIResponse.success(
+        const apiResponse = APIResponse.success(
           response,
           apiId,
           createdAcademicYear,
           HttpStatus.OK,
           API_RESPONSES.ADD_COHORT_TO_ACADEMIC_YEAR
         );
+
+        const enrichedData = {
+          ...createdAcademicYear,
+          tenantId,
+        };
+        // Publish cohort academic year created event to Kafka asynchronously - after response is sent to client
+        this.kafkaService.publishCohortAcademicYearEvent('created', enrichedData, enrichedData.cohortAcademicYearId)
+          .catch(error => LoggerUtil.error(
+            `Failed to publish cohort academic year created event to Kafka`,
+            `Error: ${error.message}`,
+            apiId
+          ));
+
+        return apiResponse;
       }
 
     } catch (error) {

@@ -494,7 +494,7 @@ ON CM."userId" = U."userId" ${whereCase}`;
     res: Response,
     tenantId: string,
     deviceId: string,
-    academicyearId: string
+    academicYearId: string
   ) {
     const apiId = APIID.COHORT_MEMBER_CREATE;
     try {
@@ -514,7 +514,7 @@ ON CM."userId" = U."userId" ${whereCase}`;
       }
       // check year is live or not
       const academicYear = await this.academicyearService.getActiveAcademicYear(
-        academicyearId,
+        academicYearId,
         tenantId
       );
 
@@ -529,7 +529,7 @@ ON CM."userId" = U."userId" ${whereCase}`;
       }
       //check this cohort exist this year or not
       const isExistAcademicYear = await this.findCohortAcademicYearId(
-        academicyearId,
+        academicYearId,
         cohortMembers
       );
       if (!isExistAcademicYear) {
@@ -541,13 +541,13 @@ ON CM."userId" = U."userId" ${whereCase}`;
           HttpStatus.NOT_FOUND
         );
       }
-      const cohortacAdemicyearId = isExistAcademicYear.cohortAcademicYearId;
+      const cohortAcademicYearId = isExistAcademicYear.cohortAcademicYearId;
       //check user is already exist in this cohort for this year or not
       const existrole = await this.cohortMembersRepository.find({
         where: {
           userId: cohortMembers.userId,
           cohortId: cohortMembers.cohortId,
-          cohortAcademicYearId: cohortacAdemicyearId,
+          cohortAcademicYearId: cohortAcademicYearId,
         },
       });
       if (existrole.length > 0) {
@@ -562,19 +562,35 @@ ON CM."userId" = U."userId" ${whereCase}`;
 
       cohortMembers.createdBy = loginUser;
       cohortMembers.updatedBy = loginUser;
-      cohortMembers.cohortAcademicYearId = cohortacAdemicyearId;
+      cohortMembers.cohortAcademicYearId = cohortAcademicYearId;
       // Create a new CohortMembers entity and populate it with cohortMembers data
       const savedCohortMember = await this.cohortMembersRepository.save(
         cohortMembers
       );
 
-      return APIResponse.success(
-        res,
-        apiId,
-        savedCohortMember,
-        HttpStatus.OK,
-        API_RESPONSES.COHORTMEMBER_CREATED_SUCCESSFULLY
-      );
+      if (savedCohortMember) {
+        const apiResponse = APIResponse.success(
+          res,
+          apiId,
+          savedCohortMember,
+          HttpStatus.OK,
+          API_RESPONSES.COHORTMEMBER_CREATED_SUCCESSFULLY
+        );
+
+        const enrichedData = {
+          ...savedCohortMember,
+          academicYearId,
+        }; 
+ 
+        this.kafkaService.publishCohortMemberEvent('created', enrichedData, enrichedData.cohortMembershipId).catch(error => {
+          LoggerUtil.error(
+            `Failed to publish cohort member created event to Kafka`,
+            `Error: ${error.message}`, 
+            enrichedData.cohortAcademicYearId
+          )
+        })
+        return apiResponse;
+      }
     } catch (e) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
