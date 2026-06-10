@@ -367,7 +367,6 @@ export class UserService {
     const apiId = APIID.USER_LIST;
     try {
       const findData = await this.findAllUserDetails(userSearchDto, tenantId, includeCustomFields);
-
       if (findData === false) {
         LoggerUtil.error(
           `${API_RESPONSES.NOT_FOUND}: ${request.url}`,
@@ -781,7 +780,6 @@ export class UserService {
   let { limit, offset, filters, exclude, sort } = userSearchDto;
   let excludeCohortIdes;
   let excludeUserIdes;
-
   const result = {
     totalCount: 0,
     getUserDetails: [],
@@ -825,20 +823,33 @@ export class UserService {
   // --- Filters ---
   if (filters && Object.keys(filters).length > 0) {
     const coreFields = await this.getCoreColumnNames();
-    const allCoreField = [...coreFields, 'fromDate', 'toDate', 'role', 'tenantId', 'name', 'tenantStatus'];
+    const allCoreField = [...coreFields, 'fromDate', 'toDate', 'role', 'tenantId', 'name', 'tenantStatus', 'search'];
 
     for (const [key, avalue] of Object.entries(filters)) {
       if (allCoreField.includes(key)) {
         const value = Array.isArray(avalue) ? avalue : avalue;
 
         switch (key) {
+          case "search": {
+            const searchTerm = Array.isArray(value) ? value[0] : value;
+            if (typeof searchTerm === "string" && searchTerm.trim() !== "") {
+              const sanitizedSearch = searchTerm.trim();
+              queryBuilder.andWhere(
+                `(U.name ILIKE :search OR U.username ILIKE :search)`,
+                { search: `%${sanitizedSearch}%` }
+              );
+            }
+            break;
+          }
+
           case "firstName":
-          case "name":
+          case "name": {
             const nameValue = Array.isArray(value) ? value[0] : value;
             queryBuilder.andWhere(`U.${key} ILIKE :${key}`, {
               [key]: `%${nameValue}%`,
             });
             break;
+          }
 
           case "username":
             if (Array.isArray(value) && value.every((item) => typeof item === "string")) {
@@ -2788,32 +2799,36 @@ export class UserService {
         );
       }
 
-      // Delete from User table
-      const userResult = await this.usersRepository.delete(userId);
+      // Delete dependent tables first
 
-      // Delete from CohortMembers table
-      const cohortMembersResult = await this.cohortMemberRepository.delete({
-        userId: userId,
+      await this.cohortMemberRepository.delete({
+        userId,
+      });
+      await this.userTenantMappingRepository.delete({
+        userId,
       });
 
-      // Delete from UserTenantMapping table
-      const userTenantMappingResult =
-        await this.userTenantMappingRepository.delete({ userId: userId });
+      await this.userRoleMappingRepository.delete({
+        userId,
+      });
 
-      // Delete from UserRoleMapping table
-      const userRoleMappingResult = await this.userRoleMappingRepository.delete(
-        { userId: userId }
-      );
-
-      // Delete from FieldValues table where ItemId matches userId
-      const fieldValuesResult = await this.fieldsValueRepository.delete({
+      await this.fieldsValueRepository.delete({
         itemId: userId,
       });
+
+      // Finally delete user
+      const userResult = await this.usersRepository.delete(userId);
 
       const keycloakResponse = await getKeycloakAdminToken();
       const token = keycloakResponse.data.access_token;
 
-      await this.axios.delete(`${KEYCLOAK}${KEYCLOAK_ADMIN}/${userId}`, {
+      const keycloakAdminUrl = new URL(KEYCLOAK_ADMIN, KEYCLOAK);
+      const keycloakDeleteUrl = new URL(
+        `${keycloakAdminUrl.pathname.replace(/\/$/, "")}/${encodeURIComponent(userId)}`,
+        keycloakAdminUrl
+      );
+
+      await this.axios.delete(keycloakDeleteUrl.toString(), {
         headers: {
           Authorization: `Bearer ${token}`,
         },

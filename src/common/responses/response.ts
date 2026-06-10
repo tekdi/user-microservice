@@ -27,7 +27,20 @@ export default class APIResponse {
       };
       return response.status(statusCode).json(resObj);
     } catch (e) {
-      return e;
+      console.error("APIResponse.success failed", e);
+      return response.status(500).json({
+        id,
+        ver: "1.0",
+        ts: new Date().toISOString(),
+        params: {
+          resmsgid: v4(),
+          status: "failed",
+          err: "INTERNAL_SERVER_ERROR",
+          errmsg: "An unexpected error occurred",
+        },
+        responseCode: 500,
+        result: {},
+      });
     }
   }
   public static error(
@@ -54,7 +67,20 @@ export default class APIResponse {
       };
       return response.status(statusCode).json(resObj);
     } catch (e) {
-      return e;
+      console.error("APIResponse.error failed", e);
+      return response.status(500).json({
+        id,
+        ver: "1.0",
+        ts: new Date().toISOString(),
+        params: {
+          resmsgid: v4(),
+          status: "failed",
+          err: "INTERNAL_SERVER_ERROR",
+          errmsg: "An unexpected error occurred",
+        },
+        responseCode: 500,
+        result: {},
+      });
     }
   }
 }

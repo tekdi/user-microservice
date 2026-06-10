@@ -115,6 +115,14 @@ export class setFilters {
     description: "Role",
   })
   tenantId: string;
+
+  @ApiPropertyOptional({
+    type: String,
+    description: "Search by name or username (partial match across both fields)",
+  })
+  @IsOptional()
+  @IsString()
+  search?: string;
 }
 export class excludeFields {
   @ApiProperty({

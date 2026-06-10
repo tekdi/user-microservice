@@ -1,10 +1,13 @@
+import validator from "validator";
 export class CustomFieldsValidation {
   static validate(fieldType: string, fieldValue: string) {
     let result = true;
     switch (fieldType) {
       case "email":
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (typeof fieldValue !== "string" || !emailRegex.test(fieldValue)) {
+        if (
+          typeof fieldValue !== "string" ||
+          !validator.isEmail(fieldValue)
+        ) {
           result = false;
         }
         break;

@@ -61,7 +61,7 @@ export class UploadS3Service {
   // }
 
 
-  async getPresignedUrl(filename: string, fileType: string, response, foldername?: string): Promise<string> {
+  async getPresignedUrl(filename: string, fileType: string, response, foldername?: string) {
     try {
       // Dynamic MIME type detection based on file extension
       const getMimeType = (extension: string): string => {
@@ -76,7 +76,7 @@ export class UploadS3Service {
           '.svg': 'image/svg+xml',
           '.tiff': 'image/tiff',
           '.ico': 'image/x-icon',
-          
+
           // Documents
           '.pdf': 'application/pdf',
           '.doc': 'application/msword',
@@ -86,7 +86,7 @@ export class UploadS3Service {
           '.ppt': 'application/vnd.ms-powerpoint',
           '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
           '.rtf': 'application/rtf',
-          
+
           // Text files
           '.txt': 'text/plain',
           '.csv': 'text/csv',
@@ -95,7 +95,7 @@ export class UploadS3Service {
           '.css': 'text/css',
           '.js': 'text/javascript',
           '.json': 'application/json',
-          
+
           // Videos
           '.mp4': 'video/mp4',
           '.avi': 'video/x-msvideo',
@@ -104,28 +104,28 @@ export class UploadS3Service {
           '.flv': 'video/x-flv',
           '.webm': 'video/webm',
           '.mkv': 'video/x-matroska',
-          
+
           // Audio
           '.mp3': 'audio/mpeg',
           '.wav': 'audio/wav',
           '.ogg': 'audio/ogg',
           '.m4a': 'audio/mp4',
           '.flac': 'audio/flac',
-          
+
           // Archives
           '.zip': 'application/zip',
           '.rar': 'application/vnd.rar',
           '.7z': 'application/x-7z-compressed',
           '.tar': 'application/x-tar',
           '.gz': 'application/gzip',
-          
+
           // Other common formats
           '.apk': 'application/vnd.android.package-archive',
           '.exe': 'application/octet-stream',
           '.dmg': 'application/octet-stream',
           '.iso': 'application/octet-stream',
         };
-        
+
         return mimeTypes[extension.toLowerCase()] || 'application/octet-stream';
       };
 
@@ -155,7 +155,7 @@ export class UploadS3Service {
         Expires: 24 * 60 * 60 // 24 hours instead of 5 minutes
       });
 
-      return APIResponse.success(
+      APIResponse.success(
         response,
         APIID.SIGNED_URL,
         result,

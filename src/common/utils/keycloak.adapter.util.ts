@@ -1,6 +1,7 @@
 import { AxiosError, AxiosRequestConfig, AxiosResponse } from "axios";
 import { API_RESPONSES } from "./response.messages";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
+import { isUUID } from "class-validator";
 const axios = require("axios");
 
 function getUserRole(userRoles: string[]) {
@@ -163,13 +164,15 @@ async function updateUserInKeyCloak(
   token: string
 ): Promise<UpdateUserResponse> {
   // Validate required parameters
-  if (!query.userId) {
+  if (!query.userId || !isUUID(query.userId)) {
     return {
       success: false,
       statusCode: 400,
-      message: "User cannot be updated, userId missing",
+      message: "User cannot be updated, invalid userId",
     };
   }
+
+  const safeUserId = encodeURIComponent(query.userId);
 
   // Prepare the payload for the update
   const data = JSON.stringify({
@@ -183,7 +186,7 @@ async function updateUserInKeyCloak(
   // Axios request configuration
   const config: AxiosRequestConfig = {
     method: "put",
-    url: `${process.env.KEYCLOAK}${process.env.KEYCLOAK_ADMIN}/${query.userId}`,
+    url: `${process.env.KEYCLOAK}${process.env.KEYCLOAK_ADMIN}/${safeUserId}`,
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
@@ -303,6 +306,16 @@ async function updateUserEnabledStatusInKeycloak(
     };
   }
 
+  if (!isUUID(query.userId)) {
+    return {
+      success: false,
+      statusCode: 400,
+      message: "User status cannot be updated, invalid userId",
+    };
+  }
+
+  const safeUserId = encodeURIComponent(query.userId);
+
   // Prepare the payload for the update
   const data = JSON.stringify({
     enabled: query.enabled,
@@ -311,7 +324,7 @@ async function updateUserEnabledStatusInKeycloak(
   // Axios request configuration
   const config: AxiosRequestConfig = {
     method: "put",
-    url: `${process.env.KEYCLOAK}${process.env.KEYCLOAK_ADMIN}/${query.userId}`,
+    url: `${process.env.KEYCLOAK}${process.env.KEYCLOAK_ADMIN}/${safeUserId}`,
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
