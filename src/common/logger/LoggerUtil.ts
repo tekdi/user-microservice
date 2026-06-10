@@ -14,7 +14,8 @@ export class LoggerUtil {
             .replace(/(secret|client_secret|api[_-]?key)\s*[:=]\s*[^,\s]+/gi, '$1=[REDACTED]')
             .replace(/(otp|code)\s*[:=]\s*[^,\s]+/gi, '$1=[REDACTED]')
             .replace(/(authorization|cookie)\s*[:=]\s*[^,\s]+/gi, '$1=[REDACTED]')
-            .replace(/\bUSER_RESET_PASSWORD\b/gi, '[REDACTED]');
+            .replace(/\bUSER_(RESET_PASSWORD_LINK|FORGOT_PASSWORD|RESET_PASSWORD)\b/gi, '[REDACTED]')
+            .replace(/\b[A-Z0-9_]*PASSWORD[A-Z0-9_]*\b/g, '[REDACTED]');
     }
 
     static getLogger() {
