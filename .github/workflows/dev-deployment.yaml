@@ -3,8 +3,6 @@ on:
   push:
     branches:
       - sdbv_rbac_changes
-permissions:
-  contents: read
 jobs:
    deploy:
     runs-on: ubuntu-latest

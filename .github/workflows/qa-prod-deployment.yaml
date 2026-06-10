@@ -11,9 +11,6 @@ on:
         description: "Image tag to deploy"
         required: true
 
-permissions:
-  contents: read
-
 jobs:
   deploy:
     name: Deploy Backend Service

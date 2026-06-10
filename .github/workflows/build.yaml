@@ -14,9 +14,6 @@ on:
         description: "Image tag to deploy"
         required: true
 
-permissions:
-  contents: read
-
 jobs:
   build:
     name: Build and Push Docker Image to AWS ECR

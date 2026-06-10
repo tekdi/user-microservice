@@ -128,7 +128,7 @@ export class AuthService {
   async refreshToken(
     refreshToken: string,
     response: Response
-  ): Promise<LoginResponse> {
+  ) {
     const apiId = APIID.REFRESH;
     const { access_token, expires_in, refresh_token, refresh_expires_in } =
       await this.keycloakService.refreshToken(refreshToken).catch(() => {
