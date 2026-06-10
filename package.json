@@ -79,6 +79,7 @@
     "templates.js": "^0.3.11",
     "typeorm": "^0.3.27",
     "uuid": "^14.0.0",
+    "validator": "^13.15.35",
     "webpack": "^5.107.2",
     "winston": "^3.18.3"
   },
