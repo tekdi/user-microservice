@@ -81,7 +81,7 @@ export class LoggerUtil {
     static warn(message: string, context?: string) {
         this.getLogger().warn({
             message: this.sanitizeLogValue(message),
-            context: this.sanitizeLogValue(context),
+            context: context ? '[REDACTED_CONTEXT]' : undefined,
             timestamp: new Date().toISOString(),
         });
     }
