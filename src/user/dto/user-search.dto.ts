@@ -121,6 +121,7 @@ export class setFilters {
     description: "Search by name or username (partial match across both fields)",
   })
   @IsOptional()
+  @IsString()
   search?: string;
 }
 export class excludeFields {
