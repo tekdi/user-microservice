@@ -367,7 +367,7 @@ export class UserService {
     const apiId = APIID.USER_LIST;
     try {
       const findData = await this.findAllUserDetails(userSearchDto, tenantId, includeCustomFields);
-
+      console.log(findData, 'findData')
       if (findData === false) {
         LoggerUtil.error(
           `${API_RESPONSES.NOT_FOUND}: ${request.url}`,
@@ -781,7 +781,7 @@ export class UserService {
   let { limit, offset, filters, exclude, sort } = userSearchDto;
   let excludeCohortIdes;
   let excludeUserIdes;
-
+  console.log('Shubham')
   const result = {
     totalCount: 0,
     getUserDetails: [],
@@ -825,20 +825,30 @@ export class UserService {
   // --- Filters ---
   if (filters && Object.keys(filters).length > 0) {
     const coreFields = await this.getCoreColumnNames();
-    const allCoreField = [...coreFields, 'fromDate', 'toDate', 'role', 'tenantId', 'name', 'tenantStatus'];
+    const allCoreField = [...coreFields, 'fromDate', 'toDate', 'role', 'tenantId', 'name', 'tenantStatus', 'search'];
 
     for (const [key, avalue] of Object.entries(filters)) {
       if (allCoreField.includes(key)) {
         const value = Array.isArray(avalue) ? avalue : avalue;
 
         switch (key) {
+          case "search": {
+            const searchTerm = Array.isArray(value) ? value[0] : value;
+            queryBuilder.andWhere(
+              `(U.name ILIKE :search OR U.username ILIKE :search)`,
+              { search: `%${searchTerm}%` }
+            );
+            break;
+          }
+
           case "firstName":
-          case "name":
+          case "name": {
             const nameValue = Array.isArray(value) ? value[0] : value;
             queryBuilder.andWhere(`U.${key} ILIKE :${key}`, {
               [key]: `%${nameValue}%`,
             });
             break;
+          }
 
           case "username":
             if (Array.isArray(value) && value.every((item) => typeof item === "string")) {
