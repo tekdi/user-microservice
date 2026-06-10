@@ -13,7 +13,8 @@ export class LoggerUtil {
             .replace(/(token|access_token|refresh_token|id_token)\s*[:=]\s*[^,\s]+/gi, '$1=[REDACTED]')
             .replace(/(secret|client_secret|api[_-]?key)\s*[:=]\s*[^,\s]+/gi, '$1=[REDACTED]')
             .replace(/(otp|code)\s*[:=]\s*[^,\s]+/gi, '$1=[REDACTED]')
-            .replace(/(authorization|cookie)\s*[:=]\s*[^,\s]+/gi, '$1=[REDACTED]');
+            .replace(/(authorization|cookie)\s*[:=]\s*[^,\s]+/gi, '$1=[REDACTED]')
+            .replace(/\bUSER_RESET_PASSWORD\b/gi, '[REDACTED]');
     }
 
     static getLogger() {
