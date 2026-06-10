@@ -197,6 +197,8 @@ export class UserController {
     @Res() response: Response,
     @Body() userSearchDto: UserSearchDto
   ) {
+
+    console.log(`[USER LIST] filters received: ${JSON.stringify(userSearchDto.filters)}`, APIID.USER_LIST);
     const tenantId = headers["tenantid"];
     const shouldIncludeCustomFields = userSearchDto.includeCustomFields !== "false";
     return await this.userService
