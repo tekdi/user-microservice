@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, InternalServerErrorException } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { AutomaticMember } from './entity/automatic-member.entity';
@@ -38,7 +38,7 @@ export class AutomaticMemberService {
       const newMember = this.automaticMemberRepository.create(dto);
       return this.automaticMemberRepository.save(newMember);
     } catch (error) {
-      return error
+      throw new InternalServerErrorException('Failed to create automatic member.');
     }
   }
 
