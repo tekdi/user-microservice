@@ -2813,7 +2813,13 @@ export class UserService {
       const keycloakResponse = await getKeycloakAdminToken();
       const token = keycloakResponse.data.access_token;
 
-      await this.axios.delete(`${KEYCLOAK}${KEYCLOAK_ADMIN}/${userId}`, {
+      const keycloakAdminUrl = new URL(KEYCLOAK_ADMIN, KEYCLOAK);
+      const keycloakDeleteUrl = new URL(
+        `${keycloakAdminUrl.pathname.replace(/\/$/, "")}/${encodeURIComponent(userId)}`,
+        keycloakAdminUrl
+      );
+
+      await this.axios.delete(keycloakDeleteUrl.toString(), {
         headers: {
           Authorization: `Bearer ${token}`,
         },
