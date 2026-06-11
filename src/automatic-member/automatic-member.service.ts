@@ -17,7 +17,7 @@ export class AutomaticMemberService {
 
   async create(dto: CreateAutomaticMemberDto) {
     try {
-      const checkExistUser = await this.userRepository.find({
+      const checkExistUser = await this.userRepository.findOne({
         where: {
           userId: dto.userId,
         },

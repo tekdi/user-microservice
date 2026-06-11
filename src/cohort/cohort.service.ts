@@ -620,7 +620,6 @@ export class CohortService {
           } else if (existingCohorDetails?.type) {
             contextType = [existingCohorDetails.type];
           }
-          console.log("contextType", contextType);
           const allCustomFields = await this.fieldsService.findCustomFields(
             "COHORT",
             contextType
