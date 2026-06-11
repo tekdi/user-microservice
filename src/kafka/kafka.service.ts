@@ -492,4 +492,50 @@ export class KafkaService implements OnModuleInit, OnModuleDestroy {
     await this.publishMessage(topic, payload, cohortMembershipId);
     this.logger.log(`Cohort member ${eventType} event published for cohortMembershipId ${cohortMembershipId}`);
   }
+
+  /**
+   * Publish a cohort-academic-year-related event to Kafka
+   * 
+   * @param eventType - The type of cohort academic year event (created, updated, deleted)
+   * @param cohortAcademicYearData - The cohort academic year data to include in the event
+   * @param cohortAcademicYearId - The ID of the cohort academic year (used as the message key)
+   */
+  async publishCohortAcademicYearEvent(
+    eventType: 'created' | 'updated' | 'deleted',
+    cohortAcademicYearData: any,
+    cohortAcademicYearId: string
+  ): Promise<void> {
+    if (!this.isKafkaEnabled) {
+      this.logger.warn('Kafka is disabled. Skipping cohort academic year event publish.');
+      return;
+    }
+    
+    const topic = this.configService.get<string>('KAFKA_TOPIC', 'user-topic');
+
+    let fullEventType = '';
+    switch (eventType) {
+      case 'created':
+        fullEventType = 'COHORT_ACADEMIC_YEAR_CREATED';
+        break;
+      case 'updated':
+        fullEventType = 'COHORT_ACADEMIC_YEAR_UPDATED';
+        break;
+      case 'deleted':
+        fullEventType = 'COHORT_ACADEMIC_YEAR_DELETED';
+        break;
+      default:
+        fullEventType = 'UNKNOWN_EVENT';
+        break;
+    }
+
+    const payload = {
+      eventType: fullEventType,
+      timestamp: new Date().toISOString(),
+      cohortAcademicYearId,
+      data: cohortAcademicYearData
+    };
+
+    await this.publishMessage(topic, payload, cohortAcademicYearId);
+    this.logger.log(`Cohort academic year ${eventType} event published for cohortAcademicYearId ${cohortAcademicYearId}`);
+  }
 }
