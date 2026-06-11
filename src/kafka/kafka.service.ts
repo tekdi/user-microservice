@@ -5,6 +5,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { FieldValues } from '../fields/entities/fields-values.entity';
 
+export type CohortEventType = 'created' | 'updated' | 'deleted';
+
 @Injectable()
 export class KafkaService implements OnModuleInit, OnModuleDestroy {
   private readonly kafka: Kafka;
@@ -374,7 +376,7 @@ export class KafkaService implements OnModuleInit, OnModuleDestroy {
    * @param cohortData - The cohort data to include in the event
    * @param cohortId - The ID of the cohort (used as the message key)
    */
-  async publishCohortEvent(eventType: 'created' | 'updated' | 'deleted', cohortData: any, cohortId: string): Promise<void> {
+  async publishCohortEvent(eventType: CohortEventType, cohortData: any, cohortId: string): Promise<void> {
     if (!this.isKafkaEnabled) {
       this.logger.warn('Kafka is disabled. Skipping cohort event publish.');
       return; // Do nothing if Kafka is disabled
@@ -455,7 +457,7 @@ export class KafkaService implements OnModuleInit, OnModuleDestroy {
    * @param cohortMembershipId - The ID of the cohort membership (message key)
    */
   async publishCohortMemberEvent(
-    eventType: 'created' | 'updated' | 'deleted',
+    eventType: CohortEventType,
     cohortMemberData: any,
     cohortMembershipId: string
   ): Promise<void> {

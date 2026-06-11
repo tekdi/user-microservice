@@ -25,7 +25,6 @@ import { CohortMembersService } from "src/cohortMembers/cohortMembers.service";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
 import { AutomaticMemberService } from "src/automatic-member/automatic-member.service";
 import { KafkaService } from "src/kafka/kafka.service";
-import { Console } from "console";
 
 @Injectable()
 export class CohortService {
@@ -50,22 +49,6 @@ export class CohortService {
 
   public async getCohortsDetails(requiredData, res) {
     const apiId = APIID.COHORT_READ;
-
-    // const cohortAcademicYear: any[] =
-    //   await this.cohortMembersService.isCohortExistForYear(
-    //     requiredData.academicYearId,
-    //     requiredData.cohortId
-    //   );
-
-    // if (cohortAcademicYear.length !== 1) {
-    //   return APIResponse.error(
-    //     res,
-    //     apiId,
-    //     "BAD_REQUEST",
-    //     API_RESPONSES.COHORT_NOT_IN_ACADEMIC_YEAR,
-    //     HttpStatus.BAD_REQUEST
-    //   );
-    // }
 
     try {
       const cohorts = await this.cohortRepository.find({
@@ -630,11 +613,14 @@ export class CohortService {
           cohortUpdateDto.customFields &&
           cohortUpdateDto.customFields.length > 0
         ) {
-          const contextType = cohortUpdateDto.type
-            ? [cohortUpdateDto.type]
-            : existingCohorDetails?.type
-              ? [existingCohorDetails.type]
-              : [];
+          let contextType: string[] = [];
+
+          if (cohortUpdateDto.type) {
+            contextType = [cohortUpdateDto.type];
+          } else if (existingCohorDetails?.type) {
+            contextType = [existingCohorDetails.type];
+          }
+          console.log("contextType", contextType);
           const allCustomFields = await this.fieldsService.findCustomFields(
             "COHORT",
             contextType
@@ -1172,7 +1158,13 @@ export class CohortService {
   }
 
   public async automaticMemberCohortHierarchy(requiredData, academicYearId) {
-    const { condition: { value, fieldId } } = requiredData?.rules;
+
+    if (!requiredData?.rules?.condition) {
+      throw new Error('Condition data is missing.');
+    }
+    const {
+      condition: { value, fieldId },
+    } = requiredData.rules;
 
     // Pass fieldId to getSearchFieldValueData
     let filledValues = await this.fieldsService.getSearchFieldValueData(

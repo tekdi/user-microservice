@@ -5,9 +5,6 @@ import { AutomaticMember } from './entity/automatic-member.entity';
 import { CreateAutomaticMemberDto } from './dto/create-automatic-member.dto';
 import { UpdateAutomaticMemberDto } from './dto/update-automatic-member.dto';
 import { User } from 'src/user/entities/user-entity';
-// Type aliases - avoiding deprecated AWS SDK v2 types
-type String = string;
-type UUID = string;
 
 @Injectable()
 export class AutomaticMemberService {
@@ -19,12 +16,12 @@ export class AutomaticMemberService {
   ) { }
 
   async create(dto: CreateAutomaticMemberDto) {
-    try {      
+    try {
       const checkExistUser = await this.userRepository.find({
-          where: {
-            userId: dto.userId,
-          },
-        });
+        where: {
+          userId: dto.userId,
+        },
+      });
 
       if (!checkExistUser) {
         throw new ConflictException('User id is not Valid.');
@@ -34,10 +31,11 @@ export class AutomaticMemberService {
       if (exists.length > 0 && exists[0].isActive === true) {
         throw new ConflictException('AutomaticMember already exists for this user and tenant.');
       }
-      
+
       const newMember = this.automaticMemberRepository.create(dto);
       return this.automaticMemberRepository.save(newMember);
     } catch (error) {
+      console.log(error);
       throw new InternalServerErrorException('Failed to create automatic member.');
     }
   }
@@ -60,8 +58,8 @@ export class AutomaticMemberService {
   }
 
   async checkMemberById(id: string) {
-    const member = await this.automaticMemberRepository.findOne({ where: { userId:id,isActive:true } });
-  
+    const member = await this.automaticMemberRepository.findOne({ where: { userId: id, isActive: true } });
+
 
     if (!member) {
       return false;
@@ -70,7 +68,7 @@ export class AutomaticMemberService {
     return member;
   }
 
-  async checkAutomaticMemberExists(userId: UUID, tenantId: UUID, assignTo: String) {
+  async checkAutomaticMemberExists(userId: string, tenantId: string, assignTo: string) {
     const query = `
     SELECT * FROM "AutomaticMember" "automaticMember"
     WHERE "automaticMember"."userId" = $1
@@ -87,7 +85,7 @@ export class AutomaticMemberService {
     ]);
   }
 
-  async getUserbyUserIdAndTenantId(userId: UUID, tenantId: UUID, status: boolean): Promise<AutomaticMember> {
+  async getUserbyUserIdAndTenantId(userId: string, tenantId: string, status: boolean): Promise<AutomaticMember> {
     return await this.automaticMemberRepository.findOne({
       where: { userId: userId, tenantId: tenantId, isActive: status },
     });

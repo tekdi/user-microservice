@@ -1,4 +1,4 @@
-import { ConsoleLogger, HttpStatus, Injectable } from "@nestjs/common";
+import { HttpStatus, Injectable } from "@nestjs/common";
 import { FieldsDto } from "./dto/fields.dto";
 import {
   FieldsOptionsSearchDto,
@@ -19,12 +19,11 @@ import { readFileSync } from "fs";
 import path, { join } from "path";
 import { FieldFactory } from "./fieldValidators/fieldFactory";
 import { FieldsUpdateDto } from "./dto/fields-update.dto";
-import { SchemaField, Option } from "./fieldValidators/fieldClass";
+import { SchemaField } from "./fieldValidators/fieldClass";
 import jwt_decode from "jwt-decode";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
 import { API_RESPONSES } from "@utils/response.messages";
-import { FieldValuesDeleteDto } from "./dto/field-values-delete.dto";
-import { check } from "prettier";
+import { FieldValuesDeleteDto } from "./dto/field-values-delete.dto"
 @Injectable()
 export class FieldsService {
   constructor(
