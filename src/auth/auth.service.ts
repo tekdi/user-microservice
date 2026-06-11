@@ -113,6 +113,7 @@ export class AuthService {
             );
           });
       }
+      return apiResponse;
     } catch (e) {
       const errorMessage = e?.message || "Something went wrong";
       return APIResponse.error(
