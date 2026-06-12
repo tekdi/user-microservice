@@ -5,9 +5,6 @@ import { AppService } from "./app.service";
 // import { MulterModule } from "@nestjs/platform-express/multer";
 // Below modules not in use for Shiksha 2.0
 
-/*
-import { ConfigurationModule } from "./configs/configuration.module";
-*/
 // In use for Shiksha 2.0
 import { DatabaseModule } from "./common/database.module";
 import { AuthModule } from "./auth/auth.module";

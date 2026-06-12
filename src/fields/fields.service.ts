@@ -1,4 +1,4 @@
-import { ConsoleLogger, HttpStatus, Injectable } from "@nestjs/common";
+import { HttpStatus, Injectable } from "@nestjs/common";
 import { FieldsDto } from "./dto/fields.dto";
 import {
   FieldsOptionsSearchDto,
@@ -19,12 +19,11 @@ import { readFileSync } from "fs";
 import path, { join } from "path";
 import { FieldFactory } from "./fieldValidators/fieldFactory";
 import { FieldsUpdateDto } from "./dto/fields-update.dto";
-import { SchemaField, Option } from "./fieldValidators/fieldClass";
+import { SchemaField } from "./fieldValidators/fieldClass";
 import jwt_decode from "jwt-decode";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
 import { API_RESPONSES } from "@utils/response.messages";
-import { FieldValuesDeleteDto } from "./dto/field-values-delete.dto";
-import { check } from "prettier";
+import { FieldValuesDeleteDto } from "./dto/field-values-delete.dto"
 @Injectable()
 export class FieldsService {
   constructor(
@@ -118,104 +117,76 @@ export class FieldsService {
   //validate cohort Create/update API Custom field
   public async validateCustomField(cohortCreateDto, contextType) {
     const tenantId = cohortCreateDto?.tenantId;
-    const fieldValues = cohortCreateDto ? cohortCreateDto.customFields : [];
-    const encounteredKeys = [];
+    const fieldValues = cohortCreateDto?.customFields || [];
+    const encounteredKeys = new Set();
     const invalidateFields = [];
     const duplicateFieldKeys = [];
-    const error = "";
 
     for (const fieldsData of fieldValues) {
-      const fieldId = fieldsData["fieldId"];
+      const fieldId = fieldsData.fieldId;
       const getFieldDetails: any = await this.getFieldByIds(fieldId);
 
-      if (getFieldDetails == null) {
-        return {
-          isValid: false,
-          error: `Field not found ${fieldId}`,
-        };
+      if (!getFieldDetails) {
+        return { isValid: false, error: `Field not found ${fieldId}` };
       }
 
-      if (encounteredKeys.includes(fieldId)) {
-        duplicateFieldKeys.push(`${fieldId} - ${getFieldDetails["name"]}`);
+      if (encounteredKeys.has(fieldId)) {
+        duplicateFieldKeys.push(`${fieldId} - ${getFieldDetails.name}`);
       } else {
-        encounteredKeys.push(fieldId);
+        encounteredKeys.add(fieldId);
       }
-      const fieldAttributes = getFieldDetails?.fieldAttributes || {};
-      // getFieldDetails["fieldAttributes"] = fieldAttributes[tenantId] || fieldAttributes["default"];
-      getFieldDetails["fieldAttributes"] = fieldAttributes;
 
-      if (
-        (getFieldDetails.type == "checkbox" ||
-          getFieldDetails.type == "drop_down" ||
-          getFieldDetails.type == "radio") &&
-        getFieldDetails.sourceDetails.source == "table"
-      ) {
-        let fieldValue = fieldsData["value"][0];
+      getFieldDetails.fieldAttributes = getFieldDetails?.fieldAttributes || {};
+
+      const validTypes = ["checkbox", "drop_down", "radio"];
+      if (validTypes.includes(getFieldDetails.type) && getFieldDetails.sourceDetails?.source === "table") {
+        const fieldValue = fieldsData.value[0];
         const getOption = await this.findDynamicOptions(
           getFieldDetails.sourceDetails.table,
-          `"${getFieldDetails?.sourceDetails?.table}_id"='${fieldValue}'`
+          `"${getFieldDetails.sourceDetails.table}_id"='${fieldValue}'`
         );
-        const transformedFieldParams = {
-          options: getOption.flatMap((param) => {
-            return Object.keys(param)
+        
+        getFieldDetails.fieldParams = {
+          options: getOption.flatMap((param) => 
+            Object.keys(param)
               .filter((key) => key.endsWith("_id"))
-              .map((idKey) => {
-                const nameKey = idKey.replace("_id", "_name");
-                return {
-                  value: param[idKey],
-                  label: param[nameKey] || "Unknown",
-                };
-              });
-          }),
+              .map((idKey) => ({
+                value: param[idKey],
+                label: param[idKey.replace("_id", "_name")] || "Unknown",
+              }))
+          ),
         };
-        getFieldDetails["fieldParams"] = transformedFieldParams;
       } else {
-        getFieldDetails["fieldParams"] = getFieldDetails?.fieldParams ?? {};
+        getFieldDetails.fieldParams = getFieldDetails?.fieldParams || {};
       }
-      const checkValidation = this.validateFieldValue(
-        getFieldDetails,
-        fieldsData["value"]
-      );
-      if (typeof checkValidation === "object" && "error" in checkValidation) {
-        invalidateFields.push(
-          `${fieldId}: ${getFieldDetails["name"]} - ${checkValidation?.error?.message}`
-        );
+
+      const checkValidation: any = this.validateFieldValue(getFieldDetails, fieldsData.value);
+
+      if (checkValidation?.error) {
+        invalidateFields.push(`${fieldId}: ${getFieldDetails.name} - ${checkValidation.error.message}`);
       }
     }
 
-    // Validation for duplicate fields
     if (duplicateFieldKeys.length > 0) {
-      return {
-        isValid: false,
-        error: `Duplicate fieldId detected: ${duplicateFieldKeys}`,
-      };
+      return { isValid: false, error: `Duplicate fieldId detected: ${duplicateFieldKeys}` };
     }
 
-    // Validation for fields values
     if (invalidateFields.length > 0) {
-      return {
-        isValid: false,
-        error: `Invalid fields found: ${invalidateFields}`,
-      };
+      return { isValid: false, error: `Invalid fields found: ${invalidateFields}` };
     }
-    const context = "COHORT";
-    const getFieldIds = await this.getFieldIds(context, contextType);
+
+    const getFieldIds = await this.getFieldIds("COHORT", contextType);
     const validFieldIds = new Set(getFieldIds.map((field) => field.fieldId));
-    const invalidFieldIds = cohortCreateDto.customFields
+    
+    const invalidFieldIds = fieldValues
       .filter((fieldValue) => !validFieldIds.has(fieldValue.fieldId))
       .map((fieldValue) => fieldValue.fieldId);
 
     if (invalidFieldIds.length > 0) {
-      return {
-        isValid: false,
-        error: `The following fields are not valid for this user: ${invalidFieldIds.join(
-          ", "
-        )}.`,
-      };
+      return { isValid: false, error: `The following fields are not valid for this user: ${invalidFieldIds.join(", ")}.` };
     }
-    return {
-      isValid: true,
-    };
+
+    return { isValid: true };
   }
   //validate custom fields by context and contextType
   public async validateCustomFieldByContext(
@@ -223,95 +194,65 @@ export class FieldsService {
     context: string,
     contextType: string
   ) {
-    const fieldValues = cohortCreateDto ? cohortCreateDto.customFields : [];
-    const encounteredKeys = [];
+    const fieldValues = cohortCreateDto?.customFields || [];
+    const encounteredKeys = new Set();
     const invalidateFields = [];
     const duplicateFieldKeys = [];
-    const error = "";
 
     for (const fieldsData of fieldValues) {
-      const fieldId = fieldsData["fieldId"];
+      const fieldId = fieldsData.fieldId;
       const getFieldDetails: any = await this.getFieldByIds(fieldId);
 
-      if (getFieldDetails == null) {
-        return {
-          isValid: false,
-          error: `Field not found`,
-        };
+      if (!getFieldDetails) {
+        return { isValid: false, error: `Field not found` };
       }
 
-      if (encounteredKeys.includes(fieldId)) {
-        duplicateFieldKeys.push(`${fieldId} - ${getFieldDetails["name"]}`);
+      if (encounteredKeys.has(fieldId)) {
+        duplicateFieldKeys.push(`${fieldId} - ${getFieldDetails.name}`);
       } else {
-        encounteredKeys.push(fieldId);
+        encounteredKeys.add(fieldId);
       }
 
-      if (
-        (getFieldDetails.type == "checkbox" ||
-          getFieldDetails.type == "drop_down" ||
-          getFieldDetails.type == "radio") &&
-        getFieldDetails.sourceDetails.source == "table"
-      ) {
-        const getOption = await this.findDynamicOptions(
-          getFieldDetails.sourceDetails.table
-        );
-        const transformedFieldParams = {
+      const validTypes = ["checkbox", "drop_down", "radio"];
+      if (validTypes.includes(getFieldDetails.type) && getFieldDetails.sourceDetails?.source === "table") {
+        const getOption = await this.findDynamicOptions(getFieldDetails.sourceDetails.table);
+        getFieldDetails.fieldParams = {
           options: getOption.map((param) => ({
             value: param.value,
             label: param.label,
           })),
         };
-        getFieldDetails["fieldParams"] = transformedFieldParams;
       } else {
-        getFieldDetails["fieldParams"] = getFieldDetails?.fieldParams ?? {};
+        getFieldDetails.fieldParams = getFieldDetails?.fieldParams || {};
       }
 
-      const checkValidation = this.validateFieldValue(
-        getFieldDetails,
-        fieldsData["value"]
-      );
+      const checkValidation: any = this.validateFieldValue(getFieldDetails, fieldsData.value);
 
-      if (typeof checkValidation === "object" && "error" in checkValidation) {
-        invalidateFields.push(
-          `${fieldId}: ${getFieldDetails["name"]} - ${checkValidation?.error?.message}`
-        );
+      if (checkValidation?.error) {
+        invalidateFields.push(`${fieldId}: ${getFieldDetails.name} - ${checkValidation.error.message}`);
       }
     }
 
-    // Validation for duplicate fields
     if (duplicateFieldKeys.length > 0) {
-      return {
-        isValid: false,
-        error: `Duplicate fieldId detected: ${duplicateFieldKeys}`,
-      };
+      return { isValid: false, error: `Duplicate fieldId detected: ${duplicateFieldKeys}` };
     }
 
-    // Validation for fields values
     if (invalidateFields.length > 0) {
-      return {
-        isValid: false,
-        error: `Invalid fields found: ${invalidateFields}`,
-      };
+      return { isValid: false, error: `Invalid fields found: ${invalidateFields}` };
     }
-    const getFieldIds = await this.getFieldIds(context, contextType);
 
+    const getFieldIds = await this.getFieldIds(context, contextType);
     const validFieldIds = new Set(getFieldIds.map((field) => field.fieldId));
 
-    const invalidFieldIds = cohortCreateDto.customFields
+    const invalidFieldIds = fieldValues
       .filter((fieldValue) => !validFieldIds.has(fieldValue.fieldId))
       .map((fieldValue) => fieldValue.fieldId);
 
     if (invalidFieldIds.length > 0) {
-      return {
-        isValid: false,
-        error: `The following fields are not valid for this user: ${invalidFieldIds.join(
-          ", "
-        )}.`,
-      };
+      return { isValid: false, error: `The following fields are not valid for this user: ${invalidFieldIds.join(", ")}.` };
     }
-    return {
-      isValid: true,
-    };
+
+    return { isValid: true };
   }
 
   async getFieldData(whereClause: any, tenantId?: string): Promise<any> {
@@ -342,23 +283,17 @@ export class FieldsService {
   async createFields(request: any, fieldsDto: FieldsDto, response: Response) {
     const apiId = APIID.FIELDS_CREATE;
     try {
-      const fieldsData: any = {}; // Define an empty object to store field data
+      const fieldsData: any = {};
       const decoded: any = jwt_decode(request.headers.authorization);
       const createdBy = decoded?.sub;
       const updatedBy = decoded?.sub;
 
-      Object.keys(fieldsDto).forEach((e) => {
-        if (fieldsDto[e] && fieldsDto[e] !== "") {
-          if (e === "render") {
-            fieldsData[e] = fieldsDto[e];
-          } else if (Array.isArray(fieldsDto[e])) {
-            fieldsData[e] = JSON.stringify(fieldsDto[e]);
-          } else {
-            fieldsData[e] = fieldsDto[e];
-          }
+      for (const [key, val] of Object.entries(fieldsDto)) {
+        if (val && val !== "") {
+          fieldsData[key] = Array.isArray(val) && key !== "render" ? JSON.stringify(val) : val;
         }
-      });
-      fieldsData["required"] = true;
+      }
+      fieldsData.required = true;
 
       const checkFieldExist = await this.fieldsRepository.find({
         where: {
@@ -367,6 +302,7 @@ export class FieldsService {
           name: fieldsData.name,
         },
       });
+
       if (checkFieldExist.length > 0) {
         APIResponse.error(
           response,
@@ -379,70 +315,57 @@ export class FieldsService {
 
       const storeWithoutControllingField = [];
       let error = "";
-      if (
-        fieldsData.sourceDetails &&
-        fieldsData.sourceDetails.source == "table" &&
-        fieldsData.fieldParams
-      ) {
+
+      if (fieldsData.sourceDetails?.source === "table" && fieldsData.fieldParams?.options) {
         for (const sourceFieldName of fieldsData.fieldParams.options) {
-          if (
-            fieldsData.dependsOn &&
-            (!sourceFieldName["controllingfieldfk"] ||
-              sourceFieldName["controllingfieldfk"] === "")
-          ) {
-            storeWithoutControllingField.push(sourceFieldName["name"]);
+          const controllingfk = sourceFieldName.controllingfieldfk;
+
+          if (fieldsData.dependsOn && !controllingfk) {
+            storeWithoutControllingField.push(sourceFieldName.name);
           }
 
           const query = `SELECT "name", "value" 
           FROM public.${fieldsData.sourceDetails.table} 
-          WHERE value = '${sourceFieldName["value"]}' 
+          WHERE value = '${sourceFieldName.value}' 
           GROUP BY  "name", "value"`;
 
-          const checkSourceData = await this.fieldsValuesRepository.query(
-            query
-          );
+          const checkSourceData = await this.fieldsValuesRepository.query(query);
+          const isCreate = fieldsData.fieldParams.isCreate;
 
-          //If code is not exist in db
           if (checkSourceData.length === 0) {
-            //If code is not exist in db and isCreate flag is false
-            if (!fieldsData.fieldParams.isCreate) {
+            if (!isCreate) {
               return APIResponse.error(
                 response,
                 apiId,
                 "BAD_REQUEST",
-                `Error: This code '${sourceFieldName["value"]}' does not exist in the '${fieldsData.sourceDetails.table}' table.`,
+                `Error: This code '${sourceFieldName.value}' does not exist in the '${fieldsData.sourceDetails.table}' table.`,
                 HttpStatus.BAD_REQUEST
               );
             }
-
-            // If not exist and isCreate is true, create the record
             await this.createSourceDetailsTableFields(
               fieldsData.sourceDetails.table,
-              sourceFieldName["name"],
-              sourceFieldName["value"],
+              sourceFieldName.name,
+              sourceFieldName.value,
               createdBy,
-              sourceFieldName["controllingfieldfk"],
+              controllingfk,
               fieldsData.dependsOn
             );
           } else {
-            //If code is exist in db and isCreate flag is true
-            if (fieldsData.fieldParams.isCreate) {
+            if (isCreate) {
               return APIResponse.error(
                 response,
                 apiId,
                 "CONFLICT",
-                `Error: This code '${sourceFieldName["value"]}' already exists for '${checkSourceData[0].name}' in the '${fieldsData.sourceDetails.table}' table.`,
+                `Error: This code '${sourceFieldName.value}' already exists for '${checkSourceData[0].name}' in the '${fieldsData.sourceDetails.table}' table.`,
                 HttpStatus.CONFLICT
               );
             }
-
-            // If exist and isCreate is false, update the record
             await this.updateSourceDetailsTableFields(
               fieldsData.sourceDetails.table,
-              sourceFieldName["name"],
-              sourceFieldName["value"],
+              sourceFieldName.name,
+              sourceFieldName.value,
               updatedBy,
-              sourceFieldName["controllingfieldfk"]
+              controllingfk
             );
           }
         }
@@ -492,21 +415,15 @@ export class FieldsService {
       const createdBy = decoded?.sub;
       const updatedBy = decoded?.sub;
 
-      const fieldsData: any = {}; // Define an empty object to store field data
+      const fieldsData: any = {};
       const storeWithoutControllingField = [];
       let error = "";
 
-      Object.keys(fieldsUpdateDto).forEach((e) => {
-        if (fieldsUpdateDto[e] && fieldsUpdateDto[e] !== "") {
-          if (e === "render") {
-            fieldsData[e] = fieldsUpdateDto[e];
-          } else if (Array.isArray(fieldsUpdateDto[e])) {
-            fieldsData[e] = JSON.stringify(fieldsUpdateDto[e]);
-          } else {
-            fieldsData[e] = fieldsUpdateDto[e];
-          }
+      for (const [key, val] of Object.entries(fieldsUpdateDto)) {
+        if (val && val !== "") {
+          fieldsData[key] = Array.isArray(val) && key !== "render" ? JSON.stringify(val) : val;
         }
-      });
+      }
 
       const getSourceDetails = await this.fieldsRepository.findOne({
         where: { fieldId: fieldId },
@@ -514,105 +431,75 @@ export class FieldsService {
 
       fieldsData["type"] = fieldsData.type || getSourceDetails.type;
 
-      //Update field options
-      //Update data in source table
-      if (
-        getSourceDetails.sourceDetails &&
-        fieldsData.fieldParams &&
-        fieldsData.fieldParams.options &&
-        getSourceDetails.sourceDetails.source == "table"
-      ) {
+      if (getSourceDetails.sourceDetails?.source === "table" && fieldsData.fieldParams?.options) {
         for (const sourceFieldName of fieldsData.fieldParams.options) {
-          if (
-            getSourceDetails.dependsOn &&
-            (!sourceFieldName["controllingfieldfk"] ||
-              sourceFieldName["controllingfieldfk"] === "")
-          ) {
-            storeWithoutControllingField.push(sourceFieldName["name"]);
+          const controllingfk = sourceFieldName.controllingfieldfk;
+
+          if (getSourceDetails.dependsOn && !controllingfk) {
+            storeWithoutControllingField.push(sourceFieldName.name);
           }
 
-          // check options exits in source table column or not
           const query = `SELECT "name", "value" 
           FROM public.${getSourceDetails.sourceDetails.table} 
-          WHERE value = '${sourceFieldName["value"]}' 
+          WHERE value = '${sourceFieldName.value}' 
           GROUP BY  "name", "value"`;
 
-          const checkSourceData = await this.fieldsValuesRepository.query(
-            query
-          );
+          const checkSourceData = await this.fieldsValuesRepository.query(query);
+          const isCreate = fieldsData.fieldParams.isCreate;
 
-          //If code is not exist in db
           if (checkSourceData.length === 0) {
-            //If code is not exist in db and isCreate flag is false
-            if (!fieldsData.fieldParams.isCreate) {
+            if (!isCreate) {
               return APIResponse.error(
                 response,
                 apiId,
                 "BAD_REQUEST",
-                `Error: This code '${sourceFieldName["value"]}' does not exist in the '${getSourceDetails.sourceDetails.table}' table.`,
+                `Error: This code '${sourceFieldName.value}' does not exist in the '${getSourceDetails.sourceDetails.table}' table.`,
                 HttpStatus.BAD_REQUEST
               );
             }
-
-            // If not exist and isCreate is true, create the record
             await this.createSourceDetailsTableFields(
               getSourceDetails.sourceDetails.table,
-              sourceFieldName["name"],
-              sourceFieldName["value"],
+              sourceFieldName.name,
+              sourceFieldName.value,
               createdBy,
-              sourceFieldName["controllingfieldfk"],
+              controllingfk,
               getSourceDetails.dependsOn
             );
           } else {
-            //If code is exist in db and isCreate flag is true
-            if (fieldsData.fieldParams.isCreate) {
+            if (isCreate) {
               return APIResponse.error(
                 response,
                 apiId,
                 "CONFLICT",
-                `Error: This code '${sourceFieldName["value"]}' already exists for '${checkSourceData[0].name}' in the '${getSourceDetails.sourceDetails.table}' table.`,
+                `Error: This code '${sourceFieldName.value}' already exists for '${checkSourceData[0].name}' in the '${getSourceDetails.sourceDetails.table}' table.`,
                 HttpStatus.CONFLICT
               );
             }
-
-            // If exist and isCreate is false, update the record
             await this.updateSourceDetailsTableFields(
               getSourceDetails.sourceDetails.table,
-              sourceFieldName["name"],
-              sourceFieldName["value"],
+              sourceFieldName.name,
+              sourceFieldName.value,
               updatedBy,
-              sourceFieldName["controllingfieldfk"]
+              controllingfk
             );
           }
         }
         delete fieldsData.fieldParams;
       }
 
-      //Update data in field params
-      if (
-        getSourceDetails.sourceDetails &&
-        getSourceDetails.sourceDetails.source == "fieldparams"
-      ) {
+      if (getSourceDetails.sourceDetails?.source === "fieldparams" && fieldsData.fieldParams?.options) {
         for (const sourceFieldName of fieldsData.fieldParams.options) {
-          //Store those fields is depends on another fields but did not provide controlling field foreign key
-          if (
-            fieldsData.dependsOn &&
-            (!sourceFieldName["controllingfieldfk"] ||
-              sourceFieldName["controllingfieldfk"] === "")
-          ) {
-            storeWithoutControllingField.push(sourceFieldName["name"]);
+          const controllingfk = sourceFieldName.controllingfieldfk;
+
+          if (fieldsData.dependsOn && !controllingfk) {
+            storeWithoutControllingField.push(sourceFieldName.name);
           }
 
-          // check options exits in fieldParams column or not
-          const query = `SELECT COUNT(*) FROM public."Fields" WHERE "fieldId"='${fieldId}' AND "fieldParams" -> 'options' @> '[{"value": "${sourceFieldName["value"]}"}]' `;
+          const query = `SELECT COUNT(*) FROM public."Fields" WHERE "fieldId"='${fieldId}' AND "fieldParams" -> 'options' @> '[{"value": "${sourceFieldName.value}"}]' `;
           const checkSourceData = await this.fieldsRepository.query(query);
 
-          //If fields is not present then create a new options
           if (checkSourceData[0].count == 0) {
-            const addFieldParamsValue = await this.addOptionsInFieldParams(
-              fieldId,
-              sourceFieldName
-            );
+            const addFieldParamsValue = await this.addOptionsInFieldParams(fieldId, sourceFieldName);
             if (addFieldParamsValue !== true) {
               return APIResponse.error(
                 response,
@@ -626,7 +513,6 @@ export class FieldsService {
         }
       }
 
-      //If fields is depends on another fields but did not provide controlling field foreign key
       if (storeWithoutControllingField.length > 0) {
         const wrongControllingField = storeWithoutControllingField.join(",");
         error = `Wrong Data: ${wrongControllingField} This field is dependent on another field and cannot be created without specifying the controllingfieldfk.`;
@@ -1104,32 +990,30 @@ export class FieldsService {
   public async mappedResponseField(result: any) {
     const fieldResponse = result.map((item: any) => {
       const fieldMapping = {
-        fieldId: item?.fieldId ? `${item.fieldId}` : "",
-        assetId: item?.assetId ? `${item.assetId}` : "",
-        context: item?.context ? `${item.context}` : "",
-        groupId: item?.groupId ? `${item.groupId}` : "",
-        name: item?.name ? `${item.name}` : "",
-        label: item?.label ? `${item.label}` : "",
-        defaultValue: item?.defaultValue ? `${item.defaultValue}` : "",
-        type: item?.type ? `${item.type}` : "",
-        note: item?.note ? `${item.note}` : "",
-        description: item?.description ? `${item.description}` : "",
-        state: item?.state ? `${item.state}` : "",
-        required: item?.required ? `${item.required}` : "",
-        ordering: item?.ordering ? `${item.ordering}` : "",
-        metadata: item?.metadata ? `${item.metadata}` : "",
-        access: item?.access ? `${item.access}` : "",
-        onlyUseInSubform: item?.onlyUseInSubform
-          ? `${item.onlyUseInSubform}`
-          : "",
-        tenantId: item?.tenantId ? `${item.tenantId}` : "",
-        createdAt: item?.createdAt ? `${item.createdAt}` : "",
-        updatedAt: item?.updatedAt ? `${item.updatedAt}` : "",
-        createdBy: item?.createdBy ? `${item.createdBy}` : "",
-        updatedBy: item?.updatedBy ? `${item.updatedBy}` : "",
-        contextId: item?.contextId ? `${item.contextId}` : "",
-        render: item?.render ? `${item.render}` : "",
-        contextType: item?.contextType ? `${item.contextType}` : "",
+        fieldId: `${item?.fieldId ?? ""}`,
+        assetId: `${item?.assetId ?? ""}`,
+        context: `${item?.context ?? ""}`,
+        groupId: `${item?.groupId ?? ""}`,
+        name: `${item?.name ?? ""}`,
+        label: `${item?.label ?? ""}`,
+        defaultValue: `${item?.defaultValue ?? ""}`,
+        type: `${item?.type ?? ""}`,
+        note: `${item?.note ?? ""}`,
+        description: `${item?.description ?? ""}`,
+        state: `${item?.state ?? ""}`,
+        required: `${item?.required ?? ""}`,
+        ordering: `${item?.ordering ?? ""}`,
+        metadata: `${item?.metadata ?? ""}`,
+        access: `${item?.access ?? ""}`,
+        onlyUseInSubform: `${item?.onlyUseInSubform ?? ""}`,
+        tenantId: `${item?.tenantId ?? ""}`,
+        createdAt: `${item?.createdAt ?? ""}`,
+        updatedAt: `${item?.updatedAt ?? ""}`,
+        createdBy: `${item?.createdBy ?? ""}`,
+        updatedBy: `${item?.updatedBy ?? ""}`,
+        contextId: `${item?.contextId ?? ""}`,
+        render: `${item?.render ?? ""}`,
+        contextType: `${item?.contextType ?? ""}`,
         fieldParams: item?.fieldParams ? JSON.stringify(item.fieldParams) : "",
       };
 
@@ -1181,7 +1065,6 @@ export class FieldsService {
   ) {
     const apiId = APIID.FIELDVALUES_SEARCH;
     try {
-      let dynamicOptions;
       let { limit, offset } = fieldsOptionsSearchDto;
       const {
         fieldName,
@@ -1197,27 +1080,18 @@ export class FieldsService {
 
       const condition: any = {
         name: fieldName,
+        ...(context && { context }),
+        ...(contextType && { contextType }),
       };
 
-      if (context) {
-        condition.context = context;
-      }
+      const fetchFieldParams = await this.fieldsRepository.findOne({ where: condition });
+      const order = sort?.length ? `ORDER BY "${sort[0]}" ${sort[1].toUpperCase()}` : `ORDER BY ${fieldName}_name ASC`;
 
-      if (contextType) {
-        condition.contextType = contextType;
-      }
+      let dynamicOptions = [];
+      const source = fetchFieldParams?.sourceDetails?.source;
 
-      const fetchFieldParams = await this.fieldsRepository.findOne({
-        where: condition,
-      });
-      let order;
-      if (sort?.length) {
-        const orderKey = sort[1].toUpperCase();
-        order = `ORDER BY "${sort[0]}" ${orderKey}`;
-      } else {
-        order = `ORDER BY ${fieldName}_name ASC`;
-      }
-      if (fetchFieldParams?.sourceDetails?.source === "table") {
+
+      if (source === "table") {
         let whereClause;
         if (controllingfieldfk) {
           if (!fetchFieldParams.dependsOn) {
@@ -1229,45 +1103,24 @@ export class FieldsService {
               HttpStatus.NOT_FOUND
             );
           }
-          let foreignKeys = controllingfieldfk.toString();
-          whereClause = `"${fetchFieldParams?.dependsOn}_id" IN(${foreignKeys})`;
+          whereClause = `"${fetchFieldParams.dependsOn}_id" IN(${controllingfieldfk})`;
         }
-        
-        dynamicOptions = await this.findDynamicOptions(
-          fieldName,
-          whereClause,
-          offset,
-          limit,
-          order,
-          optionName
-        );
-      } else if (fetchFieldParams?.sourceDetails?.source === "jsonFile") {
-        const filePath = path.join(
-          process.cwd(),
-          `${fetchFieldParams.sourceDetails.filePath}`
-        );
-        const getFieldValuesFromJson = JSON.parse(
-          readFileSync(filePath, "utf-8")
-        );
+        dynamicOptions = await this.findDynamicOptions(fieldName, whereClause, offset, limit, order, optionName);
+      } else {
+        if (source === "jsonFile") {
+          const filePath = path.join(process.cwd(), fetchFieldParams.sourceDetails.filePath);
+          const getFieldValuesFromJson = JSON.parse(readFileSync(filePath, "utf-8"));
+          dynamicOptions = getFieldValuesFromJson.options || getFieldValuesFromJson;
+        } else {
+          dynamicOptions = fetchFieldParams?.fieldParams?.["options"] || [];
+        }
 
         if (controllingfieldfk) {
-          dynamicOptions = getFieldValuesFromJson.options.filter(
-            (option) => option?.controllingfieldfk === controllingfieldfk
-          );
-        } else {
-          dynamicOptions = getFieldValuesFromJson;
-        }
-      } else {
-        if (fetchFieldParams.fieldParams["options"] && controllingfieldfk) {
-          dynamicOptions = fetchFieldParams?.fieldParams["options"].filter(
-            (option: any) => option?.controllingfieldfk === controllingfieldfk
-          );
-        } else {
-          dynamicOptions = fetchFieldParams?.fieldParams["options"];
+          dynamicOptions = dynamicOptions.filter((option: any) => option?.controllingfieldfk === controllingfieldfk);
         }
       }
 
-      if (dynamicOptions.length === 0) {
+      if (!dynamicOptions || dynamicOptions.length === 0) {
         return await APIResponse.error(
           response,
           apiId,
@@ -1277,54 +1130,34 @@ export class FieldsService {
         );
       }
 
-      // const queryData = dynamicOptions.map((result) => ({
-      //   value: result?.value,
-      //   label: result?.name,
-      //   createdAt: result?.createdAt,
-      //   updatedAt: result?.updatedAt,
-      //   createdBy: result?.createdBy,
-      //   updatedBy: result?.updatedBy,
-      // }));
-
-      /* Structing Into new Format */
-
       const queryData = dynamicOptions.map((item) => {
         const keys = Object.keys(item);
-        const valueField = keys.find((key) => key.endsWith("_id")) || keys[0];
-        const labelField = keys.find((key) => key.endsWith("_name")) || keys[1];
+        const valueField = keys.find((key) => key.endsWith("_id")) ?? keys[0];
+        const labelField = keys.find((key) => key.endsWith("_name")) ?? keys[1];
 
         return {
           value: item[valueField],
           label: item[labelField],
           ...Object.fromEntries(
-            Object.entries(item).filter(
-              ([key]) => !["value", "label"].includes(key)
-            )
+            Object.entries(item).filter(([key]) => !["value", "label"].includes(key))
           ),
         };
       });
 
       const result = {
-        totalCount: parseInt(dynamicOptions[0]?.total_count, 10),
+        totalCount: parseInt(dynamicOptions[0]?.total_count ?? "0", 10),
         fieldId: fetchFieldParams?.fieldId,
         values: queryData,
       };
 
-      return await APIResponse.success(
-        response,
-        apiId,
-        result,
-        HttpStatus.OK,
-        "Field options fetched successfully."
-      );
+      return await APIResponse.success(response, apiId, result, HttpStatus.OK, "Field options fetched successfully.");
     } catch (e) {
       LoggerUtil.error(`${API_RESPONSES.SERVER_ERROR}`, `Error: ${e.message}`);
-      const errorMessage = e?.message || API_RESPONSES.SERVER_ERROR;
       return APIResponse.error(
         response,
         apiId,
         API_RESPONSES.SERVER_ERROR,
-        `Error : ${errorMessage}`,
+        `Error : ${e?.message || API_RESPONSES.SERVER_ERROR}`,
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
@@ -1333,27 +1166,15 @@ export class FieldsService {
   public async deleteFieldOptions(requiredData, response) {
     const apiId = APIID.FIELD_OPTIONS_DELETE;
     try {
-      let result: any = {};
+      const removeOption = requiredData.option ?? null;
+
       const condition: any = {
         name: requiredData.fieldName,
+        ...(requiredData.context !== null && { context: requiredData.context }),
+        ...(requiredData.contextType && { contextType: requiredData.contextType })
       };
 
-      // If `context` and `contextType` are not provided, in that case check those fields where both `context` and `contextType` are null.
-      const removeOption =
-        requiredData.option !== null ? requiredData.option : null;
-
-      if (requiredData.context !== null) {
-        condition.context = requiredData.context;
-      }
-      if (requiredData.contextType) {
-        condition.contextType = requiredData.contextType;
-      }
-      condition.name = requiredData.fieldName;
-
-      // Fetch the total number of matching rows
-      const totalCount = await this.fieldsRepository.count({
-        where: condition,
-      });
+      const totalCount = await this.fieldsRepository.count({ where: condition });
       if (totalCount > 1) {
         return await APIResponse.error(
           response,
@@ -1364,10 +1185,7 @@ export class FieldsService {
         );
       }
 
-      const getField = await this.fieldsRepository.findOne({
-        where: condition,
-      });
-
+      const getField = await this.fieldsRepository.findOne({ where: condition });
       if (!getField) {
         return await APIResponse.error(
           response,
@@ -1378,12 +1196,12 @@ export class FieldsService {
         );
       }
 
-      //Delete data from source table
-      if (getField?.sourceDetails?.source == "table") {
-        const whereCond = requiredData.option
-          ? `WHERE "value"='${requiredData.option}'`
-          : "";
-        const query = `DELETE FROM public.${getField?.sourceDetails?.table} ${whereCond}`;
+      let result: any = {};
+      const source = getField?.sourceDetails?.source;
+
+      if (source === "table") {
+        const whereCond = removeOption ? `WHERE "value"='${removeOption}'` : "";
+        const query = `DELETE FROM public.${getField.sourceDetails.table} ${whereCond}`;
         const [_, affectedRow] = await this.fieldsRepository.query(query);
 
         if (affectedRow === 0) {
@@ -1396,32 +1214,11 @@ export class FieldsService {
           );
         }
         result = { affected: affectedRow };
-      }
-      //Delete data from fieldParams column
-      if (getField?.sourceDetails?.source == "fieldparams") {
-        // check options exits in fieldParams column or not
+      } else if (source === "fieldparams") {
         const query = `SELECT * FROM public."Fields" WHERE "fieldId"='${getField.fieldId}' AND "fieldParams" -> 'options' @> '[{"value": "${removeOption}"}]' `;
         const checkSourceData = await this.fieldsRepository.query(query);
 
-        if (checkSourceData.length > 0) {
-          let fieldParamsOptions = checkSourceData[0].fieldParams.options;
-
-          let fieldParamsData: any = {};
-          if (fieldParamsOptions) {
-            fieldParamsOptions = fieldParamsOptions.filter(
-              (option) => option.name !== removeOption
-            );
-          }
-          fieldParamsData =
-            fieldParamsOptions.length > 0
-              ? { options: fieldParamsOptions }
-              : null;
-
-          result = await this.fieldsRepository.update(
-            { fieldId: getField.fieldId },
-            { fieldParams: fieldParamsData }
-          );
-        } else {
+        if (checkSourceData.length === 0) {
           return await APIResponse.error(
             response,
             apiId,
@@ -1430,8 +1227,17 @@ export class FieldsService {
             HttpStatus.NOT_FOUND
           );
         }
+
+        const fieldParamsOptions = checkSourceData[0].fieldParams?.options?.filter((option: any) => option.name !== removeOption) || [];
+        const fieldParamsData = fieldParamsOptions.length > 0 ? { options: fieldParamsOptions } : null;
+
+        result = await this.fieldsRepository.update(
+          { fieldId: getField.fieldId },
+          { fieldParams: fieldParamsData }
+        );
       }
-      if (result.affected > 0) {
+
+      if (result?.affected > 0) {
         return await APIResponse.success(
           response,
           apiId,
@@ -1442,12 +1248,11 @@ export class FieldsService {
       }
     } catch (e) {
       LoggerUtil.error(`${API_RESPONSES.SERVER_ERROR}`, `Error: ${e.message}`);
-      const errorMessage = e?.message || API_RESPONSES.SERVER_ERROR;
       return APIResponse.error(
         response,
         apiId,
         API_RESPONSES.SERVER_ERROR,
-        `Error : ${errorMessage}`,
+        `Error : ${e?.message || API_RESPONSES.SERVER_ERROR}`,
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
@@ -1590,59 +1395,47 @@ export class FieldsService {
     getFields?: string[],
     requiredFieldOptions?: boolean
   ) {
-    let customField;
     const fieldsArr = [];
     const [filledValues, customFields] = await Promise.all([
       this.findFieldValues(id, context),
       this.findCustomFields(context, [contextType], getFields),
     ]);
+
     const filledValuesMap = new Map(
       filledValues.map((item) => [item.fieldId, item.value])
     );
-    if (customFields) {
-      for (const data of customFields) {
-        const fieldValue = filledValuesMap.get(data?.fieldId);
-        customField = {
-          fieldId: data?.fieldId,
-          name: data?.name,
-          label: data?.label,
-          order: data?.ordering,
-          isRequired: data?.fieldAttributes?.isRequired,
-          isEditable: data?.fieldAttributes?.isEditable,
-          isHidden: data?.fieldAttributes?.isHidden,
-          isMultiSelect: data.fieldAttributes
-            ? data.fieldAttributes["isMultiSelect"]
-            : "",
-          maxSelections: data.fieldAttributes
-            ? data.fieldAttributes["maxSelections"]
-            : "",
-          type: data?.type || "",
-          value: fieldValue || "",
-        };
 
-        if (
-          requiredFieldOptions == true &&
-          (data?.dependsOn == "" || data?.dependsOn == undefined)
-        ) {
-          if (data?.sourceDetails?.source === "table") {
-            const dynamicOptions = await this.findDynamicOptions(
-              data?.sourceDetails?.table
-            );
-            customField.options = dynamicOptions;
-          } else if (data?.sourceDetails?.source === "jsonFile") {
-            const filePath = path.join(
-              process.cwd(),
-              `${data?.sourceDetails?.filePath}`
-            );
-            customField = JSON.parse(readFileSync(filePath, "utf-8"));
-          } else {
-            customField.options = data?.fieldParams?.["options"] || null;
-          }
+    for (const data of (customFields || [])) {
+      const attrs = data?.fieldAttributes;
+      const customField: any = {
+        fieldId: data?.fieldId,
+        name: data?.name,
+        label: data?.label,
+        order: data?.ordering,
+        isRequired: attrs?.isRequired,
+        isEditable: attrs?.isEditable,
+        isHidden: attrs?.isHidden,
+        isMultiSelect: attrs?.isMultiSelect ?? "",
+        maxSelections: attrs?.maxSelections ?? "",
+        type: data?.type || "",
+        value: filledValuesMap.get(data?.fieldId) || "",
+        options: null,
+      };
+
+      const needsOptions = requiredFieldOptions === true && !data?.dependsOn;
+      if (needsOptions) {
+        const source = data?.sourceDetails?.source;
+        if (source === "table") {
+          customField.options = await this.findDynamicOptions(data.sourceDetails.table);
+        } else if (source === "jsonFile") {
+          const filePath = path.join(process.cwd(), `${data.sourceDetails.filePath}`);
+          customField.options = JSON.parse(readFileSync(filePath, "utf-8"));
         } else {
-          customField.options = null;
+          customField.options = data?.fieldParams?.["options"] || null;
         }
-        fieldsArr.push(customField);
       }
+
+      fieldsArr.push(customField);
     }
 
     return fieldsArr;

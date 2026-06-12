@@ -1,5 +1,3 @@
-// import { IsUUID,IsObject, IsBoolean, IsOptional } from 'class-validator';
-
 import { Expose, Type } from "class-transformer";
 import { IsBoolean, IsUUID, IsObject, IsOptional, IsString, IsArray } from "class-validator";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
@@ -75,18 +73,3 @@ export class CreateAutomaticMemberDto {
   @IsBoolean()
   isActive: boolean;
 }
-
-// export class CreateAutomaticMemberDto {
-//   @IsUUID()
-//   userId: string;
-
-//   @IsObject()
-//   rules: any;
-
-//   @IsUUID()
-//   tenantId: string;
-
-//   @IsBoolean()
-//   @IsOptional()
-//   isActive?: boolean;
-// }

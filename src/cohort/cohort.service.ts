@@ -25,7 +25,6 @@ import { CohortMembersService } from "src/cohortMembers/cohortMembers.service";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
 import { AutomaticMemberService } from "src/automatic-member/automatic-member.service";
 import { KafkaService } from "src/kafka/kafka.service";
-import { Console } from "console";
 
 @Injectable()
 export class CohortService {
@@ -50,22 +49,6 @@ export class CohortService {
 
   public async getCohortsDetails(requiredData, res) {
     const apiId = APIID.COHORT_READ;
-
-    // const cohortAcademicYear: any[] =
-    //   await this.cohortMembersService.isCohortExistForYear(
-    //     requiredData.academicYearId,
-    //     requiredData.cohortId
-    //   );
-
-    // if (cohortAcademicYear.length !== 1) {
-    //   return APIResponse.error(
-    //     res,
-    //     apiId,
-    //     "BAD_REQUEST",
-    //     API_RESPONSES.COHORT_NOT_IN_ACADEMIC_YEAR,
-    //     HttpStatus.BAD_REQUEST
-    //   );
-    // }
 
     try {
       const cohorts = await this.cohortRepository.find({
@@ -310,18 +293,15 @@ export class CohortService {
   public async createCohort(cohortCreateDto: CohortCreateDto, res) {
     const apiId = APIID.COHORT_CREATE;
     try {
-      // Add validation for check both duplicate field ids exist or not
-      // and whatever user pass fieldIds is exist in field table or not
-
       const academicYearId = cohortCreateDto.academicYearId;
       const tenantId = cohortCreateDto.tenantId;
-      cohortCreateDto.name = cohortCreateDto?.name.toLowerCase()
+      cohortCreateDto.name = cohortCreateDto?.name.toLowerCase();
+
       // verify if the academic year id is valid
-      const academicYear =
-        await this.academicYearService.getActiveAcademicYear(
-          cohortCreateDto.academicYearId,
-          tenantId
-        );
+      const academicYear = await this.academicYearService.getActiveAcademicYear(
+        cohortCreateDto.academicYearId,
+        tenantId
+      );
 
       if (!academicYear) {
         return APIResponse.error(
@@ -333,16 +313,14 @@ export class CohortService {
         );
       }
 
-      if (
-        cohortCreateDto.customFields &&
-        cohortCreateDto.customFields.length > 0
-      ) {
+      const hasCustomFields = (cohortCreateDto.customFields?.length ?? 0) > 0;
+
+      if (hasCustomFields) {
         const validationResponse = await this.fieldsService.validateCustomField(
           cohortCreateDto,
-          cohortCreateDto.type || "COHORT"
+          cohortCreateDto.type ?? "COHORT"
         );
 
-        // Check the validation response
         if (!validationResponse.isValid) {
           return APIResponse.error(
             res,
@@ -353,78 +331,54 @@ export class CohortService {
           );
         }
       }
-      cohortCreateDto.status = cohortCreateDto.status || "active";
+
+      cohortCreateDto.status ??= "active";
       cohortCreateDto.attendanceCaptureImage = false;
 
       // Ensure metadata is a JSON string if provided
-      if (cohortCreateDto.metadata && typeof cohortCreateDto.metadata === 'object') {
-        cohortCreateDto.metadata = JSON.stringify(cohortCreateDto.metadata);
-      }
+      cohortCreateDto.metadata =
+        cohortCreateDto.metadata && typeof cohortCreateDto.metadata === 'object'
+          ? JSON.stringify(cohortCreateDto.metadata)
+          : cohortCreateDto.metadata;
 
-      // const existData = await this.cohortRepository.find({
-      //   where: {
-      //     name: cohortCreateDto.name,
-      //     status: In(["active", "pending"]),
-      //     type: cohortCreateDto.type,
-      //     parentId: cohortCreateDto.parentId
-      //       ? cohortCreateDto.parentId
-      //       : IsNull(),
-      //   },
-      // });
-      // if (existData.length > 0) {
-      //   return APIResponse.error(
-      //     res,
-      //     apiId,
-      //     API_RESPONSES.COHORT_NAME_EXIST,
-      //     API_RESPONSES.COHORT_EXISTS,
-      //     HttpStatus.CONFLICT
-      //   );
-      // }
       const response = await this.cohortRepository.save(cohortCreateDto);
 
       const createFailures = [];
 
-      //SAVE  in fieldValues table
-      if (
-        response &&
-        cohortCreateDto.customFields &&
-        cohortCreateDto.customFields.length > 0
-      ) {
-        const cohortId = response?.cohortId;
-
-        // Prepare additional data for FieldValues table
+      // SAVE in fieldValues table
+      if (response && hasCustomFields) {
+        const cohortId = response.cohortId;
         const additionalData = {
-          tenantId: tenantId || null,
-          contextType: cohortCreateDto.type || "COHORT",
-          createdBy: cohortCreateDto.createdBy || null,
+          tenantId: tenantId ?? null,
+          contextType: cohortCreateDto.type ?? "COHORT",
+          createdBy: cohortCreateDto.createdBy ?? null,
           updatedBy: null,
         };
 
-        if (cohortCreateDto.customFields.length > 0) {
-          for (const fieldValues of cohortCreateDto.customFields) {
-            const fieldData = {
-              fieldId: fieldValues["fieldId"],
-              value: fieldValues["value"],
-            };
+        for (const fieldValues of cohortCreateDto.customFields) {
+          const fieldData = {
+            fieldId: fieldValues["fieldId"],
+            value: fieldValues["value"],
+          };
 
-            const resfields = await this.fieldsService.updateCustomFields(
-              cohortId,
-              fieldData,
-              cohortCreateDto.customFields[0].fieldId,
-              additionalData
+          const resfields = await this.fieldsService.updateCustomFields(
+            cohortId,
+            fieldData,
+            cohortCreateDto.customFields[0].fieldId,
+            additionalData
+          );
+
+          if (resfields.correctValue) {
+            response["customFieldsValue"] ??= [];
+            response["customFieldsValue"].push(resfields);
+          } else {
+            createFailures.push(
+              `${fieldData.fieldId}: ${resfields?.valueIssue} - ${resfields.fieldName}`
             );
-            if (resfields.correctValue) {
-              if (!response["customFieldsValue"])
-                response["customFieldsValue"] = [];
-              response["customFieldsValue"].push(resfields);
-            } else {
-              createFailures.push(
-                `${fieldData.fieldId}: ${resfields?.valueIssue} - ${resfields.fieldName}`
-              );
-            }
           }
         }
       }
+
       // add the year mapping entry in table with cohortId and academicYearId
       await this.cohortAcademicYearService.insertCohortAcademicYear(
         response.cohortId,
@@ -433,13 +387,8 @@ export class CohortService {
         cohortCreateDto.updatedBy
       );
 
-      const resBody = new ReturnResponseBody({
-        ...response,
-        academicYearId: academicYearId,
-      });
-      LoggerUtil.log(
-        API_RESPONSES.CREATE_COHORT,
-      )
+      const resBody = new ReturnResponseBody({ ...response, academicYearId });
+      LoggerUtil.log(API_RESPONSES.CREATE_COHORT);
 
       // Send response to the client
       const apiResponse = APIResponse.success(
@@ -460,17 +409,12 @@ export class CohortService {
 
       return apiResponse;
     } catch (error) {
-      LoggerUtil.error(
-        `${API_RESPONSES.SERVER_ERROR}`,
-        `Error: ${error.message}`,
-        apiId
-      )
-      const errorMessage = error.message || API_RESPONSES.SERVER_ERROR;
+      LoggerUtil.error(`${API_RESPONSES.SERVER_ERROR}`, `Error: ${error.message}`, apiId);
       return APIResponse.error(
         res,
         apiId,
         API_RESPONSES.SERVER_ERROR,
-        errorMessage,
+        error.message ?? API_RESPONSES.SERVER_ERROR,
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
@@ -534,213 +478,117 @@ export class CohortService {
     res
   ) {
     const apiId = APIID.COHORT_UPDATE;
-    // Define valid status transitions
     const validTransitions = {
       archived: ["active", "inactive"],
       active: ["archived", "inactive"],
       inactive: ["active", "archived"],
     };
+    const memberStatusMap = {
+      archived: MemberStatus.ARCHIVED,
+      active: MemberStatus.ACTIVE,
+      inactive: MemberStatus.INACTIVE,
+    };
     try {
       if (!isUUID(cohortId)) {
-        return APIResponse.error(
-          res,
-          apiId,
-          `Please Enter valid cohortId(UUID)`,
-          `Invalid cohortId`,
-          HttpStatus.CONFLICT
-        );
+        return APIResponse.error(res, apiId, `Please Enter valid cohortId(UUID)`, `Invalid cohortId`, HttpStatus.CONFLICT);
       }
 
-      // const checkData = await this.checkIfCohortExist(cohortId);
-      const existingCohorDetails = await this.cohortRepository.findOne({
-        where: { cohortId: cohortId },
-      });
+      const existingCohorDetails = await this.cohortRepository.findOne({ where: { cohortId } });
 
-      if (existingCohorDetails) {
-        const updateData = {};
-        const customFields = {};
+      if (!existingCohorDetails) {
+        return APIResponse.error(res, apiId, `Cohort not found`, `Cohort not found`, HttpStatus.NOT_FOUND);
+      }
 
-        //validation  of customFields correct or not
-        if (
-          cohortUpdateDto.customFields &&
-          cohortUpdateDto.customFields.length > 0
-        ) {
-          const contextType =
-            cohortUpdateDto?.type || existingCohorDetails?.type;
-          const validationResponse =
-            await this.fieldsService.validateCustomField(
-              cohortUpdateDto,
-              contextType
-            );
-          if (!validationResponse.isValid) {
-            return APIResponse.error(
-              res,
-              apiId,
-              validationResponse.error,
-              "Validation Error",
-              HttpStatus.BAD_REQUEST
-            );
-          }
+      const updateData = {};
+      const customFields = {};
+
+      const hasCustomFields = (cohortUpdateDto.customFields?.length ?? 0) > 0;
+
+      // Validate custom fields
+      if (hasCustomFields) {
+        const contextType = cohortUpdateDto?.type ?? existingCohorDetails?.type;
+        const validationResponse = await this.fieldsService.validateCustomField(cohortUpdateDto, contextType);
+        if (!validationResponse.isValid) {
+          return APIResponse.error(res, apiId, validationResponse.error, "Validation Error", HttpStatus.BAD_REQUEST);
         }
+      }
 
-        // validation for name or parent alredy exist or not
-        if (cohortUpdateDto.name || cohortUpdateDto.parentId) {
-          const filterOptions = {
-            where: {
-              name: cohortUpdateDto.name || existingCohorDetails.name,
-              parentId: cohortUpdateDto.parentId || existingCohorDetails.parentId,
-              cohortId: Not(cohortId),
-            },
-          };
-          const existData = await this.cohortRepository.find(filterOptions);
-
-          if (existData.length > 0) {
-            return APIResponse.error(
-              res,
-              apiId,
-              `Cohort name already exists under the specified parent. Please provide another name or parent.`,
-              `Cohort already exists`,
-              HttpStatus.CONFLICT
-            );
-          }
-        }
-
-        // Iterate over all keys in cohortUpdateDto
-        for (const key in cohortUpdateDto) {
-          if (
-            cohortUpdateDto.hasOwnProperty(key) &&
-            cohortUpdateDto[key] !== null
-          ) {
-            if (key !== "customFields") {
-              updateData[key] = cohortUpdateDto[key];
-            } else {
-              customFields[key] = cohortUpdateDto[key];
-            }
-          }
-        }
-
-        let response;
-        // save cohort detail in cohort table
-        if (Object.keys(updateData).length > 0) {
-          response = await this.cohortRepository.update(cohortId, updateData);
-        }
-
-        //SAVE customFields  in fieldValues table
-        if (
-          cohortUpdateDto.customFields &&
-          cohortUpdateDto.customFields.length > 0
-        ) {
-          const contextType = cohortUpdateDto.type
-            ? [cohortUpdateDto.type]
-            : existingCohorDetails?.type
-              ? [existingCohorDetails.type]
-              : [];
-          const allCustomFields = await this.fieldsService.findCustomFields(
-            "COHORT",
-            contextType
+      // Validate name/parent uniqueness
+      if (cohortUpdateDto.name || cohortUpdateDto.parentId) {
+        const existData = await this.cohortRepository.find({
+          where: {
+            name: cohortUpdateDto.name ?? existingCohorDetails.name,
+            parentId: cohortUpdateDto.parentId ?? existingCohorDetails.parentId,
+            cohortId: Not(cohortId),
+          },
+        });
+        if (existData.length > 0) {
+          return APIResponse.error(res, apiId,
+            `Cohort name already exists under the specified parent. Please provide another name or parent.`,
+            `Cohort already exists`, HttpStatus.CONFLICT
           );
-
-
-          if (allCustomFields.length > 0) {
-            const customFieldAttributes = allCustomFields.reduce(
-              (fieldDetail, { fieldId, fieldAttributes, fieldParams, name }) =>
-                fieldDetail[`${fieldId}`]
-                  ? fieldDetail
-                  : {
-                    ...fieldDetail,
-                    [`${fieldId}`]: { fieldAttributes, fieldParams, name },
-                  },
-              {}
-            );
-            for (const fieldValues of cohortUpdateDto.customFields) {
-              const fieldData = {
-                fieldId: fieldValues["fieldId"],
-                value: fieldValues["value"],
-              };
-              const additionalData ={
-                tenantId: existingCohorDetails.tenantId,
-                contextType: existingCohorDetails.type,
-                createdBy: existingCohorDetails.createdBy,
-                updatedBy: existingCohorDetails.updatedBy,
-              }
-              await this.fieldsService.updateCustomFields(
-                cohortId,
-                fieldData,
-                customFieldAttributes[fieldData.fieldId],
-                additionalData
-              );
-            }
-          }
         }
-
-        //Update status in cohortMember table if exist record corresponding cohortId
-        if (
-          validTransitions[cohortUpdateDto.status]?.includes(
-            existingCohorDetails.status
-          )
-        ) {
-          let memberStatus;
-          if (cohortUpdateDto.status === "archived") {
-            memberStatus = MemberStatus.ARCHIVED;
-          } else if (cohortUpdateDto.status === "active") {
-            memberStatus = MemberStatus.ACTIVE;
-          } else if (cohortUpdateDto.status === "inactive") {
-            memberStatus = MemberStatus.INACTIVE;
-          }
-
-          if (memberStatus) {
-            await this.cohortMembersRepository.update(
-              { cohortId },
-              { status: memberStatus, updatedBy: cohortUpdateDto.updatedBy }
-            );
-          }
-        }
-
-        LoggerUtil.log(
-          API_RESPONSES.COHORT_UPDATED_SUCCESSFULLY,
-        )
-
-        // Send response to the client
-        const apiResponse = APIResponse.success(
-          res,
-          apiId,
-          response?.affected,
-          HttpStatus.OK,
-          API_RESPONSES.COHORT_UPDATED_SUCCESSFULLY
-        );
-
-        // Publish cohort updated event to Kafka asynchronously - after response is sent to client
-        this.publishCohortEvent('updated', cohortId, null, apiId)
-          .catch(error => LoggerUtil.error(
-            `Failed to publish cohort updated event to Kafka`,
-            `Error: ${error.message}`,
-            apiId
-          ));
-
-        return apiResponse;
-      } else {
-        return APIResponse.error(
-          res,
-          apiId,
-          `Cohort not found`,
-          `Cohort not found`,
-          HttpStatus.NOT_FOUND
-        );
       }
+
+      // Split DTO keys into updateData vs customFields
+      for (const key in cohortUpdateDto) {
+        if (cohortUpdateDto.hasOwnProperty(key) && cohortUpdateDto[key] !== null) {
+          (key !== "customFields" ? updateData : customFields)[key] = cohortUpdateDto[key];
+        }
+      }
+
+      let response;
+      if (Object.keys(updateData).length > 0) {
+        response = await this.cohortRepository.update(cohortId, updateData);
+      }
+
+      // Save custom fields in fieldValues table
+      if (hasCustomFields) {
+        const contextType: string[] = cohortUpdateDto.type
+          ? [cohortUpdateDto.type]
+          : existingCohorDetails?.type ? [existingCohorDetails.type] : [];
+
+        const allCustomFields = await this.fieldsService.findCustomFields("COHORT", contextType);
+
+        if (allCustomFields.length > 0) {
+          const customFieldAttributes = allCustomFields.reduce(
+            (fieldDetail, { fieldId, fieldAttributes, fieldParams, name }) =>
+              fieldDetail[`${fieldId}`] ? fieldDetail : { ...fieldDetail, [`${fieldId}`]: { fieldAttributes, fieldParams, name } },
+            {}
+          );
+          const additionalData = {
+            tenantId: existingCohorDetails.tenantId,
+            contextType: existingCohorDetails.type,
+            createdBy: existingCohorDetails.createdBy,
+            updatedBy: existingCohorDetails.updatedBy,
+          };
+          for (const fieldValues of cohortUpdateDto.customFields) {
+            const fieldData = { fieldId: fieldValues["fieldId"], value: fieldValues["value"] };
+            await this.fieldsService.updateCustomFields(cohortId, fieldData, customFieldAttributes[fieldData.fieldId], additionalData);
+          }
+        }
+      }
+
+      // Update cohortMember status if transition is valid
+      const memberStatus = validTransitions[cohortUpdateDto.status]?.includes(existingCohorDetails.status)
+        ? memberStatusMap[cohortUpdateDto.status]
+        : undefined;
+
+      if (memberStatus) {
+        await this.cohortMembersRepository.update({ cohortId }, { status: memberStatus, updatedBy: cohortUpdateDto.updatedBy });
+      }
+
+      LoggerUtil.log(API_RESPONSES.COHORT_UPDATED_SUCCESSFULLY);
+
+      const apiResponse = APIResponse.success(res, apiId, response?.affected, HttpStatus.OK, API_RESPONSES.COHORT_UPDATED_SUCCESSFULLY);
+
+      this.publishCohortEvent('updated', cohortId, null, apiId)
+        .catch(error => LoggerUtil.error(`Failed to publish cohort updated event to Kafka`, `Error: ${error.message}`, apiId));
+
+      return apiResponse;
     } catch (error) {
-      LoggerUtil.error(
-        `${API_RESPONSES.SERVER_ERROR}`,
-        `Error: ${error.message}`,
-        apiId
-      )
-      const errorMessage = error.message || API_RESPONSES.SERVER_ERROR;
-      return APIResponse.error(
-        res,
-        apiId,
-        API_RESPONSES.SERVER_ERROR,
-        errorMessage,
-        HttpStatus.INTERNAL_SERVER_ERROR
-      );
+      LoggerUtil.error(`${API_RESPONSES.SERVER_ERROR}`, `Error: ${error.message}`, apiId);
+      return APIResponse.error(res, apiId, API_RESPONSES.SERVER_ERROR, error.message ?? API_RESPONSES.SERVER_ERROR, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 
@@ -756,31 +604,19 @@ export class CohortService {
       let { limit, offset } = cohortSearchDto;
       let cohortsByAcademicYear: CohortAcademicYear[];
 
-      offset = offset || 0;
-      limit = limit || 200;
+      offset ??= 0;
+      limit ??= 200;
 
       const emptyValueKeys = {};
       let emptyKeysString = "";
-
       const MAX_LIMIT = 200;
 
-      // Validate the limit parameter
       if (limit > MAX_LIMIT) {
-        return APIResponse.error(
-          response,
-          apiId,
-          `Limit exceeds maximum allowed value of ${MAX_LIMIT}`,
-          `Limit exceeded`,
-          HttpStatus.BAD_REQUEST
-        );
+        return APIResponse.error(response, apiId, `Limit exceeds maximum allowed value of ${MAX_LIMIT}`, `Limit exceeded`, HttpStatus.BAD_REQUEST);
       }
 
-      //Get all cohorts fields
-      const cohortAllKeys = this.cohortRepository.metadata.columns.map(
-        (column) => column.propertyName
-      );
+      const cohortAllKeys = this.cohortRepository.metadata.columns.map((column) => column.propertyName);
 
-      //Get custom fields
       const getCustomFields = await this.fieldsRepository.find({
         where: [
           { context: In(["COHORT", null, "null", "NULL"]), contextType: null },
@@ -788,67 +624,37 @@ export class CohortService {
         ],
         select: ["fieldId", "name", "label", "contextType"],
       });
-      // Extract custom field names
-      const customFieldsKeys = getCustomFields.map(
-        (customFields) => customFields.name
-      );
-
-      // Combine the arrays
+      const customFieldsKeys = getCustomFields.map((customFields) => customFields.name);
       const allowedKeys = ["userId", ...cohortAllKeys, ...customFieldsKeys];
 
       const whereClause = {};
       const searchCustomFields = {};
 
       // SECURITY FIX: Always enforce tenantId from headers, not from filters
-      // This prevents users from querying cohorts from other tenants
       whereClause["tenantId"] = tenantId;
 
       if (academicYearId) {
-        // check if the tenantId and academic year exist together
-        cohortsByAcademicYear =
-          await this.cohortAcademicYearService.getCohortsAcademicYear(
-            academicYearId,
-            tenantId
-          );
-
+        cohortsByAcademicYear = await this.cohortAcademicYearService.getCohortsAcademicYear(academicYearId, tenantId);
         if (cohortsByAcademicYear?.length === 0) {
-          return APIResponse.error(
-            response,
-            apiId,
-            API_RESPONSES.COHORT_NOT_AVAILABLE_FOR_ACADEMIC_YEAR,
-            API_RESPONSES.COHORT_NOT_AVAILABLE_FOR_ACADEMIC_YEAR,
-            HttpStatus.NOT_FOUND
-          );
+          return APIResponse.error(response, apiId, API_RESPONSES.COHORT_NOT_AVAILABLE_FOR_ACADEMIC_YEAR, API_RESPONSES.COHORT_NOT_AVAILABLE_FOR_ACADEMIC_YEAR, HttpStatus.NOT_FOUND);
         }
       }
+
       if (filters && Object.keys(filters).length > 0) {
-        // Clean up filters: remove undefined, null properties before processing
         const cleanedFilters = Object.fromEntries(
           Object.entries(filters).filter(([_, value]) => value !== undefined && value !== null)
         );
 
         if (cleanedFilters?.customFieldsName) {
           Object.entries(cleanedFilters.customFieldsName).forEach(([key, value]) => {
-            if (customFieldsKeys.includes(key)) {
-              searchCustomFields[key] = value;
-            }
+            if (customFieldsKeys.includes(key)) searchCustomFields[key] = value;
           });
         }
 
         Object.entries(cleanedFilters).forEach(([key, value]) => {
-          // SECURITY FIX: Skip tenantId from filters - always use the one from headers
-          if (key === "tenantId") {
-            return; // Ignore tenantId from request body filters
-          }
-
+          if (key === "tenantId") return;
           if (!allowedKeys.includes(key) && key !== "customFieldsName") {
-            return APIResponse.error(
-              response,
-              apiId,
-              `${key} Invalid key`,
-              `Invalid filter key`,
-              HttpStatus.BAD_REQUEST
-            );
+            return APIResponse.error(response, apiId, `${key} Invalid key`, `Invalid filter key`, HttpStatus.BAD_REQUEST);
           }
           if (value === "") {
             emptyValueKeys[key] = value;
@@ -863,181 +669,72 @@ export class CohortService {
         });
       }
 
-      if (whereClause["parentId"]) {
-        whereClause["parentId"] = In(whereClause["parentId"]);
-      }
-      if (whereClause["status"]) {
-        whereClause["status"] = In(whereClause["status"]);
-      }
-      if (whereClause["cohortId"]) {
-        whereClause["cohortId"] = In(whereClause["cohortId"]);
+      for (const field of ["parentId", "status", "cohortId"]) {
+        if (whereClause[field]) whereClause[field] = In(whereClause[field]);
       }
 
-      const results = {
-        cohortDetails: [],
-      };
-
-      const order = {};
-      if (sort?.length) {
-        order[sort[0]] = ["ASC", "DESC"].includes(sort[1].toUpperCase())
-          ? sort[1].toUpperCase()
-          : "ASC";
-      } else {
-        order["name"] = "ASC";
-      }
+      const results = { cohortDetails: [] };
+      const order: any = sort?.length
+        ? { [sort[0]]: ["ASC", "DESC"].includes(sort[1].toUpperCase()) ? sort[1].toUpperCase() : "ASC" }
+        : { name: "ASC" };
 
       let count = 0;
 
       if (whereClause["userId"]) {
-        const additionalFields = Object.keys(whereClause).filter(
-          (key) => key !== "userId" && key !== "academicYearId"
-        );
+        const additionalFields = Object.keys(whereClause).filter((key) => key !== "userId" && key !== "academicYearId");
         if (additionalFields.length > 0) {
-          // Handle the case where userId is provided along with other fields
-          return APIResponse.error(
-            response,
-            apiId,
-            `When filtering by userId, do not include additional fields`,
-            "Invalid filters",
-            HttpStatus.BAD_REQUEST
-          );
+          return APIResponse.error(response, apiId, `When filtering by userId, do not include additional fields`, "Invalid filters", HttpStatus.BAD_REQUEST);
         }
 
-        const userTenantMapExist = await this.UserTenantMappingRepository.find({
-          where: {
-            tenantId: tenantId,
-            userId: whereClause["userId"],
-          },
-        });
+        const userTenantMapExist = await this.UserTenantMappingRepository.find({ where: { tenantId, userId: whereClause["userId"] } });
         if (userTenantMapExist.length == 0) {
-          return APIResponse.error(
-            response,
-            apiId,
-            `User is not mapped for this tenant`,
-            "Invalid combination of userId and tenantId",
-            HttpStatus.BAD_REQUEST
-          );
+          return APIResponse.error(response, apiId, `User is not mapped for this tenant`, "Invalid combination of userId and tenantId", HttpStatus.BAD_REQUEST);
         }
 
-        const [data, totalCount] =
-          await this.cohortMembersRepository.findAndCount({
-            where: whereClause,
-          });
+        const [data, totalCount] = await this.cohortMembersRepository.findAndCount({ where: whereClause });
         const userExistCohortGroup = data.slice(offset, offset + limit);
         count = totalCount;
 
-        const cohortIds = userExistCohortGroup.map(
-          (cohortId) => cohortId.cohortId
-        );
-
-        const cohortAllData = await this.cohortRepository.find({
-          where: {
-            cohortId: In(cohortIds),
-          },
-          order,
-        });
+        const cohortIds = userExistCohortGroup.map((cohortId) => cohortId.cohortId);
+        const cohortAllData = await this.cohortRepository.find({ where: { cohortId: In(cohortIds) }, order });
         for (const data of cohortAllData) {
-          const customFieldsData = await this.getCohortDataWithCustomfield(
-            data.cohortId
-          );
-          data["customFields"] = customFieldsData;
+          data["customFields"] = await this.getCohortDataWithCustomfield(data.cohortId);
           results.cohortDetails.push(data);
         }
       } else {
         let getCohortIdUsingCustomFields;
 
-        //If source config in source details from fields table is not exist then return false
-
         if (Object.keys(searchCustomFields).length > 0) {
-          const context = "COHORT";
-          getCohortIdUsingCustomFields =
-            await this.fieldsService.filterUserUsingCustomFieldsOptimized(
-              context,
-              searchCustomFields
-            );
-
+          getCohortIdUsingCustomFields = await this.fieldsService.filterUserUsingCustomFieldsOptimized("COHORT", searchCustomFields);
           if (getCohortIdUsingCustomFields == null) {
-            return APIResponse.error(
-              response,
-              apiId,
-              "No data found",
-              "NOT FOUND",
-              HttpStatus.NOT_FOUND
-            );
+            return APIResponse.error(response, apiId, "No data found", "NOT FOUND", HttpStatus.NOT_FOUND);
           }
         }
 
-        if (
-          getCohortIdUsingCustomFields &&
-          getCohortIdUsingCustomFields.length > 0 && !whereClause['cohortId']
-        ) {
-          let cohortIdsByFieldAndAcademicYear;
-          if (cohortsByAcademicYear?.length >= 1) {
-            cohortIdsByFieldAndAcademicYear = cohortsByAcademicYear.filter(
-              ({ cohortId }) => getCohortIdUsingCustomFields.includes(cohortId)
-            );
-          }
-          const cohortIds = cohortIdsByFieldAndAcademicYear?.map(
-            ({ cohortId }) => cohortId
-          );
-          whereClause["cohortId"] = In(cohortIds);
+        if (getCohortIdUsingCustomFields?.length > 0 && !whereClause['cohortId']) {
+          const cohortIdsByFieldAndAcademicYear = cohortsByAcademicYear?.length >= 1
+            ? cohortsByAcademicYear.filter(({ cohortId }) => getCohortIdUsingCustomFields.includes(cohortId))
+            : undefined;
+          whereClause["cohortId"] = In(cohortIdsByFieldAndAcademicYear?.map(({ cohortId }) => cohortId));
         }
-        // } else if (cohortsByAcademicYear?.length >= 1) {
-        //   const cohortIds = cohortsByAcademicYear?.map(
-        //     ({ cohortId }) => cohortId
-        //   );
-        //   whereClause["cohortId"] = In(cohortIds);
-        // }
 
-        const [data, totalCount] = await this.cohortRepository.findAndCount({
-          where: whereClause,
-          order,
-        });
-
-
+        const [data, totalCount] = await this.cohortRepository.findAndCount({ where: whereClause, order });
         const cohortData = data.slice(offset, offset + limit);
         count = totalCount;
 
         for (const data of cohortData) {
-          const customFieldsData = await this.getCohortDataWithCustomfield(
-            data.cohortId,
-            data.type
-          );
-          data["customFields"] = customFieldsData || [];
+          data["customFields"] = (await this.getCohortDataWithCustomfield(data.cohortId, data.type)) ?? [];
           results.cohortDetails.push(data);
         }
       }
-      if (results.cohortDetails.length > 0) {
-        return APIResponse.success(
-          response,
-          apiId,
-          { count, results },
-          HttpStatus.OK,
-          "Cohort details fetched successfully"
-        );
-      } else {
-        return APIResponse.error(
-          response,
-          apiId,
-          `No data found.`,
-          "No data found.",
-          HttpStatus.NOT_FOUND
-        );
-      }
+
+      return results.cohortDetails.length > 0
+        ? APIResponse.success(response, apiId, { count, results }, HttpStatus.OK, "Cohort details fetched successfully")
+        : APIResponse.error(response, apiId, `No data found.`, "No data found.", HttpStatus.NOT_FOUND);
+
     } catch (error) {
-      LoggerUtil.error(
-        `${API_RESPONSES.SERVER_ERROR}`,
-        `Error: ${error.message}`,
-        apiId
-      )
-      const errorMessage = error.message || API_RESPONSES.SERVER_ERROR;
-      return APIResponse.error(
-        response,
-        apiId,
-        API_RESPONSES.SERVER_ERROR,
-        errorMessage,
-        HttpStatus.INTERNAL_SERVER_ERROR
-      );
+      LoggerUtil.error(`${API_RESPONSES.SERVER_ERROR}`, `Error: ${error.message}`, apiId);
+      return APIResponse.error(response, apiId, API_RESPONSES.SERVER_ERROR, error.message ?? API_RESPONSES.SERVER_ERROR, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 
@@ -1172,7 +869,13 @@ export class CohortService {
   }
 
   public async automaticMemberCohortHierarchy(requiredData, academicYearId) {
-    const { condition: { value, fieldId } } = requiredData?.rules;
+
+    if (!requiredData?.rules?.condition) {
+      throw new Error('Condition data is missing.');
+    }
+    const {
+      condition: { value, fieldId },
+    } = requiredData.rules;
 
     // Pass fieldId to getSearchFieldValueData
     let filledValues = await this.fieldsService.getSearchFieldValueData(
@@ -1363,395 +1066,208 @@ export class CohortService {
     try {
       const { userId, academicYearId, filters, limit, offset } = requiredData;
 
-      // Validate userId
       if (!userId || !isUUID(userId)) {
-        return APIResponse.error(
-          res,
-          apiId,
-          API_RESPONSES.BAD_REQUEST,
-          API_RESPONSES.INVALID_USERID,
-          HttpStatus.NOT_FOUND
-        );
+        return APIResponse.error(res, apiId, API_RESPONSES.BAD_REQUEST, API_RESPONSES.INVALID_USERID, HttpStatus.NOT_FOUND);
       }
 
-      const paginationLimit = limit || 100;
-      const paginationOffset = offset || 0;
+      const paginationLimit = limit ?? 100;
+      const paginationOffset = offset ?? 0;
 
-      LoggerUtil.log(
-        `Getting geographical hierarchy for userId: ${userId}, academicYearId: ${academicYearId}`,
-        apiId
-      );
+      LoggerUtil.log(`Getting geographical hierarchy for userId: ${userId}, academicYearId: ${academicYearId}`, apiId);
 
-      // Step 1: Get user cohorts (batches and centers)
+      // Step 1: Get user cohorts
       let userCohorts = await this.findCohortName(userId, academicYearId);
-      if (!userCohorts || userCohorts.length === 0) {
-        return APIResponse.error(
-          res,
-          apiId,
-          API_RESPONSES.BAD_REQUEST,
-          API_RESPONSES.COHORT_NOT_FOUND,
-          HttpStatus.NOT_FOUND
-        );
+      if (!userCohorts?.length) {
+        return APIResponse.error(res, apiId, API_RESPONSES.BAD_REQUEST, API_RESPONSES.COHORT_NOT_FOUND, HttpStatus.NOT_FOUND);
       }
 
-      // Step 1.2: Keep only active memberships so the same batch does not appear multiple times (reassigned rows excluded)
-      const memberStatus = (c: any) => (c.cohortmemberstatus || c.cohortMemberStatus || "").toString().toLowerCase();
-      userCohorts = userCohorts.filter((c) => memberStatus(c) === "active");
+      // Keep only active memberships
+      const getMemberStatus = (c: any) => (c.cohortmemberstatus ?? c.cohortMemberStatus ?? "").toString().toLowerCase();
+      userCohorts = userCohorts.filter((c) => getMemberStatus(c) === "active");
 
-      // Step 1.5: Apply filters to user cohorts if provided
+      // Apply filters to user cohorts if provided
       if (filters && Object.keys(filters).length > 0) {
-        const cleanedFilters = Object.fromEntries(
-          Object.entries(filters).filter(([_, value]) => value !== undefined && value !== null)
+        const cf = Object.fromEntries(
+          Object.entries(filters).filter(([_, v]) => v !== undefined && v !== null)
         ) as Record<string, any>;
 
-        // Filter by parentId
-        if (cleanedFilters.parentId && Array.isArray(cleanedFilters.parentId) && cleanedFilters.parentId.length > 0) {
-          const parentIdArray = cleanedFilters.parentId as string[];
-          userCohorts = userCohorts.filter(
-            cohort => cohort.parentId && parentIdArray.includes(cohort.parentId)
-          );
-        }
-
-        // Filter by cohortId
-        if (cleanedFilters.cohortId && Array.isArray(cleanedFilters.cohortId) && cleanedFilters.cohortId.length > 0) {
-          const cohortIdArray = cleanedFilters.cohortId as string[];
-          userCohorts = userCohorts.filter(
-            cohort => cohortIdArray.includes(cohort.cohortId)
-          );
-        }
-
-        // Filter by type
-        if (cleanedFilters.type && typeof cleanedFilters.type === 'string') {
-          const typeFilter = cleanedFilters.type.toLowerCase();
-          userCohorts = userCohorts.filter(
-            cohort => cohort.type?.toLowerCase() === typeFilter
-          );
-        }
-
-        // Filter by status
-        if (cleanedFilters.status && Array.isArray(cleanedFilters.status) && cleanedFilters.status.length > 0) {
-          const statusArray = cleanedFilters.status as string[];
-          userCohorts = userCohorts.filter(
-            cohort => statusArray.includes(cohort.status)
-          );
-        }
-
-        // Filter by name (case-insensitive partial match)
-        if (cleanedFilters.name && typeof cleanedFilters.name === 'string') {
-          const nameFilter = cleanedFilters.name.toLowerCase();
-          userCohorts = userCohorts.filter(
-            cohort => cohort.name?.toLowerCase().includes(nameFilter)
-          );
-        }
+        if (cf.parentId?.length > 0)
+          userCohorts = userCohorts.filter(c => c.parentId && (cf.parentId as string[]).includes(c.parentId));
+        if (cf.cohortId?.length > 0)
+          userCohorts = userCohorts.filter(c => (cf.cohortId as string[]).includes(c.cohortId));
+        if (typeof cf.type === 'string')
+          userCohorts = userCohorts.filter(c => c.type?.toLowerCase() === cf.type.toLowerCase());
+        if (cf.status?.length > 0)
+          userCohorts = userCohorts.filter(c => (cf.status as string[]).includes(c.status));
+        if (typeof cf.name === 'string')
+          userCohorts = userCohorts.filter(c => c.name?.toLowerCase().includes(cf.name.toLowerCase()));
       }
 
       if (userCohorts.length === 0) {
-        return APIResponse.error(
-          res,
-          apiId,
-          API_RESPONSES.BAD_REQUEST,
-          API_RESPONSES.COHORT_NOT_FOUND,
-          HttpStatus.NOT_FOUND
-        );
+        return APIResponse.error(res, apiId, API_RESPONSES.BAD_REQUEST, API_RESPONSES.COHORT_NOT_FOUND, HttpStatus.NOT_FOUND);
       }
 
-      // Step 2: Collect unique centers (from batches via parentId or direct center assignments)
+      // Step 2: Collect unique centers from batches / direct center assignments
       const centerBatchMap = new Map<string, any[]>();
       const centerIds = new Set<string>();
 
+      const getOrInit = <V>(map: Map<string, V>, key: string, init: () => V): V => {
+        if (!map.has(key)) map.set(key, init());
+        return map.get(key);
+      };
+
       for (const cohort of userCohorts) {
+        const cohortType = cohort.type?.toLowerCase();
         let centerId: string;
 
-        if (cohort.type?.toLowerCase() === 'batch' && cohort.parentId) {
-          // Batch: get parent center
+        if (cohortType === 'batch' && cohort.parentId) {
           centerId = cohort.parentId;
-          if (!centerBatchMap.has(centerId)) {
-            centerBatchMap.set(centerId, []);
+          const batches = getOrInit(centerBatchMap, centerId, () => []);
+          if (!batches.some((b) => b.batchId === cohort.cohortId)) {
+            batches.push({ batchId: cohort.cohortId, batchName: cohort.name });
           }
-          const batches = centerBatchMap.get(centerId);
-          const alreadyAdded = batches.some((b) => b.batchId === cohort.cohortId);
-          if (!alreadyAdded) {
-            batches.push({
-              batchId: cohort.cohortId,
-              batchName: cohort.name
-            });
-          }
-        } else if (cohort.type?.toLowerCase() === 'center' || cohort.type?.toLowerCase() === 'cohort') {
-          // Direct center assignment
+        } else if (cohortType === 'center' || cohortType === 'cohort') {
           centerId = cohort.cohortId;
-          if (!centerBatchMap.has(centerId)) {
-            centerBatchMap.set(centerId, []);
-          }
+          getOrInit(centerBatchMap, centerId, () => []);
         } else {
           continue;
         }
-
         centerIds.add(centerId);
       }
 
       if (centerIds.size === 0) {
-        return APIResponse.error(
-          res,
-          apiId,
-          API_RESPONSES.BAD_REQUEST,
-          API_RESPONSES.COHORT_NOT_FOUND,
-          HttpStatus.NOT_FOUND
-        );
+        return APIResponse.error(res, apiId, API_RESPONSES.BAD_REQUEST, API_RESPONSES.COHORT_NOT_FOUND, HttpStatus.NOT_FOUND);
       }
 
-      // Step 3: Get SDBV data for centers using existing getCustomFieldDetails method
-      const centerIdsArray = Array.from(centerIds);
+      // Step 3: Fetch center records and build geoData
       const centers = await this.cohortRepository.find({
-        where: { cohortId: In(centerIdsArray) },
+        where: { cohortId: In(Array.from(centerIds)) },
         select: ['cohortId', 'name']
       });
 
+      const geoFilters = filters
+        ? { state: filters.state, district: filters.district, block: filters.block, village: filters.village, customFieldsName: filters.customFieldsName }
+        : null;
+
+      // Map geo dimension names to their geoData id/name keys
+      const geoDimensions = [
+        { key: 'state', idField: 'stateId', nameField: 'stateName' },
+        { key: 'district', idField: 'districtId', nameField: 'districtName' },
+        { key: 'block', idField: 'blockId', nameField: 'blockName' },
+        { key: 'village', idField: 'villageId', nameField: 'villageName' },
+      ];
+
       const centerGeoDataMap = new Map<string, any>();
-      const geoFilters = filters ? {
-        state: filters.state,
-        district: filters.district,
-        block: filters.block,
-        village: filters.village,
-        customFieldsName: filters.customFieldsName
-      } : null;
 
-      // Process each center using existing method
       for (const center of centers) {
-        // Use existing getCustomFieldDetails method (same as used in other APIs)
-        const customFields = await this.fieldsService.getCustomFieldDetails(
-          center.cohortId,
-          'Cohort'
-        );
-
+        const customFields = await this.fieldsService.getCustomFieldDetails(center.cohortId, 'Cohort');
         const geoData: any = {
-          stateId: null,
-          stateName: null,
-          districtId: null,
-          districtName: null,
-          blockId: null,
-          blockName: null,
-          villageId: null,
-          villageName: null
+          stateId: null, stateName: null,
+          districtId: null, districtName: null,
+          blockId: null, blockName: null,
+          villageId: null, villageName: null
         };
 
-        // Extract SDBV from custom fields (same pattern as used in cron.service.ts)
+        // Extract SDBV from custom fields
         for (const field of customFields) {
-          const fieldLabel = field.label?.toLowerCase();
-          const fieldName = field.name?.toLowerCase();
-
-          // Check both label and name (as done in other services)
-          if ((fieldLabel === 'state' || fieldName === 'state') && field.selectedValues?.[0]) {
-            const val = field.selectedValues[0];
-            if (val && typeof val === 'object') {
-              geoData.stateId = val.id || val.value || null;
-              geoData.stateName = val.label || val.value || null;
-            }
-          } else if ((fieldLabel === 'district' || fieldName === 'district') && field.selectedValues?.[0]) {
-            const val = field.selectedValues[0];
-            if (val && typeof val === 'object') {
-              geoData.districtId = val.id || val.value || null;
-              geoData.districtName = val.label || val.value || null;
-            }
-          } else if ((fieldLabel === 'block' || fieldName === 'block') && field.selectedValues?.[0]) {
-            const val = field.selectedValues[0];
-            if (val && typeof val === 'object') {
-              geoData.blockId = val.id || val.value || null;
-              geoData.blockName = val.label || val.value || null;
-            }
-          } else if ((fieldLabel === 'village' || fieldName === 'village') && field.selectedValues?.[0]) {
-            const val = field.selectedValues[0];
-            if (val && typeof val === 'object') {
-              geoData.villageId = val.id || val.value || null;
-              geoData.villageName = val.label || val.value || null;
-            }
+          const fieldKey = (field.label ?? field.name)?.toLowerCase();
+          const dim = geoDimensions.find(d => d.key === fieldKey);
+          const val = field.selectedValues?.[0];
+          if (dim && val && typeof val === 'object') {
+            geoData[dim.idField] = val.id ?? val.value ?? null;
+            geoData[dim.nameField] = val.label ?? val.value ?? null;
           }
         }
 
-        // Apply geographical filters if provided
-        let shouldInclude = true;
-        if (geoFilters) {
-          // Filter by state
-          if (geoFilters.state && Array.isArray(geoFilters.state) && geoFilters.state.length > 0) {
-            if (!geoData.stateId || !geoFilters.state.includes(geoData.stateId)) {
-              shouldInclude = false;
-            }
-          }
-
-          // Filter by district
-          if (shouldInclude && geoFilters.district && Array.isArray(geoFilters.district) && geoFilters.district.length > 0) {
-            if (!geoData.districtId || !geoFilters.district.includes(geoData.districtId)) {
-              shouldInclude = false;
-            }
-          }
-
-          // Filter by block
-          if (shouldInclude && geoFilters.block && Array.isArray(geoFilters.block) && geoFilters.block.length > 0) {
-            if (!geoData.blockId || !geoFilters.block.includes(geoData.blockId)) {
-              shouldInclude = false;
-            }
-          }
-
-          // Filter by village
-          if (shouldInclude && geoFilters.village && Array.isArray(geoFilters.village) && geoFilters.village.length > 0) {
-            if (!geoData.villageId || !geoFilters.village.includes(geoData.villageId)) {
-              shouldInclude = false;
-            }
-          }
-
-          // Filter by customFieldsName
-          if (shouldInclude && geoFilters.customFieldsName && typeof geoFilters.customFieldsName === 'object') {
-            // Apply custom field filters using fieldsService
-            const customFieldMatches = await this.fieldsService.filterUserUsingCustomFields(
-              'COHORT',
-              geoFilters.customFieldsName
-            );
-            if (customFieldMatches && !customFieldMatches.includes(center.cohortId)) {
-              shouldInclude = false;
-            }
-          }
-        }
+        // Apply geo filters
+        const shouldInclude = !geoFilters || (
+          geoDimensions.every(({ key, idField }) => {
+            const filterArr = geoFilters[key];
+            return !Array.isArray(filterArr) || filterArr.length === 0 || (geoData[idField] && filterArr.includes(geoData[idField]));
+          }) &&
+          (!geoFilters.customFieldsName || typeof geoFilters.customFieldsName !== 'object' || await (async () => {
+            const matches = await this.fieldsService.filterUserUsingCustomFields('COHORT', geoFilters.customFieldsName);
+            return !matches || matches.includes(center.cohortId);
+          })())
+        );
 
         if (shouldInclude) {
           centerGeoDataMap.set(center.cohortId, {
             centerId: center.cohortId,
             centerName: center.name,
             ...geoData,
-            batches: centerBatchMap.get(center.cohortId) || []
+            batches: centerBatchMap.get(center.cohortId) ?? []
           });
         }
       }
 
-      // Step 5: Build reverse geographical hierarchy
-      const hierarchyMap = new Map<string, Map<string, Map<string, any[]>>>(); // state -> district -> block -> centers
+      // Step 5: Build reverse geographical hierarchy (state -> district -> block)
+      const hierarchyMap = new Map<string, Map<string, Map<string, any[]>>>();
 
-      for (const [centerId, centerData] of centerGeoDataMap.entries()) {
-        const stateKey = centerData.stateId || 'unknown';
-        const districtKey = centerData.districtId || 'unknown';
-        const blockKey = centerData.blockId || 'unknown';
+      for (const [, centerData] of centerGeoDataMap.entries()) {
+        const stateKey = centerData.stateId ?? 'unknown';
+        const districtKey = centerData.districtId ?? 'unknown';
+        const blockKey = centerData.blockId ?? 'unknown';
 
-        if (!hierarchyMap.has(stateKey)) {
-          hierarchyMap.set(stateKey, new Map());
-        }
-        const stateMap = hierarchyMap.get(stateKey);
+        const stateMap = getOrInit(hierarchyMap, stateKey, () => new Map());
+        const districtMap = getOrInit(stateMap, districtKey, () => new Map());
+        const blocks = getOrInit(districtMap, blockKey, () => []);
 
-        if (!stateMap.has(districtKey)) {
-          stateMap.set(districtKey, new Map());
-        }
-        const districtMap = stateMap.get(districtKey);
-
-        if (!districtMap.has(blockKey)) {
-          districtMap.set(blockKey, []);
-        }
-        districtMap.get(blockKey).push({
-          centerId: centerData.centerId,
-          centerName: centerData.centerName,
-          batches: centerData.batches
-        });
+        blocks.push({ centerId: centerData.centerId, centerName: centerData.centerName, batches: centerData.batches });
       }
 
       // Step 6: Convert map structure to response format
       const result = [];
 
       for (const [stateId, districtMap] of hierarchyMap.entries()) {
+        const firstCenter = Array.from(districtMap.values())[0]?.get(Array.from(Array.from(districtMap.values())[0].keys())[0])?.[0];
         const stateData: any = {
           stateId: stateId === 'unknown' ? null : stateId,
-          stateName: 'Unknown',
+          stateName: centerGeoDataMap.get(firstCenter?.centerId)?.stateName ?? 'Unknown',
           districts: []
         };
 
-        // Get state name from first center in this state
-        const firstCenter = Array.from(districtMap.values())[0]?.get(Array.from(Array.from(districtMap.values())[0].keys())[0])?.[0];
-        if (firstCenter) {
-          const centerGeo = centerGeoDataMap.get(firstCenter.centerId);
-          if (centerGeo && centerGeo.stateName) {
-            stateData.stateName = centerGeo.stateName;
-          }
-        }
-
         for (const [districtId, blockMap] of districtMap.entries()) {
+          const firstBlockCenter = Array.from(blockMap.values())[0]?.[0];
           const districtData: any = {
             districtId: districtId === 'unknown' ? null : districtId,
-            districtName: 'Unknown',
+            districtName: centerGeoDataMap.get(firstBlockCenter?.centerId)?.districtName ?? 'Unknown',
             blocks: []
           };
 
-          // Get district name from first center in this district
-          const firstBlockCenter = Array.from(blockMap.values())[0]?.[0];
-          if (firstBlockCenter) {
-            const centerGeo = centerGeoDataMap.get(firstBlockCenter.centerId);
-            if (centerGeo && centerGeo.districtName) {
-              districtData.districtName = centerGeo.districtName;
-            }
-          }
-
-          for (const [blockId, centers] of blockMap.entries()) {
+          for (const [blockId, blockCenters] of blockMap.entries()) {
             const blockData: any = {
               blockId: blockId === 'unknown' ? null : blockId,
-              blockName: 'Unknown',
-              centers: []
+              blockName: centerGeoDataMap.get(blockCenters[0]?.centerId)?.blockName ?? 'Unknown',
+              centers: blockCenters.map(c => ({
+                centerId: c.centerId,
+                centerName: c.centerName,
+                batches: c.batches ?? []
+              }))
             };
-
-            // Get block name from first center in this block
-            if (centers.length > 0) {
-              const centerGeo = centerGeoDataMap.get(centers[0].centerId);
-              if (centerGeo && centerGeo.blockName) {
-                blockData.blockName = centerGeo.blockName;
-              }
-            }
-
-            // Add centers (without batches in center object, batches are separate)
-            blockData.centers = centers.map(center => ({
-              centerId: center.centerId,
-              centerName: center.centerName,
-              batches: center.batches || []
-            }));
-
             districtData.blocks.push(blockData);
           }
-
           stateData.districts.push(districtData);
         }
-
         result.push(stateData);
       }
 
       // Step 7: Apply pagination
       const totalCount = result.length;
       const paginatedResult = result.slice(paginationOffset, paginationOffset + paginationLimit);
-      const currentPageCount = paginatedResult.length;
 
-      LoggerUtil.log(
-        "User geographical hierarchy fetched successfully",
-        apiId
-      );
+      LoggerUtil.log("User geographical hierarchy fetched successfully", apiId);
 
       return APIResponse.success(
         res,
         apiId,
-        {
-          data: paginatedResult,
-          totalCount: totalCount,
-          currentPageCount: currentPageCount,
-          limit: paginationLimit,
-          offset: paginationOffset
-        },
+        { data: paginatedResult, totalCount, currentPageCount: paginatedResult.length, limit: paginationLimit, offset: paginationOffset },
         HttpStatus.OK,
         "User geographical hierarchy fetched successfully"
       );
     } catch (error) {
-      LoggerUtil.error(
-        `${API_RESPONSES.SERVER_ERROR}`,
-        `Error: ${error.message}`,
-        apiId
-      );
-      const errorMessage = error.message || API_RESPONSES.SERVER_ERROR;
-      return APIResponse.error(
-        res,
-        apiId,
-        API_RESPONSES.SERVER_ERROR,
-        errorMessage,
-        HttpStatus.INTERNAL_SERVER_ERROR
-      );
+      LoggerUtil.error(`${API_RESPONSES.SERVER_ERROR}`, `Error: ${error.message}`, apiId);
+      return APIResponse.error(res, apiId, API_RESPONSES.SERVER_ERROR, error.message ?? API_RESPONSES.SERVER_ERROR, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 }
