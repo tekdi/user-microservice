@@ -257,7 +257,7 @@ ON CM."userId" = U."userId" ${whereCase}`;
       }
 
       const { sort, filters, limit, offset } = cohortMembersSearchDto;
-      const whereClause: any = { ...(filters ?? {}) };
+      const whereClause: any = filters ?? {};
       
       const cId = whereClause.cohortId;
       const uId = whereClause.userId;
