@@ -6,6 +6,7 @@ import { UserService } from '../user/user.service';
 import { RoleService } from '../rbac/role/role.service';
 import { FieldsService } from '../fields/fields.service';
 import { SSO_DEFAULTS } from '../constants/sso.constants';
+import { randomUUID } from 'node:crypto';
 import { UserTenantMappingService } from 'src/userTenantMapping/user-tenant-mapping.service';
 
 
@@ -669,6 +670,6 @@ export class SsoService {
    * @returns UUID string
    */
   private generateUUID(): string {
-    return require('crypto').randomUUID();
+    return randomUUID();
   }
 } 

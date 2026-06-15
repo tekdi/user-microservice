@@ -169,13 +169,8 @@ export class RoleService {
   public async searchRole(roleSearchDto: RoleSearchDto, response: Response) {
     const apiId = APIID.ROLE_SEARCH;
     try {
-      let { limit } = roleSearchDto;
-      const { page, filters } = roleSearchDto;
-
-      const offset = page > 1 ? parseInt(limit) * (page - 1) : 0;
-      limit = limit.trim() === "" ? "0" : limit;
-
-      const whereClause: any = Object.keys(filters ?? {}).length > 0 ? { ...filters } : {};
+      const { filters } = roleSearchDto;
+      const whereClause: any = filters ?? {};
 
       if (whereClause.userId && !whereClause.tenantId) {
         return APIResponse.error(response, apiId, `Please Enter Tenenat id or Valid Filter`, "Invalid Tenant Id or Valid Filter", HttpStatus.BAD_REQUEST);

@@ -1144,7 +1144,7 @@ export class FieldsService {
       });
 
       const result = {
-        totalCount: parseInt(dynamicOptions[0]?.total_count ?? "0", 10),
+        totalCount: Number.parseInt(dynamicOptions[0]?.total_count ?? "0", 10),
         fieldId: fetchFieldParams?.fieldId,
         values: queryData,
       };
