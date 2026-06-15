@@ -531,9 +531,9 @@ export class CohortService {
       }
 
       // Split DTO keys into updateData vs customFields
-      for (const key in cohortUpdateDto) {
-        if (cohortUpdateDto.hasOwnProperty(key) && cohortUpdateDto[key] !== null) {
-          (key !== "customFields" ? updateData : customFields)[key] = cohortUpdateDto[key];
+      for (const [key, value] of Object.entries(cohortUpdateDto)) {
+        if (value !== null && key !== "customFields") {
+          updateData[key] = value;
         }
       }
 
@@ -712,10 +712,12 @@ export class CohortService {
         }
 
         if (getCohortIdUsingCustomFields?.length > 0 && !whereClause['cohortId']) {
-          const cohortIdsByFieldAndAcademicYear = cohortsByAcademicYear?.length >= 1
-            ? cohortsByAcademicYear.filter(({ cohortId }) => getCohortIdUsingCustomFields.includes(cohortId))
-            : undefined;
-          whereClause["cohortId"] = In(cohortIdsByFieldAndAcademicYear?.map(({ cohortId }) => cohortId));
+          const cohortIds = cohortsByAcademicYear
+            ? cohortsByAcademicYear
+              .filter(({ cohortId }) => getCohortIdUsingCustomFields.includes(cohortId))
+              .map(({ cohortId }) => cohortId)
+            : getCohortIdUsingCustomFields;
+          whereClause["cohortId"] = In(cohortIds);
         }
 
         const [data, totalCount] = await this.cohortRepository.findAndCount({ where: whereClause, order });

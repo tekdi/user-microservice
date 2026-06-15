@@ -278,7 +278,7 @@ ON CM."userId" = U."userId" ${whereCase}`;
         finalExistRecord = uYearRec;
       }
 
-      if (uId && cId && cYearRec[0] !== uYearRec[0]) {
+      if (uId && cId && !cYearRec.some(id => uYearRec.includes(id))) {
         return APIResponse.error(res, apiId, API_RESPONSES.COHORT_USER_NOTFOUND, API_RESPONSES.NOT_FOUND, HttpStatus.NOT_FOUND);
       }
 
@@ -644,8 +644,8 @@ ${whereCase}`;
       //validate custom fileds
       if (cohortMembersUpdateDto.customFields?.length > 0) {
         const customFieldValidate = await this.fieldsService.validateCustomFieldByContext(cohortMembersUpdateDto, "COHORTMEMBER", "COHORTMEMBER");
-        if (!customFieldValidate || !isValid) {
-          return APIResponse.error(res, apiId, "BAD_REQUEST", `${customFieldValidate}`, HttpStatus.BAD_REQUEST);
+        if (!customFieldValidate?.isValid) {
+          return APIResponse.error(res, apiId, "BAD_REQUEST", customFieldValidate?.error || "Validation Error", HttpStatus.BAD_REQUEST);
         }
       }
 

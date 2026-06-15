@@ -147,13 +147,13 @@ export class FieldsService {
         );
         
         getFieldDetails.fieldParams = {
-          options: getOption.flatMap((param) => 
-            Object.keys(param)
-              .filter((key) => key.endsWith("_id"))
-              .map((idKey) => ({
-                value: param[idKey],
-                label: param[idKey.replace("_id", "_name")] || "Unknown",
-              }))
+          options: (getOption || []).flatMap((param) => 
+            Object.keys(param) 
+              .filter((key) => key.endsWith("_id")) 
+              .map((idKey) => ({ 
+                value: param[idKey], 
+                label: param[idKey.replace("_id", "_name")] || "Unknown", 
+              })) 
           ),
         };
       } else {
@@ -217,7 +217,7 @@ export class FieldsService {
       if (validTypes.includes(getFieldDetails.type) && getFieldDetails.sourceDetails?.source === "table") {
         const getOption = await this.findDynamicOptions(getFieldDetails.sourceDetails.table);
         getFieldDetails.fieldParams = {
-          options: getOption.map((param) => ({
+          options: (getOption || []).map((param) => ({
             value: param.value,
             label: param.label,
           })),
@@ -326,10 +326,9 @@ export class FieldsService {
 
           const query = `SELECT "name", "value" 
           FROM public.${fieldsData.sourceDetails.table} 
-          WHERE value = '${sourceFieldName.value}' 
+          WHERE value = $1 
           GROUP BY  "name", "value"`;
-
-          const checkSourceData = await this.fieldsValuesRepository.query(query);
+          const checkSourceData = await this.fieldsValuesRepository.query(query, [sourceFieldName.value]);
           const isCreate = fieldsData.fieldParams.isCreate;
 
           if (checkSourceData.length === 0) {
@@ -1200,9 +1199,11 @@ export class FieldsService {
       const source = getField?.sourceDetails?.source;
 
       if (source === "table") {
-        const whereCond = removeOption ? `WHERE "value"='${removeOption}'` : "";
-        const query = `DELETE FROM public.${getField.sourceDetails.table} ${whereCond}`;
-        const [_, affectedRow] = await this.fieldsRepository.query(query);
+        const query = removeOption
+          ? `DELETE FROM public.${getField.sourceDetails.table} WHERE "value" = $1`
+          : `DELETE FROM public.${getField.sourceDetails.table}`;
+        const params = removeOption ? [removeOption] : [];
+        const [_, affectedRow] = await this.fieldsRepository.query(query, params);
 
         if (affectedRow === 0) {
           return await APIResponse.error(
@@ -1429,7 +1430,8 @@ export class FieldsService {
           customField.options = await this.findDynamicOptions(data.sourceDetails.table);
         } else if (source === "jsonFile") {
           const filePath = path.join(process.cwd(), `${data.sourceDetails.filePath}`);
-          customField.options = JSON.parse(readFileSync(filePath, "utf-8"));
+          const getFieldValuesFromJson = JSON.parse(readFileSync(filePath, "utf-8"));
+          customField.options = getFieldValuesFromJson.options || getFieldValuesFromJson;
         } else {
           customField.options = data?.fieldParams?.["options"] || null;
         }

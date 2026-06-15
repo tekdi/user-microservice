@@ -213,7 +213,7 @@ export class RoleService {
           roleId: data.roleId,
           title: data.title,
           code: data.code,
-          privileges: result.find((p) => p.roleid === data.roleId) ?? [],
+          privileges: result.filter((p) => p.roleid === data.roleId),
         }));
         return APIResponse.success(response, apiId, roles, HttpStatus.OK, "Role For Tenant with Privileges fetched successfully.");
       }
