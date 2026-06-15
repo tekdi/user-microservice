@@ -544,9 +544,13 @@ export class CohortService {
 
       // Save custom fields in fieldValues table
       if (hasCustomFields) {
-        const contextType: string[] = cohortUpdateDto.type
-          ? [cohortUpdateDto.type]
-          : existingCohorDetails?.type ? [existingCohorDetails.type] : [];
+        let contextType: string[] = [];
+
+        if (cohortUpdateDto.type) {
+          contextType = [cohortUpdateDto.type];
+        } else if (existingCohorDetails?.type) {
+          contextType = [existingCohorDetails.type];
+        }
 
         const allCustomFields = await this.fieldsService.findCustomFields("COHORT", contextType);
 
