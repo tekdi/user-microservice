@@ -2,7 +2,6 @@ import { MiddlewareConsumer, Module, RequestMethod } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { AppController } from "./app.controller";
 import { AppService } from "./app.service";
-import { AuditLoggerModule } from "@tekdi/audit-logger/nestjs";
 // import { MulterModule } from "@nestjs/platform-express/multer";
 // Below modules not in use for Shiksha 2.0
 
@@ -39,10 +38,6 @@ import { CronModule } from "./cron/cron.module";
     ConfigModule.forRoot({
       load: [kafkaConfig], // Load the Kafka config
       isGlobal: true, // Makes config accessible globally
-    }),
-    AuditLoggerModule.forRoot({
-      serviceName: process.env.AUDIT_SERVICE_NAME || 'user-service',
-      kafkaTopic: 'audit.events',
     }),
     // MulterModule.register({
     //   dest: "./uploads",

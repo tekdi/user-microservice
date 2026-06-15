@@ -45,7 +45,6 @@
     "@nestjs/schedule": "^6.0.1",
     "@nestjs/swagger": "^11.2.3",
     "@nestjs/typeorm": "^11.0.0",
-    "@tekdi/audit-logger": "github:tekdi/audit-logs#product-release1.0.0",
     "@types/multer": "^2.0.0",
     "axios": "^1.13.2",
     "class-transformer": "^0.5.1",

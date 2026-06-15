@@ -97,12 +97,11 @@ export class AssignRoleController {
   @ApiNotFoundResponse({ description: "Data not found" })
   @ApiBadRequestResponse({ description: "Bad request" })
   public async deleteRole(
-    @Req() request: Request,
     @Body() deleteAssignRoleDto: DeleteAssignRoleDto, // Modify this line to accept DeleteAssignRoleDto
     @Res() response: Response
   ) {
     return await this.assignRoleService
-      .deleteAssignedRole(request, deleteAssignRoleDto, response);
+      .deleteAssignedRole(deleteAssignRoleDto, response);
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.USERROLE_BULK_UPDATE))
@@ -115,9 +114,8 @@ export class AssignRoleController {
   @ApiInternalServerErrorResponse({ description: "Internal Server Error." })
   @ApiHeader({ name: "tenantid", required: true })
   public async bulkUpdateUserRoles(
+    @Body() dto: BulkAssignRoleDto,
     @Headers() headers,
-    @Req() request: Request,
-    @Body() dto: { userIds: string[]; roleId: string },
     @Res() response: Response,
     @GetUserId("userId", ParseUUIDPipe) userId: string
   ) {
@@ -126,7 +124,6 @@ export class AssignRoleController {
       throw new BadRequestException("Tenant ID is required.");
     }
     return await this.assignRoleService.bulkUpdateUserRoles(
-      request,
       dto.userIds,
       dto.roleId,
       tenantId,

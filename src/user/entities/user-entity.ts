@@ -70,7 +70,7 @@ export class User {
   })
   updatedAt: Date;
 
-  @Column({ type: "bigint", nullable: true })
+  @Column({ nullable: true })
   mobile: number;
 
   @Column('text', { array: true, nullable: true })

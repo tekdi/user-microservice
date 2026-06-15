@@ -35,10 +35,10 @@ export class UserRoleMapping {
   })
   updatedAt: Date;
 
-  @Column({ nullable: false })
+  @Column()
   createdBy: string;
 
-  @Column({ nullable: false })
+  @Column()
   updatedBy: string;
 
   // @ManyToOne(() => User, (user) => user.userRoleMappings)

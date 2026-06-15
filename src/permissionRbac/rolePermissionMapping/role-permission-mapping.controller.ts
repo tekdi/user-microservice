@@ -1,8 +1,8 @@
-import { Body, Controller, Delete, Post, Req, Res } from "@nestjs/common";
+import { Body, Controller, Delete, Post, Res } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
 import { RolePermissionService } from "./role-permission-mapping.service";
 import { RolePermissionCreateDto } from "./dto/role-permission-create-dto";
-import { Response, Request } from "express";
+import { Response } from "express";
 @ApiTags("RolePermissionMapping")
 @Controller("role-permission")
 export class RolePermissionMappingController {
@@ -11,12 +11,10 @@ export class RolePermissionMappingController {
   //Create a new permission
   @Post("/create")
   public async createPermission(
-    @Req() request: Request,
     @Res() response: Response,
     @Body() permissionCreateDto: RolePermissionCreateDto
   ): Promise<Response> {
     return await this.rolePermissionService.createPermission(
-      request,
       permissionCreateDto,
       response
     );
@@ -38,12 +36,10 @@ export class RolePermissionMappingController {
   //update permission
   @Post("/update")
   public async updatePermission(
-    @Req() request: Request,
     @Res() response: Response,
     @Body() permissionCreateDto: RolePermissionCreateDto
   ): Promise<Response> {
     return await this.rolePermissionService.updatePermission(
-      request,
       permissionCreateDto,
       response
     );
@@ -51,12 +47,10 @@ export class RolePermissionMappingController {
   //delete permission
   @Delete("/delete")
   public async deletePermission(
-    @Req() request: Request,
     @Res() response: Response,
     @Body() rolePermissionId: string
   ): Promise<Response> {
     return await this.rolePermissionService.deletePermission(
-      request,
       rolePermissionId,
       response
     );

@@ -163,7 +163,6 @@ export class UserController {
   })
   public async updateUser(
     @Headers() headers,
-    @Req() request: Request,
     @Param("userid") userId: string,
     @GetUserId("loginUserId", ParseUUIDPipe) loginUserId: string,
     @Body() userUpdateDto: UserUpdateDTO,
@@ -176,7 +175,7 @@ export class UserController {
     userUpdateDto.userData.tenantId = tenantId ? tenantId : null;
 
     return await this.userService
-      .updateUser(request, userUpdateDto, response);
+      .updateUser(userUpdateDto, response);
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.USER_LIST))
@@ -335,7 +334,7 @@ export class UserController {
     @Res() response: Response
   ) {
     return await this.userService
-      .deleteUserById(request, userId, response);
+      .deleteUserById(userId, response);
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.SEND_OTP))

@@ -1,5 +1,4 @@
 import { HttpStatus, Injectable } from "@nestjs/common";
-import { AuditLoggerService } from "@tekdi/audit-logger/nestjs";
 import { User } from "./entities/user-entity";
 import { FieldValues } from "src/fields/entities/fields-values.entity";
 import { InjectRepository } from "@nestjs/typeorm";
@@ -101,7 +100,6 @@ export class UserService {
     private readonly authUtils: AuthUtils,
     private readonly automaticMemberService: AutomaticMemberService,
     private readonly kafkaService: KafkaService,
-    private readonly auditLoggerService: AuditLoggerService,
     dataSource: DataSource
   ) {
     this.jwt_secret = this.configService.get<string>("RBAC_JWT_SECRET");
@@ -1265,17 +1263,13 @@ export class UserService {
     return Array.from(tenantMap.values());
   }
 
-  public async updateUser(
-    request: any,
-    userUpdateDto: any,
-    response: Response
-  ) {
+  async updateUser(userDto, response: Response) {
     const apiId = APIID.USER_UPDATE;
     try {
       const updatedData = {};
       const editIssues = {};
 
-      const user = await this.usersRepository.findOne({ where: { userId: userUpdateDto.userId } });
+      const user = await this.usersRepository.findOne({ where: { userId: userDto.userId } });
       if (!user) {
         return APIResponse.error(
           response,
@@ -1287,22 +1281,22 @@ export class UserService {
       }
 
       //mutideviceId
-      if (userUpdateDto?.userData?.deviceId) {
+      if (userDto?.userData?.deviceId) {
         let deviceIds: any;
-        if (userUpdateDto.userData.action === ActionType.ADD) {
+        if (userDto.userData.action === ActionType.ADD) {
           // add deviceId
-          deviceIds = await this.loginDeviceIdAction(userUpdateDto.userData.deviceId, userUpdateDto.userId, user.deviceId)
-          userUpdateDto.userData.deviceId = deviceIds;
+          deviceIds = await this.loginDeviceIdAction(userDto.userData.deviceId, userDto.userId, user.deviceId)
+          userDto.userData.deviceId = deviceIds;
 
-        } else if (userUpdateDto.userData.action === ActionType.REMOVE) {
+        } else if (userDto.userData.action === ActionType.REMOVE) {
           //remove deviceId
-          deviceIds = await this.onLogoutDeviceId(userUpdateDto.userData.deviceId, userUpdateDto.userId, user.deviceId)
-          userUpdateDto.userData.deviceId = deviceIds;
+          deviceIds = await this.onLogoutDeviceId(userDto.userData.deviceId, userDto.userId, user.deviceId)
+          userDto.userData.deviceId = deviceIds;
         }
       }
 
-      const { username, firstName, lastName, email } = userUpdateDto.userData;
-      const userId = userUpdateDto.userId;
+      const { username, firstName, lastName, email } = userDto.userData;
+      const userId = userDto.userId;
       const keycloakReqBody = { username, firstName, lastName, userId, email };
 
       //Update userdetails on keycloak
@@ -1345,24 +1339,24 @@ export class UserService {
         }
       }
 
-      if (userUpdateDto.userData) {
-        await this.updateBasicUserDetails(userUpdateDto.userId, userUpdateDto.userData);
-        updatedData["basicDetails"] = userUpdateDto.userData;
+      if (userDto.userData) {
+        await this.updateBasicUserDetails(userDto.userId, userDto.userData);
+        updatedData["basicDetails"] = userDto.userData;
       }
 
       LoggerUtil.log(
         API_RESPONSES.USER_BASIC_DETAILS_UPDATE,
         apiId,
-        userUpdateDto?.userId
+        userDto?.userId
       );
 
 
       // Synchronize user status with Keycloak
-      if (userUpdateDto.userData?.status) {
-        const isUserActive = userUpdateDto.userData.status === 'active';
+      if (userDto.userData?.status) {
+        const isUserActive = userDto.userData.status === 'active';
 
         // Async Keycloak status synchronization - non-blocking
-        this.syncUserStatusWithKeycloak(userUpdateDto.userId, isUserActive, apiId)
+        this.syncUserStatusWithKeycloak(userDto.userId, isUserActive, apiId)
           .catch(error => LoggerUtil.error(
             'Keycloak user status sync failed',
             `Error: ${error.message}`,
@@ -1370,16 +1364,16 @@ export class UserService {
           ));
       }
 
-      if (userUpdateDto?.customFields?.length > 0) {
+      if (userDto?.customFields?.length > 0) {
         // additionalData?: { tenantId?: string, contextType?: string, createdBy?: string, updatedBy?: string }
         let additionalData = {
-          tenantId: userUpdateDto.userData?.tenantId,
+          tenantId: userDto.userData?.tenantId,
           contextType: "USER",
-          createdBy: userUpdateDto.userData?.createdBy,
-          updatedBy: userUpdateDto.userData?.updatedBy
+          createdBy: userDto.userData?.createdBy,
+          updatedBy: userDto.userData?.updatedBy
         }
         const getFieldsAttributes =
-          await this.fieldsService.getEditableFieldsAttributes(userUpdateDto.userData.tenantId);
+          await this.fieldsService.getEditableFieldsAttributes(userDto.userData.tenantId);
 
         const isEditableFieldId = [];
         const fieldIdAndAttributes = {};
@@ -1390,10 +1384,10 @@ export class UserService {
 
         const unEditableIdes = [];
         const editFailures = [];
-        for (const data of userUpdateDto.customFields) {
+        for (const data of userDto.customFields) {
           if (isEditableFieldId.includes(data.fieldId)) {
             const result = await this.fieldsService.updateCustomFields(
-              userUpdateDto.userId,
+              userDto.userId,
               data,
               fieldIdAndAttributes[data.fieldId], additionalData
             );
@@ -1418,24 +1412,24 @@ export class UserService {
         }
       }
 
-      if (userUpdateDto.automaticMember && userUpdateDto?.automaticMember?.value === true) {
+      if (userDto.automaticMember && userDto?.automaticMember?.value === true) {
 
         let assignTo;
         //Find Assign field value from custom fields
-        let foundField = userUpdateDto.customFields.find(field => field.fieldId === userUpdateDto.automaticMember.fieldId);
+        let foundField = userDto.customFields.find(field => field.fieldId === userDto.automaticMember.fieldId);
         if (foundField) {
           assignTo = foundField.value;
         }
 
         // Check if an active automated member exists for the given userId, tenantId, and assigned ID.
-        const checkAutomaticMemberExists = await this.automaticMemberService.checkAutomaticMemberExists(userId, userUpdateDto.userData.tenantId, foundField.value[0]);
+        const checkAutomaticMemberExists = await this.automaticMemberService.checkAutomaticMemberExists(userId, userDto.userData.tenantId, foundField.value[0]);
 
         if (checkAutomaticMemberExists.length > 0 && checkAutomaticMemberExists[0].isActive === true) {
           return APIResponse.error(
             response,
             apiId,
             API_RESPONSES.BAD_REQUEST,
-            `User already assign to that ${userUpdateDto.automaticMember.fieldName}`, // which uuid is needed ?
+            `User already assign to that ${userDto.automaticMember.fieldName}`, // which uuid is needed ?
             HttpStatus.BAD_REQUEST
           );
         }
@@ -1443,7 +1437,7 @@ export class UserService {
 
         if (checkAutomaticMemberExists.length > 0 && checkAutomaticMemberExists[0].isActive === false) {
           // deactivate the current active automatic membership for the user in tenantId.
-          const getActiveAutomaticMembershipId = await this.automaticMemberService.getUserbyUserIdAndTenantId(userId, userUpdateDto.userData.tenantId, true);
+          const getActiveAutomaticMembershipId = await this.automaticMemberService.getUserbyUserIdAndTenantId(userId, userDto.userData.tenantId, true);
 
           if (getActiveAutomaticMembershipId && getActiveAutomaticMembershipId.isActive === true) {
             await this.automaticMemberService.update(getActiveAutomaticMembershipId.id, { isActive: false })
@@ -1460,29 +1454,14 @@ export class UserService {
           );
         }
 
-        await this.updateAutomaticMemberMapping(userUpdateDto.automaticMember, assignTo, userId, userUpdateDto.userData.tenantId)
+        await this.updateAutomaticMemberMapping(userDto.automaticMember, assignTo, userId, userDto.userData.tenantId)
       }
 
       LoggerUtil.log(
         API_RESPONSES.USER_UPDATED_SUCCESSFULLY,
         apiId,
-        userUpdateDto?.userId
+        userDto?.userId
       );
-
-      // Audit Log
-      this.auditLoggerService.emit({
-        entityType: "USER",
-        entityId: userUpdateDto.userId,
-        eventAction: "UPDATED",
-        actorId: request["user"]?.userId || request["user"]?.sub || "system",
-        actorName: request["user"]?.name || "System",
-        userRole: request["user"]?.role || "Unknown",
-        context: {
-          ipAddress: request?.ip,
-          platform: request?.headers?.["user-agent"],
-          tenantId: userUpdateDto.userData?.tenantId
-        }
-      });
 
       // Send response to the client
       const apiResponse = await APIResponse.success(
@@ -1494,7 +1473,7 @@ export class UserService {
       );
 
       // Produce user updated event to Kafka asynchronously - after response is sent to client
-      this.publishUserEvent('updated', userUpdateDto.userId, apiId)
+      this.publishUserEvent('updated', userDto.userId, apiId)
         .catch(error => LoggerUtil.error(
           `Failed to publish user updated event to Kafka`,
           `Error: ${error.message}`,
@@ -1932,24 +1911,6 @@ export class UserService {
         HttpStatus.CREATED,
         API_RESPONSES.USER_CREATE_SUCCESSFULLY
       );
-
-      // Audit Log
-      this.auditLoggerService.emit({
-        entityType: "USER",
-        entityId: result.userId,
-        eventAction: "CREATED",
-        actorId: request?.user?.userId || request?.user?.sub || "system",
-        actorName: request?.user?.name || "System",
-        userRole: request?.user?.role || "Unknown",
-        context: {
-          ipAddress: request?.ip,
-          platform: request?.headers?.["user-agent"],
-        },
-        metadata: {
-          username: userContext.username,
-          email: userContext.email,
-        },
-      });
 
       // Produce user created event to Kafka asynchronously - after response is sent to client
       this.publishUserEvent('created', result.userId, apiId)
@@ -2809,7 +2770,7 @@ export class UserService {
     }
   }
 
-  public async deleteUserById(request: any, userId: string, response: Response) {
+  public async deleteUserById(userId: string, response: Response) {
     const apiId = APIID.USER_DELETE;
     const { KEYCLOAK, KEYCLOAK_ADMIN } = process.env;
     // Validate userId format
@@ -2857,20 +2818,6 @@ export class UserService {
 
       // Finally delete user
       const userResult = await this.usersRepository.delete(userId);
-
-      // Audit Log
-      this.auditLoggerService.emit({
-        entityType: "USER",
-        entityId: userId,
-        eventAction: "DELETED",
-        actorId: request["user"]?.userId || request["user"]?.sub || "system",
-        actorName: request["user"]?.name || "System",
-        userRole: request["user"]?.role || "Unknown",
-        context: {
-          ipAddress: request?.ip,
-          platform: request?.headers?.["user-agent"]
-        }
-      });
 
       const keycloakResponse = await getKeycloakAdminToken();
       const token = keycloakResponse.data.access_token;

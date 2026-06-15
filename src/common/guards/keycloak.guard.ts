@@ -2,8 +2,4 @@ import { Injectable } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
 
 @Injectable()
-export class JwtAuthGuard extends AuthGuard("jwt-keycloak") {
-  canActivate(context: any) {
-    return super.canActivate(context);
-  }
-}
+export class JwtAuthGuard extends AuthGuard("jwt-keycloak") {}

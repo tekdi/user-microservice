@@ -1,5 +1,4 @@
 import { HttpStatus, Injectable } from "@nestjs/common";
-import { AuditLoggerService } from "@tekdi/audit-logger/nestjs";
 import { Repository } from "typeorm";
 import { InjectRepository } from "@nestjs/typeorm";
 import { RolePermission } from "./entities/rolePermissionMapping";
@@ -11,8 +10,7 @@ import { LoggerUtil } from "src/common/logger/LoggerUtil";
 export class RolePermissionService {
   constructor(
     @InjectRepository(RolePermission)
-    private rolePermissionRepository: Repository<RolePermission>,
-    private readonly auditLoggerService: AuditLoggerService
+    private rolePermissionRepository: Repository<RolePermission>
   ) {}
 
   //getPermission for middleware
@@ -60,7 +58,6 @@ export class RolePermissionService {
 
   //create permission
   public async createPermission(
-    request: any,
     permissionCreateDto: RolePermissionCreateDto,
     response: Response
   ): Promise<any> {
@@ -72,23 +69,6 @@ export class RolePermissionService {
         requestType: permissionCreateDto.requestType,
         module: permissionCreateDto.module,
       });
-
-      // Audit Log
-      this.auditLoggerService.emit({
-        entityType: "ROLE_PERMISSION_MAPPING",
-        entityId: result.rolePermissionId || "new",
-        eventAction: "CREATED",
-        actorId: request["user"]?.userId || "system",
-        actorName: request["user"]?.name || "Unknown",
-        userRole: request["user"]?.role || "Unknown",
-        context: {
-          ipAddress: request?.ip,
-          platform: request?.headers?.["user-agent"],
-          roleTitle: permissionCreateDto.roleTitle,
-          apiPath: permissionCreateDto.apiPath
-        }
-      });
-
       return APIResponse.success(
         response,
         apiId,
@@ -109,7 +89,6 @@ export class RolePermissionService {
 
   //update permission by permissionId
   public async updatePermission(
-    request: any,
     rolePermissionCreateDto: RolePermissionCreateDto,
     response: Response
   ): Promise<any> {
@@ -124,23 +103,6 @@ export class RolePermissionService {
           module: rolePermissionCreateDto.module,
         }
       );
-
-      // Audit Log
-      this.auditLoggerService.emit({
-        entityType: "ROLE_PERMISSION_MAPPING",
-        entityId: rolePermissionCreateDto.rolePermissionId,
-        eventAction: "UPDATED",
-        actorId: request["user"]?.userId || "system",
-        actorName: request["user"]?.name || "Unknown",
-        userRole: request["user"]?.role || "Unknown",
-        context: {
-          ipAddress: request?.ip,
-          platform: request?.headers?.["user-agent"],
-          roleTitle: rolePermissionCreateDto.roleTitle,
-          apiPath: rolePermissionCreateDto.apiPath
-        }
-      });
-
       return APIResponse.success(
         response,
         apiId,
@@ -161,28 +123,12 @@ export class RolePermissionService {
 
   //delete permission by permissionId
   public async deletePermission(
-    request: any,
     rolePermissionId: string,
     response: Response
   ): Promise<any> {
     const apiId = "api.delete.permission";
     try {
       let result = await this.rolePermissionRepository.delete(rolePermissionId);
-
-      // Audit Log
-      this.auditLoggerService.emit({
-        entityType: "ROLE_PERMISSION_MAPPING",
-        entityId: rolePermissionId,
-        eventAction: "DELETED",
-        actorId: request["user"]?.userId || "system",
-        actorName: request["user"]?.name || "Unknown",
-        userRole: request["user"]?.role || "Unknown",
-        context: {
-          ipAddress: request?.ip,
-          platform: request?.headers?.["user-agent"]
-        }
-      });
-
       return APIResponse.success(
         response,
         apiId,
