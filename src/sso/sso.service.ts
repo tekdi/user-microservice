@@ -335,7 +335,6 @@ export class SsoService {
       } as any;
       
       const createdUser = await this.userService.createUserInDatabase(
-        mockRequest,
         userCreateDto
       );
 

@@ -68,7 +68,7 @@ export class AssignRoleController {
     @Headers() headers
   ) {
     return await this.assignRoleService
-      .createAssignRole(request, createAssignRoleDto, response);
+      .createAssignRole(createAssignRoleDto, response);
     // return response.status(result.statusCode).json(result);
   }
 
@@ -85,7 +85,7 @@ export class AssignRoleController {
     @Res() response: Response
   ) {
     return await this.assignRoleService
-      .getAssignedRole(userId, request, response);
+      .getAssignedRole(userId, response);
     // return response.status(result.statusCode).json(result);
   }
 
@@ -97,6 +97,7 @@ export class AssignRoleController {
   @ApiNotFoundResponse({ description: "Data not found" })
   @ApiBadRequestResponse({ description: "Bad request" })
   public async deleteRole(
+    @Req() request: Request,
     @Body() deleteAssignRoleDto: DeleteAssignRoleDto, // Modify this line to accept DeleteAssignRoleDto
     @Res() response: Response
   ) {
@@ -114,6 +115,7 @@ export class AssignRoleController {
   @ApiInternalServerErrorResponse({ description: "Internal Server Error." })
   @ApiHeader({ name: "tenantid", required: true })
   public async bulkUpdateUserRoles(
+    @Req() request: Request,
     @Body() dto: BulkAssignRoleDto,
     @Headers() headers,
     @Res() response: Response,

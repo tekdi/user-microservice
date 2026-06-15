@@ -1,4 +1,4 @@
-import { ConsoleLogger, HttpStatus, Injectable } from "@nestjs/common";
+import { ConsoleLogger, HttpStatus, Injectable, Inject } from "@nestjs/common";
 import { FieldsDto } from "./dto/fields.dto";
 import {
   FieldsOptionsSearchDto,
@@ -24,6 +24,9 @@ import jwt_decode from "jwt-decode";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
 import { API_RESPONSES } from "@utils/response.messages";
 import { FieldValuesDeleteDto } from "./dto/field-values-delete.dto";
+import { AuditLoggerService } from "@tekdi/audit-logger/nestjs";
+import { requestContext } from "@utils/request-context";
+import { getAuditContext } from "@utils/audit-helper";
 import { check } from "prettier";
 @Injectable()
 export class FieldsService {
@@ -31,7 +34,9 @@ export class FieldsService {
     @InjectRepository(Fields)
     private fieldsRepository: Repository<Fields>,
     @InjectRepository(FieldValues)
-    private fieldsValuesRepository: Repository<FieldValues>
+    private fieldsValuesRepository: Repository<FieldValues>,
+    @Inject(AuditLoggerService)
+    private readonly auditLoggerService: AuditLoggerService
   ) { }
 
   async getFormCustomField(requiredData, response) {
@@ -339,7 +344,8 @@ export class FieldsService {
     return schema;
   }
 
-  async createFields(request: any, fieldsDto: FieldsDto, response: Response) {
+  async createFields(fieldsDto: FieldsDto, response: Response) {
+    const request = requestContext.getStore() as any;
     const apiId = APIID.FIELDS_CREATE;
     try {
       const fieldsData: any = {}; // Define an empty object to store field data
@@ -482,10 +488,10 @@ export class FieldsService {
 
   async updateFields(
     fieldId: any,
-    request: any,
     fieldsUpdateDto: FieldsUpdateDto,
     response: Response
   ) {
+    const request = requestContext.getStore() as any;
     const apiId = APIID.FIELDS_CREATE;
     try {
       const decoded: any = jwt_decode(request.headers.authorization);
@@ -880,10 +886,10 @@ export class FieldsService {
   }
 
   async createFieldValues(
-    request: any,
     fieldValuesDto: FieldValuesDto,
     res: Response
   ) {
+    const request = requestContext.getStore() as any;
     const apiId = APIID.FIELDVALUES_CREATE;
 
     try {
@@ -897,13 +903,27 @@ export class FieldsService {
           HttpStatus.NOT_FOUND
         );
       }
-      return APIResponse.success(
+      const apiRes = APIResponse.success(
         res,
         apiId,
         result,
         HttpStatus.CREATED,
         "Field Values created successfully"
       );
+
+      const auditCtx = getAuditContext();
+      this.auditLoggerService.emit({
+        entityType: "FIELD_VALUE",
+        entityId: "MULTIPLE",
+        eventAction: "CREATED",
+        ...auditCtx,
+        metadata: {
+          fieldId: fieldValuesDto.fieldId,
+          itemId: fieldValuesDto.itemId,
+          value: fieldValuesDto.value
+        }
+      });
+      return apiRes;
     } catch (error) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
@@ -2086,6 +2106,7 @@ export class FieldsService {
     fieldValuesDeleteDto: FieldValuesDeleteDto,
     response: Response
   ) {
+    const request = requestContext.getStore() as any;
     const apiId = APIID.FIELDVALUES_DELETE;
     try {
       const fieldValues = fieldValuesDeleteDto.fieldValues;
@@ -2116,13 +2137,25 @@ export class FieldsService {
         )
         .execute();
 
-      return await APIResponse.success(
+      const apiRes = await APIResponse.success(
         response,
         apiId,
         result,
         HttpStatus.OK,
         "Field Values deleted successfully."
       );
+
+      const auditCtx = getAuditContext();
+      this.auditLoggerService.emit({
+        entityType: "FIELD_VALUE",
+        entityId: "MULTIPLE",
+        eventAction: "DELETED",
+        ...auditCtx,
+        metadata: {
+          deletedFieldValues: fieldValuesDeleteDto.fieldValues
+        }
+      });
+      return apiRes;
     } catch (e) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,

@@ -1,4 +1,5 @@
-import { HttpStatus, Injectable } from "@nestjs/common";
+import { HttpStatus, Inject, Injectable } from "@nestjs/common";
+import { AuditLoggerService } from "@tekdi/audit-logger/nestjs";
 import { Role } from "./entities/role.entity";
 import { RolePrivilegeMapping } from "src/rbac/assign-privilege/entities/assign-privilege.entity";
 import { InjectRepository } from "@nestjs/typeorm";
@@ -16,6 +17,8 @@ import APIResponse from "src/common/responses/response";
 import { Response } from "express";
 import { APIID } from "src/common/utils/api-id.config";
 import { validate as uuidValidate } from 'uuid';
+import { requestContext } from "@utils/request-context";
+import { getAuditContext } from "@utils/audit-helper";
 
 
 @Injectable()
@@ -26,13 +29,15 @@ export class RoleService {
     @InjectRepository(UserRoleMapping)
     private readonly userRoleMappingRepository: Repository<UserRoleMapping>,
     @InjectRepository(RolePrivilegeMapping)
-    private readonly roleprivilegeMappingRepository: Repository<RolePrivilegeMapping>
+    private readonly roleprivilegeMappingRepository: Repository<RolePrivilegeMapping>,
+    @Inject(AuditLoggerService)
+    private readonly auditLoggerService: AuditLoggerService
   ) { }
   public async createRole(
-    request: any,
     createRolesDto: CreateRolesDto,
     response: Response
   ) {
+    const request = requestContext.getStore() as any;
     const apiId = APIID.ROLE_CREATE;
     const roles = [];
     const errors = [];
@@ -89,8 +94,20 @@ export class RoleService {
         const roleEntity = this.roleRepository.create(newRoleDto);
 
         // Save the role entity to the database
-        const response = await this.roleRepository.save(roleEntity);
-        roles.push(new RolesResponseDto(response));
+        const responseData = await this.roleRepository.save(roleEntity);
+        roles.push(new RolesResponseDto(responseData));
+
+        // Audit Log
+        const auditCtx = getAuditContext();
+        this.auditLoggerService.emit({
+          entityType: "ROLE",
+          entityId: responseData.roleId,
+          eventAction: "CREATED",
+          ...auditCtx,
+          metadata: {
+            tenantId: tenantId || null
+          }
+        });
       }
     } catch (e) {
       const errorMessage = e.message || "Internal server error";
@@ -138,15 +155,24 @@ export class RoleService {
 
   public async updateRole(
     roleId: string,
-    request: any,
     roleDto: RoleDto,
     response: Response
   ) {
+    const request = requestContext.getStore() as any;
     const apiId = APIID.ROLE_UPDATE;
     try {
       const code = roleDto.title.toLowerCase().replace(/\s+/g, "_");
       roleDto.code = code;
       const result = await this.roleRepository.update(roleId, roleDto);
+
+      // Audit Log
+      const auditCtx = getAuditContext();
+      this.auditLoggerService.emit({
+        entityType: "ROLE",
+        entityId: roleId,
+        eventAction: "UPDATED",
+        ...auditCtx
+      });
       return APIResponse.success(
         response,
         apiId,
@@ -306,6 +332,8 @@ export class RoleService {
   }
 
   public async deleteRole(roleId: string, res: Response) {
+    const request = requestContext.getStore() as any;
+
     const apiId = APIID.ROLE_DELETE;
     try {
       if (!isUUID(roleId)) {
@@ -333,6 +361,15 @@ export class RoleService {
       }
       // Delete the role
       const response = await this.roleRepository.delete(roleId);
+
+      // Audit Log
+      const auditCtx = getAuditContext();
+      this.auditLoggerService.emit({
+        entityType: "ROLE",
+        entityId: roleId,
+        eventAction: "DELETED",
+        ...auditCtx
+      });
 
       // Delete entries from RolePrivilegesMapping table associated with the roleId
       const rolePrivilegesDeleteResponse =

@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { AuditLoggerService } from "@tekdi/audit-logger/nestjs";
 import { CohortMembersDto } from "src/cohortMembers/dto/cohortMembers.dto";
 import { CohortMembersSearchDto } from "src/cohortMembers/dto/cohortMembers-search.dto";
 import { CohortMembers } from "src/cohortMembers/entities/cohort-member.entity";
@@ -25,6 +26,8 @@ import { isValid } from "date-fns";
 import { FieldValuesOptionDto } from "src/user/dto/user-create.dto";
 import { KafkaService } from "src/kafka/kafka.service";
 import { BulkCohortMember } from "src/cohortMembers/dto/bulkMember-create.dto";
+import { getAuditContext } from "@utils/audit-helper";
+import { requestContext } from "@utils/request-context";
 
 @Injectable()
 export class CohortMembersService {
@@ -43,7 +46,8 @@ export class CohortMembersService {
     private readonly notificationRequest: NotificationRequest,
     private fieldsService: FieldsService,
     private userService: UserService,
-    private readonly kafkaService: KafkaService
+    private readonly kafkaService: KafkaService,
+    private readonly auditLoggerService: AuditLoggerService
   ) { }
 
   //Get cohort member
@@ -569,6 +573,21 @@ ON CM."userId" = U."userId" ${whereCase}`;
       );
 
       if (savedCohortMember) {
+        // Send audit log
+        const auditCtx = getAuditContext();
+        this.auditLoggerService.emit({
+          entityType: "COHORT_MEMBER",
+          entityId: savedCohortMember.cohortMembershipId,
+          eventAction: "CREATED",
+          ...auditCtx,
+          metadata: {
+            cohortId: cohortMembers.cohortId,
+            userId: cohortMembers.userId,
+            role: cohortMembers.cohortMemberRole,
+            status: cohortMembers.status || 'active'
+          }
+        });
+
         const apiResponse = APIResponse.success(
           res,
           apiId,
@@ -732,6 +751,7 @@ ${whereCase}`;
   }
 
   public async updateCohortMembers(
+    request: any,
     cohortMembershipId: string,
     loginUser: any,
     cohortMembersUpdateDto: CohortMembersUpdateDto,
@@ -789,6 +809,24 @@ ${whereCase}`;
       let result = await this.cohortMembersRepository.save(
         cohortMembershipToUpdate
       );
+
+      // Audit Log
+      this.auditLoggerService.emit({
+        entityType: "COHORT_MEMBER",
+        entityId: cohortMembershipId,
+        eventAction: "UPDATED",
+        actorId: loginUser || "00000000-0000-0000-0000-000000000000",
+        actorName: (request as any)?.user?.name || "Unknown",
+        userRole: (request as any)?.user?.role || "Unknown",
+        context: {
+          ipAddress: (res.req as any)?.ip,
+          platform: (res.req as any)?.headers?.["user-agent"],
+        },
+        metadata: {
+          cohortMembershipId: cohortMembershipId,
+          updates: cohortMembersUpdateDto,
+        },
+      });
       await this.publishCohortMemberEvent(
         "updated",
         cohortMembershipToUpdate,

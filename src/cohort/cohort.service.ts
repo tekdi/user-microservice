@@ -1,4 +1,5 @@
 import { ConsoleLogger, HttpStatus, Injectable } from "@nestjs/common";
+import { AuditLoggerService } from "@tekdi/audit-logger/nestjs";
 import { ReturnResponseBody } from "./dto/cohort-create.dto";
 import { CohortSearchDto } from "./dto/cohort-search.dto";
 import { CohortCreateDto } from "./dto/cohort-create.dto";
@@ -26,6 +27,9 @@ import { LoggerUtil } from "src/common/logger/LoggerUtil";
 import { AutomaticMemberService } from "src/automatic-member/automatic-member.service";
 import { KafkaService } from "src/kafka/kafka.service";
 import { Console } from "console";
+import { getAuditContext } from "@utils/audit-helper";
+import { requestContext } from "@utils/request-context";
+
 
 @Injectable()
 export class CohortService {
@@ -45,7 +49,8 @@ export class CohortService {
     private readonly academicYearService: AcademicYearService,
     private readonly cohortMembersService: CohortMembersService,
     private readonly automaticMemberService: AutomaticMemberService,
-    private readonly kafkaService: KafkaService
+    private readonly kafkaService: KafkaService,
+    private readonly auditLoggerService: AuditLoggerService
   ) { }
 
   public async getCohortsDetails(requiredData, res) {
@@ -308,6 +313,7 @@ export class CohortService {
   }
 
   public async createCohort(cohortCreateDto: CohortCreateDto, res) {
+    const request = requestContext.getStore() as any;
     const apiId = APIID.COHORT_CREATE;
     try {
       // Add validation for check both duplicate field ids exist or not
@@ -381,6 +387,21 @@ export class CohortService {
       //   );
       // }
       const response = await this.cohortRepository.save(cohortCreateDto);
+
+      const auditCtx = getAuditContext();
+      this.auditLoggerService.emit({
+        entityType: "COHORT",
+        entityId: response.cohortId,
+        eventAction: "CREATED",
+        ...auditCtx,
+        metadata: {
+          tenantId: response.tenantId || null,
+          academicYearId: response.academicYearId || null,
+          name: response.name,
+          type: response.type,
+          status: response.status
+        }
+      });
 
       const createFailures = [];
 
@@ -477,6 +498,7 @@ export class CohortService {
   }
 
   public async updateCohortStatuses(
+    request: any,
     cohortIds: string[],
     status: string,
     updatedBy: string,
@@ -504,6 +526,15 @@ export class CohortService {
         { cohortId: In(uniqueCohortIds) },
         { status, updatedBy }
       );
+      // Audit Log
+      const auditCtx = getAuditContext();
+      this.auditLoggerService.emit({
+        entityType: "COHORT",
+        entityId: uniqueCohortIds.join(','),
+        eventAction: "STATUS_UPDATED",
+        ...auditCtx,
+        metadata: { status }
+      });
       LoggerUtil.log(`Cohort statuses updated: ${result.affected} rows`);
       return APIResponse.success(
         res,
@@ -533,6 +564,7 @@ export class CohortService {
     cohortUpdateDto: CohortUpdateDto,
     res
   ) {
+    const request = requestContext.getStore() as any;
     const apiId = APIID.COHORT_UPDATE;
     // Define valid status transitions
     const validTransitions = {
@@ -695,6 +727,18 @@ export class CohortService {
             );
           }
         }
+
+        const auditCtx = getAuditContext();
+        this.auditLoggerService.emit({
+          entityType: "COHORT",
+          entityId: cohortId,
+          eventAction: "UPDATED",
+          ...auditCtx,
+          metadata: {
+            updatedFields: cohortUpdateDto, // Capturing the update payload for BRD compliance
+            cohortId: cohortId
+          }
+        });
 
         LoggerUtil.log(
           API_RESPONSES.COHORT_UPDATED_SUCCESSFULLY,
@@ -1042,6 +1086,7 @@ export class CohortService {
   }
 
   public async updateCohortStatus(cohortId: string, response, userId: string) {
+    const request = requestContext.getStore() as any;
     const apiId = APIID.COHORT_DELETE;
     try {
       if (!isUUID(cohortId)) {
@@ -1074,6 +1119,15 @@ export class CohortService {
           HttpStatus.OK,
           "Cohort Deleted Successfully."
         );
+
+        // Audit Log
+        const auditCtx = getAuditContext();
+        this.auditLoggerService.emit({
+          entityType: "COHORT",
+          entityId: cohortId,
+          eventAction: "DELETED",
+          ...auditCtx,
+        });
 
         // Publish cohort deleted event to Kafka asynchronously - after response is sent to client
         this.publishCohortEvent('deleted', cohortId, null, apiId)

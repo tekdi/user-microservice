@@ -1,4 +1,4 @@
-import { HttpStatus, Injectable } from "@nestjs/common";
+import { HttpStatus, Injectable, Inject } from "@nestjs/common";
 import { Repository } from "typeorm";
 import { InjectRepository } from "@nestjs/typeorm";
 import { RolePermission } from "./entities/rolePermissionMapping";
@@ -6,11 +6,16 @@ import { Response } from "express";
 import APIResponse from "src/common/responses/response";
 import { RolePermissionCreateDto } from "./dto/role-permission-create-dto";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
+import { AuditLoggerService } from "@tekdi/audit-logger/nestjs";
+import { requestContext } from "@utils/request-context";
+import { getAuditContext } from "@utils/audit-helper";
 @Injectable()
 export class RolePermissionService {
   constructor(
     @InjectRepository(RolePermission)
-    private rolePermissionRepository: Repository<RolePermission>
+    private rolePermissionRepository: Repository<RolePermission>,
+    @Inject(AuditLoggerService)
+    private readonly auditLoggerService: AuditLoggerService
   ) {}
 
   //getPermission for middleware
@@ -61,6 +66,7 @@ export class RolePermissionService {
     permissionCreateDto: RolePermissionCreateDto,
     response: Response
   ): Promise<any> {
+    const request = requestContext.getStore() as any;
     const apiId = "api.create.permission";
     try {
       let result = await this.rolePermissionRepository.save({
@@ -69,13 +75,21 @@ export class RolePermissionService {
         requestType: permissionCreateDto.requestType,
         module: permissionCreateDto.module,
       });
-      return APIResponse.success(
+      const apiRes = APIResponse.success(
         response,
         apiId,
         result,
         HttpStatus.OK,
         "Permission added succesfully."
       );
+      const auditCtx = getAuditContext();
+      this.auditLoggerService.emit({
+        entityType: "ROLE_PERMISSION",
+        entityId: result.rolePermissionId || "N/A",
+        eventAction: "CREATED",
+        ...auditCtx
+      });
+      return apiRes;
     } catch (error) {
       return APIResponse.error(
         response,
@@ -92,6 +106,7 @@ export class RolePermissionService {
     rolePermissionCreateDto: RolePermissionCreateDto,
     response: Response
   ): Promise<any> {
+    const request = requestContext.getStore() as any;
     const apiId = "api.update.permission";
     try {
       let result = await this.rolePermissionRepository.update(
@@ -103,13 +118,21 @@ export class RolePermissionService {
           module: rolePermissionCreateDto.module,
         }
       );
-      return APIResponse.success(
+      const apiRes = APIResponse.success(
         response,
         apiId,
         result,
         HttpStatus.OK,
         "Permission updated succesfully."
       );
+      const auditCtx = getAuditContext();
+      this.auditLoggerService.emit({
+        entityType: "ROLE_PERMISSION",
+        entityId: rolePermissionCreateDto.rolePermissionId || "N/A",
+        eventAction: "UPDATED",
+        ...auditCtx
+      });
+      return apiRes;
     } catch (error) {
       return APIResponse.error(
         response,
@@ -126,16 +149,25 @@ export class RolePermissionService {
     rolePermissionId: string,
     response: Response
   ): Promise<any> {
+    const request = requestContext.getStore() as any;
     const apiId = "api.delete.permission";
     try {
       let result = await this.rolePermissionRepository.delete(rolePermissionId);
-      return APIResponse.success(
+      const apiRes = APIResponse.success(
         response,
         apiId,
         result,
         HttpStatus.OK,
         "Permission deleted succesfully."
       );
+      const auditCtx = getAuditContext();
+      this.auditLoggerService.emit({
+        entityType: "ROLE_PERMISSION",
+        entityId: rolePermissionId,
+        eventAction: "DELETED",
+        ...auditCtx
+      });
+      return apiRes;
     } catch (error) {
       return APIResponse.error(
         response,

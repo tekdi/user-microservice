@@ -73,7 +73,7 @@ export class RoleController {
     @Res() response: Response
   ) {
     return await this.roleService
-      .createRole(request, createRolesDto, response);
+      .createRole(createRolesDto, response);
   }
 
   //Update Role
@@ -91,7 +91,7 @@ export class RoleController {
     @Res() response: Response
   ) {
     return await this.roleService
-      .updateRole(roleId, request, roleDto, response);
+      .updateRole(roleId, roleDto, response);
   }
 
   // search Role
@@ -124,6 +124,7 @@ export class RoleController {
   @ApiNotFoundResponse({ description: "Data not found" })
   @ApiBadRequestResponse({ description: "Bad request" })
   public async deleteRole(
+    @Req() request: Request,
     @Param("roleId") roleId: string,
     @Res() response: Response
   ) {

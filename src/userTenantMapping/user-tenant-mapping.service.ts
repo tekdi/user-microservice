@@ -1,4 +1,4 @@
-import { HttpStatus, Injectable } from "@nestjs/common";
+import { HttpStatus, Injectable, Inject } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { In, Repository } from "typeorm";
 import { UserTenantMapping } from "src/userTenantMapping/entities/user-tenant-mapping.entity";
@@ -21,6 +21,9 @@ import { UserService } from "src/user/user.service";
 import { FieldsService } from "src/fields/fields.service";
 import { KafkaService } from "src/kafka/kafka.service";
 import { API_RESPONSES } from "src/common/utils/response.messages";
+import { AuditLoggerService } from "@tekdi/audit-logger/nestjs";
+import { requestContext } from "@utils/request-context";
+import { getAuditContext } from "@utils/audit-helper";
 
 @Injectable()
 export class UserTenantMappingService {
@@ -37,7 +40,9 @@ export class UserTenantMappingService {
     private userRoleMappingRepository: Repository<UserRoleMapping>,
     private userService: UserService,
     private fieldsService: FieldsService,
-    private kafkaService: KafkaService
+    private kafkaService: KafkaService,
+    @Inject(AuditLoggerService)
+    private readonly auditLoggerService: AuditLoggerService
   ) { }
 
   public async validateUserTenantMapping(
@@ -101,10 +106,10 @@ export class UserTenantMappingService {
   }
 
   public async userTenantMapping(
-    request: any,
     assignTenantMappingDto: UserTenantMappingDto,
     response: Response
   ) {
+    const request = requestContext.getStore() as any;
     const apiId = APIID.ASSIGN_TENANT_CREATE;
     try {
 
@@ -153,6 +158,17 @@ export class UserTenantMappingService {
         apiId,
         userId
       );
+
+      const auditCtx = getAuditContext();
+      this.auditLoggerService.emit({
+        entityType: "USER_TENANT_MAPPING",
+        entityId: `User:${userId}|Tenant:${tenantId}|Role:${roleId}`,
+        eventAction: "CREATED",
+        ...auditCtx,
+        metadata: {
+          tenantId: tenantId
+        }
+      });
 
       // Step 5: Process custom fields if provided
       const createFailures = [];
@@ -336,12 +352,12 @@ export class UserTenantMappingService {
   }
 
   public async updateAssignTenantStatus(
-    request: any,
     userId: string,
     tenantId: string,
     updateStatusDto: any,
     response: Response
   ) {
+    const request = requestContext.getStore() as any;
     const apiId = APIID.ASSIGN_TENANT_UPDATE_STATUS;
     
     try {
@@ -377,6 +393,17 @@ export class UserTenantMappingService {
         apiId,
         userId
       );
+
+      const auditCtx = getAuditContext();
+      this.auditLoggerService.emit({
+        entityType: "USER_TENANT_MAPPING",
+        entityId: existingMapping.Id,
+        eventAction: "UPDATED",
+        ...auditCtx,
+        metadata: {
+          tenantId: tenantId
+        }
+      });
 
       // Construct response
       const result = {

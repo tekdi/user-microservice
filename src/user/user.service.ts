@@ -1,4 +1,5 @@
 import { HttpStatus, Injectable } from "@nestjs/common";
+import { AuditLoggerService } from "@tekdi/audit-logger/nestjs";
 import { User } from "./entities/user-entity";
 import { FieldValues } from "src/fields/entities/fields-values.entity";
 import { InjectRepository } from "@nestjs/typeorm";
@@ -42,6 +43,10 @@ import { CohortAcademicYearService } from "src/cohortAcademicYear/cohortAcademic
 import { AcademicYearService } from "src/academicyears/academicyears.service";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
 import { AuthUtils } from "@utils/auth-util";
+import { getAuditContext } from "@utils/audit-helper";
+import { requestContext } from "@utils/request-context";
+
+
 import { OtpSendDTO } from "./dto/otpSend.dto";
 import { OtpVerifyDTO } from "./dto/otpVerify.dto";
 import { SendPasswordResetOTPDto } from "./dto/passwordReset.dto";
@@ -100,6 +105,7 @@ export class UserService {
     private readonly authUtils: AuthUtils,
     private readonly automaticMemberService: AutomaticMemberService,
     private readonly kafkaService: KafkaService,
+    private readonly auditLoggerService: AuditLoggerService,
     dataSource: DataSource
   ) {
     this.jwt_secret = this.configService.get<string>("RBAC_JWT_SECRET");
@@ -126,11 +132,11 @@ export class UserService {
 
 
   public async sendPasswordResetLink(
-    request: any,
     username: string,
     redirectUrl: string,
     response: Response
   ) {
+    const request = requestContext.getStore() as any;
     const apiId = APIID.USER_RESET_PASSWORD_LINK;
     try {
       // Fetch user details
@@ -244,10 +250,10 @@ export class UserService {
   }
 
   async forgotPassword(
-    request: any,
     body: any,
     response: Response<any, Record<string, any>>
   ) {
+    const request = requestContext.getStore() as any;
     const apiId = APIID.USER_FORGOT_PASSWORD;
     try {
       const jwtSecretKey = this.jwt_secret;
@@ -281,7 +287,6 @@ export class UserService {
       let apiResponse: any;
       try {
         apiResponse = await this.resetKeycloakPassword(
-          request,
           userData,
           keyClocktoken,
           body.newPassword,
@@ -359,12 +364,12 @@ export class UserService {
 
   async searchUser(
     tenantId: string,
-    request: any,
     response: any,
     userSearchDto: UserSearchDto,
     includeCustomFields: boolean = true
   ) {
     const apiId = APIID.USER_LIST;
+    const request = requestContext.getStore() as any;
     try {
       const findData = await this.findAllUserDetails(userSearchDto, tenantId, includeCustomFields);
       if (findData === false) {
@@ -413,10 +418,10 @@ export class UserService {
  */
   async searchUserMultiTenant(
     tenantId: string,
-    request: any,
     response: any,
     userHierarchyViewDto: UserHierarchyViewDto
   ) {
+    const request = requestContext.getStore() as any;
     const apiId = APIID.USER_HIERARCHY_VIEW;
     const { email } = userHierarchyViewDto;
 
@@ -1263,7 +1268,11 @@ export class UserService {
     return Array.from(tenantMap.values());
   }
 
-  async updateUser(userDto, response: Response) {
+  public async updateUser(
+    userDto: any,
+    response: Response
+  ) {
+    const request = requestContext.getStore() as any;
     const apiId = APIID.USER_UPDATE;
     try {
       const updatedData = {};
@@ -1463,6 +1472,20 @@ export class UserService {
         userDto?.userId
       );
 
+      const auditCtx = getAuditContext();
+      this.auditLoggerService.emit({
+        entityType: "USER",
+        entityId: userDto.userId,
+        eventAction: "UPDATED",
+        ...auditCtx,
+        context: {
+          ipAddress: auditCtx.ipAddress,
+          platform: auditCtx.userAgent,
+          tenantId: userDto.userData?.tenantId,
+          updatedFields: userDto.userData // Capturing the update payload as requested by BRD
+        }
+      });
+
       // Send response to the client
       const apiResponse = await APIResponse.success(
         response,
@@ -1649,11 +1672,11 @@ export class UserService {
 
 
   async createUser(
-    request: any,
     userCreateDto: UserCreateDto,
     academicYearId: string,
     response: Response
   ) {
+    const request = requestContext.getStore() as any;
     const apiId = APIID.USER_CREATE;
 
     const userContext = {
@@ -1826,7 +1849,6 @@ export class UserService {
 
       const dbStart = Date.now();
       const result = await this.createUserInDatabase(
-        request,
         userCreateDto,
         academicYearId,
         response
@@ -1902,6 +1924,25 @@ export class UserService {
         apiId,
         userContext.username
       );
+
+      // Audit Log
+      const auditCtx = getAuditContext();
+      this.auditLoggerService.emit({
+        entityType: "USER",
+        entityId: result.userId,
+        eventAction: "CREATED",
+        ...auditCtx,
+        context: {
+          ipAddress: auditCtx.ipAddress,
+          platform: auditCtx.userAgent,
+        },
+        metadata: {
+          username: userContext.username,
+          email: userContext.email,
+          roles: userCreateDto.tenantCohortRoleMapping?.map(m => m.roleId) || [],
+          tenantId: userCreateDto.tenantCohortRoleMapping?.[0]?.tenantId || null
+        },
+      });
 
 
       APIResponse.success(
@@ -2109,11 +2150,11 @@ export class UserService {
   }
 
   async createUserInDatabase(
-    request: any,
     userCreateDto,
     academicYearId?: string,
     response?: Response
   ): Promise<User> {
+    const request = requestContext.getStore() as any;
     const user = new User();
     user.userId = userCreateDto?.userId,
       user.username = userCreateDto?.username,
@@ -2396,11 +2437,11 @@ export class UserService {
   }
 
   public async resetUserPassword(
-    request: any,
     extraField: string,
     newPassword: string,
     response: Response
   ) {
+    const request = requestContext.getStore() as any;
     const apiId = APIID.USER_RESET_PASSWORD;
     try {
       const user = request.user;
@@ -2427,7 +2468,6 @@ export class UserService {
       try {
         // Step 1: Reset password in Keycloak
         apiResponse = await this.resetKeycloakPassword(
-          request,
           userData,
           resToken,
           newPassword,
@@ -2565,12 +2605,12 @@ export class UserService {
   }
 
   public async resetKeycloakPassword(
-    request: any,
     userData: any,
     token: string,
     newPassword: string,
     userId: string
   ) {
+    const request = requestContext.getStore() as any;
     const data = JSON.stringify({
       temporary: "false",
       type: "password",
@@ -2771,6 +2811,8 @@ export class UserService {
   }
 
   public async deleteUserById(userId: string, response: Response) {
+    const request = requestContext.getStore() as any;
+
     const apiId = APIID.USER_DELETE;
     const { KEYCLOAK, KEYCLOAK_ADMIN } = process.env;
     // Validate userId format
@@ -2819,6 +2861,20 @@ export class UserService {
       // Finally delete user
       const userResult = await this.usersRepository.delete(userId);
 
+      // Audit Log
+      this.auditLoggerService.emit({
+        entityType: "USER",
+        entityId: userId,
+        eventAction: "DELETED",
+        actorId: request["user"]?.userId || request["user"]?.sub || "00000000-0000-0000-0000-000000000000",
+        actorName: request["user"]?.name || "System",
+        userRole: request["user"]?.role || "Unknown",
+        context: {
+          ipAddress: request?.ip,
+          platform: request?.headers?.["user-agent"]
+        }
+      });
+
       const keycloakResponse = await getKeycloakAdminToken();
       const token = keycloakResponse.data.access_token;
 
@@ -2856,6 +2912,19 @@ export class UserService {
           `Error: ${error.message}`,
           apiId
         ));
+
+      const auditCtx = getAuditContext();
+      this.auditLoggerService.emit({
+        entityType: "USER",
+        entityId: userId,
+        eventAction: "DELETED",
+        ...auditCtx,
+        context: {
+          ipAddress: auditCtx.ipAddress,
+          platform: auditCtx.userAgent
+        }
+      });
+
       return apiResponse;
     } catch (e) {
       LoggerUtil.error(
@@ -3312,10 +3381,10 @@ export class UserService {
   }
 
   async checkUser(
-    request: any,
     response: any,
     filters: ExistUserDto
   ) {
+    const request = requestContext.getStore() as any;
     const apiId = APIID.USER_LIST;
     try {
       const whereClause: any = {};
@@ -3385,7 +3454,9 @@ export class UserService {
   }
 
 
-  async suggestUsername(request: Request, response: Response, suggestUserDto: SuggestUserDto) {
+  async suggestUsername(response: Response, suggestUserDto: SuggestUserDto) {
+    const request = requestContext.getStore() as any;
+
     const apiId = APIID.USER_LIST;
     try {
       // Fetch user data from the database to check if the username already exists
