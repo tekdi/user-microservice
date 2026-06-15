@@ -1,4 +1,5 @@
 import { HttpStatus, Injectable } from "@nestjs/common";
+import { AuditLoggerService } from "@tekdi/audit-logger/nestjs";
 import { InjectRepository } from "@nestjs/typeorm";
 import { In, Repository } from "typeorm";
 import { UserTenantMapping } from "src/userTenantMapping/entities/user-tenant-mapping.entity";
@@ -37,7 +38,8 @@ export class UserTenantMappingService {
     private userRoleMappingRepository: Repository<UserRoleMapping>,
     private userService: UserService,
     private fieldsService: FieldsService,
-    private kafkaService: KafkaService
+    private kafkaService: KafkaService,
+    private readonly auditLoggerService: AuditLoggerService
   ) { }
 
   public async validateUserTenantMapping(
@@ -226,6 +228,22 @@ export class UserTenantMappingService {
         API_RESPONSES.USER_ADDED_TO_TENANT_WITH_ROLE_SUCCESS
       );
 
+      // Audit Log
+      this.auditLoggerService.emit({
+        entityType: "USER_TENANT_MAPPING",
+        entityId: userId,
+        eventAction: "CREATED",
+        actorId: request["user"]?.userId || "system",
+        actorName: request["user"]?.name || "Unknown",
+        userRole: request["user"]?.role || "Unknown",
+        context: {
+          ipAddress: request?.ip,
+          platform: request?.headers?.["user-agent"],
+          tenantId: tenantId,
+          roleId: roleId
+        }
+      });
+
       // Publish user-tenant mapping event to Kafka asynchronously - after response is sent to client
       this.publishUserTenantMappingEvent('created', userId, tenantId, apiId)
         .catch(error => LoggerUtil.error(
@@ -394,6 +412,22 @@ export class UserTenantMappingService {
         HttpStatus.OK,
         API_RESPONSES.USER_TENANT_MAPPING_STATUS_UPDATED
       );
+
+      // Audit Log
+      this.auditLoggerService.emit({
+        entityType: "USER_TENANT_MAPPING",
+        entityId: userId,
+        eventAction: "UPDATED",
+        actorId: request["user"]?.userId || "system",
+        actorName: request["user"]?.name || "Unknown",
+        userRole: request["user"]?.role || "Unknown",
+        context: {
+          ipAddress: request?.ip,
+          platform: request?.headers?.["user-agent"],
+          tenantId: tenantId,
+          newStatus: updateStatusDto.status
+        }
+      });
 
       // Publish user-tenant status update event to Kafka asynchronously - after response is sent to client
       this.publishUserTenantMappingEvent('updated_status', userId, tenantId, apiId)

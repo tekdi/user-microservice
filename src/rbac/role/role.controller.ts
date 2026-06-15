@@ -124,10 +124,11 @@ export class RoleController {
   @ApiNotFoundResponse({ description: "Data not found" })
   @ApiBadRequestResponse({ description: "Bad request" })
   public async deleteRole(
+    @Req() request: Request,
     @Param("roleId") roleId: string,
     @Res() response: Response
   ) {
     return await this.roleService
-      .deleteRole(roleId, response);
+      .deleteRole(roleId, request, response);
   }
 }

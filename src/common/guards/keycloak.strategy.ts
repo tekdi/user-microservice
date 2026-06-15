@@ -18,10 +18,14 @@ export class JwtStrategy extends PassportStrategy(Strategy, "jwt-keycloak") {
      * This can be obtained via req.user in the Controllers
      * This is where we validate that the user is valid and delimit the payload returned to req.user
      */
+    const roles = payload.realm_access?.roles || [];
     return {
       userId: payload.sub,
-      name: payload.name,
+      name: payload.name || payload.preferred_username || "Unknown",
       username: payload.preferred_username,
+      roles: roles,
+      // For convenience, if there's a primary role we want to use for audit
+      role: roles.length > 0 ? roles[0] : "Unknown",
     };
   }
 }

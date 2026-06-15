@@ -44,7 +44,7 @@ export class CohortMembers {
   @Column({ type: "uuid", nullable: true })
   updatedBy: string;
 
-  @Column({ type: "varchar" })
+  @Column({ type: "varchar", nullable: false })
   statusReason: string;
 
   @Column({

@@ -4,6 +4,7 @@ import {
   HttpStatus,
   Injectable,
 } from "@nestjs/common";
+import { AuditLoggerService } from "@tekdi/audit-logger/nestjs";
 import { InjectRepository } from "@nestjs/typeorm";
 import { In, Repository } from "typeorm";
 import { SuccessResponse } from "src/success-response";
@@ -27,7 +28,8 @@ export class AssignRoleService {
     @InjectRepository(UserRoleMapping)
     private userRoleMappingRepository: Repository<UserRoleMapping>,
     @InjectRepository(Role)
-    private roleRepository: Repository<Role>
+    private roleRepository: Repository<Role>,
+    private readonly auditLoggerService: AuditLoggerService
   ) { }
   public async createAssignRole(
     request: any,
@@ -89,6 +91,23 @@ export class AssignRoleService {
           createdBy: request["user"].userId,
           updatedBy: request["user"].userId,
         });
+
+        // Audit Log
+        this.auditLoggerService.emit({
+          entityType: "USER_ROLE_MAPPING",
+          entityId: userId,
+          eventAction: "CREATED",
+          actorId: request["user"]?.userId || "system",
+          actorName: request["user"]?.name || "Unknown",
+          userRole: request["user"]?.role || "Unknown",
+          context: {
+            ipAddress: request?.ip,
+            platform: request?.headers?.["user-agent"],
+            tenantId: tenantId,
+            roleId: roleId
+          }
+        });
+
         result.push(
           new ResponseAssignRoleDto(
             data,
@@ -186,6 +205,7 @@ export class AssignRoleService {
   }
 
   public async deleteAssignedRole(
+    request: any,
     deleteAssignRoleDto: DeleteAssignRoleDto,
     res: Response
   ) {
@@ -248,6 +268,22 @@ export class AssignRoleService {
         userId: deleteAssignRoleDto.userId,
         roleId: In(deleteAssignRoleDto.roleId),
       });
+
+      // Audit Log
+      this.auditLoggerService.emit({
+        entityType: "USER_ROLE_MAPPING",
+        entityId: deleteAssignRoleDto.userId,
+        eventAction: "DELETED",
+        actorId: request["user"]?.userId || "system",
+        actorName: request["user"]?.name || "Unknown",
+        userRole: request["user"]?.role || "Unknown",
+        context: {
+          ipAddress: request?.ip,
+          platform: request?.headers?.["user-agent"],
+          roleIds: deleteAssignRoleDto.roleId
+        }
+      });
+
       return APIResponse.success(
         res,
         apiId,
@@ -275,6 +311,7 @@ export class AssignRoleService {
   //    }
 
   public async bulkUpdateUserRoles(
+    request: any,
     userIds: string[],
     roleId: string,
     tenantId: string,
@@ -299,6 +336,23 @@ export class AssignRoleService {
           { userId, tenantId },
           { roleId, updatedBy }
         );
+
+        // Audit Log
+        this.auditLoggerService.emit({
+          entityType: "USER_ROLE_MAPPING",
+          entityId: userId,
+          eventAction: "UPDATED",
+          actorId: request["user"]?.userId || "system",
+          actorName: request["user"]?.name || "Unknown",
+          userRole: request["user"]?.role || "Unknown",
+          context: {
+            ipAddress: request?.ip,
+            platform: request?.headers?.["user-agent"],
+            tenantId: tenantId,
+            newRoleId: roleId
+          }
+        });
+
         updated.push(userId);
       }
 

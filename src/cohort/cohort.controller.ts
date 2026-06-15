@@ -127,7 +127,7 @@ export class CohortController {
     cohortCreateDto.createdBy = userId;
     cohortCreateDto.updatedBy = userId;
     return await this.cohortService
-      .createCohort(cohortCreateDto, response);
+      .createCohort(request, cohortCreateDto, response);
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.COHORT_LIST))
@@ -190,7 +190,7 @@ export class CohortController {
   ) {
     cohortUpdateDto.updatedBy = userId;
     return await this.cohortService
-      .updateCohort(cohortId, cohortUpdateDto, response);
+      .updateCohort(request, cohortId, cohortUpdateDto, response);
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.COHORT_STATUS_UPDATE))
@@ -201,11 +201,13 @@ export class CohortController {
   @ApiInternalServerErrorResponse({ description: "Internal Server Error." })
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   public async updateCohortStatuses(
+    @Req() request: Request,
     @Body() dto: CohortStatusUpdateDto,
     @Res() response: Response,
     @GetUserId("userId", ParseUUIDPipe) userId: string
   ) {
     return await this.cohortService.updateCohortStatuses(
+      request,
       dto.cohortIds,
       dto.status,
       userId,
@@ -219,12 +221,13 @@ export class CohortController {
   @ApiBadRequestResponse({ description: "Bad request." })
   @ApiInternalServerErrorResponse({ description: "Internal Server Error." })
   public async updateCohortStatus(
+    @Req() request: Request,
     @Param("cohortId") cohortId: string,
     @Res() response: Response,
     @GetUserId("userId", ParseUUIDPipe) userId: string
   ) {
     return await this.cohortService
-      .updateCohortStatus(cohortId, response, userId);
+      .updateCohortStatus(request, cohortId, response, userId);
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.COHORT_READ))

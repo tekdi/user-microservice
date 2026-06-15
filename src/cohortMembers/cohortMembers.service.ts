@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { AuditLoggerService } from "@tekdi/audit-logger/nestjs";
 import { CohortMembersDto } from "src/cohortMembers/dto/cohortMembers.dto";
 import { CohortMembersSearchDto } from "src/cohortMembers/dto/cohortMembers-search.dto";
 import { CohortMembers } from "src/cohortMembers/entities/cohort-member.entity";
@@ -42,8 +43,9 @@ export class CohortMembersService {
     private readonly academicyearService: AcademicYearService,
     private readonly notificationRequest: NotificationRequest,
     private fieldsService: FieldsService,
-    private userService: UserService,
-    private readonly kafkaService: KafkaService
+    private readonly userService: UserService,
+    private readonly kafkaService: KafkaService,
+    private readonly auditLoggerService: AuditLoggerService
   ) { }
 
   //Get cohort member
@@ -569,6 +571,23 @@ ON CM."userId" = U."userId" ${whereCase}`;
       );
 
       if (savedCohortMember) {
+        // Send audit log
+        this.auditLoggerService.emit({
+          entityType: "COHORT_MEMBER",
+          entityId: savedCohortMember.cohortMembershipId,
+          eventAction: "CREATED",
+          actorId: loginUser || "system",
+          context: {
+            ipAddress: (res.req as any)?.ip,
+            platform: (res.req as any)?.headers?.["user-agent"],
+          },
+          metadata: {
+            cohortId: cohortMembers.cohortId,
+            userId: cohortMembers.userId,
+            role: cohortMembers.cohortMemberRole,
+          },
+        });
+
         const apiResponse = APIResponse.success(
           res,
           apiId,
@@ -732,6 +751,7 @@ ${whereCase}`;
   }
 
   public async updateCohortMembers(
+    request: any,
     cohortMembershipId: string,
     loginUser: any,
     cohortMembersUpdateDto: CohortMembersUpdateDto,
@@ -763,7 +783,7 @@ ${whereCase}`;
           );
         if (!customFieldValidate || !isValid) {
           return APIResponse.error(
-            response,
+            res,
             apiId,
             "BAD_REQUEST",
             `${customFieldValidate}`,
@@ -789,6 +809,25 @@ ${whereCase}`;
       let result = await this.cohortMembersRepository.save(
         cohortMembershipToUpdate
       );
+
+      // Audit Log
+      this.auditLoggerService.emit({
+        entityType: "COHORT_MEMBER",
+        entityId: cohortMembershipId,
+        eventAction: "UPDATED",
+        actorId: loginUser || "system",
+        actorName: (request as any)?.user?.name || "Unknown",
+        userRole: (request as any)?.user?.role || "Unknown",
+        context: {
+          ipAddress: (res.req as any)?.ip,
+          platform: (res.req as any)?.headers?.["user-agent"],
+        },
+        metadata: {
+          cohortMembershipId: cohortMembershipId,
+          updates: cohortMembersUpdateDto,
+        },
+      });
+
       await this.publishCohortMemberEvent(
         "updated",
         cohortMembershipToUpdate,
@@ -883,7 +922,7 @@ ${whereCase}`;
       )
 
       return APIResponse.error(
-        response,
+        res,
         apiId,
         API_RESPONSES.INTERNAL_SERVER_ERROR,
         `Error : ${error.message}`,

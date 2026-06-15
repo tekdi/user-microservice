@@ -29,6 +29,21 @@
 //   await app.listen(3000);
 // }
 // bootstrap();
+import * as dotenv from 'dotenv';
+dotenv.config(); // Must be first — loads .env before @Module decorators are evaluated
+
+import { randomUUID, webcrypto } from 'node:crypto';
+if (!globalThis.crypto) {
+  Object.defineProperty(globalThis, 'crypto', {
+    value: {
+      randomUUID: () => randomUUID(),
+      getRandomValues: (buffer) => webcrypto.getRandomValues(buffer),
+    },
+    writable: true,
+    configurable: true
+  });
+}
+
 import { NestFactory } from "@nestjs/core";
 import { AppModule } from "./app.module";
 import { SwaggerModule, DocumentBuilder } from "@nestjs/swagger";

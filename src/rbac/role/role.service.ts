@@ -1,4 +1,5 @@
-import { HttpStatus, Injectable } from "@nestjs/common";
+import { HttpStatus, Inject, Injectable } from "@nestjs/common";
+import { AuditLoggerService } from "@tekdi/audit-logger/nestjs";
 import { Role } from "./entities/role.entity";
 import { RolePrivilegeMapping } from "src/rbac/assign-privilege/entities/assign-privilege.entity";
 import { InjectRepository } from "@nestjs/typeorm";
@@ -26,7 +27,9 @@ export class RoleService {
     @InjectRepository(UserRoleMapping)
     private readonly userRoleMappingRepository: Repository<UserRoleMapping>,
     @InjectRepository(RolePrivilegeMapping)
-    private readonly roleprivilegeMappingRepository: Repository<RolePrivilegeMapping>
+    private readonly roleprivilegeMappingRepository: Repository<RolePrivilegeMapping>,
+    @Inject(AuditLoggerService)
+    private readonly auditLoggerService: AuditLoggerService
   ) { }
   public async createRole(
     request: any,
@@ -75,13 +78,14 @@ export class RoleService {
           continue;
         }
 
+        const userId = request.user?.userId || "00000000-0000-0000-0000-000000000000";
         const newRoleDto = new RoleDto({
           ...roleDto,
           code,
           createdAt: new Date(),
           updatedAt: new Date(),
-          createdBy: request.user.userId, // Assuming you have a user object in the request
-          updatedBy: request.user.userId,
+          createdBy: userId,
+          updatedBy: userId,
           tenantId: tenantId ? tenantId : null, // Add the tenantId to the RoleDto
         });
         // Convert roleDto to lowercase
@@ -89,8 +93,23 @@ export class RoleService {
         const roleEntity = this.roleRepository.create(newRoleDto);
 
         // Save the role entity to the database
-        const response = await this.roleRepository.save(roleEntity);
-        roles.push(new RolesResponseDto(response));
+        const responseData = await this.roleRepository.save(roleEntity);
+        roles.push(new RolesResponseDto(responseData));
+
+        // Audit Log
+        this.auditLoggerService.emit({
+          entityType: "ROLE",
+          entityId: responseData.roleId,
+          eventAction: "CREATED",
+          actorId: request.user?.userId || request.user?.sub || "system",
+          actorName: request.user?.name || "System",
+          userRole: request.user?.role || "Unknown",
+          context: {
+            ipAddress: request.ip,
+            platform: request.headers?.["user-agent"],
+            tenantId: tenantId || null
+          }
+        });
       }
     } catch (e) {
       const errorMessage = e.message || "Internal server error";
@@ -147,6 +166,21 @@ export class RoleService {
       const code = roleDto.title.toLowerCase().replace(/\s+/g, "_");
       roleDto.code = code;
       const result = await this.roleRepository.update(roleId, roleDto);
+
+      // Audit Log
+      this.auditLoggerService.emit({
+        entityType: "ROLE",
+        entityId: roleId,
+        eventAction: "UPDATED",
+        actorId: request.user?.userId || request.user?.sub || "system",
+        actorName: request.user?.name || "System",
+        userRole: request.user?.role || "Unknown",
+        context: {
+          ipAddress: request.ip,
+          platform: request.headers?.["user-agent"],
+        }
+      });
+
       return APIResponse.success(
         response,
         apiId,
@@ -305,7 +339,7 @@ export class RoleService {
     }
   }
 
-  public async deleteRole(roleId: string, res: Response) {
+  public async deleteRole(roleId: string, request: any, res: Response) {
     const apiId = APIID.ROLE_DELETE;
     try {
       if (!isUUID(roleId)) {
@@ -333,6 +367,20 @@ export class RoleService {
       }
       // Delete the role
       const response = await this.roleRepository.delete(roleId);
+
+      // Audit Log
+      this.auditLoggerService.emit({
+        entityType: "ROLE",
+        entityId: roleId,
+        eventAction: "DELETED",
+        actorId: request.user?.userId || request.user?.sub || "system",
+        actorName: request.user?.name || "System",
+        userRole: request.user?.role || "Unknown",
+        context: {
+          ipAddress: request.ip,
+          platform: request.headers?.["user-agent"],
+        }
+      });
 
       // Delete entries from RolePrivilegesMapping table associated with the roleId
       const rolePrivilegesDeleteResponse =

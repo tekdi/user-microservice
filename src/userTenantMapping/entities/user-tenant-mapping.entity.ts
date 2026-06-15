@@ -49,10 +49,10 @@ export class UserTenantMapping {
   })
   updatedAt: Date;
 
-  @Column()
+  @Column({ nullable: false })
   createdBy: string;
 
-  @Column()
+  @Column({ nullable: false })
   updatedBy: string;
 
   @ManyToOne(() => User, (user) => user.userTenantMapping)
