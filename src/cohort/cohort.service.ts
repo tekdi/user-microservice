@@ -28,8 +28,6 @@ import { AutomaticMemberService } from "src/automatic-member/automatic-member.se
 import { KafkaService } from "src/kafka/kafka.service";
 import { Console } from "console";
 import { getAuditContext } from "@utils/audit-helper";
-import { requestContext } from "@utils/request-context";
-
 
 @Injectable()
 export class CohortService {

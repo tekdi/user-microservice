@@ -37,7 +37,6 @@ export class RoleService {
     createRolesDto: CreateRolesDto,
     response: Response
   ) {
-    const request = requestContext.getStore() as any;
     const apiId = APIID.ROLE_CREATE;
     const roles = [];
     const errors = [];
@@ -331,8 +330,6 @@ export class RoleService {
   }
 
   public async deleteRole(roleId: string, res: Response) {
-    const request = requestContext.getStore() as any;
-
     const apiId = APIID.ROLE_DELETE;
     try {
       if (!isUUID(roleId)) {

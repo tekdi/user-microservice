@@ -7,7 +7,6 @@ import APIResponse from "src/common/responses/response";
 import { RolePermissionCreateDto } from "./dto/role-permission-create-dto";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
 import { AuditLoggerService } from "@tekdi/audit-logger/nestjs";
-import { requestContext } from "@utils/request-context";
 import { getAuditContext } from "@utils/audit-helper";
 @Injectable()
 export class RolePermissionService {

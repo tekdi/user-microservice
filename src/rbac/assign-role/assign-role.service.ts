@@ -39,7 +39,6 @@ export class AssignRoleService {
     createAssignRoleDto: CreateAssignRoleDto,
     response: Response
   ) {
-    const request = requestContext.getStore() as any;
     const apiId = APIID.USERROLE_CREATE;
     try {
       const userId = createAssignRoleDto.userId;
@@ -205,7 +204,6 @@ export class AssignRoleService {
     deleteAssignRoleDto: DeleteAssignRoleDto,
     res: Response
   ) {
-    const request = requestContext.getStore() as any;
     const apiId = APIID.USERROLE_DELETE;
     try {
       // Validate userId format
@@ -313,7 +311,6 @@ export class AssignRoleService {
     updatedBy: string,
     res: Response
   ) {
-    const request = requestContext.getStore() as any;
     const apiId = APIID.USERROLE_BULK_UPDATE;
     try {
       const errors: { userId: string; error: string }[] = [];

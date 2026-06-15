@@ -253,7 +253,6 @@ export class UserService {
     response: Response<any, Record<string, any>>
   ) {
     const apiId = APIID.USER_FORGOT_PASSWORD;
-    const request = requestContext.getStore() as any;
     try {
       const jwtSecretKey = this.jwt_secret;
       const decoded = await this.jwtUtil.validateToken(
@@ -2802,8 +2801,6 @@ export class UserService {
   }
 
   public async deleteUserById(userId: string, response: Response) {
-    const request = requestContext.getStore() as any;
-
     const apiId = APIID.USER_DELETE;
     const { KEYCLOAK, KEYCLOAK_ADMIN } = process.env;
     // Validate userId format
