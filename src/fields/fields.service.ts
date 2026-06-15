@@ -419,7 +419,7 @@ export class FieldsService {
       let error = "";
 
       for (const [key, val] of Object.entries(fieldsUpdateDto)) {
-        if (val && val !== "") {
+        if (val !== undefined && val !== null && val !== "") {
           fieldsData[key] = Array.isArray(val) && key !== "render" ? JSON.stringify(val) : val;
         }
       }
