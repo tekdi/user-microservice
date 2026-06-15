@@ -196,7 +196,7 @@ export class RoleService {
           roleId: data.roleid,
           title: data.title,
           code: data.code,
-          privileges: result.find((p) => p.roleid === data.roleid) ?? [],
+          privileges: result.filter((p) => p.roleid === data.roleid),
         }));
         return APIResponse.success(response, apiId, roles, HttpStatus.OK, "Role For User with Privileges fetched successfully.");
       }
