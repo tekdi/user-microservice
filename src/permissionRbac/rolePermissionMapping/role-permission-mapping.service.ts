@@ -165,7 +165,7 @@ export class RolePermissionService {
         "Permission deleted succesfully."
       );
       const auditCtx = getAuditContext();
-      this.auditLoggerService.emit({
+      this.emitAuditSafely({
         entityType: "ROLE_PERMISSION",
         entityId: rolePermissionId,
         eventAction: "DELETED",

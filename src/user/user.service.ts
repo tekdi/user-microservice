@@ -123,6 +123,13 @@ export class UserService {
     this.dataSource = dataSource; // Store dataSource in class property
   }
 
+  private emitAuditSafely(event: any): void {
+    try {
+      this.auditLoggerService.emit(event);
+    } catch (err: any) {
+      LoggerUtil.error(`Audit emission failed: ${err?.message || err}`, "", "AuditLogger");
+    }
+  }
 
   public async getCoreColumnNames() {
     const userMetadata = this.dataSource.getMetadata(User);
@@ -1469,7 +1476,7 @@ export class UserService {
       );
 
       const auditCtx = getAuditContext();
-      this.auditLoggerService.emit({
+      this.emitAuditSafely({
         entityType: "USER",
         entityId: userDto.userId,
         eventAction: "UPDATED",
@@ -1921,7 +1928,7 @@ export class UserService {
 
       // Audit Log
       const auditCtx = getAuditContext();
-      this.auditLoggerService.emit({
+      this.emitAuditSafely({
         entityType: "USER",
         entityId: result.userId,
         eventAction: "CREATED",
@@ -1934,8 +1941,7 @@ export class UserService {
         }
       });
 
-
-      APIResponse.success(
+      return APIResponse.success(
         response,
         apiId,
         { userData: { ...result, createFailures } },
@@ -2890,7 +2896,7 @@ export class UserService {
         ));
 
       const auditCtx = getAuditContext();
-      this.auditLoggerService.emit({
+      this.emitAuditSafely({
         entityType: "USER",
         entityId: userId,
         eventAction: "DELETED",

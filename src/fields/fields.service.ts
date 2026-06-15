@@ -39,6 +39,14 @@ export class FieldsService {
     private readonly auditLoggerService: AuditLoggerService
   ) { }
 
+  private emitAuditSafely(event: any): void {
+    try {
+      this.auditLoggerService.emit(event);
+    } catch (err: any) {
+      LoggerUtil.error(`Audit emission failed: ${err?.message || err}`, "", "AuditLogger");
+    }
+  }
+
   async getFormCustomField(requiredData, response) {
     const apiId = "FormData";
     try {
@@ -911,7 +919,7 @@ export class FieldsService {
       );
 
       const auditCtx = getAuditContext();
-      this.auditLoggerService.emit({
+      this.emitAuditSafely({
         entityType: "FIELD_VALUE",
         entityId: "MULTIPLE",
         eventAction: "CREATED",
@@ -2144,7 +2152,7 @@ export class FieldsService {
       );
 
       const auditCtx = getAuditContext();
-      this.auditLoggerService.emit({
+      this.emitAuditSafely({
         entityType: "FIELD_VALUE",
         entityId: "MULTIPLE",
         eventAction: "DELETED",

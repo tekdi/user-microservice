@@ -45,6 +45,14 @@ export class UserTenantMappingService {
     private readonly auditLoggerService: AuditLoggerService
   ) { }
 
+  private emitAuditSafely(event: any): void {
+    try {
+      this.auditLoggerService.emit(event);
+    } catch (err: any) {
+      LoggerUtil.error(`Audit emission failed: ${err?.message || err}`, "", "AuditLogger");
+    }
+  }
+
   public async validateUserTenantMapping(
     userId: string,
     tenantId: string,
@@ -164,7 +172,7 @@ export class UserTenantMappingService {
         select: ["Id"],
       });
       const auditCtx = getAuditContext();
-      this.auditLoggerService.emit({
+      this.emitAuditSafely({
         entityType: "USER_TENANT_MAPPING",
         entityId: String(createdMapping?.Id ?? `User:${userId}|Tenant:${tenantId}|Role:${roleId}`),
         eventAction: "CREATED",
@@ -399,7 +407,7 @@ export class UserTenantMappingService {
       );
 
       const auditCtx = getAuditContext();
-      this.auditLoggerService.emit({
+      this.emitAuditSafely({
         entityType: "USER_TENANT_MAPPING",
         entityId: existingMapping.Id,
         eventAction: "UPDATED",

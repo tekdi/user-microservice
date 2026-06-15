@@ -51,6 +51,14 @@ export class CohortService {
     private readonly auditLoggerService: AuditLoggerService
   ) { }
 
+  private emitAuditSafely(event: any): void {
+    try {
+      this.auditLoggerService.emit(event);
+    } catch (err: any) {
+      LoggerUtil.error(`Audit emission failed: ${err?.message || err}`, "", "AuditLogger");
+    }
+  }
+
   public async getCohortsDetails(requiredData, res) {
     const apiId = APIID.COHORT_READ;
 
@@ -386,7 +394,7 @@ export class CohortService {
       const response = await this.cohortRepository.save(cohortCreateDto);
 
       const auditCtx = getAuditContext();
-      this.auditLoggerService.emit({
+      this.emitAuditSafely({
         entityType: "COHORT",
         entityId: response.cohortId,
         eventAction: "CREATED",
@@ -525,12 +533,14 @@ export class CohortService {
       );
       // Audit Log
       const auditCtx = getAuditContext();
-      this.auditLoggerService.emit({
+      this.emitAuditSafely({
         entityType: "COHORT",
-        entityId: uniqueCohortIds.join(','),
+        entityId: uniqueCohortIds.length === 1
+          ? uniqueCohortIds[0]
+          : `BATCH:${uniqueCohortIds.length}:${uniqueCohortIds[0]}`,
         eventAction: "STATUS_UPDATED",
         ...auditCtx,
-        metadata: { status }
+        metadata: { status, cohortIds: uniqueCohortIds }
       });
       LoggerUtil.log(`Cohort statuses updated: ${result.affected} rows`);
       return APIResponse.success(
@@ -725,7 +735,7 @@ export class CohortService {
         }
 
         const auditCtx = getAuditContext();
-        this.auditLoggerService.emit({
+        this.emitAuditSafely({
           entityType: "COHORT",
           entityId: cohortId,
           eventAction: "UPDATED",
@@ -1117,7 +1127,7 @@ export class CohortService {
 
         // Audit Log
         const auditCtx = getAuditContext();
-        this.auditLoggerService.emit({
+        this.emitAuditSafely({
           entityType: "COHORT",
           entityId: cohortId,
           eventAction: "DELETED",

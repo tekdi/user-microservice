@@ -19,6 +19,7 @@ import { APIID } from "src/common/utils/api-id.config";
 import { validate as uuidValidate } from 'uuid';
 import { requestContext } from "@utils/request-context";
 import { getAuditContext } from "@utils/audit-helper";
+import { LoggerUtil } from "src/common/logger/LoggerUtil";
 
 
 @Injectable()
@@ -33,6 +34,15 @@ export class RoleService {
     @Inject(AuditLoggerService)
     private readonly auditLoggerService: AuditLoggerService
   ) { }
+
+  private emitAuditSafely(event: any): void {
+    try {
+      this.auditLoggerService.emit(event);
+    } catch (err: any) {
+      LoggerUtil.error(`Audit emission failed: ${err?.message || err}`, "", "AuditLogger");
+    }
+  }
+
   public async createRole(
     createRolesDto: CreateRolesDto,
     response: Response
@@ -98,7 +108,7 @@ export class RoleService {
         roles.push(new RolesResponseDto(responseData));
 
         // Audit Log
-        this.auditLoggerService.emit({
+        this.emitAuditSafely({
           entityType: "ROLE",
           entityId: responseData.roleId,
           eventAction: "CREATED",
@@ -165,7 +175,7 @@ export class RoleService {
 
       // Audit Log
       const auditCtx = getAuditContext();
-      this.auditLoggerService.emit({
+      this.emitAuditSafely({
         entityType: "ROLE",
         entityId: roleId,
         eventAction: "UPDATED",
@@ -360,7 +370,7 @@ export class RoleService {
 
       // Audit Log
       const auditCtx = getAuditContext();
-      this.auditLoggerService.emit({
+      this.emitAuditSafely({
         entityType: "ROLE",
         entityId: roleId,
         eventAction: "DELETED",

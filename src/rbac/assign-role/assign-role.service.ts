@@ -24,6 +24,7 @@ import { Response } from "express";
 import { APIID } from "src/common/utils/api-id.config";
 import APIResponse from "src/common/responses/response";
 import { AuditLoggerService } from "@tekdi/audit-logger/nestjs";
+import { LoggerUtil } from "src/common/logger/LoggerUtil";
 
 @Injectable()
 export class AssignRoleService {
@@ -35,6 +36,15 @@ export class AssignRoleService {
     @Inject(AuditLoggerService)
     private readonly auditLoggerService: AuditLoggerService
   ) { }
+
+  private emitAuditSafely(event: any): void {
+    try {
+      this.auditLoggerService.emit(event);
+    } catch (err: any) {
+      LoggerUtil.error(`Audit emission failed: ${err?.message || err}`, "", "AuditLogger");
+    }
+  }
+
   public async createAssignRole(
     createAssignRoleDto: CreateAssignRoleDto,
     response: Response
@@ -96,7 +106,7 @@ export class AssignRoleService {
           updatedBy: auditCtx.actorId,
         });
 
-        this.auditLoggerService.emit({
+        this.emitAuditSafely({
           entityType: "USER_ROLE",
           entityId: data.userRolesId,
           eventAction: "CREATED",
@@ -267,7 +277,7 @@ export class AssignRoleService {
       // Audit Log for each deleted role
       const auditCtx = getAuditContext();
       for (const roleId of deleteAssignRoleDto.roleId) {
-        this.auditLoggerService.emit({
+        this.emitAuditSafely({
           entityType: "USER_ROLE",
           entityId: `User:${deleteAssignRoleDto.userId}|Role:${roleId}`,
           eventAction: "DELETED",
@@ -332,7 +342,7 @@ export class AssignRoleService {
         updated.push(userId);
 
         const auditCtx = getAuditContext();
-        this.auditLoggerService.emit({
+        this.emitAuditSafely({
           entityType: "USER_ROLE",
           entityId: `User:${userId}|Tenant:${tenantId}`,
           eventAction: "UPDATED",

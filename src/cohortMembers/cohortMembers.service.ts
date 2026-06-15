@@ -49,6 +49,14 @@ export class CohortMembersService {
     private readonly auditLoggerService: AuditLoggerService
   ) { }
 
+  private emitAuditSafely(event: any): void {
+    try {
+      this.auditLoggerService.emit(event);
+    } catch (err: any) {
+      LoggerUtil.error(`Audit emission failed: ${err?.message || err}`, "", "AuditLogger");
+    }
+  }
+
   //Get cohort member
   async getCohortMembers(
     cohortId: any,
@@ -574,7 +582,7 @@ ON CM."userId" = U."userId" ${whereCase}`;
       if (savedCohortMember) {
         // Send audit log
         const auditCtx = getAuditContext();
-        this.auditLoggerService.emit({
+        this.emitAuditSafely({
           entityType: "COHORT_MEMBER",
           entityId: savedCohortMember.cohortMembershipId,
           eventAction: "CREATED",
@@ -780,9 +788,9 @@ ${whereCase}`;
             "COHORTMEMBER",
             "COHORTMEMBER"
           );
-        if (!customFieldValidate || !isValid) {
+        if (!customFieldValidate) {
           return APIResponse.error(
-            response,
+            res,
             apiId,
             "BAD_REQUEST",
             `${customFieldValidate}`,
@@ -811,7 +819,7 @@ ${whereCase}`;
 
       // Audit Log
       const auditCtx = getAuditContext();
-      this.auditLoggerService.emit({
+      this.emitAuditSafely({
         entityType: "COHORT_MEMBER",
         entityId: cohortMembershipId,
         eventAction: "UPDATED",
