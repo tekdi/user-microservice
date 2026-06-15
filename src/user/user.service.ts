@@ -1941,15 +1941,7 @@ export class UserService {
         }
       });
 
-      return APIResponse.success(
-        response,
-        apiId,
-        { userData: { ...result, createFailures } },
-        HttpStatus.CREATED,
-        API_RESPONSES.USER_CREATE_SUCCESSFULLY
-      );
-
-      // Produce user created event to Kafka asynchronously - after response is sent to client
+      // Produce user created event to Kafka asynchronously (fire-and-forget, does not block response)
       this.publishUserEvent('created', result.userId, apiId)
         .catch(error => LoggerUtil.error(
           `Failed to publish user created event to Kafka for ${userContext.username}`,
@@ -1957,6 +1949,14 @@ export class UserService {
           apiId,
           userContext.username
         ));
+
+      return APIResponse.success(
+        response,
+        apiId,
+        { userData: { ...result, createFailures } },
+        HttpStatus.CREATED,
+        API_RESPONSES.USER_CREATE_SUCCESSFULLY
+      );
     } catch (e) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
