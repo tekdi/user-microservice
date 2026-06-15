@@ -20,7 +20,7 @@ import { Role } from "src/rbac/role/entities/role.entity";
 import { IsAlpha, IsUUID, isUUID } from "class-validator";
 import { executionAsyncResource } from "async_hooks";
 import { DeleteAssignRoleDto } from "src/rbac/assign-role/dto/delete-assign-role.dto";
-import { Response, Request } from "express";
+import { Response } from "express";
 import { APIID } from "src/common/utils/api-id.config";
 import APIResponse from "src/common/responses/response";
 import { AuditLoggerService } from "@tekdi/audit-logger/nestjs";
@@ -29,9 +29,9 @@ import { AuditLoggerService } from "@tekdi/audit-logger/nestjs";
 export class AssignRoleService {
   constructor(
     @InjectRepository(UserRoleMapping)
-    private userRoleMappingRepository: Repository<UserRoleMapping>,
+    private readonly userRoleMappingRepository: Repository<UserRoleMapping>,
     @InjectRepository(Role)
-    private roleRepository: Repository<Role>,
+    private readonly roleRepository: Repository<Role>,
     @Inject(AuditLoggerService)
     private readonly auditLoggerService: AuditLoggerService
   ) { }
@@ -88,15 +88,15 @@ export class AssignRoleService {
           continue;
         }
 
+        const auditCtx = getAuditContext();
         const data = await this.userRoleMappingRepository.save({
           userId: userId,
           roleId: roleId,
           tenantId: tenantId,
-          createdBy: request["user"].userId,
-          updatedBy: request["user"].userId,
+          createdBy: auditCtx.actorId,
+          updatedBy: auditCtx.actorId,
         });
 
-        const auditCtx = getAuditContext();
         this.auditLoggerService.emit({
           entityType: "USER_ROLE",
           entityId: data.userRolesId,
@@ -160,7 +160,6 @@ export class AssignRoleService {
     userId: string,
     response: Response
   ) {
-    const request = requestContext.getStore() as any;
     const apiId = APIID.USERROLE_GET;
     try {
       if (!isUUID(userId)) {
@@ -268,17 +267,16 @@ export class AssignRoleService {
       });
 
       // Audit Log for each deleted role
+      const auditCtx = getAuditContext();
       for (const roleId of deleteAssignRoleDto.roleId) {
         this.auditLoggerService.emit({
           entityType: "USER_ROLE",
           entityId: `User:${deleteAssignRoleDto.userId}|Role:${roleId}`,
           eventAction: "DELETED",
-          actorId: (request as any).user?.userId || (request as any).user?.sub || "00000000-0000-0000-0000-000000000000",
-          actorName: (request as any).user?.name || "System",
-          userRole: (request as any).user?.role || "Unknown",
-          context: {
-            ipAddress: (request as any).ip,
-            platform: (request as any).headers?.["user-agent"]
+          ...auditCtx,
+          metadata: {
+            userId: deleteAssignRoleDto.userId,
+            roleId: roleId
           }
         });
       }
@@ -336,17 +334,16 @@ export class AssignRoleService {
         );
         updated.push(userId);
 
+        const auditCtx = getAuditContext();
         this.auditLoggerService.emit({
           entityType: "USER_ROLE",
           entityId: `User:${userId}|Tenant:${tenantId}`,
           eventAction: "UPDATED",
-          actorId: (request as any).user?.userId || (request as any).user?.sub || "00000000-0000-0000-0000-000000000000",
-          actorName: (request as any).user?.name || "System",
-          userRole: (request as any).user?.role || "Unknown",
-          context: {
-            ipAddress: (request as any).ip,
-            platform: (request as any).headers?.["user-agent"],
-            tenantId: tenantId
+          ...auditCtx,
+          metadata: {
+            userId,
+            tenantId,
+            roleId
           }
         });
       }

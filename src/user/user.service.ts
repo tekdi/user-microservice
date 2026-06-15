@@ -136,7 +136,6 @@ export class UserService {
     redirectUrl: string,
     response: Response
   ) {
-    const request = requestContext.getStore() as any;
     const apiId = APIID.USER_RESET_PASSWORD_LINK;
     try {
       // Fetch user details
@@ -253,8 +252,8 @@ export class UserService {
     body: any,
     response: Response<any, Record<string, any>>
   ) {
-    const request = requestContext.getStore() as any;
     const apiId = APIID.USER_FORGOT_PASSWORD;
+    const request = requestContext.getStore() as any;
     try {
       const jwtSecretKey = this.jwt_secret;
       const decoded = await this.jwtUtil.validateToken(
@@ -421,7 +420,6 @@ export class UserService {
     response: any,
     userHierarchyViewDto: UserHierarchyViewDto
   ) {
-    const request = requestContext.getStore() as any;
     const apiId = APIID.USER_HIERARCHY_VIEW;
     const { email } = userHierarchyViewDto;
 
@@ -1272,7 +1270,6 @@ export class UserService {
     userDto: any,
     response: Response
   ) {
-    const request = requestContext.getStore() as any;
     const apiId = APIID.USER_UPDATE;
     try {
       const updatedData = {};
@@ -1478,9 +1475,7 @@ export class UserService {
         entityId: userDto.userId,
         eventAction: "UPDATED",
         ...auditCtx,
-        context: {
-          ipAddress: auditCtx.ipAddress,
-          platform: auditCtx.userAgent,
+        metadata: {
           tenantId: userDto.userData?.tenantId,
           updatedFields: userDto.userData // Capturing the update payload as requested by BRD
         }
@@ -1932,16 +1927,12 @@ export class UserService {
         entityId: result.userId,
         eventAction: "CREATED",
         ...auditCtx,
-        context: {
-          ipAddress: auditCtx.ipAddress,
-          platform: auditCtx.userAgent,
-        },
         metadata: {
           username: userContext.username,
           email: userContext.email,
           roles: userCreateDto.tenantCohortRoleMapping?.map(m => m.roleId) || [],
           tenantId: userCreateDto.tenantCohortRoleMapping?.[0]?.tenantId || null
-        },
+        }
       });
 
 
@@ -2441,8 +2432,8 @@ export class UserService {
     newPassword: string,
     response: Response
   ) {
-    const request = requestContext.getStore() as any;
     const apiId = APIID.USER_RESET_PASSWORD;
+    const request = requestContext.getStore() as any;
     try {
       const user = request.user;
 
@@ -2861,19 +2852,7 @@ export class UserService {
       // Finally delete user
       const userResult = await this.usersRepository.delete(userId);
 
-      // Audit Log
-      this.auditLoggerService.emit({
-        entityType: "USER",
-        entityId: userId,
-        eventAction: "DELETED",
-        actorId: request["user"]?.userId || request["user"]?.sub || "00000000-0000-0000-0000-000000000000",
-        actorName: request["user"]?.name || "System",
-        userRole: request["user"]?.role || "Unknown",
-        context: {
-          ipAddress: request?.ip,
-          platform: request?.headers?.["user-agent"]
-        }
-      });
+      // Audit Log trigger removed here as it is handled at the end of the method
 
       const keycloakResponse = await getKeycloakAdminToken();
       const token = keycloakResponse.data.access_token;
@@ -2918,11 +2897,7 @@ export class UserService {
         entityType: "USER",
         entityId: userId,
         eventAction: "DELETED",
-        ...auditCtx,
-        context: {
-          ipAddress: auditCtx.ipAddress,
-          platform: auditCtx.userAgent
-        }
+        ...auditCtx
       });
 
       return apiResponse;
@@ -3384,8 +3359,8 @@ export class UserService {
     response: any,
     filters: ExistUserDto
   ) {
-    const request = requestContext.getStore() as any;
     const apiId = APIID.USER_LIST;
+    const request = requestContext.getStore() as any;
     try {
       const whereClause: any = {};
 

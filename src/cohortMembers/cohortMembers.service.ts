@@ -27,7 +27,6 @@ import { FieldValuesOptionDto } from "src/user/dto/user-create.dto";
 import { KafkaService } from "src/kafka/kafka.service";
 import { BulkCohortMember } from "src/cohortMembers/dto/bulkMember-create.dto";
 import { getAuditContext } from "@utils/audit-helper";
-import { requestContext } from "@utils/request-context";
 
 @Injectable()
 export class CohortMembersService {
@@ -811,17 +810,12 @@ ${whereCase}`;
       );
 
       // Audit Log
+      const auditCtx = getAuditContext();
       this.auditLoggerService.emit({
         entityType: "COHORT_MEMBER",
         entityId: cohortMembershipId,
         eventAction: "UPDATED",
-        actorId: loginUser || "00000000-0000-0000-0000-000000000000",
-        actorName: (request as any)?.user?.name || "Unknown",
-        userRole: (request as any)?.user?.role || "Unknown",
-        context: {
-          ipAddress: (res.req as any)?.ip,
-          platform: (res.req as any)?.headers?.["user-agent"],
-        },
+        ...auditCtx,
         metadata: {
           cohortMembershipId: cohortMembershipId,
           updates: cohortMembersUpdateDto,

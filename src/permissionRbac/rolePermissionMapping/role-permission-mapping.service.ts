@@ -13,10 +13,18 @@ import { getAuditContext } from "@utils/audit-helper";
 export class RolePermissionService {
   constructor(
     @InjectRepository(RolePermission)
-    private rolePermissionRepository: Repository<RolePermission>,
+    private readonly rolePermissionRepository: Repository<RolePermission>,
     @Inject(AuditLoggerService)
     private readonly auditLoggerService: AuditLoggerService
   ) {}
+  
+  private emitAuditSafely(event: any): void {
+    try {
+      this.auditLoggerService.emit(event);
+    } catch (err: any) {
+      LoggerUtil.error(`Audit emission failed: ${err?.message || err}`, "", "AuditLogger");
+    }
+  }
 
   //getPermission for middleware
   public async getPermissionForMiddleware(
@@ -66,7 +74,6 @@ export class RolePermissionService {
     permissionCreateDto: RolePermissionCreateDto,
     response: Response
   ): Promise<any> {
-    const request = requestContext.getStore() as any;
     const apiId = "api.create.permission";
     try {
       let result = await this.rolePermissionRepository.save({
@@ -83,7 +90,7 @@ export class RolePermissionService {
         "Permission added succesfully."
       );
       const auditCtx = getAuditContext();
-      this.auditLoggerService.emit({
+      this.emitAuditSafely({
         entityType: "ROLE_PERMISSION",
         entityId: result.rolePermissionId || "N/A",
         eventAction: "CREATED",
@@ -106,7 +113,6 @@ export class RolePermissionService {
     rolePermissionCreateDto: RolePermissionCreateDto,
     response: Response
   ): Promise<any> {
-    const request = requestContext.getStore() as any;
     const apiId = "api.update.permission";
     try {
       let result = await this.rolePermissionRepository.update(
@@ -126,7 +132,7 @@ export class RolePermissionService {
         "Permission updated succesfully."
       );
       const auditCtx = getAuditContext();
-      this.auditLoggerService.emit({
+      this.emitAuditSafely({
         entityType: "ROLE_PERMISSION",
         entityId: rolePermissionCreateDto.rolePermissionId || "N/A",
         eventAction: "UPDATED",
@@ -149,7 +155,6 @@ export class RolePermissionService {
     rolePermissionId: string,
     response: Response
   ): Promise<any> {
-    const request = requestContext.getStore() as any;
     const apiId = "api.delete.permission";
     try {
       let result = await this.rolePermissionRepository.delete(rolePermissionId);

@@ -329,10 +329,6 @@ export class SsoService {
     try {
       // Create user in local database using the actual user adapter method
       const userCreateDto = this.mapToUserCreateDto(newtonResponse, ssoRequestDto);
-      // Create mock request object for the user adapter method
-      const mockRequest = {
-        headers: { authorization: null } // No JWT token for SSO users
-      } as any;
       
       const createdUser = await this.userService.createUserInDatabase(
         userCreateDto

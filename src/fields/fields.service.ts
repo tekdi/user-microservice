@@ -32,9 +32,9 @@ import { check } from "prettier";
 export class FieldsService {
   constructor(
     @InjectRepository(Fields)
-    private fieldsRepository: Repository<Fields>,
+    private readonly fieldsRepository: Repository<Fields>,
     @InjectRepository(FieldValues)
-    private fieldsValuesRepository: Repository<FieldValues>,
+    private readonly fieldsValuesRepository: Repository<FieldValues>,
     @Inject(AuditLoggerService)
     private readonly auditLoggerService: AuditLoggerService
   ) { }
@@ -889,7 +889,6 @@ export class FieldsService {
     fieldValuesDto: FieldValuesDto,
     res: Response
   ) {
-    const request = requestContext.getStore() as any;
     const apiId = APIID.FIELDVALUES_CREATE;
 
     try {
@@ -2106,7 +2105,6 @@ export class FieldsService {
     fieldValuesDeleteDto: FieldValuesDeleteDto,
     response: Response
   ) {
-    const request = requestContext.getStore() as any;
     const apiId = APIID.FIELDVALUES_DELETE;
     try {
       const fieldValues = fieldValuesDeleteDto.fieldValues;

@@ -313,7 +313,6 @@ export class CohortService {
   }
 
   public async createCohort(cohortCreateDto: CohortCreateDto, res) {
-    const request = requestContext.getStore() as any;
     const apiId = APIID.COHORT_CREATE;
     try {
       // Add validation for check both duplicate field ids exist or not
@@ -564,7 +563,6 @@ export class CohortService {
     cohortUpdateDto: CohortUpdateDto,
     res
   ) {
-    const request = requestContext.getStore() as any;
     const apiId = APIID.COHORT_UPDATE;
     // Define valid status transitions
     const validTransitions = {
@@ -1086,7 +1084,6 @@ export class CohortService {
   }
 
   public async updateCohortStatus(cohortId: string, response, userId: string) {
-    const request = requestContext.getStore() as any;
     const apiId = APIID.COHORT_DELETE;
     try {
       if (!isUUID(cohortId)) {

@@ -29,18 +29,18 @@ import { getAuditContext } from "@utils/audit-helper";
 export class UserTenantMappingService {
   constructor(
     @InjectRepository(UserTenantMapping)
-    private userTenantMappingRepository: Repository<UserTenantMapping>,
+    private readonly userTenantMappingRepository: Repository<UserTenantMapping>,
     @InjectRepository(User)
-    private userRepository: Repository<User>,
+    private readonly userRepository: Repository<User>,
     @InjectRepository(Tenants)
-    private tenantsRepository: Repository<Tenants>,
+    private readonly tenantsRepository: Repository<Tenants>,
     @InjectRepository(Role)
-    private roleRepository: Repository<Role>,
+    private readonly roleRepository: Repository<Role>,
     @InjectRepository(UserRoleMapping)
-    private userRoleMappingRepository: Repository<UserRoleMapping>,
-    private userService: UserService,
-    private fieldsService: FieldsService,
-    private kafkaService: KafkaService,
+    private readonly userRoleMappingRepository: Repository<UserRoleMapping>,
+    private readonly userService: UserService,
+    private readonly fieldsService: FieldsService,
+    private readonly kafkaService: KafkaService,
     @Inject(AuditLoggerService)
     private readonly auditLoggerService: AuditLoggerService
   ) { }
@@ -159,10 +159,14 @@ export class UserTenantMappingService {
         userId
       );
 
+      const createdMapping = await this.userTenantMappingRepository.findOne({
+        where: { userId, tenantId },
+        select: ["Id"],
+      });
       const auditCtx = getAuditContext();
       this.auditLoggerService.emit({
         entityType: "USER_TENANT_MAPPING",
-        entityId: `User:${userId}|Tenant:${tenantId}|Role:${roleId}`,
+        entityId: String(createdMapping?.Id ?? `User:${userId}|Tenant:${tenantId}|Role:${roleId}`),
         eventAction: "CREATED",
         ...auditCtx,
         metadata: {

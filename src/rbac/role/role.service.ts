@@ -80,13 +80,14 @@ export class RoleService {
           continue;
         }
 
+        const auditCtx = getAuditContext();
         const newRoleDto = new RoleDto({
           ...roleDto,
           code,
           createdAt: new Date(),
           updatedAt: new Date(),
-          createdBy: request.user.userId, // Assuming you have a user object in the request
-          updatedBy: request.user.userId,
+          createdBy: auditCtx.actorId, // Assuming you have a user object in the request
+          updatedBy: auditCtx.actorId,
           tenantId: tenantId ? tenantId : null, // Add the tenantId to the RoleDto
         });
         // Convert roleDto to lowercase
@@ -98,7 +99,6 @@ export class RoleService {
         roles.push(new RolesResponseDto(responseData));
 
         // Audit Log
-        const auditCtx = getAuditContext();
         this.auditLoggerService.emit({
           entityType: "ROLE",
           entityId: responseData.roleId,
@@ -158,7 +158,6 @@ export class RoleService {
     roleDto: RoleDto,
     response: Response
   ) {
-    const request = requestContext.getStore() as any;
     const apiId = APIID.ROLE_UPDATE;
     try {
       const code = roleDto.title.toLowerCase().replace(/\s+/g, "_");
