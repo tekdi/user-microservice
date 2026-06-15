@@ -440,10 +440,10 @@ export class FieldsService {
 
           const query = `SELECT "name", "value" 
           FROM public.${getSourceDetails.sourceDetails.table} 
-          WHERE value = '${sourceFieldName.value}' 
+          WHERE value = $1 
           GROUP BY  "name", "value"`;
 
-          const checkSourceData = await this.fieldsValuesRepository.query(query);
+          const checkSourceData = await this.fieldsValuesRepository.query(query, [sourceFieldName.value]);
           const isCreate = fieldsData.fieldParams.isCreate;
 
           if (checkSourceData.length === 0) {
