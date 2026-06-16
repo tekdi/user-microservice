@@ -4139,10 +4139,10 @@ export class UserService {
         params.push(locationFilter.ids);
         paramIndex++;
 
-        const fieldValueTenantIds = parentTenantId
+        const fieldValueTenantIds = parentTenantId && parentTenantId !== tenantId
           ? [tenantId, parentTenantId]
           : [tenantId];
-        conditions.push(`fv."tenantId" = ANY($${paramIndex})`);
+        conditions.push(`fv."tenantId"::text = ANY($${paramIndex}::text[])`);
         params.push(fieldValueTenantIds);
         paramIndex++;
       }
