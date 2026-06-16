@@ -4955,7 +4955,7 @@ export class UserService {
             resolvedData[userId][fieldName] = fieldValue;
           }
         }
-      });
+      }); 
     });
 
     return resolvedData;
