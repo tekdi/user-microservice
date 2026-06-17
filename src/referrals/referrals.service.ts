@@ -479,11 +479,11 @@ export class ReferralsService {
         ua."createdAt"           AS "attributedAt"
       ${fromSql}
       ${whereClause}
-      ORDER BY ua."createdAt" DESC
+      ORDER BY ua."createdAt" DESC NULLS LAST
       LIMIT $${params.length + 1} OFFSET $${params.length + 2}
     `;
 
-    const countSql = `SELECT COUNT(DISTINCT ua."userId")::int AS count ${fromSql} ${whereClause}`;
+    const countSql = `SELECT COUNT(*)::int AS count ${fromSql} ${whereClause}`;
 
     const [[countRow], userRows] = await Promise.all([
       this.dataSource.query<any[]>(countSql, params),
@@ -497,19 +497,22 @@ export class ReferralsService {
     }
 
     // Fetch cohort memberships for returned users — scoped to filtered cohorts if provided
-    const userIds = [...new Set(userRows.map((r) => r.userId))];
-    const membershipQuery = filters.cohortIds?.length
-      ? `SELECT cm."userId", cm."cohortId", cm."status", c."name" AS "cohortName"
-         FROM "CohortMembers" cm
-         LEFT JOIN "Cohort" c ON c."cohortId" = cm."cohortId"
-         WHERE cm."userId" = ANY($1) AND cm."cohortId" = ANY($2)`
-      : `SELECT cm."userId", cm."cohortId", cm."status", c."name" AS "cohortName"
-         FROM "CohortMembers" cm
-         LEFT JOIN "Cohort" c ON c."cohortId" = cm."cohortId"
-         WHERE cm."userId" = ANY($1)`;
-    const membershipParams = filters.cohortIds?.length ? [userIds, filters.cohortIds] : [userIds];
-
-    const memberships = await this.dataSource.query<any[]>(membershipQuery, membershipParams);
+    // Filter out null userIds (referral entities with no attributed users)
+    const userIds = [...new Set(userRows.map((r) => r.userId).filter(Boolean))];
+    const memberships = userIds.length
+      ? await this.dataSource.query<any[]>(
+          filters.cohortIds?.length
+            ? `SELECT cm."userId", cm."cohortId", cm."status", c."name" AS "cohortName"
+               FROM "CohortMembers" cm
+               LEFT JOIN "Cohort" c ON c."cohortId" = cm."cohortId"
+               WHERE cm."userId" = ANY($1) AND cm."cohortId" = ANY($2)`
+            : `SELECT cm."userId", cm."cohortId", cm."status", c."name" AS "cohortName"
+               FROM "CohortMembers" cm
+               LEFT JOIN "Cohort" c ON c."cohortId" = cm."cohortId"
+               WHERE cm."userId" = ANY($1)`,
+          filters.cohortIds?.length ? [userIds, filters.cohortIds] : [userIds],
+        )
+      : [];
     const membershipMap = new Map<string, { cohortId: string; cohortName: string | null; status: string }[]>();
     for (const m of memberships) {
       if (!membershipMap.has(m.userId)) membershipMap.set(m.userId, []);
@@ -542,6 +545,105 @@ export class ReferralsService {
     return { data, totalCount, limit, offset, hasMore: offset + limit < totalCount };
   }
 
+  async getReferralSummary(dto: ReferralReportRequestDto) {
+    const { filters = {} } = dto;
+
+    // Only slug / cohort filters narrow which referral entities appear;
+    // status, country, name are not applied here (we compute all counts).
+    const { fromSql, whereClause, params } = this.buildReportBase({
+      slug_id: filters.slug_id,
+      slug: filters.slug,
+      cohortIds: filters.cohortIds,
+    });
+
+    const summarySql = `
+      SELECT
+        re."id"                                                                  AS slug_id,
+        re."slug",
+        TRIM(COALESCE(re."firstName", '') || ' ' || COALESCE(re."lastName", '')) AS "referralName",
+        re."contactEmail"                                                         AS "referralContactEmail",
+        re."type"                                                                 AS "referralType",
+        re."subType"                                                              AS "referralSubType",
+        re."country",
+        ARRAY(
+          SELECT DISTINCT UNNEST(u2."auto_tags")
+          FROM "UserAttribution" ua2
+          JOIN "Users" u2 ON u2."userId" = ua2."userId"
+          WHERE ua2."referralEntityId" = re."id"
+            AND u2."auto_tags" IS NOT NULL
+        )                                                                         AS tags,
+        COUNT(DISTINCT ua."userId") FILTER (WHERE u."status" = 'active')         AS "activeCount",
+        COUNT(DISTINCT ua."userId") FILTER (WHERE u."temporaryPassword" = true)  AS "registeredCount"
+      ${fromSql}
+      ${whereClause}
+      GROUP BY re."id", re."slug", re."firstName", re."lastName",
+               re."contactEmail", re."type", re."subType", re."country", re."createdAt"
+      ORDER BY re."createdAt" DESC
+    `;
+
+    const summaryRows = await this.dataSource.query<any[]>(summarySql, params);
+
+    if (summaryRows.length === 0) {
+      return { data: [] };
+    }
+
+    const referralEntityIds = summaryRows.map((r) => r.slug_id);
+
+    const cohortScope = filters.cohortIds?.length ? `AND cm."cohortId" = ANY($2)` : '';
+    const cohortParams: any[] = filters.cohortIds?.length
+      ? [referralEntityIds, filters.cohortIds]
+      : [referralEntityIds];
+
+    const cohortSql = `
+      SELECT
+        ua."referralEntityId",
+        c."cohortId",
+        c."name"                                                                  AS "cohortName",
+        COUNT(DISTINCT cm."userId") FILTER (WHERE cm."status" = 'applied')       AS "startedCount",
+        COUNT(DISTINCT cm."userId") FILTER (WHERE cm."status" = 'submitted')     AS "submittedCount",
+        COUNT(DISTINCT cm."userId") FILTER (WHERE cm."status" = 'shortlisted')   AS "shortlistedCount",
+        COUNT(DISTINCT cm."userId") FILTER (WHERE cm."status" = 'rejected')      AS "rejectedCount",
+        COUNT(DISTINCT cm."userId") FILTER (WHERE cm."status" = 'dropout')       AS "dropoutCount"
+      FROM "UserAttribution" ua
+      JOIN "CohortMembers" cm ON cm."userId" = ua."userId"
+      JOIN "Cohort" c ON c."cohortId" = cm."cohortId"
+      WHERE ua."referralEntityId" = ANY($1) ${cohortScope}
+      GROUP BY ua."referralEntityId", c."cohortId", c."name"
+      ORDER BY c."name"
+    `;
+
+    const cohortRows = await this.dataSource.query<any[]>(cohortSql, cohortParams);
+
+    const cohortMap = new Map<string, any[]>();
+    for (const c of cohortRows) {
+      if (!cohortMap.has(c.referralEntityId)) cohortMap.set(c.referralEntityId, []);
+      cohortMap.get(c.referralEntityId)!.push({
+        cohortId: c.cohortId,
+        cohortName: c.cohortName,
+        startedCount: Number(c.startedCount ?? 0),
+        submittedCount: Number(c.submittedCount ?? 0),
+        shortlistedCount: Number(c.shortlistedCount ?? 0),
+        rejectedCount: Number(c.rejectedCount ?? 0),
+        dropoutCount: Number(c.dropoutCount ?? 0),
+      });
+    }
+
+    const data = summaryRows.map((row) => ({
+      slug_id: row.slug_id,
+      slug: row.slug,
+      referralName: (row.referralName ?? '').trim(),
+      referralContactEmail: row.referralContactEmail ?? null,
+      referralType: row.referralType,
+      referralSubType: row.referralSubType,
+      country: row.country ?? null,
+      tags: row.tags ?? [],
+      activeCount: Number(row.activeCount ?? 0),
+      registeredCount: Number(row.registeredCount ?? 0),
+      cohorts: cohortMap.get(row.slug_id) ?? [],
+    }));
+
+    return { data, totalCount: data.length };
+  }
 
   private buildReportBase(filters: ReferralReportFiltersDto): { fromSql: string; whereClause: string; params: any[] } {
     const conds: string[] = [];
@@ -635,9 +737,9 @@ export class ReferralsService {
 
     const whereClause = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
     const fromSql = `
-      FROM "UserAttribution" ua
-      JOIN "ReferralEntities" re ON re."id" = ua."referralEntityId"
-      JOIN "Users" u ON u."userId" = ua."userId"
+      FROM "ReferralEntities" re
+      LEFT JOIN "UserAttribution" ua ON ua."referralEntityId" = re."id"
+      LEFT JOIN "Users" u ON u."userId" = ua."userId"
     `;
 
     return { fromSql, whereClause, params };

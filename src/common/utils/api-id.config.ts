@@ -39,6 +39,7 @@ export const APIID = {
   REFERRAL_IMPORT: "api.referral.import",
   REFERRAL_BULK: "api.referral.bulk",
   REFERRAL_REPORT: "api.referral.report",
+  REFERRAL_SUMMARY: "api.referral.summary",
 
   // Role Management APIs
   ROLE_GET: "api.role.get",
