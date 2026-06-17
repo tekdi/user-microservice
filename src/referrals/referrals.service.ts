@@ -457,7 +457,7 @@ export class ReferralsService {
   async getReferralReport(dto: ReferralReportRequestDto) {
     const { limit = 10, offset = 0, filters = {} } = dto;
 
-    const { fromSql, whereClause, params } = this.buildReportBase(filters);
+    const { fromSql, whereClause, params } = this.buildReportBase(filters, true);
 
     const listSql = `
       SELECT
@@ -546,7 +546,7 @@ export class ReferralsService {
   }
 
   async getReferralSummary(dto: ReferralReportRequestDto) {
-    const { filters = {} } = dto;
+    const { limit = 50, offset = 0, filters = {} } = dto;
 
     // Only slug / cohort filters narrow which referral entities appear;
     // status, country, name are not applied here (we compute all counts).
@@ -554,7 +554,9 @@ export class ReferralsService {
       slug_id: filters.slug_id,
       slug: filters.slug,
       cohortIds: filters.cohortIds,
-    });
+    }, true);
+
+    const countSql = `SELECT COUNT(DISTINCT re."id")::int AS count ${fromSql} ${whereClause}`;
 
     const summarySql = `
       SELECT
@@ -579,12 +581,18 @@ export class ReferralsService {
       GROUP BY re."id", re."slug", re."firstName", re."lastName",
                re."contactEmail", re."type", re."subType", re."country", re."createdAt"
       ORDER BY re."createdAt" DESC
+      LIMIT $${params.length + 1} OFFSET $${params.length + 2}
     `;
 
-    const summaryRows = await this.dataSource.query<any[]>(summarySql, params);
+    const [[countRow], summaryRows] = await Promise.all([
+      this.dataSource.query<any[]>(countSql, params),
+      this.dataSource.query<any[]>(summarySql, [...params, limit, offset]),
+    ]);
+
+    const totalCount = countRow?.count ?? 0;
 
     if (summaryRows.length === 0) {
-      return { data: [] };
+      return { data: [], totalCount, limit, offset, hasMore: false };
     }
 
     const referralEntityIds = summaryRows.map((r) => r.slug_id);
@@ -617,7 +625,7 @@ export class ReferralsService {
     const cohortMap = new Map<string, any[]>();
     for (const c of cohortRows) {
       if (!cohortMap.has(c.referralEntityId)) cohortMap.set(c.referralEntityId, []);
-      cohortMap.get(c.referralEntityId)!.push({
+      cohortMap.get(c.referralEntityId)?.push({
         cohortId: c.cohortId,
         cohortName: c.cohortName,
         startedCount: Number(c.startedCount ?? 0),
@@ -642,10 +650,10 @@ export class ReferralsService {
       cohorts: cohortMap.get(row.slug_id) ?? [],
     }));
 
-    return { data, totalCount: data.length };
+    return { data, totalCount, limit, offset, hasMore: offset + limit < totalCount };
   }
 
-  private buildReportBase(filters: ReferralReportFiltersDto): { fromSql: string; whereClause: string; params: any[] } {
+  private buildReportBase(filters: ReferralReportFiltersDto, useLeftJoin = true): { fromSql: string; whereClause: string; params: any[] } {
     const conds: string[] = [];
     const params: any[] = [];
     let idx = 1;
@@ -736,11 +744,13 @@ export class ReferralsService {
     }
 
     const whereClause = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
-    const fromSql = `
-      FROM "ReferralEntities" re
-      LEFT JOIN "UserAttribution" ua ON ua."referralEntityId" = re."id"
-      LEFT JOIN "Users" u ON u."userId" = ua."userId"
-    `;
+    const fromSql = useLeftJoin
+      ? `FROM "ReferralEntities" re
+         LEFT JOIN "UserAttribution" ua ON ua."referralEntityId" = re."id"
+         LEFT JOIN "Users" u ON u."userId" = ua."userId"`
+      : `FROM "UserAttribution" ua
+         JOIN "ReferralEntities" re ON re."id" = ua."referralEntityId"
+         JOIN "Users" u ON u."userId" = ua."userId"`;
 
     return { fromSql, whereClause, params };
   }
