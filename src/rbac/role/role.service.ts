@@ -169,139 +169,60 @@ export class RoleService {
   public async searchRole(roleSearchDto: RoleSearchDto, response: Response) {
     const apiId = APIID.ROLE_SEARCH;
     try {
-      let { limit } = roleSearchDto;
-      const { page, filters } = roleSearchDto;
+      const { filters } = roleSearchDto;
+      const whereClause: any = filters ?? {};
 
-      let offset = 0;
-      if (page > 1) {
-        offset = parseInt(limit) * (page - 1);
-      }
-
-      if (limit.trim() === "") {
-        limit = "0";
-      }
-
-      const whereClause: any = {};
-      if (filters && Object.keys(filters).length > 0) {
-        Object.entries(filters).forEach(([key, value]) => {
-          whereClause[key] = value;
-        });
-      }
       if (whereClause.userId && !whereClause.tenantId) {
-        return APIResponse.error(
-          response,
-          APIID.ROLE_SEARCH,
-          `Please Enter Tenenat id or Valid Filter`,
-          "Invalid Tenant Id or Valid Filter",
-          HttpStatus.BAD_REQUEST
-        );
+        return APIResponse.error(response, apiId, `Please Enter Tenenat id or Valid Filter`, "Invalid Tenant Id or Valid Filter", HttpStatus.BAD_REQUEST);
       }
-      if (whereClause.field && !["Privilege"].includes(whereClause?.field)) {
-        return APIResponse.error(
-          response,
-          APIID.ROLE_SEARCH,
-          `Please Enter valid field value.`,
-          "Invalid field value.",
-          HttpStatus.BAD_REQUEST
-        );
+
+      if (whereClause.field && !["Privilege"].includes(whereClause.field)) {
+        return APIResponse.error(response, apiId, `Please Enter valid field value.`, "Invalid field value.", HttpStatus.BAD_REQUEST);
       }
-      if (
-        whereClause.userId &&
-        whereClause.tenantId &&
-        whereClause.field === "Privilege"
-      ) {
-        const userRoleMappingData = await this.findUserRoleData(
-          whereClause.userId,
-          whereClause.tenantId
-        );
+
+      const hasUser = !!(whereClause.userId && whereClause.tenantId);
+      const hasPrivilege = whereClause.field === "Privilege";
+
+      if (hasUser && hasPrivilege) {
+        const userRoleMappingData = await this.findUserRoleData(whereClause.userId, whereClause.tenantId);
         const roleIds = userRoleMappingData.map((data) => data.roleid);
-
         const result = await this.findPrivilegeByRoleId(roleIds);
-
-        const roles = userRoleMappingData.map((data) => {
-          const roleResult = result.find(
-            (privilegeData) => privilegeData.roleid === data.roleid
-          );
-          return {
-            roleId: data.roleid,
-            title: data.title,
-            code: data.code,
-            privileges: roleResult ? roleResult : [],
-          };
-        });
-        return APIResponse.success(
-          response,
-          apiId,
-          roles,
-          HttpStatus.OK,
-          "Role For User with Privileges fetched successfully."
-        );
-      } else if (
-        whereClause.userId &&
-        whereClause.tenantId &&
-        !whereClause.field
-      ) {
-        const data = await this.findUserRoleData(
-          whereClause.userId,
-          whereClause.tenantId
-        );
-        return APIResponse.success(
-          response,
-          apiId,
-          data,
-          HttpStatus.OK,
-          "Role For User Id fetched successfully."
-        );
-      } else if (whereClause.tenantId && whereClause.field === "Privilege") {
-        const userRoleData = await this.findRoleData(whereClause.tenantId);
-        const result = await this.findPrivilegeByRoleId(
-          userRoleData.map((data) => data.roleId)
-        );
-        const roles = userRoleData.map((data) => {
-          const roleResult = result.find(
-            (privilegeData) => privilegeData.roleid === data.roleId
-          );
-          return {
-            roleId: data.roleId,
-            title: data.title,
-            code: data.code,
-            privileges: roleResult ? roleResult : [],
-          };
-        });
-        return APIResponse.success(
-          response,
-          apiId,
-          roles,
-          HttpStatus.OK,
-          "Role For Tenant with Privileges fetched successfully."
-        );
-      } else if (whereClause.tenantId && !whereClause.field) {
-        const data = await this.findRoleData(whereClause.tenantId);
-        return APIResponse.success(
-          response,
-          apiId,
-          data,
-          HttpStatus.OK,
-          "Role For Tenant fetched successfully."
-        );
-      } else {
-        return APIResponse.error(
-          response,
-          APIID.ROLE_SEARCH,
-          `Please Enter Valid Filter`,
-          "Invalid Filter",
-          HttpStatus.BAD_REQUEST
-        );
+        const roles = userRoleMappingData.map((data) => ({
+          roleId: data.roleid,
+          title: data.title,
+          code: data.code,
+          privileges: result.filter((p) => p.roleid === data.roleid),
+        }));
+        return APIResponse.success(response, apiId, roles, HttpStatus.OK, "Role For User with Privileges fetched successfully.");
       }
+
+      if (hasUser) {
+        const data = await this.findUserRoleData(whereClause.userId, whereClause.tenantId);
+        return APIResponse.success(response, apiId, data, HttpStatus.OK, "Role For User Id fetched successfully.");
+      }
+
+      if (whereClause.tenantId && hasPrivilege) {
+        const userRoleData = await this.findRoleData(whereClause.tenantId);
+        const result = await this.findPrivilegeByRoleId(userRoleData.map((data) => data.roleId));
+        const roles = userRoleData.map((data) => ({
+          roleId: data.roleId,
+          title: data.title,
+          code: data.code,
+          privileges: result.filter((p) => p.roleid === data.roleId),
+        }));
+        return APIResponse.success(response, apiId, roles, HttpStatus.OK, "Role For Tenant with Privileges fetched successfully.");
+      }
+
+      if (whereClause.tenantId) {
+        const data = await this.findRoleData(whereClause.tenantId);
+        return APIResponse.success(response, apiId, data, HttpStatus.OK, "Role For Tenant fetched successfully.");
+      }
+
+      return APIResponse.error(response, apiId, `Please Enter Valid Filter`, "Invalid Filter", HttpStatus.BAD_REQUEST);
+
     } catch (e) {
       const errorMessage = e.message || "Internal server error";
-      return APIResponse.error(
-        response,
-        apiId,
-        "Internal Server Error",
-        errorMessage,
-        HttpStatus.INTERNAL_SERVER_ERROR
-      );
+      return APIResponse.error(response, apiId, "Internal Server Error", errorMessage, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 

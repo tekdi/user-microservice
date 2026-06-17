@@ -59,7 +59,7 @@ export class AuthService {
         "Auth Token fetched Successfully."
       );
     } catch (error) {
-      if (error.response && error.response.status === 401) {
+      if (error?.response?.status === 401) {
         throw new NotFoundException("Invalid username or password");
       } else {
         const errorMessage = error?.message || "Something went wrong";
@@ -113,6 +113,7 @@ export class AuthService {
             );
           });
       }
+      return apiResponse;
     } catch (e) {
       const errorMessage = e?.message || "Something went wrong";
       return APIResponse.error(

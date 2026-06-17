@@ -2,11 +2,11 @@ import { Injectable, HttpException, HttpStatus, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { HttpService } from '../common/utils/http-service';
 import { SsoRequestDto } from './dto/sso-request.dto';
-import { UserCreateDto } from '../user/dto/user-create.dto';
 import { UserService } from '../user/user.service';
 import { RoleService } from '../rbac/role/role.service';
 import { FieldsService } from '../fields/fields.service';
 import { SSO_DEFAULTS } from '../constants/sso.constants';
+import { randomUUID } from 'node:crypto';
 import { UserTenantMappingService } from 'src/userTenantMapping/user-tenant-mapping.service';
 
 
@@ -670,10 +670,6 @@ export class SsoService {
    * @returns UUID string
    */
   private generateUUID(): string {
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-      const r = Math.random() * 16 | 0;
-      const v = c == 'x' ? r : (r & 0x3 | 0x8);
-      return v.toString(16);
-    });
+    return randomUUID();
   }
 } 
