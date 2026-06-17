@@ -499,19 +499,18 @@ export class ReferralsService {
     // Fetch cohort memberships for returned users — scoped to filtered cohorts if provided
     // Filter out null userIds (referral entities with no attributed users)
     const userIds = [...new Set(userRows.map((r) => r.userId).filter(Boolean))];
+    const membershipSql = filters.cohortIds?.length
+      ? `SELECT cm."userId", cm."cohortId", cm."status", c."name" AS "cohortName"
+         FROM "CohortMembers" cm
+         LEFT JOIN "Cohort" c ON c."cohortId" = cm."cohortId"
+         WHERE cm."userId" = ANY($1) AND cm."cohortId" = ANY($2)`
+      : `SELECT cm."userId", cm."cohortId", cm."status", c."name" AS "cohortName"
+         FROM "CohortMembers" cm
+         LEFT JOIN "Cohort" c ON c."cohortId" = cm."cohortId"
+         WHERE cm."userId" = ANY($1)`;
+    const membershipParams = filters.cohortIds?.length ? [userIds, filters.cohortIds] : [userIds];
     const memberships = userIds.length
-      ? await this.dataSource.query<any[]>(
-          filters.cohortIds?.length
-            ? `SELECT cm."userId", cm."cohortId", cm."status", c."name" AS "cohortName"
-               FROM "CohortMembers" cm
-               LEFT JOIN "Cohort" c ON c."cohortId" = cm."cohortId"
-               WHERE cm."userId" = ANY($1) AND cm."cohortId" = ANY($2)`
-            : `SELECT cm."userId", cm."cohortId", cm."status", c."name" AS "cohortName"
-               FROM "CohortMembers" cm
-               LEFT JOIN "Cohort" c ON c."cohortId" = cm."cohortId"
-               WHERE cm."userId" = ANY($1)`,
-          filters.cohortIds?.length ? [userIds, filters.cohortIds] : [userIds],
-        )
+      ? await this.dataSource.query<any[]>(membershipSql, membershipParams)
       : [];
     const membershipMap = new Map<string, { cohortId: string; cohortName: string | null; status: string }[]>();
     for (const m of memberships) {
