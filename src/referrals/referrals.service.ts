@@ -565,8 +565,15 @@ export class ReferralsService {
 
     // Scope tags to the same cohort filter used for the counts.
     const tagsSubquery =
-      cohortIdsParamIdx !== null
+      cohortIdsParamIdx === null
         ? `ARRAY(
+            SELECT DISTINCT UNNEST(u2."auto_tags")
+            FROM "UserAttribution" ua2
+            JOIN "Users" u2 ON u2."userId" = ua2."userId"
+            WHERE ua2."referralEntityId" = re."id"
+              AND u2."auto_tags" IS NOT NULL
+          )`
+        : `ARRAY(
             SELECT DISTINCT UNNEST(u2."auto_tags")
             FROM "UserAttribution" ua2
             JOIN "Users" u2 ON u2."userId" = ua2."userId"
@@ -577,13 +584,6 @@ export class ReferralsService {
                 WHERE cm2."userId" = ua2."userId"
                   AND cm2."cohortId" = ANY($${cohortIdsParamIdx})
               )
-          )`
-        : `ARRAY(
-            SELECT DISTINCT UNNEST(u2."auto_tags")
-            FROM "UserAttribution" ua2
-            JOIN "Users" u2 ON u2."userId" = ua2."userId"
-            WHERE ua2."referralEntityId" = re."id"
-              AND u2."auto_tags" IS NOT NULL
           )`;
 
     const summarySql = `
