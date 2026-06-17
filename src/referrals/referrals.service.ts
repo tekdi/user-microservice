@@ -457,7 +457,10 @@ export class ReferralsService {
   async getReferralReport(dto: ReferralReportRequestDto) {
     const { limit = 10, offset = 0, filters = {} } = dto;
 
-    const { fromSql, whereClause, params } = this.buildReportBase(filters, true);
+    const { fromSql, whereClause, params } = this.buildReportBase(
+      filters,
+      true,
+    );
 
     const listSql = `
       SELECT
@@ -483,7 +486,7 @@ export class ReferralsService {
       LIMIT $${params.length + 1} OFFSET $${params.length + 2}
     `;
 
-    const countSql = `SELECT COUNT(*)::int AS count ${fromSql} ${whereClause}`;
+    const countSql = `SELECT COUNT(DISTINCT ua."userId")::int AS count ${fromSql} ${whereClause}`;
 
     const [[countRow], userRows] = await Promise.all([
       this.dataSource.query<any[]>(countSql, params),
@@ -549,13 +552,39 @@ export class ReferralsService {
 
     // Only slug / cohort filters narrow which referral entities appear;
     // status, country, name are not applied here (we compute all counts).
-    const { fromSql, whereClause, params } = this.buildReportBase({
-      slug_id: filters.slug_id,
-      slug: filters.slug,
-      cohortIds: filters.cohortIds,
-    }, true);
+    const { fromSql, whereClause, params, cohortIdsParamIdx } = this.buildReportBase(
+      {
+        slug_id: filters.slug_id,
+        slug: filters.slug,
+        cohortIds: filters.cohortIds,
+      },
+      true,
+    );
 
     const countSql = `SELECT COUNT(DISTINCT re."id")::int AS count ${fromSql} ${whereClause}`;
+
+    // Scope tags to the same cohort filter used for the counts.
+    const tagsSubquery =
+      cohortIdsParamIdx !== null
+        ? `ARRAY(
+            SELECT DISTINCT UNNEST(u2."auto_tags")
+            FROM "UserAttribution" ua2
+            JOIN "Users" u2 ON u2."userId" = ua2."userId"
+            WHERE ua2."referralEntityId" = re."id"
+              AND u2."auto_tags" IS NOT NULL
+              AND EXISTS (
+                SELECT 1 FROM "CohortMembers" cm2
+                WHERE cm2."userId" = ua2."userId"
+                  AND cm2."cohortId" = ANY($${cohortIdsParamIdx})
+              )
+          )`
+        : `ARRAY(
+            SELECT DISTINCT UNNEST(u2."auto_tags")
+            FROM "UserAttribution" ua2
+            JOIN "Users" u2 ON u2."userId" = ua2."userId"
+            WHERE ua2."referralEntityId" = re."id"
+              AND u2."auto_tags" IS NOT NULL
+          )`;
 
     const summarySql = `
       SELECT
@@ -566,13 +595,7 @@ export class ReferralsService {
         re."type"                                                                 AS "referralType",
         re."subType"                                                              AS "referralSubType",
         re."country",
-        ARRAY(
-          SELECT DISTINCT UNNEST(u2."auto_tags")
-          FROM "UserAttribution" ua2
-          JOIN "Users" u2 ON u2."userId" = ua2."userId"
-          WHERE ua2."referralEntityId" = re."id"
-            AND u2."auto_tags" IS NOT NULL
-        )                                                                         AS tags,
+        ${tagsSubquery}                                                           AS tags,
         COUNT(DISTINCT ua."userId") FILTER (WHERE u."status" = 'active')         AS "activeCount",
         COUNT(DISTINCT ua."userId") FILTER (WHERE u."temporaryPassword" = true)  AS "registeredCount"
       ${fromSql}
@@ -652,7 +675,10 @@ export class ReferralsService {
     return { data, totalCount, limit, offset, hasMore: offset + limit < totalCount };
   }
 
-  private buildReportBase(filters: ReferralReportFiltersDto, useLeftJoin = true): { fromSql: string; whereClause: string; params: any[] } {
+  private buildReportBase(
+    filters: ReferralReportFiltersDto,
+    useLeftJoin = true,
+  ): { fromSql: string; whereClause: string; params: any[]; cohortIdsParamIdx: number | null } {
     const conds: string[] = [];
     const params: any[] = [];
     let idx = 1;
@@ -751,7 +777,7 @@ export class ReferralsService {
          JOIN "ReferralEntities" re ON re."id" = ua."referralEntityId"
          JOIN "Users" u ON u."userId" = ua."userId"`;
 
-    return { fromSql, whereClause, params };
+    return { fromSql, whereClause, params, cohortIdsParamIdx };
   }
 
 }
