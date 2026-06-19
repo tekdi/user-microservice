@@ -49,7 +49,7 @@ export class CronService {
     private readonly kafkaService: KafkaService
   ) {}
 
-  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
+  // @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
   async assignStudentsToBatches() {
     this.logger.log("Starting Navapatham student batch assignment cron job");
     LoggerUtil.log("Navapatham cron job started", this.apiId);
@@ -103,6 +103,26 @@ export class CronService {
       // Step 4: Process each user
       for (const user of users) {
         try {
+          // Step 4.0: Filter by preferred mode of learning — only "remote" learners
+          // Custom field: WHAT_IS_YOUR_PREFERRED_MODE_OF_LEARNING (fieldId: 7b43db0a-f4c3-4c77-919f-622509ca7add)
+          const preferredModeField = user.customFields?.find(
+            (field) =>
+              field.fieldId === "7b43db0a-f4c3-4c77-919f-622509ca7add" ||
+              field.label?.toUpperCase() === "WHAT_IS_YOUR_PREFERRED_MODE_OF_LEARNING"
+          );
+
+          const preferredModeValue =
+            preferredModeField?.selectedValues?.[0]?.value?.toString().trim().toLowerCase() ??
+            preferredModeField?.value?.toString().trim().toLowerCase();
+
+          if (preferredModeValue !== "remote") {
+            skippedCount++;
+            this.logger.log(
+              `Skipping user ${user.userId} — preferred mode of learning is "${preferredModeValue || "not set"}" (not "remote")`
+            );
+            continue;
+          }
+
           // Step 4.1: Extract user's districtId
           const districtField = user.customFields?.find(
             (field) => field.name?.toLowerCase() === "district" || field.label?.toLowerCase() === "district"
