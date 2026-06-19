@@ -306,7 +306,6 @@ export class UserController {
   @ApiBadRequestResponse({ description: "Invalid input parameters" })
   @UsePipes(new ValidationPipe())
   async suggestUsername(
-    @Req() request: Request,
     @Body() suggestUserDto: SuggestUserDto,
     @Res() response: Response
   ) {

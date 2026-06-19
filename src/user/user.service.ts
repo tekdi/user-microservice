@@ -3433,7 +3433,6 @@ export class UserService {
 
 
   async suggestUsername(response: Response, suggestUserDto: SuggestUserDto) {
-    const request = requestContext.getStore() as any;
 
     const apiId = APIID.USER_LIST;
     try {
