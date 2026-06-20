@@ -20,6 +20,7 @@ import { User } from "../user/entities/user-entity";
 import { Tenant } from "../tenant/entities/tenent.entity";
 import { UserRoleMapping } from "../rbac/assign-role/entities/assign-role.entity";
 import { SSO_DEFAULTS } from "../constants/sso.constants";
+import { AcademicYear } from "src/academicyears/entities/academicyears-entity";
 
 @Injectable()
 export class CronService {
@@ -42,6 +43,8 @@ export class CronService {
     private readonly tenantRepository: Repository<Tenant>,
     @InjectRepository(UserRoleMapping)
     private readonly userRoleMappingRepository: Repository<UserRoleMapping>,
+    @InjectRepository(AcademicYear)
+    private readonly academicYearRepository: Repository<AcademicYear>,
     private readonly userService: UserService,
     private readonly fieldsService: FieldsService,
     private readonly cohortMembersService: CohortMembersService,
@@ -57,8 +60,10 @@ export class CronService {
     try {
       // Step 1: Get configuration
       const tenantId = navapathamConfig.tenantId;
-      const academicYearId = navapathamConfig.academicYearId;
-
+      const academicYear = await this.academicYearRepository.findOne({
+        where: { isActive: true, tenantId: tenantId },
+      });
+      const academicYearId = academicYear.id;
       if (!tenantId || !academicYearId) {
         const errorMsg =
           "Missing required configuration: tenantId or academicYearId in navapatham.config.ts";
