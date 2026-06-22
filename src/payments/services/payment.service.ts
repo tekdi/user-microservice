@@ -811,6 +811,7 @@ export class PaymentService {
           discountApplied: discountCode,
           discountAmount: discountAmount,
           transactionId: transaction.providerPaymentId,
+          internalTransactionId: transaction.id,
           transactionTime: transaction.createdAt,
           status: this.mapTransactionStatusToReportStatus(transaction.status),
           targetUnlocked: this.computeTargetUnlockedForContext(

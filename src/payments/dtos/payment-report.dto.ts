@@ -28,6 +28,9 @@ export class PaymentReportItemDto {
   @ApiProperty({ type: 'string', description: 'Transaction ID' })
   transactionId: string;
 
+  @ApiProperty({ type: 'string', format: 'uuid', description: 'Internal transaction ID from transaction table' })
+  internalTransactionId: string;
+
   @ApiProperty({ type: 'string', format: 'date-time', description: 'Transaction time' })
   transactionTime: Date;
 
