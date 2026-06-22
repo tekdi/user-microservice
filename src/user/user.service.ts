@@ -3555,7 +3555,11 @@ export class UserService {
                   ay."session" as "academicYearSession"
                 FROM BatchData bd
                 LEFT JOIN public."Cohort" parent_cohort ON bd."cohortId"::uuid = parent_cohort."cohortId" AND parent_cohort."type" = 'COHORT'
-                LEFT JOIN public."CohortAcademicYear" cay ON (
+                LEFT JOIN (
+                  SELECT cay."cohortAcademicYearId", cay."cohortId", cay."academicYearId"
+                  FROM public."CohortAcademicYear" cay
+                  INNER JOIN public."AcademicYears" ay_filter ON cay."academicYearId" = ay_filter."id" AND ay_filter."isActive" = true
+                ) cay ON (
                   CASE WHEN bd."batchType" = 'BATCH' THEN bd."cohortId"::uuid ELSE bd."batchId"::uuid END
                 ) = cay."cohortId"
                 LEFT JOIN public."AcademicYears" ay ON cay."academicYearId" = ay."id"
