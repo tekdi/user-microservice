@@ -114,7 +114,6 @@ export class CohortAcademicYearService {
     this.kafkaService.publishCohortAcademicYearEvent('created', enrichedData, saved.cohortAcademicYearId)
       .then(() => console.log('COHORT_ACADEMIC_YEAR_CREATED event published successfully'))
       .catch(error => {
-        console.error('Failed to publish COHORT_ACADEMIC_YEAR_CREATED:', error?.message, error?.stack);
         LoggerUtil.error(
           `Failed to publish cohort academic year created event to Kafka`,
           `Error: ${error.message}`,
