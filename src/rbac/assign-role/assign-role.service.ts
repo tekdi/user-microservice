@@ -14,7 +14,6 @@ import {
   ResponseAssignRoleDto,
 } from "src/rbac/assign-role/dto/create-assign-role.dto";
 import { UserRoleMapping } from "src/rbac/assign-role/entities/assign-role.entity";
-import { requestContext } from "@utils/request-context";
 import { getAuditContext } from "@utils/audit-helper";
 import { Role } from "src/rbac/role/entities/role.entity";
 import { IsAlpha, IsUUID, isUUID } from "class-validator";

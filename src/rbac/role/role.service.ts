@@ -17,7 +17,6 @@ import APIResponse from "src/common/responses/response";
 import { Response } from "express";
 import { APIID } from "src/common/utils/api-id.config";
 import { validate as uuidValidate } from 'uuid';
-import { requestContext } from "@utils/request-context";
 import { getAuditContext } from "@utils/audit-helper";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
 
