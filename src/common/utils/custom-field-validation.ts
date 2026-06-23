@@ -21,6 +21,7 @@ export class CustomFieldsValidation {
         if (!regex.test(fieldValue)) {
           result = false;
         }
+        break;
 
       default:
         break;
