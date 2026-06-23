@@ -64,7 +64,7 @@ export class FieldsController {
     @Res() response: Response
   ) {
     return await this.fieldsService
-      .createFields(request, fieldsDto, response);
+      .createFields(fieldsDto, response);
   }
 
   //create fields
@@ -82,7 +82,7 @@ export class FieldsController {
     @Res() response: Response
   ) {
     return await this.fieldsService
-      .updateFields(fieldId, request, fieldsUpdateDto, response);
+      .updateFields(fieldId, fieldsUpdateDto, response);
   }
 
   //search
@@ -127,7 +127,7 @@ export class FieldsController {
     @Res() response: Response
   ) {
     return await this.fieldsService
-      .createFieldValues(request, fieldValuesDto, response);
+      .createFieldValues(fieldValuesDto, response);
   }
 
   //search fields values
@@ -231,6 +231,7 @@ export class FieldsController {
   @UsePipes(ValidationPipe)
   @ApiBody({ type: FieldValuesDeleteDto })
   public async deleteFieldValues(
+    @Req() request: Request,
     @Body() fieldValuesDeleteDto: FieldValuesDeleteDto,
     @Res() response: Response
   ) {

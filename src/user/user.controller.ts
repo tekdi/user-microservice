@@ -122,7 +122,7 @@ export class UserController {
 
   @UseFilters(new AllExceptionsFilter(APIID.USER_CREATE))
   @Post("/create")
-  // @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard)
   @UsePipes(new ValidationPipe())
   // @ApiBasicAuth("access-token")
   @ApiCreatedResponse({ description: API_RESPONSES.USER_CREATE_SUCCESSFULLY })
@@ -148,7 +148,7 @@ export class UserController {
     //   );
     // }
     return await this.userService
-      .createUser(request, userCreateDto, academicYearId, response);
+      .createUser(userCreateDto, academicYearId, response);
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.USER_UPDATE))
@@ -162,6 +162,7 @@ export class UserController {
     name: "tenantid",
   })
   public async updateUser(
+    @Req() request: Request,
     @Headers() headers,
     @Param("userid") userId: string,
     @GetUserId("loginUserId", ParseUUIDPipe) loginUserId: string,
@@ -202,7 +203,7 @@ export class UserController {
     const tenantId = headers["tenantid"];
     const shouldIncludeCustomFields = userSearchDto.includeCustomFields !== "false";
     return await this.userService
-      .searchUser(tenantId, request, response, userSearchDto, shouldIncludeCustomFields);
+      .searchUser(tenantId, response, userSearchDto, shouldIncludeCustomFields);
   }
 
   @Post("/password-reset-link")
@@ -216,7 +217,6 @@ export class UserController {
   ) {
     return await this.userService
       .sendPasswordResetLink(
-        request,
         reqBody.username,
         reqBody.redirectUrl,
         response
@@ -245,7 +245,7 @@ export class UserController {
     @Body() userHierarchyViewDto: UserHierarchyViewDto
   ) {
     return await this.userService
-      .searchUserMultiTenant(tenantId, request, response, userHierarchyViewDto);
+      .searchUserMultiTenant(tenantId, response, userHierarchyViewDto);
   }
   
   @Post("/forgot-password")
@@ -258,7 +258,7 @@ export class UserController {
     @Body() reqBody: ForgotPasswordDto
   ) {
     return await this.userService
-      .forgotPassword(request, reqBody, response);
+      .forgotPassword(reqBody, response);
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.USER_RESET_PASSWORD))
@@ -276,7 +276,6 @@ export class UserController {
   ) {
     return await this.userService
       .resetUserPassword(
-        request,
         reqBody.userName,
         reqBody.newPassword,
         response
@@ -294,7 +293,7 @@ export class UserController {
     @Res() response: Response
   ) {
     const result = await this.userService
-      .checkUser(request, response, existUserDto);
+      .checkUser(response, existUserDto);
     return response.status(result.statusCode).json(result);
   }
 
@@ -307,12 +306,11 @@ export class UserController {
   @ApiBadRequestResponse({ description: "Invalid input parameters" })
   @UsePipes(new ValidationPipe())
   async suggestUsername(
-    @Req() request: Request,
     @Body() suggestUserDto: SuggestUserDto,
     @Res() response: Response
   ) {
     const result = await this.userService
-      .suggestUsername(request, response, suggestUserDto);
+      .suggestUsername(response, suggestUserDto);
     return response.status(result.statusCode).json(result);
   }
 

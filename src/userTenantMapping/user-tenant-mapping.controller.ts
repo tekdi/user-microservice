@@ -68,7 +68,7 @@ export class AssignTenantController {
     @Res() response: Response
   ) {
     return await this.userTenantMappingService
-      .userTenantMapping(request, userTenantMappingDto, response);
+      .userTenantMapping(userTenantMappingDto, response);
   }
 
   @Get("/:userId")
@@ -133,6 +133,6 @@ export class AssignTenantController {
     @Res() response: Response
   ) {
     return await this.userTenantMappingService
-      .updateAssignTenantStatus(request, userId, tenantId, updateStatusDto, response);
+      .updateAssignTenantStatus(userId, tenantId, updateStatusDto, response);
   }
 }
