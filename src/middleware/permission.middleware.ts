@@ -42,7 +42,7 @@ export class PermissionMiddleware implements NestMiddleware {
     requestPath: string,
     requestMethod: string
   ) {
-    const parts = requestPath.match(/[^/]+/g);
+    const parts = requestPath.match(/[^/]+/g) ?? [];
     let apiPath = "";
     if (roleTitle === "public") {
       apiPath = requestPath;
