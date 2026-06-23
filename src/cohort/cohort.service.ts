@@ -456,7 +456,8 @@ export class CohortService {
         response.cohortId,
         academicYearId,
         cohortCreateDto.createdBy,
-        cohortCreateDto.updatedBy
+        cohortCreateDto.updatedBy,
+        tenantId
       );
 
       const resBody = new ReturnResponseBody({

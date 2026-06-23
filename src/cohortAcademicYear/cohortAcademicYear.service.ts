@@ -68,7 +68,7 @@ export class CohortAcademicYearService {
         );
       }
 
-      const createdAcademicYear = await this.insertCohortAcademicYear(cohortAcademicYearDto.cohortId, cohortAcademicYearDto.academicYearId, cohortAcademicYearDto.createdBy, cohortAcademicYearDto.updatedBy);
+      const createdAcademicYear = await this.insertCohortAcademicYear(cohortAcademicYearDto.cohortId, cohortAcademicYearDto.academicYearId, cohortAcademicYearDto.createdBy, cohortAcademicYearDto.updatedBy, tenantId);
 
       if (createdAcademicYear) {
         const apiResponse = APIResponse.success(
@@ -78,18 +78,6 @@ export class CohortAcademicYearService {
           HttpStatus.OK,
           API_RESPONSES.ADD_COHORT_TO_ACADEMIC_YEAR
         );
-
-        const enrichedData = {
-          ...createdAcademicYear,
-          tenantId,
-        };
-        // Publish cohort academic year created event to Kafka asynchronously - after response is sent to client
-        this.kafkaService.publishCohortAcademicYearEvent('created', enrichedData, enrichedData.cohortAcademicYearId)
-          .catch(error => LoggerUtil.error(
-            `Failed to publish cohort academic year created event to Kafka`,
-            `Error: ${error.message}`,
-            apiId
-          ));
 
         return apiResponse;
       }
@@ -110,14 +98,30 @@ export class CohortAcademicYearService {
     cohortId: string,
     academicYearId: string,
     createdBy: string,
-    updatedBy: string
+    updatedBy: string,
+    tenantId?: string
   ) {
     const cohortAcademicYear = new CohortAcademicYear();
     cohortAcademicYear.cohortId = cohortId;
     cohortAcademicYear.academicYearId = academicYearId;
     cohortAcademicYear.createdBy = createdBy;
     cohortAcademicYear.updatedBy = updatedBy;
-    return await this.cohortAcademicYearRepository.save(cohortAcademicYear);
+
+    const saved = await this.cohortAcademicYearRepository.save(cohortAcademicYear);
+
+    // Publish COHORT_ACADEMIC_YEAR_CREATED event to Kafka (fire-and-forget)
+    const enrichedData = { ...saved, tenantId };
+    this.kafkaService.publishCohortAcademicYearEvent('created', enrichedData, saved.cohortAcademicYearId)
+      .then(() => console.log('COHORT_ACADEMIC_YEAR_CREATED event published successfully'))
+      .catch(error => {
+        LoggerUtil.error(
+          `Failed to publish cohort academic year created event to Kafka`,
+          `Error: ${error.message}`,
+          'insertCohortAcademicYear'
+        );
+      });
+
+    return saved;
   }
 
   async getCohortsAcademicYear(

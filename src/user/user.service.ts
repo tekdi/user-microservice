@@ -2271,6 +2271,14 @@ export class UserService {
     return tenant && tenant.parentId === null;
   }
 
+  private async getParentTenantId(tenantId: string): Promise<string | null> {
+    const tenant = await this.tenantsRepository.findOne({
+      where: { tenantId },
+      select: ['parentId'],
+    });
+    return tenant?.parentId ?? null;
+  }
+
   /**
    * Check if user already has a specific role in a tenant
    * @param userId - User ID
@@ -3595,7 +3603,11 @@ export class UserService {
                   ay."session" as "academicYearSession"
                 FROM BatchData bd
                 LEFT JOIN public."Cohort" parent_cohort ON bd."cohortId"::uuid = parent_cohort."cohortId" AND parent_cohort."type" = 'COHORT'
-                LEFT JOIN public."CohortAcademicYear" cay ON (
+                LEFT JOIN (
+                  SELECT cay."cohortAcademicYearId", cay."cohortId", cay."academicYearId"
+                  FROM public."CohortAcademicYear" cay
+                  INNER JOIN public."AcademicYears" ay_filter ON cay."academicYearId" = ay_filter."id" AND ay_filter."isActive" = true
+                ) cay ON (
                   CASE WHEN bd."batchType" = 'BATCH' THEN bd."cohortId"::uuid ELSE bd."batchId"::uuid END
                 ) = cay."cohortId"
                 LEFT JOIN public."AcademicYears" ay ON cay."academicYearId" = ay."id"
@@ -4048,6 +4060,8 @@ export class UserService {
     const apiId = APIID.USER_LIST;
 
     try {
+      const parentTenantId = await this.getParentTenantId(tenantId);
+
       // Get user Data with conditional filters
       const queryBuilder = this.buildOptimizedUserQuery(
         tenantId,
@@ -4059,7 +4073,8 @@ export class UserService {
         sortDirection,
         limit,
         offset,
-        academicYearId
+        academicYearId,
+        parentTenantId
       );
       const result = await this.usersRepository.query(queryBuilder.query, queryBuilder.params);
       const totalCount = result.length > 0 ? parseInt(result[0].total_count) : 0;
@@ -4113,7 +4128,8 @@ export class UserService {
     sortDirection: string = 'ASC',
     limit: number = 10,
     offset: number = 0,
-    academicYearId?: string
+    academicYearId?: string,
+    parentTenantId?: string | null
   ): { query: string; params: any[] } {
 
     const conditions: string[] = [];
@@ -4175,8 +4191,11 @@ export class UserService {
         params.push(locationFilter.ids);
         paramIndex++;
 
-        conditions.push(`fv."tenantId" = $${paramIndex}`);
-        params.push(tenantId);
+        const fieldValueTenantIds = parentTenantId && parentTenantId !== tenantId
+          ? [tenantId, parentTenantId]
+          : [tenantId];
+        conditions.push(`fv."tenantId"::text = ANY($${paramIndex}::text[])`);
+        params.push(fieldValueTenantIds);
         paramIndex++;
       }
     }
@@ -4988,7 +5007,7 @@ export class UserService {
             resolvedData[userId][fieldName] = fieldValue;
           }
         }
-      });
+      }); 
     });
 
     return resolvedData;

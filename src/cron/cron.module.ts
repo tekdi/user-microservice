@@ -16,6 +16,7 @@ import { UserTenantMapping } from "../userTenantMapping/entities/user-tenant-map
 import { User } from "../user/entities/user-entity";
 import { Tenant } from "../tenant/entities/tenent.entity";
 import { UserRoleMapping } from "../rbac/assign-role/entities/assign-role.entity";
+import { AcademicYear } from "../academicyears/entities/academicyears-entity";
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { UserRoleMapping } from "../rbac/assign-role/entities/assign-role.entity
       User,
       Tenant,
       UserRoleMapping,
+      AcademicYear
     ]),
     UserModule,
     CohortModule,
