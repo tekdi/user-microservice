@@ -980,6 +980,24 @@ ${whereCase}`;
     return mappingExist;
   }
 
+  /**
+   * Find any existing cohort member mapping regardless of status.
+   * Used during bulk cohort member addition to decide update vs insert.
+   */
+  public async findAnyMappingForYear(
+    userId: string,
+    cohortId: string,
+    cohortAcademicYearId: string
+  ): Promise<CohortMembers | null> {
+    return this.cohortMembersRepository.findOne({
+      where: {
+        userId,
+        cohortId,
+        cohortAcademicYearId,
+      },
+    });
+  }
+
   public async createBulkCohortMembers(
     loginUser: any,
     cohortMembersDto: BulkCohortMember,
@@ -1065,6 +1083,7 @@ ${whereCase}`;
                 ),
               });
             }
+            affectedUsers.add(userId);
           } catch (error) {
             LoggerUtil.error(
               `${API_RESPONSES.SERVER_ERROR}`,
@@ -1088,13 +1107,14 @@ ${whereCase}`;
         cohortMembersDto?.cohortId.length > 0
       ) {
         for (const cohortId of cohortMembersDto.cohortId) {
-          const cohortMembers = {
+          const cohortMemberBase = {
             ...cohortMembersBase,
             userId: userId,
             cohortId: cohortId,
             ...(cohortMembersDto.cohortMemberRole && { cohortMemberRole: cohortMembersDto.cohortMemberRole }),
           };
           try {
+            // Verify cohort is mapped to the active academic year
             const cohortExists = await this.isCohortExistForYear(
               academicyearId,
               cohortId
@@ -1105,51 +1125,40 @@ ${whereCase}`;
               );
               continue;
             }
-            // get active mapping entries
-            const mappingExists = await this.cohortUserMapping(
+
+            const cohortAcademicYearId = cohortExists[0].cohortAcademicYearId;
+
+            // Check if a mapping already exists (any status) for this user+cohort+academicYear
+            const existingMapping = await this.findAnyMappingForYear(
               userId,
               cohortId,
-              cohortExists[0].cohortAcademicYearId
+              cohortAcademicYearId
             );
-            if (mappingExists) {
-              // if (mappingExists.status === MemberStatus.ACTIVE) {
-              // errors.push(`Mapping already exists for userId ${userId} and cohortId ${cohortId} for this academic year`);
-              errors.push(
-                API_RESPONSES.MAPPING_EXIST_BW_USER_AND_COHORT(userId, cohortId)
-              );
-              continue;
-            }
-            // else if (mappingExists.status === MemberStatus.ARCHIVED) {
 
-            //   const cohortMemberForAcademicYear = {
-            //     ...cohortMembers,
-            //     cohortAcademicYearId: cohortExists[0].cohortAcademicYearId,
-            //   };
-            //   const result = await this.cohortMembersRepository.save(
-            //     cohortMemberForAcademicYear
-            //   );
-            // const updateCohort = await this.cohortMembersRepository.update(
-            //   {
-            //     userId,
-            //     cohortId,
-            //     cohortAcademicYearId: cohortExists[0].cohortAcademicYearId,
-            //   },
-            //   { status: MemberStatus.ACTIVE }
-            // );
-            //   results.push(result);
-            //   continue;
-            // }
-            // }
-            // add new entry
-            const cohortMemberForAcademicYear = {
-              ...cohortMembers,
-              cohortAcademicYearId: cohortExists[0].cohortAcademicYearId,
-            };
-            // Need to add User in cohort for Academic year
-            const result = await this.cohortMembersRepository.save(
-              cohortMemberForAcademicYear
-            );
-            results.push(result);
+            if (existingMapping) {
+              // Mapping exists → update status to ACTIVE and refresh updatedBy
+              await this.cohortMembersRepository.update(
+                { cohortMembershipId: existingMapping.cohortMembershipId },
+                {
+                  status: MemberStatus.ACTIVE,
+                  updatedBy: loginUser,
+                }
+              );
+              results.push({
+                cohortMembershipId: existingMapping.cohortMembershipId,
+                message: `Cohort member mapping updated to active for userId ${userId} and cohortId ${cohortId}`,
+              });
+            } else {
+              // No mapping found → insert new cohort member record
+              const cohortMemberForAcademicYear = {
+                ...cohortMemberBase,
+                cohortAcademicYearId,
+              };
+              const result = await this.cohortMembersRepository.save(
+                cohortMemberForAcademicYear
+              );
+              results.push(result);
+            }
 
             // Track user for Kafka event publishing
             affectedUsers.add(userId);
@@ -1158,7 +1167,7 @@ ${whereCase}`;
               `${API_RESPONSES.SERVER_ERROR}`,
               `Error: ${error.message}`,
               apiId
-            )
+            );
             errors.push(
               API_RESPONSES.ERROR_SAVING_COHORTMEMBER(
                 userId,
