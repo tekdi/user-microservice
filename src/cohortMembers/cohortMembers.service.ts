@@ -1136,18 +1136,15 @@ ${whereCase}`;
             );
 
             if (existingMapping) {
-              // Mapping exists → update status to ACTIVE and refresh updatedBy
-              await this.cohortMembersRepository.update(
-                { cohortMembershipId: existingMapping.cohortMembershipId },
-                {
-                  status: MemberStatus.ACTIVE,
-                  updatedBy: loginUser,
-                }
-              );
-              results.push({
-                cohortMembershipId: existingMapping.cohortMembershipId,
-                message: `Cohort member mapping updated to active for userId ${userId} and cohortId ${cohortId}`,
-              });
+              // Update status, updatedBy, and cohortMemberRole (if provided) while preserving original entity fields
+              const updatedMapping = {
+                ...existingMapping,
+                ...(cohortMembersDto.cohortMemberRole && { cohortMemberRole: cohortMembersDto.cohortMemberRole }),
+                status: MemberStatus.ACTIVE,
+                updatedBy: loginUser,
+              };
+              const result = await this.cohortMembersRepository.save(updatedMapping);
+              results.push(result);
             } else {
               // No mapping found → insert new cohort member record
               const cohortMemberForAcademicYear = {
