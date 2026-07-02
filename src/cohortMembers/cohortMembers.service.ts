@@ -1082,8 +1082,8 @@ ${whereCase}`;
                   userId
                 ),
               });
-            }
             affectedUsers.add(userId);
+            }
           } catch (error) {
             LoggerUtil.error(
               `${API_RESPONSES.SERVER_ERROR}`,
