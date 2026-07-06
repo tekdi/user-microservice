@@ -129,6 +129,22 @@ export class ReferralsController {
     );
   }
 
+  @UseFilters(new AllExceptionsFilter(APIID.REFERRAL_SUMMARY))
+  @Post('report/summary')
+  @UsePipes(new ValidationPipe({ transform: true }))
+  @ApiBody({ type: ReferralReportRequestDto })
+  @ApiOkResponse({ description: 'Per-referral-entity aggregated status counts' })
+  async getSummary(@Body() dto: ReferralReportRequestDto, @Res() response: Response) {
+    const result = await this.referralsService.getReferralSummary(dto);
+    return APIResponse.success(
+      response,
+      APIID.REFERRAL_SUMMARY,
+      result,
+      HttpStatus.OK,
+      API_RESPONSES.REFERRAL_SUMMARY_SUCCESS
+    );
+  }
+
   @UseFilters(new AllExceptionsFilter(APIID.REFERRAL_REPORT))
   @Post('report')
   @UsePipes(new ValidationPipe({ transform: true }))

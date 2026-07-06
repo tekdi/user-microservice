@@ -290,4 +290,5 @@ export const API_RESPONSES = {
   REFERRAL_IMPORT_SUCCESS: "Referrals imported successfully",
   REFERRAL_BULK_SUCCESS: "Bulk referrals processed successfully",
   REFERRAL_REPORT_SUCCESS: "Referral report retrieved successfully",
+  REFERRAL_SUMMARY_SUCCESS: "Referral summary retrieved successfully",
 };
