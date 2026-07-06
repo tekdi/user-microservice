@@ -675,6 +675,7 @@ export class CohortService {
         }
 
         //Update status in cohortMember table if exist record corresponding cohortId
+        let updatedCohortMembers: CohortMembers[] = [];
         if (
           validTransitions[cohortUpdateDto.status]?.includes(
             existingCohorDetails.status
@@ -690,10 +691,21 @@ export class CohortService {
           }
 
           if (memberStatus) {
+            const cohortMembers = await this.cohortMembersRepository.find({
+              where: {
+                cohortId,
+              },
+            });
+
+            for (const cohortMember of cohortMembers) {
             await this.cohortMembersRepository.update(
-              { cohortId },
+                { cohortMembershipId: cohortMember.cohortMembershipId },
               { status: memberStatus, updatedBy: cohortUpdateDto.updatedBy }
             );
+              cohortMember.status = memberStatus;
+              cohortMember.updatedBy = cohortUpdateDto.updatedBy;
+              updatedCohortMembers.push(cohortMember);
+            }
           }
         }
 
@@ -717,6 +729,23 @@ export class CohortService {
             `Error: ${error.message}`,
             apiId
           ));
+
+        // Publish cohort member updated events to Kafka asynchronously - after response is sent to client
+        if (updatedCohortMembers.length > 0) {
+          Promise.allSettled(
+            updatedCohortMembers.map((cohortMember) =>
+              this.cohortMembersService.publishCohortMemberEvent(
+                'updated',
+                cohortMember,
+                apiId
+              )
+            )
+          ).catch(error => LoggerUtil.error(
+            `Failed to publish cohort member updated events to Kafka`,
+            `Error: ${error.message}`,
+            apiId
+          ));
+        }
 
         return apiResponse;
       } else {
