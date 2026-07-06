@@ -697,14 +697,17 @@ export class CohortService {
               },
             });
 
-            for (const cohortMember of cohortMembers) {
-            await this.cohortMembersRepository.update(
-                { cohortMembershipId: cohortMember.cohortMembershipId },
-              { status: memberStatus, updatedBy: cohortUpdateDto.updatedBy }
-            );
-              cohortMember.status = memberStatus;
-              cohortMember.updatedBy = cohortUpdateDto.updatedBy;
-              updatedCohortMembers.push(cohortMember);
+            if (cohortMembers.length > 0) {
+              await this.cohortMembersRepository.update(
+                { cohortId },
+                { status: memberStatus, updatedBy: cohortUpdateDto.updatedBy }
+              );
+
+              for (const cohortMember of cohortMembers) {
+                cohortMember.status = memberStatus;
+                cohortMember.updatedBy = cohortUpdateDto.updatedBy;
+                updatedCohortMembers.push(cohortMember);
+              }
             }
           }
         }
@@ -732,7 +735,7 @@ export class CohortService {
 
         // Publish cohort member updated events to Kafka asynchronously - after response is sent to client
         if (updatedCohortMembers.length > 0) {
-          Promise.allSettled(
+          Promise.all(
             updatedCohortMembers.map((cohortMember) =>
               this.cohortMembersService.publishCohortMemberEvent(
                 'updated',
@@ -741,8 +744,8 @@ export class CohortService {
               )
             )
           ).catch(error => LoggerUtil.error(
-            `Failed to publish cohort member updated events to Kafka`,
-            `Error: ${error.message}`,
+            'Failed to publish cohort member updated events to Kafka',
+            'Error: ' + error.message,
             apiId
           ));
         }
