@@ -44,7 +44,6 @@ import { ActivePathwayDto } from './dto/active-pathway.dto';
 import { ListPathwayUsersDto } from './dto/list-pathway-users.dto';
 import { CheckEligibilityDto } from './dto/check-eligibility.dto';
 import { UpdateHistoryStatusDto } from './dto/update-history-status.dto';
-import { CourseCompletionWebhookDto } from './dto/course-completion-webhook.dto';
 import { PathwayType } from './entities/pathway.entity';
 import { Response, Request } from 'express';
 import { JwtAuthGuard } from 'src/common/guards/keycloak.guard';
@@ -703,7 +702,7 @@ export class PathwaysController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: "Update volunteer pathway history status",
-    description: "Transitions a user_pathway_history record from ACTIVE to COMPLETED, WITHDRAWN, or EXPIRED. On COMPLETED, assigns the volunteer tag (e.g. volunteer_cal) to the user's auto_tags. Called by LMS webhook on course completion + assessment pass, or by admin.",
+    description: "Transitions a user_pathway_history record from ACTIVE to COMPLETED, WITHDRAWN, or EXPIRED. Note: email notification and volunteer tag assignment are handled automatically by LMS via POST /users/course-completion on course completion.",
   })
   @ApiHeader({ name: "Authorization", required: true })
   @ApiHeader({ name: "tenantid", required: true })
@@ -712,12 +711,10 @@ export class PathwaysController {
   @ApiBody({ type: UpdateHistoryStatusDto })
   @ApiResponse({
     status: 200,
-    description: "Status updated. tagAssigned is null if LMS course not yet fully completed.",
     schema: {
       example: {
         id: "uuid",
         status: "COMPLETED",
-        tagAssigned: "volunteer_cal",
         deactivatedAt: "2026-07-01T10:00:00.000Z",
       },
     },
@@ -738,22 +735,5 @@ export class PathwaysController {
     return this.pathwaysService.updateHistoryStatus(id, dto, tenantId, organisationId || '', response);
   }
 
-  @Post("webhook/course-completed")
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: "LMS course completion webhook",
-    description: "Called by LMS when a user completes a course (completedLesson >= noOfLesson AND status = completed AND course.notification_send = true). Transitions history to COMPLETED, assigns volunteer tag, and sends email notification.",
-  })
-  @ApiBody({ type: CourseCompletionWebhookDto })
-  @ApiResponse({ status: 200, description: "Completion processed — notification sent and tag assigned" })
-  @ApiResponse({ status: 200, description: "Already processed — idempotent no-op" })
-  @ApiNotFoundResponse({ description: "No active history found for this user + course" })
-  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
-  async courseCompletionWebhook(
-    @Body() dto: CourseCompletionWebhookDto,
-    @Res() response: Response
-  ): Promise<Response> {
-    return this.pathwaysService.handleCourseCompletionWebhook(dto, response);
-  }
 
 }

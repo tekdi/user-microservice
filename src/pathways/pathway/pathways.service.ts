@@ -15,7 +15,6 @@ import { ListPathwayUsersDto } from './dto/list-pathway-users.dto';
 import { UserPathwayHistory, PathwayHistoryStatus } from './entities/user-pathway-history.entity';
 import { UpdateHistoryStatusDto } from './dto/update-history-status.dto';
 import { CheckEligibilityDto } from './dto/check-eligibility.dto';
-import { CourseCompletionWebhookDto } from './dto/course-completion-webhook.dto';
 import { User } from '../../user/entities/user-entity';
 import { LmsClientService } from '../common/services/lms-client.service';
 import APIResponse from 'src/common/responses/response';
@@ -26,7 +25,6 @@ import { Response } from 'express';
 import { S3StorageProvider } from '../../storage/providers/s3-storage.provider';
 import { ConfigService } from '@nestjs/config';
 import { CacheService } from 'src/cache/cache.service';
-import { NotificationRequest } from '../../common/utils/notification.axios';
 
 @Injectable()
 export class PathwaysService {
@@ -46,7 +44,6 @@ export class PathwaysService {
     private readonly lmsClientService: LmsClientService,
     private readonly configService: ConfigService,
     private readonly cacheService: CacheService,
-    private readonly notificationRequest: NotificationRequest,
   ) {
     // Initialize S3StorageProvider for image uploads
     this.s3StorageProvider = new S3StorageProvider(this.configService);
@@ -2083,32 +2080,6 @@ export class PathwaysService {
 
       const now = new Date();
 
-      // For COMPLETED: check LMS to decide whether tags should be assigned.
-      // Admin can force COMPLETED status for offline reasons, but tags only assigned
-      // when LMS also confirms completedLesson >= noOfLesson AND status = completed.
-      let tagEligible = false;
-      if (dto.status === PathwayHistoryStatus.COMPLETED && record.course_id) {
-        const lmsProgress = await this.lmsClientService.getCourseCompletionStatus(
-          record.user_id, record.course_id, tenantId, organisationId
-        );
-        tagEligible =
-          lmsProgress !== null &&
-          lmsProgress.status === 'completed' &&
-          lmsProgress.noOfLesson > 0 &&
-          lmsProgress.completedLesson >= lmsProgress.noOfLesson;
-
-        if (!tagEligible) {
-          this.logger.warn(
-            `Admin marking history ${historyId} COMPLETED but LMS course not fully done. ` +
-            `Progress: ${lmsProgress?.completedLesson ?? 'N/A'}/${lmsProgress?.noOfLesson ?? 'N/A'} ` +
-            `status=${lmsProgress?.status ?? 'N/A'}. Tag will NOT be assigned.`
-          );
-        }
-      } else if (dto.status === PathwayHistoryStatus.COMPLETED && !record.course_id) {
-        // No course linked (e.g. STANDARD pathway) — assign tag directly
-        tagEligible = true;
-      }
-
       await this.dataSource.transaction(async (manager) => {
         await manager.update(UserPathwayHistory, { id: historyId }, {
           status: dto.status,
@@ -2116,36 +2087,11 @@ export class PathwaysService {
           deactivated_at: now,
           updated_by: dto.updated_by,
         });
-
-        // Assign volunteer tag only when both pathway = COMPLETED and LMS confirms course done
-        if (tagEligible && record.pathway) {
-          const tagAlias = `volunteer_${record.pathway.key}`;
-          const userRecord = await manager.findOne(User, {
-            where: { userId: record.user_id } as any,
-            select: ['userId', 'auto_tags'] as any,
-          });
-          if (userRecord) {
-            const existingTags: string[] = (userRecord as any).auto_tags || [];
-            if (!existingTags.includes(tagAlias)) {
-              await manager.update(User, { userId: record.user_id } as any, {
-                auto_tags: [...existingTags, tagAlias],
-              } as any);
-            }
-          }
-        }
       });
-
-      // Send notification only when tags were eligible (both pathway + course completed)
-      if (tagEligible) {
-        this.sendCourseCompletionNotification(record, historyId).catch((err) => {
-          this.logger.error(`Completion notification failed for history ${historyId}: ${err?.message}`);
-        });
-      }
 
       return APIResponse.success(response, apiId, {
         id: historyId,
         status: dto.status,
-        tagAssigned: tagEligible && record.pathway ? `volunteer_${record.pathway.key}` : null,
         deactivatedAt: now.toISOString(),
       }, HttpStatus.OK, API_RESPONSES.VOLUNTEER_PATHWAY_STATUS_UPDATED);
     } catch (error) {
@@ -2155,211 +2101,4 @@ export class PathwaysService {
     }
   }
 
-  /**
-   * Generic course completion notification.
-   * Sends notification only when ALL 3 validations pass:
-   *   1. notification_sent === false  (no duplicate)
-   *   2. history.status === COMPLETED
-   *   3. LMS reports noOfLesson === completedLesson (100% course progress)
-   *
-   * On success marks notification_sent = true to prevent re-send.
-   * Called fire-and-forget from updateHistoryStatus; errors are logged but do not affect the API response.
-   */
-  /**
-   * Webhook handler called by LMS when a course is completed.
-   * Triggered when: course_tracking.completedLesson >= noOfLesson AND status = completed
-   *                 AND course.notification_send = true in LMS.
-   *
-   * Does 3 things in one transaction:
-   *   1. Updates user_pathway_history status → COMPLETED
-   *   2. Assigns volunteer tag (volunteer_cal / volunteer_cl / volunteer_dl) to user.auto_tags
-   *   3. Sends email notification via NotificationRequest
-   * Then marks notification_sent = true to prevent duplicate processing.
-   */
-  async handleCourseCompletionWebhook(
-    dto: CourseCompletionWebhookDto,
-    response: Response
-  ): Promise<Response> {
-    const apiId = APIID.PATHWAY_COURSE_COMPLETION_WEBHOOK;
-    try {
-      // Find the ACTIVE history record for this user + course
-      const record = await this.userPathwayHistoryRepository.findOne({
-        where: {
-          user_id: dto.userId,
-          course_id: dto.courseId,
-          is_active: true,
-        } as any,
-        relations: ['pathway'],
-      });
-
-      // Validation 1: history record must exist
-      if (!record) {
-        return APIResponse.error(
-          response, apiId,
-          API_RESPONSES.NOT_FOUND,
-          API_RESPONSES.COURSE_COMPLETION_HISTORY_NOT_FOUND,
-          HttpStatus.NOT_FOUND
-        );
-      }
-
-      // Validation 2: notification not already sent (idempotency guard)
-      if ((record as any).notification_sent === true) {
-        return APIResponse.success(
-          response, apiId,
-          { historyId: record.id, userId: dto.userId, courseId: dto.courseId },
-          HttpStatus.OK,
-          API_RESPONSES.COURSE_COMPLETION_ALREADY_PROCESSED
-        );
-      }
-
-      // Validation 3: status must be ACTIVE (LMS confirms completion, we transition here)
-      if (record.status !== PathwayHistoryStatus.ACTIVE) {
-        return APIResponse.error(
-          response, apiId,
-          API_RESPONSES.BAD_REQUEST,
-          API_RESPONSES.VOLUNTEER_PATHWAY_INVALID_STATUS_TRANSITION,
-          HttpStatus.BAD_REQUEST
-        );
-      }
-
-      // Validation 4: confirm course is fully completed in LMS
-      // Both course status = completed AND completedLesson >= noOfLesson must be true
-      const lmsProgress = await this.lmsClientService.getCourseCompletionStatus(
-        dto.userId, dto.courseId, dto.tenantId, dto.organisationId
-      );
-      const courseCompletedInLms =
-        lmsProgress !== null &&
-        lmsProgress.status === 'completed' &&
-        lmsProgress.noOfLesson > 0 &&
-        lmsProgress.completedLesson >= lmsProgress.noOfLesson;
-
-      if (!courseCompletedInLms) {
-        this.logger.warn(
-          `LMS course not fully completed for user=${dto.userId} course=${dto.courseId}. ` +
-          `Progress: ${lmsProgress?.completedLesson ?? 'N/A'}/${lmsProgress?.noOfLesson ?? 'N/A'} status=${lmsProgress?.status ?? 'N/A'}`
-        );
-        return APIResponse.error(
-          response, apiId,
-          API_RESPONSES.BAD_REQUEST,
-          API_RESPONSES.COURSE_NOT_COMPLETED_IN_LMS,
-          HttpStatus.BAD_REQUEST
-        );
-      }
-
-      const now = new Date();
-
-      // Fetch user details for notification
-      const user = await this.userRepository.findOne({
-        where: { userId: dto.userId } as any,
-        select: ['userId', 'email', 'firstName', 'lastName', 'auto_tags'] as any,
-      });
-
-      if (!user) {
-        return APIResponse.error(response, apiId, API_RESPONSES.NOT_FOUND, 'User not found', HttpStatus.NOT_FOUND);
-      }
-
-      await this.dataSource.transaction(async (manager) => {
-        // 1. Mark history as COMPLETED
-        await manager.update(UserPathwayHistory, { id: record.id }, {
-          status: PathwayHistoryStatus.COMPLETED,
-          is_active: false,
-          deactivated_at: now,
-          notification_sent: true,
-        } as any);
-
-        // 2. Assign volunteer tag — only because LMS completion is already verified above
-        if (record.pathway) {
-          const tagAlias = `volunteer_${record.pathway.key}`;
-          const existingTags: string[] = (user as any).auto_tags || [];
-          if (!existingTags.includes(tagAlias)) {
-            await manager.update(User, { userId: dto.userId } as any, {
-              auto_tags: [...existingTags, tagAlias],
-            } as any);
-          }
-        }
-      });
-
-      // 3. Send notification (outside transaction — failure should not roll back DB changes)
-      if ((user as any).email) {
-        const notificationPayload = {
-          isQueue: false,
-          context: 'USER',
-          key: 'onCourseCompletion',
-          replacements: {
-            '{username}': `${(user as any).firstName ?? ''} ${(user as any).lastName ?? ''}`.trim(),
-            '{firstName}': (user as any).firstName ?? '',
-            '{lastName}': (user as any).lastName ?? '',
-            '{pathwayName}': record.pathway?.name ?? '',
-            '{currentYear}': new Date().getFullYear(),
-          },
-          email: {
-            receipients: [(user as any).email],
-          },
-        };
-        this.notificationRequest.sendNotification(notificationPayload).catch((err) => {
-          this.logger.error(`Notification send failed for user ${dto.userId} course ${dto.courseId}: ${err?.message}`);
-        });
-      }
-
-      this.logger.log(`Course completion processed: user=${dto.userId} course=${dto.courseId} history=${record.id}`);
-
-      return APIResponse.success(
-        response, apiId,
-        {
-          historyId: record.id,
-          userId: dto.userId,
-          courseId: dto.courseId,
-          status: PathwayHistoryStatus.COMPLETED,
-          tagAssigned: record.pathway ? `volunteer_${record.pathway.key}` : null,
-          processedAt: now.toISOString(),
-        },
-        HttpStatus.OK,
-        API_RESPONSES.COURSE_COMPLETION_NOTIFICATION_SENT
-      );
-    } catch (error) {
-      const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
-      LoggerUtil.error(`${API_RESPONSES.SERVER_ERROR}`, `Course completion webhook error: ${errorMessage}`, apiId);
-      return APIResponse.error(response, apiId, API_RESPONSES.INTERNAL_SERVER_ERROR, errorMessage, HttpStatus.INTERNAL_SERVER_ERROR);
-    }
-  }
-
-  /**
-   * Private helper: fire notification after manual status update (admin PATCH).
-   * Uses tenantId/orgId from the record context; best-effort only.
-   */
-  private async sendCourseCompletionNotification(
-    record: UserPathwayHistory,
-    historyId: string,
-  ): Promise<void> {
-    const fresh = await this.userPathwayHistoryRepository.findOne({
-      where: { id: historyId },
-      relations: ['pathway'],
-    });
-    if (!fresh || (fresh as any).notification_sent === true) return;
-    if (fresh.status !== PathwayHistoryStatus.COMPLETED) return;
-
-    const user = await this.userRepository.findOne({
-      where: { userId: fresh.user_id } as any,
-      select: ['userId', 'email', 'firstName', 'lastName'] as any,
-    });
-    if (!user || !(user as any).email) return;
-
-    const notificationPayload = {
-      isQueue: false,
-      context: 'USER',
-      key: 'onCourseCompletion',
-      replacements: {
-        '{username}': `${(user as any).firstName ?? ''} ${(user as any).lastName ?? ''}`.trim(),
-        '{firstName}': (user as any).firstName ?? '',
-        '{lastName}': (user as any).lastName ?? '',
-        '{pathwayName}': fresh.pathway?.name ?? '',
-        '{currentYear}': new Date().getFullYear(),
-      },
-      email: { receipients: [(user as any).email] },
-    };
-
-    await this.notificationRequest.sendNotification(notificationPayload);
-    await this.userPathwayHistoryRepository.update({ id: historyId }, { notification_sent: true } as any);
-    this.logger.log(`Manual completion notification sent for history ${historyId}`);
-  }
 }
