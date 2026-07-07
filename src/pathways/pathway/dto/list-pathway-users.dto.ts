@@ -2,6 +2,8 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsOptional, IsString, IsUUID, IsObject, ValidateNested, IsBoolean, IsEnum, IsArray, ArrayNotEmpty } from 'class-validator';
 import { Expose, Type } from 'class-transformer';
 import { PaginationDto } from '../../common/dto/pagination.dto';
+import { PathwayType } from '../entities/pathway.entity';
+import { PathwayHistoryStatus } from '../entities/user-pathway-history.entity';
 
 export enum SortOrder {
   ASC = 'ASC',
@@ -17,6 +19,8 @@ export enum PathwayUserSortColumn {
   IS_ACTIVE = 'isActive',
   PATHWAY_NAME = 'pathwayName',
   DEACTIVATED_AT = 'deactivatedAt',
+  EXPIRES_AT = 'expiresAt',
+  HISTORY_STATUS = 'historyStatus',
 }
 
 class ListPathwayUsersFiltersDto {
@@ -30,13 +34,43 @@ class ListPathwayUsersFiltersDto {
   search?: string;
 
   @ApiPropertyOptional({
-    description: 'Filter by active status in pathway',
+    description: 'Filter by active status in pathway (backward-compatible boolean)',
     example: true,
   })
   @Expose()
   @IsOptional()
   @IsBoolean()
   status?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Filter by pathway type (STANDARD or VOLUNTEER). Useful for volunteer reporting.',
+    enum: PathwayType,
+    example: PathwayType.VOLUNTEER,
+  })
+  @Expose()
+  @IsOptional()
+  @IsEnum(PathwayType)
+  pathwayType?: PathwayType;
+
+  @ApiPropertyOptional({
+    description: 'Filter by history status (ACTIVE, COMPLETED, EXPIRED, WITHDRAWN, INACTIVE).',
+    enum: PathwayHistoryStatus,
+    example: PathwayHistoryStatus.COMPLETED,
+  })
+  @Expose()
+  @IsOptional()
+  @IsEnum(PathwayHistoryStatus)
+  historyStatus?: PathwayHistoryStatus;
+
+  @ApiPropertyOptional({
+    description: 'Filter users enrolled in a specific LMS batch/course UUID.',
+    example: 'c102-0000-0000-0000-000000000000',
+    format: 'uuid',
+  })
+  @Expose()
+  @IsOptional()
+  @IsUUID()
+  courseId?: string;
 }
 
 class ListPathwayUsersSortDto {

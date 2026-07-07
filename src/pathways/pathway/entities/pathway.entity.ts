@@ -7,10 +7,16 @@ import {
   Index,
 } from "typeorm";
 
+export enum PathwayType {
+  STANDARD = 'STANDARD',
+  VOLUNTEER = 'VOLUNTEER',
+}
+
 @Entity("pathways")
 @Index(["key"], { unique: true })
 @Index(["is_active"])
 @Index(["display_order"])
+@Index(["type"])
 export class Pathway {
   @PrimaryGeneratedColumn("uuid")
   id: string;
@@ -35,6 +41,18 @@ export class Pathway {
 
   @Column({ type: 'text', nullable: true })
   image_url: string | null;
+
+  @Column({ type: 'varchar', length: 50, default: PathwayType.STANDARD, nullable: false })
+  type: PathwayType;
+
+  @Column({ type: 'boolean', default: false, nullable: false })
+  allow_multiple_active: boolean;
+
+  @Column({ type: 'int', nullable: true })
+  volunteer_term_months: number | null;
+
+  @Column({ type: 'int', nullable: true })
+  reapply_after_days: number | null;
 
   @CreateDateColumn({
     type: "timestamp",

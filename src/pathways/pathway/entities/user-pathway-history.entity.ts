@@ -10,8 +10,20 @@ import {
 import { User } from "../../../user/entities/user-entity";
 import { Pathway } from "./pathway.entity";
 
+export enum PathwayHistoryStatus {
+    ACTIVE = 'ACTIVE',
+    COMPLETED = 'COMPLETED',
+    EXPIRED = 'EXPIRED',
+    WITHDRAWN = 'WITHDRAWN',
+    INACTIVE = 'INACTIVE',
+}
+
 @Entity("user_pathway_history")
-@Index("ux_one_active_pathway", ["user_id"], { unique: true, where: "is_active = true" })
+// Unique index dropped: VOLUNTEER pathways allow multiple active records per user.
+// One-active-STANDARD rule is now enforced in application logic in PathwaysService.
+@Index("ix_user_pathway_history_user_id", ["user_id"])
+@Index("ix_user_pathway_history_pathway_id", ["pathway_id"])
+@Index("ix_user_pathway_history_status", ["status"])
 export class UserPathwayHistory {
     @PrimaryGeneratedColumn("uuid")
     id: string;
@@ -33,6 +45,15 @@ export class UserPathwayHistory {
     @Column({ type: "boolean", default: true })
     is_active: boolean;
 
+    @Column({ type: 'varchar', length: 50, default: PathwayHistoryStatus.ACTIVE, nullable: false })
+    status: PathwayHistoryStatus;
+
+    @Column({ type: 'uuid', nullable: true })
+    course_id: string | null;
+
+    @Column({ type: 'timestamp', nullable: true })
+    expires_at: Date | null;
+
     @CreateDateColumn({
         type: "timestamp",
         default: () => "CURRENT_TIMESTAMP",
@@ -50,4 +71,7 @@ export class UserPathwayHistory {
 
     @Column({ type: "uuid", nullable: true })
     updated_by: string;
+
+    @Column({ type: 'boolean', default: false, nullable: false })
+    notification_sent: boolean;
 }

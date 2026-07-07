@@ -1,7 +1,8 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsOptional, IsString, IsUUID, IsObject, ValidateNested } from 'class-validator';
+import { IsBoolean, IsOptional, IsString, IsUUID, IsObject, ValidateNested, IsEnum } from 'class-validator';
 import { Expose, Type } from 'class-transformer';
 import { PaginationDto } from '../../common/dto/pagination.dto';
+import { PathwayType } from '../entities/pathway.entity';
 
 class PathwayFiltersDto {
   @ApiPropertyOptional({
@@ -39,6 +40,16 @@ class PathwayFiltersDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiPropertyOptional({
+    description: "Filter pathways by type. Use VOLUNTEER to fetch only volunteer pathways for the 'Become a Volunteer' screen.",
+    enum: PathwayType,
+    example: PathwayType.VOLUNTEER,
+  })
+  @Expose()
+  @IsOptional()
+  @IsEnum(PathwayType)
+  type?: PathwayType;
 }
 export class ListPathwayDto extends PaginationDto {
   @ApiPropertyOptional({

@@ -8,8 +8,10 @@ import {
   Min,
   IsArray,
   IsUUID,
+  IsEnum,
 } from 'class-validator';
 import { Expose, Type } from 'class-transformer';
+import { PathwayType } from '../entities/pathway.entity';
 
 export class UpdatePathwayDto {
   @ApiPropertyOptional({
@@ -74,4 +76,44 @@ export class UpdatePathwayDto {
   @IsOptional()
   @IsBoolean()
   is_active?: boolean;
+
+  @ApiPropertyOptional({
+    description: "Pathway category type (STANDARD or VOLUNTEER).",
+    enum: PathwayType,
+  })
+  @Expose()
+  @IsEnum(PathwayType)
+  @IsOptional()
+  type?: PathwayType;
+
+  @ApiPropertyOptional({
+    description: "Whether multiple active assignments are allowed simultaneously.",
+    example: true,
+  })
+  @Expose()
+  @IsBoolean()
+  @IsOptional()
+  allow_multiple_active?: boolean;
+
+  @ApiPropertyOptional({
+    description: "Duration in months for volunteer status validity.",
+    example: 12,
+  })
+  @Expose()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(1)
+  @IsOptional()
+  volunteer_term_months?: number;
+
+  @ApiPropertyOptional({
+    description: "Days after expiry before reapplication is allowed.",
+    example: 365,
+  })
+  @Expose()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(1)
+  @IsOptional()
+  reapply_after_days?: number;
 }

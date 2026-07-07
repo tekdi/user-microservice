@@ -1,4 +1,4 @@
-import { ApiProperty } from "@nestjs/swagger";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { IsNotEmpty, IsOptional, IsString, IsUUID } from "class-validator";
 import { Expose } from "class-transformer";
 
@@ -53,4 +53,14 @@ export class AssignPathwayDto {
     @IsUUID()
     @IsOptional()
     updated_by?: string;
+
+    @ApiPropertyOptional({
+        description: "LMS Course UUID (batch) to enroll the user in. Required for VOLUNTEER pathways if not auto-resolved. Ignored for STANDARD pathways.",
+        example: "c102-0000-0000-0000-000000000000",
+        format: "uuid",
+    })
+    @Expose()
+    @IsUUID()
+    @IsOptional()
+    course_id?: string;
 }

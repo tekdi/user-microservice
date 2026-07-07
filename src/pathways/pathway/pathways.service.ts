@@ -2,7 +2,7 @@ import * as crypto from 'crypto';
 import { Injectable, HttpStatus, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, DataSource, Like, ILike, Not } from 'typeorm';
-import { Pathway } from './entities/pathway.entity';
+import { Pathway, PathwayType } from './entities/pathway.entity';
 import { Tag } from '../tags/entities/tag.entity';
 import { CreatePathwayDto } from './dto/create-pathway.dto';
 import { UpdatePathwayDto } from './dto/update-pathway.dto';
@@ -12,7 +12,10 @@ import { StringUtil } from '../common/utils/string.util';
 import { MAX_PAGINATION_LIMIT } from '../common/dto/pagination.dto';
 import { AssignPathwayDto } from './dto/assign-pathway.dto';
 import { ListPathwayUsersDto } from './dto/list-pathway-users.dto';
-import { UserPathwayHistory } from './entities/user-pathway-history.entity';
+import { UserPathwayHistory, PathwayHistoryStatus } from './entities/user-pathway-history.entity';
+import { UpdateHistoryStatusDto } from './dto/update-history-status.dto';
+import { CheckEligibilityDto } from './dto/check-eligibility.dto';
+import { CourseCompletionWebhookDto } from './dto/course-completion-webhook.dto';
 import { User } from '../../user/entities/user-entity';
 import { LmsClientService } from '../common/services/lms-client.service';
 import APIResponse from 'src/common/responses/response';
@@ -23,6 +26,7 @@ import { Response } from 'express';
 import { S3StorageProvider } from '../../storage/providers/s3-storage.provider';
 import { ConfigService } from '@nestjs/config';
 import { CacheService } from 'src/cache/cache.service';
+import { NotificationRequest } from '../../common/utils/notification.axios';
 
 @Injectable()
 export class PathwaysService {
@@ -39,9 +43,10 @@ export class PathwaysService {
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     private readonly dataSource: DataSource,
-    private readonly lmsClientService: LmsClientService,   
+    private readonly lmsClientService: LmsClientService,
     private readonly configService: ConfigService,
-    private readonly cacheService: CacheService
+    private readonly cacheService: CacheService,
+    private readonly notificationRequest: NotificationRequest,
   ) {
     // Initialize S3StorageProvider for image uploads
     this.s3StorageProvider = new S3StorageProvider(this.configService);
@@ -405,6 +410,10 @@ export class PathwaysService {
                 ? createPathwayDto.tags
                 : [],
             image_url: imageUrl,
+            type: createPathwayDto.type ?? PathwayType.STANDARD,
+            allow_multiple_active: createPathwayDto.allow_multiple_active ?? false,
+            volunteer_term_months: createPathwayDto.volunteer_term_months ?? null,
+            reapply_after_days: createPathwayDto.reapply_after_days ?? null,
             created_by: userId,
             updated_by: userId,
           };
@@ -427,6 +436,10 @@ export class PathwaysService {
             display_order: savedData.display_order,
             is_active: savedData.is_active,
             image_url: savedData.image_url,
+            type: savedData.type,
+            allow_multiple_active: savedData.allow_multiple_active,
+            volunteer_term_months: savedData.volunteer_term_months,
+            reapply_after_days: savedData.reapply_after_days,
             created_at: savedData.created_at,
           };
 
@@ -670,6 +683,9 @@ export class PathwaysService {
         if (filters.isActive !== undefined) {
           queryBuilder.andWhere("pathway.is_active = :isActive", { isActive: filters.isActive });
         }
+        if (filters.type) {
+          queryBuilder.andWhere("pathway.type = :type", { type: filters.type });
+        }
 
         // Apply ordering
         queryBuilder.orderBy("pathway.display_order", "ASC");
@@ -688,6 +704,9 @@ export class PathwaysService {
         }
         if (filters.isActive !== undefined) {
           whereCondition.is_active = filters.isActive;
+        }
+        if (filters.type) {
+          whereCondition.type = filters.type;
         }
 
         // OPTIMIZED: Single query with count and data using findAndCount
@@ -762,6 +781,10 @@ export class PathwaysService {
           display_order: item.display_order,
           is_active: item.is_active,
           image_url: item.image_url,
+          type: item.type,
+          allow_multiple_active: item.allow_multiple_active,
+          volunteer_term_months: item.volunteer_term_months,
+          reapply_after_days: item.reapply_after_days,
           created_at: item.created_at,
           video_count: videoCount,
           resource_count: resourceCount,
@@ -869,6 +892,10 @@ export class PathwaysService {
         display_order: pathwayData.display_order,
         is_active: pathwayData.is_active,
         image_url: pathwayData.image_url,
+        type: pathwayData.type,
+        allow_multiple_active: pathwayData.allow_multiple_active,
+        volunteer_term_months: pathwayData.volunteer_term_months,
+        reapply_after_days: pathwayData.reapply_after_days,
         created_at: pathwayData.created_at,
       };
 
@@ -1014,6 +1041,18 @@ export class PathwaysService {
       if (updatePathwayDto.is_active !== undefined) {
         updateData.is_active = updatePathwayDto.is_active;
       }
+      if (updatePathwayDto.type !== undefined) {
+        updateData.type = updatePathwayDto.type;
+      }
+      if (updatePathwayDto.allow_multiple_active !== undefined) {
+        updateData.allow_multiple_active = updatePathwayDto.allow_multiple_active;
+      }
+      if (updatePathwayDto.volunteer_term_months !== undefined) {
+        updateData.volunteer_term_months = updatePathwayDto.volunteer_term_months;
+      }
+      if (updatePathwayDto.reapply_after_days !== undefined) {
+        updateData.reapply_after_days = updatePathwayDto.reapply_after_days;
+      }
       if (clearImage) {
         updateData.image_url = null;
       } else if (newImageUrl !== null) {
@@ -1084,6 +1123,10 @@ export class PathwaysService {
         display_order: pathwayData.display_order,
         is_active: pathwayData.is_active,
         image_url: pathwayData.image_url,
+        type: pathwayData.type,
+        allow_multiple_active: pathwayData.allow_multiple_active,
+        volunteer_term_months: pathwayData.volunteer_term_months,
+        reapply_after_days: pathwayData.reapply_after_days,
         created_at: pathwayData.created_at,
       };
 
@@ -1141,17 +1184,18 @@ export class PathwaysService {
       organisationId,
       assignDto.userGoal,
       assignDto.created_by,
-      assignDto.updated_by
+      assignDto.updated_by,
+      assignDto.course_id
     );
   }
 
 
 
   /**
-   * Shared internal method for Pathway Assignment and Switching
-   * Flow: 1) Validate user and that user has completed_alumni in auto_tags.
-   *       2) Get course IDs for pathway, enroll user in all courses via LMS; if enrollment fails, abort.
-   *       3) Then ensure strict reactivation of existing records to prevent duplicates.
+   * Shared internal method for Pathway Assignment and Switching.
+   * Branches on pathway type:
+   *   STANDARD — deactivate existing active pathway, activate new one (existing behaviour).
+   *   VOLUNTEER — eligibility check, no deactivation of other pathways, set status/course_id/expires_at.
    */
   private async handlePathwayAssignment(
     userId: string,
@@ -1162,7 +1206,8 @@ export class PathwaysService {
     organisationId: string,
     userGoal?: string,
     created_by?: string,
-    updated_by?: string
+    updated_by?: string,
+    courseId?: string
   ): Promise<Response> {
     try {
       // 1. Validate user existence and completed_alumni tag
@@ -1172,66 +1217,44 @@ export class PathwaysService {
       });
 
       if (!user) {
-        return APIResponse.error(
-          response,
-          apiId,
-          API_RESPONSES.NOT_FOUND,
-          'User not found',
-          HttpStatus.NOT_FOUND
-        );
+        return APIResponse.error(response, apiId, API_RESPONSES.NOT_FOUND, 'User not found', HttpStatus.NOT_FOUND);
       }
 
       const autoTags = (user as any).auto_tags;
-      const hasCompletedAlumni =
-        Array.isArray(autoTags) && autoTags.includes('completed_alumni');
+      const hasCompletedAlumni = Array.isArray(autoTags) && autoTags.includes('completed_alumni');
       if (!hasCompletedAlumni) {
-        return APIResponse.error(
-          response,
-          apiId,
-          API_RESPONSES.BAD_REQUEST,
-          API_RESPONSES.PATHWAY_ASSIGN_REQUIRES_COMPLETED_ALUMNI,
-          HttpStatus.BAD_REQUEST
-        );
+        return APIResponse.error(response, apiId, API_RESPONSES.BAD_REQUEST, API_RESPONSES.PATHWAY_ASSIGN_REQUIRES_COMPLETED_ALUMNI, HttpStatus.BAD_REQUEST);
       }
 
-      // 2. Validate target pathway existence and active status
+      // 2. Validate target pathway existence and active status (fetch type + volunteer config)
       const pathway = await this.pathwayRepository.findOne({
         where: { id: pathwayId, is_active: true },
-        select: ['id'],
+        select: ['id', 'type', 'allow_multiple_active', 'volunteer_term_months', 'reapply_after_days', 'key'],
       });
 
       if (!pathway) {
-        return APIResponse.error(
-          response,
-          apiId,
-          API_RESPONSES.NOT_FOUND,
-          'Active pathway not found',
-          HttpStatus.NOT_FOUND
+        return APIResponse.error(response, apiId, API_RESPONSES.NOT_FOUND, 'Active pathway not found', HttpStatus.NOT_FOUND);
+      }
+
+      const isVolunteer = pathway.type === PathwayType.VOLUNTEER;
+
+      // ── VOLUNTEER PATH ──────────────────────────────────────────────────────
+      if (isVolunteer) {
+        return this.handleVolunteerAssignment(
+          userId, pathway, courseId, userGoal, created_by, updated_by,
+          tenantId, organisationId, apiId, response
         );
       }
 
-      // 3. Get all course IDs for pathway and enroll user via LMS (all must succeed before assignment)
-      // 409 "already enrolled" from LMS is treated as success; only real failures abort
+      // ── STANDARD PATH (existing behaviour) ──────────────────────────────────
       let alreadyEnrolledCourseCount = 0;
-      const courseIds = await this.lmsClientService.getCourseIdsForPathway(
-        pathwayId,
-        tenantId,
-        organisationId
-      );
+      const courseIds = await this.lmsClientService.getCourseIdsForPathway(pathwayId, tenantId, organisationId);
       if (courseIds.length > 0) {
-        const enrollResult = await this.lmsClientService.enrollUserToCourses(
-          userId,
-          courseIds,
-          tenantId,
-          organisationId
-        );
+        const enrollResult = await this.lmsClientService.enrollUserToCourses(userId, courseIds, tenantId, organisationId);
         if (!enrollResult.success) {
           return APIResponse.error(
-            response,
-            apiId,
-            API_RESPONSES.BAD_REQUEST,
-            API_RESPONSES.PATHWAY_ASSIGN_LMS_ENROLLMENT_FAILED +
-              (enrollResult.message ? ` ${enrollResult.message}` : ''),
+            response, apiId, API_RESPONSES.BAD_REQUEST,
+            API_RESPONSES.PATHWAY_ASSIGN_LMS_ENROLLMENT_FAILED + (enrollResult.message ? ` ${enrollResult.message}` : ''),
             HttpStatus.BAD_REQUEST
           );
         }
@@ -1240,18 +1263,14 @@ export class PathwaysService {
         }
       }
 
-      // 4. Find currently active pathway
       const currentActive = await this.userPathwayHistoryRepository.findOne({
         where: { user_id: userId, is_active: true },
       });
 
-      // 5. Check if target pathway already has a history record for this user
-      // If found, we will REACTIVATE it instead of creating a new one
       const existingTargetRecord = await this.userPathwayHistoryRepository.findOne({
         where: { user_id: userId, pathway_id: pathwayId },
       });
 
-      // If already active, no switch needed
       if (currentActive?.pathway_id === pathwayId) {
         const result = {
           id: currentActive.id,
@@ -1264,59 +1283,43 @@ export class PathwaysService {
           created_by: currentActive.created_by,
           updated_by: currentActive.updated_by,
         };
-        return APIResponse.success(
-          response,
-          apiId,
-          result,
-          HttpStatus.OK,
-          'Pathway is already active'
-        );
+        return APIResponse.success(response, apiId, result, HttpStatus.OK, 'Pathway is already active');
       }
 
       const timestamp = new Date();
-      let previousPathwayId = currentActive ? currentActive.pathway_id : null;
-
+      const previousPathwayId = currentActive ? currentActive.pathway_id : null;
       let activeId = existingTargetRecord ? existingTargetRecord.id : null;
-      
-      // Atomic Transaction: Deactivate current and Reactivate/Activate target
+
       await this.dataSource.transaction(async (manager) => {
-        // Deactivate current active pathway
         if (currentActive) {
-          await manager.update(
-            UserPathwayHistory,
-            { id: currentActive.id },
-            {
-              is_active: false,
-              deactivated_at: timestamp,
-              updated_by: updated_by || created_by
-            }
-          );
+          await manager.update(UserPathwayHistory, { id: currentActive.id }, {
+            is_active: false,
+            status: PathwayHistoryStatus.INACTIVE,
+            deactivated_at: timestamp,
+            updated_by: updated_by || created_by,
+          });
         }
 
         if (existingTargetRecord) {
-          // REACTIVATE: Update existing record timestamps and status
-          await manager.update(
-            UserPathwayHistory,
-            { id: existingTargetRecord.id },
-            {
-              is_active: true,
-              activated_at: timestamp,
-              deactivated_at: null,
-              user_goal: userGoal,
-              updated_by: created_by
-            }
-          );
+          await manager.update(UserPathwayHistory, { id: existingTargetRecord.id }, {
+            is_active: true,
+            status: PathwayHistoryStatus.ACTIVE,
+            activated_at: timestamp,
+            deactivated_at: null,
+            user_goal: userGoal,
+            updated_by: created_by,
+          });
           activeId = existingTargetRecord.id;
         } else {
-          // CREATE: New history record
           const record = manager.create(UserPathwayHistory, {
             user_id: userId,
             pathway_id: pathwayId,
             is_active: true,
+            status: PathwayHistoryStatus.ACTIVE,
             activated_at: timestamp,
             user_goal: userGoal,
-            created_by: created_by,
-            updated_by: created_by
+            created_by,
+            updated_by: created_by,
           });
           const savedRecord = await manager.save(record);
           activeId = savedRecord.id;
@@ -1330,162 +1333,240 @@ export class PathwaysService {
         currentPathwayId: pathwayId,
         activatedAt: timestamp,
         deactivated_at: currentActive ? timestamp : null,
-        userGoal: userGoal,
-        created_by: created_by,
+        userGoal,
+        created_by,
         updated_by: created_by,
       };
 
-      let successMessage = currentActive
-        ? API_RESPONSES.PATHWAY_SWITCHED_SUCCESSFULLY
-        : API_RESPONSES.PATHWAY_ASSIGNED_SUCCESSFULLY;
-      // Only append "already enrolled" for initial assignment, not when switching pathway
+      let successMessage = currentActive ? API_RESPONSES.PATHWAY_SWITCHED_SUCCESSFULLY : API_RESPONSES.PATHWAY_ASSIGNED_SUCCESSFULLY;
       if (!currentActive && alreadyEnrolledCourseCount > 0) {
         successMessage += ` User was already enrolled in ${alreadyEnrolledCourseCount} course(s).`;
       }
 
-      return APIResponse.success(
-        response,
-        apiId,
-        result,
-        HttpStatus.OK,
-        successMessage
-      );
+      return APIResponse.success(response, apiId, result, HttpStatus.OK, successMessage);
     } catch (error) {
       const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
-      LoggerUtil.error(
-        `${API_RESPONSES.SERVER_ERROR}`,
-        `Error handling pathway assignment: ${errorMessage}`,
-        apiId
-      );
-      return APIResponse.error(
-        response,
-        apiId,
-        API_RESPONSES.INTERNAL_SERVER_ERROR,
-        errorMessage,
-        HttpStatus.INTERNAL_SERVER_ERROR
-      );
+      LoggerUtil.error(`${API_RESPONSES.SERVER_ERROR}`, `Error handling pathway assignment: ${errorMessage}`, apiId);
+      return APIResponse.error(response, apiId, API_RESPONSES.INTERNAL_SERVER_ERROR, errorMessage, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  /**
+   * Handle VOLUNTEER pathway assignment.
+   * Rules: eligibility check, reapply window, enroll in active batch, create history with status/expires_at.
+   */
+  private async handleVolunteerAssignment(
+    userId: string,
+    pathway: Pathway,
+    courseId: string | undefined,
+    userGoal: string | undefined,
+    created_by: string | undefined,
+    updated_by: string | undefined,
+    tenantId: string,
+    organisationId: string,
+    apiId: string,
+    response: Response
+  ): Promise<Response> {
+    try {
+      // 1. Eligibility: block if there is an ACTIVE record for same user+pathway that hasn't expired
+      const activeRecord = await this.userPathwayHistoryRepository.findOne({
+        where: { user_id: userId, pathway_id: pathway.id, status: PathwayHistoryStatus.ACTIVE },
+        order: { activated_at: 'DESC' },
+      });
+
+      if (activeRecord) {
+        const nowMs = Date.now();
+        const notExpired = !activeRecord.expires_at || activeRecord.expires_at.getTime() > nowMs;
+        if (notExpired) {
+          return APIResponse.error(response, apiId, API_RESPONSES.CONFLICT, API_RESPONSES.VOLUNTEER_PATHWAY_ALREADY_ACTIVE, HttpStatus.CONFLICT);
+        }
+      }
+
+      // 2. Reapply window: check most recent COMPLETED or EXPIRED record
+      if (pathway.reapply_after_days) {
+        const lastFinished = await this.userPathwayHistoryRepository.findOne({
+          where: [
+            { user_id: userId, pathway_id: pathway.id, status: PathwayHistoryStatus.COMPLETED },
+            { user_id: userId, pathway_id: pathway.id, status: PathwayHistoryStatus.EXPIRED },
+          ],
+          order: { activated_at: 'DESC' },
+        });
+
+        if (lastFinished?.deactivated_at) {
+          const reapplyAfterMs = lastFinished.deactivated_at.getTime() + pathway.reapply_after_days * 24 * 60 * 60 * 1000;
+          if (Date.now() < reapplyAfterMs) {
+            const reapplyAfterDate = new Date(reapplyAfterMs).toISOString();
+            return APIResponse.error(
+              response, apiId, API_RESPONSES.BAD_REQUEST,
+              `${API_RESPONSES.VOLUNTEER_PATHWAY_REAPPLY_TOO_SOON} Reapply after: ${reapplyAfterDate}`,
+              HttpStatus.BAD_REQUEST
+            );
+          }
+        }
+      }
+
+      // 3. Resolve course_id:
+      //    - Use the explicitly provided course_id if frontend sent one.
+      //    - Otherwise auto-fetch the single active batch from LMS using isActive=true filter.
+      //    getCourseIdsForPathway() is NOT used here — it returns ALL published batches.
+      let resolvedCourseId = courseId || null;
+      if (!resolvedCourseId) {
+        resolvedCourseId = await this.lmsClientService.getActiveCourseForPathway(pathway.id, tenantId, organisationId);
+      }
+
+      // 4. Enroll user in the resolved course via LMS
+      if (resolvedCourseId) {
+        const enrollResult = await this.lmsClientService.enrollUserToCourses(userId, [resolvedCourseId], tenantId, organisationId);
+        if (!enrollResult.success) {
+          return APIResponse.error(
+            response, apiId, API_RESPONSES.BAD_REQUEST,
+            API_RESPONSES.PATHWAY_ASSIGN_LMS_ENROLLMENT_FAILED + (enrollResult.message ? ` ${enrollResult.message}` : ''),
+            HttpStatus.BAD_REQUEST
+          );
+        }
+      }
+
+      // 5. Calculate expires_at from volunteer_term_months
+      const timestamp = new Date();
+      let expiresAt: Date | null = null;
+      if (pathway.volunteer_term_months) {
+        expiresAt = new Date(timestamp);
+        expiresAt.setMonth(expiresAt.getMonth() + pathway.volunteer_term_months);
+      }
+
+      // 6. Create new history record (no deactivation of other active pathways)
+      let newRecordId: string;
+      await this.dataSource.transaction(async (manager) => {
+        const record = manager.create(UserPathwayHistory, {
+          user_id: userId,
+          pathway_id: pathway.id,
+          is_active: true,
+          status: PathwayHistoryStatus.ACTIVE,
+          course_id: resolvedCourseId,
+          expires_at: expiresAt,
+          activated_at: timestamp,
+          user_goal: userGoal,
+          created_by,
+          updated_by: created_by,
+        });
+        const saved = await manager.save(record);
+        newRecordId = saved.id;
+      });
+
+      const result = {
+        id: newRecordId,
+        userId,
+        pathwayId: pathway.id,
+        pathwayType: PathwayType.VOLUNTEER,
+        courseId: resolvedCourseId,
+        status: PathwayHistoryStatus.ACTIVE,
+        activatedAt: timestamp,
+        expiresAt,
+        userGoal,
+        created_by,
+      };
+
+      return APIResponse.success(response, apiId, result, HttpStatus.OK, API_RESPONSES.PATHWAY_ASSIGNED_SUCCESSFULLY);
+    } catch (error) {
+      const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+      LoggerUtil.error(`${API_RESPONSES.SERVER_ERROR}`, `Error assigning volunteer pathway: ${errorMessage}`, apiId);
+      return APIResponse.error(response, apiId, API_RESPONSES.INTERNAL_SERVER_ERROR, errorMessage, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 
 
   /**
-   * Get Active Pathway for User
-   * Retrieves the currently active pathway assignment for a user
+   * Get Active Pathway for User.
+   * Supports pathwayType filter: STANDARD (default) → single record, VOLUNTEER → array.
    */
   async getActivePathway(
     userId: string,
     response: Response,
-    pathwayId?: string
+    pathwayId?: string,
+    pathwayType?: PathwayType
   ): Promise<Response> {
     const apiId = APIID.PATHWAY_GET_ACTIVE;
     try {
-      // Validate UUID format for userId and pathwayId
-      const uuidRegex =
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
       if (!uuidRegex.test(userId)) {
-        return APIResponse.error(
-          response,
-          apiId,
-          API_RESPONSES.BAD_REQUEST,
-          API_RESPONSES.UUID_VALIDATION,
-          HttpStatus.BAD_REQUEST
-        );
+        return APIResponse.error(response, apiId, API_RESPONSES.BAD_REQUEST, API_RESPONSES.UUID_VALIDATION, HttpStatus.BAD_REQUEST);
       }
-
       if (pathwayId && !uuidRegex.test(pathwayId)) {
-        return APIResponse.error(
-          response,
-          apiId,
-          API_RESPONSES.BAD_REQUEST,
-          'Invalid pathwayId format. Must be a valid UUID.',
-          HttpStatus.BAD_REQUEST
-        );
+        return APIResponse.error(response, apiId, API_RESPONSES.BAD_REQUEST, 'Invalid pathwayId format. Must be a valid UUID.', HttpStatus.BAD_REQUEST);
       }
 
-      // 1. Validate user existence
-      const user = await this.userRepository.findOne({
-        where: { userId },
-        select: ['userId'],
-      });
-
+      const user = await this.userRepository.findOne({ where: { userId }, select: ['userId'] });
       if (!user) {
-        return APIResponse.error(
-          response,
-          apiId,
-          API_RESPONSES.NOT_FOUND,
-          'User not found',
-          HttpStatus.NOT_FOUND
-        );
+        return APIResponse.error(response, apiId, API_RESPONSES.NOT_FOUND, 'User not found', HttpStatus.NOT_FOUND);
       }
 
-      // 2. Build where condition based on whether pathwayId is provided   
-     const whereCondition: any = {
-  user_id: userId,
-  ...(pathwayId ? { pathway_id: pathwayId } : { is_active: true }),
-};
+      // VOLUNTEER type: return all active volunteer records for the user (array)
+      if (pathwayType === PathwayType.VOLUNTEER) {
+        const qb = this.userPathwayHistoryRepository
+          .createQueryBuilder('h')
+          .innerJoin('h.pathway', 'pw')
+          .where('h.user_id = :userId', { userId })
+          .andWhere('h.status = :status', { status: PathwayHistoryStatus.ACTIVE })
+          .andWhere('pw.type = :type', { type: PathwayType.VOLUNTEER })
+          .select(['h.id', 'h.pathway_id', 'h.course_id', 'h.status', 'h.activated_at', 'h.expires_at', 'h.user_goal', 'h.is_active', 'h.updated_by']);
 
+        if (pathwayId) {
+          qb.andWhere('h.pathway_id = :pathwayId', { pathwayId });
+        }
 
+        const records = await qb.orderBy('h.activated_at', 'DESC').getMany();
 
-      // 3. Get pathway from user_pathway_history
+        const items = records.map((r) => ({
+          id: r.id,
+          pathwayId: r.pathway_id,
+          courseId: r.course_id,
+          status: r.status,
+          activatedAt: r.activated_at,
+          expiresAt: r.expires_at,
+          userGoal: r.user_goal,
+          isActive: r.is_active,
+          updatedBy: r.updated_by,
+        }));
+
+        return APIResponse.success(response, apiId, { items, count: items.length }, HttpStatus.OK, 'Active volunteer pathways retrieved successfully');
+      }
+
+      // STANDARD (default): return single active record
+      const whereCondition: any = {
+        user_id: userId,
+        ...(pathwayId ? { pathway_id: pathwayId } : { is_active: true }),
+      };
+
       const userPathway = await this.userPathwayHistoryRepository.findOne({
         where: whereCondition,
         order: { activated_at: 'DESC' },
-        select: [
-          'id',
-          'pathway_id',
-          'activated_at',
-          'deactivated_at',
-          'user_goal',
-          'is_active',
-          'updated_by',
-        ],
+        select: ['id', 'pathway_id', 'activated_at', 'deactivated_at', 'user_goal', 'is_active', 'updated_by', 'status', 'course_id', 'expires_at'],
       });
 
       if (!userPathway) {
-        const message = pathwayId
-          ? 'Specified pathway assignment not found for this user'
-          : 'No active pathway found for this user';
-        return APIResponse.error(
-          response,
-          apiId,
-          API_RESPONSES.NOT_FOUND,
-          message,
-          HttpStatus.NOT_FOUND
-        );
+        const message = pathwayId ? 'Specified pathway assignment not found for this user' : 'No active pathway found for this user';
+        return APIResponse.error(response, apiId, API_RESPONSES.NOT_FOUND, message, HttpStatus.NOT_FOUND);
       }
 
       const result = {
         id: userPathway.id,
         pathwayId: userPathway.pathway_id,
+        courseId: userPathway.course_id,
+        status: userPathway.status,
         activatedAt: userPathway.activated_at,
         deactivatedAt: userPathway.deactivated_at,
+        expiresAt: userPathway.expires_at,
         userGoal: userPathway.user_goal,
         isActive: userPathway.is_active,
         updatedBy: userPathway.updated_by,
       };
 
-      return APIResponse.success(
-        response,
-        apiId,
-        result,
-        HttpStatus.OK,
-        'Pathway retrieved successfully'
-      );
+      return APIResponse.success(response, apiId, result, HttpStatus.OK, 'Pathway retrieved successfully');
     } catch (error) {
       const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
-      LoggerUtil.error(
-        `${API_RESPONSES.SERVER_ERROR}`,
-        `Error getting active pathway: ${errorMessage}`,
-        apiId
-      );
-      return APIResponse.error(
-        response,
-        apiId,
-        API_RESPONSES.INTERNAL_SERVER_ERROR,
-        errorMessage,
-        HttpStatus.INTERNAL_SERVER_ERROR
-      );
+      LoggerUtil.error(`${API_RESPONSES.SERVER_ERROR}`, `Error getting active pathway: ${errorMessage}`, apiId);
+      return APIResponse.error(response, apiId, API_RESPONSES.INTERNAL_SERVER_ERROR, errorMessage, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 
@@ -1700,9 +1781,16 @@ export class PathwaysService {
           );
         }
         if (filters.status !== undefined) {
-          queryBuilder.andWhere("history.is_active = :isActive", {
-            isActive: filters.status,
-          });
+          queryBuilder.andWhere("history.is_active = :isActive", { isActive: filters.status });
+        }
+        if (filters.pathwayType) {
+          queryBuilder.andWhere("pathway.type = :pathwayType", { pathwayType: filters.pathwayType });
+        }
+        if (filters.historyStatus) {
+          queryBuilder.andWhere("history.status = :historyStatus", { historyStatus: filters.historyStatus });
+        }
+        if (filters.courseId) {
+          queryBuilder.andWhere("history.course_id = :courseId", { courseId: filters.courseId });
         }
       }
 
@@ -1712,6 +1800,9 @@ export class PathwaysService {
         'history.user_id',
         'history.pathway_id',
         'history.is_active',
+        'history.status',
+        'history.course_id',
+        'history.expires_at',
         'history.activated_at',
         'history.deactivated_at',
         'user.userId',
@@ -1721,6 +1812,7 @@ export class PathwaysService {
         'user.gender',
         'pathway.id',
         'pathway.name',
+        'pathway.type',
       ]);
 
       // Apply Sorting
@@ -1734,6 +1826,8 @@ export class PathwaysService {
         isActive: 'history.is_active',
         pathwayName: 'pathway.name',
         deactivatedAt: 'history.deactivated_at',
+        expiresAt: 'history.expires_at',
+        historyStatus: 'history.status',
       };
       const order = sort?.order === 'ASC' ? 'ASC' : 'DESC';
       const resolvedSortColumn = sort?.column
@@ -1762,6 +1856,7 @@ export class PathwaysService {
           userId: item.user_id,
           pathwayId: item.pathway_id,
           pathwayName: item.pathway?.name ?? null,
+          pathwayType: item.pathway?.type ?? null,
           firstName: item.user?.firstName,
           lastName: item.user?.lastName,
           email: item.user?.email,
@@ -1769,6 +1864,9 @@ export class PathwaysService {
           activatedAt: item.activated_at,
           deactivatedAt: item.deactivated_at ?? null,
           status: item.is_active,
+          historyStatus: item.status,
+          courseId: item.course_id ?? null,
+          expiresAt: item.expires_at ?? null,
         })),
       };
 
@@ -1794,5 +1892,474 @@ export class PathwaysService {
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
+  }
+
+  /**
+   * Get the currently active LMS batch/course for a VOLUNTEER pathway.
+   * Used by frontend to display active batch info before user clicks Apply.
+   */
+  async getActiveCourseForPathway(
+    pathwayId: string,
+    tenantId: string,
+    organisationId: string,
+    response: Response
+  ): Promise<Response> {
+    const apiId = APIID.PATHWAY_GET;
+    try {
+      const pathway = await this.pathwayRepository.findOne({
+        where: { id: pathwayId, is_active: true },
+        select: ['id', 'type'],
+      });
+
+      if (!pathway) {
+        return APIResponse.error(response, apiId, API_RESPONSES.NOT_FOUND, API_RESPONSES.PATHWAY_NOT_FOUND, HttpStatus.NOT_FOUND);
+      }
+
+      const courseId = await this.lmsClientService.getActiveCourseForPathway(pathwayId, tenantId, organisationId);
+
+      if (!courseId) {
+        return APIResponse.error(response, apiId, API_RESPONSES.NOT_FOUND, 'No active batch course found for this pathway in LMS.', HttpStatus.NOT_FOUND);
+      }
+
+      return APIResponse.success(response, apiId, { pathwayId, courseId }, HttpStatus.OK, 'Active course resolved successfully');
+    } catch (error) {
+      const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+      LoggerUtil.error(`${API_RESPONSES.SERVER_ERROR}`, `Error fetching active course: ${errorMessage}`, apiId);
+      return APIResponse.error(response, apiId, API_RESPONSES.INTERNAL_SERVER_ERROR, errorMessage, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  /**
+   * Check if a user is eligible to apply for a VOLUNTEER pathway.
+   * Checks active record expiry and reapply_after_days window.
+   */
+  async checkVolunteerEligibility(
+    dto: CheckEligibilityDto,
+    response: Response
+  ): Promise<Response> {
+    const apiId = APIID.VOLUNTEER_CHECK_ELIGIBILITY;
+    try {
+      const pathway = await this.pathwayRepository.findOne({
+        where: { id: dto.pathwayId, is_active: true },
+        select: ['id', 'type', 'volunteer_term_months', 'reapply_after_days'],
+      });
+
+      if (!pathway) {
+        return APIResponse.error(response, apiId, API_RESPONSES.NOT_FOUND, API_RESPONSES.PATHWAY_NOT_FOUND, HttpStatus.NOT_FOUND);
+      }
+      if (pathway.type !== PathwayType.VOLUNTEER) {
+        return APIResponse.error(response, apiId, API_RESPONSES.BAD_REQUEST, API_RESPONSES.VOLUNTEER_PATHWAY_NOT_VOLUNTEER_TYPE, HttpStatus.BAD_REQUEST);
+      }
+
+      // Check for an existing ACTIVE record that hasn't expired
+      const activeRecord = await this.userPathwayHistoryRepository.findOne({
+        where: { user_id: dto.userId, pathway_id: dto.pathwayId, status: PathwayHistoryStatus.ACTIVE },
+        order: { activated_at: 'DESC' },
+      });
+
+      if (activeRecord) {
+        const notExpired = !activeRecord.expires_at || activeRecord.expires_at.getTime() > Date.now();
+        if (notExpired) {
+          return APIResponse.success(response, apiId, {
+            isEligible: false,
+            currentStatus: PathwayHistoryStatus.ACTIVE,
+            reapplyAfterDate: activeRecord.expires_at?.toISOString() ?? null,
+            reason: API_RESPONSES.VOLUNTEER_PATHWAY_ALREADY_ACTIVE,
+          }, HttpStatus.OK, API_RESPONSES.VOLUNTEER_ELIGIBILITY_RETRIEVED);
+        }
+      }
+
+      // Check reapply window against most recent COMPLETED or EXPIRED record
+      if (pathway.reapply_after_days) {
+        const lastFinished = await this.userPathwayHistoryRepository.findOne({
+          where: [
+            { user_id: dto.userId, pathway_id: dto.pathwayId, status: PathwayHistoryStatus.COMPLETED },
+            { user_id: dto.userId, pathway_id: dto.pathwayId, status: PathwayHistoryStatus.EXPIRED },
+          ],
+          order: { activated_at: 'DESC' },
+        });
+
+        if (lastFinished?.deactivated_at) {
+          const reapplyAfterMs = lastFinished.deactivated_at.getTime() + pathway.reapply_after_days * 24 * 60 * 60 * 1000;
+          if (Date.now() < reapplyAfterMs) {
+            const reapplyAfterDate = new Date(reapplyAfterMs).toISOString();
+            return APIResponse.success(response, apiId, {
+              isEligible: false,
+              currentStatus: lastFinished.status,
+              reapplyAfterDate,
+              reason: API_RESPONSES.VOLUNTEER_PATHWAY_REAPPLY_TOO_SOON,
+            }, HttpStatus.OK, API_RESPONSES.VOLUNTEER_ELIGIBILITY_RETRIEVED);
+          }
+        }
+      }
+
+      return APIResponse.success(response, apiId, {
+        isEligible: true,
+        currentStatus: null,
+        reapplyAfterDate: null,
+        reason: null,
+      }, HttpStatus.OK, API_RESPONSES.VOLUNTEER_ELIGIBILITY_RETRIEVED);
+    } catch (error) {
+      const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+      LoggerUtil.error(`${API_RESPONSES.SERVER_ERROR}`, `Error checking volunteer eligibility: ${errorMessage}`, apiId);
+      return APIResponse.error(response, apiId, API_RESPONSES.INTERNAL_SERVER_ERROR, errorMessage, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  /**
+   * Get all active VOLUNTEER pathway assignments for a user (array).
+   */
+  async getVolunteerActivePathways(
+    userId: string,
+    pathwayId: string | undefined,
+    response: Response
+  ): Promise<Response> {
+    const apiId = APIID.VOLUNTEER_ACTIVE_PATHWAYS;
+    try {
+      const user = await this.userRepository.findOne({ where: { userId }, select: ['userId'] });
+      if (!user) {
+        return APIResponse.error(response, apiId, API_RESPONSES.NOT_FOUND, 'User not found', HttpStatus.NOT_FOUND);
+      }
+
+      const qb = this.userPathwayHistoryRepository
+        .createQueryBuilder('h')
+        .innerJoin('h.pathway', 'pw')
+        .where('h.user_id = :userId', { userId })
+        .andWhere('h.status = :status', { status: PathwayHistoryStatus.ACTIVE })
+        .andWhere('pw.type = :type', { type: PathwayType.VOLUNTEER })
+        .select(['h.id', 'h.pathway_id', 'h.course_id', 'h.status', 'h.activated_at', 'h.expires_at', 'h.user_goal', 'h.is_active', 'pw.id', 'pw.name', 'pw.key', 'pw.type']);
+
+      if (pathwayId) {
+        qb.andWhere('h.pathway_id = :pathwayId', { pathwayId });
+      }
+
+      const records = await qb.orderBy('h.activated_at', 'DESC').getMany();
+
+      const items = records.map((r: any) => ({
+        userPathwayHistoryId: r.id,
+        pathwayId: r.pathway_id,
+        pathwayName: r.pathway?.name ?? null,
+        pathwayKey: r.pathway?.key ?? null,
+        courseId: r.course_id,
+        status: r.status,
+        activatedAt: r.activated_at,
+        expiresAt: r.expires_at,
+        userGoal: r.user_goal,
+      }));
+
+      return APIResponse.success(response, apiId, { items, count: items.length }, HttpStatus.OK, API_RESPONSES.VOLUNTEER_ACTIVE_PATHWAYS_RETRIEVED);
+    } catch (error) {
+      const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+      LoggerUtil.error(`${API_RESPONSES.SERVER_ERROR}`, `Error fetching active volunteer pathways: ${errorMessage}`, apiId);
+      return APIResponse.error(response, apiId, API_RESPONSES.INTERNAL_SERVER_ERROR, errorMessage, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  /**
+   * Update status of a user_pathway_history record (COMPLETED, WITHDRAWN, EXPIRED, INACTIVE).
+   * On COMPLETED: assigns the volunteer tag alias (volunteer_<pathway.key>) to user's auto_tags.
+   */
+  async updateHistoryStatus(
+    historyId: string,
+    dto: UpdateHistoryStatusDto,
+    tenantId: string,
+    organisationId: string,
+    response: Response
+  ): Promise<Response> {
+    const apiId = APIID.VOLUNTEER_HISTORY_STATUS_UPDATE;
+    try {
+      const record = await this.userPathwayHistoryRepository.findOne({
+        where: { id: historyId },
+        relations: ['pathway'],
+      });
+
+      if (!record) {
+        return APIResponse.error(response, apiId, API_RESPONSES.NOT_FOUND, API_RESPONSES.VOLUNTEER_PATHWAY_HISTORY_NOT_FOUND, HttpStatus.NOT_FOUND);
+      }
+
+      if (record.status !== PathwayHistoryStatus.ACTIVE) {
+        return APIResponse.error(response, apiId, API_RESPONSES.BAD_REQUEST, API_RESPONSES.VOLUNTEER_PATHWAY_INVALID_STATUS_TRANSITION, HttpStatus.BAD_REQUEST);
+      }
+
+      const now = new Date();
+
+      // For COMPLETED: check LMS to decide whether tags should be assigned.
+      // Admin can force COMPLETED status for offline reasons, but tags only assigned
+      // when LMS also confirms completedLesson >= noOfLesson AND status = completed.
+      let tagEligible = false;
+      if (dto.status === PathwayHistoryStatus.COMPLETED && record.course_id) {
+        const lmsProgress = await this.lmsClientService.getCourseCompletionStatus(
+          record.user_id, record.course_id, tenantId, organisationId
+        );
+        tagEligible =
+          lmsProgress !== null &&
+          lmsProgress.status === 'completed' &&
+          lmsProgress.noOfLesson > 0 &&
+          lmsProgress.completedLesson >= lmsProgress.noOfLesson;
+
+        if (!tagEligible) {
+          this.logger.warn(
+            `Admin marking history ${historyId} COMPLETED but LMS course not fully done. ` +
+            `Progress: ${lmsProgress?.completedLesson ?? 'N/A'}/${lmsProgress?.noOfLesson ?? 'N/A'} ` +
+            `status=${lmsProgress?.status ?? 'N/A'}. Tag will NOT be assigned.`
+          );
+        }
+      } else if (dto.status === PathwayHistoryStatus.COMPLETED && !record.course_id) {
+        // No course linked (e.g. STANDARD pathway) — assign tag directly
+        tagEligible = true;
+      }
+
+      await this.dataSource.transaction(async (manager) => {
+        await manager.update(UserPathwayHistory, { id: historyId }, {
+          status: dto.status,
+          is_active: false,
+          deactivated_at: now,
+          updated_by: dto.updated_by,
+        });
+
+        // Assign volunteer tag only when both pathway = COMPLETED and LMS confirms course done
+        if (tagEligible && record.pathway) {
+          const tagAlias = `volunteer_${record.pathway.key}`;
+          const userRecord = await manager.findOne(User, {
+            where: { userId: record.user_id } as any,
+            select: ['userId', 'auto_tags'] as any,
+          });
+          if (userRecord) {
+            const existingTags: string[] = (userRecord as any).auto_tags || [];
+            if (!existingTags.includes(tagAlias)) {
+              await manager.update(User, { userId: record.user_id } as any, {
+                auto_tags: [...existingTags, tagAlias],
+              } as any);
+            }
+          }
+        }
+      });
+
+      // Send notification only when tags were eligible (both pathway + course completed)
+      if (tagEligible) {
+        this.sendCourseCompletionNotification(record, historyId).catch((err) => {
+          this.logger.error(`Completion notification failed for history ${historyId}: ${err?.message}`);
+        });
+      }
+
+      return APIResponse.success(response, apiId, {
+        id: historyId,
+        status: dto.status,
+        tagAssigned: tagEligible && record.pathway ? `volunteer_${record.pathway.key}` : null,
+        deactivatedAt: now.toISOString(),
+      }, HttpStatus.OK, API_RESPONSES.VOLUNTEER_PATHWAY_STATUS_UPDATED);
+    } catch (error) {
+      const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+      LoggerUtil.error(`${API_RESPONSES.SERVER_ERROR}`, `Error updating pathway history status: ${errorMessage}`, apiId);
+      return APIResponse.error(response, apiId, API_RESPONSES.INTERNAL_SERVER_ERROR, errorMessage, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  /**
+   * Generic course completion notification.
+   * Sends notification only when ALL 3 validations pass:
+   *   1. notification_sent === false  (no duplicate)
+   *   2. history.status === COMPLETED
+   *   3. LMS reports noOfLesson === completedLesson (100% course progress)
+   *
+   * On success marks notification_sent = true to prevent re-send.
+   * Called fire-and-forget from updateHistoryStatus; errors are logged but do not affect the API response.
+   */
+  /**
+   * Webhook handler called by LMS when a course is completed.
+   * Triggered when: course_tracking.completedLesson >= noOfLesson AND status = completed
+   *                 AND course.notification_send = true in LMS.
+   *
+   * Does 3 things in one transaction:
+   *   1. Updates user_pathway_history status → COMPLETED
+   *   2. Assigns volunteer tag (volunteer_cal / volunteer_cl / volunteer_dl) to user.auto_tags
+   *   3. Sends email notification via NotificationRequest
+   * Then marks notification_sent = true to prevent duplicate processing.
+   */
+  async handleCourseCompletionWebhook(
+    dto: CourseCompletionWebhookDto,
+    response: Response
+  ): Promise<Response> {
+    const apiId = APIID.PATHWAY_COURSE_COMPLETION_WEBHOOK;
+    try {
+      // Find the ACTIVE history record for this user + course
+      const record = await this.userPathwayHistoryRepository.findOne({
+        where: {
+          user_id: dto.userId,
+          course_id: dto.courseId,
+          is_active: true,
+        } as any,
+        relations: ['pathway'],
+      });
+
+      // Validation 1: history record must exist
+      if (!record) {
+        return APIResponse.error(
+          response, apiId,
+          API_RESPONSES.NOT_FOUND,
+          API_RESPONSES.COURSE_COMPLETION_HISTORY_NOT_FOUND,
+          HttpStatus.NOT_FOUND
+        );
+      }
+
+      // Validation 2: notification not already sent (idempotency guard)
+      if ((record as any).notification_sent === true) {
+        return APIResponse.success(
+          response, apiId,
+          { historyId: record.id, userId: dto.userId, courseId: dto.courseId },
+          HttpStatus.OK,
+          API_RESPONSES.COURSE_COMPLETION_ALREADY_PROCESSED
+        );
+      }
+
+      // Validation 3: status must be ACTIVE (LMS confirms completion, we transition here)
+      if (record.status !== PathwayHistoryStatus.ACTIVE) {
+        return APIResponse.error(
+          response, apiId,
+          API_RESPONSES.BAD_REQUEST,
+          API_RESPONSES.VOLUNTEER_PATHWAY_INVALID_STATUS_TRANSITION,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      // Validation 4: confirm course is fully completed in LMS
+      // Both course status = completed AND completedLesson >= noOfLesson must be true
+      const lmsProgress = await this.lmsClientService.getCourseCompletionStatus(
+        dto.userId, dto.courseId, dto.tenantId, dto.organisationId
+      );
+      const courseCompletedInLms =
+        lmsProgress !== null &&
+        lmsProgress.status === 'completed' &&
+        lmsProgress.noOfLesson > 0 &&
+        lmsProgress.completedLesson >= lmsProgress.noOfLesson;
+
+      if (!courseCompletedInLms) {
+        this.logger.warn(
+          `LMS course not fully completed for user=${dto.userId} course=${dto.courseId}. ` +
+          `Progress: ${lmsProgress?.completedLesson ?? 'N/A'}/${lmsProgress?.noOfLesson ?? 'N/A'} status=${lmsProgress?.status ?? 'N/A'}`
+        );
+        return APIResponse.error(
+          response, apiId,
+          API_RESPONSES.BAD_REQUEST,
+          API_RESPONSES.COURSE_NOT_COMPLETED_IN_LMS,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      const now = new Date();
+
+      // Fetch user details for notification
+      const user = await this.userRepository.findOne({
+        where: { userId: dto.userId } as any,
+        select: ['userId', 'email', 'firstName', 'lastName', 'auto_tags'] as any,
+      });
+
+      if (!user) {
+        return APIResponse.error(response, apiId, API_RESPONSES.NOT_FOUND, 'User not found', HttpStatus.NOT_FOUND);
+      }
+
+      await this.dataSource.transaction(async (manager) => {
+        // 1. Mark history as COMPLETED
+        await manager.update(UserPathwayHistory, { id: record.id }, {
+          status: PathwayHistoryStatus.COMPLETED,
+          is_active: false,
+          deactivated_at: now,
+          notification_sent: true,
+        } as any);
+
+        // 2. Assign volunteer tag — only because LMS completion is already verified above
+        if (record.pathway) {
+          const tagAlias = `volunteer_${record.pathway.key}`;
+          const existingTags: string[] = (user as any).auto_tags || [];
+          if (!existingTags.includes(tagAlias)) {
+            await manager.update(User, { userId: dto.userId } as any, {
+              auto_tags: [...existingTags, tagAlias],
+            } as any);
+          }
+        }
+      });
+
+      // 3. Send notification (outside transaction — failure should not roll back DB changes)
+      if ((user as any).email) {
+        const notificationPayload = {
+          isQueue: false,
+          context: 'USER',
+          key: 'onCourseCompletion',
+          replacements: {
+            '{username}': `${(user as any).firstName ?? ''} ${(user as any).lastName ?? ''}`.trim(),
+            '{firstName}': (user as any).firstName ?? '',
+            '{lastName}': (user as any).lastName ?? '',
+            '{pathwayName}': record.pathway?.name ?? '',
+            '{currentYear}': new Date().getFullYear(),
+          },
+          email: {
+            receipients: [(user as any).email],
+          },
+        };
+        this.notificationRequest.sendNotification(notificationPayload).catch((err) => {
+          this.logger.error(`Notification send failed for user ${dto.userId} course ${dto.courseId}: ${err?.message}`);
+        });
+      }
+
+      this.logger.log(`Course completion processed: user=${dto.userId} course=${dto.courseId} history=${record.id}`);
+
+      return APIResponse.success(
+        response, apiId,
+        {
+          historyId: record.id,
+          userId: dto.userId,
+          courseId: dto.courseId,
+          status: PathwayHistoryStatus.COMPLETED,
+          tagAssigned: record.pathway ? `volunteer_${record.pathway.key}` : null,
+          processedAt: now.toISOString(),
+        },
+        HttpStatus.OK,
+        API_RESPONSES.COURSE_COMPLETION_NOTIFICATION_SENT
+      );
+    } catch (error) {
+      const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+      LoggerUtil.error(`${API_RESPONSES.SERVER_ERROR}`, `Course completion webhook error: ${errorMessage}`, apiId);
+      return APIResponse.error(response, apiId, API_RESPONSES.INTERNAL_SERVER_ERROR, errorMessage, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  /**
+   * Private helper: fire notification after manual status update (admin PATCH).
+   * Uses tenantId/orgId from the record context; best-effort only.
+   */
+  private async sendCourseCompletionNotification(
+    record: UserPathwayHistory,
+    historyId: string,
+  ): Promise<void> {
+    const fresh = await this.userPathwayHistoryRepository.findOne({
+      where: { id: historyId },
+      relations: ['pathway'],
+    });
+    if (!fresh || (fresh as any).notification_sent === true) return;
+    if (fresh.status !== PathwayHistoryStatus.COMPLETED) return;
+
+    const user = await this.userRepository.findOne({
+      where: { userId: fresh.user_id } as any,
+      select: ['userId', 'email', 'firstName', 'lastName'] as any,
+    });
+    if (!user || !(user as any).email) return;
+
+    const notificationPayload = {
+      isQueue: false,
+      context: 'USER',
+      key: 'onCourseCompletion',
+      replacements: {
+        '{username}': `${(user as any).firstName ?? ''} ${(user as any).lastName ?? ''}`.trim(),
+        '{firstName}': (user as any).firstName ?? '',
+        '{lastName}': (user as any).lastName ?? '',
+        '{pathwayName}': fresh.pathway?.name ?? '',
+        '{currentYear}': new Date().getFullYear(),
+      },
+      email: { receipients: [(user as any).email] },
+    };
+
+    await this.notificationRequest.sendNotification(notificationPayload);
+    await this.userPathwayHistoryRepository.update({ id: historyId }, { notification_sent: true } as any);
+    this.logger.log(`Manual completion notification sent for history ${historyId}`);
   }
 }

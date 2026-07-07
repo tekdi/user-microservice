@@ -42,6 +42,10 @@ import { AssignPathwayDto } from './dto/assign-pathway.dto';
 import { BulkUpdateOrderDto } from './dto/update-pathway-order.dto';
 import { ActivePathwayDto } from './dto/active-pathway.dto';
 import { ListPathwayUsersDto } from './dto/list-pathway-users.dto';
+import { CheckEligibilityDto } from './dto/check-eligibility.dto';
+import { UpdateHistoryStatusDto } from './dto/update-history-status.dto';
+import { CourseCompletionWebhookDto } from './dto/course-completion-webhook.dto';
+import { PathwayType } from './entities/pathway.entity';
 import { Response, Request } from 'express';
 import { JwtAuthGuard } from 'src/common/guards/keycloak.guard';
 import { InterestsService } from '../interests/interests.service';
@@ -402,7 +406,8 @@ export class PathwaysController {
     return this.pathwaysService.getActivePathway(
       activePathwayDto.userId,
       response,
-      activePathwayDto.pathwayId
+      activePathwayDto.pathwayId,
+      activePathwayDto.pathwayType
     );
   }
 
@@ -539,7 +544,7 @@ export class PathwaysController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: "List users related to a specific pathway",
-    description: "Retrieves a paginated list of users associated with a pathway, with optional filters and sorting.",
+    description: "Retrieves a paginated list of users associated with a pathway, with optional filters and sorting. Supports new volunteer-specific filters: pathwayType, historyStatus, courseId.",
   })
   @ApiHeader({ name: "tenantid", required: true })
   @ApiBody({ type: ListPathwayUsersDto })
@@ -559,6 +564,196 @@ export class PathwaysController {
       throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
     }
     return this.pathwaysService.listPathwayUsers(listPathwayUsersDto, response);
+  }
+
+  // ── Volunteer-specific routes ──────────────────────────────────────────────
+
+  /**
+   * Get the currently active LMS batch/course for a VOLUNTEER pathway.
+   * Frontend calls this to display batch name before user clicks Apply.
+   */
+  @Get(":id/active-course")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: "Get active LMS batch course for a volunteer pathway",
+    description: "Returns the currently active LMS course (onboarding batch) for a VOLUNTEER pathway. Frontend calls this to display the current open batch before the user clicks Apply.",
+  })
+  @ApiHeader({ name: "Authorization", required: true })
+  @ApiHeader({ name: "tenantid", required: true })
+  @ApiHeader({ name: "organisationid", required: false })
+  @ApiParam({ name: "id", description: "Pathway UUID", format: "uuid" })
+  @ApiResponse({
+    status: 200,
+    description: "Active course resolved",
+    schema: {
+      example: {
+        pathwayId: "pw4-uuid-cal-pathway",
+        courseId: "c102-uuid-cal-batch2-2025",
+      },
+    },
+  })
+  @ApiNotFoundResponse({ description: "No active batch found for this pathway" })
+  async getActiveCourseForPathway(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Headers("tenantid") tenantId: string,
+    @Headers("organisationid") organisationId: string,
+    @Res() response: Response
+  ): Promise<Response> {
+    if (!tenantId || !isUUID(tenantId)) {
+      throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
+    }
+    const orgId = (process.env.DEFAULT_ORGANISATION_ID || organisationId || '').trim();
+    return this.pathwaysService.getActiveCourseForPathway(id, tenantId, orgId, response);
+  }
+
+  /**
+   * Check user eligibility to apply for a VOLUNTEER pathway.
+   * Returns isEligible flag, current status, and reapply date if blocked.
+   */
+  @Post("volunteer/check-eligibility")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: "Check volunteer pathway eligibility",
+    description: "Returns whether a user can apply for a specific volunteer pathway. Frontend uses this to show/disable the Apply button per reapplication rules.",
+  })
+  @ApiHeader({ name: "Authorization", required: true })
+  @ApiHeader({ name: "tenantid", required: true })
+  @ApiBody({ type: CheckEligibilityDto })
+  @ApiResponse({
+    status: 200,
+    description: "Eligibility check completed",
+    schema: {
+      example: {
+        isEligible: false,
+        currentStatus: "ACTIVE",
+        reapplyAfterDate: "2026-07-20T00:00:00.000Z",
+        reason: "User already has an active assignment for this volunteer pathway.",
+      },
+    },
+  })
+  @ApiNotFoundResponse({ description: "Pathway not found" })
+  @ApiBadRequestResponse({ description: "Pathway is not VOLUNTEER type" })
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  async checkVolunteerEligibility(
+    @Body() dto: CheckEligibilityDto,
+    @Headers("tenantid") tenantId: string,
+    @Res() response: Response
+  ): Promise<Response> {
+    if (!tenantId || !isUUID(tenantId)) {
+      throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
+    }
+    return this.pathwaysService.checkVolunteerEligibility(dto, response);
+  }
+
+  /**
+   * Get all active VOLUNTEER pathway assignments for a user.
+   */
+  @Get("volunteer/active/:userId")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: "Get active volunteer pathway assignments for a user",
+    description: "Returns all currently active VOLUNTEER pathway history records for a user as an array. Distinct from POST /pathway/active which is designed for a single STANDARD pathway.",
+  })
+  @ApiHeader({ name: "Authorization", required: true })
+  @ApiHeader({ name: "tenantid", required: true })
+  @ApiParam({ name: "userId", description: "User UUID", format: "uuid" })
+  @ApiResponse({
+    status: 200,
+    description: "Active volunteer pathways retrieved successfully",
+    schema: {
+      example: {
+        count: 2,
+        items: [
+          {
+            userPathwayHistoryId: "uuid",
+            pathwayId: "uuid",
+            pathwayName: "Campus Ambassador Leader",
+            pathwayKey: "cal",
+            courseId: "uuid",
+            status: "ACTIVE",
+            activatedAt: "2025-07-20T00:00:00.000Z",
+            expiresAt: "2026-07-20T00:00:00.000Z",
+          },
+        ],
+      },
+    },
+  })
+  @ApiNotFoundResponse({ description: "User not found" })
+  async getVolunteerActivePathways(
+    @Param("userId", ParseUUIDPipe) userId: string,
+    @Query("pathwayId") pathwayId: string,
+    @Headers("tenantid") tenantId: string,
+    @Res() response: Response
+  ): Promise<Response> {
+    if (!tenantId || !isUUID(tenantId)) {
+      throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
+    }
+    if (pathwayId && !isUUID(pathwayId)) {
+      throw new BadRequestException("pathwayId query param must be a valid UUID");
+    }
+    return this.pathwaysService.getVolunteerActivePathways(userId, pathwayId || undefined, response);
+  }
+
+  /**
+   * Update status of a user_pathway_history record (COMPLETED, WITHDRAWN, EXPIRED).
+   * Called by LMS service on course+assessment completion, or admin for manual withdrawal.
+   * On COMPLETED: automatically assigns the corresponding volunteer tag to user's auto_tags.
+   */
+  @Patch("history/:id/status")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: "Update volunteer pathway history status",
+    description: "Transitions a user_pathway_history record from ACTIVE to COMPLETED, WITHDRAWN, or EXPIRED. On COMPLETED, assigns the volunteer tag (e.g. volunteer_cal) to the user's auto_tags. Called by LMS webhook on course completion + assessment pass, or by admin.",
+  })
+  @ApiHeader({ name: "Authorization", required: true })
+  @ApiHeader({ name: "tenantid", required: true })
+  @ApiHeader({ name: "organisationid", required: false })
+  @ApiParam({ name: "id", description: "UserPathwayHistory UUID", format: "uuid" })
+  @ApiBody({ type: UpdateHistoryStatusDto })
+  @ApiResponse({
+    status: 200,
+    description: "Status updated. tagAssigned is null if LMS course not yet fully completed.",
+    schema: {
+      example: {
+        id: "uuid",
+        status: "COMPLETED",
+        tagAssigned: "volunteer_cal",
+        deactivatedAt: "2026-07-01T10:00:00.000Z",
+      },
+    },
+  })
+  @ApiNotFoundResponse({ description: "History record not found" })
+  @ApiBadRequestResponse({ description: "Invalid status transition (only ACTIVE → COMPLETED/WITHDRAWN/EXPIRED allowed)" })
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  async updateHistoryStatus(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: UpdateHistoryStatusDto,
+    @Headers("tenantid") tenantId: string,
+    @Headers("organisationid") organisationId: string,
+    @Res() response: Response
+  ): Promise<Response> {
+    if (!tenantId || !isUUID(tenantId)) {
+      throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
+    }
+    return this.pathwaysService.updateHistoryStatus(id, dto, tenantId, organisationId || '', response);
+  }
+
+  @Post("webhook/course-completed")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: "LMS course completion webhook",
+    description: "Called by LMS when a user completes a course (completedLesson >= noOfLesson AND status = completed AND course.notification_send = true). Transitions history to COMPLETED, assigns volunteer tag, and sends email notification.",
+  })
+  @ApiBody({ type: CourseCompletionWebhookDto })
+  @ApiResponse({ status: 200, description: "Completion processed — notification sent and tag assigned" })
+  @ApiResponse({ status: 200, description: "Already processed — idempotent no-op" })
+  @ApiNotFoundResponse({ description: "No active history found for this user + course" })
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  async courseCompletionWebhook(
+    @Body() dto: CourseCompletionWebhookDto,
+    @Res() response: Response
+  ): Promise<Response> {
+    return this.pathwaysService.handleCourseCompletionWebhook(dto, response);
   }
 
 }
