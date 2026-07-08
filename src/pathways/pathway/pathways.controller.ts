@@ -44,7 +44,6 @@ import { ActivePathwayDto } from './dto/active-pathway.dto';
 import { ListPathwayUsersDto } from './dto/list-pathway-users.dto';
 import { CheckEligibilityDto } from './dto/check-eligibility.dto';
 import { UpdateHistoryStatusDto } from './dto/update-history-status.dto';
-import { PathwayType } from './entities/pathway.entity';
 import { Response, Request } from 'express';
 import { JwtAuthGuard } from 'src/common/guards/keycloak.guard';
 import { InterestsService } from '../interests/interests.service';
@@ -602,6 +601,9 @@ export class PathwaysController {
       throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
     }
     const orgId = (process.env.DEFAULT_ORGANISATION_ID || organisationId || '').trim();
+    if (!orgId) {
+      throw new BadRequestException(API_RESPONSES.ORGANISATIONID_REQUIRED);
+    }
     return this.pathwaysService.getActiveCourseForPathway(id, tenantId, orgId, response);
   }
 
@@ -732,7 +734,8 @@ export class PathwaysController {
     if (!tenantId || !isUUID(tenantId)) {
       throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
     }
-    return this.pathwaysService.updateHistoryStatus(id, dto, tenantId, organisationId || '', response);
+    const orgId = (process.env.DEFAULT_ORGANISATION_ID || organisationId || '').trim();
+    return this.pathwaysService.updateHistoryStatus(id, dto, tenantId, orgId, response);
   }
 
 

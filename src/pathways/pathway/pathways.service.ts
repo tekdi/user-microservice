@@ -1377,10 +1377,22 @@ export class PathwaysService {
         if (notExpired) {
           return APIResponse.error(response, apiId, API_RESPONSES.CONFLICT, API_RESPONSES.VOLUNTEER_PATHWAY_ALREADY_ACTIVE, HttpStatus.CONFLICT);
         }
+        // Active record exists but has expired — enforce reapply window against its expiry date
+        if (pathway.reapply_after_days && activeRecord.expires_at) {
+          const reapplyAfterMs = activeRecord.expires_at.getTime() + pathway.reapply_after_days * 24 * 60 * 60 * 1000;
+          if (nowMs < reapplyAfterMs) {
+            const reapplyAfterDate = new Date(reapplyAfterMs).toISOString();
+            return APIResponse.error(
+              response, apiId, API_RESPONSES.BAD_REQUEST,
+              `${API_RESPONSES.VOLUNTEER_PATHWAY_REAPPLY_TOO_SOON} Reapply after: ${reapplyAfterDate}`,
+              HttpStatus.BAD_REQUEST
+            );
+          }
+        }
       }
 
-      // 2. Reapply window: check most recent COMPLETED or EXPIRED record
-      if (pathway.reapply_after_days) {
+      // 2. Reapply window: check most recent COMPLETED or EXPIRED record (only when no stale active record)
+      if (!activeRecord && pathway.reapply_after_days) {
         const lastFinished = await this.userPathwayHistoryRepository.findOne({
           where: [
             { user_id: userId, pathway_id: pathway.id, status: PathwayHistoryStatus.COMPLETED },
@@ -1431,9 +1443,16 @@ export class PathwaysService {
         expiresAt.setMonth(expiresAt.getMonth() + pathway.volunteer_term_months);
       }
 
-      // 6. Create new history record (no deactivation of other active pathways)
+      // 6. Create new history record, expiring any stale active record in the same transaction
       let newRecordId: string;
       await this.dataSource.transaction(async (manager) => {
+        if (activeRecord) {
+          await manager.update(UserPathwayHistory, { id: activeRecord.id }, {
+            status: PathwayHistoryStatus.EXPIRED,
+            is_active: false,
+            deactivated_at: new Date(),
+          } as any);
+        }
         const record = manager.create(UserPathwayHistory, {
           user_id: userId,
           pathway_id: pathway.id,
@@ -1955,7 +1974,8 @@ export class PathwaysService {
       });
 
       if (activeRecord) {
-        const notExpired = !activeRecord.expires_at || activeRecord.expires_at.getTime() > Date.now();
+        const nowMs = Date.now();
+        const notExpired = !activeRecord.expires_at || activeRecord.expires_at.getTime() > nowMs;
         if (notExpired) {
           return APIResponse.success(response, apiId, {
             isEligible: false,
@@ -1964,10 +1984,23 @@ export class PathwaysService {
             reason: API_RESPONSES.VOLUNTEER_PATHWAY_ALREADY_ACTIVE,
           }, HttpStatus.OK, API_RESPONSES.VOLUNTEER_ELIGIBILITY_RETRIEVED);
         }
+        // Active record exists but has expired — check reapply window against its expiry date
+        if (pathway.reapply_after_days && activeRecord.expires_at) {
+          const reapplyAfterMs = activeRecord.expires_at.getTime() + pathway.reapply_after_days * 24 * 60 * 60 * 1000;
+          if (nowMs < reapplyAfterMs) {
+            const reapplyAfterDate = new Date(reapplyAfterMs).toISOString();
+            return APIResponse.success(response, apiId, {
+              isEligible: false,
+              currentStatus: PathwayHistoryStatus.EXPIRED,
+              reapplyAfterDate,
+              reason: API_RESPONSES.VOLUNTEER_PATHWAY_REAPPLY_TOO_SOON,
+            }, HttpStatus.OK, API_RESPONSES.VOLUNTEER_ELIGIBILITY_RETRIEVED);
+          }
+        }
       }
 
-      // Check reapply window against most recent COMPLETED or EXPIRED record
-      if (pathway.reapply_after_days) {
+      // Check reapply window against most recent COMPLETED or EXPIRED record (only when no stale active record)
+      if (!activeRecord && pathway.reapply_after_days) {
         const lastFinished = await this.userPathwayHistoryRepository.findOne({
           where: [
             { user_id: dto.userId, pathway_id: dto.pathwayId, status: PathwayHistoryStatus.COMPLETED },

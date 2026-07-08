@@ -22,7 +22,7 @@ export class ActivePathwayDto {
   pathwayId?: string;
 
   @ApiPropertyOptional({
-    description: "Filter by pathway type. STANDARD (default) returns the single active career pathway. VOLUNTEER returns all active volunteer pathway assignments as an array. ALL returns both.",
+    description: "Filter by pathway type. STANDARD (default) returns the single active career pathway. VOLUNTEER returns all active volunteer pathway assignments as an array.",
     enum: PathwayType,
     default: PathwayType.STANDARD,
     example: PathwayType.STANDARD,

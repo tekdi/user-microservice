@@ -123,7 +123,6 @@ export class CreatePathwayDto {
   @IsNumber()
   @Min(1)
   @ValidateIf((o) => o.type === PathwayType.VOLUNTEER)
-  @IsOptional()
   volunteer_term_months?: number;
 
   @ApiPropertyOptional({
