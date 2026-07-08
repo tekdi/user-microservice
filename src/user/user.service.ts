@@ -1931,7 +1931,7 @@ export class UserService {
       this.emitAuditSafely({
         entityType: "USER",
         entityId: result.userId,
-        eventAction: "CREATED",
+        eventAction: "USER_CREATED",
         ...auditCtx,
         metadata: {
           username: userContext.username,

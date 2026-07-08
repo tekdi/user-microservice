@@ -122,7 +122,7 @@ export class UserController {
 
   @UseFilters(new AllExceptionsFilter(APIID.USER_CREATE))
   @Post("/create")
-  @UseGuards(JwtAuthGuard)
+  // @UseGuards(JwtAuthGuard)
   @UsePipes(new ValidationPipe())
   // @ApiBasicAuth("access-token")
   @ApiCreatedResponse({ description: API_RESPONSES.USER_CREATE_SUCCESSFULLY })
@@ -245,7 +245,7 @@ export class UserController {
     @Body() userHierarchyViewDto: UserHierarchyViewDto
   ) {
     return await this.userService
-      .searchUserMultiTenant(tenantId, response, userHierarchyViewDto);
+      .searchUserMultiTenant(tenantId, request, response, userHierarchyViewDto);
   }
   
   @Post("/forgot-password")
