@@ -1413,7 +1413,7 @@ export class PathwaysService {
     apiId: string,
     response: Response
   ): Promise<Response> {
-    const { userId, pathway, courseId, userGoal, created_by, updated_by, tenantId, organisationId } = opts;
+    const { userId, pathway, courseId, userGoal, created_by, tenantId, organisationId } = opts;
     try {
       // 1. Eligibility: block if there is an ACTIVE record for same user+pathway that hasn't expired
       const activeRecord = await this.userPathwayHistoryRepository.findOne({
