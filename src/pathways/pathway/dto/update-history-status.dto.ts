@@ -1,5 +1,5 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { IsEnum, IsNotEmpty, IsOptional, IsUUID } from "class-validator";
+import { IsEnum, IsNotEmpty, IsUUID } from "class-validator";
 import { Expose } from "class-transformer";
 import { PathwayHistoryStatus } from '../entities/user-pathway-history.entity';
 

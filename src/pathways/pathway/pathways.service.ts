@@ -1284,8 +1284,9 @@ export class PathwaysService {
       // ── VOLUNTEER PATH ──────────────────────────────────────────────────────
       if (isVolunteer) {
         return this.handleVolunteerAssignment(
-          userId, pathway, courseId, userGoal, created_by, updated_by,
-          tenantId, organisationId, apiId, response
+          { userId, pathway, courseId, userGoal, created_by, updated_by, tenantId, organisationId },
+          apiId,
+          response
         );
       }
 
@@ -1399,17 +1400,20 @@ export class PathwaysService {
    * Rules: eligibility check, reapply window, enroll in active batch, create history with status/expires_at.
    */
   private async handleVolunteerAssignment(
-    userId: string,
-    pathway: Pathway,
-    courseId: string | undefined,
-    userGoal: string | undefined,
-    created_by: string | undefined,
-    updated_by: string | undefined,
-    tenantId: string,
-    organisationId: string,
+    opts: {
+      userId: string;
+      pathway: Pathway;
+      courseId: string | undefined;
+      userGoal: string | undefined;
+      created_by: string | undefined;
+      updated_by: string | undefined;
+      tenantId: string;
+      organisationId: string;
+    },
     apiId: string,
     response: Response
   ): Promise<Response> {
+    const { userId, pathway, courseId, userGoal, created_by, updated_by, tenantId, organisationId } = opts;
     try {
       // 1. Eligibility: block if there is an ACTIVE record for same user+pathway that hasn't expired
       const activeRecord = await this.userPathwayHistoryRepository.findOne({
