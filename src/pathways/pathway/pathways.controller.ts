@@ -44,6 +44,7 @@ import { ActivePathwayDto } from './dto/active-pathway.dto';
 import { ListPathwayUsersDto } from './dto/list-pathway-users.dto';
 import { CheckEligibilityDto } from './dto/check-eligibility.dto';
 import { UpdateHistoryStatusDto } from './dto/update-history-status.dto';
+import { CourseCompletionWebhookDto } from './dto/course-completion-webhook.dto';
 import { Response, Request } from 'express';
 import { JwtAuthGuard } from 'src/common/guards/keycloak.guard';
 import { InterestsService } from '../interests/interests.service';
@@ -693,6 +694,35 @@ export class PathwaysController {
       throw new BadRequestException("pathwayId query param must be a valid UUID");
     }
     return this.pathwaysService.getVolunteerActivePathways(userId, pathwayId || undefined, response);
+  }
+
+  /**
+   * Called by LMS service when a course track is marked COMPLETED.
+   * Finds the ACTIVE VOLUNTEER pathway history for this user+course,
+   * marks it COMPLETED, sets expires_at, and assigns tags to user.auto_tags.
+   */
+  @Post("course-completed")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: "LMS course completion webhook",
+    description: "Called by LMS service when a course is completed. Marks the linked VOLUNTEER pathway history as COMPLETED and assigns tags to the user.",
+  })
+  @ApiHeader({ name: "Authorization", required: true, description: "Bearer token from LMS request" })
+  @ApiHeader({ name: "tenantid", required: true })
+  @ApiHeader({ name: "organisationid", required: false })
+  @ApiBody({ type: CourseCompletionWebhookDto })
+  @ApiResponse({ status: 200, description: "Pathway marked completed and tags assigned" })
+  @ApiNotFoundResponse({ description: "No active VOLUNTEER pathway history found for this user+course" })
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  async courseCompletedWebhook(
+    @Body() dto: CourseCompletionWebhookDto,
+    @Headers("tenantid") tenantId: string,
+    @Res() response: Response
+  ): Promise<Response> {
+    if (!tenantId || !isUUID(tenantId)) {
+      throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
+    }
+    return this.pathwaysService.handleCourseCompletionWebhook(dto, response);
   }
 
   /**

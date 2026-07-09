@@ -1,7 +1,7 @@
 import * as crypto from 'crypto';
 import { Injectable, HttpStatus, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In, DataSource, Like, ILike, Not } from 'typeorm';
+import { Repository, In, DataSource, Like, ILike, Not, EntityManager } from 'typeorm';
 import { Pathway, PathwayType } from './entities/pathway.entity';
 import { Tag } from '../tags/entities/tag.entity';
 import { CreatePathwayDto } from './dto/create-pathway.dto';
@@ -25,6 +25,8 @@ import { Response } from 'express';
 import { S3StorageProvider } from '../../storage/providers/s3-storage.provider';
 import { ConfigService } from '@nestjs/config';
 import { CacheService } from 'src/cache/cache.service';
+import { Cron } from '@nestjs/schedule';
+import { CourseCompletionWebhookDto } from './dto/course-completion-webhook.dto';
 
 @Injectable()
 export class PathwaysService {
@@ -397,6 +399,9 @@ export class PathwaysService {
             imageUrl = dtoImageUrl.trim();
           }
 
+          const effectiveType = createPathwayDto.type ?? PathwayType.STANDARD;
+          const isVolunteer = effectiveType === PathwayType.VOLUNTEER;
+
           const pathwayData = {
             ...createPathwayDto,
             key: key,
@@ -407,10 +412,13 @@ export class PathwaysService {
                 ? createPathwayDto.tags
                 : [],
             image_url: imageUrl,
-            type: createPathwayDto.type ?? PathwayType.STANDARD,
+            type: effectiveType,
             allow_multiple_active: createPathwayDto.allow_multiple_active ?? false,
             volunteer_term_months: createPathwayDto.volunteer_term_months ?? null,
             reapply_after_days: createPathwayDto.reapply_after_days ?? null,
+            application_opening_date: isVolunteer ? (createPathwayDto.application_opening_date ?? null) : null,
+            application_closing_date: isVolunteer ? (createPathwayDto.application_closing_date ?? null) : null,
+            notification_date: isVolunteer ? (createPathwayDto.notification_date ?? null) : null,
             created_by: userId,
             updated_by: userId,
           };
@@ -437,6 +445,9 @@ export class PathwaysService {
             allow_multiple_active: savedData.allow_multiple_active,
             volunteer_term_months: savedData.volunteer_term_months,
             reapply_after_days: savedData.reapply_after_days,
+            application_opening_date: savedData.application_opening_date ?? null,
+            application_closing_date: savedData.application_closing_date ?? null,
+            notification_date: savedData.notification_date ?? null,
             created_at: savedData.created_at,
           };
 
@@ -782,6 +793,9 @@ export class PathwaysService {
           allow_multiple_active: item.allow_multiple_active,
           volunteer_term_months: item.volunteer_term_months,
           reapply_after_days: item.reapply_after_days,
+          application_opening_date: item.application_opening_date ?? null,
+          application_closing_date: item.application_closing_date ?? null,
+          notification_date: item.notification_date ?? null,
           created_at: item.created_at,
           video_count: videoCount,
           resource_count: resourceCount,
@@ -806,6 +820,9 @@ export class PathwaysService {
           items: transformedItems.map(({ video_count, resource_count, total_items, tags, ...item }) => ({
             ...item,
             tag_ids: (tags || []).map((t: { id: string }) => t.id),
+            application_opening_date: (item as any).application_opening_date ?? null,
+            application_closing_date: (item as any).application_closing_date ?? null,
+            notification_date: (item as any).notification_date ?? null,
           })),
         };
         await this.cacheService.set(cacheKey, resultForCache, pathwayListCacheTtl);
@@ -893,6 +910,9 @@ export class PathwaysService {
         allow_multiple_active: pathwayData.allow_multiple_active,
         volunteer_term_months: pathwayData.volunteer_term_months,
         reapply_after_days: pathwayData.reapply_after_days,
+        application_opening_date: pathwayData.application_opening_date ?? null,
+        application_closing_date: pathwayData.application_closing_date ?? null,
+        notification_date: pathwayData.notification_date ?? null,
         created_at: pathwayData.created_at,
       };
 
@@ -1050,6 +1070,29 @@ export class PathwaysService {
       if (updatePathwayDto.reapply_after_days !== undefined) {
         updateData.reapply_after_days = updatePathwayDto.reapply_after_days;
       }
+
+      // Date fields only apply to VOLUNTEER pathways.
+      // Effective type = incoming type change (if any) else existing type.
+      const effectiveType = updatePathwayDto.type ?? existingPathway.type;
+      const isVolunteer = effectiveType === PathwayType.VOLUNTEER;
+
+      if (isVolunteer) {
+        if (updatePathwayDto.application_opening_date !== undefined) {
+          updateData.application_opening_date = updatePathwayDto.application_opening_date ?? null;
+        }
+        if (updatePathwayDto.application_closing_date !== undefined) {
+          updateData.application_closing_date = updatePathwayDto.application_closing_date ?? null;
+        }
+        if (updatePathwayDto.notification_date !== undefined) {
+          updateData.notification_date = updatePathwayDto.notification_date ?? null;
+        }
+      } else {
+        // Pathway is STANDARD — clear dates if they were previously set (e.g. type changed from VOLUNTEER)
+        updateData.application_opening_date = null;
+        updateData.application_closing_date = null;
+        updateData.notification_date = null;
+      }
+
       if (clearImage) {
         updateData.image_url = null;
       } else if (newImageUrl !== null) {
@@ -1124,6 +1167,9 @@ export class PathwaysService {
         allow_multiple_active: pathwayData.allow_multiple_active,
         volunteer_term_months: pathwayData.volunteer_term_months,
         reapply_after_days: pathwayData.reapply_after_days,
+        application_opening_date: pathwayData.application_opening_date ?? null,
+        application_closing_date: pathwayData.application_closing_date ?? null,
+        notification_date: pathwayData.notification_date ?? null,
         created_at: pathwayData.created_at,
       };
 
@@ -2082,6 +2128,143 @@ export class PathwaysService {
       const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
       LoggerUtil.error(`${API_RESPONSES.SERVER_ERROR}`, `Error fetching active volunteer pathways: ${errorMessage}`, apiId);
       return APIResponse.error(response, apiId, API_RESPONSES.INTERNAL_SERVER_ERROR, errorMessage, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  /**
+   * Called by LMS when a course is marked COMPLETED in course_track.
+   * Finds the ACTIVE VOLUNTEER pathway history for this user+course, marks it COMPLETED,
+   * recalculates expires_at from completion date, and assigns pathway tags to user.auto_tags.
+   */
+  async handleCourseCompletionWebhook(
+    dto: CourseCompletionWebhookDto,
+    response: Response
+  ): Promise<Response> {
+    const apiId = APIID.PATHWAY_COURSE_COMPLETION_WEBHOOK;
+    try {
+      const qb = this.userPathwayHistoryRepository
+        .createQueryBuilder('h')
+        .innerJoinAndSelect('h.pathway', 'pw')
+        .where('h.user_id = :userId', { userId: dto.userId })
+        .andWhere('h.course_id = :courseId', { courseId: dto.courseId })
+        .andWhere('h.status = :status', { status: PathwayHistoryStatus.ACTIVE });
+
+      if (dto.pathwayId) {
+        qb.andWhere('h.pathway_id = :pathwayId', { pathwayId: dto.pathwayId });
+      }
+
+      const record = await qb.getOne();
+
+      if (!record) {
+        return APIResponse.error(
+          response, apiId, API_RESPONSES.NOT_FOUND,
+          API_RESPONSES.COURSE_COMPLETION_HISTORY_NOT_FOUND, HttpStatus.NOT_FOUND
+        );
+      }
+
+      if (record.pathway.type !== PathwayType.VOLUNTEER) {
+        return APIResponse.success(
+          response, apiId,
+          { processed: false, reason: 'Not a VOLUNTEER pathway — no tag assignment needed' },
+          HttpStatus.OK, 'Skipped'
+        );
+      }
+
+      if (record.notification_sent) {
+        return APIResponse.success(
+          response, apiId,
+          { processed: false, historyId: record.id },
+          HttpStatus.OK, API_RESPONSES.COURSE_COMPLETION_ALREADY_PROCESSED
+        );
+      }
+
+      const now = new Date();
+
+      let newExpiresAt: Date | null = null;
+      if (record.pathway.volunteer_term_months) {
+        newExpiresAt = new Date(now);
+        newExpiresAt.setMonth(newExpiresAt.getMonth() + record.pathway.volunteer_term_months);
+      }
+
+      await this.dataSource.transaction(async (manager) => {
+        await manager.update(UserPathwayHistory, { id: record.id }, {
+          status: PathwayHistoryStatus.COMPLETED,
+          is_active: false,
+          deactivated_at: now,
+          expires_at: newExpiresAt,
+          notification_sent: true,
+        } as any);
+
+        await this.assignVolunteerTags(manager, dto.userId, record.pathway);
+      });
+
+      return APIResponse.success(response, apiId, {
+        historyId: record.id,
+        userId: dto.userId,
+        courseId: dto.courseId,
+        pathwayId: record.pathway_id,
+        status: PathwayHistoryStatus.COMPLETED,
+        expiresAt: newExpiresAt?.toISOString() ?? null,
+        deactivatedAt: now.toISOString(),
+      }, HttpStatus.OK, API_RESPONSES.COURSE_COMPLETION_NOTIFICATION_SENT);
+    } catch (error) {
+      const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+      LoggerUtil.error(`${API_RESPONSES.SERVER_ERROR}`, `Course completion webhook error: ${errorMessage}`, apiId);
+      return APIResponse.error(response, apiId, API_RESPONSES.INTERNAL_SERVER_ERROR, errorMessage, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  /**
+   * Resolves pathway tag UUIDs to their alias strings and merges them into user.auto_tags.
+   * Must be called inside a transaction (pass the EntityManager).
+   */
+  private async assignVolunteerTags(manager: EntityManager, userId: string, pathway: Pathway): Promise<void> {
+    const tagIds: string[] = pathway.tags || [];
+    if (!tagIds.length) return;
+
+    const tags = await this.tagRepository.find({
+      where: { id: In(tagIds) },
+      select: ['id', 'alias'],
+    });
+
+    const aliases = tags.map(t => t.alias).filter(Boolean);
+    if (!aliases.length) return;
+
+    const user = await manager.findOne(User, {
+      where: { userId },
+      select: ['userId', 'auto_tags'] as any,
+    });
+
+    if (!user) return;
+
+    const existing: string[] = (user as any).auto_tags || [];
+    const merged = [...new Set([...existing, ...aliases])];
+
+    await manager.update(User, { userId }, { auto_tags: merged } as any);
+    this.logger.log(`[Tags] Assigned to userId=${userId}: ${aliases.join(', ')}`);
+  }
+
+  /**
+   * Daily cron: transitions COMPLETED volunteer pathway records to EXPIRED
+   * once their expires_at date has passed.
+   */
+  @Cron('0 2 * * *')
+  async checkAndExpireVolunteerPathways(): Promise<void> {
+    const now = new Date();
+    try {
+      const result = await this.userPathwayHistoryRepository
+        .createQueryBuilder()
+        .update(UserPathwayHistory)
+        .set({ status: PathwayHistoryStatus.EXPIRED })
+        .where('status = :status', { status: PathwayHistoryStatus.COMPLETED })
+        .andWhere('expires_at IS NOT NULL')
+        .andWhere('expires_at < :now', { now })
+        .execute();
+      if ((result.affected ?? 0) > 0) {
+        this.logger.log(`[Cron] Expired ${result.affected} volunteer pathway record(s)`);
+      }
+    } catch (error) {
+      this.logger.error(`[Cron] Volunteer expiry check failed: ${error?.message}`);
     }
   }
 

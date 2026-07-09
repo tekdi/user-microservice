@@ -11,6 +11,7 @@ import {
   IsUUID,
   IsEnum,
   ValidateIf,
+  IsDateString,
 } from 'class-validator';
 import { Expose, Type } from 'class-transformer';
 import { PathwayType } from '../entities/pathway.entity';
@@ -135,4 +136,34 @@ export class CreatePathwayDto {
   @Min(1)
   @IsOptional()
   reapply_after_days?: number;
+
+  @ApiPropertyOptional({
+    description: "Date from which applications open for this volunteer pathway. Applicable for VOLUNTEER type only.",
+    example: "2025-01-01T00:00:00Z",
+  })
+  @Expose()
+  @IsOptional()
+  @IsDateString()
+  @ValidateIf((o) => o.type === PathwayType.VOLUNTEER || o.application_opening_date !== undefined)
+  application_opening_date?: string;
+
+  @ApiPropertyOptional({
+    description: "Date after which applications are no longer accepted for this volunteer pathway. Applicable for VOLUNTEER type only.",
+    example: "2025-03-31T23:59:59Z",
+  })
+  @Expose()
+  @IsOptional()
+  @IsDateString()
+  @ValidateIf((o) => o.type === PathwayType.VOLUNTEER || o.application_closing_date !== undefined)
+  application_closing_date?: string;
+
+  @ApiPropertyOptional({
+    description: "Date on which applicants will be notified of the outcome for this volunteer pathway. Applicable for VOLUNTEER type only.",
+    example: "2025-04-15T00:00:00Z",
+  })
+  @Expose()
+  @IsOptional()
+  @IsDateString()
+  @ValidateIf((o) => o.type === PathwayType.VOLUNTEER || o.notification_date !== undefined)
+  notification_date?: string;
 }

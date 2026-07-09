@@ -54,6 +54,15 @@ export class Pathway {
   @Column({ type: 'int', nullable: true })
   reapply_after_days: number | null;
 
+  @Column({ type: 'timestamptz', nullable: true })
+  application_opening_date: Date | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  application_closing_date: Date | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  notification_date: Date | null;
+
   @CreateDateColumn({
     type: "timestamp",
     default: () => "CURRENT_TIMESTAMP",

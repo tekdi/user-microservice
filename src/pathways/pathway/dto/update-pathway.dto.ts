@@ -9,6 +9,7 @@ import {
   IsArray,
   IsUUID,
   IsEnum,
+  IsDateString,
 } from 'class-validator';
 import { Expose, Type } from 'class-transformer';
 import { PathwayType } from '../entities/pathway.entity';
@@ -116,4 +117,31 @@ export class UpdatePathwayDto {
   @Min(1)
   @IsOptional()
   reapply_after_days?: number;
+
+  @ApiPropertyOptional({
+    description: "Date from which applications open. Applicable for VOLUNTEER type only; pass null to clear.",
+    example: "2025-01-01T00:00:00Z",
+  })
+  @Expose()
+  @IsOptional()
+  @IsDateString()
+  application_opening_date?: string | null;
+
+  @ApiPropertyOptional({
+    description: "Date after which applications are closed. Applicable for VOLUNTEER type only; pass null to clear.",
+    example: "2025-03-31T23:59:59Z",
+  })
+  @Expose()
+  @IsOptional()
+  @IsDateString()
+  application_closing_date?: string | null;
+
+  @ApiPropertyOptional({
+    description: "Date on which applicants will be notified of outcome. Applicable for VOLUNTEER type only; pass null to clear.",
+    example: "2025-04-15T00:00:00Z",
+  })
+  @Expose()
+  @IsOptional()
+  @IsDateString()
+  notification_date?: string | null;
 }
