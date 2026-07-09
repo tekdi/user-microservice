@@ -402,6 +402,18 @@ export class PathwaysService {
           const effectiveType = createPathwayDto.type ?? PathwayType.STANDARD;
           const isVolunteer = effectiveType === PathwayType.VOLUNTEER;
 
+          if (
+            isVolunteer &&
+            createPathwayDto.application_opening_date &&
+            createPathwayDto.application_closing_date &&
+            new Date(createPathwayDto.application_closing_date) < new Date(createPathwayDto.application_opening_date)
+          ) {
+            return APIResponse.error(
+              response, apiId, API_RESPONSES.BAD_REQUEST,
+              'application_closing_date must be on or after application_opening_date', HttpStatus.BAD_REQUEST
+            );
+          }
+
           const pathwayData = {
             ...createPathwayDto,
             key: key,
@@ -1077,6 +1089,16 @@ export class PathwaysService {
       const isVolunteer = effectiveType === PathwayType.VOLUNTEER;
 
       if (isVolunteer) {
+        // Cross-field date validation: closing must not be before opening
+        const openingDate = updatePathwayDto.application_opening_date ?? existingPathway.application_opening_date;
+        const closingDate = updatePathwayDto.application_closing_date ?? existingPathway.application_closing_date;
+        if (openingDate && closingDate && new Date(closingDate) < new Date(openingDate)) {
+          return APIResponse.error(
+            response, apiId, API_RESPONSES.BAD_REQUEST,
+            'application_closing_date must be on or after application_opening_date', HttpStatus.BAD_REQUEST
+          );
+        }
+
         if (updatePathwayDto.application_opening_date !== undefined) {
           updateData.application_opening_date = updatePathwayDto.application_opening_date ?? null;
         }
@@ -1086,8 +1108,8 @@ export class PathwaysService {
         if (updatePathwayDto.notification_date !== undefined) {
           updateData.notification_date = updatePathwayDto.notification_date ?? null;
         }
-      } else {
-        // Pathway is STANDARD — clear dates if they were previously set (e.g. type changed from VOLUNTEER)
+      } else if (updatePathwayDto.type !== undefined) {
+        // Only clear dates when explicitly transitioning away from VOLUNTEER
         updateData.application_opening_date = null;
         updateData.application_closing_date = null;
         updateData.notification_date = null;
@@ -2137,27 +2159,27 @@ export class PathwaysService {
 
   /**
    * Called by LMS when a course is marked COMPLETED in course_track.
-   * Finds the ACTIVE VOLUNTEER pathway history for this user+course, marks it COMPLETED,
+   * Finds the VOLUNTEER pathway history for this user+course, marks it COMPLETED,
    * recalculates expires_at from completion date, and assigns pathway tags to user.auto_tags.
    */
-  async handleCourseCompletionWebhook(
+  async handleCourseCompletion(
     dto: CourseCompletionWebhookDto,
     response: Response
   ): Promise<Response> {
     const apiId = APIID.PATHWAY_COURSE_COMPLETION_WEBHOOK;
     try {
+      // Query without status filter so retried calls can detect "already processed"
       const qb = this.userPathwayHistoryRepository
         .createQueryBuilder('h')
         .innerJoinAndSelect('h.pathway', 'pw')
         .where('h.user_id = :userId', { userId: dto.userId })
-        .andWhere('h.course_id = :courseId', { courseId: dto.courseId })
-        .andWhere('h.status = :status', { status: PathwayHistoryStatus.ACTIVE });
+        .andWhere('h.course_id = :courseId', { courseId: dto.courseId });
 
       if (dto.pathwayId) {
         qb.andWhere('h.pathway_id = :pathwayId', { pathwayId: dto.pathwayId });
       }
 
-      const record = await qb.getOne();
+      const record = await qb.orderBy('h.activated_at', 'DESC').getOne();
 
       if (!record) {
         return APIResponse.error(
@@ -2174,6 +2196,7 @@ export class PathwaysService {
         );
       }
 
+      // Idempotency: already processed by a previous call
       if (record.notification_sent) {
         return APIResponse.success(
           response, apiId,
@@ -2182,25 +2205,49 @@ export class PathwaysService {
         );
       }
 
-      const now = new Date();
+      if (record.status !== PathwayHistoryStatus.ACTIVE) {
+        return APIResponse.error(
+          response, apiId, API_RESPONSES.BAD_REQUEST,
+          'Pathway history is not ACTIVE — cannot mark completed', HttpStatus.CONFLICT
+        );
+      }
 
+      const now = new Date();
       let newExpiresAt: Date | null = null;
       if (record.pathway.volunteer_term_months) {
         newExpiresAt = new Date(now);
         newExpiresAt.setMonth(newExpiresAt.getMonth() + record.pathway.volunteer_term_months);
       }
 
+      let tagAssigned = false;
       await this.dataSource.transaction(async (manager) => {
-        await manager.update(UserPathwayHistory, { id: record.id }, {
-          status: PathwayHistoryStatus.COMPLETED,
-          is_active: false,
-          deactivated_at: now,
-          expires_at: newExpiresAt,
-          notification_sent: true,
-        } as any);
+        // Atomic guard: only proceed if notification_sent is still false
+        const atomicUpdate = await manager.createQueryBuilder()
+          .update(UserPathwayHistory)
+          .set({
+            status: PathwayHistoryStatus.COMPLETED,
+            is_active: false,
+            deactivated_at: now,
+            expires_at: newExpiresAt,
+            notification_sent: true,
+          } as any)
+          .where('id = :id', { id: record.id })
+          .andWhere('notification_sent = false')
+          .execute();
 
-        await this.assignVolunteerTags(manager, dto.userId, record.pathway);
+        if ((atomicUpdate.affected ?? 0) > 0) {
+          await this.assignVolunteerTags(manager, dto.userId, record.pathway);
+          tagAssigned = true;
+        }
       });
+
+      if (!tagAssigned) {
+        return APIResponse.success(
+          response, apiId,
+          { processed: false, historyId: record.id },
+          HttpStatus.OK, API_RESPONSES.COURSE_COMPLETION_ALREADY_PROCESSED
+        );
+      }
 
       return APIResponse.success(response, apiId, {
         historyId: record.id,
@@ -2213,7 +2260,7 @@ export class PathwaysService {
       }, HttpStatus.OK, API_RESPONSES.COURSE_COMPLETION_NOTIFICATION_SENT);
     } catch (error) {
       const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
-      LoggerUtil.error(`${API_RESPONSES.SERVER_ERROR}`, `Course completion webhook error: ${errorMessage}`, apiId);
+      LoggerUtil.error(`${API_RESPONSES.SERVER_ERROR}`, `Course completion API error: ${errorMessage}`, apiId);
       return APIResponse.error(response, apiId, API_RESPONSES.INTERNAL_SERVER_ERROR, errorMessage, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
@@ -2249,26 +2296,54 @@ export class PathwaysService {
   }
 
   /**
-   * Daily cron: transitions COMPLETED volunteer pathway records to EXPIRED
-   * once their expires_at date has passed.
+   * Core expiry logic — shared by the scheduled cron and the manual API trigger.
+   * Transitions all COMPLETED volunteer pathway records whose expires_at has passed to EXPIRED.
    */
-  @Cron('0 2 * * *')
-  async checkAndExpireVolunteerPathways(): Promise<void> {
+  private async runVolunteerExpiry(): Promise<number> {
     const now = new Date();
+    const result = await this.userPathwayHistoryRepository
+      .createQueryBuilder()
+      .update(UserPathwayHistory)
+      .set({ status: PathwayHistoryStatus.EXPIRED })
+      .where('status = :status', { status: PathwayHistoryStatus.COMPLETED })
+      .andWhere('expires_at IS NOT NULL')
+      .andWhere('expires_at < :now', { now })
+      .execute();
+    return result.affected ?? 0;
+  }
+
+  /**
+   * Daily cron at 02:00 — automatically expires volunteer pathway records.
+   */
+  // @Cron('0 2 * * *')
+  async checkAndExpireVolunteerPathways(): Promise<void> {
     try {
-      const result = await this.userPathwayHistoryRepository
-        .createQueryBuilder()
-        .update(UserPathwayHistory)
-        .set({ status: PathwayHistoryStatus.EXPIRED })
-        .where('status = :status', { status: PathwayHistoryStatus.COMPLETED })
-        .andWhere('expires_at IS NOT NULL')
-        .andWhere('expires_at < :now', { now })
-        .execute();
-      if ((result.affected ?? 0) > 0) {
-        this.logger.log(`[Cron] Expired ${result.affected} volunteer pathway record(s)`);
+      const expired = await this.runVolunteerExpiry();
+      if (expired > 0) {
+        this.logger.log(`[Cron] Expired ${expired} volunteer pathway record(s)`);
       }
     } catch (error) {
       this.logger.error(`[Cron] Volunteer expiry check failed: ${error?.message}`);
+    }
+  }
+
+  /**
+   * Manual trigger — same logic as the daily cron, exposed via API for testing or urgent runs.
+   */
+  async triggerVolunteerExpiry(response: Response): Promise<Response> {
+    const apiId = APIID.VOLUNTEER_EXPIRY_TRIGGER;
+    try {
+      const expired = await this.runVolunteerExpiry();
+      return APIResponse.success(
+        response, apiId,
+        { expired },
+        HttpStatus.OK,
+        `Volunteer expiry check completed. ${expired} record(s) marked as EXPIRED.`
+      );
+    } catch (error) {
+      const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
+      LoggerUtil.error(`${API_RESPONSES.SERVER_ERROR}`, `Volunteer expiry trigger failed: ${errorMessage}`, apiId);
+      return APIResponse.error(response, apiId, API_RESPONSES.INTERNAL_SERVER_ERROR, errorMessage, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 
