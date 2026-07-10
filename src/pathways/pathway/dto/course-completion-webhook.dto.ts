@@ -20,16 +20,4 @@ export class CourseCompletionWebhookDto {
   @IsUUID()
   @IsOptional()
   pathwayId?: string;
-
-  @ApiProperty({ description: "Tenant UUID", format: "uuid" })
-  @Expose()
-  @IsUUID()
-  @IsNotEmpty()
-  tenantId: string;
-
-  @ApiProperty({ description: "Organisation UUID", format: "uuid" })
-  @Expose()
-  @IsUUID()
-  @IsNotEmpty()
-  organisationId: string;
 }

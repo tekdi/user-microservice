@@ -735,7 +735,6 @@ export class PathwaysController {
     summary: "LMS course completion API",
     description: "Called by LMS service when a course is completed. Marks the linked VOLUNTEER pathway history as COMPLETED and assigns tags to the user.",
   })
-  @ApiHeader({ name: "x-internal-key", required: true, description: "Service-to-service auth key" })
   @ApiHeader({ name: "tenantid", required: true })
   @ApiHeader({ name: "organisationid", required: false })
   @ApiBody({ type: CourseCompletionWebhookDto })
@@ -745,13 +744,8 @@ export class PathwaysController {
   async courseCompleted(
     @Body() dto: CourseCompletionWebhookDto,
     @Headers("tenantid") tenantId: string,
-    @Headers("x-internal-key") internalKey: string,
     @Res() response: Response
   ): Promise<Response> {
-    const expectedKey = process.env.INTERNAL_API_KEY;
-    if (!expectedKey || internalKey !== expectedKey) {
-      throw new BadRequestException('Unauthorized: invalid or missing x-internal-key');
-    }
     if (!tenantId || !isUUID(tenantId)) {
       throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
     }

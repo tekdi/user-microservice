@@ -2196,19 +2196,12 @@ export class PathwaysService {
         );
       }
 
-      // Idempotency: already processed by a previous call
-      if (record.notification_sent) {
+      // Idempotency: status already moved past ACTIVE means already processed
+      if (record.status !== PathwayHistoryStatus.ACTIVE) {
         return APIResponse.success(
           response, apiId,
-          { processed: false, historyId: record.id },
+          { processed: false, historyId: record.id, status: record.status },
           HttpStatus.OK, API_RESPONSES.COURSE_COMPLETION_ALREADY_PROCESSED
-        );
-      }
-
-      if (record.status !== PathwayHistoryStatus.ACTIVE) {
-        return APIResponse.error(
-          response, apiId, API_RESPONSES.BAD_REQUEST,
-          'Pathway history is not ACTIVE — cannot mark completed', HttpStatus.CONFLICT
         );
       }
 
@@ -2221,7 +2214,7 @@ export class PathwaysService {
 
       let tagAssigned = false;
       await this.dataSource.transaction(async (manager) => {
-        // Atomic guard: only proceed if notification_sent is still false
+        // Atomic guard: only update if still ACTIVE (prevents concurrent duplicate calls)
         const atomicUpdate = await manager.createQueryBuilder()
           .update(UserPathwayHistory)
           .set({
@@ -2229,10 +2222,9 @@ export class PathwaysService {
             is_active: false,
             deactivated_at: now,
             expires_at: newExpiresAt,
-            notification_sent: true,
           } as any)
           .where('id = :id', { id: record.id })
-          .andWhere('notification_sent = false')
+          .andWhere('status = :status', { status: PathwayHistoryStatus.ACTIVE })
           .execute();
 
         if ((atomicUpdate.affected ?? 0) > 0) {
@@ -2270,29 +2262,27 @@ export class PathwaysService {
    * Must be called inside a transaction (pass the EntityManager).
    */
   private async assignVolunteerTags(manager: EntityManager, userId: string, pathway: Pathway): Promise<void> {
-    const tagIds: string[] = pathway.tags || [];
-    if (!tagIds.length) return;
+    const tagAlias = pathway.key ? `volunteer_${pathway.key}` : null;
+    if (!tagAlias) {
+      this.logger.warn(`[Tags] Pathway ${pathway.id} has no key — skipping tag assignment`);
+      return;
+    }
 
-    const tags = await this.tagRepository.find({
-      where: { id: In(tagIds) },
-      select: ['id', 'alias'],
-    });
-
-    const aliases = tags.map(t => t.alias).filter(Boolean);
-    if (!aliases.length) return;
-
-    const user = await manager.findOne(User, {
+    const user = await manager.getRepository(User).findOne({
       where: { userId },
-      select: ['userId', 'auto_tags'] as any,
+      select: { userId: true, auto_tags: true } as any,
     });
 
-    if (!user) return;
+    if (!user) {
+      this.logger.warn(`[Tags] User not found userId=${userId}`);
+      return;
+    }
 
     const existing: string[] = (user as any).auto_tags || [];
-    const merged = [...new Set([...existing, ...aliases])];
+    const merged = [...new Set([...existing, tagAlias])];
 
-    await manager.update(User, { userId }, { auto_tags: merged } as any);
-    this.logger.log(`[Tags] Assigned to userId=${userId}: ${aliases.join(', ')}`);
+    await manager.getRepository(User).update({ userId }, { auto_tags: merged } as any);
+    this.logger.log(`[Tags] Assigned tag "${tagAlias}" to userId=${userId}`);
   }
 
   /**

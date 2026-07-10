@@ -72,6 +72,4 @@ export class UserPathwayHistory {
     @Column({ type: "uuid", nullable: true })
     updated_by: string;
 
-    @Column({ type: 'boolean', default: false, nullable: false })
-    notification_sent: boolean;
 }
