@@ -538,7 +538,7 @@ export class CohortService {
         entityType: "COHORT",
         entityId: uniqueCohortIds.length === 1
           ? uniqueCohortIds[0]
-          : `BATCH:${uniqueCohortIds.length}:${uniqueCohortIds[0]}`,
+          : "COHORT",
         eventAction: "STATUS_UPDATED",
         ...auditCtx,
         metadata: { status, cohortIds: uniqueCohortIds }
