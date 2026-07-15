@@ -713,6 +713,7 @@ export class CohortService {
         }
 
         //Update status in cohortMember table if exist record corresponding cohortId
+        let updatedCohortMembers: CohortMembers[] = [];
         if (
           validTransitions[cohortUpdateDto.status]?.includes(
             existingCohorDetails.status
@@ -728,10 +729,24 @@ export class CohortService {
           }
 
           if (memberStatus) {
-            await this.cohortMembersRepository.update(
-              { cohortId },
-              { status: memberStatus, updatedBy: cohortUpdateDto.updatedBy }
-            );
+            const cohortMembers = await this.cohortMembersRepository.find({
+              where: {
+                cohortId,
+              },
+            });
+
+            if (cohortMembers.length > 0) {
+              await this.cohortMembersRepository.update(
+                { cohortId },
+                { status: memberStatus, updatedBy: cohortUpdateDto.updatedBy }
+              );
+
+              for (const cohortMember of cohortMembers) {
+                cohortMember.status = memberStatus;
+                cohortMember.updatedBy = cohortUpdateDto.updatedBy;
+                updatedCohortMembers.push(cohortMember);
+              }
+            }
           }
         }
 
@@ -767,6 +782,23 @@ export class CohortService {
             `Error: ${error.message}`,
             apiId
           ));
+
+        // Publish cohort member updated events to Kafka asynchronously - after response is sent to client
+        if (updatedCohortMembers.length > 0) {
+          Promise.all(
+            updatedCohortMembers.map((cohortMember) =>
+              this.cohortMembersService.publishCohortMemberEvent(
+                'updated',
+                cohortMember,
+                apiId
+              )
+            )
+          ).catch(error => LoggerUtil.error(
+            'Failed to publish cohort member updated events to Kafka',
+            'Error: ' + error.message,
+            apiId
+          ));
+        }
 
         return apiResponse;
       } else {
