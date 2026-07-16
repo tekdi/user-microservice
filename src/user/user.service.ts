@@ -1800,12 +1800,20 @@ export class UserService {
             apiId,
             userContext.username
           );
+          const keycloakStatusCode =
+            typeof resKeycloak.statusCode === "number" &&
+            resKeycloak.statusCode >= 400 &&
+            resKeycloak.statusCode < 600
+              ? resKeycloak.statusCode
+              : HttpStatus.INTERNAL_SERVER_ERROR;
           return APIResponse.error(
             response,
             apiId,
-            API_RESPONSES.SERVER_ERROR,
+            keycloakStatusCode === HttpStatus.BAD_REQUEST
+              ? API_RESPONSES.BAD_REQUEST
+              : API_RESPONSES.SERVER_ERROR,
             `${resKeycloak.message}`,
-            HttpStatus.INTERNAL_SERVER_ERROR
+            keycloakStatusCode
           );
         }
       }
