@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Controller,
   Get,
   Param,
@@ -10,6 +11,7 @@ import { AppService } from "./app.service";
 import { JwtAuthGuard } from "./common/guards/keycloak.guard";
 import { ApiBasicAuth, ApiHeader } from "@nestjs/swagger";
 import { RbacAuthGuard } from "./common/guards/rbac.guard";
+import * as path from "path";
 
 @Controller()
 export class AppController {
@@ -27,6 +29,10 @@ export class AppController {
 
   @Get("files/:fileName")
   seeUploadedFile(@Param("fileName") fileName: string, @Res() res) {
-    return res.sendFile(fileName, { root: "./uploads" });
+    const sanitizedFileName = path.basename(fileName);
+    if (sanitizedFileName !== fileName) {
+      throw new BadRequestException("Invalid file name");
+    }
+    return res.sendFile(sanitizedFileName, { root: "./uploads" });
   }
 }
