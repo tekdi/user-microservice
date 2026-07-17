@@ -26,6 +26,10 @@ import { LoggerUtil } from "src/common/logger/LoggerUtil";
 import { AutomaticMemberService } from "src/automatic-member/automatic-member.service";
 import { KafkaService } from "src/kafka/kafka.service";
 import { Console } from "console";
+import { CacheService } from "../cache/cache.service";
+import { hashCacheKey } from "../cache/cache-key.util";
+
+const COHORT_TTL_SECONDS = 300; // §2.1.3: cohort:{tenantId}, 5 min
 
 @Injectable()
 export class CohortService {
@@ -45,7 +49,8 @@ export class CohortService {
     private readonly academicYearService: AcademicYearService,
     private readonly cohortMembersService: CohortMembersService,
     private readonly automaticMemberService: AutomaticMemberService,
-    private readonly kafkaService: KafkaService
+    private readonly kafkaService: KafkaService,
+    private readonly cacheService: CacheService
   ) { }
 
   public async getCohortsDetails(requiredData, res) {
@@ -84,10 +89,28 @@ export class CohortService {
         );
       }
 
+      // §2.1.3: GET /cohort/cohortHierarchy/:id under cohort:{tenantId} (from
+      // the fetched row) + id + flags, dependsOn fieldsdef. The custom-field
+      // hydration is the cost this cache saves.
+      const tenantId = cohorts[0].tenantId;
       if (requiredData.getChildData) {
-        return this.handleChildDataResponse(cohorts, requiredData, res, apiId);
+        const payload = await this.cacheService.getOrLoad({
+          namespace: `cohort:${tenantId}`,
+          key: `read:${requiredData.cohortId}:child:cf${requiredData.customField ? 1 : 0}`,
+          dependsOn: ["fieldsdef"],
+          ttlSeconds: COHORT_TTL_SECONDS,
+          loader: () => this.buildChildData(cohorts, requiredData),
+        });
+        return APIResponse.success(res, apiId, payload, HttpStatus.OK, API_RESPONSES.COHORT_HIERARCHY);
       } else {
-        return this.handleCohortDataResponse(cohorts, res, apiId);
+        const payload = await this.cacheService.getOrLoad({
+          namespace: `cohort:${tenantId}`,
+          key: `read:${requiredData.cohortId}:nochild`,
+          dependsOn: ["fieldsdef"],
+          ttlSeconds: COHORT_TTL_SECONDS,
+          loader: () => this.buildCohortData(cohorts),
+        });
+        return APIResponse.success(res, apiId, payload, HttpStatus.OK, API_RESPONSES.COHORT_LIST);
       }
     } catch (error) {
       LoggerUtil.error(
@@ -106,7 +129,9 @@ export class CohortService {
     }
   }
 
-  private async handleCohortDataResponse(cohorts, res, apiId) {
+  // Pure data builder (was handleCohortDataResponse); the caller caches this
+  // and writes the response.
+  private async buildCohortData(cohorts) {
     const result = { cohortData: [] };
 
     for (const data of cohorts) {
@@ -122,16 +147,12 @@ export class CohortService {
     LoggerUtil.log(
       API_RESPONSES.COHORT_DATA_RESPONSE,
     )
-    return APIResponse.success(
-      res,
-      apiId,
-      result,
-      HttpStatus.OK,
-      API_RESPONSES.COHORT_LIST,
-    );
+    return result;
   }
 
-  private async handleChildDataResponse(cohorts, requiredData, res, apiId) {
+  // Pure data builder (was handleChildDataResponse); the caller caches this
+  // and writes the response.
+  private async buildChildData(cohorts, requiredData) {
     const resultDataList = [];
 
     for (const cohort of cohorts) {
@@ -156,13 +177,7 @@ export class CohortService {
       )
     }
 
-    return APIResponse.success(
-      res,
-      apiId,
-      resultDataList,
-      HttpStatus.OK,
-      API_RESPONSES.COHORT_HIERARCHY,
-    );
+    return resultDataList;
   }
 
   public async getCohortDataWithCustomfield(
@@ -434,6 +449,14 @@ export class CohortService {
         tenantId
       );
 
+      // §2.1.3 invalidation: create writes Cohort + FieldValues → bump
+      // cohort:{t}, the new cohort's cfields, and userfilter.
+      await this.cacheService.invalidate([
+        `cohort:${tenantId}`,
+        `cfields:${response.cohortId}`,
+        "userfilter",
+      ]);
+
       const resBody = new ReturnResponseBody({
         ...response,
         academicYearId: academicYearId,
@@ -501,10 +524,21 @@ export class CohortService {
         );
       }
 
+      const affectedCohorts = await this.cohortRepository.find({
+        where: { cohortId: In(uniqueCohortIds) },
+        select: ["tenantId"],
+      });
+
       const result = await this.cohortRepository.update(
         { cohortId: In(uniqueCohortIds) },
         { status, updatedBy }
       );
+
+      // §2.1.3: bulk status change → bump cohort:{t} for each affected tenant.
+      await this.cacheService.invalidate(
+        [...new Set(affectedCohorts.map((c) => c.tenantId).filter(Boolean))].map((t) => `cohort:${t}`)
+      );
+
       LoggerUtil.log(`Cohort statuses updated: ${result.affected} rows`);
       return APIResponse.success(
         res,
@@ -697,6 +731,14 @@ export class CohortService {
           }
         }
 
+        // §2.1.3 invalidation: update writes Cohort + FieldValues → bump
+        // cohort:{t}, this cohort's cfields, and userfilter.
+        await this.cacheService.invalidate([
+          `cohort:${existingCohorDetails.tenantId}`,
+          `cfields:${cohortId}`,
+          "userfilter",
+        ]);
+
         LoggerUtil.log(
           API_RESPONSES.COHORT_UPDATED_SUCCESSFULLY,
         )
@@ -745,7 +787,38 @@ export class CohortService {
     }
   }
 
+  // §2.1.3: POST /cohort/search under cohort:{tenantId} + body hash, 5 min,
+  // dependsOn fieldsdef. The loader computes the success payload; validation
+  // failures respond inside it and yield null, which is never cached.
   public async searchCohort(
+    tenantId: string,
+    academicYearId: string,
+    cohortSearchDto: CohortSearchDto,
+    response
+  ) {
+    const payload = await this.cacheService.getOrLoad({
+      namespace: `cohort:${tenantId}`,
+      key: `search:${hashCacheKey({ academicYearId, cohortSearchDto })}`,
+      dependsOn: ["fieldsdef"],
+      ttlSeconds: COHORT_TTL_SECONDS,
+      loader: async () => {
+        const result = await this.searchCohortData(tenantId, academicYearId, cohortSearchDto, response);
+        return response.headersSent ? null : result;
+      },
+    });
+    if (payload === null || payload === undefined) {
+      return; // an error response was already written inside the loader
+    }
+    return APIResponse.success(
+      response,
+      APIID.COHORT_LIST,
+      payload,
+      HttpStatus.OK,
+      "Cohort details fetched successfully"
+    );
+  }
+
+  private async searchCohortData(
     tenantId: string,
     academicYearId: string,
     cohortSearchDto: CohortSearchDto,
@@ -1009,13 +1082,10 @@ export class CohortService {
         }
       }
       if (results.cohortDetails.length > 0) {
-        return APIResponse.success(
-          response,
-          apiId,
-          { count, results },
-          HttpStatus.OK,
-          "Cohort details fetched successfully"
-        );
+        // Return the raw payload so the caching wrapper can store it; the
+        // outer searchCohort() writes the success response. Error branches
+        // still write directly (response.headersSent tells the wrapper).
+        return { count, results };
       } else {
         return APIResponse.error(
           response,
@@ -1057,6 +1127,10 @@ export class CohortService {
       const checkData = await this.checkIfCohortExist(cohortId);
 
       if (checkData === true) {
+        // Tenant read before the deletes so the invalidation below can key by it.
+        const cohortRow = await this.cohortRepository.findOne({ where: { cohortId } });
+        const cohortTenantId = cohortRow?.tenantId;
+
         const query = `UPDATE public."Cohort"
         SET "status" = 'archived',
         "updatedBy" = '${userId}'
@@ -1066,6 +1140,15 @@ export class CohortService {
         ]);
         await this.cohortMembersRepository.delete({ cohortId: cohortId });
         await this.fieldValuesRepository.delete({ itemId: cohortId });
+
+        // §2.1.3/§2.1.4 invalidation: delete archives the Cohort and removes
+        // its members + FieldValues → cohort:{t}, cohortmember:{t} (members
+        // gone), this cohort's cfields, and userfilter.
+        await this.cacheService.invalidate([
+          ...(cohortTenantId ? [`cohort:${cohortTenantId}`, `cohortmember:${cohortTenantId}`] : []),
+          `cfields:${cohortId}`,
+          "userfilter",
+        ]);
 
         // Send response to the client
         const apiResponse = APIResponse.success(
@@ -1198,41 +1281,34 @@ export class CohortService {
     const apiId = APIID.COHORT_LIST;
 
     try {
-      const checkAutomaticMember = await this.automaticMemberService.checkMemberById(requiredData.userId);
-      let findCohortId;
-      if (checkAutomaticMember) {
-        findCohortId = await this.automaticMemberCohortHierarchy(checkAutomaticMember, requiredData?.academicYearId);
-
-      } else {
-        findCohortId = await this.findCohortName(requiredData.userId, requiredData?.academicYearId);
-        if (!findCohortId.length) {
-          return APIResponse.error(
-            res,
-            apiId,
-            "BAD_REQUEST",
-            `No Cohort Found for this User ID`,
-            HttpStatus.BAD_REQUEST
-          );
+      // §2.1.3: GET /cohort/mycohorts/:userId under cohort:{tenantId} + userId
+      // + flags. dependsOn is cohortmember:{t} — NOT cohort:{t} — deliberately
+      // (§2.1.4 note): a membership change must refresh this read without a
+      // cohort:{t} bump. fieldsdef too, since custom fields are embedded.
+      // When tenantId isn't supplied, fall through uncached.
+      if (requiredData.tenantId) {
+        const payload = await this.cacheService.getOrLoad({
+          namespace: `cohort:${requiredData.tenantId}`,
+          key: `mycohorts:${requiredData.userId}:child${requiredData.getChildData ? 1 : 0}:cf${requiredData.customField ? 1 : 0}`,
+          dependsOn: [`cohortmember:${requiredData.tenantId}`, "fieldsdef"],
+          ttlSeconds: COHORT_TTL_SECONDS,
+          loader: () => this.buildMyCohortsData(requiredData),
+        });
+        if (payload === null || payload === undefined) {
+          return APIResponse.error(res, apiId, "BAD_REQUEST", `No Cohort Found for this User ID`, HttpStatus.BAD_REQUEST);
         }
+        return APIResponse.success(res, apiId, payload, HttpStatus.OK, API_RESPONSES.COHORT_HIERARCHY);
       }
-      const resultDataList = [];
 
-      for (const cohort of findCohortId) {
-        const resultData = {
-          cohortName: cohort?.name,
-          cohortId: cohort?.cohortId,
-          parentId: cohort?.parentId,
-          cohortMemberStatus: cohort?.cohortmemberstatus,
-          cohortMembershipId: cohort?.cohortMembershipId,
-          cohortStatus: cohort?.cohortstatus || cohort?.status,
-          type: cohort?.type,
-          customField: await this.fieldsService.getCustomFieldDetails(cohort.cohortId, 'Cohort'),
-          childData: requiredData.getChildData
-            ? await this.getCohortHierarchy(cohort.cohortId, requiredData.customField)
-            : []
-        };
-
-        resultDataList.push(resultData);
+      const resultDataList = await this.buildMyCohortsData(requiredData);
+      if (resultDataList === null) {
+        return APIResponse.error(
+          res,
+          apiId,
+          "BAD_REQUEST",
+          `No Cohort Found for this User ID`,
+          HttpStatus.BAD_REQUEST
+        );
       }
 
       return APIResponse.success(
@@ -1258,6 +1334,40 @@ export class CohortService {
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
+  }
+
+  // Pure data builder for mycohorts; returns null when the user has no cohort
+  // (the caller turns that into a 400). The automatic-member branch is
+  // preserved from the original getCohortHierarchyData.
+  private async buildMyCohortsData(requiredData) {
+    const checkAutomaticMember = await this.automaticMemberService.checkMemberById(requiredData.userId);
+    let findCohortId;
+    if (checkAutomaticMember) {
+      findCohortId = await this.automaticMemberCohortHierarchy(checkAutomaticMember, requiredData?.academicYearId);
+    } else {
+      findCohortId = await this.findCohortName(requiredData.userId, requiredData?.academicYearId);
+      if (!findCohortId.length) {
+        return null;
+      }
+    }
+
+    const resultDataList = [];
+    for (const cohort of findCohortId) {
+      resultDataList.push({
+        cohortName: cohort?.name,
+        cohortId: cohort?.cohortId,
+        parentId: cohort?.parentId,
+        cohortMemberStatus: cohort?.cohortmemberstatus,
+        cohortMembershipId: cohort?.cohortMembershipId,
+        cohortStatus: cohort?.cohortstatus || cohort?.status,
+        type: cohort?.type,
+        customField: await this.fieldsService.getCustomFieldDetails(cohort.cohortId, 'Cohort'),
+        childData: requiredData.getChildData
+          ? await this.getCohortHierarchy(cohort.cohortId, requiredData.customField)
+          : []
+      });
+    }
+    return resultDataList;
   }
 
   /**

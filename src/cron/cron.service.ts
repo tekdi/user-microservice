@@ -21,6 +21,7 @@ import { Tenant } from "../tenant/entities/tenent.entity";
 import { UserRoleMapping } from "../rbac/assign-role/entities/assign-role.entity";
 import { SSO_DEFAULTS } from "../constants/sso.constants";
 import { AcademicYear } from "src/academicyears/entities/academicyears-entity";
+import { CacheService } from "../cache/cache.service";
 
 @Injectable()
 export class CronService {
@@ -49,7 +50,8 @@ export class CronService {
     private readonly fieldsService: FieldsService,
     private readonly cohortMembersService: CohortMembersService,
     private readonly userTenantMappingService: UserTenantMappingService,
-    private readonly kafkaService: KafkaService
+    private readonly kafkaService: KafkaService,
+    private readonly cacheService: CacheService
   ) {}
 
   // @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
@@ -349,6 +351,11 @@ export class CronService {
                       updatedAt: new Date(),
                     }
                   );
+                  await this.cacheService.invalidate([
+                    `usertenant:${user.userId}`,
+                    `userlist:${tenantId}`,
+                    `cohortmember:${tenantId}`,
+                  ]);
 
                   // Publish Kafka event for user tenant mapping status update
                   try {
@@ -514,6 +521,12 @@ export class CronService {
               `Created role mapping for user ${user.userId} (${user.email}) with learner role`
             );
           }
+
+          await this.cacheService.invalidate([
+            `usertenant:${user.userId}`,
+            `userroles:${user.userId}`,
+            `userlist:${pragyanpathTenantId}`,
+          ]);
 
           // Step 4.5: Publish Kafka events
           try {

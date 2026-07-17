@@ -16,6 +16,7 @@ import APIResponse from "src/common/responses/response";
 import { Response } from "express";
 import { APIID } from "src/common/utils/api-id.config";
 import { validate as uuidValidate } from 'uuid';
+import { CacheService } from "../../cache/cache.service";
 
 
 @Injectable()
@@ -26,7 +27,8 @@ export class RoleService {
     @InjectRepository(UserRoleMapping)
     private readonly userRoleMappingRepository: Repository<UserRoleMapping>,
     @InjectRepository(RolePrivilegeMapping)
-    private readonly roleprivilegeMappingRepository: Repository<RolePrivilegeMapping>
+    private readonly roleprivilegeMappingRepository: Repository<RolePrivilegeMapping>,
+    private readonly cacheService: CacheService
   ) { }
   public async createRole(
     request: any,
@@ -331,6 +333,13 @@ export class RoleService {
           HttpStatus.NOT_FOUND
         );
       }
+      // Affected user ids must be read before the cascade delete — they name
+      // the userroles:{userId} namespaces to bump afterwards.
+      const affectedMappings = await this.userRoleMappingRepository.find({
+        where: { roleId: roleId },
+        select: ["userId"],
+      });
+
       // Delete the role
       const response = await this.roleRepository.delete(roleId);
 
@@ -344,6 +353,11 @@ export class RoleService {
         await this.userRoleMappingRepository.delete({
           roleId: roleId,
         });
+
+      await this.cacheService.invalidate([
+        ...[...new Set(affectedMappings.map((m) => m.userId))].map((id) => `userroles:${id}`),
+        ...(roleToDelete.tenantId ? [`userlist:${roleToDelete.tenantId}`] : []),
+      ]);
       return APIResponse.success(
         res,
         apiId,

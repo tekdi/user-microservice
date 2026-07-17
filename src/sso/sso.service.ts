@@ -6,6 +6,7 @@ import { UserCreateDto } from '../user/dto/user-create.dto';
 import { UserService } from '../user/user.service';
 import { RoleService } from '../rbac/role/role.service';
 import { FieldsService } from '../fields/fields.service';
+import { CacheService } from '../cache/cache.service';
 import { SSO_DEFAULTS } from '../constants/sso.constants';
 import { UserTenantMappingService } from 'src/userTenantMapping/user-tenant-mapping.service';
 
@@ -56,7 +57,8 @@ export class SsoService {
     private readonly userService: UserService,
     private readonly roleService: RoleService,
     private readonly fieldsService: FieldsService,
-    private readonly userTenantMappingService: UserTenantMappingService
+    private readonly userTenantMappingService: UserTenantMappingService,
+    private readonly cacheService: CacheService
   ) {
     // Configuration from environment variables
     this.newtonApiEndpoint =this.configService.get<string>('KEYCLOAK')
@@ -348,8 +350,8 @@ export class SsoService {
             const fieldId = await this.fieldsService.getFieldIdByLabel(fieldLabel, ssoRequestDto.tenantId);
             if (fieldId) {
               await this.fieldsService.updateUserCustomFields(
-                createdUser.userId, 
-                { fieldId, value: fieldValue }, 
+                createdUser.userId,
+                { fieldId, value: fieldValue },
                 null,
                 {
                   tenantId: ssoRequestDto.tenantId,
@@ -361,6 +363,7 @@ export class SsoService {
             }
           }
         }
+        await this.cacheService.invalidate([`ufields:${createdUser.userId}`, "userfilter"]);
       }
       // Map Manager Role as well
       if(newtonResponse.newtonData.IS_MANAGER?.toUpperCase() === 'YES'){
@@ -549,6 +552,7 @@ export class SsoService {
           }
         }
       }
+      await this.cacheService.invalidate([`ufields:${userId}`, "userfilter"]);
       this.logger.log(
         `Successfully updated newtonData fields for user: ${userId}`,
         'SSO_SERVICE'

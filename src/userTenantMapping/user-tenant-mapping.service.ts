@@ -19,6 +19,7 @@ import { isUUID } from "class-validator";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
 import { UserService } from "src/user/user.service";
 import { FieldsService } from "src/fields/fields.service";
+import { CacheService } from "../cache/cache.service";
 import { KafkaService } from "src/kafka/kafka.service";
 import { API_RESPONSES } from "src/common/utils/response.messages";
 
@@ -37,7 +38,8 @@ export class UserTenantMappingService {
     private userRoleMappingRepository: Repository<UserRoleMapping>,
     private userService: UserService,
     private fieldsService: FieldsService,
-    private kafkaService: KafkaService
+    private kafkaService: KafkaService,
+    private readonly cacheService: CacheService
   ) { }
 
   public async validateUserTenantMapping(
@@ -206,6 +208,7 @@ export class UserTenantMappingService {
               additionalData
             );
           }
+          await this.cacheService.invalidate([`ufields:${userId}`, "userfilter"]);
         }
       }
 
@@ -299,7 +302,14 @@ export class UserTenantMappingService {
 
       query += ` ORDER BY UTM."createdAt" DESC`;
 
-      const mappings = await this.userTenantMappingRepository.query(query, [userId]);
+      // §2.1.5: usertenant:{userId}, 10 min. An empty mapping list is never
+      // cached (no negative caching), so a fresh assignment shows up at once.
+      const mappings = await this.cacheService.getOrLoad<any[]>({
+        namespace: `usertenant:${userId}`,
+        key: `mappings:${includeArchived ? "all" : "active"}`,
+        ttlSeconds: 600,
+        loader: () => this.userTenantMappingRepository.query(query, [userId]),
+      });
 
       if (mappings.length === 0) {
         return APIResponse.error(
@@ -371,6 +381,8 @@ export class UserTenantMappingService {
       }
 
       await this.userTenantMappingRepository.save(existingMapping);
+
+      await this.cacheService.invalidate([`usertenant:${userId}`, `userlist:${tenantId}`]);
 
       LoggerUtil.log(
         API_RESPONSES.LOG_STATUS_UPDATED_FOR_USER_TENANT(userId, tenantId),

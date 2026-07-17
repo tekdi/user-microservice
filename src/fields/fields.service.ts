@@ -25,13 +25,20 @@ import { LoggerUtil } from "src/common/logger/LoggerUtil";
 import { API_RESPONSES } from "@utils/response.messages";
 import { FieldValuesDeleteDto } from "./dto/field-values-delete.dto";
 import { check } from "prettier";
+import { CacheService } from "../cache/cache.service";
+import { hashCacheKey } from "../cache/cache-key.util";
+
+const UFIELDS_TTL_SECONDS = 3600; // §2.1.1 row 1: ufields:{userId}, 1 h
+const USERFILTER_TTL_SECONDS = 300; // §2.1.1 row 2: userfilter, 5 min
+
 @Injectable()
 export class FieldsService {
   constructor(
     @InjectRepository(Fields)
     private fieldsRepository: Repository<Fields>,
     @InjectRepository(FieldValues)
-    private fieldsValuesRepository: Repository<FieldValues>
+    private fieldsValuesRepository: Repository<FieldValues>,
+    private readonly cacheService: CacheService
   ) { }
 
   async getFormCustomField(requiredData, response) {
@@ -455,6 +462,9 @@ export class FieldsService {
       }
 
       const result = await this.fieldsRepository.save(fieldsData);
+      // §2.1.2: a definition change alters processed values for ALL owners —
+      // one fieldsdef epoch bump covers every ufields/cfields/cohort/member read.
+      await this.cacheService.invalidate("fieldsdef");
 
       return await APIResponse.success(
         response,
@@ -633,6 +643,7 @@ export class FieldsService {
       }
 
       const result = await this.fieldsRepository.update(fieldId, fieldsData);
+      await this.cacheService.invalidate("fieldsdef");
       return await APIResponse.success(
         response,
         apiId,
@@ -896,6 +907,19 @@ export class FieldsService {
           `Fields not found or already exist`,
           HttpStatus.NOT_FOUND
         );
+      }
+      if (result) {
+        // itemId here may be a userId or a cohortId; bumping ufields for a
+        // cohortId is harmless (nothing ever reads ufields with a cohortId).
+        // userfilter covers both contexts, and userlist:{t} is bumped for
+        // each tenant the item maps to (empty when itemId isn't a user).
+        const tenantIds = await this.getUserTenantIds(fieldValuesDto.itemId);
+        await this.cacheService.invalidate([
+          `ufields:${fieldValuesDto.itemId}`,
+          `cfields:${fieldValuesDto.itemId}`,
+          "userfilter",
+          ...tenantIds.map((t) => `userlist:${t}`),
+        ]);
       }
       return APIResponse.success(
         res,
@@ -1432,6 +1456,7 @@ export class FieldsService {
         }
       }
       if (result.affected > 0) {
+        await this.cacheService.invalidate("fieldsdef");
         return await APIResponse.success(
           response,
           apiId,
@@ -1538,15 +1563,26 @@ export class FieldsService {
   }
 
   // OPTIMIZED VERSION - Much faster alternative to avoid JSON aggregation
+  // §2.1.1 row 2 (pattern C): one shared userfilter cache for all three call
+  // sites (user search, cohort search, cron). A null result (no filters or no
+  // matches) is never cached — rule 5.
   async filterUserUsingCustomFieldsOptimized(context: string, stateDistBlockData: any) {
     if (context !== "COHORT" && context !== "USERS") {
       return null;
     }
-
-    // No filters provided — return null so callers treat it as no custom field constraint
     if (!stateDistBlockData || Object.keys(stateDistBlockData).length === 0) {
       return null;
     }
+
+    return this.cacheService.getOrLoad<string[]>({
+      namespace: "userfilter",
+      key: `${context}:${hashCacheKey(stateDistBlockData)}`,
+      ttlSeconds: USERFILTER_TTL_SECONDS,
+      loader: () => this.filterUserUsingCustomFieldsUncached(context, stateDistBlockData),
+    });
+  }
+
+  private async filterUserUsingCustomFieldsUncached(context: string, stateDistBlockData: any) {
 
     const idColumn = context === "COHORT" ? `c."cohortId"` : `u."userId"`;
     const baseTable = context === "COHORT" ? `"Cohort" c` : `"Users" u`;
@@ -1925,6 +1961,38 @@ export class FieldsService {
     if (!itemIds || itemIds.length === 0) {
       return {};
     }
+
+    // §2.1.1 row 1 / §2.1.3 row 5: per-owner bulk hydration — ufields:{userId}
+    // for Users, cfields:{cohortId} for Cohort. Both declare dependsOn
+    // fieldsdef (§2.1.2): a definition change re-processes every owner's
+    // values, so the epoch bump makes all entries stale at once.
+    if (tableName === "Users" || tableName === "Cohort") {
+      const nsPrefix = tableName === "Users" ? "ufields" : "cfields";
+      const hydrated = await this.cacheService.bulkGetOrLoad<any[]>({
+        ids: itemIds,
+        namespaceFor: (id) => `${nsPrefix}:${id}`,
+        dependsOn: ["fieldsdef"],
+        ttlSeconds: UFIELDS_TTL_SECONDS,
+        loader: async (missingIds) => {
+          const fetched = await this.fetchBulkCustomFieldDetails(missingIds, tableName);
+          return new Map(Object.entries(fetched));
+        },
+      });
+
+      const result: Record<string, any[]> = {};
+      itemIds.forEach((id) => {
+        result[id] = hydrated.get(id) ?? [];
+      });
+      return result;
+    }
+
+    return this.fetchBulkCustomFieldDetails(itemIds, tableName);
+  }
+
+  private async fetchBulkCustomFieldDetails(
+    itemIds: string[],
+    tableName: string
+  ): Promise<Record<string, any[]>> {
     let joinCond: string;
     if (tableName === "Users") {
       joinCond = `fv."itemId" = u."userId"`;
@@ -2075,6 +2143,26 @@ export class FieldsService {
     }
   }
 
+  /**
+   * Tenants a user maps to — used to bump userlist:{t} from write paths that
+   * only know the userId. Empty for non-user itemIds. Never throws: a failed
+   * lookup must not turn an already-committed write into an error response
+   * (the userfilter/ufields bumps still run; only the userlist bump is lost,
+   * and its 3-min TTL bounds the exposure).
+   */
+  private async getUserTenantIds(userId: string): Promise<string[]> {
+    try {
+      const rows = await this.fieldsValuesRepository.query(
+        `SELECT "tenantId" FROM public."UserTenantMapping" WHERE "userId" = $1`,
+        [userId]
+      );
+      return rows.map((r) => r.tenantId).filter(Boolean);
+    } catch (error) {
+      LoggerUtil.warn(`Tenant lookup for cache invalidation failed: ${error.message}`, "FieldsService");
+      return [];
+    }
+  }
+
   public async getFieldsByIds(fieldIds: string[]) {
     return this.fieldsRepository.find({
       where: {
@@ -2115,6 +2203,15 @@ export class FieldsService {
           }, {})
         )
         .execute();
+
+      const deletedItemIds = [...new Set(conditions.map((c) => c.itemId))];
+      const tenantIdLists = await Promise.all(deletedItemIds.map((id) => this.getUserTenantIds(id)));
+      await this.cacheService.invalidate([
+        ...deletedItemIds.map((id) => `ufields:${id}`),
+        ...deletedItemIds.map((id) => `cfields:${id}`),
+        "userfilter",
+        ...[...new Set(tenantIdLists.flat())].map((t) => `userlist:${t}`),
+      ]);
 
       return await APIResponse.success(
         response,
