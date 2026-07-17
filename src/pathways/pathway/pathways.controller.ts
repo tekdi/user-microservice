@@ -674,7 +674,7 @@ export class PathwaysController {
             courseId: "uuid",
             status: "ACTIVE",
             activatedAt: "2025-07-20T00:00:00.000Z",
-            expiresAt: "2026-07-20T00:00:00.000Z",
+            volunteerValidUntil: "2026-12-31T23:59:59.000Z",
           },
         ],
       },
@@ -697,43 +697,14 @@ export class PathwaysController {
   }
 
   /**
-   * Manual trigger for the volunteer pathway expiry cron.
-   * Runs the same logic as the scheduled 02:00 job — transitions COMPLETED records
-   * with passed expires_at to EXPIRED. Use for testing or urgent runs.
-   */
-  @Post("cron/expire-volunteer-pathways")
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: "Manually trigger volunteer pathway expiry check",
-    description: "Runs the same logic as the daily 02:00 cron: marks COMPLETED volunteer pathway records as EXPIRED when their expires_at has passed.",
-  })
-  @ApiHeader({ name: "Authorization", required: true })
-  @ApiHeader({ name: "tenantid", required: true })
-  @ApiResponse({
-    status: 200,
-    description: "Expiry check completed",
-    schema: { example: { expired: 3 } },
-  })
-  async triggerVolunteerExpiry(
-    @Headers("tenantid") tenantId: string,
-    @Res() response: Response
-  ): Promise<Response> {
-    if (!tenantId || !isUUID(tenantId)) {
-      throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
-    }
-    return this.pathwaysService.triggerVolunteerExpiry(response);
-  }
-
-  /**
    * Called by LMS service when a course track is marked COMPLETED.
-   * Finds the VOLUNTEER pathway history for this user+course,
-   * marks it COMPLETED, sets expires_at, and assigns tags to user.auto_tags.
+   * Finds the VOLUNTEER pathway history for this user+course and marks it COMPLETED.
    */
   @Post("course-completed")
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: "LMS course completion API",
-    description: "Called by LMS service when a course is completed. Marks the linked VOLUNTEER pathway history as COMPLETED and assigns tags to the user.",
+    description: "Called by LMS service when a course is completed. Marks the linked VOLUNTEER pathway history as COMPLETED.",
   })
   @ApiHeader({ name: "tenantid", required: true })
   @ApiHeader({ name: "organisationid", required: false })
@@ -753,15 +724,14 @@ export class PathwaysController {
   }
 
   /**
-   * Update status of a user_pathway_history record (COMPLETED, WITHDRAWN, EXPIRED).
-   * Called by LMS service on course+assessment completion, or admin for manual withdrawal.
-   * On COMPLETED: automatically assigns the corresponding volunteer tag to user's auto_tags.
+   * Manual status update for a user_pathways record (COMPLETED, WITHDRAWN, INACTIVE).
+   * Use for admin-driven withdrawal or manual corrections.
    */
   @Patch("history/:id/status")
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: "Update volunteer pathway history status",
-    description: "Transitions a user_pathway_history record from ACTIVE to COMPLETED, WITHDRAWN, or EXPIRED. Note: email notification and volunteer tag assignment are handled automatically by LMS via POST /users/course-completion on course completion.",
+    description: "Transitions a user_pathways record from ACTIVE to COMPLETED, WITHDRAWN, or INACTIVE. Email notification is handled automatically by LMS via POST /pathway/course-completed on course completion.",
   })
   @ApiHeader({ name: "Authorization", required: true })
   @ApiHeader({ name: "tenantid", required: true })
@@ -779,7 +749,7 @@ export class PathwaysController {
     },
   })
   @ApiNotFoundResponse({ description: "History record not found" })
-  @ApiBadRequestResponse({ description: "Invalid status transition (only ACTIVE → COMPLETED/WITHDRAWN/EXPIRED allowed)" })
+  @ApiBadRequestResponse({ description: "Invalid status transition (only ACTIVE → COMPLETED/WITHDRAWN/INACTIVE allowed)" })
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   async updateHistoryStatus(
     @Param("id", ParseUUIDPipe) id: string,

@@ -163,7 +163,6 @@ export const APIID = {
   VOLUNTEER_CHECK_ELIGIBILITY: "api.volunteer.pathway.check-eligibility",
   VOLUNTEER_ACTIVE_PATHWAYS: "api.volunteer.pathway.active.list",
   VOLUNTEER_HISTORY_STATUS_UPDATE: "api.volunteer.pathway.history.status.update",
-  VOLUNTEER_EXPIRY_TRIGGER: "api.volunteer.pathway.cron.expire",
   PATHWAY_COURSE_COMPLETION_WEBHOOK: "api.pathway.webhook.course-completed",
 
   // Content Management APIs

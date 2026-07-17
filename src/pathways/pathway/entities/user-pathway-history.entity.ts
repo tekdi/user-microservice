@@ -13,17 +13,17 @@ import { Pathway } from "./pathway.entity";
 export enum PathwayHistoryStatus {
     ACTIVE = 'ACTIVE',
     COMPLETED = 'COMPLETED',
-    EXPIRED = 'EXPIRED',
     WITHDRAWN = 'WITHDRAWN',
     INACTIVE = 'INACTIVE',
 }
 
-@Entity("user_pathway_history")
+@Entity("user_pathways")
 // Unique index dropped: VOLUNTEER pathways allow multiple active records per user.
 // One-active-STANDARD rule is now enforced in application logic in PathwaysService.
-@Index("ix_user_pathway_history_user_id", ["user_id"])
-@Index("ix_user_pathway_history_pathway_id", ["pathway_id"])
-@Index("ix_user_pathway_history_status", ["status"])
+@Index("ix_user_pathways_user_id", ["user_id"])
+@Index("ix_user_pathways_pathway_id", ["pathway_id"])
+@Index("ix_user_pathways_status", ["status"])
+@Index("ix_user_pathways_user_pathway_status", ["user_id", "pathway_id", "status"])
 export class UserPathwayHistory {
     @PrimaryGeneratedColumn("uuid")
     id: string;
@@ -53,6 +53,9 @@ export class UserPathwayHistory {
 
     @Column({ type: 'timestamp', nullable: true })
     expires_at: Date | null;
+
+    @Column({ type: 'timestamptz', nullable: true })
+    completed_at: Date | null;
 
     @CreateDateColumn({
         type: "timestamp",

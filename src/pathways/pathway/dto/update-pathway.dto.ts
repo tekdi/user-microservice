@@ -2,9 +2,9 @@ import { ApiPropertyOptional } from "@nestjs/swagger";
 import {
   IsString,
   IsBoolean,
-  IsNumber,
   IsOptional,
   MaxLength,
+  IsNumber,
   Min,
   IsArray,
   IsUUID,
@@ -44,11 +44,7 @@ export class UpdatePathwayDto {
   image_url?: string | null;
 
   @ApiPropertyOptional({
-    description: 'Array of tag IDs from tags table (stored as PostgreSQL text[] array)',
-    example: [
-      'a1b2c3d4-e111-2222-3333-444455556666',
-      'b2c3d4e5-f111-2222-3333-444455556777',
-    ],
+    description: 'Array of tag IDs from tags table',
     type: [String],
   })
   @Expose()
@@ -97,26 +93,24 @@ export class UpdatePathwayDto {
   allow_multiple_active?: boolean;
 
   @ApiPropertyOptional({
-    description: "Duration in months for volunteer status validity.",
-    example: 12,
+    description: "Volunteer pathway subtype (e.g. CAL, CL, DL). Applicable for VOLUNTEER type only.",
+    example: "CAL",
+    maxLength: 50,
   })
   @Expose()
-  @Type(() => Number)
-  @IsNumber()
-  @Min(1)
   @IsOptional()
-  volunteer_term_months?: number;
+  @IsString()
+  @MaxLength(50)
+  subtype?: string | null;
 
   @ApiPropertyOptional({
-    description: "Days after expiry before reapplication is allowed.",
-    example: 365,
+    description: "Datetime until which completed participants are considered current volunteers (batch-level). Pass null to clear.",
+    example: "2026-12-31T23:59:59Z",
   })
   @Expose()
-  @Type(() => Number)
-  @IsNumber()
-  @Min(1)
   @IsOptional()
-  reapply_after_days?: number;
+  @IsDateString()
+  volunteer_valid_until?: string | null;
 
   @ApiPropertyOptional({
     description: "Date from which applications open. Applicable for VOLUNTEER type only; pass null to clear.",
@@ -135,13 +129,4 @@ export class UpdatePathwayDto {
   @IsOptional()
   @IsDateString()
   application_closing_date?: string | null;
-
-  @ApiPropertyOptional({
-    description: "Date on which applicants will be notified of outcome. Applicable for VOLUNTEER type only; pass null to clear.",
-    example: "2025-04-15T00:00:00Z",
-  })
-  @Expose()
-  @IsOptional()
-  @IsDateString()
-  notification_date?: string | null;
 }

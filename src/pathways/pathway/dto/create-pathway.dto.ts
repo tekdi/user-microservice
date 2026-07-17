@@ -3,9 +3,9 @@ import {
   IsString,
   IsNotEmpty,
   IsBoolean,
-  IsNumber,
   IsOptional,
   MaxLength,
+  IsNumber,
   Min,
   IsArray,
   IsUUID,
@@ -49,23 +49,17 @@ export class CreatePathwayDto {
   description?: string;
 
   @ApiPropertyOptional({
-    description: 'Array of tag IDs from tags table (stored as PostgreSQL text[] array)',
-    example: [
-      'a1b2c3d4-e111-2222-3333-444455556666',
-      'b2c3d4e5-f111-2222-3333-444455556777',
-    ],
-    type: [String],
-  })
-
-   @ApiPropertyOptional({
-    description: "Image URL (from presigned S3 upload). upload to S3, then send the returned fileUrl here.",
+    description: "Image URL (from presigned S3 upload). Upload to S3, then send the returned fileUrl here.",
   })
   @Expose()
   @IsOptional()
   @IsString()
   image_url?: string;
 
-
+  @ApiPropertyOptional({
+    description: 'Array of tag IDs from tags table',
+    type: [String],
+  })
   @Expose()
   @IsOptional()
   @IsArray({ message: 'tags must be an array' })
@@ -84,7 +78,7 @@ export class CreatePathwayDto {
   @Min(0, { message: "Display order must be a non-negative number" })
   display_order?: number;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: "Whether the pathway is active",
     example: true,
     default: true,
@@ -116,26 +110,27 @@ export class CreatePathwayDto {
   allow_multiple_active?: boolean;
 
   @ApiPropertyOptional({
-    description: "Duration in months for which volunteer status is valid after completion. Required when type = VOLUNTEER.",
-    example: 12,
+    description: "Volunteer pathway subtype (e.g. CAL, CL, DL). Required when type = VOLUNTEER.",
+    example: "CAL",
+    maxLength: 50,
   })
   @Expose()
-  @Type(() => Number)
-  @IsNumber()
-  @Min(1)
+  @IsString()
+  @MaxLength(50)
   @ValidateIf((o) => o.type === PathwayType.VOLUNTEER)
-  volunteer_term_months?: number;
+  @IsNotEmpty({ message: "subtype is required for VOLUNTEER pathways" })
+  @IsOptional()
+  subtype?: string;
 
   @ApiPropertyOptional({
-    description: "Number of days after expiry/completion before a user can reapply to this volunteer pathway.",
-    example: 365,
+    description: "Datetime until which completed participants are considered current volunteers (batch-level). Applicable for VOLUNTEER type only.",
+    example: "2026-12-31T23:59:59Z",
   })
   @Expose()
-  @Type(() => Number)
-  @IsNumber()
-  @Min(1)
   @IsOptional()
-  reapply_after_days?: number;
+  @IsDateString()
+  @ValidateIf((o) => o.type === PathwayType.VOLUNTEER || o.volunteer_valid_until !== undefined)
+  volunteer_valid_until?: string;
 
   @ApiPropertyOptional({
     description: "Date from which applications open for this volunteer pathway. Applicable for VOLUNTEER type only.",
@@ -156,14 +151,4 @@ export class CreatePathwayDto {
   @IsDateString()
   @ValidateIf((o) => o.type === PathwayType.VOLUNTEER || o.application_closing_date !== undefined)
   application_closing_date?: string;
-
-  @ApiPropertyOptional({
-    description: "Date on which applicants will be notified of the outcome for this volunteer pathway. Applicable for VOLUNTEER type only.",
-    example: "2025-04-15T00:00:00Z",
-  })
-  @Expose()
-  @IsOptional()
-  @IsDateString()
-  @ValidateIf((o) => o.type === PathwayType.VOLUNTEER || o.notification_date !== undefined)
-  notification_date?: string;
 }

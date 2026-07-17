@@ -5,13 +5,13 @@ import { PathwayHistoryStatus } from '../entities/user-pathway-history.entity';
 
 export class UpdateHistoryStatusDto {
   @ApiProperty({
-    description: "New status for the pathway history record. COMPLETED triggers volunteer tag assignment on the user.",
-    enum: [PathwayHistoryStatus.COMPLETED, PathwayHistoryStatus.WITHDRAWN, PathwayHistoryStatus.EXPIRED, PathwayHistoryStatus.INACTIVE],
+    description: "New status for the pathway history record.",
+    enum: [PathwayHistoryStatus.COMPLETED, PathwayHistoryStatus.WITHDRAWN, PathwayHistoryStatus.INACTIVE],
     example: PathwayHistoryStatus.COMPLETED,
   })
   @Expose()
-  @IsEnum([PathwayHistoryStatus.COMPLETED, PathwayHistoryStatus.WITHDRAWN, PathwayHistoryStatus.EXPIRED, PathwayHistoryStatus.INACTIVE], {
-    message: "status must be one of: COMPLETED, WITHDRAWN, EXPIRED, INACTIVE",
+  @IsEnum([PathwayHistoryStatus.COMPLETED, PathwayHistoryStatus.WITHDRAWN, PathwayHistoryStatus.INACTIVE], {
+    message: "status must be one of: COMPLETED, WITHDRAWN, INACTIVE",
   })
   @IsNotEmpty()
   status: PathwayHistoryStatus;

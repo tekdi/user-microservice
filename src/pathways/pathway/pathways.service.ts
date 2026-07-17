@@ -1,7 +1,7 @@
 import * as crypto from 'crypto';
 import { Injectable, HttpStatus, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In, DataSource, Like, ILike, Not, EntityManager } from 'typeorm';
+import { Repository, In, DataSource, Like, ILike, Not } from 'typeorm';
 import { Pathway, PathwayType } from './entities/pathway.entity';
 import { Tag } from '../tags/entities/tag.entity';
 import { CreatePathwayDto } from './dto/create-pathway.dto';
@@ -25,7 +25,6 @@ import { Response } from 'express';
 import { S3StorageProvider } from '../../storage/providers/s3-storage.provider';
 import { ConfigService } from '@nestjs/config';
 import { CacheService } from 'src/cache/cache.service';
-import { Cron } from '@nestjs/schedule';
 import { CourseCompletionWebhookDto } from './dto/course-completion-webhook.dto';
 
 @Injectable()
@@ -426,11 +425,10 @@ export class PathwaysService {
             image_url: imageUrl,
             type: effectiveType,
             allow_multiple_active: createPathwayDto.allow_multiple_active ?? false,
-            volunteer_term_months: createPathwayDto.volunteer_term_months ?? null,
-            reapply_after_days: createPathwayDto.reapply_after_days ?? null,
+            subtype: isVolunteer ? (createPathwayDto.subtype ?? null) : null,
+            volunteer_valid_until: isVolunteer ? (createPathwayDto.volunteer_valid_until ?? null) : null,
             application_opening_date: isVolunteer ? (createPathwayDto.application_opening_date ?? null) : null,
             application_closing_date: isVolunteer ? (createPathwayDto.application_closing_date ?? null) : null,
-            notification_date: isVolunteer ? (createPathwayDto.notification_date ?? null) : null,
             created_by: userId,
             updated_by: userId,
           };
@@ -455,11 +453,10 @@ export class PathwaysService {
             image_url: savedData.image_url,
             type: savedData.type,
             allow_multiple_active: savedData.allow_multiple_active,
-            volunteer_term_months: savedData.volunteer_term_months,
-            reapply_after_days: savedData.reapply_after_days,
+            subtype: savedData.subtype ?? null,
+            volunteer_valid_until: savedData.volunteer_valid_until ?? null,
             application_opening_date: savedData.application_opening_date ?? null,
             application_closing_date: savedData.application_closing_date ?? null,
-            notification_date: savedData.notification_date ?? null,
             created_at: savedData.created_at,
           };
 
@@ -650,6 +647,12 @@ export class PathwaysService {
             display_order: item.display_order,
             is_active: item.is_active,
             image_url: item.image_url,
+            type: item.type,
+            allow_multiple_active: item.allow_multiple_active,
+            subtype: item.subtype ?? null,
+            volunteer_valid_until: item.volunteer_valid_until ?? null,
+            application_opening_date: item.application_opening_date ?? null,
+            application_closing_date: item.application_closing_date ?? null,
             created_at: item.created_at,
             video_count: counts?.videoCount ?? 0,
             resource_count: counts?.resourceCount ?? 0,
@@ -706,6 +709,9 @@ export class PathwaysService {
         if (filters.type) {
           queryBuilder.andWhere("pathway.type = :type", { type: filters.type });
         }
+        if (filters.subtype) {
+          queryBuilder.andWhere("pathway.subtype = :subtype", { subtype: filters.subtype });
+        }
 
         // Apply ordering
         queryBuilder.orderBy("pathway.display_order", "ASC");
@@ -727,6 +733,9 @@ export class PathwaysService {
         }
         if (filters.type) {
           whereCondition.type = filters.type;
+        }
+        if (filters.subtype) {
+          whereCondition.subtype = filters.subtype;
         }
 
         // OPTIMIZED: Single query with count and data using findAndCount
@@ -803,11 +812,10 @@ export class PathwaysService {
           image_url: item.image_url,
           type: item.type,
           allow_multiple_active: item.allow_multiple_active,
-          volunteer_term_months: item.volunteer_term_months,
-          reapply_after_days: item.reapply_after_days,
+          subtype: item.subtype ?? null,
+          volunteer_valid_until: item.volunteer_valid_until ?? null,
           application_opening_date: item.application_opening_date ?? null,
           application_closing_date: item.application_closing_date ?? null,
-          notification_date: item.notification_date ?? null,
           created_at: item.created_at,
           video_count: videoCount,
           resource_count: resourceCount,
@@ -832,9 +840,6 @@ export class PathwaysService {
           items: transformedItems.map(({ video_count, resource_count, total_items, tags, ...item }) => ({
             ...item,
             tag_ids: (tags || []).map((t: { id: string }) => t.id),
-            application_opening_date: (item as any).application_opening_date ?? null,
-            application_closing_date: (item as any).application_closing_date ?? null,
-            notification_date: (item as any).notification_date ?? null,
           })),
         };
         await this.cacheService.set(cacheKey, resultForCache, pathwayListCacheTtl);
@@ -920,11 +925,10 @@ export class PathwaysService {
         image_url: pathwayData.image_url,
         type: pathwayData.type,
         allow_multiple_active: pathwayData.allow_multiple_active,
-        volunteer_term_months: pathwayData.volunteer_term_months,
-        reapply_after_days: pathwayData.reapply_after_days,
+        subtype: pathwayData.subtype ?? null,
+        volunteer_valid_until: pathwayData.volunteer_valid_until ?? null,
         application_opening_date: pathwayData.application_opening_date ?? null,
         application_closing_date: pathwayData.application_closing_date ?? null,
-        notification_date: pathwayData.notification_date ?? null,
         created_at: pathwayData.created_at,
       };
 
@@ -1076,14 +1080,8 @@ export class PathwaysService {
       if (updatePathwayDto.allow_multiple_active !== undefined) {
         updateData.allow_multiple_active = updatePathwayDto.allow_multiple_active;
       }
-      if (updatePathwayDto.volunteer_term_months !== undefined) {
-        updateData.volunteer_term_months = updatePathwayDto.volunteer_term_months;
-      }
-      if (updatePathwayDto.reapply_after_days !== undefined) {
-        updateData.reapply_after_days = updatePathwayDto.reapply_after_days;
-      }
 
-      // Date fields only apply to VOLUNTEER pathways.
+      // Date/volunteer fields only apply to VOLUNTEER pathways.
       // Effective type = incoming type change (if any) else existing type.
       const effectiveType = updatePathwayDto.type ?? existingPathway.type;
       const isVolunteer = effectiveType === PathwayType.VOLUNTEER;
@@ -1099,20 +1097,24 @@ export class PathwaysService {
           );
         }
 
+        if (updatePathwayDto.subtype !== undefined) {
+          updateData.subtype = updatePathwayDto.subtype ?? null;
+        }
+        if (updatePathwayDto.volunteer_valid_until !== undefined) {
+          updateData.volunteer_valid_until = updatePathwayDto.volunteer_valid_until ?? null;
+        }
         if (updatePathwayDto.application_opening_date !== undefined) {
           updateData.application_opening_date = updatePathwayDto.application_opening_date ?? null;
         }
         if (updatePathwayDto.application_closing_date !== undefined) {
           updateData.application_closing_date = updatePathwayDto.application_closing_date ?? null;
         }
-        if (updatePathwayDto.notification_date !== undefined) {
-          updateData.notification_date = updatePathwayDto.notification_date ?? null;
-        }
       } else if (updatePathwayDto.type !== undefined) {
-        // Only clear dates when explicitly transitioning away from VOLUNTEER
+        // Only clear volunteer-specific fields when explicitly transitioning away from VOLUNTEER
         updateData.application_opening_date = null;
         updateData.application_closing_date = null;
-        updateData.notification_date = null;
+        updateData.subtype = null;
+        updateData.volunteer_valid_until = null;
       }
 
       if (clearImage) {
@@ -1187,11 +1189,10 @@ export class PathwaysService {
         image_url: pathwayData.image_url,
         type: pathwayData.type,
         allow_multiple_active: pathwayData.allow_multiple_active,
-        volunteer_term_months: pathwayData.volunteer_term_months,
-        reapply_after_days: pathwayData.reapply_after_days,
+        subtype: pathwayData.subtype ?? null,
+        volunteer_valid_until: pathwayData.volunteer_valid_until ?? null,
         application_opening_date: pathwayData.application_opening_date ?? null,
         application_closing_date: pathwayData.application_closing_date ?? null,
-        notification_date: pathwayData.notification_date ?? null,
         created_at: pathwayData.created_at,
       };
 
@@ -1260,7 +1261,7 @@ export class PathwaysService {
    * Shared internal method for Pathway Assignment and Switching.
    * Branches on pathway type:
    *   STANDARD — deactivate existing active pathway, activate new one (existing behaviour).
-   *   VOLUNTEER — eligibility check, no deactivation of other pathways, set status/course_id/expires_at.
+   *   VOLUNTEER — eligibility check, no deactivation of other pathways, creates new ACTIVE record.
    */
   private async handlePathwayAssignment(
     userId: string,
@@ -1294,7 +1295,7 @@ export class PathwaysService {
       // 2. Validate target pathway existence and active status (fetch type + volunteer config)
       const pathway = await this.pathwayRepository.findOne({
         where: { id: pathwayId, is_active: true },
-        select: ['id', 'type', 'allow_multiple_active', 'volunteer_term_months', 'reapply_after_days', 'key'],
+        select: ['id', 'type', 'allow_multiple_active', 'subtype', 'volunteer_valid_until', 'key'],
       });
 
       if (!pathway) {
@@ -1419,7 +1420,7 @@ export class PathwaysService {
 
   /**
    * Handle VOLUNTEER pathway assignment.
-   * Rules: eligibility check, reapply window, enroll in active batch, create history with status/expires_at.
+   * Rules: eligibility check (ACTIVE same-pathway + COMPLETED same-subtype valid-until), enroll in active batch, create ACTIVE record.
    */
   private async handleVolunteerAssignment(
     opts: {
@@ -1437,59 +1438,42 @@ export class PathwaysService {
   ): Promise<Response> {
     const { userId, pathway, courseId, userGoal, created_by, tenantId, organisationId } = opts;
     try {
-      // 1. Eligibility: block if there is an ACTIVE record for same user+pathway that hasn't expired
+      // 1. Block if user already has an ACTIVE record for this exact pathway (same batch in progress)
       const activeRecord = await this.userPathwayHistoryRepository.findOne({
         where: { user_id: userId, pathway_id: pathway.id, status: PathwayHistoryStatus.ACTIVE },
-        order: { activated_at: 'DESC' },
+        select: ['id'],
       });
 
       if (activeRecord) {
-        const nowMs = Date.now();
-        const notExpired = !activeRecord.expires_at || activeRecord.expires_at.getTime() > nowMs;
-        if (notExpired) {
-          return APIResponse.error(response, apiId, API_RESPONSES.CONFLICT, API_RESPONSES.VOLUNTEER_PATHWAY_ALREADY_ACTIVE, HttpStatus.CONFLICT);
-        }
-        // Active record exists but has expired — enforce reapply window against its expiry date
-        if (pathway.reapply_after_days && activeRecord.expires_at) {
-          const reapplyAfterMs = activeRecord.expires_at.getTime() + pathway.reapply_after_days * 24 * 60 * 60 * 1000;
-          if (nowMs < reapplyAfterMs) {
-            const reapplyAfterDate = new Date(reapplyAfterMs).toISOString();
-            return APIResponse.error(
-              response, apiId, API_RESPONSES.BAD_REQUEST,
-              `${API_RESPONSES.VOLUNTEER_PATHWAY_REAPPLY_TOO_SOON} Reapply after: ${reapplyAfterDate}`,
-              HttpStatus.BAD_REQUEST
-            );
-          }
-        }
+        return APIResponse.error(response, apiId, API_RESPONSES.CONFLICT, API_RESPONSES.VOLUNTEER_PATHWAY_ALREADY_ACTIVE, HttpStatus.CONFLICT);
       }
 
-      // 2. Reapply window: check most recent COMPLETED or EXPIRED record (only when no stale active record)
-      if (!activeRecord && pathway.reapply_after_days) {
-        const lastFinished = await this.userPathwayHistoryRepository.findOne({
-          where: [
-            { user_id: userId, pathway_id: pathway.id, status: PathwayHistoryStatus.COMPLETED },
-            { user_id: userId, pathway_id: pathway.id, status: PathwayHistoryStatus.EXPIRED },
-          ],
-          order: { activated_at: 'DESC' },
-        });
+      // 2. Block if user is a current volunteer for same subtype (COMPLETED + volunteer_valid_until >= NOW())
+      //    Single join query — no N+1. Only applies if pathway has a subtype.
+      if (pathway.subtype) {
+        const isCurrentVolunteer = await this.userPathwayHistoryRepository
+          .createQueryBuilder('h')
+          .innerJoin('h.pathway', 'pw')
+          .where('h.user_id = :userId', { userId })
+          .andWhere('h.status = :status', { status: PathwayHistoryStatus.COMPLETED })
+          .andWhere('pw.type = :type', { type: PathwayType.VOLUNTEER })
+          .andWhere('pw.subtype = :subtype', { subtype: pathway.subtype })
+          .andWhere('pw.volunteer_valid_until >= CURRENT_TIMESTAMP')
+          .select('h.id')
+          .getOne();
 
-        if (lastFinished?.deactivated_at) {
-          const reapplyAfterMs = lastFinished.deactivated_at.getTime() + pathway.reapply_after_days * 24 * 60 * 60 * 1000;
-          if (Date.now() < reapplyAfterMs) {
-            const reapplyAfterDate = new Date(reapplyAfterMs).toISOString();
-            return APIResponse.error(
-              response, apiId, API_RESPONSES.BAD_REQUEST,
-              `${API_RESPONSES.VOLUNTEER_PATHWAY_REAPPLY_TOO_SOON} Reapply after: ${reapplyAfterDate}`,
-              HttpStatus.BAD_REQUEST
-            );
-          }
+        if (isCurrentVolunteer) {
+          return APIResponse.error(
+            response, apiId, API_RESPONSES.CONFLICT,
+            `User is already a current ${pathway.subtype} volunteer. Reapplication allowed after volunteer_valid_until passes.`,
+            HttpStatus.CONFLICT
+          );
         }
       }
 
       // 3. Resolve course_id:
       //    - Use the explicitly provided course_id if frontend sent one.
-      //    - Otherwise auto-fetch the single active batch from LMS using isActive=true filter.
-      //    getCourseIdsForPathway() is NOT used here — it returns ALL published batches.
+      //    - Otherwise auto-fetch the single active batch from LMS.
       let resolvedCourseId = courseId || null;
       if (!resolvedCourseId) {
         resolvedCourseId = await this.lmsClientService.getActiveCourseForPathway(pathway.id, tenantId, organisationId);
@@ -1507,49 +1491,30 @@ export class PathwaysService {
         }
       }
 
-      // 5. Calculate expires_at from volunteer_term_months
+      // 5. Create ACTIVE history record
       const timestamp = new Date();
-      let expiresAt: Date | null = null;
-      if (pathway.volunteer_term_months) {
-        expiresAt = new Date(timestamp);
-        expiresAt.setMonth(expiresAt.getMonth() + pathway.volunteer_term_months);
-      }
-
-      // 6. Create new history record, expiring any stale active record in the same transaction
-      let newRecordId: string;
-      await this.dataSource.transaction(async (manager) => {
-        if (activeRecord) {
-          await manager.update(UserPathwayHistory, { id: activeRecord.id }, {
-            status: PathwayHistoryStatus.EXPIRED,
-            is_active: false,
-            deactivated_at: new Date(),
-          } as any);
-        }
-        const record = manager.create(UserPathwayHistory, {
-          user_id: userId,
-          pathway_id: pathway.id,
-          is_active: true,
-          status: PathwayHistoryStatus.ACTIVE,
-          course_id: resolvedCourseId,
-          expires_at: expiresAt,
-          activated_at: timestamp,
-          user_goal: userGoal,
-          created_by,
-          updated_by: created_by,
-        });
-        const saved = await manager.save(record);
-        newRecordId = saved.id;
+      const record = this.userPathwayHistoryRepository.create({
+        user_id: userId,
+        pathway_id: pathway.id,
+        is_active: true,
+        status: PathwayHistoryStatus.ACTIVE,
+        course_id: resolvedCourseId,
+        activated_at: timestamp,
+        user_goal: userGoal,
+        created_by,
+        updated_by: created_by,
       });
+      const saved = await this.userPathwayHistoryRepository.save(record);
 
       const result = {
-        id: newRecordId,
+        id: saved.id,
         userId,
         pathwayId: pathway.id,
         pathwayType: PathwayType.VOLUNTEER,
+        subtype: pathway.subtype ?? null,
         courseId: resolvedCourseId,
         status: PathwayHistoryStatus.ACTIVE,
         activatedAt: timestamp,
-        expiresAt,
         userGoal,
         created_by,
       };
@@ -1597,7 +1562,7 @@ export class PathwaysService {
           .where('h.user_id = :userId', { userId })
           .andWhere('h.status = :status', { status: PathwayHistoryStatus.ACTIVE })
           .andWhere('pw.type = :type', { type: PathwayType.VOLUNTEER })
-          .select(['h.id', 'h.pathway_id', 'h.course_id', 'h.status', 'h.activated_at', 'h.expires_at', 'h.user_goal', 'h.is_active', 'h.updated_by']);
+          .select(['h.id', 'h.pathway_id', 'h.course_id', 'h.status', 'h.activated_at', 'h.completed_at', 'h.user_goal', 'h.is_active', 'h.updated_by', 'pw.id', 'pw.subtype', 'pw.volunteer_valid_until']);
 
         if (pathwayId) {
           qb.andWhere('h.pathway_id = :pathwayId', { pathwayId });
@@ -1605,13 +1570,15 @@ export class PathwaysService {
 
         const records = await qb.orderBy('h.activated_at', 'DESC').getMany();
 
-        const items = records.map((r) => ({
+        const items = records.map((r: any) => ({
           id: r.id,
           pathwayId: r.pathway_id,
+          pathwaySubtype: r.pathway?.subtype ?? null,
           courseId: r.course_id,
           status: r.status,
           activatedAt: r.activated_at,
-          expiresAt: r.expires_at,
+          completedAt: r.completed_at ?? null,
+          volunteerValidUntil: r.pathway?.volunteer_valid_until?.toISOString() ?? null,
           userGoal: r.user_goal,
           isActive: r.is_active,
           updatedBy: r.updated_by,
@@ -1629,7 +1596,7 @@ export class PathwaysService {
       const userPathway = await this.userPathwayHistoryRepository.findOne({
         where: whereCondition,
         order: { activated_at: 'DESC' },
-        select: ['id', 'pathway_id', 'activated_at', 'deactivated_at', 'user_goal', 'is_active', 'updated_by', 'status', 'course_id', 'expires_at'],
+        select: ['id', 'pathway_id', 'activated_at', 'deactivated_at', 'completed_at', 'user_goal', 'is_active', 'updated_by', 'status', 'course_id'],
       });
 
       if (!userPathway) {
@@ -1644,7 +1611,7 @@ export class PathwaysService {
         status: userPathway.status,
         activatedAt: userPathway.activated_at,
         deactivatedAt: userPathway.deactivated_at,
-        expiresAt: userPathway.expires_at,
+        completedAt: (userPathway as any).completed_at ?? null,
         userGoal: userPathway.user_goal,
         isActive: userPathway.is_active,
         updatedBy: userPathway.updated_by,
@@ -1880,6 +1847,14 @@ export class PathwaysService {
         if (filters.courseId) {
           queryBuilder.andWhere("history.course_id = :courseId", { courseId: filters.courseId });
         }
+        if (filters.subtype) {
+          queryBuilder.andWhere("pathway.subtype = :subtype", { subtype: filters.subtype });
+        }
+        if (filters.valid === true) {
+          queryBuilder.andWhere("pathway.volunteer_valid_until >= CURRENT_TIMESTAMP");
+        } else if (filters.valid === false) {
+          queryBuilder.andWhere("(pathway.volunteer_valid_until IS NULL OR pathway.volunteer_valid_until < CURRENT_TIMESTAMP)");
+        }
       }
 
       // Selective projection to minimize data transfer (Performance Optimization)
@@ -1890,9 +1865,9 @@ export class PathwaysService {
         'history.is_active',
         'history.status',
         'history.course_id',
-        'history.expires_at',
         'history.activated_at',
         'history.deactivated_at',
+        'history.completed_at',
         'user.userId',
         'user.firstName',
         'user.lastName',
@@ -1901,6 +1876,8 @@ export class PathwaysService {
         'pathway.id',
         'pathway.name',
         'pathway.type',
+        'pathway.subtype',
+        'pathway.volunteer_valid_until',
       ]);
 
       // Apply Sorting
@@ -1914,7 +1891,7 @@ export class PathwaysService {
         isActive: 'history.is_active',
         pathwayName: 'pathway.name',
         deactivatedAt: 'history.deactivated_at',
-        expiresAt: 'history.expires_at',
+        completedAt: 'history.completed_at',
         historyStatus: 'history.status',
       };
       const order = sort?.order === 'ASC' ? 'ASC' : 'DESC';
@@ -1945,16 +1922,18 @@ export class PathwaysService {
           pathwayId: item.pathway_id,
           pathwayName: item.pathway?.name ?? null,
           pathwayType: item.pathway?.type ?? null,
+          pathwaySubtype: item.pathway?.subtype ?? null,
+          volunteerValidUntil: item.pathway?.volunteer_valid_until?.toISOString() ?? null,
           firstName: item.user?.firstName,
           lastName: item.user?.lastName,
           email: item.user?.email,
           gender: item.user?.gender,
           activatedAt: item.activated_at,
           deactivatedAt: item.deactivated_at ?? null,
+          completedAt: item.completed_at ?? null,
           status: item.is_active,
           historyStatus: item.status,
           courseId: item.course_id ?? null,
-          expiresAt: item.expires_at ?? null,
         })),
       };
 
@@ -2019,7 +1998,14 @@ export class PathwaysService {
 
   /**
    * Check if a user is eligible to apply for a VOLUNTEER pathway.
-   * Checks active record expiry and reapply_after_days window.
+   * Two gates: ACTIVE same-pathway check, then COMPLETED same-subtype + valid-until check.
+   */
+  /**
+   * Check eligibility to apply for a VOLUNTEER pathway.
+   * Two gates (both run as single efficient queries):
+   *   1. ACTIVE check   — user already in progress for this specific pathway (same batch)
+   *   2. SUBTYPE check  — user is a current volunteer for same subtype across any batch
+   *      (COMPLETED + pathway.volunteer_valid_until >= NOW())
    */
   async checkVolunteerEligibility(
     dto: CheckEligibilityDto,
@@ -2029,7 +2015,7 @@ export class PathwaysService {
     try {
       const pathway = await this.pathwayRepository.findOne({
         where: { id: dto.pathwayId, is_active: true },
-        select: ['id', 'type', 'volunteer_term_months', 'reapply_after_days'],
+        select: ['id', 'type', 'subtype', 'volunteer_valid_until'],
       });
 
       if (!pathway) {
@@ -2039,66 +2025,50 @@ export class PathwaysService {
         return APIResponse.error(response, apiId, API_RESPONSES.BAD_REQUEST, API_RESPONSES.VOLUNTEER_PATHWAY_NOT_VOLUNTEER_TYPE, HttpStatus.BAD_REQUEST);
       }
 
-      // Check for an existing ACTIVE record that hasn't expired
+      // Gate 1: ACTIVE record for same pathway — user is in the middle of this batch
       const activeRecord = await this.userPathwayHistoryRepository.findOne({
         where: { user_id: dto.userId, pathway_id: dto.pathwayId, status: PathwayHistoryStatus.ACTIVE },
-        order: { activated_at: 'DESC' },
+        select: ['id'],
       });
 
       if (activeRecord) {
-        const nowMs = Date.now();
-        const notExpired = !activeRecord.expires_at || activeRecord.expires_at.getTime() > nowMs;
-        if (notExpired) {
-          return APIResponse.success(response, apiId, {
-            isEligible: false,
-            currentStatus: PathwayHistoryStatus.ACTIVE,
-            reapplyAfterDate: activeRecord.expires_at?.toISOString() ?? null,
-            reason: API_RESPONSES.VOLUNTEER_PATHWAY_ALREADY_ACTIVE,
-          }, HttpStatus.OK, API_RESPONSES.VOLUNTEER_ELIGIBILITY_RETRIEVED);
-        }
-        // Active record exists but has expired — check reapply window against its expiry date
-        if (pathway.reapply_after_days && activeRecord.expires_at) {
-          const reapplyAfterMs = activeRecord.expires_at.getTime() + pathway.reapply_after_days * 24 * 60 * 60 * 1000;
-          if (nowMs < reapplyAfterMs) {
-            const reapplyAfterDate = new Date(reapplyAfterMs).toISOString();
-            return APIResponse.success(response, apiId, {
-              isEligible: false,
-              currentStatus: PathwayHistoryStatus.EXPIRED,
-              reapplyAfterDate,
-              reason: API_RESPONSES.VOLUNTEER_PATHWAY_REAPPLY_TOO_SOON,
-            }, HttpStatus.OK, API_RESPONSES.VOLUNTEER_ELIGIBILITY_RETRIEVED);
-          }
-        }
+        return APIResponse.success(response, apiId, {
+          isEligible: false,
+          currentStatus: PathwayHistoryStatus.ACTIVE,
+          volunteerValidUntil: null,
+          reason: API_RESPONSES.VOLUNTEER_PATHWAY_ALREADY_ACTIVE,
+        }, HttpStatus.OK, API_RESPONSES.VOLUNTEER_ELIGIBILITY_RETRIEVED);
       }
 
-      // Check reapply window against most recent COMPLETED or EXPIRED record (only when no stale active record)
-      if (!activeRecord && pathway.reapply_after_days) {
-        const lastFinished = await this.userPathwayHistoryRepository.findOne({
-          where: [
-            { user_id: dto.userId, pathway_id: dto.pathwayId, status: PathwayHistoryStatus.COMPLETED },
-            { user_id: dto.userId, pathway_id: dto.pathwayId, status: PathwayHistoryStatus.EXPIRED },
-          ],
-          order: { activated_at: 'DESC' },
-        });
+      // Gate 2: COMPLETED record for same subtype where volunteer_valid_until >= NOW()
+      //          Single join query — no N+1.
+      if (pathway.subtype) {
+        const currentVolunteer = await this.userPathwayHistoryRepository
+          .createQueryBuilder('h')
+          .innerJoin('h.pathway', 'pw')
+          .where('h.user_id = :userId', { userId: dto.userId })
+          .andWhere('h.status = :status', { status: PathwayHistoryStatus.COMPLETED })
+          .andWhere('pw.type = :type', { type: PathwayType.VOLUNTEER })
+          .andWhere('pw.subtype = :subtype', { subtype: pathway.subtype })
+          .andWhere('pw.volunteer_valid_until >= CURRENT_TIMESTAMP')
+          .select(['h.id', 'pw.volunteer_valid_until'])
+          .getOne();
 
-        if (lastFinished?.deactivated_at) {
-          const reapplyAfterMs = lastFinished.deactivated_at.getTime() + pathway.reapply_after_days * 24 * 60 * 60 * 1000;
-          if (Date.now() < reapplyAfterMs) {
-            const reapplyAfterDate = new Date(reapplyAfterMs).toISOString();
-            return APIResponse.success(response, apiId, {
-              isEligible: false,
-              currentStatus: lastFinished.status,
-              reapplyAfterDate,
-              reason: API_RESPONSES.VOLUNTEER_PATHWAY_REAPPLY_TOO_SOON,
-            }, HttpStatus.OK, API_RESPONSES.VOLUNTEER_ELIGIBILITY_RETRIEVED);
-          }
+        if (currentVolunteer) {
+          const pw = (currentVolunteer as any).pathway;
+          return APIResponse.success(response, apiId, {
+            isEligible: false,
+            currentStatus: PathwayHistoryStatus.COMPLETED,
+            volunteerValidUntil: pw?.volunteer_valid_until?.toISOString() ?? null,
+            reason: `User is already a current ${pathway.subtype} volunteer. Reapplication allowed after volunteer_valid_until passes.`,
+          }, HttpStatus.OK, API_RESPONSES.VOLUNTEER_ELIGIBILITY_RETRIEVED);
         }
       }
 
       return APIResponse.success(response, apiId, {
         isEligible: true,
         currentStatus: null,
-        reapplyAfterDate: null,
+        volunteerValidUntil: pathway.volunteer_valid_until?.toISOString() ?? null,
         reason: null,
       }, HttpStatus.OK, API_RESPONSES.VOLUNTEER_ELIGIBILITY_RETRIEVED);
     } catch (error) {
@@ -2129,7 +2099,7 @@ export class PathwaysService {
         .where('h.user_id = :userId', { userId })
         .andWhere('h.status = :status', { status: PathwayHistoryStatus.ACTIVE })
         .andWhere('pw.type = :type', { type: PathwayType.VOLUNTEER })
-        .select(['h.id', 'h.pathway_id', 'h.course_id', 'h.status', 'h.activated_at', 'h.expires_at', 'h.user_goal', 'h.is_active', 'pw.id', 'pw.name', 'pw.key', 'pw.type']);
+        .select(['h.id', 'h.pathway_id', 'h.course_id', 'h.status', 'h.activated_at', 'h.completed_at', 'h.user_goal', 'h.is_active', 'pw.id', 'pw.name', 'pw.key', 'pw.type', 'pw.subtype', 'pw.volunteer_valid_until']);
 
       if (pathwayId) {
         qb.andWhere('h.pathway_id = :pathwayId', { pathwayId });
@@ -2142,10 +2112,12 @@ export class PathwaysService {
         pathwayId: r.pathway_id,
         pathwayName: r.pathway?.name ?? null,
         pathwayKey: r.pathway?.key ?? null,
+        pathwaySubtype: r.pathway?.subtype ?? null,
         courseId: r.course_id,
         status: r.status,
         activatedAt: r.activated_at,
-        expiresAt: r.expires_at,
+        completedAt: r.completed_at ?? null,
+        volunteerValidUntil: r.pathway?.volunteer_valid_until?.toISOString() ?? null,
         userGoal: r.user_goal,
       }));
 
@@ -2160,7 +2132,7 @@ export class PathwaysService {
   /**
    * Called by LMS when a course is marked COMPLETED in course_track.
    * Finds the VOLUNTEER pathway history for this user+course, marks it COMPLETED,
-   * recalculates expires_at from completion date, and assigns pathway tags to user.auto_tags.
+   * Sets status = COMPLETED and completed_at = NOW() atomically.
    */
   async handleCourseCompletion(
     dto: CourseCompletionWebhookDto,
@@ -2206,34 +2178,22 @@ export class PathwaysService {
       }
 
       const now = new Date();
-      let newExpiresAt: Date | null = null;
-      if (record.pathway.volunteer_term_months) {
-        newExpiresAt = new Date(now);
-        newExpiresAt.setMonth(newExpiresAt.getMonth() + record.pathway.volunteer_term_months);
-      }
 
-      let tagAssigned = false;
-      await this.dataSource.transaction(async (manager) => {
-        // Atomic guard: only update if still ACTIVE (prevents concurrent duplicate calls)
-        const atomicUpdate = await manager.createQueryBuilder()
-          .update(UserPathwayHistory)
-          .set({
-            status: PathwayHistoryStatus.COMPLETED,
-            is_active: false,
-            deactivated_at: now,
-            expires_at: newExpiresAt,
-          } as any)
-          .where('id = :id', { id: record.id })
-          .andWhere('status = :status', { status: PathwayHistoryStatus.ACTIVE })
-          .execute();
+      // Atomic update — WHERE status = ACTIVE prevents double-processing without a lock
+      const result = await this.userPathwayHistoryRepository
+        .createQueryBuilder()
+        .update(UserPathwayHistory)
+        .set({
+          status: PathwayHistoryStatus.COMPLETED,
+          is_active: false,
+          completed_at: now,
+          deactivated_at: now,
+        } as any)
+        .where('id = :id', { id: record.id })
+        .andWhere('status = :status', { status: PathwayHistoryStatus.ACTIVE })
+        .execute();
 
-        if ((atomicUpdate.affected ?? 0) > 0) {
-          await this.assignVolunteerTags(manager, dto.userId, record.pathway);
-          tagAssigned = true;
-        }
-      });
-
-      if (!tagAssigned) {
+      if ((result.affected ?? 0) === 0) {
         return APIResponse.success(
           response, apiId,
           { processed: false, historyId: record.id },
@@ -2246,9 +2206,10 @@ export class PathwaysService {
         userId: dto.userId,
         courseId: dto.courseId,
         pathwayId: record.pathway_id,
+        subtype: record.pathway.subtype ?? null,
         status: PathwayHistoryStatus.COMPLETED,
-        expiresAt: newExpiresAt?.toISOString() ?? null,
-        deactivatedAt: now.toISOString(),
+        completedAt: now.toISOString(),
+        volunteerValidUntil: record.pathway.volunteer_valid_until?.toISOString() ?? null,
       }, HttpStatus.OK, API_RESPONSES.COURSE_COMPLETION_NOTIFICATION_SENT);
     } catch (error) {
       const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
@@ -2257,89 +2218,9 @@ export class PathwaysService {
     }
   }
 
-  /**
-   * Resolves pathway tag UUIDs to their alias strings and merges them into user.auto_tags.
-   * Must be called inside a transaction (pass the EntityManager).
-   */
-  private async assignVolunteerTags(manager: EntityManager, userId: string, pathway: Pathway): Promise<void> {
-    const tagAlias = pathway.key ? `volunteer_${pathway.key}` : null;
-    if (!tagAlias) {
-      this.logger.warn(`[Tags] Pathway ${pathway.id} has no key — skipping tag assignment`);
-      return;
-    }
-
-    const user = await manager.getRepository(User).findOne({
-      where: { userId },
-      select: { userId: true, auto_tags: true } as any,
-    });
-
-    if (!user) {
-      this.logger.warn(`[Tags] User not found userId=${userId}`);
-      return;
-    }
-
-    const existing: string[] = (user as any).auto_tags || [];
-    const merged = [...new Set([...existing, tagAlias])];
-
-    await manager.getRepository(User).update({ userId }, { auto_tags: merged } as any);
-    this.logger.log(`[Tags] Assigned tag "${tagAlias}" to userId=${userId}`);
-  }
 
   /**
-   * Core expiry logic — shared by the scheduled cron and the manual API trigger.
-   * Transitions all COMPLETED volunteer pathway records whose expires_at has passed to EXPIRED.
-   */
-  private async runVolunteerExpiry(): Promise<number> {
-    const now = new Date();
-    const result = await this.userPathwayHistoryRepository
-      .createQueryBuilder()
-      .update(UserPathwayHistory)
-      .set({ status: PathwayHistoryStatus.EXPIRED })
-      .where('status = :status', { status: PathwayHistoryStatus.COMPLETED })
-      .andWhere('expires_at IS NOT NULL')
-      .andWhere('expires_at < :now', { now })
-      .execute();
-    return result.affected ?? 0;
-  }
-
-  /**
-   * Daily cron at 02:00 — automatically expires volunteer pathway records.
-   */
-  // @Cron('0 2 * * *')
-  async checkAndExpireVolunteerPathways(): Promise<void> {
-    try {
-      const expired = await this.runVolunteerExpiry();
-      if (expired > 0) {
-        this.logger.log(`[Cron] Expired ${expired} volunteer pathway record(s)`);
-      }
-    } catch (error) {
-      this.logger.error(`[Cron] Volunteer expiry check failed: ${error?.message}`);
-    }
-  }
-
-  /**
-   * Manual trigger — same logic as the daily cron, exposed via API for testing or urgent runs.
-   */
-  async triggerVolunteerExpiry(response: Response): Promise<Response> {
-    const apiId = APIID.VOLUNTEER_EXPIRY_TRIGGER;
-    try {
-      const expired = await this.runVolunteerExpiry();
-      return APIResponse.success(
-        response, apiId,
-        { expired },
-        HttpStatus.OK,
-        `Volunteer expiry check completed. ${expired} record(s) marked as EXPIRED.`
-      );
-    } catch (error) {
-      const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
-      LoggerUtil.error(`${API_RESPONSES.SERVER_ERROR}`, `Volunteer expiry trigger failed: ${errorMessage}`, apiId);
-      return APIResponse.error(response, apiId, API_RESPONSES.INTERNAL_SERVER_ERROR, errorMessage, HttpStatus.INTERNAL_SERVER_ERROR);
-    }
-  }
-
-  /**
-   * Update status of a user_pathway_history record (COMPLETED, WITHDRAWN, EXPIRED, INACTIVE).
-   * On COMPLETED: assigns the volunteer tag alias (volunteer_<pathway.key>) to user's auto_tags.
+   * Update status of a user_pathways record (COMPLETED, WITHDRAWN, INACTIVE).
    */
   async updateHistoryStatus(
     historyId: string,

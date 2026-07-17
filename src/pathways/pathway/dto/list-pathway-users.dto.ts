@@ -19,7 +19,7 @@ export enum PathwayUserSortColumn {
   IS_ACTIVE = 'isActive',
   PATHWAY_NAME = 'pathwayName',
   DEACTIVATED_AT = 'deactivatedAt',
-  EXPIRES_AT = 'expiresAt',
+  COMPLETED_AT = 'completedAt',
   HISTORY_STATUS = 'historyStatus',
 }
 
@@ -53,7 +53,7 @@ class ListPathwayUsersFiltersDto {
   pathwayType?: PathwayType;
 
   @ApiPropertyOptional({
-    description: 'Filter by history status (ACTIVE, COMPLETED, EXPIRED, WITHDRAWN, INACTIVE).',
+    description: 'Filter by history status (ACTIVE, COMPLETED, WITHDRAWN, INACTIVE).',
     enum: PathwayHistoryStatus,
     example: PathwayHistoryStatus.COMPLETED,
   })
@@ -71,6 +71,24 @@ class ListPathwayUsersFiltersDto {
   @IsOptional()
   @IsUUID()
   courseId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Filter by volunteer pathway subtype (e.g. CAL, CL, DL). Only applies when pathwayType = VOLUNTEER.',
+    example: 'CAL',
+  })
+  @Expose()
+  @IsOptional()
+  @IsString()
+  subtype?: string;
+
+  @ApiPropertyOptional({
+    description: 'When true, only return VOLUNTEER participants whose pathway.volunteer_valid_until >= NOW() (current volunteers). Requires pathwayType = VOLUNTEER.',
+    example: true,
+  })
+  @Expose()
+  @IsOptional()
+  @IsBoolean()
+  valid?: boolean;
 }
 
 class ListPathwayUsersSortDto {

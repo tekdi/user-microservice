@@ -50,6 +50,15 @@ class PathwayFiltersDto {
   @IsOptional()
   @IsEnum(PathwayType)
   type?: PathwayType;
+
+  @ApiPropertyOptional({
+    description: "Filter VOLUNTEER pathways by subtype (e.g. CAL, CL, DL). Only applies when type = VOLUNTEER.",
+    example: "CAL",
+  })
+  @Expose()
+  @IsOptional()
+  @IsString()
+  subtype?: string;
 }
 export class ListPathwayDto extends PaginationDto {
   @ApiPropertyOptional({
