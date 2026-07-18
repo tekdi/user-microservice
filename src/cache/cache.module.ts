@@ -10,6 +10,9 @@ import { loadCacheConfig, CacheConfig } from "./cache.config";
 import { CacheService } from "./cache.service";
 import { MemoryCacheVersionStore } from "./stores/memory-version-store";
 import { RedisCacheVersionStore } from "./stores/redis-version-store";
+import { CacheMetrics } from "./cache.metrics";
+import { CacheMetricsReporter } from "./cache-metrics.reporter";
+import { CacheHealthIndicator } from "./cache-health.indicator";
 
 const CONTEXT = "CacheModule";
 
@@ -59,9 +62,12 @@ const CONTEXT = "CacheModule";
         redisHandle ? new RedisCacheVersionStore(redisHandle) : new MemoryCacheVersionStore(),
       inject: [CACHE_REDIS_HANDLE],
     },
+    CacheMetrics,
+    CacheMetricsReporter,
     CacheService,
+    CacheHealthIndicator,
   ],
-  exports: [CacheService],
+  exports: [CacheService, CacheMetrics, CacheHealthIndicator],
 })
 export class CacheModule implements OnApplicationShutdown {
   constructor(@Optional() @Inject(CACHE_REDIS_HANDLE) private readonly redisHandle?: KeyvRedis<string>) {}

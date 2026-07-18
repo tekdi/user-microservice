@@ -10,6 +10,9 @@ import { FormCreateDto } from "./dto/form-create.dto";
 import { APIID } from "@utils/api-id.config";
 import { API_RESPONSES } from "@utils/response.messages";
 import { ConfigService } from "@nestjs/config";
+import { CacheService } from "../cache/cache.service";
+
+const FORM_TTL_SECONDS = 3600; // §2.1.5 phase 2: form:{tenantId}, 1 h
 
 @Injectable()
 export class FormsService {
@@ -17,12 +20,39 @@ export class FormsService {
     private readonly fieldsService: FieldsService,
     @InjectRepository(Form)
     private readonly formRepository: Repository<Form>,
-    private readonly configService: ConfigService
+    private readonly configService: ConfigService,
+    private readonly cacheService: CacheService
   ) { }
 
+  // §2.1.5 phase 2: GET /form/read under form:{tenantId} keyed on
+  // (context, contextType), 1 h. dependsOn fieldsdef because forms embed
+  // field definitions — a definition change must refresh this read.
   async getForm(requiredData, response) {
+    const payload = await this.cacheService.getOrLoad({
+      namespace: `form:${requiredData?.tenantId ?? "global"}`,
+      key: `read:${requiredData?.context || "none"}:${requiredData?.contextType || "none"}`,
+      dependsOn: ["fieldsdef"],
+      ttlSeconds: FORM_TTL_SECONDS,
+      loader: async () => {
+        const result = await this.getFormPayload(requiredData, response);
+        return response.headersSent ? null : result;
+      },
+    });
+    if (payload === null || payload === undefined) {
+      return; // error response already written inside the loader
+    }
+    return APIResponse.success(
+      response,
+      APIID.FORM_GET,
+      payload,
+      HttpStatus.OK,
+      "Fields fetched successfully."
+    );
+  }
+
+  private async getFormPayload(requiredData, response) {
     let apiId = APIID.FORM_GET;
-    try {      
+    try {
       if (!requiredData.context && !requiredData.contextType) {
         return APIResponse.error(
           response,
@@ -98,13 +128,8 @@ export class FormsService {
         fields: processedResponse,
       };
 
-      return APIResponse.success(
-        response,
-        apiId,
-        result,
-        HttpStatus.OK,
-        "Fields fetched successfully."
-      );
+      // Raw payload for the caching wrapper; it writes the response.
+      return result;
     } catch (error) {
       const errorMessage = error.message || "Internal server error";
       return APIResponse.error(
@@ -277,6 +302,12 @@ export class FormsService {
       }
 
       const result = await this.formRepository.save(formCreateDto);
+
+      // §2.1.5: POST /form/create bumps its tenant's form namespace.
+      await this.cacheService.invalidate([
+        "form:global",
+        ...(formCreateDto?.tenantId ? [`form:${formCreateDto.tenantId}`] : []),
+      ]);
 
       return APIResponse.success(
         response,

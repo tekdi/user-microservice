@@ -4,6 +4,7 @@ import { LoggerUtil } from "../common/logger/LoggerUtil";
 import { CACHE_CONFIG, CACHE_VERSION_STORE } from "./cache.constants";
 import { CacheConfig } from "./cache.config";
 import { CacheVersionStore } from "./interfaces/cache-version-store.interface";
+import { CacheMetrics } from "./cache.metrics";
 
 export interface GetOrLoadOptions<T> {
   namespace: string;
@@ -38,6 +39,7 @@ export class CacheService {
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
     @Inject(CACHE_VERSION_STORE) private readonly versionStore: CacheVersionStore,
     @Inject(CACHE_CONFIG) private readonly config: CacheConfig,
+    private readonly metrics: CacheMetrics,
   ) {}
 
   /**
@@ -49,6 +51,13 @@ export class CacheService {
     const { namespace, key, dependsOn = [], ttlSeconds, loader } = options;
 
     if (!this.isNamespaceCacheable(namespace)) {
+      // Disabled master switch or CACHE_DISABLED_NAMESPACES — not counted as
+      // a bypass, which §1.6 reserves for circuit-open.
+      return loader();
+    }
+
+    if (this.isCircuitOpen()) {
+      this.metrics.record(namespace, "bypass");
       return loader();
     }
 
@@ -58,8 +67,12 @@ export class CacheService {
       const cacheKey = this.buildEntryKey(namespace, key, versions, dependsOn);
       const cached = await this.safeGet(cacheKey);
       if (cached.ok && cached.value !== undefined && cached.value !== null) {
+        this.metrics.record(namespace, "hit");
         return cached.value as T;
       }
+      this.metrics.record(namespace, cached.ok ? "miss" : "error");
+    } else {
+      this.metrics.record(namespace, "error");
     }
 
     const result = await loader();
@@ -107,15 +120,21 @@ export class CacheService {
           const value = mgetOutcome.value[idx];
           if (value !== undefined && value !== null) {
             result.set(id, value as T);
+            this.metrics.record(namespaceFor(id), "hit");
           } else {
             missingIds.push(id);
+            this.metrics.record(namespaceFor(id), "miss");
           }
         });
       } else {
         missingIds.push(...cacheableIds);
+        cacheableIds.forEach((id) => this.metrics.record(namespaceFor(id), "error"));
       }
     } else {
       missingIds.push(...cacheableIds);
+      cacheableIds.forEach((id) =>
+        this.metrics.record(namespaceFor(id), this.isCircuitOpen() ? "bypass" : "error"),
+      );
     }
 
     if (missingIds.length > 0) {
@@ -151,15 +170,45 @@ export class CacheService {
   async invalidate(namespaces: string | string[]): Promise<void> {
     if (!this.config.enabled) return;
 
+    // §1.6: debug log on every INCR with namespace + caller. The caller is
+    // recovered from the stack (the frame above invalidate()), so write paths
+    // don't have to pass it explicitly.
+    const caller = this.callerFrame();
+
     const uniqueNamespaces = [...new Set(Array.isArray(namespaces) ? namespaces : [namespaces])];
     await Promise.all(
       uniqueNamespaces.map(async (namespace) => {
         const outcome = await this.executeOp(() => this.versionStore.incr(this.versionKey(namespace)));
-        if (!outcome.ok) {
-          LoggerUtil.error(`Failed to invalidate namespace ${namespace}`, "Cache invalidation bypassed (circuit open or op failure)", CONTEXT);
+        if (outcome.ok) {
+          LoggerUtil.log(
+            `cache INCR ns=${namespace} v=${outcome.value} caller=${caller}`,
+            CONTEXT,
+            undefined,
+            "debug",
+          );
+        } else {
+          LoggerUtil.error(
+            `Failed to invalidate namespace ${namespace} (caller=${caller})`,
+            "Cache invalidation bypassed (circuit open or op failure)",
+            CONTEXT,
+          );
         }
       }),
     );
+  }
+
+  /** Best-effort caller identification for the INCR debug log. */
+  private callerFrame(): string {
+    const stack = new Error().stack?.split("\n") ?? [];
+    // [0] "Error", [1] callerFrame, [2] invalidate, [3] the actual caller
+    const frame = stack[3]?.trim() ?? "unknown";
+    const match = frame.match(/at\s+([^\s(]+)/);
+    return match ? match[1] : "unknown";
+  }
+
+  /** §1.6 snapshot of per-namespace counters (also surfaced by /health). */
+  getMetricsSnapshot() {
+    return this.metrics.snapshot();
   }
 
   private isNamespaceCacheable(namespace: string): boolean {

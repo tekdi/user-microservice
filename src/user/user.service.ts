@@ -62,6 +62,7 @@ interface UpdateField {
   email?: string; // Optional
 }
 const USERLIST_TTL_SECONDS = 180; // §2.1.1 row 3: userlist:{tenantId}, 3 min
+const USER_CORE_TTL_SECONDS = 900; // §2.1.1 row 6: GET /read/:userId, 15 min
 
 @Injectable()
 export class UserService {
@@ -1026,6 +1027,45 @@ export class UserService {
 }
 
 
+  /**
+   * §2.1.1 rows 4/6 — user:{userId} core-row cache (pattern B) for
+   * GET /read/:userId. Purely additive: it runs exactly the same two fetches
+   * the endpoint already ran and returns the same [userDetails, userRole]
+   * pair, only skipping the DB round-trips on a hit. Keyed by tenantId
+   * because findUserRoles is tenant-scoped; dependsOn ufields:{userId} per
+   * row 6. `false`/null results are never cached, so a missing user or a
+   * failed lookup always re-reads.
+   *
+   * NOTE: the cached pair carries role + tenantStatus (via tenantData and
+   * userRole), so every role / user-tenant write bumps user:{id} — see the
+   * invalidation matrix.
+   */
+  private async getCachedUserCoreRow(userData: UserData): Promise<[any, any]> {
+    const loadPair = (): Promise<[any, any]> =>
+      Promise.all([
+        this.findUserDetails(userData?.userId),
+        userData && userData?.tenantId
+          ? this.findUserRoles(userData?.userId, userData?.tenantId)
+          : Promise.resolve(null),
+      ]) as Promise<[any, any]>;
+
+    const cached = await this.cacheService.getOrLoad<[any, any]>({
+      namespace: `user:${userData.userId}`,
+      key: `core:${userData?.tenantId ?? "no-tenant"}`,
+      dependsOn: [`ufields:${userData.userId}`],
+      ttlSeconds: USER_CORE_TTL_SECONDS,
+      // findUserDetails returns `false` when the user doesn't exist. The pair
+      // would still be a non-empty array, so return null instead to keep the
+      // "not found" out of the cache (§1.3 rule 5 — no negative caching).
+      loader: async () => {
+        const pair = await loadPair();
+        return pair[0] ? pair : null;
+      },
+    });
+
+    return cached ?? [false, null];
+  }
+
   async getUsersDetailsById(userData: UserData, response: any) {
     const apiId = APIID.USER_GET;
     try {
@@ -1058,12 +1098,7 @@ export class UserService {
         userData: {},
       };
 
-      const [userDetails, userRole] = await Promise.all([
-        this.findUserDetails(userData?.userId),
-        userData && userData?.tenantId
-          ? this.findUserRoles(userData?.userId, userData?.tenantId)
-          : Promise.resolve(null),
-      ]);
+      const [userDetails, userRole] = await this.getCachedUserCoreRow(userData);
 
       let roleInUpper;
       if (userRole) {
@@ -1452,6 +1487,7 @@ export class UserService {
           select: ["tenantId"],
         });
         await this.cacheService.invalidate([
+          `user:${userDto.userId}`,
           "userfilter",
           ...tenantRows.map((row) => `userlist:${row.tenantId}`),
         ]);
@@ -2433,6 +2469,9 @@ export class UserService {
       // user-create, SSO and assign-tenant — bump everything they affect.
       if (roleId || tenantId) {
         await this.cacheService.invalidate([
+          // user:{id} — the cached core row exposes role + tenantStatus
+          // through tenantData/userRole, so these writes must bump it.
+          `user:${userId}`,
           `usertenant:${userId}`,
           `userroles:${userId}`,
           ...(tenantId ? [`userlist:${tenantId}`] : []),
@@ -2899,6 +2938,7 @@ export class UserService {
       const userResult = await this.usersRepository.delete(userId);
 
       await this.cacheService.invalidate([
+        `user:${userId}`,
         `ufields:${userId}`,
         `usertenant:${userId}`,
         `userroles:${userId}`,

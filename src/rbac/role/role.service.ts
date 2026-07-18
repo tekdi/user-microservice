@@ -355,6 +355,7 @@ export class RoleService {
         });
 
       await this.cacheService.invalidate([
+        ...[...new Set(affectedMappings.map((m) => m.userId))].map((id) => `user:${id}`),
         ...[...new Set(affectedMappings.map((m) => m.userId))].map((id) => `userroles:${id}`),
         ...(roleToDelete.tenantId ? [`userlist:${roleToDelete.tenantId}`] : []),
       ]);

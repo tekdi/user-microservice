@@ -1,4 +1,4 @@
-import KeyvRedis from "@keyv/redis";
+import type KeyvRedis from "@keyv/redis";
 import { CacheVersionStore } from "../interfaces/cache-version-store.interface";
 
 /**

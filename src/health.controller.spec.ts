@@ -1,14 +1,25 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { HealthController } from './health.controller';
 import { DataSource } from 'typeorm';
+import { CacheHealthIndicator } from './cache/cache-health.indicator';
 
 describe('HealthController', () => {
   let controller: HealthController;
   let dataSource: DataSource;
+  let cacheHealth: { check: jest.Mock };
 
   beforeEach(async () => {
     const mockDataSource = {
       query: jest.fn(),
+    };
+    cacheHealth = {
+      check: jest.fn().mockResolvedValue({
+        enabled: false,
+        provider: 'memory',
+        redis: 'disabled',
+        disabledNamespaces: [],
+        namespaces: {},
+      }),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -17,6 +28,10 @@ describe('HealthController', () => {
         {
           provide: DataSource,
           useValue: mockDataSource,
+        },
+        {
+          provide: CacheHealthIndicator,
+          useValue: cacheHealth,
         },
       ],
     }).compile();
@@ -41,9 +56,7 @@ describe('HealthController', () => {
       expect(result.responseCode).toBe('OK');
       expect(result.params.status).toBe('successful');
       expect(result.result.healthy).toBe(true);
-      expect(result.result.checks).toEqual([
-        { name: 'postgres db', healthy: true }
-      ]);
+      expect(result.result.checks[0]).toEqual({ name: 'postgres db', healthy: true });
       expect(result.params.resmsgid).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
     });
 
@@ -58,9 +71,34 @@ describe('HealthController', () => {
       expect(result.responseCode).toBe('OK');
       expect(result.params.status).toBe('successful');
       expect(result.result.healthy).toBe(false);
-      expect(result.result.checks).toEqual([
-        { name: 'postgres db', healthy: false }
-      ]);
+      expect(result.result.checks[0]).toEqual({ name: 'postgres db', healthy: false });
+    });
+
+    // §1.5 rule 5: Redis is informational and must never fail the check.
+    it('stays healthy when Redis is unreachable', async () => {
+      jest.spyOn(dataSource, 'query').mockResolvedValue([{ '?column?': 1 }]);
+      cacheHealth.check.mockResolvedValue({
+        enabled: true,
+        provider: 'redis',
+        redis: 'unreachable',
+        disabledNamespaces: [],
+        namespaces: {},
+      });
+
+      const result = await controller.getHealth();
+
+      expect(result.result.healthy).toBe(true);
+      expect(result.result.cache.redis).toBe('unreachable');
+    });
+
+    it('stays healthy even if the cache probe itself throws', async () => {
+      jest.spyOn(dataSource, 'query').mockResolvedValue([{ '?column?': 1 }]);
+      cacheHealth.check.mockRejectedValue(new Error('boom'));
+
+      const result = await controller.getHealth();
+
+      expect(result.result.healthy).toBe(true);
+      expect(result.result.cache.redis).toBe('unknown');
     });
   });
 });

@@ -108,7 +108,7 @@ export class AssignRoleService {
           HttpStatus.BAD_REQUEST
         );
       }
-      await this.cacheService.invalidate([`userroles:${userId}`, `userlist:${tenantId}`]);
+      await this.cacheService.invalidate([`user:${userId}`, `userroles:${userId}`, `userlist:${tenantId}`]);
       return APIResponse.success(
         response,
         apiId,
@@ -262,6 +262,7 @@ export class AssignRoleService {
       });
       // The DTO carries no tenantId — the deleted mappings (roleExists) do.
       await this.cacheService.invalidate([
+        `user:${deleteAssignRoleDto.userId}`,
         `userroles:${deleteAssignRoleDto.userId}`,
         ...[...new Set(roleExists.map((m) => m.tenantId).filter(Boolean))].map((t) => `userlist:${t}`),
       ]);
@@ -330,6 +331,7 @@ export class AssignRoleService {
       }
 
       await this.cacheService.invalidate([
+        ...updated.map((id) => `user:${id}`),
         ...updated.map((id) => `userroles:${id}`),
         `userlist:${tenantId}`,
       ]);

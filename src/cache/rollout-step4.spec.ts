@@ -2,6 +2,7 @@ import { Test } from "@nestjs/testing";
 import { getRepositoryToken } from "@nestjs/typeorm";
 import { CACHE_MANAGER, Cache } from "@nestjs/cache-manager";
 import { CacheService } from "./cache.service";
+import { CacheMetrics } from "./cache.metrics";
 import { CACHE_CONFIG, CACHE_VERSION_STORE } from "./cache.constants";
 import { CacheConfig } from "./cache.config";
 import { MemoryCacheVersionStore } from "./stores/memory-version-store";
@@ -23,6 +24,7 @@ function cacheConfig(overrides: Partial<CacheConfig> = {}): CacheConfig {
     opTimeoutMs: 150,
     cbFailures: 5,
     cbCooldownMs: 30000,
+    metricsIntervalMs: 60000,
     ...overrides,
   };
 }
@@ -61,6 +63,7 @@ async function buildCacheService(cache: Cache, versionStore: any, config: CacheC
   const moduleRef = await Test.createTestingModule({
     providers: [
       CacheService,
+      CacheMetrics,
       { provide: CACHE_MANAGER, useValue: cache },
       { provide: CACHE_VERSION_STORE, useValue: versionStore },
       { provide: CACHE_CONFIG, useValue: config },
@@ -90,6 +93,7 @@ describe("cfields:{cohortId} cache + fieldsdef dependsOn (§2.1.3 row 5 / §2.1.
       providers: [
         FieldsService,
         CacheService,
+        CacheMetrics,
         { provide: getRepositoryToken(Fields), useValue: fieldsRepository },
         { provide: getRepositoryToken(FieldValues), useValue: { query: jest.fn() } },
         { provide: CACHE_MANAGER, useValue: cache },

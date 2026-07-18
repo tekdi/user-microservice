@@ -1,6 +1,7 @@
 import { CACHE_MANAGER, Cache } from "@nestjs/cache-manager";
 import { Test } from "@nestjs/testing";
 import { CacheService } from "./cache.service";
+import { CacheMetrics } from "./cache.metrics";
 import { CACHE_CONFIG, CACHE_VERSION_STORE } from "./cache.constants";
 import { CacheConfig } from "./cache.config";
 import { CacheVersionStore } from "./interfaces/cache-version-store.interface";
@@ -15,6 +16,7 @@ function baseConfig(overrides: Partial<CacheConfig> = {}): CacheConfig {
     opTimeoutMs: 150,
     cbFailures: 3,
     cbCooldownMs: 1000,
+    metricsIntervalMs: 60000,
     ...overrides,
   };
 }
@@ -81,6 +83,7 @@ async function buildService(
   const moduleRef = await Test.createTestingModule({
     providers: [
       CacheService,
+      CacheMetrics,
       { provide: CACHE_MANAGER, useValue: cache },
       { provide: CACHE_VERSION_STORE, useValue: versionStore },
       { provide: CACHE_CONFIG, useValue: config },

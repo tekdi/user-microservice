@@ -30,6 +30,7 @@ import { hashCacheKey } from "../cache/cache-key.util";
 
 const UFIELDS_TTL_SECONDS = 3600; // §2.1.1 row 1: ufields:{userId}, 1 h
 const USERFILTER_TTL_SECONDS = 300; // §2.1.1 row 2: userfilter, 5 min
+const FIELDSDEF_TTL_SECONDS = 3600; // §2.1.2 phase 2: fields:{tenantId}, 1 h
 
 @Injectable()
 export class FieldsService {
@@ -41,7 +42,33 @@ export class FieldsService {
     private readonly cacheService: CacheService
   ) { }
 
+  // §2.1.2 phase 2: GET /fields/formFields under fields:{tenantId}, 1 h,
+  // keyed on (context, contextType). No tenant header on this endpoint, so
+  // it shares the global fields namespace.
   async getFormCustomField(requiredData, response) {
+    const payload = await this.cacheService.getOrLoad({
+      namespace: "fields:global",
+      key: `formFields:${requiredData?.context || "none"}:${requiredData?.contextType || "none"}`,
+      dependsOn: ["fieldsdef"],
+      ttlSeconds: FIELDSDEF_TTL_SECONDS,
+      loader: async () => {
+        const result = await this.getFormCustomFieldData(requiredData, response);
+        return response.headersSent ? null : result;
+      },
+    });
+    if (payload === null || payload === undefined) {
+      return; // error response already written inside the loader
+    }
+    return APIResponse.success(
+      response,
+      "FormData",
+      payload,
+      HttpStatus.OK,
+      "Fields fetched successfully."
+    );
+  }
+
+  private async getFormCustomFieldData(requiredData, response) {
     const apiId = "FormData";
     try {
       let whereClause = '(context IS NULL AND "contextType" IS NULL)';
@@ -63,13 +90,8 @@ export class FieldsService {
             HttpStatus.NOT_FOUND
           );
         }
-        return APIResponse.success(
-          response,
-          apiId,
-          data,
-          HttpStatus.OK,
-          "Fields fetched successfully."
-        );
+        // Raw payload for the caching wrapper; it writes the success response.
+        return data;
       }
 
       if (requiredData.context) {
@@ -97,13 +119,8 @@ export class FieldsService {
         const coreFields = corefield[requiredData.context.toLowerCase()];
         data.push(...coreFields);
       }
-      return APIResponse.success(
-        response,
-        apiId,
-        data,
-        HttpStatus.OK,
-        "Fields fetched successfully."
-      );
+      // Raw payload for the caching wrapper; it writes the success response.
+      return data;
     } catch (error) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
@@ -462,9 +479,7 @@ export class FieldsService {
       }
 
       const result = await this.fieldsRepository.save(fieldsData);
-      // §2.1.2: a definition change alters processed values for ALL owners —
-      // one fieldsdef epoch bump covers every ufields/cfields/cohort/member read.
-      await this.cacheService.invalidate("fieldsdef");
+      await this.invalidateFieldDefinitionCaches(fieldsData?.tenantId);
 
       return await APIResponse.success(
         response,
@@ -643,7 +658,7 @@ export class FieldsService {
       }
 
       const result = await this.fieldsRepository.update(fieldId, fieldsData);
-      await this.cacheService.invalidate("fieldsdef");
+      await this.invalidateFieldDefinitionCaches(fieldsData?.tenantId);
       return await APIResponse.success(
         response,
         apiId,
@@ -792,7 +807,39 @@ export class FieldsService {
     }
   }
 
+  // §2.1.2 / §2.1.5 phase 2: POST /fields/search under fields:{tenantId},
+  // 1 h. Wrapper writes the success response; the inner method returns the
+  // payload and still writes its own error responses (headersSent tells the
+  // wrapper, so failures are never cached).
   async searchFields(
+    tenantId: string,
+    request: any,
+    fieldsSearchDto: FieldsSearchDto,
+    response: Response
+  ) {
+    const payload = await this.cacheService.getOrLoad({
+      namespace: `fields:${tenantId ?? "global"}`,
+      key: `search:${hashCacheKey(fieldsSearchDto)}`,
+      dependsOn: ["fieldsdef"],
+      ttlSeconds: FIELDSDEF_TTL_SECONDS,
+      loader: async () => {
+        const result = await this.searchFieldsData(tenantId, request, fieldsSearchDto, response);
+        return response.headersSent ? null : result;
+      },
+    });
+    if (payload === null || payload === undefined) {
+      return; // an error response was already written inside the loader
+    }
+    return APIResponse.success(
+      response,
+      APIID.FIELDS_SEARCH,
+      payload,
+      HttpStatus.OK,
+      "Fields fetched successfully."
+    );
+  }
+
+  private async searchFieldsData(
     tenantId: string,
     request: any,
     fieldsSearchDto: FieldsSearchDto,
@@ -845,13 +892,8 @@ export class FieldsService {
           HttpStatus.NOT_FOUND
         );
       }
-      return APIResponse.success(
-        response,
-        apiId,
-        fieldData,
-        HttpStatus.OK,
-        "Fields fetched successfully."
-      );
+      // Raw payload for the caching wrapper; it writes the success response.
+      return fieldData;
     } catch (error) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
@@ -1198,8 +1240,36 @@ export class FieldsService {
     return { offset, limit, whereClause };
   }
 
-  //Get all fields options
+  // §2.1.2 phase 2: POST /fields/options/read under fields:{tenantId}, 1 h.
+  // The endpoint carries no tenant header, so it lives under the global
+  // fields namespace — the same field-definition writes bump both.
   public async getFieldOptions(
+    fieldsOptionsSearchDto: FieldsOptionsSearchDto,
+    response: Response
+  ) {
+    const payload = await this.cacheService.getOrLoad({
+      namespace: "fields:global",
+      key: `options:${hashCacheKey(fieldsOptionsSearchDto)}`,
+      dependsOn: ["fieldsdef"],
+      ttlSeconds: FIELDSDEF_TTL_SECONDS,
+      loader: async () => {
+        const result = await this.getFieldOptionsData(fieldsOptionsSearchDto, response);
+        return response.headersSent ? null : result;
+      },
+    });
+    if (payload === null || payload === undefined) {
+      return; // error response already written inside the loader
+    }
+    return APIResponse.success(
+      response,
+      APIID.FIELDVALUES_SEARCH,
+      payload,
+      HttpStatus.OK,
+      "Field options fetched successfully."
+    );
+  }
+
+  private async getFieldOptionsData(
     fieldsOptionsSearchDto: FieldsOptionsSearchDto,
     response: Response
   ) {
@@ -1334,13 +1404,8 @@ export class FieldsService {
         values: queryData,
       };
 
-      return await APIResponse.success(
-        response,
-        apiId,
-        result,
-        HttpStatus.OK,
-        "Field options fetched successfully."
-      );
+      // Raw payload for the caching wrapper; it writes the success response.
+      return result;
     } catch (e) {
       LoggerUtil.error(`${API_RESPONSES.SERVER_ERROR}`, `Error: ${e.message}`);
       const errorMessage = e?.message || API_RESPONSES.SERVER_ERROR;
@@ -1456,7 +1521,7 @@ export class FieldsService {
         }
       }
       if (result.affected > 0) {
-        await this.cacheService.invalidate("fieldsdef");
+        await this.invalidateFieldDefinitionCaches(getField?.tenantId);
         return await APIResponse.success(
           response,
           apiId,
@@ -2141,6 +2206,30 @@ export class FieldsService {
       });
       return emptyResult;
     }
+  }
+
+  /**
+   * Single invalidation point for every field-DEFINITION write
+   * (POST /fields/create, PATCH /fields/update/:fieldId,
+   * DELETE /fields/options/delete/:fieldName). §2.1.2 + §2.1.5:
+   *
+   *  - `fieldsdef` is the global epoch. Every definition-dependent read
+   *    (ufields, cfields, cohort, cohortmember, fields, form) declares it as
+   *    a dependsOn, so this one INCR invalidates them across ALL tenants —
+   *    which matters because a global (tenantId IS NULL) field definition
+   *    affects every tenant and we cannot enumerate them.
+   *  - the writing tenant's own `fields:{t}` / `form:{t}` are bumped
+   *    explicitly as well, so the two move together rather than relying on
+   *    the epoch alone.
+   *  - forms embed field definitions, hence the form bump (§2.1.5).
+   */
+  private async invalidateFieldDefinitionCaches(tenantId?: string): Promise<void> {
+    await this.cacheService.invalidate([
+      "fieldsdef",
+      "fields:global",
+      "form:global",
+      ...(tenantId ? [`fields:${tenantId}`, `form:${tenantId}`] : []),
+    ]);
   }
 
   /**

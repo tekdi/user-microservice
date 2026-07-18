@@ -1265,10 +1265,14 @@ ${whereCase}`;
     );
 
     // Membership changes alter /list results that use exclude.cohortIds
-    // (§2.1.1 matrix: cohortMembers user-affecting publish → userlist:{t};
-    // the user:{id} bump joins in rollout step 5 when that namespace ships).
+    // (§2.1.1 matrix: cohortMembers user-affecting publish → user:{id} +
+    // userlist:{t}; the user:{id} bump ships with rollout step 5).
     if (affectedUsers.size > 0) {
-      await this.cacheService.invalidate([`cohortmember:${tenantId}`, `userlist:${tenantId}`]);
+      await this.cacheService.invalidate([
+        ...Array.from(affectedUsers).map((id) => `user:${id}`),
+        `cohortmember:${tenantId}`,
+        `userlist:${tenantId}`,
+      ]);
     }
 
     const publishPromises = Array.from(affectedUsers).map(async (userId) => {

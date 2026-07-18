@@ -208,7 +208,7 @@ export class UserTenantMappingService {
               additionalData
             );
           }
-          await this.cacheService.invalidate([`ufields:${userId}`, "userfilter"]);
+          await this.cacheService.invalidate([`user:${userId}`, `ufields:${userId}`, "userfilter"]);
         }
       }
 
@@ -382,7 +382,7 @@ export class UserTenantMappingService {
 
       await this.userTenantMappingRepository.save(existingMapping);
 
-      await this.cacheService.invalidate([`usertenant:${userId}`, `userlist:${tenantId}`]);
+      await this.cacheService.invalidate([`user:${userId}`, `usertenant:${userId}`, `userlist:${tenantId}`]);
 
       LoggerUtil.log(
         API_RESPONSES.LOG_STATUS_UPDATED_FOR_USER_TENANT(userId, tenantId),

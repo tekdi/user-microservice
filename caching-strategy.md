@@ -151,6 +151,35 @@ With versioned keys the race is harmless: the read fetched version v12 *before* 
 
 **Preconditions verified:** only this service writes its DB; Kafka events (USER\_\*, COHORT\_\*, COHORT_MEMBER\_\*, USER_TENANT\_\*) mark most mutation points — eviction hooks co-locate with those publishes; reference-data modules without events get hooks added directly in their write methods.
 
+### Implementation status (kept truthful as rollout lands — §2.2)
+
+As of rollout steps 1–7. Everything below ships behind `CACHE_ENABLED=false`;
+no environment has been switched on yet.
+
+| Namespace | Status | Where |
+|---|---|---|
+| `ufields:{userId}` | **live** | `getBulkCustomFieldDetails(..., 'Users')` |
+| `userfilter` | **live** | `filterUserUsingCustomFieldsOptimized` (3 call sites, one cache) |
+| `userlist:{tenantId}` | **live** | `findAllUserDetails` (query cached as-is; thin-query refactor deferred) |
+| `usertenant:{userId}` | **live** | `GET /user-tenant/:userId` |
+| `userroles:{userId}` | **live** | `GET /rbac/usersRoles/:userId` — per-user, **not** the planned `{tenantId}:{userId}` |
+| `user:{userId}` | **live** | `GET /read/:userId` core row (`getCachedUserCoreRow`) |
+| `cohort:{tenantId}` | **live** | `/cohort/search`, `/cohortHierarchy/:id`, `/mycohorts/:userId` |
+| `cfields:{cohortId}` | **live** | `getBulkCustomFieldDetails(..., 'Cohort')` |
+| `cohortmember:{tenantId}` | **live** | `/cohortmember/read/:cohortId`, `/cohortmember/list` |
+| `fieldsdef` | **live** | global epoch; declared as `dependsOn` by ufields, cfields, cohort, cohortmember, fields, form |
+| `fields:{tenantId}` | **live** | `/fields/search`, `/fields/formFields`, `/fields/options/read` |
+| `tenant` | **live** | `/tenant/read`, `/tenant/search` |
+| `form:{tenantId}` | **live** | `/form/read` keyed on (context, contextType) |
+| `POST /cohort/geographical-hierarchy` | **not cached** | no tenant in request scope — see step-4 flags |
+| locations, roles, privileges, academic years, role-permission | **not started** | later phase |
+
+Observability (§1.6) and the Redis health probe (§1.5 rule 5) are implemented:
+per-namespace hit/miss/error/bypass counters logged every
+`CACHE_METRICS_INTERVAL_MS` (default 60s), a debug log on every INCR with
+namespace + caller, and `/health` reporting Redis status informationally
+without ever failing the check.
+
 ### Namespace catalog
 
 | **Namespace**                 | **Width** | **Pattern** | **Holds**                                                     |
@@ -244,6 +273,42 @@ POST /list → searchUser → findAllUserDetails (user.service.ts:779) decompose
 
 > The last two rows exist because the hydrated core row (#4) includes role and tenantStatus from joins. If we instead keep those columns in the id-resolution query, the last two rows drop user:{id} — decide at implementation time; matrix must match the final column split.
 
+**Rollout step 5 — DECIDED: the last two rows KEEP user:{id}.** The id-resolution
+query (`findAllUserDetails`) was left untouched — no thin-query refactor — so
+role/tenantStatus remain in it. `user:{userId}` caches the single-user read
+(`GET /read/:userId` via `getCachedUserCoreRow`), and that cached pair carries
+role + tenantStatus through `tenantData`/`findUserRoles`. Every role and
+user-tenant write therefore bumps `user:{id}`.
+
+| Read path | Namespace / key | dependsOn | TTL |
+|---|---|---|---|
+| GET /read/:userId (user.service.ts getCachedUserCoreRow) | user:{userId} + core:{tenantId} | ufields:{userId} | 15 min |
+
+| Write path bumping user:{id} (step 5) | Also bumps |
+|---|---|
+| PATCH /update/:userid | ufields:{id}, userfilter, userlist:{each t} |
+| DELETE /delete/:userId | ufields, usertenant, userroles, userfilter, userlist:{each t} |
+| assignUserToTenantAndRoll (POST /create, SSO, assign-tenant) | usertenant:{id}, userroles:{id}, userlist:{t} |
+| Role assign / delete / bulkUpdate (assign-role.service.ts) | userroles:{id}, userlist:{t} |
+| DELETE /rbac/roles/:roleId cascade (role.service.ts) | userroles:{each id}, userlist:{t} |
+| PATCH /user-tenant status update | usertenant:{id}, userlist:{t} |
+| POST /assign-tenant custom fields, SSO newtonData update | ufields:{id}, userfilter |
+| cohortMembers user-affecting bulk publish | cohortmember:{t}, userlist:{t} |
+| cron tenant-status / pragyanpath mapping | usertenant:{id}, userroles:{id}, userlist:{t} |
+
+`POST/DELETE /fields/values/*` needs no explicit user:{id} bump — the cached
+row declares `dependsOn: ufields:{userId}`, so the existing ufields bump
+already invalidates it.
+
+**Not done in step 5 (deliberate):** the §2.1.1 row-3 "Phase 1.5" thin-query
+refactor. `POST /list` keeps its existing query and its step-3 `userlist:{t}`
+response cache. Measured on a 200k-user synthetic dataset the thin query was
+17–24% faster (921→704 ms unfiltered, 76→63 ms narrow), but realizing it means
+restructuring a live method, and `role`/`tenantStatus`/`tenantId` are
+per-(user×tenant) — 66,582 of 200,000 users produced more than one row — so
+hydrating them from a per-user key would return the wrong tenant's values for
+multi-tenant users. Deferred by decision.
+
 ### 2.1.2 fields / fieldValues module
 
 Field **values** are covered per-owner above (ufields:{userId}, cfields:{cohortId}, userfilter). Field **definitions** (Phase 2): POST /fields/search, GET /fields/formFields, POST /fields/options/read under fields:{tenantId} (A, 1 h), bumped by POST /fields/create, PATCH /fields/update/:fieldId, DELETE /fields/options/delete/:fieldName. A definition change also bumps form:{tenantId} (forms embed field definitions) and ufields/cfields **wide fallback**: since a definition change alters processed values for *all* owners, it bumps a global fieldsdef epoch namespace declared as dependsOn by every ufields:{userId} and cfields:{cohortId} read — one INCR covers all records.
@@ -299,3 +364,81 @@ Field **values** are covered per-owner above (ufields:{userId}, cfields:{cohortI
 ## 2.2 (Template) Next service
 
 Copy §2.1's structure: namespace catalog → per-module tables (cached thing, pattern, key, TTL, dependsOn) → **invalidation matrix enumerating every write path** → rollout order. A service section merged into this doc is the prerequisite for its implementation PRs.
+
+# Appendix — Rollout checklist for enabling the cache
+
+`CACHE_ENABLED` is a per-environment config change, deliberately **not** made
+in the implementation PR. Work through the environments in order; do not skip
+dev.
+
+## 1. Dev (in-memory, single process)
+
+Set `CACHE_ENABLED=true`, leave `CACHE_PROVIDER=memory`. No Redis needed.
+
+Watch for:
+- **Correctness first, hit rate second.** Exercise a write→read cycle on each
+  live namespace: update a user, then immediately re-read `/read/:userId` and
+  `/list`; edit a cohort, re-run `/cohort/search`; change a field definition,
+  re-open a form. Every one must show the new value on the *next* request. A
+  stale read here is a missing invalidation hook, not a tuning problem.
+- The periodic `cache metrics {...}` log line (every
+  `CACHE_METRICS_INTERVAL_MS`). Confirm the namespaces you expect are moving
+  and `hitRate` climbs as you repeat requests.
+- `cache INCR ns=... caller=...` debug lines appearing on writes — if a write
+  produces no INCR, that path is unhooked.
+- `error`/`bypass` counters should be **zero** on memory. Anything else is a bug.
+
+Memory caveat: it is per-process, so results won't reproduce a multi-pod
+environment — that is what QA is for.
+
+## 2. QA (Redis, multi-pod)
+
+Set `CACHE_PROVIDER=redis` and `REDIS_URL`; keep a distinct
+`CACHE_KEY_PREFIX` per service (`ums`) so a shared Redis stays separable.
+
+What changes vs dev:
+- **Version counters become shared.** An INCR from one pod invalidates every
+  pod — this is the property memory cannot demonstrate.
+- **Redis failures become real.** Watch the `error` and `bypass` counters and
+  the circuit-breaker log (`Cache circuit breaker opened for ...`). Sustained
+  `error` means Redis is slow relative to `CACHE_OP_TIMEOUT_MS` (default
+  150ms) — raise the timeout or fix the network before blaming the cache.
+- `GET /health` now reports `cache.redis: "ok" | "unreachable"`. It is
+  informational: `healthy` must stay driven by Postgres alone. Verify by
+  stopping Redis — the service should keep serving (colder, from the DB) and
+  `/health` must stay green.
+- Check hit rates per namespace after a realistic soak. A namespace whose hit
+  rate doesn't justify itself should be turned off (below) rather than kept.
+
+## 3. Prod
+
+Enable one module at a time, in the §2.1.6 order, with a soak between each.
+Re-check the same signals: zero stale reads, hit rate, `error`/`bypass` flat.
+
+## 4. Turning a namespace off (config, not code)
+
+`CACHE_DISABLED_NAMESPACES` is a comma-separated bypass list, applied at
+runtime with **no redeploy and no code change**:
+
+```
+# turn off one family everywhere (all tenants / all users)
+CACHE_DISABLED_NAMESPACES=userlist
+
+# turn off several
+CACHE_DISABLED_NAMESPACES=userlist,cohort,ufields
+
+# surgically disable a single tenant's entry, leaving other tenants cached
+CACHE_DISABLED_NAMESPACES=cohort:11111111-1111-4111-8111-111111111111
+```
+
+Matching is by **family** (the part before the first `:`) or by the **exact**
+namespace. A listed namespace becomes a straight pass-through to the database:
+reads stop consulting the cache and stop writing to it. Invalidation INCRs
+still run, so re-enabling is safe — entries written before the bypass are
+already unreachable under the newer version.
+
+The current list is visible at `GET /health` under
+`cache.disabledNamespaces`, so you can confirm what a pod actually loaded.
+
+**Full stop:** `CACHE_ENABLED=false` disables everything, including INCRs, and
+is the instant, deploy-free rollback for the whole layer (§1.1 goal 5).

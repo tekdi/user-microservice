@@ -552,7 +552,7 @@ export class SsoService {
           }
         }
       }
-      await this.cacheService.invalidate([`ufields:${userId}`, "userfilter"]);
+      await this.cacheService.invalidate([`user:${userId}`, `ufields:${userId}`, "userfilter"]);
       this.logger.log(
         `Successfully updated newtonData fields for user: ${userId}`,
         'SSO_SERVICE'

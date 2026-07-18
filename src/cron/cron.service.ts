@@ -352,6 +352,7 @@ export class CronService {
                     }
                   );
                   await this.cacheService.invalidate([
+                    `user:${user.userId}`,
                     `usertenant:${user.userId}`,
                     `userlist:${tenantId}`,
                     `cohortmember:${tenantId}`,
@@ -523,6 +524,7 @@ export class CronService {
           }
 
           await this.cacheService.invalidate([
+            `user:${user.userId}`,
             `usertenant:${user.userId}`,
             `userroles:${user.userId}`,
             `userlist:${pragyanpathTenantId}`,

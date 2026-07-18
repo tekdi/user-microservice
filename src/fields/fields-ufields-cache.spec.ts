@@ -5,6 +5,7 @@ import { FieldsService } from "./fields.service";
 import { Fields } from "./entities/fields.entity";
 import { FieldValues } from "./entities/fields-values.entity";
 import { CacheService } from "../cache/cache.service";
+import { CacheMetrics } from "../cache/cache.metrics";
 import { CACHE_CONFIG, CACHE_VERSION_STORE } from "../cache/cache.constants";
 import { CacheConfig } from "../cache/cache.config";
 import { MemoryCacheVersionStore } from "../cache/stores/memory-version-store";
@@ -19,6 +20,7 @@ function cacheConfig(overrides: Partial<CacheConfig> = {}): CacheConfig {
     opTimeoutMs: 150,
     cbFailures: 5,
     cbCooldownMs: 30000,
+    metricsIntervalMs: 60000,
     ...overrides,
   };
 }
@@ -72,6 +74,7 @@ async function buildFieldsService(cache: Cache, versionStore: any, config: Cache
     providers: [
       FieldsService,
       CacheService,
+      CacheMetrics,
       { provide: getRepositoryToken(Fields), useValue: fieldsRepository },
       { provide: getRepositoryToken(FieldValues), useValue: { createQueryBuilder: jest.fn() } },
       { provide: CACHE_MANAGER, useValue: cache },
