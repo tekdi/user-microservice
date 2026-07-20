@@ -1,11 +1,9 @@
 # Caching / Redis — As-Built Implementation Reference
 
 **user-microservice**, key prefix `ums`. This document describes what is
-**actually implemented in the code today**, for someone picking up this layer
+**actually implemented**, for someone picking up this layer
 cold. Every namespace, key, TTL and invalidation hook below was read out of the
 source, not from a plan.
-
-Companion rules file: [`.claude/rules/caching.md`](.claude/rules/caching.md).
 
 ---
 
