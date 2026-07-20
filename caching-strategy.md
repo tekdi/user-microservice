@@ -1,5 +1,3 @@
-> Exported from `Caching_strartegy.docx` so it can live in the repo at `docs/caching-strategy.md` and be read directly by Claude Code. This is the canonical spec — see `claude-code-implementation-prompts.md` for the step-by-step build order derived from it. Keep §2 updated as namespaces go live (per §2.2: a service section here is "the prerequisite for its implementation PRs").
-
 # Platform Caching Strategy & Service Plans
 
 This document has two parts:
