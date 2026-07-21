@@ -48,9 +48,6 @@ export class UserPathwayHistory {
     @Column({ type: 'varchar', length: 50, default: PathwayHistoryStatus.ACTIVE, nullable: false })
     status: PathwayHistoryStatus;
 
-    @Column({ type: 'uuid', nullable: true })
-    course_id: string | null;
-
     @Column({ type: 'timestamp', nullable: true })
     expires_at: Date | null;
 
