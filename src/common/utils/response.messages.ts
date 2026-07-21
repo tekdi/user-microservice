@@ -285,6 +285,7 @@ export const API_RESPONSES = {
   VOLUNTEER_PATHWAY_HISTORY_NOT_FOUND: "Volunteer pathway history record not found.",
   VOLUNTEER_PATHWAY_INVALID_STATUS_TRANSITION: "Invalid status transition. Only ACTIVE records can be transitioned to COMPLETED, WITHDRAWN, or EXPIRED.",
   VOLUNTEER_PATHWAY_STATUS_UPDATED: "Volunteer pathway status updated successfully.",
+  VOLUNTEER_ELIGIBILITY_NOT_COMPLETED_ALUMNI: "User must complete the alumni pathway before applying to a volunteer or standard pathway.",
   VOLUNTEER_ELIGIBILITY_RETRIEVED: "Volunteer pathway eligibility check completed.",
   VOLUNTEER_ACTIVE_PATHWAYS_RETRIEVED: "Active volunteer pathway assignments retrieved successfully.",
   COURSE_COMPLETION_NOTIFICATION_SENT: "Course completion notification sent and tags assigned successfully.",

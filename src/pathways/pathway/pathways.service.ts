@@ -1951,6 +1951,12 @@ export class PathwaysService {
         `Error listing pathway users: ${errorMessage}`,
         apiId
       );
+      if (error.stack) {
+        LoggerUtil.error('Stack trace', error.stack, apiId);
+      }
+      if (error.driverError) {
+        LoggerUtil.error('DB driver error', JSON.stringify({ code: error.driverError?.code, detail: error.driverError?.detail, message: error.driverError?.message }), apiId);
+      }
       return APIResponse.error(
         response,
         apiId,
@@ -2023,6 +2029,27 @@ export class PathwaysService {
       }
       if (pathway.type !== PathwayType.VOLUNTEER) {
         return APIResponse.error(response, apiId, API_RESPONSES.BAD_REQUEST, API_RESPONSES.VOLUNTEER_PATHWAY_NOT_VOLUNTEER_TYPE, HttpStatus.BAD_REQUEST);
+      }
+
+      // Gate 0: User must be a completed alumni before applying to any pathway
+      const user = await this.userRepository.findOne({
+        where: { userId: dto.userId },
+        select: ['userId', 'auto_tags'],
+      });
+
+      if (!user) {
+        return APIResponse.error(response, apiId, API_RESPONSES.NOT_FOUND, 'User not found', HttpStatus.NOT_FOUND);
+      }
+
+      const autoTags = (user as any).auto_tags;
+      const hasCompletedAlumni = Array.isArray(autoTags) && autoTags.includes('completed_alumni');
+      if (!hasCompletedAlumni) {
+        return APIResponse.success(response, apiId, {
+          isEligible: false,
+          currentStatus: null,
+          volunteerValidUntil: null,
+          reason: API_RESPONSES.VOLUNTEER_ELIGIBILITY_NOT_COMPLETED_ALUMNI,
+        }, HttpStatus.OK, API_RESPONSES.VOLUNTEER_ELIGIBILITY_RETRIEVED);
       }
 
       // Gate 1: ACTIVE record for same pathway — user is in the middle of this batch
@@ -2247,12 +2274,16 @@ export class PathwaysService {
       const now = new Date();
 
       await this.dataSource.transaction(async (manager) => {
-        await manager.update(UserPathwayHistory, { id: historyId }, {
+        const updatePayload: Partial<UserPathwayHistory> = {
           status: dto.status,
           is_active: false,
           deactivated_at: now,
           updated_by: dto.updated_by,
-        });
+        };
+        if (dto.status === PathwayHistoryStatus.COMPLETED) {
+          (updatePayload as any).completed_at = now;
+        }
+        await manager.update(UserPathwayHistory, { id: historyId }, updatePayload);
       });
 
       return APIResponse.success(response, apiId, {
