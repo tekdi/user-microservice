@@ -1433,7 +1433,7 @@ export class PathwaysService {
     apiId: string,
     response: Response
   ): Promise<Response> {
-    const { userId, pathway, userGoal, created_by, tenantId, organisationId } = opts;
+    const { userId, pathway, userGoal, created_by, updated_by, tenantId, organisationId } = opts;
     try {
       // 1. Block if user already has an ACTIVE record for this exact pathway (same batch in progress)
       const activeRecord = await this.userPathwayHistoryRepository.findOne({
@@ -1496,7 +1496,7 @@ export class PathwaysService {
         activated_at: timestamp,
         user_goal: userGoal,
         created_by,
-        updated_by: created_by,
+        updated_by: updated_by ?? created_by,
       });
       const saved = await this.userPathwayHistoryRepository.save(record);
 
@@ -1514,6 +1514,9 @@ export class PathwaysService {
 
       return APIResponse.success(response, apiId, result, HttpStatus.OK, API_RESPONSES.PATHWAY_ASSIGNED_SUCCESSFULLY);
     } catch (error) {
+      if (error?.code === '23505' || error?.constraint === 'ux_user_pathway_active') {
+        return APIResponse.error(response, apiId, API_RESPONSES.CONFLICT, API_RESPONSES.VOLUNTEER_PATHWAY_ALREADY_ACTIVE, HttpStatus.CONFLICT);
+      }
       const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
       LoggerUtil.error(`${API_RESPONSES.SERVER_ERROR}`, `Error assigning volunteer pathway: ${errorMessage}`, apiId);
       return APIResponse.error(response, apiId, API_RESPONSES.INTERNAL_SERVER_ERROR, errorMessage, HttpStatus.INTERNAL_SERVER_ERROR);
@@ -2246,33 +2249,34 @@ export class PathwaysService {
   ): Promise<Response> {
     const apiId = APIID.VOLUNTEER_HISTORY_STATUS_UPDATE;
     try {
-      const record = await this.userPathwayHistoryRepository.findOne({
-        where: { id: historyId },
-        relations: ['pathway'],
-      });
-
-      if (!record) {
+      const exists = await this.userPathwayHistoryRepository.existsBy({ id: historyId });
+      if (!exists) {
         return APIResponse.error(response, apiId, API_RESPONSES.NOT_FOUND, API_RESPONSES.VOLUNTEER_PATHWAY_HISTORY_NOT_FOUND, HttpStatus.NOT_FOUND);
-      }
-
-      if (record.status !== PathwayHistoryStatus.ACTIVE) {
-        return APIResponse.error(response, apiId, API_RESPONSES.BAD_REQUEST, API_RESPONSES.VOLUNTEER_PATHWAY_INVALID_STATUS_TRANSITION, HttpStatus.BAD_REQUEST);
       }
 
       const now = new Date();
 
-      await this.dataSource.transaction(async (manager) => {
-        const updatePayload: Partial<UserPathwayHistory> = {
-          status: dto.status,
-          is_active: false,
-          deactivated_at: now,
-          updated_by: dto.updated_by,
-        };
-        if (dto.status === PathwayHistoryStatus.COMPLETED) {
-          (updatePayload as any).completed_at = now;
-        }
-        await manager.update(UserPathwayHistory, { id: historyId }, updatePayload);
-      });
+      const updatePayload: Record<string, any> = {
+        status: dto.status,
+        is_active: false,
+        deactivated_at: now,
+        updated_by: dto.updated_by,
+      };
+      if (dto.status === PathwayHistoryStatus.COMPLETED) {
+        updatePayload.completed_at = now;
+      }
+
+      const result = await this.userPathwayHistoryRepository
+        .createQueryBuilder()
+        .update(UserPathwayHistory)
+        .set(updatePayload)
+        .where('id = :id', { id: historyId })
+        .andWhere('status = :status', { status: PathwayHistoryStatus.ACTIVE })
+        .execute();
+
+      if ((result.affected ?? 0) === 0) {
+        return APIResponse.error(response, apiId, API_RESPONSES.BAD_REQUEST, API_RESPONSES.VOLUNTEER_PATHWAY_INVALID_STATUS_TRANSITION, HttpStatus.BAD_REQUEST);
+      }
 
       return APIResponse.success(response, apiId, {
         id: historyId,

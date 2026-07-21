@@ -24,6 +24,10 @@ export enum PathwayHistoryStatus {
 @Index("ix_user_pathways_pathway_id", ["pathway_id"])
 @Index("ix_user_pathways_status", ["status"])
 @Index("ix_user_pathways_user_pathway_status", ["user_id", "pathway_id", "status"])
+@Index("ux_user_pathway_active", ["user_id", "pathway_id"], {
+    unique: true,
+    where: "status = 'ACTIVE'",
+})
 export class UserPathwayHistory {
     @PrimaryGeneratedColumn("uuid")
     id: string;
