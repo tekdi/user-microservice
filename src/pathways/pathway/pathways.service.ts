@@ -424,7 +424,7 @@ export class PathwaysService {
                 : [],
             image_url: imageUrl,
             type: effectiveType,
-            allow_multiple_active: createPathwayDto.allow_multiple_active ?? false,
+            allow_multiple_active: createPathwayDto.allow_multiple_active ?? (isVolunteer ? true : false),
             subtype: isVolunteer ? (createPathwayDto.subtype ?? null) : null,
             volunteer_valid_until: isVolunteer ? (createPathwayDto.volunteer_valid_until ?? null) : null,
             application_opening_date: isVolunteer ? (createPathwayDto.application_opening_date ?? null) : null,
