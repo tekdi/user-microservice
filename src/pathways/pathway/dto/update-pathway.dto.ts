@@ -2,14 +2,17 @@ import { ApiPropertyOptional } from "@nestjs/swagger";
 import {
   IsString,
   IsBoolean,
-  IsNumber,
   IsOptional,
   MaxLength,
+  IsNumber,
   Min,
   IsArray,
   IsUUID,
+  IsEnum,
+  IsDateString,
 } from 'class-validator';
 import { Expose, Type } from 'class-transformer';
+import { PathwayType } from '../entities/pathway.entity';
 
 export class UpdatePathwayDto {
   @ApiPropertyOptional({
@@ -41,11 +44,7 @@ export class UpdatePathwayDto {
   image_url?: string | null;
 
   @ApiPropertyOptional({
-    description: 'Array of tag IDs from tags table (stored as PostgreSQL text[] array)',
-    example: [
-      'a1b2c3d4-e111-2222-3333-444455556666',
-      'b2c3d4e5-f111-2222-3333-444455556777',
-    ],
+    description: 'Array of tag IDs from tags table',
     type: [String],
   })
   @Expose()
@@ -74,4 +73,60 @@ export class UpdatePathwayDto {
   @IsOptional()
   @IsBoolean()
   is_active?: boolean;
+
+  @ApiPropertyOptional({
+    description: "Pathway category type (STANDARD or VOLUNTEER).",
+    enum: PathwayType,
+  })
+  @Expose()
+  @IsEnum(PathwayType)
+  @IsOptional()
+  type?: PathwayType;
+
+  @ApiPropertyOptional({
+    description: "Whether multiple active assignments are allowed simultaneously.",
+    example: true,
+  })
+  @Expose()
+  @IsBoolean()
+  @IsOptional()
+  allow_multiple_active?: boolean;
+
+  @ApiPropertyOptional({
+    description: "Volunteer pathway subtype (e.g. CAL, CL, DL). Applicable for VOLUNTEER type only.",
+    example: "CAL",
+    maxLength: 50,
+  })
+  @Expose()
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  subtype?: string | null;
+
+  @ApiPropertyOptional({
+    description: "Datetime until which completed participants are considered current volunteers (batch-level). Pass null to clear.",
+    example: "2026-12-31T23:59:59Z",
+  })
+  @Expose()
+  @IsOptional()
+  @IsDateString()
+  volunteer_valid_until?: string | null;
+
+  @ApiPropertyOptional({
+    description: "Date from which applications open. Applicable for VOLUNTEER type only; pass null to clear.",
+    example: "2025-01-01T00:00:00Z",
+  })
+  @Expose()
+  @IsOptional()
+  @IsDateString()
+  application_opening_date?: string | null;
+
+  @ApiPropertyOptional({
+    description: "Date after which applications are closed. Applicable for VOLUNTEER type only; pass null to clear.",
+    example: "2025-03-31T23:59:59Z",
+  })
+  @Expose()
+  @IsOptional()
+  @IsDateString()
+  application_closing_date?: string | null;
 }

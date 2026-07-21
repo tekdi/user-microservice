@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule } from '@nestjs/config';
+import { HttpModule } from '@nestjs/axios';
 import { PathwaysController } from './pathway/pathways.controller';
 import { PathwaysService } from './pathway/pathways.service';
 import { Pathway } from './pathway/entities/pathway.entity';
@@ -19,7 +20,8 @@ import { CacheModule } from '../cache/cache.module';
     TypeOrmModule.forFeature([Pathway, UserPathwayHistory, User, Tag]),
     InterestsModule,
     ConfigModule,
-    StorageModule, // Added for S3 file upload support
+    HttpModule,
+    StorageModule,
     CacheModule,
   ],
   controllers: [PathwaysController, TagsController],

@@ -159,6 +159,11 @@ export const APIID = {
   PATHWAY_STORAGE_DELETE: "api.pathway.storage.files.delete",
   PATHWAY_CONFIG: "api.pathway.config",
   PATHWAY_USER_LIST: "api.pathway.user.list",
+  // Volunteer Pathway APIs
+  VOLUNTEER_CHECK_ELIGIBILITY: "api.volunteer.pathway.check-eligibility",
+  VOLUNTEER_ACTIVE_PATHWAYS: "api.volunteer.pathway.active.list",
+  VOLUNTEER_HISTORY_STATUS_UPDATE: "api.volunteer.pathway.history.status.update",
+  PATHWAY_COURSE_COMPLETION_WEBHOOK: "api.pathway.webhook.course-completed",
 
   // Content Management APIs
   CONTENT_CREATE: "api.content.create",

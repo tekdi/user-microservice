@@ -447,6 +447,71 @@ export class LmsClientService {
   }
 
   /**
+   * Get the single active batch course for a VOLUNTEER pathway.
+   * Calls LMS search with isActive=true so only the currently open batch is returned.
+   * Returns the courseId string, or null if no active batch exists.
+   *
+   * LMS contract: GET /lms-service/v1/courses/search?pathwayId=X&isActive=true&status=published
+   */
+  async getActiveCourseForPathway(
+    pathwayId: string,
+    tenantId: string,
+    organisationId: string
+  ): Promise<string | null> {
+    if (!this.lmsServiceUrl) {
+      this.logger.warn(`LMS_SERVICE_URL not configured. Cannot resolve active course for pathway ${pathwayId}`);
+      return null;
+    }
+
+    const searchUrl = `${this.lmsServiceUrl}/lms-service/v1/courses/search`;
+    const headers = {
+      tenantid: tenantId,
+      organisationid: organisationId,
+      'Content-Type': 'application/json',
+    };
+
+    try {
+      const res = await axios.get(searchUrl, {
+        params: {
+          pathwayId,
+          status: 'published',
+          isActive: true,
+          limit: 1,
+          offset: 0,
+        },
+        headers,
+        timeout: 10000,
+        validateStatus: (status) => status < 500,
+      });
+
+      if (res.status !== 200) {
+        this.logger.warn(`LMS active-course lookup returned ${res.status} for pathway ${pathwayId}`);
+        return null;
+      }
+
+      const responseData = res.data?.result || res.data;
+      const courses: any[] = responseData?.courses || [];
+
+      if (courses.length === 0) {
+        this.logger.warn(`No active batch course found in LMS for pathway ${pathwayId}`);
+        return null;
+      }
+
+      const courseId = courses[0]?.courseId || courses[0]?.id || courses[0]?.course_id;
+      if (!courseId || !LmsClientService.UUID_REGEX.test(courseId)) {
+        this.logger.warn(`Active course for pathway ${pathwayId} has invalid ID: ${courseId}`);
+        return null;
+      }
+
+      return courseId;
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Failed to get active course for pathway ${pathwayId}: ${msg}`);
+      return null;
+    }
+  }
+
+  /**
    * Enroll a user to all given courses via LMS enrollment API.
    * Uses batched parallelism (no N+1). Treats 409 (already enrolled) as success.
    * Only real failures (e.g. 4xx other than 409, 5xx, network) cause abort.
@@ -533,6 +598,57 @@ export class LmsClientService {
         failedCourseIds: courseIds,
         message: `LMS bulk enrollment error: ${msg}`,
       };
+    }
+  }
+
+  /**
+   * Get course completion progress for a user from LMS.
+   * Used to validate noOfLesson == completedLesson before sending completion notification.
+   *
+   * LMS contract: GET /lms-service/v1/enrollment/progress?userId=X&courseId=Y
+   * Expected response: { noOfLesson: number, completedLesson: number, status: string }
+   */
+  async getCourseCompletionStatus(
+    userId: string,
+    courseId: string,
+    tenantId: string,
+    organisationId: string
+  ): Promise<{ noOfLesson: number; completedLesson: number; status: string } | null> {
+    if (!this.lmsServiceUrl) {
+      this.logger.warn('LMS_SERVICE_URL not configured. Cannot verify course completion.');
+      return null;
+    }
+
+    const url = `${this.lmsServiceUrl}/lms-service/v1/enrollment/progress`;
+    const headers = {
+      tenantid: tenantId,
+      organisationid: organisationId,
+      'Content-Type': 'application/json',
+    };
+
+    try {
+      const res = await axios.get(url, {
+        params: { userId, courseId },
+        headers,
+        timeout: 10000,
+        validateStatus: (status) => status < 500,
+      });
+
+      if (res.status !== 200) {
+        this.logger.warn(`LMS course progress returned ${res.status} for user ${userId} course ${courseId}`);
+        return null;
+      }
+
+      const data = res.data?.result || res.data;
+      return {
+        noOfLesson: Number(data?.noOfLesson ?? data?.totalLessons ?? 0),
+        completedLesson: Number(data?.completedLesson ?? data?.completedLessons ?? 0),
+        status: String(data?.status ?? ''),
+      };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Failed to get course progress for user ${userId} course ${courseId}: ${msg}`);
+      return null;
     }
   }
 

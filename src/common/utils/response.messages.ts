@@ -278,6 +278,21 @@ export const API_RESPONSES = {
   PATHWAY_ASSIGN_LMS_ENROLLMENT_FAILED:
     "LMS enrollment failed. Pathway assignment aborted.",
 
+  // Volunteer Pathway Messages
+  VOLUNTEER_PATHWAY_ALREADY_ACTIVE: "User already has an active assignment for this volunteer pathway.",
+  VOLUNTEER_PATHWAY_REAPPLY_TOO_SOON: "User cannot reapply to this volunteer pathway until the reapplication window opens.",
+  VOLUNTEER_PATHWAY_NOT_VOLUNTEER_TYPE: "This pathway is not a VOLUNTEER type pathway.",
+  VOLUNTEER_PATHWAY_HISTORY_NOT_FOUND: "Volunteer pathway history record not found.",
+  VOLUNTEER_PATHWAY_INVALID_STATUS_TRANSITION: "Invalid status transition. Only ACTIVE records can be transitioned to COMPLETED, WITHDRAWN, or EXPIRED.",
+  VOLUNTEER_PATHWAY_STATUS_UPDATED: "Volunteer pathway status updated successfully.",
+  VOLUNTEER_ELIGIBILITY_NOT_COMPLETED_ALUMNI: "User must complete the alumni pathway before applying to a volunteer or standard pathway.",
+  VOLUNTEER_ELIGIBILITY_RETRIEVED: "Volunteer pathway eligibility check completed.",
+  VOLUNTEER_ACTIVE_PATHWAYS_RETRIEVED: "Active volunteer pathway assignments retrieved successfully.",
+  COURSE_COMPLETION_NOTIFICATION_SENT: "Course completion notification sent and tags assigned successfully.",
+  COURSE_COMPLETION_ALREADY_PROCESSED: "Course completion notification already sent for this user and course.",
+  COURSE_COMPLETION_HISTORY_NOT_FOUND: "No active pathway history found for this user and course.",
+  COURSE_NOT_COMPLETED_IN_LMS: "Course is not fully completed in LMS. Tags will not be assigned until completedLesson >= noOfLesson and status is completed.",
+
   // Country Management Messages
   COUNTRY_LIST_SUCCESS: "Countries retrieved successfully",
 
