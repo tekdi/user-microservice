@@ -1470,15 +1470,20 @@ export class PathwaysService {
 
       // 3. Enroll user in LMS course for this pathway (auto-resolve from LMS)
       const resolvedCourseId = await this.lmsClientService.getActiveCourseForPathway(pathway.id, tenantId, organisationId);
-      if (resolvedCourseId) {
-        const enrollResult = await this.lmsClientService.enrollUserToCourses(userId, [resolvedCourseId], tenantId, organisationId);
-        if (!enrollResult.success) {
-          return APIResponse.error(
-            response, apiId, API_RESPONSES.BAD_REQUEST,
-            API_RESPONSES.PATHWAY_ASSIGN_LMS_ENROLLMENT_FAILED + (enrollResult.message ? ` ${enrollResult.message}` : ''),
-            HttpStatus.BAD_REQUEST
-          );
-        }
+      if (!resolvedCourseId) {
+        return APIResponse.error(
+          response, apiId, API_RESPONSES.NOT_FOUND,
+          'No active batch course found for this pathway in LMS.',
+          HttpStatus.NOT_FOUND
+        );
+      }
+      const enrollResult = await this.lmsClientService.enrollUserToCourses(userId, [resolvedCourseId], tenantId, organisationId);
+      if (!enrollResult.success) {
+        return APIResponse.error(
+          response, apiId, API_RESPONSES.BAD_REQUEST,
+          API_RESPONSES.PATHWAY_ASSIGN_LMS_ENROLLMENT_FAILED + (enrollResult.message ? ` ${enrollResult.message}` : ''),
+          HttpStatus.BAD_REQUEST
+        );
       }
 
       // 4. Create ACTIVE history record
@@ -2148,14 +2153,19 @@ export class PathwaysService {
     const apiId = APIID.PATHWAY_COURSE_COMPLETION_WEBHOOK;
     try {
       // Query without status filter so retried calls can detect "already processed"
+      if (!dto.pathwayId) {
+        return APIResponse.error(
+          response, apiId, API_RESPONSES.BAD_REQUEST,
+          'pathwayId is required to identify the correct pathway history record.',
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
       const qb = this.userPathwayHistoryRepository
         .createQueryBuilder('h')
         .innerJoinAndSelect('h.pathway', 'pw')
-        .where('h.user_id = :userId', { userId: dto.userId });
-
-      if (dto.pathwayId) {
-        qb.andWhere('h.pathway_id = :pathwayId', { pathwayId: dto.pathwayId });
-      }
+        .where('h.user_id = :userId', { userId: dto.userId })
+        .andWhere('h.pathway_id = :pathwayId', { pathwayId: dto.pathwayId });
 
       const record = await qb.orderBy('h.activated_at', 'DESC').getOne();
 
