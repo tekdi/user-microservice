@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsOptional, IsString, IsUUID, IsObject, ValidateNested, IsEnum } from 'class-validator';
+import { IsBoolean, IsOptional, IsString, IsUUID, IsObject, ValidateNested, IsEnum, IsInt, Min } from 'class-validator';
 import { Expose, Type } from 'class-transformer';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { PathwayType } from '../entities/pathway.entity';
@@ -59,6 +59,17 @@ class PathwayFiltersDto {
   @IsOptional()
   @IsString()
   subtype?: string;
+
+  @ApiPropertyOptional({
+    description: "Filter VOLUNTEER pathways by the calendar year of application_opening_date (e.g. the recruitment cycle year).",
+    example: 2026,
+  })
+  @Expose()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1970)
+  applicationYear?: number;
 }
 export class ListPathwayDto extends PaginationDto {
   @ApiPropertyOptional({

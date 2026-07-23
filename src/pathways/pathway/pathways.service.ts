@@ -1,7 +1,7 @@
 import * as crypto from 'crypto';
 import { Injectable, HttpStatus, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In, DataSource, Like, ILike, Not } from 'typeorm';
+import { Repository, In, DataSource, Like, ILike, Not, Raw } from 'typeorm';
 import { Pathway, PathwayType } from './entities/pathway.entity';
 import { Tag } from '../tags/entities/tag.entity';
 import { CreatePathwayDto } from './dto/create-pathway.dto';
@@ -424,7 +424,7 @@ export class PathwaysService {
                 : [],
             image_url: imageUrl,
             type: effectiveType,
-            allow_multiple_active: createPathwayDto.allow_multiple_active ?? false,
+            allow_multiple_active: createPathwayDto.allow_multiple_active ?? isVolunteer,
             subtype: isVolunteer ? (createPathwayDto.subtype ?? null) : null,
             volunteer_valid_until: isVolunteer ? (createPathwayDto.volunteer_valid_until ?? null) : null,
             application_opening_date: isVolunteer ? (createPathwayDto.application_opening_date ?? null) : null,
@@ -712,6 +712,12 @@ export class PathwaysService {
         if (filters.subtype) {
           queryBuilder.andWhere("pathway.subtype = :subtype", { subtype: filters.subtype });
         }
+        if (filters.applicationYear) {
+          queryBuilder.andWhere(
+            "EXTRACT(YEAR FROM pathway.application_opening_date) = :applicationYear",
+            { applicationYear: Number(filters.applicationYear) }
+          );
+        }
 
         // Apply ordering
         queryBuilder.orderBy("pathway.display_order", "ASC");
@@ -736,6 +742,12 @@ export class PathwaysService {
         }
         if (filters.subtype) {
           whereCondition.subtype = filters.subtype;
+        }
+        if (filters.applicationYear) {
+          whereCondition.application_opening_date = Raw(
+            alias => `EXTRACT(YEAR FROM ${alias}) = :year`,
+            { year: Number(filters.applicationYear) }
+          );
         }
 
         // OPTIMIZED: Single query with count and data using findAndCount
@@ -1251,7 +1263,6 @@ export class PathwaysService {
       assignDto.userGoal,
       assignDto.created_by,
       assignDto.updated_by,
-      assignDto.course_id
     );
   }
 
@@ -1273,7 +1284,6 @@ export class PathwaysService {
     userGoal?: string,
     created_by?: string,
     updated_by?: string,
-    courseId?: string
   ): Promise<Response> {
     try {
       // 1. Validate user existence and completed_alumni tag
@@ -1307,7 +1317,7 @@ export class PathwaysService {
       // ── VOLUNTEER PATH ──────────────────────────────────────────────────────
       if (isVolunteer) {
         return this.handleVolunteerAssignment(
-          { userId, pathway, courseId, userGoal, created_by, updated_by, tenantId, organisationId },
+          { userId, pathway, userGoal, created_by, updated_by, tenantId, organisationId },
           apiId,
           response
         );
@@ -1426,7 +1436,6 @@ export class PathwaysService {
     opts: {
       userId: string;
       pathway: Pathway;
-      courseId: string | undefined;
       userGoal: string | undefined;
       created_by: string | undefined;
       updated_by: string | undefined;
@@ -1436,7 +1445,7 @@ export class PathwaysService {
     apiId: string,
     response: Response
   ): Promise<Response> {
-    const { userId, pathway, courseId, userGoal, created_by, tenantId, organisationId } = opts;
+    const { userId, pathway, userGoal, created_by, updated_by, tenantId, organisationId } = opts;
     try {
       // 1. Block if user already has an ACTIVE record for this exact pathway (same batch in progress)
       const activeRecord = await this.userPathwayHistoryRepository.findOne({
@@ -1471,38 +1480,35 @@ export class PathwaysService {
         }
       }
 
-      // 3. Resolve course_id:
-      //    - Use the explicitly provided course_id if frontend sent one.
-      //    - Otherwise auto-fetch the single active batch from LMS.
-      let resolvedCourseId = courseId || null;
+      // 3. Enroll user in LMS course for this pathway (auto-resolve from LMS)
+      const resolvedCourseId = await this.lmsClientService.getActiveCourseForPathway(pathway.id, tenantId, organisationId);
       if (!resolvedCourseId) {
-        resolvedCourseId = await this.lmsClientService.getActiveCourseForPathway(pathway.id, tenantId, organisationId);
+        return APIResponse.error(
+          response, apiId, API_RESPONSES.NOT_FOUND,
+          'No active batch course found for this pathway in LMS.',
+          HttpStatus.NOT_FOUND
+        );
+      }
+      const enrollResult = await this.lmsClientService.enrollUserToCourses(userId, [resolvedCourseId], tenantId, organisationId);
+      if (!enrollResult.success) {
+        return APIResponse.error(
+          response, apiId, API_RESPONSES.BAD_REQUEST,
+          API_RESPONSES.PATHWAY_ASSIGN_LMS_ENROLLMENT_FAILED + (enrollResult.message ? ` ${enrollResult.message}` : ''),
+          HttpStatus.BAD_REQUEST
+        );
       }
 
-      // 4. Enroll user in the resolved course via LMS
-      if (resolvedCourseId) {
-        const enrollResult = await this.lmsClientService.enrollUserToCourses(userId, [resolvedCourseId], tenantId, organisationId);
-        if (!enrollResult.success) {
-          return APIResponse.error(
-            response, apiId, API_RESPONSES.BAD_REQUEST,
-            API_RESPONSES.PATHWAY_ASSIGN_LMS_ENROLLMENT_FAILED + (enrollResult.message ? ` ${enrollResult.message}` : ''),
-            HttpStatus.BAD_REQUEST
-          );
-        }
-      }
-
-      // 5. Create ACTIVE history record
+      // 4. Create ACTIVE history record
       const timestamp = new Date();
       const record = this.userPathwayHistoryRepository.create({
         user_id: userId,
         pathway_id: pathway.id,
         is_active: true,
         status: PathwayHistoryStatus.ACTIVE,
-        course_id: resolvedCourseId,
         activated_at: timestamp,
         user_goal: userGoal,
         created_by,
-        updated_by: created_by,
+        updated_by: updated_by ?? created_by,
       });
       const saved = await this.userPathwayHistoryRepository.save(record);
 
@@ -1512,7 +1518,6 @@ export class PathwaysService {
         pathwayId: pathway.id,
         pathwayType: PathwayType.VOLUNTEER,
         subtype: pathway.subtype ?? null,
-        courseId: resolvedCourseId,
         status: PathwayHistoryStatus.ACTIVE,
         activatedAt: timestamp,
         userGoal,
@@ -1521,6 +1526,9 @@ export class PathwaysService {
 
       return APIResponse.success(response, apiId, result, HttpStatus.OK, API_RESPONSES.PATHWAY_ASSIGNED_SUCCESSFULLY);
     } catch (error) {
+      if (error?.code === '23505' || error?.constraint === 'ux_user_pathway_active') {
+        return APIResponse.error(response, apiId, API_RESPONSES.CONFLICT, API_RESPONSES.VOLUNTEER_PATHWAY_ALREADY_ACTIVE, HttpStatus.CONFLICT);
+      }
       const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
       LoggerUtil.error(`${API_RESPONSES.SERVER_ERROR}`, `Error assigning volunteer pathway: ${errorMessage}`, apiId);
       return APIResponse.error(response, apiId, API_RESPONSES.INTERNAL_SERVER_ERROR, errorMessage, HttpStatus.INTERNAL_SERVER_ERROR);
@@ -1562,7 +1570,7 @@ export class PathwaysService {
           .where('h.user_id = :userId', { userId })
           .andWhere('h.status = :status', { status: PathwayHistoryStatus.ACTIVE })
           .andWhere('pw.type = :type', { type: PathwayType.VOLUNTEER })
-          .select(['h.id', 'h.pathway_id', 'h.course_id', 'h.status', 'h.activated_at', 'h.completed_at', 'h.user_goal', 'h.is_active', 'h.updated_by', 'pw.id', 'pw.subtype', 'pw.volunteer_valid_until']);
+          .select(['h.id', 'h.pathway_id', 'h.status', 'h.activated_at', 'h.completed_at', 'h.user_goal', 'h.is_active', 'h.updated_by', 'pw.id', 'pw.subtype', 'pw.volunteer_valid_until']);
 
         if (pathwayId) {
           qb.andWhere('h.pathway_id = :pathwayId', { pathwayId });
@@ -1574,7 +1582,6 @@ export class PathwaysService {
           id: r.id,
           pathwayId: r.pathway_id,
           pathwaySubtype: r.pathway?.subtype ?? null,
-          courseId: r.course_id,
           status: r.status,
           activatedAt: r.activated_at,
           completedAt: r.completed_at ?? null,
@@ -1596,7 +1603,7 @@ export class PathwaysService {
       const userPathway = await this.userPathwayHistoryRepository.findOne({
         where: whereCondition,
         order: { activated_at: 'DESC' },
-        select: ['id', 'pathway_id', 'activated_at', 'deactivated_at', 'completed_at', 'user_goal', 'is_active', 'updated_by', 'status', 'course_id'],
+        select: ['id', 'pathway_id', 'activated_at', 'deactivated_at', 'completed_at', 'user_goal', 'is_active', 'updated_by', 'status'],
       });
 
       if (!userPathway) {
@@ -1607,7 +1614,6 @@ export class PathwaysService {
       const result = {
         id: userPathway.id,
         pathwayId: userPathway.pathway_id,
-        courseId: userPathway.course_id,
         status: userPathway.status,
         activatedAt: userPathway.activated_at,
         deactivatedAt: userPathway.deactivated_at,
@@ -1844,9 +1850,6 @@ export class PathwaysService {
         if (filters.historyStatus) {
           queryBuilder.andWhere("history.status = :historyStatus", { historyStatus: filters.historyStatus });
         }
-        if (filters.courseId) {
-          queryBuilder.andWhere("history.course_id = :courseId", { courseId: filters.courseId });
-        }
         if (filters.subtype) {
           queryBuilder.andWhere("pathway.subtype = :subtype", { subtype: filters.subtype });
         }
@@ -1864,7 +1867,6 @@ export class PathwaysService {
         'history.pathway_id',
         'history.is_active',
         'history.status',
-        'history.course_id',
         'history.activated_at',
         'history.deactivated_at',
         'history.completed_at',
@@ -1933,7 +1935,6 @@ export class PathwaysService {
           completedAt: item.completed_at ?? null,
           status: item.is_active,
           historyStatus: item.status,
-          courseId: item.course_id ?? null,
         })),
       };
 
@@ -2126,7 +2127,7 @@ export class PathwaysService {
         .where('h.user_id = :userId', { userId })
         .andWhere('h.status = :status', { status: PathwayHistoryStatus.ACTIVE })
         .andWhere('pw.type = :type', { type: PathwayType.VOLUNTEER })
-        .select(['h.id', 'h.pathway_id', 'h.course_id', 'h.status', 'h.activated_at', 'h.completed_at', 'h.user_goal', 'h.is_active', 'pw.id', 'pw.name', 'pw.key', 'pw.type', 'pw.subtype', 'pw.volunteer_valid_until']);
+        .select(['h.id', 'h.pathway_id', 'h.status', 'h.activated_at', 'h.completed_at', 'h.user_goal', 'h.is_active', 'pw.id', 'pw.name', 'pw.key', 'pw.type', 'pw.subtype', 'pw.volunteer_valid_until']);
 
       if (pathwayId) {
         qb.andWhere('h.pathway_id = :pathwayId', { pathwayId });
@@ -2140,7 +2141,6 @@ export class PathwaysService {
         pathwayName: r.pathway?.name ?? null,
         pathwayKey: r.pathway?.key ?? null,
         pathwaySubtype: r.pathway?.subtype ?? null,
-        courseId: r.course_id,
         status: r.status,
         activatedAt: r.activated_at,
         completedAt: r.completed_at ?? null,
@@ -2168,15 +2168,19 @@ export class PathwaysService {
     const apiId = APIID.PATHWAY_COURSE_COMPLETION_WEBHOOK;
     try {
       // Query without status filter so retried calls can detect "already processed"
+      if (!dto.pathwayId) {
+        return APIResponse.error(
+          response, apiId, API_RESPONSES.BAD_REQUEST,
+          'pathwayId is required to identify the correct pathway history record.',
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
       const qb = this.userPathwayHistoryRepository
         .createQueryBuilder('h')
         .innerJoinAndSelect('h.pathway', 'pw')
         .where('h.user_id = :userId', { userId: dto.userId })
-        .andWhere('h.course_id = :courseId', { courseId: dto.courseId });
-
-      if (dto.pathwayId) {
-        qb.andWhere('h.pathway_id = :pathwayId', { pathwayId: dto.pathwayId });
-      }
+        .andWhere('h.pathway_id = :pathwayId', { pathwayId: dto.pathwayId });
 
       const record = await qb.orderBy('h.activated_at', 'DESC').getOne();
 
@@ -2231,7 +2235,6 @@ export class PathwaysService {
       return APIResponse.success(response, apiId, {
         historyId: record.id,
         userId: dto.userId,
-        courseId: dto.courseId,
         pathwayId: record.pathway_id,
         subtype: record.pathway.subtype ?? null,
         status: PathwayHistoryStatus.COMPLETED,
@@ -2258,33 +2261,34 @@ export class PathwaysService {
   ): Promise<Response> {
     const apiId = APIID.VOLUNTEER_HISTORY_STATUS_UPDATE;
     try {
-      const record = await this.userPathwayHistoryRepository.findOne({
-        where: { id: historyId },
-        relations: ['pathway'],
-      });
-
-      if (!record) {
+      const exists = await this.userPathwayHistoryRepository.existsBy({ id: historyId });
+      if (!exists) {
         return APIResponse.error(response, apiId, API_RESPONSES.NOT_FOUND, API_RESPONSES.VOLUNTEER_PATHWAY_HISTORY_NOT_FOUND, HttpStatus.NOT_FOUND);
-      }
-
-      if (record.status !== PathwayHistoryStatus.ACTIVE) {
-        return APIResponse.error(response, apiId, API_RESPONSES.BAD_REQUEST, API_RESPONSES.VOLUNTEER_PATHWAY_INVALID_STATUS_TRANSITION, HttpStatus.BAD_REQUEST);
       }
 
       const now = new Date();
 
-      await this.dataSource.transaction(async (manager) => {
-        const updatePayload: Partial<UserPathwayHistory> = {
-          status: dto.status,
-          is_active: false,
-          deactivated_at: now,
-          updated_by: dto.updated_by,
-        };
-        if (dto.status === PathwayHistoryStatus.COMPLETED) {
-          (updatePayload as any).completed_at = now;
-        }
-        await manager.update(UserPathwayHistory, { id: historyId }, updatePayload);
-      });
+      const updatePayload: Record<string, any> = {
+        status: dto.status,
+        is_active: false,
+        deactivated_at: now,
+        updated_by: dto.updated_by,
+      };
+      if (dto.status === PathwayHistoryStatus.COMPLETED) {
+        updatePayload.completed_at = now;
+      }
+
+      const result = await this.userPathwayHistoryRepository
+        .createQueryBuilder()
+        .update(UserPathwayHistory)
+        .set(updatePayload)
+        .where('id = :id', { id: historyId })
+        .andWhere('status = :status', { status: PathwayHistoryStatus.ACTIVE })
+        .execute();
+
+      if ((result.affected ?? 0) === 0) {
+        return APIResponse.error(response, apiId, API_RESPONSES.BAD_REQUEST, API_RESPONSES.VOLUNTEER_PATHWAY_INVALID_STATUS_TRANSITION, HttpStatus.BAD_REQUEST);
+      }
 
       return APIResponse.success(response, apiId, {
         id: historyId,

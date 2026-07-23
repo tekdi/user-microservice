@@ -63,16 +63,6 @@ class ListPathwayUsersFiltersDto {
   historyStatus?: PathwayHistoryStatus;
 
   @ApiPropertyOptional({
-    description: 'Filter users enrolled in a specific LMS batch/course UUID.',
-    example: 'c102-0000-0000-0000-000000000000',
-    format: 'uuid',
-  })
-  @Expose()
-  @IsOptional()
-  @IsUUID()
-  courseId?: string;
-
-  @ApiPropertyOptional({
     description: 'Filter by volunteer pathway subtype (e.g. CAL, CL, DL). Only applies when pathwayType = VOLUNTEER.',
     example: 'CAL',
   })

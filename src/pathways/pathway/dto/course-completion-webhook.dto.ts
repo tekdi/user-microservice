@@ -15,9 +15,9 @@ export class CourseCompletionWebhookDto {
   @IsNotEmpty()
   courseId: string;
 
-  @ApiProperty({ description: "Pathway UUID linked to the course", format: "uuid", required: false })
+  @ApiProperty({ description: "Pathway UUID linked to the course", format: "uuid" })
   @Expose()
   @IsUUID()
-  @IsOptional()
-  pathwayId?: string;
+  @IsNotEmpty()
+  pathwayId: string;
 }
