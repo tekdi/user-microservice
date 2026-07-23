@@ -52,19 +52,19 @@ export class UserPathwayHistory {
     @Column({ type: 'varchar', length: 50, default: PathwayHistoryStatus.ACTIVE, nullable: false })
     status: PathwayHistoryStatus;
 
-    @Column({ type: 'timestamp', nullable: true })
+    @Column({ type: 'timestamptz', nullable: true })
     expires_at: Date | null;
 
-    @Column({ type: 'timestamp', nullable: true })
+    @Column({ type: 'timestamptz', nullable: true })
     completed_at: Date | null;
 
     @CreateDateColumn({
-        type: "timestamp",
+        type: "timestamptz",
         default: () => "CURRENT_TIMESTAMP",
     })
     activated_at: Date;
 
-    @Column({ type: "timestamp", nullable: true })
+    @Column({ type: "timestamptz", nullable: true })
     deactivated_at: Date;
 
     @Column({ type: "text", nullable: true })
