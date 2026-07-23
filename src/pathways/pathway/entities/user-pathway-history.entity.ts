@@ -52,7 +52,7 @@ export class UserPathwayHistory {
     @Column({ type: 'varchar', length: 50, default: PathwayHistoryStatus.ACTIVE, nullable: false })
     status: PathwayHistoryStatus;
 
-    @Column({ type: 'timestamp', nullable: true })
+    @Column({ type: 'timestamptz', nullable: true })
     expires_at: Date | null;
 
     @Column({ type: 'timestamptz', nullable: true })
