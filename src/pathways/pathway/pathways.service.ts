@@ -1,7 +1,7 @@
 import * as crypto from 'crypto';
 import { Injectable, HttpStatus, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In, DataSource, Like, ILike, Not, Between } from 'typeorm';
+import { Repository, In, DataSource, Like, ILike, Not, Raw } from 'typeorm';
 import { Pathway, PathwayType } from './entities/pathway.entity';
 import { Tag } from '../tags/entities/tag.entity';
 import { CreatePathwayDto } from './dto/create-pathway.dto';
@@ -713,13 +713,9 @@ export class PathwaysService {
           queryBuilder.andWhere("pathway.subtype = :subtype", { subtype: filters.subtype });
         }
         if (filters.applicationYear) {
-          const year = Number(filters.applicationYear);
           queryBuilder.andWhere(
-            "pathway.application_opening_date BETWEEN :yearStart AND :yearEnd",
-            {
-              yearStart: new Date(Date.UTC(year, 0, 1, 0, 0, 0)),
-              yearEnd: new Date(Date.UTC(year, 11, 31, 23, 59, 59, 999)),
-            }
+            "EXTRACT(YEAR FROM pathway.application_opening_date) = :applicationYear",
+            { applicationYear: Number(filters.applicationYear) }
           );
         }
 
@@ -748,10 +744,9 @@ export class PathwaysService {
           whereCondition.subtype = filters.subtype;
         }
         if (filters.applicationYear) {
-          const year = Number(filters.applicationYear);
-          whereCondition.application_opening_date = Between(
-            new Date(Date.UTC(year, 0, 1, 0, 0, 0)),
-            new Date(Date.UTC(year, 11, 31, 23, 59, 59, 999))
+          whereCondition.application_opening_date = Raw(
+            alias => `EXTRACT(YEAR FROM ${alias}) = :year`,
+            { year: Number(filters.applicationYear) }
           );
         }
 
