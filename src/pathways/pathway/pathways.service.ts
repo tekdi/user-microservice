@@ -1,7 +1,7 @@
 import * as crypto from 'crypto';
 import { Injectable, HttpStatus, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In, DataSource, Like, ILike, Not } from 'typeorm';
+import { Repository, In, DataSource, Like, ILike, Not, Between } from 'typeorm';
 import { Pathway, PathwayType } from './entities/pathway.entity';
 import { Tag } from '../tags/entities/tag.entity';
 import { CreatePathwayDto } from './dto/create-pathway.dto';
@@ -424,7 +424,7 @@ export class PathwaysService {
                 : [],
             image_url: imageUrl,
             type: effectiveType,
-            allow_multiple_active: createPathwayDto.allow_multiple_active ?? (isVolunteer ? true : false),
+            allow_multiple_active: createPathwayDto.allow_multiple_active ?? isVolunteer,
             subtype: isVolunteer ? (createPathwayDto.subtype ?? null) : null,
             volunteer_valid_until: isVolunteer ? (createPathwayDto.volunteer_valid_until ?? null) : null,
             application_opening_date: isVolunteer ? (createPathwayDto.application_opening_date ?? null) : null,
@@ -712,6 +712,16 @@ export class PathwaysService {
         if (filters.subtype) {
           queryBuilder.andWhere("pathway.subtype = :subtype", { subtype: filters.subtype });
         }
+        if (filters.applicationYear) {
+          const year = Number(filters.applicationYear);
+          queryBuilder.andWhere(
+            "pathway.application_opening_date BETWEEN :yearStart AND :yearEnd",
+            {
+              yearStart: new Date(Date.UTC(year, 0, 1, 0, 0, 0)),
+              yearEnd: new Date(Date.UTC(year, 11, 31, 23, 59, 59, 999)),
+            }
+          );
+        }
 
         // Apply ordering
         queryBuilder.orderBy("pathway.display_order", "ASC");
@@ -736,6 +746,13 @@ export class PathwaysService {
         }
         if (filters.subtype) {
           whereCondition.subtype = filters.subtype;
+        }
+        if (filters.applicationYear) {
+          const year = Number(filters.applicationYear);
+          whereCondition.application_opening_date = Between(
+            new Date(Date.UTC(year, 0, 1, 0, 0, 0)),
+            new Date(Date.UTC(year, 11, 31, 23, 59, 59, 999))
+          );
         }
 
         // OPTIMIZED: Single query with count and data using findAndCount

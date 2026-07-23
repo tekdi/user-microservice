@@ -49,7 +49,7 @@ export class UserPathwayHistory {
     @Column({ type: "boolean", default: true })
     is_active: boolean;
 
-    @Column({ type: 'varchar', length: 50, default: PathwayHistoryStatus.ACTIVE, nullable: false })
+    @Column({ type: 'enum', enum: PathwayHistoryStatus, default: PathwayHistoryStatus.ACTIVE, nullable: false })
     status: PathwayHistoryStatus;
 
     @Column({ type: 'timestamp', nullable: true })
