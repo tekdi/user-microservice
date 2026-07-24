@@ -159,10 +159,8 @@ export class AssignRoleService {
         );
       }
 
-      // §2.1.5: userroles namespace, 10 min. Keyed by userId alone (not the
-      // doc's userroles:{tenantId}:{userId}) because this read has no tenant
-      // filter and the delete write path has no tenantId to invalidate with.
-      // A null result (no role mapping) is never cached.
+      // Keyed by userId alone: this read has no tenant filter, and the delete
+      // write path carries no tenantId to invalidate with.
       const result = await this.cacheService.getOrLoad({
         namespace: `userroles:${userId}`,
         key: "role",

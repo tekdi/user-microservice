@@ -27,7 +27,7 @@ import { KafkaService } from "src/kafka/kafka.service";
 import { CacheService } from "../cache/cache.service";
 import { hashCacheKey } from "../cache/cache-key.util";
 
-const COHORTMEMBER_TTL_SECONDS = 180; // §2.1.4: cohortmember:{tenantId}, 3 min
+const COHORTMEMBER_TTL_SECONDS = 180; // cohortmember:{tenantId}, 3 min
 import { BulkCohortMember } from "src/cohortMembers/dto/bulkMember-create.dto";
 
 @Injectable()
@@ -52,9 +52,8 @@ export class CohortMembersService {
   ) { }
 
   //Get cohort member
-  // §2.1.4: GET /cohortmember/read/:cohortId under cohortmember:{tenantId} +
-  // id + flags, 3 min, dependsOn fieldsdef + userlist:{t}. Wrapper writes the
-  // response; the inner method returns the payload / writes errors directly.
+  // Wrapper writes the response; the inner method returns the payload or
+  // writes errors directly.
   async getCohortMembers(
     cohortId: any,
     tenantId: any,
@@ -273,10 +272,9 @@ ON CM."userId" = U."userId" ${whereCase}`;
     return result;
   }
 
-  // §2.1.4: POST /cohortmember/list under cohortmember:{tenantId} + body hash,
-  // 3 min, dependsOn fieldsdef + userlist:{t}. Loader returns the payload; the
-  // wrapper writes the success response. Error branches write directly, which
-  // the headersSent check detects so their (null) result is never cached.
+  // Loader returns the payload; the wrapper writes the success response. Error
+  // branches write directly, which the headersSent check detects so their
+  // (null) result is never cached.
   public async searchCohortMembers(
     cohortMembersSearchDto: CohortMembersSearchDto,
     tenantId: string,
@@ -509,8 +507,7 @@ ON CM."userId" = U."userId" ${whereCase}`;
     if (getUserDetails.length > 0) {
       results.totalCount = parseInt(getUserDetails[0].total_count, 10);
 
-      // §2.1.4 "Member user-detail hydration reuses ufields:{userId}": one
-      // bulk call into the same ufields-cached path the user module uses,
+      // One bulk call into the same ufields-cached path the user module uses,
       // instead of a per-user getCustomFieldDetails (also removes the N+1).
       const bulkUserFields =
         fieldShowHide === "false"
@@ -1264,9 +1261,7 @@ ${whereCase}`;
       apiId
     );
 
-    // Membership changes alter /list results that use exclude.cohortIds
-    // (§2.1.1 matrix: cohortMembers user-affecting publish → user:{id} +
-    // userlist:{t}; the user:{id} bump ships with rollout step 5).
+    // Membership changes alter /list results that use exclude.cohortIds.
     if (affectedUsers.size > 0) {
       await this.cacheService.invalidate([
         ...Array.from(affectedUsers).map((id) => `user:${id}`),

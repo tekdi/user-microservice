@@ -302,8 +302,7 @@ export class UserTenantMappingService {
 
       query += ` ORDER BY UTM."createdAt" DESC`;
 
-      // §2.1.5: usertenant:{userId}, 10 min. An empty mapping list is never
-      // cached (no negative caching), so a fresh assignment shows up at once.
+      // An empty mapping list is never cached, so a fresh assignment shows up at once.
       const mappings = await this.cacheService.getOrLoad<any[]>({
         namespace: `usertenant:${userId}`,
         key: `mappings:${includeArchived ? "all" : "active"}`,

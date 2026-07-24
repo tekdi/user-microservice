@@ -90,7 +90,7 @@ async function buildFieldsService(cache: Cache, versionStore: any, config: Cache
   };
 }
 
-describe("ufields:{userId} cache (getBulkCustomFieldDetails, §2.1.1 row 1)", () => {
+describe("ufields:{userId} cache (getBulkCustomFieldDetails)", () => {
   it("miss: first call queries the DB and returns grouped fields", async () => {
     const { fieldsService, fieldsRepository } = await buildFieldsService(
       fakeCache(),
@@ -231,7 +231,7 @@ describe("ufields:{userId} cache (getBulkCustomFieldDetails, §2.1.1 row 1)", ()
   });
 });
 
-describe("getCoreColumnNames memo (§2.1.1 row 5, pattern D)", () => {
+describe("getCoreColumnNames memo (in-process, no Redis)", () => {
   it("computes column names once per process and reuses the memo", async () => {
     const getMetadata = jest.fn().mockReturnValue({
       columns: [{ propertyName: "userId" }, { propertyName: "username" }],

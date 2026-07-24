@@ -28,9 +28,9 @@ import { check } from "prettier";
 import { CacheService } from "../cache/cache.service";
 import { hashCacheKey } from "../cache/cache-key.util";
 
-const UFIELDS_TTL_SECONDS = 3600; // §2.1.1 row 1: ufields:{userId}, 1 h
-const USERFILTER_TTL_SECONDS = 300; // §2.1.1 row 2: userfilter, 5 min
-const FIELDSDEF_TTL_SECONDS = 3600; // §2.1.2 phase 2: fields:{tenantId}, 1 h
+const UFIELDS_TTL_SECONDS = 3600; // ufields:{userId}, 1 h
+const USERFILTER_TTL_SECONDS = 300; // userfilter, 5 min
+const FIELDSDEF_TTL_SECONDS = 3600; // fields:{tenantId}, 1 h
 
 @Injectable()
 export class FieldsService {
@@ -42,9 +42,7 @@ export class FieldsService {
     private readonly cacheService: CacheService
   ) { }
 
-  // §2.1.2 phase 2: GET /fields/formFields under fields:{tenantId}, 1 h,
-  // keyed on (context, contextType). No tenant header on this endpoint, so
-  // it shares the global fields namespace.
+  // No tenant header on this endpoint, so it shares the global fields namespace.
   async getFormCustomField(requiredData, response) {
     const payload = await this.cacheService.getOrLoad({
       namespace: "fields:global",
@@ -807,10 +805,9 @@ export class FieldsService {
     }
   }
 
-  // §2.1.2 / §2.1.5 phase 2: POST /fields/search under fields:{tenantId},
-  // 1 h. Wrapper writes the success response; the inner method returns the
-  // payload and still writes its own error responses (headersSent tells the
-  // wrapper, so failures are never cached).
+  // Wrapper writes the success response; the inner method returns the payload
+  // and still writes its own error responses (headersSent tells the wrapper,
+  // so failures are never cached).
   async searchFields(
     tenantId: string,
     request: any,
@@ -1240,9 +1237,8 @@ export class FieldsService {
     return { offset, limit, whereClause };
   }
 
-  // §2.1.2 phase 2: POST /fields/options/read under fields:{tenantId}, 1 h.
-  // The endpoint carries no tenant header, so it lives under the global
-  // fields namespace — the same field-definition writes bump both.
+  // The endpoint carries no tenant header, so it lives under the global fields
+  // namespace — the same field-definition writes bump both.
   public async getFieldOptions(
     fieldsOptionsSearchDto: FieldsOptionsSearchDto,
     response: Response
@@ -1628,9 +1624,8 @@ export class FieldsService {
   }
 
   // OPTIMIZED VERSION - Much faster alternative to avoid JSON aggregation
-  // §2.1.1 row 2 (pattern C): one shared userfilter cache for all three call
-  // sites (user search, cohort search, cron). A null result (no filters or no
-  // matches) is never cached — rule 5.
+  // One shared userfilter cache for all three call sites (user search, cohort
+  // search, cron). A null result is never cached.
   async filterUserUsingCustomFieldsOptimized(context: string, stateDistBlockData: any) {
     if (context !== "COHORT" && context !== "USERS") {
       return null;
@@ -2027,10 +2022,9 @@ export class FieldsService {
       return {};
     }
 
-    // §2.1.1 row 1 / §2.1.3 row 5: per-owner bulk hydration — ufields:{userId}
-    // for Users, cfields:{cohortId} for Cohort. Both declare dependsOn
-    // fieldsdef (§2.1.2): a definition change re-processes every owner's
-    // values, so the epoch bump makes all entries stale at once.
+    // Per-owner bulk hydration: ufields:{userId} for Users, cfields:{cohortId}
+    // for Cohort. Both declare dependsOn fieldsdef, so one epoch bump makes
+    // every owner's entries stale at once.
     if (tableName === "Users" || tableName === "Cohort") {
       const nsPrefix = tableName === "Users" ? "ufields" : "cfields";
       const hydrated = await this.cacheService.bulkGetOrLoad<any[]>({
@@ -2211,7 +2205,7 @@ export class FieldsService {
   /**
    * Single invalidation point for every field-DEFINITION write
    * (POST /fields/create, PATCH /fields/update/:fieldId,
-   * DELETE /fields/options/delete/:fieldName). §2.1.2 + §2.1.5:
+   * DELETE /fields/options/delete/:fieldName).
    *
    *  - `fieldsdef` is the global epoch. Every definition-dependent read
    *    (ufields, cfields, cohort, cohortmember, fields, form) declares it as
@@ -2221,7 +2215,7 @@ export class FieldsService {
    *  - the writing tenant's own `fields:{t}` / `form:{t}` are bumped
    *    explicitly as well, so the two move together rather than relying on
    *    the epoch alone.
-   *  - forms embed field definitions, hence the form bump (§2.1.5).
+   *  - forms embed field definitions, hence the form bump.
    */
   private async invalidateFieldDefinitionCaches(tenantId?: string): Promise<void> {
     await this.cacheService.invalidate([

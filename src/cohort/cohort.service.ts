@@ -29,7 +29,7 @@ import { Console } from "console";
 import { CacheService } from "../cache/cache.service";
 import { hashCacheKey } from "../cache/cache-key.util";
 
-const COHORT_TTL_SECONDS = 300; // §2.1.3: cohort:{tenantId}, 5 min
+const COHORT_TTL_SECONDS = 300; // cohort:{tenantId}, 5 min
 
 @Injectable()
 export class CohortService {
@@ -89,9 +89,7 @@ export class CohortService {
         );
       }
 
-      // §2.1.3: GET /cohort/cohortHierarchy/:id under cohort:{tenantId} (from
-      // the fetched row) + id + flags, dependsOn fieldsdef. The custom-field
-      // hydration is the cost this cache saves.
+      // Tenant is resolved from the fetched cohort row, not the request.
       const tenantId = cohorts[0].tenantId;
       if (requiredData.getChildData) {
         const payload = await this.cacheService.getOrLoad({
@@ -449,8 +447,7 @@ export class CohortService {
         tenantId
       );
 
-      // §2.1.3 invalidation: create writes Cohort + FieldValues → bump
-      // cohort:{t}, the new cohort's cfields, and userfilter.
+      // Create writes Cohort + FieldValues, so bump both.
       await this.cacheService.invalidate([
         `cohort:${tenantId}`,
         `cfields:${response.cohortId}`,
@@ -534,7 +531,7 @@ export class CohortService {
         { status, updatedBy }
       );
 
-      // §2.1.3: bulk status change → bump cohort:{t} for each affected tenant.
+      // Bulk status change → bump cohort:{t} for each affected tenant.
       await this.cacheService.invalidate(
         [...new Set(affectedCohorts.map((c) => c.tenantId).filter(Boolean))].map((t) => `cohort:${t}`)
       );
@@ -731,8 +728,7 @@ export class CohortService {
           }
         }
 
-        // §2.1.3 invalidation: update writes Cohort + FieldValues → bump
-        // cohort:{t}, this cohort's cfields, and userfilter.
+        // Update writes Cohort + FieldValues, so bump both.
         await this.cacheService.invalidate([
           `cohort:${existingCohorDetails.tenantId}`,
           `cfields:${cohortId}`,
@@ -787,9 +783,8 @@ export class CohortService {
     }
   }
 
-  // §2.1.3: POST /cohort/search under cohort:{tenantId} + body hash, 5 min,
-  // dependsOn fieldsdef. The loader computes the success payload; validation
-  // failures respond inside it and yield null, which is never cached.
+  // The loader computes the success payload; validation failures respond
+  // inside it and yield null, which is never cached.
   public async searchCohort(
     tenantId: string,
     academicYearId: string,
@@ -1141,9 +1136,7 @@ export class CohortService {
         await this.cohortMembersRepository.delete({ cohortId: cohortId });
         await this.fieldValuesRepository.delete({ itemId: cohortId });
 
-        // §2.1.3/§2.1.4 invalidation: delete archives the Cohort and removes
-        // its members + FieldValues → cohort:{t}, cohortmember:{t} (members
-        // gone), this cohort's cfields, and userfilter.
+        // Delete archives the Cohort and removes its members + FieldValues.
         await this.cacheService.invalidate([
           ...(cohortTenantId ? [`cohort:${cohortTenantId}`, `cohortmember:${cohortTenantId}`] : []),
           `cfields:${cohortId}`,
@@ -1281,10 +1274,8 @@ export class CohortService {
     const apiId = APIID.COHORT_LIST;
 
     try {
-      // §2.1.3: GET /cohort/mycohorts/:userId under cohort:{tenantId} + userId
-      // + flags. dependsOn is cohortmember:{t} — NOT cohort:{t} — deliberately
-      // (§2.1.4 note): a membership change must refresh this read without a
-      // cohort:{t} bump. fieldsdef too, since custom fields are embedded.
+      // dependsOn is cohortmember:{t} — NOT cohort:{t} — deliberately: a
+      // membership change must refresh this read without a cohort:{t} bump.
       // When tenantId isn't supplied, fall through uncached.
       if (requiredData.tenantId) {
         const payload = await this.cacheService.getOrLoad({

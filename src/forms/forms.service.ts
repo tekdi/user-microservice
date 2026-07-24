@@ -12,7 +12,7 @@ import { API_RESPONSES } from "@utils/response.messages";
 import { ConfigService } from "@nestjs/config";
 import { CacheService } from "../cache/cache.service";
 
-const FORM_TTL_SECONDS = 3600; // §2.1.5 phase 2: form:{tenantId}, 1 h
+const FORM_TTL_SECONDS = 3600; // form:{tenantId}, 1 h
 
 @Injectable()
 export class FormsService {
@@ -24,9 +24,8 @@ export class FormsService {
     private readonly cacheService: CacheService
   ) { }
 
-  // §2.1.5 phase 2: GET /form/read under form:{tenantId} keyed on
-  // (context, contextType), 1 h. dependsOn fieldsdef because forms embed
-  // field definitions — a definition change must refresh this read.
+  // dependsOn fieldsdef because forms embed field definitions — a definition
+  // change must refresh this read.
   async getForm(requiredData, response) {
     const payload = await this.cacheService.getOrLoad({
       namespace: `form:${requiredData?.tenantId ?? "global"}`,
@@ -303,7 +302,6 @@ export class FormsService {
 
       const result = await this.formRepository.save(formCreateDto);
 
-      // §2.1.5: POST /form/create bumps its tenant's form namespace.
       await this.cacheService.invalidate([
         "form:global",
         ...(formCreateDto?.tenantId ? [`form:${formCreateDto.tenantId}`] : []),

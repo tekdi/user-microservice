@@ -61,8 +61,8 @@ interface UpdateField {
   username?: string; // Optional
   email?: string; // Optional
 }
-const USERLIST_TTL_SECONDS = 180; // §2.1.1 row 3: userlist:{tenantId}, 3 min
-const USER_CORE_TTL_SECONDS = 900; // §2.1.1 row 6: GET /read/:userId, 15 min
+const USERLIST_TTL_SECONDS = 180; // userlist:{tenantId}, 3 min
+const USER_CORE_TTL_SECONDS = 900; // GET /read/:userId, 15 min
 
 @Injectable()
 export class UserService {
@@ -124,8 +124,8 @@ export class UserService {
   }
 
 
-  // §2.1.1 row 5, pattern D: entity metadata is immutable per deploy, so
-  // compute once per process — no Redis involved.
+  // Entity metadata is immutable per deploy, so compute once per process — no
+  // Redis involved.
   private coreColumnNamesMemo: string[] | null = null;
 
   public async getCoreColumnNames() {
@@ -788,12 +788,10 @@ export class UserService {
   //   }
   //   return result;
   // }
-  // §2.1.1 row 3 (pattern A): full response cache of the POST /list search
-  // under userlist:{tenantId}. Cached as-is for now — the userId-only
-  // id-resolution refactor is deferred to rollout step 5. The tenant-less
-  // caller (domain email lookup) bypasses the cache: no tenant to key by,
-  // and it feeds an auth-adjacent flow the spec says not to cache.
-  // `false` (no results) is never cached — rule 5.
+  // Full response cache of the POST /list search under userlist:{tenantId}.
+  // The tenant-less caller (domain email lookup) bypasses the cache: no
+  // tenant to key by, and it feeds an auth-adjacent flow that must not be
+  // cached. `false` (no results) is never cached.
   async findAllUserDetails(userSearchDto, tenantId?: string, includeCustomFields: boolean = true) {
     if (!tenantId || tenantId.trim() === "") {
       return this.findAllUserDetailsUncached(userSearchDto, tenantId, includeCustomFields);
@@ -1028,17 +1026,15 @@ export class UserService {
 
 
   /**
-   * §2.1.1 rows 4/6 — user:{userId} core-row cache (pattern B) for
-   * GET /read/:userId. Purely additive: it runs exactly the same two fetches
-   * the endpoint already ran and returns the same [userDetails, userRole]
-   * pair, only skipping the DB round-trips on a hit. Keyed by tenantId
-   * because findUserRoles is tenant-scoped; dependsOn ufields:{userId} per
-   * row 6. `false`/null results are never cached, so a missing user or a
-   * failed lookup always re-reads.
+   * user:{userId} core-row cache for GET /read/:userId. Purely additive: it
+   * runs exactly the same two fetches the endpoint already ran and returns
+   * the same [userDetails, userRole] pair, only skipping the DB round-trips
+   * on a hit. Keyed by tenantId because findUserRoles is tenant-scoped;
+   * dependsOn ufields:{userId}. `false`/null results are never cached, so a
+   * missing user or a failed lookup always re-reads.
    *
    * NOTE: the cached pair carries role + tenantStatus (via tenantData and
-   * userRole), so every role / user-tenant write bumps user:{id} — see the
-   * invalidation matrix.
+   * userRole), so every role / user-tenant write must bump user:{id}.
    */
   private async getCachedUserCoreRow(userData: UserData): Promise<[any, any]> {
     const loadPair = (): Promise<[any, any]> =>
@@ -1056,7 +1052,7 @@ export class UserService {
       ttlSeconds: USER_CORE_TTL_SECONDS,
       // findUserDetails returns `false` when the user doesn't exist. The pair
       // would still be a non-empty array, so return null instead to keep the
-      // "not found" out of the cache (§1.3 rule 5 — no negative caching).
+      // "not found" out of the cache.
       loader: async () => {
         const pair = await loadPair();
         return pair[0] ? pair : null;

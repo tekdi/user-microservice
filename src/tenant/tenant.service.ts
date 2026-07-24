@@ -13,7 +13,7 @@ import { TenantCreateDto } from './dto/tenant-create.dto';
 import { CacheService } from '../cache/cache.service';
 import { hashCacheKey } from '../cache/cache-key.util';
 
-const TENANT_TTL_SECONDS = 3600; // §2.1.5 phase 2: tenant, 1 h
+const TENANT_TTL_SECONDS = 3600; // tenant, 1 h
 
 @Injectable()
 export class TenantService {
@@ -23,9 +23,6 @@ export class TenantService {
         private readonly cacheService: CacheService,
     ) { }
 
-    // §2.1.5 phase 2: GET /tenant/read under the global `tenant` namespace,
-    // 1 h. Tenant writes publish no Kafka events (§2.1 preconditions), so the
-    // create/update/delete methods below bump this namespace directly.
     public async getTenants(request: Request, response: Response): Promise<Response> {
         const payload = await this.cacheService.getOrLoad({
             namespace: "tenant",
@@ -158,7 +155,6 @@ export class TenantService {
     }
     
 
-    // §2.1.5 phase 2: POST /tenant/search under `tenant` + body hash, 1 h.
     public async searchTenants(request: Request, tenantSearchDTO: TenantSearchDTO, response: Response): Promise<Response> {
         const payload = await this.cacheService.getOrLoad({
             namespace: "tenant",
@@ -313,7 +309,7 @@ export class TenantService {
 
             let result = await this.tenantRepository.save(tenantCreateDto);
             if (result) {
-                // §2.1.5: tenant writes emit no Kafka event — hook directly.
+                // Tenant writes emit no Kafka event, so invalidate directly.
                 await this.cacheService.invalidate("tenant");
                 return APIResponse.success(
                     response,

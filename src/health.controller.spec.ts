@@ -74,7 +74,7 @@ describe('HealthController', () => {
       expect(result.result.checks[0]).toEqual({ name: 'postgres db', healthy: false });
     });
 
-    // §1.5 rule 5: Redis is informational and must never fail the check.
+    // Redis is informational and must never fail the health check.
     it('stays healthy when Redis is unreachable', async () => {
       jest.spyOn(dataSource, 'query').mockResolvedValue([{ '?column?': 1 }]);
       cacheHealth.check.mockResolvedValue({

@@ -22,9 +22,8 @@ export class HealthController {
       dbHealthy = false;
     }
 
-    // §1.5 rule 5: Redis is reported informationally only. It is deliberately
-    // NOT part of `healthy` — a dead Redis degrades to DB reads, which is
-    // correct behaviour, so it must never take the pod out of service.
+    // Redis is informational only and deliberately NOT part of `healthy` — a
+    // dead Redis degrades to DB reads, so it must never take the pod out of service.
     let cache;
     try {
       cache = await this.cacheHealth.check();
