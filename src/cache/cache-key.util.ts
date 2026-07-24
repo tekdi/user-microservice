@@ -16,10 +16,10 @@ function sortValue(value: unknown): unknown {
 }
 
 /**
- * Stable SHA-1 of any JSON-serializable value: object keys are sorted at
+ * Stable SHA-256 of any JSON-serializable value: object keys are sorted at
  * every depth, so two requests that differ only in property order hash to
  * the same cache key.
  */
 export function hashCacheKey(value: unknown): string {
-  return createHash("sha1").update(JSON.stringify(sortValue(value))).digest("hex");
+  return createHash("sha256").update(JSON.stringify(sortValue(value))).digest("hex");
 }
