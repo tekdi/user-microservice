@@ -2,6 +2,7 @@ import { MiddlewareConsumer, Module, RequestMethod } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { AppController } from "./app.controller";
 import { AppService } from "./app.service";
+import { AuditLoggerModule } from "@tekdi/audit-logger/nestjs";
 // import { MulterModule } from "@nestjs/platform-express/multer";
 // Below modules not in use for Shiksha 2.0
 
@@ -32,12 +33,18 @@ import { SsoModule } from "./sso/sso.module";
 import kafkaConfig from "./kafka/kafka.config";
 import { HealthController } from "./health.controller";
 import { CronModule } from "./cron/cron.module";
+import { RequestContextMiddleware } from "./common/middleware/request-context.middleware";
+
 @Module({
   imports: [
     RbacModule,
     ConfigModule.forRoot({
       load: [kafkaConfig], // Load the Kafka config
       isGlobal: true, // Makes config accessible globally
+    }),
+    AuditLoggerModule.forRoot({
+      serviceName: process.env.AUDIT_SERVICE_NAME || 'user-service',
+      kafkaTopic: 'audit.events',
     }),
     // MulterModule.register({
     //   dest: "./uploads",
@@ -65,7 +72,7 @@ import { CronModule } from "./cron/cron.module";
   providers: [AppService, HttpService],
 })
 export class AppModule {
-  // configure(consumer: MiddlewareConsumer) {
-  //   consumer.apply(PermissionMiddleware).forRoutes("*"); // Apply middleware to the all routes
-  // }
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(RequestContextMiddleware).forRoutes("*");
+  }
 }

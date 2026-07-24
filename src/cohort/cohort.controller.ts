@@ -201,11 +201,13 @@ export class CohortController {
   @ApiInternalServerErrorResponse({ description: "Internal Server Error." })
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   public async updateCohortStatuses(
+    @Req() request: Request,
     @Body() dto: CohortStatusUpdateDto,
     @Res() response: Response,
     @GetUserId("userId", ParseUUIDPipe) userId: string
   ) {
     return await this.cohortService.updateCohortStatuses(
+      request,
       dto.cohortIds,
       dto.status,
       userId,
@@ -219,6 +221,7 @@ export class CohortController {
   @ApiBadRequestResponse({ description: "Bad request." })
   @ApiInternalServerErrorResponse({ description: "Internal Server Error." })
   public async updateCohortStatus(
+    @Req() request: Request,
     @Param("cohortId") cohortId: string,
     @Res() response: Response,
     @GetUserId("userId", ParseUUIDPipe) userId: string
