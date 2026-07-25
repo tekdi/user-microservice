@@ -1,4 +1,4 @@
-import { createHash } from "crypto";
+import { createHash } from "node:crypto";
 
 function sortValue(value: unknown): unknown {
   if (Array.isArray(value)) {

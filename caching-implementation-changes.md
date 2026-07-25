@@ -160,6 +160,62 @@ key differs from what was originally proposed.
 
 ---
 
+## 11. Response-time impact
+
+**What's verified vs. what's estimated, stated plainly:** the environment
+this document was produced in cannot reach the project's Postgres host
+(`POSTGRES_HOST` in `.env` times out from here — likely VPC/security-group
+restricted), so no live before/after millisecond numbers for these specific
+APIs could be measured. Nothing below is a fabricated benchmark. What *is*
+verified is the structural behavior; what follows that is order-of-magnitude
+reasoning, explicitly labeled.
+
+### Verified: what happens on repeat calls
+
+Booting the real `CacheService` against a live Redis and calling the same
+`getOrLoad` twice with an identical namespace/key:
+
+- **1st call (cache miss):** the DB loader runs exactly as it did before this
+  work — same query, same round-trip, same cost as pre-caching.
+- **2nd+ call within the TTL (cache hit):** the DB loader is **not invoked at
+  all** — confirmed by instrumenting the loader with a call counter, which
+  stayed at 1 after multiple identical reads. The response is served from one
+  Redis `MGET` (version counters) + one `GET` (the entry) instead.
+
+This holds for every namespace in §10 with the same mechanism — a hit means
+zero DB round-trips, full stop, not a "faster query."
+
+### Estimated: relative magnitude (not measured)
+
+| | Typical cost | Notes |
+|---|---|---|
+| Cache hit (Redis `MGET`+`GET`) | roughly 1–5 ms on a same-region network | Bounded above by `CACHE_OP_TIMEOUT_MS` (150 ms default) — a slow Redis op is treated as a miss, never adds unbounded latency |
+| DB miss path (unchanged from before) | ranges from a few ms (indexed single-row read, e.g. `usertenant`/`userroles`) to hundreds of ms+ (joined/filtered list queries against large tables, e.g. `POST /user/list`, `POST /cohort/search`) | Exact cost depends on table size and filter selectivity in each environment — this is why no single number is quoted |
+
+The APIs most likely to show the largest wins are the ones whose uncached
+query is a multi-table join over a large result set — `POST /user/list`,
+`POST /cohort/search`, `POST /cohortmember/list`, and the `ufields`/`cfields`
+bulk hydration (which replaces N+1 per-record queries with 2 Redis
+round-trips regardless of N). Narrow single-row lookups (`user:{id}`,
+`usertenant:{id}`, `userroles:{id}`) save less in absolute terms per call, but
+are hit far more often.
+
+### How to get real numbers
+
+1. **Read actual hit rates in any environment where this is running:** the
+   `cache metrics {...}` log line (every `CACHE_METRICS_INTERVAL_MS`, default
+   60s) reports live `hit/miss/error/bypass` counts per namespace family —
+   this is the direct evidence of how often the DB is being skipped.
+2. **To get real before/after latency in milliseconds:** time the same
+   request twice — first call cold (or right after
+   `CACHE_DISABLED_NAMESPACES` includes it), second call warm — against an
+   environment where Postgres and Redis are both reachable, and record actual
+   `curl -w '%{time_total}'` or APM timings. I can write that benchmark script
+   on request; it just needs to be run somewhere with DB access, since this
+   session doesn't have it.
+
+---
+
 For rollout steps, `CACHE_ENABLED` / `CACHE_PROVIDER` / `REDIS_URL` config,
 the circuit breaker, `/health` reporting, and the two open Redis-provider
 issues (keyspace-split stale-data hazard, shutdown hang), see
