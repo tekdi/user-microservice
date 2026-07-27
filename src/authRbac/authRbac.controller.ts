@@ -24,7 +24,7 @@ export class AuthRbacController {
   @ApiHeader({
     name: "tenantid",
     required: true,
-    description: "Tenant Id",
+    description: "Tenant ID",
   })
   @ApiBasicAuth("access-token")
   @UseGuards(JwtAuthGuard)
