@@ -44,7 +44,7 @@ import { RequestContextMiddleware } from "./common/middleware/request-context.mi
     }),
     AuditLoggerModule.forRoot({
       serviceName: process.env.AUDIT_SERVICE_NAME || 'user-service',
-      kafkaTopic: 'audit.events',
+      kafkaTopic: process.env.KAFKA_TOPIC || 'audit.events',
     }),
     // MulterModule.register({
     //   dest: "./uploads",
