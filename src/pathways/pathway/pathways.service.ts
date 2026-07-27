@@ -1480,16 +1480,16 @@ export class PathwaysService {
         }
       }
 
-      // 3. Enroll user in LMS course for this pathway (auto-resolve from LMS)
-      const resolvedCourseId = await this.lmsClientService.getActiveCourseForPathway(pathway.id, tenantId, organisationId);
-      if (!resolvedCourseId) {
+      // 3. Enroll user in all active LMS courses for this pathway (auto-resolve from LMS)
+      const resolvedCourseIds = await this.lmsClientService.getActiveCourseIdsForPathway(pathway.id, tenantId, organisationId);
+      if (resolvedCourseIds.length === 0) {
         return APIResponse.error(
           response, apiId, API_RESPONSES.NOT_FOUND,
           'No active batch course found for this pathway in LMS.',
           HttpStatus.NOT_FOUND
         );
       }
-      const enrollResult = await this.lmsClientService.enrollUserToCourses(userId, [resolvedCourseId], tenantId, organisationId);
+      const enrollResult = await this.lmsClientService.enrollUserToCourses(userId, resolvedCourseIds, tenantId, organisationId);
       if (!enrollResult.success) {
         return APIResponse.error(
           response, apiId, API_RESPONSES.BAD_REQUEST,
@@ -1989,13 +1989,13 @@ export class PathwaysService {
         return APIResponse.error(response, apiId, API_RESPONSES.NOT_FOUND, API_RESPONSES.PATHWAY_NOT_FOUND, HttpStatus.NOT_FOUND);
       }
 
-      const courseId = await this.lmsClientService.getActiveCourseForPathway(pathwayId, tenantId, organisationId);
+      const courseIds = await this.lmsClientService.getActiveCourseIdsForPathway(pathwayId, tenantId, organisationId);
 
-      if (!courseId) {
+      if (courseIds.length === 0) {
         return APIResponse.error(response, apiId, API_RESPONSES.NOT_FOUND, 'No active batch course found for this pathway in LMS.', HttpStatus.NOT_FOUND);
       }
 
-      return APIResponse.success(response, apiId, { pathwayId, courseId }, HttpStatus.OK, 'Active course resolved successfully');
+      return APIResponse.success(response, apiId, { pathwayId, courseIds }, HttpStatus.OK, 'Active course(s) resolved successfully');
     } catch (error) {
       const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
       LoggerUtil.error(`${API_RESPONSES.SERVER_ERROR}`, `Error fetching active course: ${errorMessage}`, apiId);
@@ -2163,7 +2163,9 @@ export class PathwaysService {
    */
   async handleCourseCompletion(
     dto: CourseCompletionWebhookDto,
-    response: Response
+    response: Response,
+    tenantId: string,
+    organisationId: string
   ): Promise<Response> {
     const apiId = APIID.PATHWAY_COURSE_COMPLETION_WEBHOOK;
     try {
@@ -2191,10 +2193,14 @@ export class PathwaysService {
         );
       }
 
-      if (record.pathway.type !== PathwayType.VOLUNTEER) {
+      const pathwayType = record.pathway.type;
+
+      // pathwayType is always returned so LMS knows whether to still send its own
+      // per-course email (skipped for VOLUNTEER — handled by the aggregate check below).
+      if (pathwayType !== PathwayType.VOLUNTEER) {
         return APIResponse.success(
           response, apiId,
-          { processed: false, reason: 'Not a VOLUNTEER pathway — no tag assignment needed' },
+          { processed: false, pathwayType, reason: 'Not a VOLUNTEER pathway — no aggregation needed' },
           HttpStatus.OK, 'Skipped'
         );
       }
@@ -2203,8 +2209,28 @@ export class PathwaysService {
       if (record.status !== PathwayHistoryStatus.ACTIVE) {
         return APIResponse.success(
           response, apiId,
-          { processed: false, historyId: record.id, status: record.status },
+          { processed: false, pathwayType, historyId: record.id, status: record.status },
           HttpStatus.OK, API_RESPONSES.COURSE_COMPLETION_ALREADY_PROCESSED
+        );
+      }
+
+      // Single aggregate LMS call — no per-course loop — to check whether every
+      // course tied to this pathway is now complete for this user.
+      const completion = await this.lmsClientService.getPathwayCompletionStatus(
+        dto.pathwayId, dto.userId, tenantId, organisationId
+      );
+
+      if (!completion.allCompleted) {
+        return APIResponse.success(
+          response, apiId,
+          {
+            processed: false,
+            pathwayType,
+            historyId: record.id,
+            totalCourses: completion.totalCourses,
+            completedCourses: completion.completedCourses,
+          },
+          HttpStatus.OK, API_RESPONSES.PATHWAY_COURSE_COMPLETED_PARTIAL
         );
       }
 
@@ -2227,20 +2253,24 @@ export class PathwaysService {
       if ((result.affected ?? 0) === 0) {
         return APIResponse.success(
           response, apiId,
-          { processed: false, historyId: record.id },
+          { processed: false, pathwayType, historyId: record.id },
           HttpStatus.OK, API_RESPONSES.COURSE_COMPLETION_ALREADY_PROCESSED
         );
       }
 
+      // Notification itself is sent by LMS (same place the per-course email lives) —
+      // this response just confirms completion so LMS knows to trigger it.
       return APIResponse.success(response, apiId, {
         historyId: record.id,
         userId: dto.userId,
         pathwayId: record.pathway_id,
+        pathwayType,
+        allCoursesCompleted: true,
         subtype: record.pathway.subtype ?? null,
         status: PathwayHistoryStatus.COMPLETED,
         completedAt: now.toISOString(),
         volunteerValidUntil: record.pathway.volunteer_valid_until?.toISOString() ?? null,
-      }, HttpStatus.OK, API_RESPONSES.COURSE_COMPLETION_NOTIFICATION_SENT);
+      }, HttpStatus.OK, API_RESPONSES.PATHWAY_ALL_COURSES_COMPLETED);
     } catch (error) {
       const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
       LoggerUtil.error(`${API_RESPONSES.SERVER_ERROR}`, `Course completion API error: ${errorMessage}`, apiId);

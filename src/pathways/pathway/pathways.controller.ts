@@ -583,11 +583,11 @@ export class PathwaysController {
   @ApiParam({ name: "id", description: "Pathway UUID", format: "uuid" })
   @ApiResponse({
     status: 200,
-    description: "Active course resolved",
+    description: "Active course(s) resolved",
     schema: {
       example: {
         pathwayId: "pw4-uuid-cal-pathway",
-        courseId: "c102-uuid-cal-batch2-2025",
+        courseIds: ["c102-uuid-cal-batch2-2025"],
       },
     },
   })
@@ -715,12 +715,14 @@ export class PathwaysController {
   async courseCompleted(
     @Body() dto: CourseCompletionWebhookDto,
     @Headers("tenantid") tenantId: string,
+    @Headers("organisationid") organisationId: string,
     @Res() response: Response
   ): Promise<Response> {
     if (!tenantId || !isUUID(tenantId)) {
       throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
     }
-    return this.pathwaysService.handleCourseCompletion(dto, response);
+    const orgId = (process.env.DEFAULT_ORGANISATION_ID || organisationId || '').trim();
+    return this.pathwaysService.handleCourseCompletion(dto, response, tenantId, orgId);
   }
 
   /**

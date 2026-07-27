@@ -288,10 +288,10 @@ export const API_RESPONSES = {
   VOLUNTEER_ELIGIBILITY_NOT_COMPLETED_ALUMNI: "User must complete the alumni pathway before applying to a volunteer or standard pathway.",
   VOLUNTEER_ELIGIBILITY_RETRIEVED: "Volunteer pathway eligibility check completed.",
   VOLUNTEER_ACTIVE_PATHWAYS_RETRIEVED: "Active volunteer pathway assignments retrieved successfully.",
-  COURSE_COMPLETION_NOTIFICATION_SENT: "Course completion notification sent and tags assigned successfully.",
   COURSE_COMPLETION_ALREADY_PROCESSED: "Course completion notification already sent for this user and course.",
   COURSE_COMPLETION_HISTORY_NOT_FOUND: "No active pathway history found for this user and course.",
-  COURSE_NOT_COMPLETED_IN_LMS: "Course is not fully completed in LMS. Tags will not be assigned until completedLesson >= noOfLesson and status is completed.",
+  PATHWAY_COURSE_COMPLETED_PARTIAL: "Course completion recorded. Waiting for remaining courses in this pathway to be completed.",
+  PATHWAY_ALL_COURSES_COMPLETED: "All courses in this pathway are completed. Pathway marked completed and notification sent.",
 
   // Country Management Messages
   COUNTRY_LIST_SUCCESS: "Countries retrieved successfully",

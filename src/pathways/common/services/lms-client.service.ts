@@ -447,20 +447,21 @@ export class LmsClientService {
   }
 
   /**
-   * Get the single active batch course for a VOLUNTEER pathway.
-   * Calls LMS search with isActive=true so only the currently open batch is returned.
-   * Returns the courseId string, or null if no active batch exists.
+   * Get all active batch courses for a VOLUNTEER pathway.
+   * Calls LMS search with isActive=true so only currently open batches are returned.
+   * Returns an array of course IDs (may be empty if no active batch exists).
+   * Paginated the same way as getCourseIdsForPathway; no N+1.
    *
    * LMS contract: GET /lms-service/v1/courses/search?pathwayId=X&isActive=true&status=published
    */
-  async getActiveCourseForPathway(
+  async getActiveCourseIdsForPathway(
     pathwayId: string,
     tenantId: string,
     organisationId: string
-  ): Promise<string | null> {
+  ): Promise<string[]> {
     if (!this.lmsServiceUrl) {
-      this.logger.warn(`LMS_SERVICE_URL not configured. Cannot resolve active course for pathway ${pathwayId}`);
-      return null;
+      this.logger.warn(`LMS_SERVICE_URL not configured. Cannot resolve active courses for pathway ${pathwayId}`);
+      return [];
     }
 
     const searchUrl = `${this.lmsServiceUrl}/lms-service/v1/courses/search`;
@@ -470,44 +471,78 @@ export class LmsClientService {
       'Content-Type': 'application/json',
     };
 
+    const limit = 1000;
+    const MAX_PAGES = 100;
+    const MAX_COURSES = 100000;
+    let offset = 0;
+    let allCourses: any[] = [];
+    let totalElements = 0;
+    let hasMore = true;
+    let pageCount = 0;
+
     try {
-      const res = await axios.get(searchUrl, {
-        params: {
+      while (hasMore) {
+        if (pageCount >= MAX_PAGES || allCourses.length >= MAX_COURSES) break;
+
+        const searchParams = {
           pathwayId,
           status: 'published',
           isActive: true,
-          limit: 1,
-          offset: 0,
-        },
-        headers,
-        timeout: 10000,
-        validateStatus: (status) => status < 500,
-      });
+          limit,
+          offset,
+        };
 
-      if (res.status !== 200) {
-        this.logger.warn(`LMS active-course lookup returned ${res.status} for pathway ${pathwayId}`);
-        return null;
+        const res = await axios.get(searchUrl, {
+          params: searchParams,
+          headers,
+          timeout: 10000,
+          validateStatus: (status) => status < 500,
+        });
+
+        if (res.status !== 200) {
+          if (allCourses.length === 0) {
+            this.logger.warn(`LMS active-course lookup returned ${res.status} for pathway ${pathwayId}`);
+            return [];
+          }
+          break;
+        }
+
+        const responseData = res.data?.result || res.data;
+        const courses = responseData?.courses || [];
+        totalElements = responseData?.totalElements || 0;
+
+        if (courses.length === 0) break;
+
+        if (courses.length > 0 && allCourses.length > 0) {
+          const firstId = courses[0]?.courseId || courses[0]?.id;
+          const lastId =
+            allCourses[allCourses.length - 1]?.courseId ||
+            allCourses[allCourses.length - 1]?.id;
+          if (firstId === lastId) break;
+        }
+
+        allCourses = allCourses.concat(courses);
+        pageCount++;
+        hasMore =
+          courses.length === limit &&
+          (totalElements === 0 || offset + limit < totalElements);
+        if (hasMore) offset += limit;
       }
 
-      const responseData = res.data?.result || res.data;
-      const courses: any[] = responseData?.courses || [];
+      const courseIds = allCourses
+        .map((c: any) => c.courseId || c.id || c.course_id)
+        .filter(Boolean)
+        .filter((id: string) => LmsClientService.UUID_REGEX.test(id));
 
-      if (courses.length === 0) {
+      if (courseIds.length === 0) {
         this.logger.warn(`No active batch course found in LMS for pathway ${pathwayId}`);
-        return null;
       }
 
-      const courseId = courses[0]?.courseId || courses[0]?.id || courses[0]?.course_id;
-      if (!courseId || !LmsClientService.UUID_REGEX.test(courseId)) {
-        this.logger.warn(`Active course for pathway ${pathwayId} has invalid ID: ${courseId}`);
-        return null;
-      }
-
-      return courseId;
+      return courseIds;
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error';
-      this.logger.error(`Failed to get active course for pathway ${pathwayId}: ${msg}`);
-      return null;
+      this.logger.error(`Failed to get active courses for pathway ${pathwayId}: ${msg}`);
+      return [];
     }
   }
 
@@ -649,6 +684,57 @@ export class LmsClientService {
       const msg = error instanceof Error ? error.message : 'Unknown error';
       this.logger.error(`Failed to get course progress for user ${userId} course ${courseId}: ${msg}`);
       return null;
+    }
+  }
+
+  /**
+   * Aggregate completion status for every course tied to a pathway, for one user.
+   * Single HTTP call, regardless of how many courses the pathway has — LMS resolves
+   * the course list and completion counts server-side (no per-course looping here).
+   *
+   * LMS contract: GET /lms-service/v1/tracking/pathway-completion-status?pathwayId=X&userId=Y
+   */
+  async getPathwayCompletionStatus(
+    pathwayId: string,
+    userId: string,
+    tenantId: string,
+    organisationId: string
+  ): Promise<{ totalCourses: number; completedCourses: number; allCompleted: boolean }> {
+    if (!this.lmsServiceUrl) {
+      this.logger.warn('LMS_SERVICE_URL not configured. Cannot resolve pathway completion status.');
+      return { totalCourses: 0, completedCourses: 0, allCompleted: false };
+    }
+
+    const url = `${this.lmsServiceUrl}/lms-service/v1/tracking/pathway-completion-status`;
+    const headers = {
+      tenantid: tenantId,
+      organisationid: organisationId,
+      'Content-Type': 'application/json',
+    };
+
+    try {
+      const res = await axios.get(url, {
+        params: { pathwayId, userId },
+        headers,
+        timeout: 10000,
+        validateStatus: (status) => status < 500,
+      });
+
+      if (res.status !== 200) {
+        this.logger.warn(`LMS pathway completion status returned ${res.status} for pathway ${pathwayId} user ${userId}`);
+        return { totalCourses: 0, completedCourses: 0, allCompleted: false };
+      }
+
+      const data = res.data?.result || res.data;
+      return {
+        totalCourses: Number(data?.totalCourses ?? 0),
+        completedCourses: Number(data?.completedCourses ?? 0),
+        allCompleted: Boolean(data?.allCompleted),
+      };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Failed to get pathway completion status for pathway ${pathwayId} user ${userId}: ${msg}`);
+      return { totalCourses: 0, completedCourses: 0, allCompleted: false };
     }
   }
 
