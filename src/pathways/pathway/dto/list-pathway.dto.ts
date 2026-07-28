@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsOptional, IsString, IsUUID, IsObject, ValidateNested, IsEnum, IsInt, Min } from 'class-validator';
+import { IsBoolean, IsOptional, IsString, IsUUID, IsObject, ValidateNested, IsEnum, IsIn, IsInt, Min } from 'class-validator';
 import { Expose, Type } from 'class-transformer';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { PathwayType } from '../entities/pathway.entity';
@@ -70,6 +70,17 @@ class PathwayFiltersDto {
   @IsInt()
   @Min(1970)
   applicationYear?: number;
+
+  @ApiPropertyOptional({
+    description:
+      "Filter VOLUNTEER pathways by computed lifecycle status: 'completed' = application_closing_date has passed, 'expired' = volunteer_valid_until has passed. Used by the admin list's Completed/Expired tabs.",
+    enum: ['completed', 'expired'],
+    example: 'completed',
+  })
+  @Expose()
+  @IsOptional()
+  @IsIn(['completed', 'expired'])
+  computedStatus?: 'completed' | 'expired';
 }
 export class ListPathwayDto extends PaginationDto {
   @ApiPropertyOptional({

@@ -249,6 +249,8 @@ export const API_RESPONSES = {
   PATHWAY_UPDATED_SUCCESSFULLY: "Pathway updated successfully",
   PATHWAY_NOT_FOUND: "Pathway not found",
   PATHWAY_KEY_EXISTS: "Pathway with this name already exists",
+  PATHWAY_SUBTYPE_APPLICATION_OPEN_CONFLICT:
+    "Another pathway of this subtype already has an open application window. A new pathway of the same subtype cannot be created for this date window.",
   PATHWAY_LIST_SUCCESS: "Pathways retrieved successfully",
   PATHWAY_USER_LIST_SUCCESS: "Pathway users retrieved successfully",
   PATHWAY_GET_SUCCESS: "Pathway retrieved successfully",
@@ -288,10 +290,11 @@ export const API_RESPONSES = {
   VOLUNTEER_ELIGIBILITY_NOT_COMPLETED_ALUMNI: "User must complete the alumni pathway before applying to a volunteer or standard pathway.",
   VOLUNTEER_ELIGIBILITY_RETRIEVED: "Volunteer pathway eligibility check completed.",
   VOLUNTEER_ACTIVE_PATHWAYS_RETRIEVED: "Active volunteer pathway assignments retrieved successfully.",
-  COURSE_COMPLETION_NOTIFICATION_SENT: "Course completion notification sent and tags assigned successfully.",
   COURSE_COMPLETION_ALREADY_PROCESSED: "Course completion notification already sent for this user and course.",
   COURSE_COMPLETION_HISTORY_NOT_FOUND: "No active pathway history found for this user and course.",
-  COURSE_NOT_COMPLETED_IN_LMS: "Course is not fully completed in LMS. Tags will not be assigned until completedLesson >= noOfLesson and status is completed.",
+  PATHWAY_COURSE_COMPLETED_PARTIAL: "Course completion recorded. Waiting for remaining courses in this pathway to be completed.",
+  PATHWAY_ALL_COURSES_COMPLETED: "All courses in this pathway are completed. Pathway marked completed; notification will be sent by LMS.",
+  LMS_SERVICE_UNAVAILABLE: "Could not verify course completion status with LMS. Please retry.",
 
   // Country Management Messages
   COUNTRY_LIST_SUCCESS: "Countries retrieved successfully",

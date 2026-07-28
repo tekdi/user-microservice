@@ -283,6 +283,43 @@ export class PathwaysService {
   }
 
   /**
+   * True if any other VOLUNTEER pathway of the same subtype has an application
+   * window overlapping [openingDate, closingDate] — compares full ranges (not just
+   * "is anything currently open") so overlaps are caught whether the conflicting
+   * window is in the future or already backdated. NULL opening/closing bounds are
+   * treated as open-ended (no lower/upper bound).
+   */
+  private async hasSubtypeWindowConflict(
+    subtype: string,
+    openingDate: string | Date | null | undefined,
+    closingDate: string | Date | null | undefined,
+    excludePathwayId: string | null = null
+  ): Promise<boolean> {
+    const conflict = await this.pathwayRepository
+      .createQueryBuilder("pathway")
+      .where("pathway.type = :swcType", { swcType: PathwayType.VOLUNTEER })
+      .andWhere("pathway.subtype = :swcSubtype", { swcSubtype: subtype })
+      .andWhere(
+        "(:swcExcludeId::uuid IS NULL OR pathway.id != :swcExcludeId)",
+        {
+          swcExcludeId: excludePathwayId,
+        }
+      )
+      .andWhere(
+        "(pathway.application_closing_date IS NULL OR :swcNewOpening::timestamptz IS NULL OR :swcNewOpening::timestamptz <= pathway.application_closing_date)",
+        { swcNewOpening: openingDate ?? null }
+      )
+      .andWhere(
+        "(:swcNewClosing::timestamptz IS NULL OR pathway.application_opening_date IS NULL OR pathway.application_opening_date <= :swcNewClosing::timestamptz)",
+        { swcNewClosing: closingDate ?? null }
+      )
+      .select(["pathway.id"])
+      .getOne();
+
+    return !!conflict;
+  }
+
+  /**
    * Create a new pathway
    * Optimized: Single query with conflict check and batch tag validation
    */
@@ -346,6 +383,30 @@ export class PathwaysService {
               ', '
             )}`,
             HttpStatus.BAD_REQUEST
+          );
+        }
+      }
+
+      // Block creating a new pathway of a given VOLUNTEER subtype (e.g. CAL) whose
+      // application window overlaps another pathway of the same subtype, so two
+      // application windows for the same subtype can never overlap.
+      if (
+        (createPathwayDto.type ?? PathwayType.STANDARD) === PathwayType.VOLUNTEER &&
+        createPathwayDto.subtype
+      ) {
+        const hasConflict = await this.hasSubtypeWindowConflict(
+          createPathwayDto.subtype,
+          createPathwayDto.application_opening_date,
+          createPathwayDto.application_closing_date
+        );
+
+        if (hasConflict) {
+          return APIResponse.error(
+            response,
+            apiId,
+            API_RESPONSES.CONFLICT,
+            API_RESPONSES.PATHWAY_SUBTYPE_APPLICATION_OPEN_CONFLICT,
+            HttpStatus.CONFLICT
           );
         }
       }
@@ -594,13 +655,19 @@ export class PathwaysService {
     );
     try {
       const cacheKey = this.generatePathwayListCacheKey(tenantId, organisationId, listPathwayDto);
+      // computedStatus ('completed'/'expired') is evaluated against CURRENT_TIMESTAMP, so a
+      // cached result can go stale the moment a pathway crosses that time boundary — bypass
+      // caching entirely for this filter rather than serving a time-sensitive stale list.
+      const bypassCache = !!(listPathwayDto as any).filters?.computedStatus;
       let cachedResult: { count: number; limit: number; offset: number; items: any[] } | null = null;
-      try {
-        cachedResult = await this.cacheService.get<{ count: number; limit: number; offset: number; items: any[] }>(cacheKey);
-      } catch (cacheReadError: any) {
-        this.logger.warn(
-          `Pathway list cache read failed, falling through to DB: ${cacheReadError?.message || cacheReadError}`
-        );
+      if (!bypassCache) {
+        try {
+          cachedResult = await this.cacheService.get<{ count: number; limit: number; offset: number; items: any[] }>(cacheKey);
+        } catch (cacheReadError: any) {
+          this.logger.warn(
+            `Pathway list cache read failed, falling through to DB: ${cacheReadError?.message || cacheReadError}`
+          );
+        }
       }
       if (cachedResult) {
         this.logger.debug(`Cache HIT for pathway list: ${cacheKey}`);
@@ -718,6 +785,15 @@ export class PathwaysService {
             { applicationYear: Number(filters.applicationYear) }
           );
         }
+        if (filters.computedStatus === 'completed') {
+          queryBuilder.andWhere(
+            "pathway.application_closing_date IS NOT NULL AND pathway.application_closing_date <= CURRENT_TIMESTAMP"
+          );
+        } else if (filters.computedStatus === 'expired') {
+          queryBuilder.andWhere(
+            "pathway.volunteer_valid_until IS NOT NULL AND pathway.volunteer_valid_until <= CURRENT_TIMESTAMP"
+          );
+        }
 
         // Apply ordering
         queryBuilder.orderBy("pathway.display_order", "ASC");
@@ -747,6 +823,15 @@ export class PathwaysService {
           whereCondition.application_opening_date = Raw(
             alias => `EXTRACT(YEAR FROM ${alias}) = :year`,
             { year: Number(filters.applicationYear) }
+          );
+        }
+        if (filters.computedStatus === 'completed') {
+          whereCondition.application_closing_date = Raw(
+            alias => `${alias} IS NOT NULL AND ${alias} <= CURRENT_TIMESTAMP`
+          );
+        } else if (filters.computedStatus === 'expired') {
+          whereCondition.volunteer_valid_until = Raw(
+            alias => `${alias} IS NOT NULL AND ${alias} <= CURRENT_TIMESTAMP`
           );
         }
 
@@ -854,7 +939,9 @@ export class PathwaysService {
             tag_ids: (tags || []).map((t: { id: string }) => t.id),
           })),
         };
-        await this.cacheService.set(cacheKey, resultForCache, pathwayListCacheTtl);
+        if (!bypassCache) {
+          await this.cacheService.set(cacheKey, resultForCache, pathwayListCacheTtl);
+        }
       } catch (cacheError: any) {
         this.logger.warn(
           `Failed to cache pathway list result: ${cacheError?.message || cacheError}`
@@ -1107,6 +1194,29 @@ export class PathwaysService {
             response, apiId, API_RESPONSES.BAD_REQUEST,
             'application_closing_date must be on or after application_opening_date', HttpStatus.BAD_REQUEST
           );
+        }
+
+        // Same overlap invariant as create(): this subtype's application window
+        // must not overlap another pathway of the same subtype's window.
+        const effectiveSubtype =
+          updatePathwayDto.subtype !== undefined
+            ? updatePathwayDto.subtype
+            : existingPathway.subtype;
+        if (effectiveSubtype) {
+          const hasConflict = await this.hasSubtypeWindowConflict(
+            effectiveSubtype,
+            openingDate,
+            closingDate,
+            id
+          );
+
+          if (hasConflict) {
+            return APIResponse.error(
+              response, apiId, API_RESPONSES.CONFLICT,
+              API_RESPONSES.PATHWAY_SUBTYPE_APPLICATION_OPEN_CONFLICT,
+              HttpStatus.CONFLICT
+            );
+          }
         }
 
         if (updatePathwayDto.subtype !== undefined) {
@@ -1480,16 +1590,23 @@ export class PathwaysService {
         }
       }
 
-      // 3. Enroll user in LMS course for this pathway (auto-resolve from LMS)
-      const resolvedCourseId = await this.lmsClientService.getActiveCourseForPathway(pathway.id, tenantId, organisationId);
-      if (!resolvedCourseId) {
+      // 3. Enroll user in all active LMS courses for this pathway (auto-resolve from LMS)
+      const resolvedCourseIds = await this.lmsClientService.getActiveCourseIdsForPathway(pathway.id, tenantId, organisationId);
+      if (resolvedCourseIds === null) {
+        return APIResponse.error(
+          response, apiId, API_RESPONSES.LMS_SERVICE_UNAVAILABLE,
+          'Could not verify active courses for this pathway in LMS. Please try again.',
+          HttpStatus.SERVICE_UNAVAILABLE
+        );
+      }
+      if (resolvedCourseIds.length === 0) {
         return APIResponse.error(
           response, apiId, API_RESPONSES.NOT_FOUND,
           'No active batch course found for this pathway in LMS.',
           HttpStatus.NOT_FOUND
         );
       }
-      const enrollResult = await this.lmsClientService.enrollUserToCourses(userId, [resolvedCourseId], tenantId, organisationId);
+      const enrollResult = await this.lmsClientService.enrollUserToCourses(userId, resolvedCourseIds, tenantId, organisationId);
       if (!enrollResult.success) {
         return APIResponse.error(
           response, apiId, API_RESPONSES.BAD_REQUEST,
@@ -1594,17 +1711,36 @@ export class PathwaysService {
         return APIResponse.success(response, apiId, { items, count: items.length }, HttpStatus.OK, 'Active volunteer pathways retrieved successfully');
       }
 
-      // STANDARD (default): return single active record
-      const whereCondition: any = {
-        user_id: userId,
-        ...(pathwayId ? { pathway_id: pathwayId } : { is_active: true }),
-      };
+      // STANDARD (default): return single active record.
+      // Must join and filter on pathway.type = STANDARD — otherwise an active
+      // VOLUNTEER assignment (e.g. a CAL pathway) would be picked up here too,
+      // making every STANDARD pathway look like it has an active pathway to switch from.
+      const qb = this.userPathwayHistoryRepository
+        .createQueryBuilder('h')
+        .innerJoin('h.pathway', 'pw')
+        .where('h.user_id = :userId', { userId })
+        .andWhere('pw.type = :type', { type: PathwayType.STANDARD });
 
-      const userPathway = await this.userPathwayHistoryRepository.findOne({
-        where: whereCondition,
-        order: { activated_at: 'DESC' },
-        select: ['id', 'pathway_id', 'activated_at', 'deactivated_at', 'completed_at', 'user_goal', 'is_active', 'updated_by', 'status'],
-      });
+      if (pathwayId) {
+        qb.andWhere('h.pathway_id = :pathwayId', { pathwayId });
+      } else {
+        qb.andWhere('h.is_active = :isActive', { isActive: true });
+      }
+
+      const userPathway = await qb
+        .orderBy('h.activated_at', 'DESC')
+        .select([
+          'h.id',
+          'h.pathway_id',
+          'h.activated_at',
+          'h.deactivated_at',
+          'h.completed_at',
+          'h.user_goal',
+          'h.is_active',
+          'h.updated_by',
+          'h.status',
+        ])
+        .getOne();
 
       if (!userPathway) {
         const message = pathwayId ? 'Specified pathway assignment not found for this user' : 'No active pathway found for this user';
@@ -1989,13 +2125,17 @@ export class PathwaysService {
         return APIResponse.error(response, apiId, API_RESPONSES.NOT_FOUND, API_RESPONSES.PATHWAY_NOT_FOUND, HttpStatus.NOT_FOUND);
       }
 
-      const courseId = await this.lmsClientService.getActiveCourseForPathway(pathwayId, tenantId, organisationId);
+      const courseIds = await this.lmsClientService.getActiveCourseIdsForPathway(pathwayId, tenantId, organisationId);
 
-      if (!courseId) {
+      if (courseIds === null) {
+        return APIResponse.error(response, apiId, API_RESPONSES.LMS_SERVICE_UNAVAILABLE, 'Could not verify active courses for this pathway in LMS. Please try again.', HttpStatus.SERVICE_UNAVAILABLE);
+      }
+
+      if (courseIds.length === 0) {
         return APIResponse.error(response, apiId, API_RESPONSES.NOT_FOUND, 'No active batch course found for this pathway in LMS.', HttpStatus.NOT_FOUND);
       }
 
-      return APIResponse.success(response, apiId, { pathwayId, courseId }, HttpStatus.OK, 'Active course resolved successfully');
+      return APIResponse.success(response, apiId, { pathwayId, courseIds }, HttpStatus.OK, 'Active course(s) resolved successfully');
     } catch (error) {
       const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
       LoggerUtil.error(`${API_RESPONSES.SERVER_ERROR}`, `Error fetching active course: ${errorMessage}`, apiId);
@@ -2163,7 +2303,9 @@ export class PathwaysService {
    */
   async handleCourseCompletion(
     dto: CourseCompletionWebhookDto,
-    response: Response
+    response: Response,
+    tenantId: string,
+    organisationId: string
   ): Promise<Response> {
     const apiId = APIID.PATHWAY_COURSE_COMPLETION_WEBHOOK;
     try {
@@ -2191,10 +2333,14 @@ export class PathwaysService {
         );
       }
 
-      if (record.pathway.type !== PathwayType.VOLUNTEER) {
+      const pathwayType = record.pathway.type;
+
+      // pathwayType is always returned so LMS knows whether to still send its own
+      // per-course email (skipped for VOLUNTEER — handled by the aggregate check below).
+      if (pathwayType !== PathwayType.VOLUNTEER) {
         return APIResponse.success(
           response, apiId,
-          { processed: false, reason: 'Not a VOLUNTEER pathway — no tag assignment needed' },
+          { processed: false, pathwayType, reason: 'Not a VOLUNTEER pathway — no aggregation needed' },
           HttpStatus.OK, 'Skipped'
         );
       }
@@ -2203,8 +2349,39 @@ export class PathwaysService {
       if (record.status !== PathwayHistoryStatus.ACTIVE) {
         return APIResponse.success(
           response, apiId,
-          { processed: false, historyId: record.id, status: record.status },
+          { processed: false, pathwayType, historyId: record.id, status: record.status },
           HttpStatus.OK, API_RESPONSES.COURSE_COMPLETION_ALREADY_PROCESSED
+        );
+      }
+
+      // Single aggregate LMS call — no per-course loop — to check whether every
+      // course tied to this pathway is now complete for this user.
+      const completion = await this.lmsClientService.getPathwayCompletionStatus(
+        dto.pathwayId, dto.userId, tenantId, organisationId
+      );
+
+      // null means LMS was unreachable/erroring — a genuine failure, not "0 courses
+      // done yet". Surface a retriable error so LMS's webhook retry (3 attempts) kicks
+      // in, rather than silently acknowledging a lost completion check as "partial".
+      if (completion === null) {
+        return APIResponse.error(
+          response, apiId, API_RESPONSES.LMS_SERVICE_UNAVAILABLE,
+          'Could not verify course completion status with LMS. Please retry.',
+          HttpStatus.SERVICE_UNAVAILABLE
+        );
+      }
+
+      if (!completion.allCompleted) {
+        return APIResponse.success(
+          response, apiId,
+          {
+            processed: false,
+            pathwayType,
+            historyId: record.id,
+            totalCourses: completion.totalCourses,
+            completedCourses: completion.completedCourses,
+          },
+          HttpStatus.OK, API_RESPONSES.PATHWAY_COURSE_COMPLETED_PARTIAL
         );
       }
 
@@ -2227,20 +2404,24 @@ export class PathwaysService {
       if ((result.affected ?? 0) === 0) {
         return APIResponse.success(
           response, apiId,
-          { processed: false, historyId: record.id },
+          { processed: false, pathwayType, historyId: record.id },
           HttpStatus.OK, API_RESPONSES.COURSE_COMPLETION_ALREADY_PROCESSED
         );
       }
 
+      // Notification itself is sent by LMS (same place the per-course email lives) —
+      // this response just confirms completion so LMS knows to trigger it.
       return APIResponse.success(response, apiId, {
         historyId: record.id,
         userId: dto.userId,
         pathwayId: record.pathway_id,
+        pathwayType,
+        allCoursesCompleted: true,
         subtype: record.pathway.subtype ?? null,
         status: PathwayHistoryStatus.COMPLETED,
         completedAt: now.toISOString(),
         volunteerValidUntil: record.pathway.volunteer_valid_until?.toISOString() ?? null,
-      }, HttpStatus.OK, API_RESPONSES.COURSE_COMPLETION_NOTIFICATION_SENT);
+      }, HttpStatus.OK, API_RESPONSES.PATHWAY_ALL_COURSES_COMPLETED);
     } catch (error) {
       const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
       LoggerUtil.error(`${API_RESPONSES.SERVER_ERROR}`, `Course completion API error: ${errorMessage}`, apiId);

@@ -447,19 +447,23 @@ export class LmsClientService {
   }
 
   /**
-   * Get the single active batch course for a VOLUNTEER pathway.
-   * Calls LMS search with isActive=true so only the currently open batch is returned.
-   * Returns the courseId string, or null if no active batch exists.
+   * Get all active batch courses for a VOLUNTEER pathway.
+   * Calls LMS search with isActive=true so only currently open batches are returned.
+   * Paginated the same way as getCourseIdsForPathway; no N+1.
+   *
+   * Returns `null` if the fetch is incomplete/failed (non-200 mid-pagination, network
+   * error) — callers must treat this as "unknown", never as "zero active courses".
+   * Returns `[]` only when LMS genuinely reports no matching courses.
    *
    * LMS contract: GET /lms-service/v1/courses/search?pathwayId=X&isActive=true&status=published
    */
-  async getActiveCourseForPathway(
+  async getActiveCourseIdsForPathway(
     pathwayId: string,
     tenantId: string,
     organisationId: string
-  ): Promise<string | null> {
+  ): Promise<string[] | null> {
     if (!this.lmsServiceUrl) {
-      this.logger.warn(`LMS_SERVICE_URL not configured. Cannot resolve active course for pathway ${pathwayId}`);
+      this.logger.warn(`LMS_SERVICE_URL not configured. Cannot resolve active courses for pathway ${pathwayId}`);
       return null;
     }
 
@@ -470,43 +474,72 @@ export class LmsClientService {
       'Content-Type': 'application/json',
     };
 
+    const limit = 1000;
+    const MAX_PAGES = 100;
+    const MAX_COURSES = 100000;
+    let offset = 0;
+    // Set-based dedupe: catches a repeated page (e.g. LMS ignoring `offset`) even when
+    // it's a full multi-item duplicate, not just a single-ID boundary overlap.
+    const seenIds = new Set<string>();
+    let totalElements = 0;
+    let hasMore = true;
+    let pageCount = 0;
+
     try {
-      const res = await axios.get(searchUrl, {
-        params: {
+      while (hasMore) {
+        if (pageCount >= MAX_PAGES || seenIds.size >= MAX_COURSES) break;
+
+        const searchParams = {
           pathwayId,
           status: 'published',
           isActive: true,
-          limit: 1,
-          offset: 0,
-        },
-        headers,
-        timeout: 10000,
-        validateStatus: (status) => status < 500,
-      });
+          limit,
+          offset,
+        };
 
-      if (res.status !== 200) {
-        this.logger.warn(`LMS active-course lookup returned ${res.status} for pathway ${pathwayId}`);
-        return null;
+        const res = await axios.get(searchUrl, {
+          params: searchParams,
+          headers,
+          timeout: 10000,
+          validateStatus: (status) => status < 500,
+        });
+
+        if (res.status !== 200) {
+          this.logger.warn(`LMS active-course lookup returned ${res.status} for pathway ${pathwayId} at offset ${offset} — treating as incomplete`);
+          return null;
+        }
+
+        const responseData = res.data?.result || res.data;
+        const courses = responseData?.courses || [];
+        totalElements = responseData?.totalElements || 0;
+
+        if (courses.length === 0) break;
+
+        const pageIds: string[] = courses
+          .map((c: any) => c.courseId || c.id || c.course_id)
+          .filter(Boolean)
+          .filter((id: string) => LmsClientService.UUID_REGEX.test(id));
+
+        const newIds = pageIds.filter((id) => !seenIds.has(id));
+        if (newIds.length === 0) break; // page contributed nothing new — stop instead of looping forever
+
+        newIds.forEach((id) => seenIds.add(id));
+        pageCount++;
+        hasMore =
+          courses.length === limit &&
+          (totalElements === 0 || offset + limit < totalElements);
+        if (hasMore) offset += limit;
       }
 
-      const responseData = res.data?.result || res.data;
-      const courses: any[] = responseData?.courses || [];
-
-      if (courses.length === 0) {
+      const courseIds = Array.from(seenIds);
+      if (courseIds.length === 0) {
         this.logger.warn(`No active batch course found in LMS for pathway ${pathwayId}`);
-        return null;
       }
 
-      const courseId = courses[0]?.courseId || courses[0]?.id || courses[0]?.course_id;
-      if (!courseId || !LmsClientService.UUID_REGEX.test(courseId)) {
-        this.logger.warn(`Active course for pathway ${pathwayId} has invalid ID: ${courseId}`);
-        return null;
-      }
-
-      return courseId;
+      return courseIds;
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error';
-      this.logger.error(`Failed to get active course for pathway ${pathwayId}: ${msg}`);
+      this.logger.error(`Failed to get active courses for pathway ${pathwayId}: ${msg}`);
       return null;
     }
   }
@@ -648,6 +681,59 @@ export class LmsClientService {
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error';
       this.logger.error(`Failed to get course progress for user ${userId} course ${courseId}: ${msg}`);
+      return null;
+    }
+  }
+
+  /**
+   * Aggregate completion status for every course tied to a pathway, for one user.
+   * Single HTTP call, regardless of how many courses the pathway has — LMS resolves
+   * the course list and completion counts server-side (no per-course looping here).
+   *
+   * LMS contract: GET /lms-service/v1/tracking/pathway-completion-status?pathwayId=X&userId=Y
+   */
+  async getPathwayCompletionStatus(
+    pathwayId: string,
+    userId: string,
+    tenantId: string,
+    organisationId: string
+  ): Promise<{ totalCourses: number; completedCourses: number; allCompleted: boolean } | null> {
+    if (!this.lmsServiceUrl) {
+      this.logger.warn('LMS_SERVICE_URL not configured. Cannot resolve pathway completion status.');
+      return null;
+    }
+
+    const url = `${this.lmsServiceUrl}/lms-service/v1/tracking/pathway-completion-status`;
+    const headers = {
+      tenantid: tenantId,
+      organisationid: organisationId,
+      'Content-Type': 'application/json',
+    };
+
+    try {
+      const res = await axios.get(url, {
+        params: { pathwayId, userId },
+        headers,
+        timeout: 10000,
+        validateStatus: (status) => status < 500,
+      });
+
+      // Non-200 is a genuine LMS failure, not "zero courses completed" — the caller
+      // must not treat this the same as legitimate partial progress.
+      if (res.status !== 200) {
+        this.logger.warn(`LMS pathway completion status returned ${res.status} for pathway ${pathwayId} user ${userId}`);
+        return null;
+      }
+
+      const data = res.data?.result || res.data;
+      return {
+        totalCourses: Number(data?.totalCourses ?? 0),
+        completedCourses: Number(data?.completedCourses ?? 0),
+        allCompleted: Boolean(data?.allCompleted),
+      };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Failed to get pathway completion status for pathway ${pathwayId} user ${userId}: ${msg}`);
       return null;
     }
   }
