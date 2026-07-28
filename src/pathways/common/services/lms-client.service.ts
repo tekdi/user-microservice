@@ -449,8 +449,11 @@ export class LmsClientService {
   /**
    * Get all active batch courses for a VOLUNTEER pathway.
    * Calls LMS search with isActive=true so only currently open batches are returned.
-   * Returns an array of course IDs (may be empty if no active batch exists).
    * Paginated the same way as getCourseIdsForPathway; no N+1.
+   *
+   * Returns `null` if the fetch is incomplete/failed (non-200 mid-pagination, network
+   * error) — callers must treat this as "unknown", never as "zero active courses".
+   * Returns `[]` only when LMS genuinely reports no matching courses.
    *
    * LMS contract: GET /lms-service/v1/courses/search?pathwayId=X&isActive=true&status=published
    */
@@ -458,10 +461,10 @@ export class LmsClientService {
     pathwayId: string,
     tenantId: string,
     organisationId: string
-  ): Promise<string[]> {
+  ): Promise<string[] | null> {
     if (!this.lmsServiceUrl) {
       this.logger.warn(`LMS_SERVICE_URL not configured. Cannot resolve active courses for pathway ${pathwayId}`);
-      return [];
+      return null;
     }
 
     const searchUrl = `${this.lmsServiceUrl}/lms-service/v1/courses/search`;
@@ -475,14 +478,16 @@ export class LmsClientService {
     const MAX_PAGES = 100;
     const MAX_COURSES = 100000;
     let offset = 0;
-    let allCourses: any[] = [];
+    // Set-based dedupe: catches a repeated page (e.g. LMS ignoring `offset`) even when
+    // it's a full multi-item duplicate, not just a single-ID boundary overlap.
+    const seenIds = new Set<string>();
     let totalElements = 0;
     let hasMore = true;
     let pageCount = 0;
 
     try {
       while (hasMore) {
-        if (pageCount >= MAX_PAGES || allCourses.length >= MAX_COURSES) break;
+        if (pageCount >= MAX_PAGES || seenIds.size >= MAX_COURSES) break;
 
         const searchParams = {
           pathwayId,
@@ -500,11 +505,8 @@ export class LmsClientService {
         });
 
         if (res.status !== 200) {
-          if (allCourses.length === 0) {
-            this.logger.warn(`LMS active-course lookup returned ${res.status} for pathway ${pathwayId}`);
-            return [];
-          }
-          break;
+          this.logger.warn(`LMS active-course lookup returned ${res.status} for pathway ${pathwayId} at offset ${offset} — treating as incomplete`);
+          return null;
         }
 
         const responseData = res.data?.result || res.data;
@@ -513,15 +515,15 @@ export class LmsClientService {
 
         if (courses.length === 0) break;
 
-        if (courses.length > 0 && allCourses.length > 0) {
-          const firstId = courses[0]?.courseId || courses[0]?.id;
-          const lastId =
-            allCourses[allCourses.length - 1]?.courseId ||
-            allCourses[allCourses.length - 1]?.id;
-          if (firstId === lastId) break;
-        }
+        const pageIds: string[] = courses
+          .map((c: any) => c.courseId || c.id || c.course_id)
+          .filter(Boolean)
+          .filter((id: string) => LmsClientService.UUID_REGEX.test(id));
 
-        allCourses = allCourses.concat(courses);
+        const newIds = pageIds.filter((id) => !seenIds.has(id));
+        if (newIds.length === 0) break; // page contributed nothing new — stop instead of looping forever
+
+        newIds.forEach((id) => seenIds.add(id));
         pageCount++;
         hasMore =
           courses.length === limit &&
@@ -529,11 +531,7 @@ export class LmsClientService {
         if (hasMore) offset += limit;
       }
 
-      const courseIds = allCourses
-        .map((c: any) => c.courseId || c.id || c.course_id)
-        .filter(Boolean)
-        .filter((id: string) => LmsClientService.UUID_REGEX.test(id));
-
+      const courseIds = Array.from(seenIds);
       if (courseIds.length === 0) {
         this.logger.warn(`No active batch course found in LMS for pathway ${pathwayId}`);
       }
@@ -542,7 +540,7 @@ export class LmsClientService {
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error';
       this.logger.error(`Failed to get active courses for pathway ${pathwayId}: ${msg}`);
-      return [];
+      return null;
     }
   }
 
@@ -699,10 +697,10 @@ export class LmsClientService {
     userId: string,
     tenantId: string,
     organisationId: string
-  ): Promise<{ totalCourses: number; completedCourses: number; allCompleted: boolean }> {
+  ): Promise<{ totalCourses: number; completedCourses: number; allCompleted: boolean } | null> {
     if (!this.lmsServiceUrl) {
       this.logger.warn('LMS_SERVICE_URL not configured. Cannot resolve pathway completion status.');
-      return { totalCourses: 0, completedCourses: 0, allCompleted: false };
+      return null;
     }
 
     const url = `${this.lmsServiceUrl}/lms-service/v1/tracking/pathway-completion-status`;
@@ -720,9 +718,11 @@ export class LmsClientService {
         validateStatus: (status) => status < 500,
       });
 
+      // Non-200 is a genuine LMS failure, not "zero courses completed" — the caller
+      // must not treat this the same as legitimate partial progress.
       if (res.status !== 200) {
         this.logger.warn(`LMS pathway completion status returned ${res.status} for pathway ${pathwayId} user ${userId}`);
-        return { totalCourses: 0, completedCourses: 0, allCompleted: false };
+        return null;
       }
 
       const data = res.data?.result || res.data;
@@ -734,7 +734,7 @@ export class LmsClientService {
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error';
       this.logger.error(`Failed to get pathway completion status for pathway ${pathwayId} user ${userId}: ${msg}`);
-      return { totalCourses: 0, completedCourses: 0, allCompleted: false };
+      return null;
     }
   }
 

@@ -722,6 +722,9 @@ export class PathwaysController {
       throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
     }
     const orgId = (process.env.DEFAULT_ORGANISATION_ID || organisationId || '').trim();
+    if (!orgId) {
+      throw new BadRequestException(API_RESPONSES.ORGANISATIONID_REQUIRED);
+    }
     return this.pathwaysService.handleCourseCompletion(dto, response, tenantId, orgId);
   }
 
