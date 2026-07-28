@@ -293,24 +293,27 @@ export class PathwaysService {
     subtype: string,
     openingDate: string | Date | null | undefined,
     closingDate: string | Date | null | undefined,
-    excludePathwayId: string | null = null,
+    excludePathwayId: string | null = null
   ): Promise<boolean> {
     const conflict = await this.pathwayRepository
-      .createQueryBuilder('pathway')
-      .where('pathway.type = :swcType', { swcType: PathwayType.VOLUNTEER })
-      .andWhere('pathway.subtype = :swcSubtype', { swcSubtype: subtype })
-      .andWhere('(:swcExcludeId::uuid IS NULL OR pathway.id != :swcExcludeId)', {
-        swcExcludeId: excludePathwayId,
-      })
+      .createQueryBuilder("pathway")
+      .where("pathway.type = :swcType", { swcType: PathwayType.VOLUNTEER })
+      .andWhere("pathway.subtype = :swcSubtype", { swcSubtype: subtype })
       .andWhere(
-        '(pathway.application_closing_date IS NULL OR :swcNewOpening::timestamptz IS NULL OR :swcNewOpening::timestamptz <= pathway.application_closing_date)',
+        "(:swcExcludeId::uuid IS NULL OR pathway.id != :swcExcludeId)",
+        {
+          swcExcludeId: excludePathwayId,
+        }
+      )
+      .andWhere(
+        "(pathway.application_closing_date IS NULL OR :swcNewOpening::timestamptz IS NULL OR :swcNewOpening::timestamptz <= pathway.application_closing_date)",
         { swcNewOpening: openingDate ?? null }
       )
       .andWhere(
-        '(:swcNewClosing::timestamptz IS NULL OR pathway.application_opening_date IS NULL OR pathway.application_opening_date <= :swcNewClosing::timestamptz)',
+        "(:swcNewClosing::timestamptz IS NULL OR pathway.application_opening_date IS NULL OR pathway.application_opening_date <= :swcNewClosing::timestamptz)",
         { swcNewClosing: closingDate ?? null }
       )
-      .select(['pathway.id'])
+      .select(["pathway.id"])
       .getOne();
 
     return !!conflict;
@@ -394,7 +397,7 @@ export class PathwaysService {
         const hasConflict = await this.hasSubtypeWindowConflict(
           createPathwayDto.subtype,
           createPathwayDto.application_opening_date,
-          createPathwayDto.application_closing_date,
+          createPathwayDto.application_closing_date
         );
 
         if (hasConflict) {
@@ -1195,13 +1198,16 @@ export class PathwaysService {
 
         // Same overlap invariant as create(): this subtype's application window
         // must not overlap another pathway of the same subtype's window.
-        const effectiveSubtype = updatePathwayDto.subtype !== undefined ? updatePathwayDto.subtype : existingPathway.subtype;
+        const effectiveSubtype =
+          updatePathwayDto.subtype !== undefined
+            ? updatePathwayDto.subtype
+            : existingPathway.subtype;
         if (effectiveSubtype) {
           const hasConflict = await this.hasSubtypeWindowConflict(
             effectiveSubtype,
             openingDate,
             closingDate,
-            id,
+            id
           );
 
           if (hasConflict) {
