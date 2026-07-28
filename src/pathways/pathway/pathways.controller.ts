@@ -661,7 +661,7 @@ export class PathwaysController {
   @ApiParam({ name: "userId", description: "User UUID", format: "uuid" })
   @ApiResponse({
     status: 200,
-    description: "Active volunteer pathways retrieved successfully",
+    description: "Active and completed volunteer pathways retrieved successfully",
     schema: {
       example: {
         count: 2,
@@ -671,9 +671,19 @@ export class PathwaysController {
             pathwayId: "uuid",
             pathwayName: "Campus Ambassador Leader",
             pathwayKey: "cal",
-            courseId: "uuid",
             status: "ACTIVE",
             activatedAt: "2025-07-20T00:00:00.000Z",
+            completedAt: null,
+            volunteerValidUntil: "2026-12-31T23:59:59.000Z",
+          },
+          {
+            userPathwayHistoryId: "uuid",
+            pathwayId: "uuid",
+            pathwayName: "Campus Ambassador Leader",
+            pathwayKey: "cal",
+            status: "COMPLETED",
+            activatedAt: "2025-01-20T00:00:00.000Z",
+            completedAt: "2025-06-20T00:00:00.000Z",
             volunteerValidUntil: "2026-12-31T23:59:59.000Z",
           },
         ],
