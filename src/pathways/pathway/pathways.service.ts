@@ -622,13 +622,19 @@ export class PathwaysService {
     );
     try {
       const cacheKey = this.generatePathwayListCacheKey(tenantId, organisationId, listPathwayDto);
+      // computedStatus ('completed'/'expired') is evaluated against CURRENT_TIMESTAMP, so a
+      // cached result can go stale the moment a pathway crosses that time boundary — bypass
+      // caching entirely for this filter rather than serving a time-sensitive stale list.
+      const bypassCache = !!(listPathwayDto as any).filters?.computedStatus;
       let cachedResult: { count: number; limit: number; offset: number; items: any[] } | null = null;
-      try {
-        cachedResult = await this.cacheService.get<{ count: number; limit: number; offset: number; items: any[] }>(cacheKey);
-      } catch (cacheReadError: any) {
-        this.logger.warn(
-          `Pathway list cache read failed, falling through to DB: ${cacheReadError?.message || cacheReadError}`
-        );
+      if (!bypassCache) {
+        try {
+          cachedResult = await this.cacheService.get<{ count: number; limit: number; offset: number; items: any[] }>(cacheKey);
+        } catch (cacheReadError: any) {
+          this.logger.warn(
+            `Pathway list cache read failed, falling through to DB: ${cacheReadError?.message || cacheReadError}`
+          );
+        }
       }
       if (cachedResult) {
         this.logger.debug(`Cache HIT for pathway list: ${cacheKey}`);
@@ -900,7 +906,9 @@ export class PathwaysService {
             tag_ids: (tags || []).map((t: { id: string }) => t.id),
           })),
         };
-        await this.cacheService.set(cacheKey, resultForCache, pathwayListCacheTtl);
+        if (!bypassCache) {
+          await this.cacheService.set(cacheKey, resultForCache, pathwayListCacheTtl);
+        }
       } catch (cacheError: any) {
         this.logger.warn(
           `Failed to cache pathway list result: ${cacheError?.message || cacheError}`
