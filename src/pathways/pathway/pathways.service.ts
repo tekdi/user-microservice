@@ -2265,7 +2265,7 @@ export class PathwaysService {
         .createQueryBuilder('h')
         .innerJoin('h.pathway', 'pw')
         .where('h.user_id = :userId', { userId })
-        .andWhere('h.status = :status', { status: PathwayHistoryStatus.ACTIVE })
+        .andWhere('h.status IN (:...statuses)', { statuses: [PathwayHistoryStatus.ACTIVE, PathwayHistoryStatus.COMPLETED] })
         .andWhere('pw.type = :type', { type: PathwayType.VOLUNTEER })
         .select(['h.id', 'h.pathway_id', 'h.status', 'h.activated_at', 'h.completed_at', 'h.user_goal', 'h.is_active', 'pw.id', 'pw.name', 'pw.key', 'pw.type', 'pw.subtype', 'pw.volunteer_valid_until']);
 
