@@ -653,8 +653,8 @@ export class PathwaysController {
   @Get("volunteer/active/:userId")
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: "Get active volunteer pathway assignments for a user",
-    description: "Returns all currently active VOLUNTEER pathway history records for a user as an array. Distinct from POST /pathway/active which is designed for a single STANDARD pathway.",
+    summary: "Get active and completed volunteer pathway assignments for a user",
+    description: "Returns ACTIVE and COMPLETED VOLUNTEER pathway history records for a user as an array (each item's `status` field distinguishes them). Distinct from POST /pathway/active which is designed for a single STANDARD pathway.",
   })
   @ApiHeader({ name: "Authorization", required: true })
   @ApiHeader({ name: "tenantid", required: true })
