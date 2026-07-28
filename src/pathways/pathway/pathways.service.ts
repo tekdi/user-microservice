@@ -283,6 +283,40 @@ export class PathwaysService {
   }
 
   /**
+   * True if any other VOLUNTEER pathway of the same subtype has an application
+   * window overlapping [openingDate, closingDate] — compares full ranges (not just
+   * "is anything currently open") so overlaps are caught whether the conflicting
+   * window is in the future or already backdated. NULL opening/closing bounds are
+   * treated as open-ended (no lower/upper bound).
+   */
+  private async hasSubtypeWindowConflict(
+    subtype: string,
+    openingDate: string | Date | null | undefined,
+    closingDate: string | Date | null | undefined,
+    excludePathwayId: string | null = null,
+  ): Promise<boolean> {
+    const conflict = await this.pathwayRepository
+      .createQueryBuilder('pathway')
+      .where('pathway.type = :swcType', { swcType: PathwayType.VOLUNTEER })
+      .andWhere('pathway.subtype = :swcSubtype', { swcSubtype: subtype })
+      .andWhere('(:swcExcludeId::uuid IS NULL OR pathway.id != :swcExcludeId)', {
+        swcExcludeId: excludePathwayId,
+      })
+      .andWhere(
+        '(pathway.application_closing_date IS NULL OR :swcNewOpening::timestamptz IS NULL OR :swcNewOpening::timestamptz <= pathway.application_closing_date)',
+        { swcNewOpening: openingDate ?? null }
+      )
+      .andWhere(
+        '(:swcNewClosing::timestamptz IS NULL OR pathway.application_opening_date IS NULL OR pathway.application_opening_date <= :swcNewClosing::timestamptz)',
+        { swcNewClosing: closingDate ?? null }
+      )
+      .select(['pathway.id'])
+      .getOne();
+
+    return !!conflict;
+  }
+
+  /**
    * Create a new pathway
    * Optimized: Single query with conflict check and batch tag validation
    */
@@ -350,24 +384,20 @@ export class PathwaysService {
         }
       }
 
-      // Block creating a new pathway of a given VOLUNTEER subtype (e.g. CAL) while
-      // another pathway of the same subtype still has an open application window,
-      // so two application windows for the same subtype can never overlap.
+      // Block creating a new pathway of a given VOLUNTEER subtype (e.g. CAL) whose
+      // application window overlaps another pathway of the same subtype, so two
+      // application windows for the same subtype can never overlap.
       if (
         (createPathwayDto.type ?? PathwayType.STANDARD) === PathwayType.VOLUNTEER &&
         createPathwayDto.subtype
       ) {
-        const openSubtypePathway = await this.pathwayRepository
-          .createQueryBuilder('pathway')
-          .where('pathway.type = :type', { type: PathwayType.VOLUNTEER })
-          .andWhere('pathway.subtype = :subtype', { subtype: createPathwayDto.subtype })
-          .andWhere(
-            '(pathway.application_closing_date IS NULL OR pathway.application_closing_date > CURRENT_TIMESTAMP)'
-          )
-          .select(['pathway.id'])
-          .getOne();
+        const hasConflict = await this.hasSubtypeWindowConflict(
+          createPathwayDto.subtype,
+          createPathwayDto.application_opening_date,
+          createPathwayDto.application_closing_date,
+        );
 
-        if (openSubtypePathway) {
+        if (hasConflict) {
           return APIResponse.error(
             response,
             apiId,
@@ -1161,6 +1191,26 @@ export class PathwaysService {
             response, apiId, API_RESPONSES.BAD_REQUEST,
             'application_closing_date must be on or after application_opening_date', HttpStatus.BAD_REQUEST
           );
+        }
+
+        // Same overlap invariant as create(): this subtype's application window
+        // must not overlap another pathway of the same subtype's window.
+        const effectiveSubtype = updatePathwayDto.subtype !== undefined ? updatePathwayDto.subtype : existingPathway.subtype;
+        if (effectiveSubtype) {
+          const hasConflict = await this.hasSubtypeWindowConflict(
+            effectiveSubtype,
+            openingDate,
+            closingDate,
+            id,
+          );
+
+          if (hasConflict) {
+            return APIResponse.error(
+              response, apiId, API_RESPONSES.CONFLICT,
+              API_RESPONSES.PATHWAY_SUBTYPE_APPLICATION_OPEN_CONFLICT,
+              HttpStatus.CONFLICT
+            );
+          }
         }
 
         if (updatePathwayDto.subtype !== undefined) {
