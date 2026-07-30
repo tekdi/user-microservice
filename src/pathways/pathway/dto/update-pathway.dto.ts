@@ -129,4 +129,13 @@ export class UpdatePathwayDto {
   @IsOptional()
   @IsDateString()
   application_closing_date?: string | null;
+
+  @ApiPropertyOptional({
+    description: "Date on which a notification should be sent for this pathway. Pass null to clear.",
+    example: "2025-03-15T09:00:00Z",
+  })
+  @Expose()
+  @IsOptional()
+  @IsDateString()
+  notification_date?: string | null;
 }
