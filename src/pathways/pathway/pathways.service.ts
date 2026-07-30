@@ -2433,7 +2433,7 @@ export class PathwaysService {
           await this.notificationRequest.sendNotification({
             isQueue: false,
             context: 'USER',
-            key: 'onCourseCompletion',
+            key: 'onPathwayCompletion',
             replacements: {
               '{username}': `${user.firstName} ${user.lastName}`.trim(),
               '{firstName}': user.firstName,
