@@ -14,6 +14,7 @@ import { InterestsModule } from './interests/interests.module';
 import { LmsClientService } from './common/services/lms-client.service';
 import { StorageModule } from '../storage/storage.module';
 import { CacheModule } from '../cache/cache.module';
+import { NotificationRequest } from '../common/utils/notification.axios';
 
 @Module({
   imports: [
@@ -25,7 +26,7 @@ import { CacheModule } from '../cache/cache.module';
     CacheModule,
   ],
   controllers: [PathwaysController, TagsController],
-  providers: [PathwaysService, TagsService, LmsClientService],
+  providers: [PathwaysService, TagsService, LmsClientService, NotificationRequest],
   exports: [PathwaysService, TagsService, LmsClientService],
 })
 export class PathwaysModule { }

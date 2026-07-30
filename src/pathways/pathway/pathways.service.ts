@@ -26,6 +26,7 @@ import { S3StorageProvider } from '../../storage/providers/s3-storage.provider';
 import { ConfigService } from '@nestjs/config';
 import { CacheService } from 'src/cache/cache.service';
 import { CourseCompletionWebhookDto } from './dto/course-completion-webhook.dto';
+import { NotificationRequest } from '../../common/utils/notification.axios';
 
 @Injectable()
 export class PathwaysService {
@@ -45,6 +46,7 @@ export class PathwaysService {
     private readonly lmsClientService: LmsClientService,
     private readonly configService: ConfigService,
     private readonly cacheService: CacheService,
+    private readonly notificationRequest: NotificationRequest,
   ) {
     // Initialize S3StorageProvider for image uploads
     this.s3StorageProvider = new S3StorageProvider(this.configService);
@@ -2420,6 +2422,37 @@ export class PathwaysService {
           response, apiId,
           { processed: false, pathwayType, historyId: record.id },
           HttpStatus.OK, API_RESPONSES.COURSE_COMPLETION_ALREADY_PROCESSED
+        );
+      }
+
+      // Send course-completion email for the completed VOLUNTEER pathway.
+      try {        
+        const user = await this.userRepository.findOne({ where: { userId: dto.userId } });
+        if (user?.email) {
+          const pathwayName = record.pathway.name;
+          await this.notificationRequest.sendNotification({
+            isQueue: false,
+            context: 'USER',
+            key: 'onCourseCompletion',
+            replacements: {
+              '{username}': `${user.firstName} ${user.lastName}`.trim(),
+              '{firstName}': user.firstName,
+              '{lastName}': pathwayName,
+              '{courseName}': pathwayName,
+              '{programName}': record.pathway.subtype ?? '',
+              '{notificationDate}': record.pathway.notification_date
+                ? new Date(record.pathway.notification_date).toISOString().slice(0, 10)
+                : '',
+              '{currentYear}': now.getFullYear(),
+            },
+            email: { receipients: [user.email] },
+          });
+        }
+      } catch (notificationError: any) {
+        LoggerUtil.error(
+          `${API_RESPONSES.SERVER_ERROR}`,
+          `Failed to send course-completion notification: ${notificationError?.message || notificationError}`,
+          apiId
         );
       }
 
