@@ -492,6 +492,7 @@ export class PathwaysService {
             volunteer_valid_until: isVolunteer ? (createPathwayDto.volunteer_valid_until ?? null) : null,
             application_opening_date: isVolunteer ? (createPathwayDto.application_opening_date ?? null) : null,
             application_closing_date: isVolunteer ? (createPathwayDto.application_closing_date ?? null) : null,
+            notification_date: createPathwayDto.notification_date ?? null,
             created_by: userId,
             updated_by: userId,
           };
@@ -520,6 +521,7 @@ export class PathwaysService {
             volunteer_valid_until: savedData.volunteer_valid_until ?? null,
             application_opening_date: savedData.application_opening_date ?? null,
             application_closing_date: savedData.application_closing_date ?? null,
+            notification_date: savedData.notification_date ?? null,
             created_at: savedData.created_at,
           };
 
@@ -722,6 +724,7 @@ export class PathwaysService {
             volunteer_valid_until: item.volunteer_valid_until ?? null,
             application_opening_date: item.application_opening_date ?? null,
             application_closing_date: item.application_closing_date ?? null,
+            notification_date: item.notification_date ?? null,
             created_at: item.created_at,
             video_count: counts?.videoCount ?? 0,
             resource_count: counts?.resourceCount ?? 0,
@@ -1030,6 +1033,7 @@ export class PathwaysService {
         volunteer_valid_until: pathwayData.volunteer_valid_until ?? null,
         application_opening_date: pathwayData.application_opening_date ?? null,
         application_closing_date: pathwayData.application_closing_date ?? null,
+        notification_date: pathwayData.notification_date ?? null,
         created_at: pathwayData.created_at,
       };
 
@@ -1175,6 +1179,9 @@ export class PathwaysService {
       if (updatePathwayDto.is_active !== undefined) {
         updateData.is_active = updatePathwayDto.is_active;
       }
+      if (updatePathwayDto.notification_date !== undefined) {
+        updateData.notification_date = updatePathwayDto.notification_date ?? null;
+      }
       if (updatePathwayDto.type !== undefined) {
         updateData.type = updatePathwayDto.type;
       }
@@ -1318,6 +1325,7 @@ export class PathwaysService {
         volunteer_valid_until: pathwayData.volunteer_valid_until ?? null,
         application_opening_date: pathwayData.application_opening_date ?? null,
         application_closing_date: pathwayData.application_closing_date ?? null,
+        notification_date: pathwayData.notification_date ?? null,
         created_at: pathwayData.created_at,
       };
 

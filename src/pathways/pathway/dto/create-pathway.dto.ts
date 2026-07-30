@@ -151,4 +151,13 @@ export class CreatePathwayDto {
   @IsDateString()
   @ValidateIf((o) => o.type === PathwayType.VOLUNTEER || o.application_closing_date !== undefined)
   application_closing_date?: string;
+
+  @ApiPropertyOptional({
+    description: "Date on which a notification should be sent for this pathway.",
+    example: "2025-03-15T09:00:00Z",
+  })
+  @Expose()
+  @IsOptional()
+  @IsDateString()
+  notification_date?: string;
 }

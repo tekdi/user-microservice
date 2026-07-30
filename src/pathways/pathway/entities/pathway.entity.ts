@@ -61,6 +61,9 @@ export class Pathway {
   @Column({ type: 'timestamptz', nullable: true })
   application_closing_date: Date | null;
 
+  @Column({ type: "date", nullable: true })
+  notification_date: Date | null;
+
   @CreateDateColumn({
     type: "timestamp",
     default: () => "CURRENT_TIMESTAMP",
