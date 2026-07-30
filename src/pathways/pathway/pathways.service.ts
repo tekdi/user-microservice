@@ -299,6 +299,7 @@ export class PathwaysService {
       .createQueryBuilder("pathway")
       .where("pathway.type = :swcType", { swcType: PathwayType.VOLUNTEER })
       .andWhere("pathway.subtype = :swcSubtype", { swcSubtype: subtype })
+      .andWhere("pathway.is_active = true")
       .andWhere(
         "(:swcExcludeId::uuid IS NULL OR pathway.id != :swcExcludeId)",
         {
@@ -392,7 +393,8 @@ export class PathwaysService {
       // application windows for the same subtype can never overlap.
       if (
         (createPathwayDto.type ?? PathwayType.STANDARD) === PathwayType.VOLUNTEER &&
-        createPathwayDto.subtype
+        createPathwayDto.subtype &&
+        (createPathwayDto.is_active ?? true)
       ) {
         const hasConflict = await this.hasSubtypeWindowConflict(
           createPathwayDto.subtype,
@@ -1202,7 +1204,8 @@ export class PathwaysService {
           updatePathwayDto.subtype !== undefined
             ? updatePathwayDto.subtype
             : existingPathway.subtype;
-        if (effectiveSubtype) {
+        const effectiveIsActive = updatePathwayDto.is_active ?? existingPathway.is_active;
+        if (effectiveSubtype && effectiveIsActive) {
           const hasConflict = await this.hasSubtypeWindowConflict(
             effectiveSubtype,
             openingDate,
