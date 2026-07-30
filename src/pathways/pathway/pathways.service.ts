@@ -2357,36 +2357,38 @@ export class PathwaysService {
         );
       }
 
-      // Single aggregate LMS call — no per-course loop — to check whether every
-      // course tied to this pathway is now complete for this user.
-      const completion = await this.lmsClientService.getPathwayCompletionStatus(
-        dto.pathwayId, dto.userId, tenantId, organisationId
-      );
+      // LMS already only calls this webhook when all courses in the pathway are
+      // completed for this user, so no need to recheck completion status here.
+      // // Single aggregate LMS call — no per-course loop — to check whether every
+      // // course tied to this pathway is now complete for this user.
+      // const completion = await this.lmsClientService.getPathwayCompletionStatus(
+      //   dto.pathwayId, dto.userId, tenantId, organisationId
+      // );
 
-      // null means LMS was unreachable/erroring — a genuine failure, not "0 courses
-      // done yet". Surface a retriable error so LMS's webhook retry (3 attempts) kicks
-      // in, rather than silently acknowledging a lost completion check as "partial".
-      if (completion === null) {
-        return APIResponse.error(
-          response, apiId, API_RESPONSES.LMS_SERVICE_UNAVAILABLE,
-          'Could not verify course completion status with LMS. Please retry.',
-          HttpStatus.SERVICE_UNAVAILABLE
-        );
-      }
+      // // null means LMS was unreachable/erroring — a genuine failure, not "0 courses
+      // // done yet". Surface a retriable error so LMS's webhook retry (3 attempts) kicks
+      // // in, rather than silently acknowledging a lost completion check as "partial".
+      // if (completion === null) {
+      //   return APIResponse.error(
+      //     response, apiId, API_RESPONSES.LMS_SERVICE_UNAVAILABLE,
+      //     'Could not verify course completion status with LMS. Please retry.',
+      //     HttpStatus.SERVICE_UNAVAILABLE
+      //   );
+      // }
 
-      if (!completion.allCompleted) {
-        return APIResponse.success(
-          response, apiId,
-          {
-            processed: false,
-            pathwayType,
-            historyId: record.id,
-            totalCourses: completion.totalCourses,
-            completedCourses: completion.completedCourses,
-          },
-          HttpStatus.OK, API_RESPONSES.PATHWAY_COURSE_COMPLETED_PARTIAL
-        );
-      }
+      // if (!completion.allCompleted) {
+      //   return APIResponse.success(
+      //     response, apiId,
+      //     {
+      //       processed: false,
+      //       pathwayType,
+      //       historyId: record.id,
+      //       totalCourses: completion.totalCourses,
+      //       completedCourses: completion.completedCourses,
+      //     },
+      //     HttpStatus.OK, API_RESPONSES.PATHWAY_COURSE_COMPLETED_PARTIAL
+      //   );
+      // }
 
       const now = new Date();
 
