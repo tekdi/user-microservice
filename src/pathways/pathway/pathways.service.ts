@@ -918,6 +918,7 @@ export class PathwaysService {
           volunteer_valid_until: item.volunteer_valid_until ?? null,
           application_opening_date: item.application_opening_date ?? null,
           application_closing_date: item.application_closing_date ?? null,
+          notification_date: item.notification_date ?? null,
           created_at: item.created_at,
           video_count: videoCount,
           resource_count: resourceCount,
