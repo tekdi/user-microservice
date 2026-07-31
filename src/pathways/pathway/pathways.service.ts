@@ -28,6 +28,12 @@ import { CacheService } from 'src/cache/cache.service';
 import { CourseCompletionWebhookDto } from './dto/course-completion-webhook.dto';
 import { NotificationRequest } from '../../common/utils/notification.axios';
 
+const PATHWAY_SUBTYPE_PROGRAM_NAMES: Record<string, string> = {
+  CAL: 'Campus Leader Training!',
+  DL: 'Domain Leader Training!',
+  CL: 'Community Leader Training!',
+};
+
 @Injectable()
 export class PathwaysService {
   private readonly logger = new Logger(PathwaysService.name);
@@ -2439,7 +2445,9 @@ export class PathwaysService {
               '{firstName}': user.firstName,
               '{lastName}': pathwayName,
               '{courseName}': pathwayName,
-              '{programName}': record.pathway.subtype ?? '',
+              '{programName}': record.pathway.subtype
+                ? PATHWAY_SUBTYPE_PROGRAM_NAMES[record.pathway.subtype] ?? record.pathway.subtype
+                : '',
               '{notificationDate}': record.pathway.notification_date
                 ? new Date(record.pathway.notification_date).toLocaleDateString('en-GB', {
                     day: 'numeric',
