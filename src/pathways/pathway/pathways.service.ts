@@ -2441,7 +2441,11 @@ export class PathwaysService {
               '{courseName}': pathwayName,
               '{programName}': record.pathway.subtype ?? '',
               '{notificationDate}': record.pathway.notification_date
-                ? new Date(record.pathway.notification_date).toISOString().slice(0, 10)
+                ? new Date(record.pathway.notification_date).toLocaleDateString('en-GB', {
+                    day: 'numeric',
+                    month: 'short',
+                    year: 'numeric',
+                  })
                 : '',
               '{currentYear}': now.getFullYear(),
             },
