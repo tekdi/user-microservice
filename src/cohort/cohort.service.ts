@@ -52,7 +52,7 @@ export class CohortService {
     private readonly cohortMembersService: CohortMembersService,
     private readonly automaticMemberService: AutomaticMemberService,
     private readonly kafkaService: KafkaService,
-    private readonly cacheService: CacheService
+    private readonly cacheService: CacheService,
     private readonly auditLoggerService: AuditLoggerService
   ) { }
 

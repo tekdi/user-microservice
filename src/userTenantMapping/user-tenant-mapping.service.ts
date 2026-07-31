@@ -38,15 +38,11 @@ export class UserTenantMappingService {
     @InjectRepository(Role)
     private readonly roleRepository: Repository<Role>,
     @InjectRepository(UserRoleMapping)
-    private userRoleMappingRepository: Repository<UserRoleMapping>,
-    private userService: UserService,
-    private fieldsService: FieldsService,
-    private kafkaService: KafkaService,
-    private readonly cacheService: CacheService
     private readonly userRoleMappingRepository: Repository<UserRoleMapping>,
     private readonly userService: UserService,
     private readonly fieldsService: FieldsService,
     private readonly kafkaService: KafkaService,
+    private readonly cacheService: CacheService,
     @Inject(AuditLoggerService)
     private readonly auditLoggerService: AuditLoggerService
   ) { }

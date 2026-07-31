@@ -31,7 +31,7 @@ export class RoleService {
     private readonly userRoleMappingRepository: Repository<UserRoleMapping>,
     @InjectRepository(RolePrivilegeMapping)
     private readonly roleprivilegeMappingRepository: Repository<RolePrivilegeMapping>,
-    private readonly cacheService: CacheService
+    private readonly cacheService: CacheService,
     @Inject(AuditLoggerService)
     private readonly auditLoggerService: AuditLoggerService
   ) { }

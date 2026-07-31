@@ -41,12 +41,8 @@ export class FieldsService {
     @InjectRepository(Fields)
     private readonly fieldsRepository: Repository<Fields>,
     @InjectRepository(FieldValues)
-    private fieldsValuesRepository: Repository<FieldValues>,
-    private readonly cacheService: CacheService
-  ) { }
-
-  // No tenant header on this endpoint, so it shares the global fields namespace.
     private readonly fieldsValuesRepository: Repository<FieldValues>,
+    private readonly cacheService: CacheService,
     @Inject(AuditLoggerService)
     private readonly auditLoggerService: AuditLoggerService
   ) { }
@@ -59,6 +55,7 @@ export class FieldsService {
     }
   }
 
+  // No tenant header on this endpoint, so it shares the global fields namespace.
   async getFormCustomField(requiredData, response) {
     const payload = await this.cacheService.getOrLoad({
       namespace: "fields:global",
@@ -976,7 +973,6 @@ export class FieldsService {
           ...tenantIds.map((t) => `userlist:${t}`),
         ]);
       }
-      return APIResponse.success(
       const apiRes = APIResponse.success(
         res,
         apiId,
@@ -2327,7 +2323,6 @@ export class FieldsService {
         ...[...new Set(tenantIdLists.flat())].map((t) => `userlist:${t}`),
       ]);
 
-      return await APIResponse.success(
       const apiRes = await APIResponse.success(
         response,
         apiId,

@@ -50,7 +50,7 @@ export class CohortMembersService {
     private fieldsService: FieldsService,
     private userService: UserService,
     private readonly kafkaService: KafkaService,
-    private readonly cacheService: CacheService
+    private readonly cacheService: CacheService,
     private readonly auditLoggerService: AuditLoggerService
   ) { }
 
