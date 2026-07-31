@@ -54,6 +54,7 @@ import { LoggerUtil } from 'src/common/logger/LoggerUtil';
 import { OtpSendDTO } from './dto/otpSend.dto';
 import { OtpVerifyDTO } from './dto/otpVerify.dto';
 import { UserCreateSsoDto } from './dto/user-create-sso.dto';
+import { UserAnonymizeDto } from './dto/user-anonymize.dto';
 import { RecaptchaService } from './recaptcha.service';
 
 export interface UserData {
@@ -310,6 +311,25 @@ export class UserController {
       .buildUserAdapter()
       .deleteUserById(userId, response);
   }
+  // GDPR-style anonymize: overwrites email/username/firstName/lastName/dob/gender/mobile/status
+  // in Postgres + Keycloak (email/username/firstName/lastName only) + Elasticsearch. Accepts multiple emails.
+  @UseFilters(new AllExceptionsFilter(APIID.USER_ANONYMIZE))
+  @Post('anonymize')
+  @UseGuards(JwtAuthGuard)
+  @ApiBasicAuth('access-token')
+  @UsePipes(new ValidationPipe({ transform: true }))
+  @ApiBody({ type: UserAnonymizeDto })
+  @ApiOkResponse({ description: 'Users processed for anonymization.' })
+  public async anonymizeUsers(
+    @Req() request: Request,
+    @Res() response: Response,
+    @Body() userAnonymizeDto: UserAnonymizeDto
+  ) {
+    return await this.userAdapter
+      .buildUserAdapter()
+      .anonymizeUsers(userAnonymizeDto, request, response);
+  }
+
   @UseFilters(new AllExceptionsFilter(APIID.SEND_OTP))
   @Post('send-otp')
   @ApiBody({ type: OtpSendDTO })

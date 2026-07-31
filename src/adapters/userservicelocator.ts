@@ -7,6 +7,7 @@ import { UserData } from 'src/user/user.controller';
 import { SendPasswordResetOTPDto } from 'src/user/dto/passwordReset.dto';
 import { UserUpdateDTO } from 'src/user/dto/user-update.dto';
 import { UserCreateSsoDto } from 'src/user/dto/user-create-sso.dto';
+import { UserAnonymizeDto } from 'src/user/dto/user-anonymize.dto';
 
 export interface IServicelocator {
   // getUser(
@@ -48,6 +49,11 @@ export interface IServicelocator {
   );
   checkUser(body: any, response);
   deleteUserById(userId: string, response: Response): Promise<any>;
+  anonymizeUsers(
+    userAnonymizeDto: UserAnonymizeDto,
+    request: any,
+    response: Response
+  ): Promise<any>;
   sendPasswordResetLink(
     request: any,
     username: string,

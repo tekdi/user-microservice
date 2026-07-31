@@ -1,5 +1,5 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { User } from '../../user/entities/user-entity';
+import { User, UserStatus } from '../../user/entities/user-entity';
 import { FieldValues } from 'src/fields/entities/fields-values.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
@@ -10,6 +10,7 @@ import {
   clearCachedAdminToken,
   createUserInKeyCloak,
   updateUserInKeyCloak,
+  logoutUserInKeyCloak,
   checkIfUsernameExistsInKeycloak,
   checkIfEmailExistsInKeycloak,
 } from '../../common/utils/keycloak.adapter.util';
@@ -49,11 +50,13 @@ import { ActionType, UserUpdateDTO } from 'src/user/dto/user-update.dto';
 import config from '../../common/config';
 import { CalendarField } from 'src/fields/fieldValidators/fieldTypeClasses';
 import { UserCreateSsoDto } from 'src/user/dto/user-create-sso.dto';
+import { UserAnonymizeDto } from 'src/user/dto/user-anonymize.dto';
 import { UserElasticsearchService } from '../../elasticsearch/user-elasticsearch.service';
 import { IUser } from '../../elasticsearch/interfaces/user.interface';
 import { isElasticsearchEnabled } from 'src/common/utils/elasticsearch.util';
 import { ReferralsService } from 'src/referrals/referrals.service';
 import { buildReferLink } from 'src/referrals/utils/referral-slug.util';
+import { isPiiCustomField } from '@utils/pii-fields.constant';
 
 interface UpdateField {
   userId: string; // Required
@@ -2966,6 +2969,263 @@ export class PostgresUserService implements IServicelocator {
       );
     }
   }
+  /**
+   * GDPR-style anonymization: overwrites only email/username/firstName/lastName/dob/gender/mobile/status
+   * (+ reason/updatedBy/updatedAt) in Postgres, the same email/username/firstName/lastName in Keycloak
+   * (account is left enabled, no session invalidation), and mirrors both into Elasticsearch. Accepts
+   * multiple emails per call; each is processed independently so one failure doesn't block the rest.
+   */
+  public async anonymizeUsers(
+    userAnonymizeDto: UserAnonymizeDto,
+    request: any,
+    response: Response
+  ) {
+    const apiId = APIID.USER_ANONYMIZE;
+    try {
+      const { emails, reason } = userAnonymizeDto;
+
+      // Resolve acting admin id from JWT, same pattern used by updateUser().
+      let loggedInUserId: string | null = null;
+      if (request?.user?.userId) {
+        loggedInUserId = request.user.userId;
+      } else if (request?.headers?.authorization) {
+        try {
+          const token = request.headers.authorization
+            .replace(/^Bearer\s+/i, '')
+            .trim();
+          const decoded: { sub?: string } = token ? jwt_decode(token) : null;
+          loggedInUserId = decoded?.sub ?? null;
+        } catch {
+          loggedInUserId = null;
+        }
+      }
+
+      // Fetch the Keycloak admin token once and reuse it for the whole batch (already cached/deduped
+      // internally by getKeycloakAdminToken) instead of re-fetching per user.
+      const keycloakTokenResponse = await getKeycloakAdminToken();
+      const keycloakToken = keycloakTokenResponse.data.access_token;
+
+      // Process every user concurrently; a failure on one email must not block the others.
+      const settled = await Promise.allSettled(
+        emails.map((email) =>
+          this.anonymizeSingleUser(
+            email,
+            reason,
+            loggedInUserId,
+            keycloakToken
+          )
+        )
+      );
+
+      const results = settled.map((result, index) => {
+        if (result.status === 'fulfilled') {
+          return result.value;
+        }
+        return {
+          email: emails[index],
+          status: 'FAILED',
+          message: result.reason?.message || 'Anonymization failed',
+        };
+      });
+
+      return await APIResponse.success(
+        response,
+        apiId,
+        { results },
+        HttpStatus.OK,
+        API_RESPONSES.USER_ANONYMIZE_SUCCESSFULLY
+      );
+    } catch (e) {
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${e.message}`,
+        apiId
+      );
+      return APIResponse.error(
+        response,
+        apiId,
+        API_RESPONSES.SERVER_ERROR,
+        `Error : ${e?.message}`,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  private generateAnonymizedIdentity(userId: string): string {
+    return `deleted_user_${userId}@anon.local`;
+  }
+
+  private async anonymizeSingleUser(
+    email: string,
+    reason: string,
+    loggedInUserId: string | null,
+    keycloakToken: string
+  ): Promise<{ email: string; status: string; message?: string }> {
+    const user = await this.usersRepository.findOne({ where: { email } });
+    if (!user) {
+      return {
+        email,
+        status: 'NOT_FOUND',
+        message: API_RESPONSES.USER_NOT_FOUND_FOR_ANONYMIZE,
+      };
+    }
+
+    // Idempotency guard: skip a user whose email already matches the anonymized pattern
+    // (e.g. this email was re-submitted after a prior successful anonymization).
+    if (/^deleted_user_.+@anon\.local$/.test(user.email || '')) {
+      return {
+        email,
+        status: 'SKIPPED',
+        message: API_RESPONSES.USER_ALREADY_ANONYMIZED,
+      };
+    }
+
+    const anonymizedIdentity = this.generateAnonymizedIdentity(user.userId);
+
+    // 1. Keycloak: only email/username/firstName/lastName. Account stays enabled, no session invalidation.
+    const keycloakResult = await updateUserInKeyCloak(
+      {
+        userId: user.userId,
+        email: anonymizedIdentity,
+        username: anonymizedIdentity,
+        firstName: 'deleted',
+        lastName: 'user',
+      },
+      keycloakToken
+    );
+    if (keycloakResult.success === false) {
+      return {
+        email,
+        status: 'FAILED',
+        message: `Keycloak update failed: ${keycloakResult.message}`,
+      };
+    }
+
+    // 1b. Keycloak: invalidate any active sessions/refresh tokens for this user so an
+    // already-logged-in session can't keep refreshing its access token post-anonymization.
+    // Account `enabled` is left untouched — this only kills sessions, it does not disable the account.
+    const logoutResult = await logoutUserInKeyCloak(user.userId, keycloakToken);
+    if (logoutResult.success === false) {
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Keycloak session invalidation failed for user ${user.userId}: ${logoutResult.message}`,
+        APIID.USER_ANONYMIZE
+      );
+    }
+
+    // 2. Postgres: overwrite exactly the agreed field set on the Users row.
+    await this.updateBasicUserDetails(user.userId, {
+      email: anonymizedIdentity,
+      username: anonymizedIdentity,
+      firstName: 'deleted',
+      lastName: 'user',
+      dob: null,
+      gender: null,
+      mobile: null,
+      country: null,
+      permanentCountry: null,
+      currentCountry: null,
+      status: UserStatus.ARCHIVED,
+      reason,
+      updatedBy: loggedInUserId ?? undefined,
+    } as unknown as Partial<User>);
+
+    // 3. Postgres: null the address-line/city/state/pincode/mobile-type custom field values only.
+    const anonymizedCustomFields = await this.anonymizePiiCustomFieldValues(
+      user.userId,
+      loggedInUserId
+    );
+
+    // 4. Elasticsearch: mirror the same field set + the nulled custom fields.
+    if (isElasticsearchEnabled()) {
+      try {
+        await this.userElasticsearchService.updateUserProfile(user.userId, {
+          email: anonymizedIdentity,
+          username: anonymizedIdentity,
+          firstName: 'deleted',
+          lastName: 'user',
+          dob: null,
+          gender: null,
+          mobile: null,
+          country: null,
+          permanentCountry: null,
+          currentCountry: null,
+          status: UserStatus.ARCHIVED,
+          customFields: anonymizedCustomFields,
+        });
+      } catch (esError) {
+        LoggerUtil.error(
+          `${API_RESPONSES.SERVER_ERROR}`,
+          `Elasticsearch anonymize failed for user ${user.userId}: ${esError.message}`,
+          APIID.USER_ANONYMIZE
+        );
+        return {
+          email,
+          status: 'PARTIAL',
+          message:
+            'Anonymized in Keycloak and Postgres; Elasticsearch update failed and needs retry.',
+        };
+      }
+    }
+
+    if (logoutResult.success === false) {
+      return {
+        email,
+        status: 'ANONYMIZED',
+        message:
+          'Anonymized successfully, but invalidating the Keycloak session failed — an already-logged-in session may keep working until its access token naturally expires.',
+      };
+    }
+
+    return { email, status: 'ANONYMIZED' };
+  }
+
+  /**
+   * Nulls only the USERS-context custom field values classified as PII by
+   * isPiiCustomField (address lines/city/state/pincode/mobile-type fields) — every other
+   * custom field value is left untouched. Returns the full custom-field list (PII fields
+   * blanked) so the caller can mirror the same state into Elasticsearch.
+   */
+  private async anonymizePiiCustomFieldValues(
+    userId: string,
+    loggedInUserId: string | null
+  ): Promise<any[]> {
+    const fieldsAndValues = await this.fieldsService.getFieldsAndFieldsValues(
+      userId
+    );
+
+    const piiFieldValuesIds = fieldsAndValues
+      .filter((f) => isPiiCustomField(f.fieldname))
+      .map((f) => f.fieldValuesId)
+      .filter(Boolean);
+
+    if (piiFieldValuesIds.length > 0) {
+      await this.fieldsValueRepository.update(
+        { fieldValuesId: In(piiFieldValuesIds) },
+        {
+          value: '', // FieldValues.value is NOT NULL; blank string is the closest equivalent to null here.
+          textValue: null,
+          numberValue: null,
+          calendarValue: null,
+          dropdownValue: null,
+          radioValue: null,
+          checkboxValue: null,
+          textareaValue: null,
+          fileValue: null,
+          updatedBy: loggedInUserId ?? undefined,
+        }
+      );
+    }
+
+    return fieldsAndValues.map((f) => ({
+      fieldId: f.fieldId,
+      code: f.fieldname,
+      label: f.label,
+      type: f.type,
+      value: isPiiCustomField(f.fieldname) ? '' : f.value,
+    }));
+  }
+
   private formatMobileNumber(mobile: string): string {
     return `+91${mobile}`;
   }
