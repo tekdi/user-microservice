@@ -3,6 +3,7 @@ import {
   ConsoleLogger,
   HttpStatus,
   Injectable,
+  Inject,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { In, Repository } from "typeorm";
@@ -13,26 +14,40 @@ import {
   ResponseAssignRoleDto,
 } from "src/rbac/assign-role/dto/create-assign-role.dto";
 import { UserRoleMapping } from "src/rbac/assign-role/entities/assign-role.entity";
+import { getAuditContext } from "@utils/audit-helper";
 import { Role } from "src/rbac/role/entities/role.entity";
 import { IsAlpha, IsUUID, isUUID } from "class-validator";
 import { executionAsyncResource } from "async_hooks";
 import { DeleteAssignRoleDto } from "src/rbac/assign-role/dto/delete-assign-role.dto";
-import { Response, Request } from "express";
+import { Response } from "express";
 import { APIID } from "src/common/utils/api-id.config";
 import APIResponse from "src/common/responses/response";
 import { CacheService } from "../../cache/cache.service";
+import { AuditLoggerService } from "@tekdi/audit-logger/nestjs";
+import { LoggerUtil } from "src/common/logger/LoggerUtil";
 
 @Injectable()
 export class AssignRoleService {
   constructor(
     @InjectRepository(UserRoleMapping)
-    private userRoleMappingRepository: Repository<UserRoleMapping>,
+    private readonly userRoleMappingRepository: Repository<UserRoleMapping>,
     @InjectRepository(Role)
     private roleRepository: Repository<Role>,
     private readonly cacheService: CacheService
+    private readonly roleRepository: Repository<Role>,
+    @Inject(AuditLoggerService)
+    private readonly auditLoggerService: AuditLoggerService
   ) { }
+
+  private emitAuditSafely(event: any): void {
+    try {
+      this.auditLoggerService.emit(event);
+    } catch (err: any) {
+      LoggerUtil.error(`Audit emission failed: ${err?.message || err}`, "", "AuditLogger");
+    }
+  }
+
   public async createAssignRole(
-    request: any,
     createAssignRoleDto: CreateAssignRoleDto,
     response: Response
   ) {
@@ -84,12 +99,23 @@ export class AssignRoleService {
           continue;
         }
 
+        const auditCtx = getAuditContext();
         const data = await this.userRoleMappingRepository.save({
           userId: userId,
           roleId: roleId,
           tenantId: tenantId,
-          createdBy: request["user"].userId,
-          updatedBy: request["user"].userId,
+          createdBy: auditCtx.actorId,
+          updatedBy: auditCtx.actorId,
+        });
+
+        this.emitAuditSafely({
+          entityType: "USER_ROLE",
+          entityId: data.userRolesId,
+          eventAction: "CREATED",
+          ...auditCtx,
+          metadata: {
+            tenantId: tenantId
+          }
         });
         result.push(
           new ResponseAssignRoleDto(
@@ -144,7 +170,6 @@ export class AssignRoleService {
 
   public async getAssignedRole(
     userId: string,
-    request: Request,
     response: Response
   ) {
     const apiId = APIID.USERROLE_GET;
@@ -264,6 +289,21 @@ export class AssignRoleService {
         `userroles:${deleteAssignRoleDto.userId}`,
         ...[...new Set(roleExists.map((m) => m.tenantId).filter(Boolean))].map((t) => `userlist:${t}`),
       ]);
+
+      // Audit Log for each deleted role
+      const auditCtx = getAuditContext();
+      for (const roleId of deleteAssignRoleDto.roleId) {
+        this.emitAuditSafely({
+          entityType: "USER_ROLE",
+          entityId: `User:${deleteAssignRoleDto.userId}|Role:${roleId}`,
+          eventAction: "DELETED",
+          ...auditCtx,
+          metadata: {
+            userId: deleteAssignRoleDto.userId,
+            roleId: roleId
+          }
+        });
+      }
       return APIResponse.success(
         res,
         apiId,
@@ -316,6 +356,19 @@ export class AssignRoleService {
           { roleId, updatedBy }
         );
         updated.push(userId);
+
+        const auditCtx = getAuditContext();
+        this.emitAuditSafely({
+          entityType: "USER_ROLE",
+          entityId: `User:${userId}|Tenant:${tenantId}`,
+          eventAction: "UPDATED",
+          ...auditCtx,
+          metadata: {
+            userId,
+            tenantId,
+            roleId
+          }
+        });
       }
 
       if (updated.length === 0) {
