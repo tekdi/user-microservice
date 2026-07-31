@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayNotEmpty,
@@ -19,6 +20,13 @@ export class UserAnonymizeDto {
   @ArrayNotEmpty()
   @ArrayMaxSize(100)
   @IsEmail({}, { each: true })
+  @Transform(({ value }) =>
+    Array.isArray(value)
+      ? value.map((email) =>
+          typeof email === 'string' ? email.trim().toLowerCase() : email
+        )
+      : value
+  )
   emails: string[];
 
   @ApiProperty({

@@ -2970,10 +2970,13 @@ export class PostgresUserService implements IServicelocator {
     }
   }
   /**
-   * GDPR-style anonymization: overwrites only email/username/firstName/lastName/dob/gender/mobile/status
-   * (+ reason/updatedBy/updatedAt) in Postgres, the same email/username/firstName/lastName in Keycloak
-   * (account is left enabled, no session invalidation), and mirrors both into Elasticsearch. Accepts
-   * multiple emails per call; each is processed independently so one failure doesn't block the rest.
+   * GDPR-style anonymization: overwrites only email/username/firstName/lastName/dob/gender/mobile/
+   * country/permanentCountry/currentCountry/status (+ reason/updatedBy/updatedAt) in Postgres —
+   * gender is set to the existing "i do not want to disclose" enum value rather than null, since
+   * the column is NOT NULL — mirrors email/username/firstName/lastName into Keycloak (account stays
+   * enabled, but its active sessions/refresh tokens are invalidated), and mirrors the full field set
+   * into Elasticsearch. Accepts multiple emails per call, processed with bounded concurrency so one
+   * failure never blocks the rest.
    */
   public async anonymizeUsers(
     userAnonymizeDto: UserAnonymizeDto,
@@ -3005,16 +3008,16 @@ export class PostgresUserService implements IServicelocator {
       const keycloakTokenResponse = await getKeycloakAdminToken();
       const keycloakToken = keycloakTokenResponse.data.access_token;
 
-      // Process every user concurrently; a failure on one email must not block the others.
-      const settled = await Promise.allSettled(
-        emails.map((email) =>
-          this.anonymizeSingleUser(
-            email,
-            reason,
-            loggedInUserId,
-            keycloakToken
-          )
-        )
+      // Bounded concurrency: each user triggers 2 Keycloak admin calls plus Postgres/Elasticsearch
+      // writes, so running the full batch (up to 100 emails) at once could exhaust the Keycloak
+      // admin connection pool / trip its rate limiting. A failure on one email still can't block
+      // the rest — each is captured individually, same as Promise.allSettled.
+      const ANONYMIZE_CONCURRENCY = 5;
+      const settled = await this.runWithConcurrency(
+        emails,
+        ANONYMIZE_CONCURRENCY,
+        (email) =>
+          this.anonymizeSingleUser(email, reason, loggedInUserId, keycloakToken)
       );
 
       const results = settled.map((result, index) => {
@@ -3051,18 +3054,53 @@ export class PostgresUserService implements IServicelocator {
     }
   }
 
+  /**
+   * Runs `worker` over `items` with at most `limit` in flight at once. Results are returned in
+   * the same shape as Promise.allSettled — a rejection on one item is captured, never thrown —
+   * so callers get bounded concurrency without losing the "one failure can't block the rest" property.
+   */
+  private async runWithConcurrency<T, R>(
+    items: T[],
+    limit: number,
+    worker: (item: T, index: number) => Promise<R>
+  ): Promise<PromiseSettledResult<R>[]> {
+    const results: PromiseSettledResult<R>[] = new Array(items.length);
+    let nextIndex = 0;
+    const poolSize = Math.max(1, Math.min(limit, items.length));
+
+    const runners = Array.from({ length: poolSize }, async () => {
+      while (nextIndex < items.length) {
+        const current = nextIndex++;
+        try {
+          const value = await worker(items[current], current);
+          results[current] = { status: 'fulfilled', value };
+        } catch (reason) {
+          results[current] = { status: 'rejected', reason };
+        }
+      }
+    });
+
+    await Promise.all(runners);
+    return results;
+  }
+
   private generateAnonymizedIdentity(userId: string): string {
     return `deleted_user_${userId}@anon.local`;
   }
 
+  /**
+   * Looks up every `Users` row matching `email` — email carries no DB-level unique constraint in
+   * this service (only `username` does), so more than one account can share an email — and
+   * anonymizes each matching row, aggregating their outcomes into a single result for this email.
+   */
   private async anonymizeSingleUser(
     email: string,
     reason: string,
     loggedInUserId: string | null,
     keycloakToken: string
   ): Promise<{ email: string; status: string; message?: string }> {
-    const user = await this.usersRepository.findOne({ where: { email } });
-    if (!user) {
+    const users = await this.usersRepository.find({ where: { email } });
+    if (users.length === 0) {
       return {
         email,
         status: 'NOT_FOUND',
@@ -3070,9 +3108,33 @@ export class PostgresUserService implements IServicelocator {
       };
     }
 
-    // Idempotency guard: skip a user whose email already matches the anonymized pattern
-    // (e.g. this email was re-submitted after a prior successful anonymization).
-    if (/^deleted_user_.+@anon\.local$/.test(user.email || '')) {
+    const rowResults = await Promise.all(
+      users.map((user) =>
+        this.anonymizeUserRow(user, reason, loggedInUserId, keycloakToken)
+      )
+    );
+
+    if (rowResults.some((r) => r.status === 'FAILED')) {
+      return {
+        email,
+        status: 'FAILED',
+        message: rowResults
+          .map((r) => r.message)
+          .filter(Boolean)
+          .join('; '),
+      };
+    }
+    if (rowResults.some((r) => r.status === 'PARTIAL')) {
+      return {
+        email,
+        status: 'PARTIAL',
+        message:
+          rowResults.length > 1
+            ? `${rowResults.length} accounts share this email; at least one had a partial failure — check logs by userId.`
+            : rowResults[0].message,
+      };
+    }
+    if (rowResults.every((r) => r.status === 'SKIPPED')) {
       return {
         email,
         status: 'SKIPPED',
@@ -3080,9 +3142,36 @@ export class PostgresUserService implements IServicelocator {
       };
     }
 
+    return {
+      email,
+      status: 'ANONYMIZED',
+      ...(rowResults.length > 1
+        ? {
+            message: `${rowResults.length} accounts shared this email; all were anonymized.`,
+          }
+        : {}),
+    };
+  }
+
+  /**
+   * Anonymizes a single `Users` row: Keycloak profile update + session invalidation, then an
+   * atomic Postgres update (Users row + its PII custom field values), then the Elasticsearch mirror.
+   */
+  private async anonymizeUserRow(
+    user: User,
+    reason: string,
+    loggedInUserId: string | null,
+    keycloakToken: string
+  ): Promise<{ status: string; message?: string }> {
+    // Idempotency guard: skip a user whose email already matches the anonymized pattern
+    // (e.g. this email was re-submitted after a prior successful anonymization).
+    if (/^deleted_user_.+@anon\.local$/.test(user.email || '')) {
+      return { status: 'SKIPPED', message: API_RESPONSES.USER_ALREADY_ANONYMIZED };
+    }
+
     const anonymizedIdentity = this.generateAnonymizedIdentity(user.userId);
 
-    // 1. Keycloak: only email/username/firstName/lastName. Account stays enabled, no session invalidation.
+    // 1. Keycloak: only email/username/firstName/lastName. Account stays enabled.
     const keycloakResult = await updateUserInKeyCloak(
       {
         userId: user.userId,
@@ -3095,7 +3184,6 @@ export class PostgresUserService implements IServicelocator {
     );
     if (keycloakResult.success === false) {
       return {
-        email,
         status: 'FAILED',
         message: `Keycloak update failed: ${keycloakResult.message}`,
       };
@@ -3113,28 +3201,59 @@ export class PostgresUserService implements IServicelocator {
       );
     }
 
-    // 2. Postgres: overwrite exactly the agreed field set on the Users row.
-    await this.updateBasicUserDetails(user.userId, {
-      email: anonymizedIdentity,
-      username: anonymizedIdentity,
-      firstName: 'deleted',
-      lastName: 'user',
-      dob: null,
-      gender: null,
-      mobile: null,
-      country: null,
-      permanentCountry: null,
-      currentCountry: null,
-      status: UserStatus.ARCHIVED,
-      reason,
-      updatedBy: loggedInUserId ?? undefined,
-    } as unknown as Partial<User>);
-
-    // 3. Postgres: null the address-line/city/state/pincode/mobile-type custom field values only.
-    const anonymizedCustomFields = await this.anonymizePiiCustomFieldValues(
-      user.userId,
-      loggedInUserId
-    );
+    // 2 & 3. Postgres: overwrite the Users row and null its PII custom field values atomically.
+    // If this fails after Keycloak already succeeded, best-effort revert the Keycloak profile so
+    // the two systems don't silently diverge (identity anonymized in Keycloak, PII still in Postgres).
+    let anonymizedCustomFields: any[];
+    try {
+      anonymizedCustomFields = await this.anonymizeUserPostgresData(
+        user.userId,
+        {
+          email: anonymizedIdentity,
+          username: anonymizedIdentity,
+          firstName: 'deleted',
+          lastName: 'user',
+          dob: null,
+          gender: 'i do not want to disclose',
+          mobile: null,
+          country: null,
+          permanentCountry: null,
+          currentCountry: null,
+          status: UserStatus.ARCHIVED,
+          reason,
+          updatedBy: loggedInUserId ?? undefined,
+        },
+        loggedInUserId
+      );
+    } catch (pgError) {
+      const revert = await updateUserInKeyCloak(
+        {
+          userId: user.userId,
+          email: user.email,
+          username: user.username,
+          firstName: user.firstName,
+          lastName: user.lastName,
+        },
+        keycloakToken
+      );
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Postgres anonymize failed for user ${user.userId}: ${pgError.message}. Keycloak revert ${
+          revert.success
+            ? 'succeeded'
+            : `FAILED: ${revert.message} — Keycloak identity is now out of sync with Postgres, manual reconciliation required`
+        }.`,
+        APIID.USER_ANONYMIZE
+      );
+      return {
+        status: 'FAILED',
+        message: `Postgres update failed: ${pgError.message}${
+          revert.success
+            ? ''
+            : ' — Keycloak revert also failed; this account needs manual reconciliation.'
+        }`,
+      };
+    }
 
     // 4. Elasticsearch: mirror the same field set + the nulled custom fields.
     if (isElasticsearchEnabled()) {
@@ -3145,7 +3264,7 @@ export class PostgresUserService implements IServicelocator {
           firstName: 'deleted',
           lastName: 'user',
           dob: null,
-          gender: null,
+          gender: 'i do not want to disclose',
           mobile: null,
           country: null,
           permanentCountry: null,
@@ -3160,7 +3279,6 @@ export class PostgresUserService implements IServicelocator {
           APIID.USER_ANONYMIZE
         );
         return {
-          email,
           status: 'PARTIAL',
           message:
             'Anonymized in Keycloak and Postgres; Elasticsearch update failed and needs retry.',
@@ -3170,24 +3288,24 @@ export class PostgresUserService implements IServicelocator {
 
     if (logoutResult.success === false) {
       return {
-        email,
         status: 'ANONYMIZED',
         message:
           'Anonymized successfully, but invalidating the Keycloak session failed — an already-logged-in session may keep working until its access token naturally expires.',
       };
     }
 
-    return { email, status: 'ANONYMIZED' };
+    return { status: 'ANONYMIZED' };
   }
 
   /**
-   * Nulls only the USERS-context custom field values classified as PII by
-   * isPiiCustomField (address lines/city/state/pincode/mobile-type fields) — every other
-   * custom field value is left untouched. Returns the full custom-field list (PII fields
-   * blanked) so the caller can mirror the same state into Elasticsearch.
+   * Atomically updates the Users row and nulls its PII custom field values (address
+   * line/city/state/pincode/mobile-type fields per isPiiCustomField — every other custom field
+   * is left untouched). Returns the full custom-field list (PII fields blanked) so the caller can
+   * mirror the same state into Elasticsearch.
    */
-  private async anonymizePiiCustomFieldValues(
+  private async anonymizeUserPostgresData(
     userId: string,
+    fields: Partial<User>,
     loggedInUserId: string | null
   ): Promise<any[]> {
     const fieldsAndValues = await this.fieldsService.getFieldsAndFieldsValues(
@@ -3195,34 +3313,38 @@ export class PostgresUserService implements IServicelocator {
     );
 
     const piiFieldValuesIds = fieldsAndValues
-      .filter((f) => isPiiCustomField(f.fieldname))
+      .filter((f) => isPiiCustomField(f.fieldname, f.type))
       .map((f) => f.fieldValuesId)
       .filter(Boolean);
 
-    if (piiFieldValuesIds.length > 0) {
-      await this.fieldsValueRepository.update(
-        { fieldValuesId: In(piiFieldValuesIds) },
-        {
-          value: '', // FieldValues.value is NOT NULL; blank string is the closest equivalent to null here.
-          textValue: null,
-          numberValue: null,
-          calendarValue: null,
-          dropdownValue: null,
-          radioValue: null,
-          checkboxValue: null,
-          textareaValue: null,
-          fileValue: null,
-          updatedBy: loggedInUserId ?? undefined,
-        }
-      );
-    }
+    await this.usersRepository.manager.transaction(async (manager) => {
+      await manager.update(User, { userId }, fields as any);
+      if (piiFieldValuesIds.length > 0) {
+        await manager.update(
+          FieldValues,
+          { fieldValuesId: In(piiFieldValuesIds) },
+          {
+            value: '', // FieldValues.value is NOT NULL; blank string is the closest equivalent to null here.
+            textValue: null,
+            numberValue: null,
+            calendarValue: null,
+            dropdownValue: null,
+            radioValue: null,
+            checkboxValue: null,
+            textareaValue: null,
+            fileValue: null,
+            updatedBy: loggedInUserId ?? undefined,
+          }
+        );
+      }
+    });
 
     return fieldsAndValues.map((f) => ({
       fieldId: f.fieldId,
       code: f.fieldname,
       label: f.label,
       type: f.type,
-      value: isPiiCustomField(f.fieldname) ? '' : f.value,
+      value: isPiiCustomField(f.fieldname, f.type) ? '' : f.value,
     }));
   }
 
