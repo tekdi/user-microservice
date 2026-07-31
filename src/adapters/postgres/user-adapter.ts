@@ -2994,7 +2994,7 @@ export class PostgresUserService implements IServicelocator {
       } else if (request?.headers?.authorization) {
         try {
           const token = request.headers.authorization
-            .replace(/^Bearer\s+/i, '')
+            .replace(/^Bearer\s+/i, "")
             .trim();
           const decoded: { sub?: string } = token ? jwt_decode(token) : null;
           loggedInUserId = decoded?.sub ?? null;
@@ -3021,13 +3021,13 @@ export class PostgresUserService implements IServicelocator {
       );
 
       const results = settled.map((result, index) => {
-        if (result.status === 'fulfilled') {
+        if (result.status === "fulfilled") {
           return result.value;
         }
         return {
           email: emails[index],
-          status: 'FAILED',
-          message: result.reason?.message || 'Anonymization failed',
+          status: "FAILED",
+          message: result.reason?.message || "Anonymization failed",
         };
       });
 
@@ -3073,9 +3073,9 @@ export class PostgresUserService implements IServicelocator {
         const current = nextIndex++;
         try {
           const value = await worker(items[current], current);
-          results[current] = { status: 'fulfilled', value };
+          results[current] = { status: "fulfilled", value };
         } catch (reason) {
-          results[current] = { status: 'rejected', reason };
+          results[current] = { status: "rejected", reason };
         }
       }
     });
@@ -3099,11 +3099,14 @@ export class PostgresUserService implements IServicelocator {
     loggedInUserId: string | null,
     keycloakToken: string
   ): Promise<{ email: string; status: string; message?: string }> {
-    const users = await this.usersRepository.find({ where: { email } });
+    const normalizedEmail = email.trim().toLowerCase();
+    const users = await this.usersRepository.find({
+      where: { email: normalizedEmail },
+    });
     if (users.length === 0) {
       return {
         email,
-        status: 'NOT_FOUND',
+        status: "NOT_FOUND",
         message: API_RESPONSES.USER_NOT_FOUND_FOR_ANONYMIZE,
       };
     }
@@ -3114,37 +3117,37 @@ export class PostgresUserService implements IServicelocator {
       )
     );
 
-    if (rowResults.some((r) => r.status === 'FAILED')) {
+    if (rowResults.some((r) => r.status === "FAILED")) {
       return {
         email,
-        status: 'FAILED',
+        status: "FAILED",
         message: rowResults
           .map((r) => r.message)
           .filter(Boolean)
-          .join('; '),
+          .join("; "),
       };
     }
-    if (rowResults.some((r) => r.status === 'PARTIAL')) {
+    if (rowResults.some((r) => r.status === "PARTIAL")) {
       return {
         email,
-        status: 'PARTIAL',
+        status: "PARTIAL",
         message:
           rowResults.length > 1
             ? `${rowResults.length} accounts share this email; at least one had a partial failure — check logs by userId.`
             : rowResults[0].message,
       };
     }
-    if (rowResults.every((r) => r.status === 'SKIPPED')) {
+    if (rowResults.every((r) => r.status === "SKIPPED")) {
       return {
         email,
-        status: 'SKIPPED',
+        status: "SKIPPED",
         message: API_RESPONSES.USER_ALREADY_ANONYMIZED,
       };
     }
 
     return {
       email,
-      status: 'ANONYMIZED',
+      status: "ANONYMIZED",
       ...(rowResults.length > 1
         ? {
             message: `${rowResults.length} accounts shared this email; all were anonymized.`,
@@ -3165,8 +3168,11 @@ export class PostgresUserService implements IServicelocator {
   ): Promise<{ status: string; message?: string }> {
     // Idempotency guard: skip a user whose email already matches the anonymized pattern
     // (e.g. this email was re-submitted after a prior successful anonymization).
-    if (/^deleted_user_.+@anon\.local$/.test(user.email || '')) {
-      return { status: 'SKIPPED', message: API_RESPONSES.USER_ALREADY_ANONYMIZED };
+    if (/^deleted_user_.+@anon\.local$/.test(user.email || "")) {
+      return {
+        status: "SKIPPED",
+        message: API_RESPONSES.USER_ALREADY_ANONYMIZED,
+      };
     }
 
     const anonymizedIdentity = this.generateAnonymizedIdentity(user.userId);
@@ -3177,14 +3183,14 @@ export class PostgresUserService implements IServicelocator {
         userId: user.userId,
         email: anonymizedIdentity,
         username: anonymizedIdentity,
-        firstName: 'deleted',
-        lastName: 'user',
+        firstName: "deleted",
+        lastName: "user",
       },
       keycloakToken
     );
     if (keycloakResult.success === false) {
       return {
-        status: 'FAILED',
+        status: "FAILED",
         message: `Keycloak update failed: ${keycloakResult.message}`,
       };
     }
@@ -3211,10 +3217,10 @@ export class PostgresUserService implements IServicelocator {
         {
           email: anonymizedIdentity,
           username: anonymizedIdentity,
-          firstName: 'deleted',
-          lastName: 'user',
+          firstName: "deleted",
+          lastName: "user",
           dob: null,
-          gender: 'i do not want to disclose',
+          gender: "i do not want to disclose",
           mobile: null,
           country: null,
           permanentCountry: null,
@@ -3238,19 +3244,21 @@ export class PostgresUserService implements IServicelocator {
       );
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
-        `Postgres anonymize failed for user ${user.userId}: ${pgError.message}. Keycloak revert ${
+        `Postgres anonymize failed for user ${user.userId}: ${
+          pgError.message
+        }. Keycloak revert ${
           revert.success
-            ? 'succeeded'
+            ? "succeeded"
             : `FAILED: ${revert.message} — Keycloak identity is now out of sync with Postgres, manual reconciliation required`
         }.`,
         APIID.USER_ANONYMIZE
       );
       return {
-        status: 'FAILED',
+        status: "FAILED",
         message: `Postgres update failed: ${pgError.message}${
           revert.success
-            ? ''
-            : ' — Keycloak revert also failed; this account needs manual reconciliation.'
+            ? ""
+            : " — Keycloak revert also failed; this account needs manual reconciliation."
         }`,
       };
     }
@@ -3261,10 +3269,10 @@ export class PostgresUserService implements IServicelocator {
         await this.userElasticsearchService.updateUserProfile(user.userId, {
           email: anonymizedIdentity,
           username: anonymizedIdentity,
-          firstName: 'deleted',
-          lastName: 'user',
+          firstName: "deleted",
+          lastName: "user",
           dob: null,
-          gender: 'i do not want to disclose',
+          gender: "i do not want to disclose",
           mobile: null,
           country: null,
           permanentCountry: null,
@@ -3279,22 +3287,22 @@ export class PostgresUserService implements IServicelocator {
           APIID.USER_ANONYMIZE
         );
         return {
-          status: 'PARTIAL',
+          status: "PARTIAL",
           message:
-            'Anonymized in Keycloak and Postgres; Elasticsearch update failed and needs retry.',
+            "Anonymized in Keycloak and Postgres; Elasticsearch update failed and needs retry.",
         };
       }
     }
 
     if (logoutResult.success === false) {
       return {
-        status: 'ANONYMIZED',
+        status: "ANONYMIZED",
         message:
-          'Anonymized successfully, but invalidating the Keycloak session failed — an already-logged-in session may keep working until its access token naturally expires.',
+          "Anonymized successfully, but invalidating the Keycloak session failed — an already-logged-in session may keep working until its access token naturally expires.",
       };
     }
 
-    return { status: 'ANONYMIZED' };
+    return { status: "ANONYMIZED" };
   }
 
   /**
@@ -3324,7 +3332,7 @@ export class PostgresUserService implements IServicelocator {
           FieldValues,
           { fieldValuesId: In(piiFieldValuesIds) },
           {
-            value: '', // FieldValues.value is NOT NULL; blank string is the closest equivalent to null here.
+            value: "", // FieldValues.value is NOT NULL; blank string is the closest equivalent to null here.
             textValue: null,
             numberValue: null,
             calendarValue: null,
@@ -3344,7 +3352,7 @@ export class PostgresUserService implements IServicelocator {
       code: f.fieldname,
       label: f.label,
       type: f.type,
-      value: isPiiCustomField(f.fieldname, f.type) ? '' : f.value,
+      value: isPiiCustomField(f.fieldname, f.type) ? "" : f.value,
     }));
   }
 
