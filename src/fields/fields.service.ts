@@ -28,6 +28,13 @@ import { AuditLoggerService } from "@tekdi/audit-logger/nestjs";
 import { requestContext } from "@utils/request-context";
 import { getAuditContext } from "@utils/audit-helper";
 import { check } from "prettier";
+import { CacheService } from "../cache/cache.service";
+import { hashCacheKey } from "../cache/cache-key.util";
+
+const UFIELDS_TTL_SECONDS = 3600; // ufields:{userId}, 1 h
+const USERFILTER_TTL_SECONDS = 300; // userfilter, 5 min
+const FIELDSDEF_TTL_SECONDS = 3600; // fields:{tenantId}, 1 h
+
 @Injectable()
 export class FieldsService {
   constructor(
@@ -35,6 +42,7 @@ export class FieldsService {
     private readonly fieldsRepository: Repository<Fields>,
     @InjectRepository(FieldValues)
     private readonly fieldsValuesRepository: Repository<FieldValues>,
+    private readonly cacheService: CacheService,
     @Inject(AuditLoggerService)
     private readonly auditLoggerService: AuditLoggerService
   ) { }
@@ -47,7 +55,31 @@ export class FieldsService {
     }
   }
 
+  // No tenant header on this endpoint, so it shares the global fields namespace.
   async getFormCustomField(requiredData, response) {
+    const payload = await this.cacheService.getOrLoad({
+      namespace: "fields:global",
+      key: `formFields:${requiredData?.context || "none"}:${requiredData?.contextType || "none"}`,
+      dependsOn: ["fieldsdef"],
+      ttlSeconds: FIELDSDEF_TTL_SECONDS,
+      loader: async () => {
+        const result = await this.getFormCustomFieldData(requiredData, response);
+        return response.headersSent ? null : result;
+      },
+    });
+    if (payload === null || payload === undefined) {
+      return; // error response already written inside the loader
+    }
+    return APIResponse.success(
+      response,
+      "FormData",
+      payload,
+      HttpStatus.OK,
+      "Fields fetched successfully."
+    );
+  }
+
+  private async getFormCustomFieldData(requiredData, response) {
     const apiId = "FormData";
     try {
       let whereClause = '(context IS NULL AND "contextType" IS NULL)';
@@ -69,13 +101,8 @@ export class FieldsService {
             HttpStatus.NOT_FOUND
           );
         }
-        return APIResponse.success(
-          response,
-          apiId,
-          data,
-          HttpStatus.OK,
-          "Fields fetched successfully."
-        );
+        // Raw payload for the caching wrapper; it writes the success response.
+        return data;
       }
 
       if (requiredData.context) {
@@ -103,13 +130,8 @@ export class FieldsService {
         const coreFields = corefield[requiredData.context.toLowerCase()];
         data.push(...coreFields);
       }
-      return APIResponse.success(
-        response,
-        apiId,
-        data,
-        HttpStatus.OK,
-        "Fields fetched successfully."
-      );
+      // Raw payload for the caching wrapper; it writes the success response.
+      return data;
     } catch (error) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
@@ -469,6 +491,7 @@ export class FieldsService {
       }
 
       const result = await this.fieldsRepository.save(fieldsData);
+      await this.invalidateFieldDefinitionCaches(fieldsData?.tenantId);
 
       return await APIResponse.success(
         response,
@@ -647,6 +670,7 @@ export class FieldsService {
       }
 
       const result = await this.fieldsRepository.update(fieldId, fieldsData);
+      await this.invalidateFieldDefinitionCaches(fieldsData?.tenantId);
       return await APIResponse.success(
         response,
         apiId,
@@ -795,7 +819,38 @@ export class FieldsService {
     }
   }
 
+  // Wrapper writes the success response; the inner method returns the payload
+  // and still writes its own error responses (headersSent tells the wrapper,
+  // so failures are never cached).
   async searchFields(
+    tenantId: string,
+    request: any,
+    fieldsSearchDto: FieldsSearchDto,
+    response: Response
+  ) {
+    const payload = await this.cacheService.getOrLoad({
+      namespace: `fields:${tenantId ?? "global"}`,
+      key: `search:${hashCacheKey(fieldsSearchDto)}`,
+      dependsOn: ["fieldsdef"],
+      ttlSeconds: FIELDSDEF_TTL_SECONDS,
+      loader: async () => {
+        const result = await this.searchFieldsData(tenantId, request, fieldsSearchDto, response);
+        return response.headersSent ? null : result;
+      },
+    });
+    if (payload === null || payload === undefined) {
+      return; // an error response was already written inside the loader
+    }
+    return APIResponse.success(
+      response,
+      APIID.FIELDS_SEARCH,
+      payload,
+      HttpStatus.OK,
+      "Fields fetched successfully."
+    );
+  }
+
+  private async searchFieldsData(
     tenantId: string,
     request: any,
     fieldsSearchDto: FieldsSearchDto,
@@ -848,13 +903,8 @@ export class FieldsService {
           HttpStatus.NOT_FOUND
         );
       }
-      return APIResponse.success(
-        response,
-        apiId,
-        fieldData,
-        HttpStatus.OK,
-        "Fields fetched successfully."
-      );
+      // Raw payload for the caching wrapper; it writes the success response.
+      return fieldData;
     } catch (error) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
@@ -909,6 +959,19 @@ export class FieldsService {
           `Fields not found or already exist`,
           HttpStatus.NOT_FOUND
         );
+      }
+      if (result) {
+        // itemId here may be a userId or a cohortId; bumping ufields for a
+        // cohortId is harmless (nothing ever reads ufields with a cohortId).
+        // userfilter covers both contexts, and userlist:{t} is bumped for
+        // each tenant the item maps to (empty when itemId isn't a user).
+        const tenantIds = await this.getUserTenantIds(fieldValuesDto.itemId);
+        await this.cacheService.invalidate([
+          `ufields:${fieldValuesDto.itemId}`,
+          `cfields:${fieldValuesDto.itemId}`,
+          "userfilter",
+          ...tenantIds.map((t) => `userlist:${t}`),
+        ]);
       }
       const apiRes = APIResponse.success(
         res,
@@ -1201,8 +1264,35 @@ export class FieldsService {
     return { offset, limit, whereClause };
   }
 
-  //Get all fields options
+  // The endpoint carries no tenant header, so it lives under the global fields
+  // namespace — the same field-definition writes bump both.
   public async getFieldOptions(
+    fieldsOptionsSearchDto: FieldsOptionsSearchDto,
+    response: Response
+  ) {
+    const payload = await this.cacheService.getOrLoad({
+      namespace: "fields:global",
+      key: `options:${hashCacheKey(fieldsOptionsSearchDto)}`,
+      dependsOn: ["fieldsdef"],
+      ttlSeconds: FIELDSDEF_TTL_SECONDS,
+      loader: async () => {
+        const result = await this.getFieldOptionsData(fieldsOptionsSearchDto, response);
+        return response.headersSent ? null : result;
+      },
+    });
+    if (payload === null || payload === undefined) {
+      return; // error response already written inside the loader
+    }
+    return APIResponse.success(
+      response,
+      APIID.FIELDVALUES_SEARCH,
+      payload,
+      HttpStatus.OK,
+      "Field options fetched successfully."
+    );
+  }
+
+  private async getFieldOptionsData(
     fieldsOptionsSearchDto: FieldsOptionsSearchDto,
     response: Response
   ) {
@@ -1337,13 +1427,8 @@ export class FieldsService {
         values: queryData,
       };
 
-      return await APIResponse.success(
-        response,
-        apiId,
-        result,
-        HttpStatus.OK,
-        "Field options fetched successfully."
-      );
+      // Raw payload for the caching wrapper; it writes the success response.
+      return result;
     } catch (e) {
       LoggerUtil.error(`${API_RESPONSES.SERVER_ERROR}`, `Error: ${e.message}`);
       const errorMessage = e?.message || API_RESPONSES.SERVER_ERROR;
@@ -1459,6 +1544,7 @@ export class FieldsService {
         }
       }
       if (result.affected > 0) {
+        await this.invalidateFieldDefinitionCaches(getField?.tenantId);
         return await APIResponse.success(
           response,
           apiId,
@@ -1565,15 +1651,25 @@ export class FieldsService {
   }
 
   // OPTIMIZED VERSION - Much faster alternative to avoid JSON aggregation
+  // One shared userfilter cache for all three call sites (user search, cohort
+  // search, cron). A null result is never cached.
   async filterUserUsingCustomFieldsOptimized(context: string, stateDistBlockData: any) {
     if (context !== "COHORT" && context !== "USERS") {
       return null;
     }
-
-    // No filters provided — return null so callers treat it as no custom field constraint
     if (!stateDistBlockData || Object.keys(stateDistBlockData).length === 0) {
       return null;
     }
+
+    return this.cacheService.getOrLoad<string[]>({
+      namespace: "userfilter",
+      key: `${context}:${hashCacheKey(stateDistBlockData)}`,
+      ttlSeconds: USERFILTER_TTL_SECONDS,
+      loader: () => this.filterUserUsingCustomFieldsUncached(context, stateDistBlockData),
+    });
+  }
+
+  private async filterUserUsingCustomFieldsUncached(context: string, stateDistBlockData: any) {
 
     const idColumn = context === "COHORT" ? `c."cohortId"` : `u."userId"`;
     const baseTable = context === "COHORT" ? `"Cohort" c` : `"Users" u`;
@@ -1952,6 +2048,37 @@ export class FieldsService {
     if (!itemIds || itemIds.length === 0) {
       return {};
     }
+
+    // Per-owner bulk hydration: ufields:{userId} for Users, cfields:{cohortId}
+    // for Cohort. Both declare dependsOn fieldsdef, so one epoch bump makes
+    // every owner's entries stale at once.
+    if (tableName === "Users" || tableName === "Cohort") {
+      const nsPrefix = tableName === "Users" ? "ufields" : "cfields";
+      const hydrated = await this.cacheService.bulkGetOrLoad<any[]>({
+        ids: itemIds,
+        namespaceFor: (id) => `${nsPrefix}:${id}`,
+        dependsOn: ["fieldsdef"],
+        ttlSeconds: UFIELDS_TTL_SECONDS,
+        loader: async (missingIds) => {
+          const fetched = await this.fetchBulkCustomFieldDetails(missingIds, tableName);
+          return new Map(Object.entries(fetched));
+        },
+      });
+
+      const result: Record<string, any[]> = {};
+      itemIds.forEach((id) => {
+        result[id] = hydrated.get(id) ?? [];
+      });
+      return result;
+    }
+
+    return this.fetchBulkCustomFieldDetails(itemIds, tableName);
+  }
+
+  private async fetchBulkCustomFieldDetails(
+    itemIds: string[],
+    tableName: string
+  ): Promise<Record<string, any[]>> {
     let joinCond: string;
     if (tableName === "Users") {
       joinCond = `fv."itemId" = u."userId"`;
@@ -2102,6 +2229,50 @@ export class FieldsService {
     }
   }
 
+  /**
+   * Single invalidation point for every field-DEFINITION write
+   * (POST /fields/create, PATCH /fields/update/:fieldId,
+   * DELETE /fields/options/delete/:fieldName).
+   *
+   *  - `fieldsdef` is the global epoch. Every definition-dependent read
+   *    (ufields, cfields, cohort, cohortmember, fields, form) declares it as
+   *    a dependsOn, so this one INCR invalidates them across ALL tenants —
+   *    which matters because a global (tenantId IS NULL) field definition
+   *    affects every tenant and we cannot enumerate them.
+   *  - the writing tenant's own `fields:{t}` / `form:{t}` are bumped
+   *    explicitly as well, so the two move together rather than relying on
+   *    the epoch alone.
+   *  - forms embed field definitions, hence the form bump.
+   */
+  private async invalidateFieldDefinitionCaches(tenantId?: string): Promise<void> {
+    await this.cacheService.invalidate([
+      "fieldsdef",
+      "fields:global",
+      "form:global",
+      ...(tenantId ? [`fields:${tenantId}`, `form:${tenantId}`] : []),
+    ]);
+  }
+
+  /**
+   * Tenants a user maps to — used to bump userlist:{t} from write paths that
+   * only know the userId. Empty for non-user itemIds. Never throws: a failed
+   * lookup must not turn an already-committed write into an error response
+   * (the userfilter/ufields bumps still run; only the userlist bump is lost,
+   * and its 3-min TTL bounds the exposure).
+   */
+  private async getUserTenantIds(userId: string): Promise<string[]> {
+    try {
+      const rows = await this.fieldsValuesRepository.query(
+        `SELECT "tenantId" FROM public."UserTenantMapping" WHERE "userId" = $1`,
+        [userId]
+      );
+      return rows.map((r) => r.tenantId).filter(Boolean);
+    } catch (error) {
+      LoggerUtil.warn(`Tenant lookup for cache invalidation failed: ${error.message}`, "FieldsService");
+      return [];
+    }
+  }
+
   public async getFieldsByIds(fieldIds: string[]) {
     return this.fieldsRepository.find({
       where: {
@@ -2142,6 +2313,15 @@ export class FieldsService {
           }, {})
         )
         .execute();
+
+      const deletedItemIds = [...new Set(conditions.map((c) => c.itemId))];
+      const tenantIdLists = await Promise.all(deletedItemIds.map((id) => this.getUserTenantIds(id)));
+      await this.cacheService.invalidate([
+        ...deletedItemIds.map((id) => `ufields:${id}`),
+        ...deletedItemIds.map((id) => `cfields:${id}`),
+        "userfilter",
+        ...[...new Set(tenantIdLists.flat())].map((t) => `userlist:${t}`),
+      ]);
 
       const apiRes = await APIResponse.success(
         response,

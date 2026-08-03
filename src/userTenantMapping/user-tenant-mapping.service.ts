@@ -19,6 +19,7 @@ import { isUUID } from "class-validator";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
 import { UserService } from "src/user/user.service";
 import { FieldsService } from "src/fields/fields.service";
+import { CacheService } from "../cache/cache.service";
 import { KafkaService } from "src/kafka/kafka.service";
 import { API_RESPONSES } from "src/common/utils/response.messages";
 import { AuditLoggerService } from "@tekdi/audit-logger/nestjs";
@@ -41,6 +42,7 @@ export class UserTenantMappingService {
     private readonly userService: UserService,
     private readonly fieldsService: FieldsService,
     private readonly kafkaService: KafkaService,
+    private readonly cacheService: CacheService,
     @Inject(AuditLoggerService)
     private readonly auditLoggerService: AuditLoggerService
   ) { }
@@ -234,6 +236,7 @@ export class UserTenantMappingService {
               additionalData
             );
           }
+          await this.cacheService.invalidate([`user:${userId}`, `ufields:${userId}`, "userfilter"]);
         }
       }
 
@@ -327,7 +330,13 @@ export class UserTenantMappingService {
 
       query += ` ORDER BY UTM."createdAt" DESC`;
 
-      const mappings = await this.userTenantMappingRepository.query(query, [userId]);
+      // An empty mapping list is never cached, so a fresh assignment shows up at once.
+      const mappings = await this.cacheService.getOrLoad<any[]>({
+        namespace: `usertenant:${userId}`,
+        key: `mappings:${includeArchived ? "all" : "active"}`,
+        ttlSeconds: 600,
+        loader: () => this.userTenantMappingRepository.query(query, [userId]),
+      });
 
       if (mappings.length === 0) {
         return APIResponse.error(
@@ -399,6 +408,8 @@ export class UserTenantMappingService {
       }
 
       await this.userTenantMappingRepository.save(existingMapping);
+
+      await this.cacheService.invalidate([`user:${userId}`, `usertenant:${userId}`, `userlist:${tenantId}`]);
 
       LoggerUtil.log(
         API_RESPONSES.LOG_STATUS_UPDATED_FOR_USER_TENANT(userId, tenantId),

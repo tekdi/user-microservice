@@ -22,6 +22,7 @@ import { DeleteAssignRoleDto } from "src/rbac/assign-role/dto/delete-assign-role
 import { Response } from "express";
 import { APIID } from "src/common/utils/api-id.config";
 import APIResponse from "src/common/responses/response";
+import { CacheService } from "../../cache/cache.service";
 import { AuditLoggerService } from "@tekdi/audit-logger/nestjs";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
 
@@ -32,6 +33,7 @@ export class AssignRoleService {
     private readonly userRoleMappingRepository: Repository<UserRoleMapping>,
     @InjectRepository(Role)
     private readonly roleRepository: Repository<Role>,
+    private readonly cacheService: CacheService,
     @Inject(AuditLoggerService)
     private readonly auditLoggerService: AuditLoggerService
   ) { }
@@ -131,6 +133,7 @@ export class AssignRoleService {
           HttpStatus.BAD_REQUEST
         );
       }
+      await this.cacheService.invalidate([`user:${userId}`, `userroles:${userId}`, `userlist:${tenantId}`]);
       return APIResponse.success(
         response,
         apiId,
@@ -180,7 +183,14 @@ export class AssignRoleService {
         );
       }
 
-      const result = await this.checkExistingRole(userId);
+      // Keyed by userId alone: this read has no tenant filter, and the delete
+      // write path carries no tenantId to invalidate with.
+      const result = await this.cacheService.getOrLoad({
+        namespace: `userroles:${userId}`,
+        key: "role",
+        ttlSeconds: 600,
+        loader: () => this.checkExistingRole(userId),
+      });
       if (!result) {
         return APIResponse.error(
           response,
@@ -272,6 +282,12 @@ export class AssignRoleService {
         userId: deleteAssignRoleDto.userId,
         roleId: In(deleteAssignRoleDto.roleId),
       });
+      // The DTO carries no tenantId — the deleted mappings (roleExists) do.
+      await this.cacheService.invalidate([
+        `user:${deleteAssignRoleDto.userId}`,
+        `userroles:${deleteAssignRoleDto.userId}`,
+        ...[...new Set(roleExists.map((m) => m.tenantId).filter(Boolean))].map((t) => `userlist:${t}`),
+      ]);
 
       // Audit Log for each deleted role
       const auditCtx = getAuditContext();
@@ -363,6 +379,12 @@ export class AssignRoleService {
           HttpStatus.NOT_FOUND
         );
       }
+
+      await this.cacheService.invalidate([
+        ...updated.map((id) => `user:${id}`),
+        ...updated.map((id) => `userroles:${id}`),
+        `userlist:${tenantId}`,
+      ]);
 
       return APIResponse.success(
         res,

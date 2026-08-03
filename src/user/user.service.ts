@@ -31,6 +31,8 @@ import APIResponse from "src/common/responses/response";
 import { Request, Response, query } from "express";
 import { APIID } from "src/common/utils/api-id.config";
 import { FieldsService } from "src/fields/fields.service";
+import { CacheService } from "../cache/cache.service";
+import { hashCacheKey } from "../cache/cache-key.util";
 import { RoleService } from "src/rbac/role/role.service";
 import { CustomFieldsValidation } from "@utils/custom-field-validation";
 import { NotificationRequest } from "@utils/notification.axios";
@@ -64,6 +66,9 @@ interface UpdateField {
   username?: string; // Optional
   email?: string; // Optional
 }
+const USERLIST_TTL_SECONDS = 180; // userlist:{tenantId}, 3 min
+const USER_CORE_TTL_SECONDS = 900; // GET /read/:userId, 15 min
+
 @Injectable()
 export class UserService {
   axios = require("axios");
@@ -105,6 +110,7 @@ export class UserService {
     private readonly authUtils: AuthUtils,
     private readonly automaticMemberService: AutomaticMemberService,
     private readonly kafkaService: KafkaService,
+    private readonly cacheService: CacheService,
     private readonly auditLoggerService: AuditLoggerService,
     dataSource: DataSource
   ) {
@@ -131,10 +137,16 @@ export class UserService {
     }
   }
 
+  // Entity metadata is immutable per deploy, so compute once per process — no
+  // Redis involved.
+  private coreColumnNamesMemo: string[] | null = null;
+
   public async getCoreColumnNames() {
-    const userMetadata = this.dataSource.getMetadata(User);
-    const columnNames = userMetadata.columns.map((column) => column.propertyName);
-    return columnNames;
+    if (!this.coreColumnNamesMemo) {
+      const userMetadata = this.dataSource.getMetadata(User);
+      this.coreColumnNamesMemo = userMetadata.columns.map((column) => column.propertyName);
+    }
+    return this.coreColumnNamesMemo;
   }
 
 
@@ -785,7 +797,23 @@ export class UserService {
   //   }
   //   return result;
   // }
+  // Full response cache of the POST /list search under userlist:{tenantId}.
+  // The tenant-less caller (domain email lookup) bypasses the cache: no
+  // tenant to key by, and it feeds an auth-adjacent flow that must not be
+  // cached. `false` (no results) is never cached.
   async findAllUserDetails(userSearchDto, tenantId?: string, includeCustomFields: boolean = true) {
+    if (!tenantId || tenantId.trim() === "") {
+      return this.findAllUserDetailsUncached(userSearchDto, tenantId, includeCustomFields);
+    }
+    return this.cacheService.getOrLoad({
+      namespace: `userlist:${tenantId}`,
+      key: hashCacheKey({ userSearchDto, includeCustomFields }),
+      ttlSeconds: USERLIST_TTL_SECONDS,
+      loader: () => this.findAllUserDetailsUncached(userSearchDto, tenantId, includeCustomFields),
+    });
+  }
+
+  private async findAllUserDetailsUncached(userSearchDto, tenantId?: string, includeCustomFields: boolean = true) {
   let { limit, offset, filters, exclude, sort } = userSearchDto;
   let excludeCohortIdes;
   let excludeUserIdes;
@@ -1006,6 +1034,43 @@ export class UserService {
 }
 
 
+  /**
+   * user:{userId} core-row cache for GET /read/:userId. Purely additive: it
+   * runs exactly the same two fetches the endpoint already ran and returns
+   * the same [userDetails, userRole] pair, only skipping the DB round-trips
+   * on a hit. Keyed by tenantId because findUserRoles is tenant-scoped;
+   * dependsOn ufields:{userId}. `false`/null results are never cached, so a
+   * missing user or a failed lookup always re-reads.
+   *
+   * NOTE: the cached pair carries role + tenantStatus (via tenantData and
+   * userRole), so every role / user-tenant write must bump user:{id}.
+   */
+  private async getCachedUserCoreRow(userData: UserData): Promise<[any, any]> {
+    const loadPair = (): Promise<[any, any]> =>
+      Promise.all([
+        this.findUserDetails(userData?.userId),
+        userData && userData?.tenantId
+          ? this.findUserRoles(userData?.userId, userData?.tenantId)
+          : Promise.resolve(null),
+      ]) as Promise<[any, any]>;
+
+    const cached = await this.cacheService.getOrLoad<[any, any]>({
+      namespace: `user:${userData.userId}`,
+      key: `core:${userData?.tenantId ?? "no-tenant"}`,
+      dependsOn: [`ufields:${userData.userId}`],
+      ttlSeconds: USER_CORE_TTL_SECONDS,
+      // findUserDetails returns `false` when the user doesn't exist. The pair
+      // would still be a non-empty array, so return null instead to keep the
+      // "not found" out of the cache.
+      loader: async () => {
+        const pair = await loadPair();
+        return pair[0] ? pair : null;
+      },
+    });
+
+    return cached ?? [false, null];
+  }
+
   async getUsersDetailsById(userData: UserData, response: any) {
     const apiId = APIID.USER_GET;
     try {
@@ -1038,12 +1103,7 @@ export class UserService {
         userData: {},
       };
 
-      const [userDetails, userRole] = await Promise.all([
-        this.findUserDetails(userData?.userId),
-        userData && userData?.tenantId
-          ? this.findUserRoles(userData?.userId, userData?.tenantId)
-          : Promise.resolve(null),
-      ]);
+      const [userDetails, userRole] = await this.getCachedUserCoreRow(userData);
 
       let roleInUpper;
       if (userRole) {
@@ -1422,6 +1482,23 @@ export class UserService {
         if (editFailures.length > 0) {
           editIssues["editFieldsFailure"] = editFailures;
         }
+        if (updatedData["customFields"]?.length > 0) {
+          await this.cacheService.invalidate(`ufields:${userDto.userId}`);
+        }
+      }
+
+      // List/filter caches go stale on any Users or FieldValues change; the
+      // update DTO doesn't carry a tenant, so bump every tenant the user maps to.
+      if (userDto.userData || updatedData["customFields"]?.length > 0) {
+        const tenantRows = await this.userTenantMappingRepository.find({
+          where: { userId: userDto.userId },
+          select: ["tenantId"],
+        });
+        await this.cacheService.invalidate([
+          `user:${userDto.userId}`,
+          "userfilter",
+          ...tenantRows.map((row) => `userlist:${row.tenantId}`),
+        ]);
       }
 
       if (userDto.automaticMember && userDto?.automaticMember?.value === true) {
@@ -1824,12 +1901,20 @@ export class UserService {
             apiId,
             userContext.username
           );
+          const keycloakStatusCode =
+            typeof resKeycloak.statusCode === "number" &&
+            resKeycloak.statusCode >= 400 &&
+            resKeycloak.statusCode < 600
+              ? resKeycloak.statusCode
+              : HttpStatus.INTERNAL_SERVER_ERROR;
           return APIResponse.error(
             response,
             apiId,
-            API_RESPONSES.SERVER_ERROR,
+            keycloakStatusCode === HttpStatus.BAD_REQUEST
+              ? API_RESPONSES.BAD_REQUEST
+              : API_RESPONSES.SERVER_ERROR,
             `${resKeycloak.message}`,
-            HttpStatus.INTERNAL_SERVER_ERROR
+            keycloakStatusCode
           );
         }
       }
@@ -1914,6 +1999,7 @@ export class UserService {
               additionalData
             );
           }
+          await this.cacheService.invalidate([`ufields:${userId}`, "userfilter"]);
           LoggerUtil.log(`[TIMING] customFieldsInsert: ${Date.now() - cfInsertStart}ms`, apiId);
         }
       }
@@ -2412,6 +2498,19 @@ export class UserService {
         await this.handleTenantMappingForUser(userId, tenantId, createdBy, userType, userTenantStatus);
       }
 
+      // Single choke point for UserRoleMapping/UserTenantMapping writes from
+      // user-create, SSO and assign-tenant — bump everything they affect.
+      if (roleId || tenantId) {
+        await this.cacheService.invalidate([
+          // user:{id} — the cached core row exposes role + tenantStatus
+          // through tenantData/userRole, so these writes must bump it.
+          `user:${userId}`,
+          `usertenant:${userId}`,
+          `userroles:${userId}`,
+          ...(tenantId ? [`userlist:${tenantId}`] : []),
+        ]);
+      }
+
       LoggerUtil.log(API_RESPONSES.USER_TENANT);
     } catch (error) {
       LoggerUtil.error(
@@ -2843,6 +2942,13 @@ export class UserService {
         );
       }
 
+      // Tenant ids must be read before the mappings are deleted — they name
+      // the userlist:{t} namespaces to bump afterwards.
+      const tenantRowsForInvalidation = await this.userTenantMappingRepository.find({
+        where: { userId },
+        select: ["tenantId"],
+      });
+
       // Delete dependent tables first
 
       await this.cohortMemberRepository.delete({
@@ -2863,6 +2969,14 @@ export class UserService {
       // Finally delete user
       const userResult = await this.usersRepository.delete(userId);
 
+      await this.cacheService.invalidate([
+        `user:${userId}`,
+        `ufields:${userId}`,
+        `usertenant:${userId}`,
+        `userroles:${userId}`,
+        "userfilter",
+        ...tenantRowsForInvalidation.map((row) => `userlist:${row.tenantId}`),
+      ]);
       // Audit Log trigger removed here as it is handled at the end of the method
 
       const keycloakResponse = await getKeycloakAdminToken();

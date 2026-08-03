@@ -25,6 +25,10 @@ import { UserService } from "src/user/user.service";
 import { isValid } from "date-fns";
 import { FieldValuesOptionDto } from "src/user/dto/user-create.dto";
 import { KafkaService } from "src/kafka/kafka.service";
+import { CacheService } from "../cache/cache.service";
+import { hashCacheKey } from "../cache/cache-key.util";
+
+const COHORTMEMBER_TTL_SECONDS = 180; // cohortmember:{tenantId}, 3 min
 import { BulkCohortMember } from "src/cohortMembers/dto/bulkMember-create.dto";
 import { getAuditContext } from "@utils/audit-helper";
 
@@ -46,6 +50,7 @@ export class CohortMembersService {
     private fieldsService: FieldsService,
     private userService: UserService,
     private readonly kafkaService: KafkaService,
+    private readonly cacheService: CacheService,
     private readonly auditLoggerService: AuditLoggerService
   ) { }
 
@@ -58,7 +63,35 @@ export class CohortMembersService {
   }
 
   //Get cohort member
+  // Wrapper writes the response; the inner method returns the payload or
+  // writes errors directly.
   async getCohortMembers(
+    cohortId: any,
+    tenantId: any,
+    fieldvalue: any,
+    academicYearId: string,
+    res: Response
+  ) {
+    if (!tenantId) {
+      return APIResponse.error(res, APIID.COHORT_MEMBER_GET, API_RESPONSES.BAD_REQUEST, API_RESPONSES.TANANT_ID_REQUIRED, HttpStatus.BAD_REQUEST);
+    }
+    const payload = await this.cacheService.getOrLoad({
+      namespace: `cohortmember:${tenantId}`,
+      key: `read:${cohortId}:${academicYearId}:cf${(fieldvalue || "").toLowerCase() === "true" ? 1 : 0}`,
+      dependsOn: ["fieldsdef", `userlist:${tenantId}`],
+      ttlSeconds: COHORTMEMBER_TTL_SECONDS,
+      loader: async () => {
+        const result = await this.getCohortMembersData(cohortId, tenantId, fieldvalue, academicYearId, res);
+        return res.headersSent ? null : result;
+      },
+    });
+    if (payload === null || payload === undefined) {
+      return; // error response already written in the loader
+    }
+    return APIResponse.success(res, APIID.COHORT_MEMBER_GET, payload, HttpStatus.OK, API_RESPONSES.COHORT_MEMBER_GET_SUCCESSFULLY);
+  }
+
+  private async getCohortMembersData(
     cohortId: any,
     tenantId: any,
     fieldvalue: any,
@@ -121,13 +154,8 @@ export class CohortMembersService {
         );
         results.userDetails.push(cohortDetails);
 
-        return APIResponse.success(
-          res,
-          apiId,
-          results,
-          HttpStatus.OK,
-          API_RESPONSES.COHORT_MEMBER_GET_SUCCESSFULLY
-        );
+        // Raw payload for the caching wrapper; the outer method writes success.
+        return results;
       } else {
         return APIResponse.error(
           res,
@@ -255,7 +283,32 @@ ON CM."userId" = U."userId" ${whereCase}`;
     return result;
   }
 
+  // Loader returns the payload; the wrapper writes the success response. Error
+  // branches write directly, which the headersSent check detects so their
+  // (null) result is never cached.
   public async searchCohortMembers(
+    cohortMembersSearchDto: CohortMembersSearchDto,
+    tenantId: string,
+    academicyearId: string,
+    res: Response
+  ) {
+    const payload = await this.cacheService.getOrLoad({
+      namespace: `cohortmember:${tenantId}`,
+      key: `list:${hashCacheKey({ cohortMembersSearchDto, academicyearId })}`,
+      dependsOn: ["fieldsdef", `userlist:${tenantId}`],
+      ttlSeconds: COHORTMEMBER_TTL_SECONDS,
+      loader: async () => {
+        const result = await this.searchCohortMembersData(cohortMembersSearchDto, tenantId, academicyearId, res);
+        return res.headersSent ? null : result;
+      },
+    });
+    if (payload === null || payload === undefined) {
+      return; // an error response was already written inside the loader
+    }
+    return APIResponse.success(res, APIID.COHORT_MEMBER_SEARCH, payload, HttpStatus.OK, API_RESPONSES.COHORT_GET_SUCCESSFULLY);
+  }
+
+  private async searchCohortMembersData(
     cohortMembersSearchDto: CohortMembersSearchDto,
     tenantId: string,
     academicyearId: string,
@@ -395,13 +448,8 @@ ON CM."userId" = U."userId" ${whereCase}`;
           HttpStatus.NOT_FOUND
         );
       }
-      return APIResponse.success(
-        res,
-        apiId,
-        results,
-        HttpStatus.OK,
-        API_RESPONSES.COHORT_GET_SUCCESSFULLY
-      );
+      // Raw payload for the caching wrapper; the outer method writes success.
+      return results;
     } catch (e) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
@@ -470,12 +518,21 @@ ON CM."userId" = U."userId" ${whereCase}`;
     if (getUserDetails.length > 0) {
       results.totalCount = parseInt(getUserDetails[0].total_count, 10);
 
+      // One bulk call into the same ufields-cached path the user module uses,
+      // instead of a per-user getCustomFieldDetails (also removes the N+1).
+      const bulkUserFields =
+        fieldShowHide === "false"
+          ? {}
+          : await this.fieldsService.getBulkCustomFieldDetails(
+              getUserDetails.map((d) => d.userId),
+              "Users"
+            );
+
       for (const data of getUserDetails) {
         if (fieldShowHide === "false") {
           results.userDetails.push(data);
         } else {
-          const fieldValues =
-            await this.fieldsService.getCustomFieldDetails(data.userId, 'Users');
+          const fieldValues = bulkUserFields[data.userId] || [];
           //get data by cohort membership Id
           let fieldValuesForCohort =
             await this.fieldsService.getFieldsAndFieldsValues(
@@ -603,11 +660,13 @@ ON CM."userId" = U."userId" ${whereCase}`;
           API_RESPONSES.COHORTMEMBER_CREATED_SUCCESSFULLY
         );
 
+        await this.cacheService.invalidate([`cohortmember:${savedCohortMember.tenantId}`, `userlist:${savedCohortMember.tenantId}`]);
+
         const enrichedData = {
           ...savedCohortMember,
           academicYearId,
-        }; 
- 
+        };
+
         this.kafkaService.publishCohortMemberEvent('created', enrichedData, enrichedData.cohortMembershipId).catch(error => {
           LoggerUtil.error(
             `Failed to publish cohort member created event to Kafka`,
@@ -865,6 +924,11 @@ ${whereCase}`;
         updatedBy: cohortMembershipToUpdate.updatedBy,
       }
 
+      // Membership row already saved above — bump the owning tenant's lists.
+      if (cohortDetails.tenantId) {
+        await this.cacheService.invalidate([`cohortmember:${cohortDetails.tenantId}`, `userlist:${cohortDetails.tenantId}`]);
+      }
+
       //update custom fields
       let responseForCustomField;
       if (
@@ -961,6 +1025,10 @@ ${whereCase}`;
       const result = await this.cohortMembersRepository.delete(
         cohortMembershipId
       );
+
+      if (tenantid) {
+        await this.cacheService.invalidate([`cohortmember:${tenantid}`, `userlist:${tenantid}`]);
+      }
 
       return APIResponse.success(
         res,
@@ -1233,6 +1301,15 @@ ${whereCase}`;
       apiId
     );
 
+    // Membership changes alter /list results that use exclude.cohortIds.
+    if (affectedUsers.size > 0) {
+      await this.cacheService.invalidate([
+        ...Array.from(affectedUsers).map((id) => `user:${id}`),
+        `cohortmember:${tenantId}`,
+        `userlist:${tenantId}`,
+      ]);
+    }
+
     const publishPromises = Array.from(affectedUsers).map(async (userId) => {
       try {
         // Directly call publishUserEvent with 'updated' type since users joined new cohorts
@@ -1333,6 +1410,11 @@ ${whereCase}`;
     cohortMembershipToUpdate,
     apiId: string
   ): Promise<void> {
+    // Callers invoke this right after their membership write commits, so it
+    // doubles as the invalidation point for single-member update/delete.
+    if (cohortMembershipToUpdate?.tenantId) {
+      await this.cacheService.invalidate([`cohortmember:${cohortMembershipToUpdate.tenantId}`, `userlist:${cohortMembershipToUpdate.tenantId}`]);
+    }
     try {
       // Prepare payload depending on event type
       let cohortMemberData: any;

@@ -261,6 +261,7 @@ export class CohortController {
     const fieldValueBooelan = customField === "true";
     const requiredData = {
       userId: userId,
+      tenantId: tenantId,
       academicYearId: academicYearId,
       getChildData: getChildDataValueBoolean,
       customField: fieldValueBooelan,

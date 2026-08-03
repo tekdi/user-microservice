@@ -33,6 +33,7 @@ import { SsoModule } from "./sso/sso.module";
 import kafkaConfig from "./kafka/kafka.config";
 import { HealthController } from "./health.controller";
 import { CronModule } from "./cron/cron.module";
+import { CacheModule } from "./cache/cache.module";
 import { RequestContextMiddleware } from "./common/middleware/request-context.middleware";
 
 @Module({
@@ -67,6 +68,7 @@ import { RequestContextMiddleware } from "./common/middleware/request-context.mi
     KafkaModule,
     SsoModule,
     CronModule,
+    CacheModule,
   ],
   controllers: [AppController, HealthController],
   providers: [AppService, HttpService],
