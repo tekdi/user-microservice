@@ -16,7 +16,6 @@ export const PII_CUSTOM_FIELD_NAME_PATTERNS: string[] = [
   "pincode",
   "post_code",
   "mobile",
-  "whatsapp",
 ];
 
 // Field types that can never hold an address/phone-number style PII value (e.g. a checkbox
