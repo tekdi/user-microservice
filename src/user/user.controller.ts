@@ -245,7 +245,7 @@ export class UserController {
     @Body() userHierarchyViewDto: UserHierarchyViewDto
   ) {
     return await this.userService
-      .searchUserMultiTenant(tenantId, request, response, userHierarchyViewDto);
+      .searchUserMultiTenant(tenantId, response, userHierarchyViewDto);
   }
   
   @Post("/forgot-password")
