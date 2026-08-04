@@ -3010,6 +3010,44 @@ export class PostgresUserService implements IServicelocator {
         }
       }
 
+      if (!loggedInUserId) {
+        return APIResponse.error(
+          response,
+          apiId,
+          "Unauthorized",
+          "Unable to identify the calling user from the access token.",
+          HttpStatus.UNAUTHORIZED
+        );
+      }
+
+      // Admin-only: same tenant-scoped 'admin' role check already used elsewhere in this codebase
+      // (see isUserAdmin() in cohortMembers-adapter.ts) — reuses the same Keycloak bearer token
+      // already required for authentication, no separate rbac_token needed.
+      const tenantId = request?.headers?.tenantid;
+      if (!tenantId) {
+        return APIResponse.error(
+          response,
+          apiId,
+          "Bad Request",
+          "Please provide a tenantid header.",
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      const isAdmin = await this.isUserAdminForAnonymize(
+        loggedInUserId,
+        tenantId
+      );
+      if (!isAdmin) {
+        return APIResponse.error(
+          response,
+          apiId,
+          "Forbidden",
+          API_RESPONSES.USER_ANONYMIZE_FORBIDDEN,
+          HttpStatus.FORBIDDEN
+        );
+      }
+
       // Fetch the Keycloak admin token once and reuse it for the whole batch (already cached/deduped
       // internally by getKeycloakAdminToken) instead of re-fetching per user.
       const keycloakTokenResponse = await getKeycloakAdminToken();
@@ -3409,6 +3447,26 @@ export class PostgresUserService implements IServicelocator {
       type: f.type,
       value: isPiiCustomField(f.fieldname, f.type) ? "" : f.value,
     }));
+  }
+
+  /**
+   * Tenant-scoped "is this user an admin" check for gating /user/anonymize — same query as the
+   * existing isUserAdmin() in cohortMembers-adapter.ts (Roles.code === 'admin' via
+   * UserRolesMapping), duplicated locally rather than shared across adapters since neither
+   * exposes this as a public method today.
+   */
+  private async isUserAdminForAnonymize(
+    userId: string,
+    tenantId: string
+  ): Promise<boolean> {
+    const result = await this.usersRepository.query(
+      `SELECT 1 FROM "UserRolesMapping" URM
+       JOIN "Roles" R ON R."roleId" = URM."roleId"
+       WHERE URM."userId" = $1 AND URM."tenantId" = $2 AND R."code" = 'admin'
+       LIMIT 1`,
+      [userId, tenantId]
+    );
+    return result.length > 0;
   }
 
   private formatMobileNumber(mobile: string): string {

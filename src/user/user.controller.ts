@@ -313,14 +313,17 @@ export class UserController {
   }
   // GDPR-style anonymize: overwrites email/username/firstName/lastName/dob/gender/mobile/country/status
   // in Postgres + Keycloak (email/username/firstName/lastName, disables the account, and invalidates
-  // its sessions/refresh tokens) + Elasticsearch. Accepts multiple emails.
+  // its sessions/refresh tokens) + Elasticsearch. Accepts multiple emails. Admin-only: the caller
+  // must hold the 'admin' role for the tenant given in the tenantid header (checked in the adapter).
   @UseFilters(new AllExceptionsFilter(APIID.USER_ANONYMIZE))
   @Post('anonymize')
   @UseGuards(JwtAuthGuard)
   @ApiBasicAuth('access-token')
+  @ApiHeader({ name: 'tenantid' })
   @UsePipes(new ValidationPipe({ transform: true }))
   @ApiBody({ type: UserAnonymizeDto })
   @ApiOkResponse({ description: 'Users processed for anonymization.' })
+  @ApiForbiddenResponse({ description: 'Caller is not an admin for the given tenant.' })
   public async anonymizeUsers(
     @Req() request: Request,
     @Res() response: Response,
