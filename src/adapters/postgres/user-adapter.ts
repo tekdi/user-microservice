@@ -2987,6 +2987,13 @@ export class PostgresUserService implements IServicelocator {
     try {
       const { emails, reason } = userAnonymizeDto;
 
+      // De-duplicate (case-insensitive) before building the concurrency pool — a duplicate email
+      // in the request would otherwise be processed twice concurrently against the same row.
+      const uniqueEmails = Array.from(
+        new Set(emails.map((email) => email.trim().toLowerCase()))
+      );
+      const duplicatesRemoved = emails.length - uniqueEmails.length;
+
       // Resolve acting admin id from JWT, same pattern used by updateUser().
       let loggedInUserId: string | null = null;
       if (request?.user?.userId) {
@@ -3014,7 +3021,7 @@ export class PostgresUserService implements IServicelocator {
       // the rest — each is captured individually, same as Promise.allSettled.
       const ANONYMIZE_CONCURRENCY = 5;
       const settled = await this.runWithConcurrency(
-        emails,
+        uniqueEmails,
         ANONYMIZE_CONCURRENCY,
         (email) =>
           this.anonymizeSingleUser(email, reason, loggedInUserId, keycloakToken)
@@ -3025,7 +3032,7 @@ export class PostgresUserService implements IServicelocator {
           return result.value;
         }
         return {
-          email: emails[index],
+          email: uniqueEmails[index],
           status: "FAILED",
           message: result.reason?.message || "Anonymization failed",
         };
@@ -3034,7 +3041,7 @@ export class PostgresUserService implements IServicelocator {
       return await APIResponse.success(
         response,
         apiId,
-        { results },
+        duplicatesRemoved > 0 ? { results, duplicatesRemoved } : { results },
         HttpStatus.OK,
         API_RESPONSES.USER_ANONYMIZE_SUCCESSFULLY
       );
@@ -3166,9 +3173,44 @@ export class PostgresUserService implements IServicelocator {
     loggedInUserId: string | null,
     keycloakToken: string
   ): Promise<{ status: string; message?: string }> {
-    // Idempotency guard: skip a user whose email already matches the anonymized pattern
-    // (e.g. this email was re-submitted after a prior successful anonymization).
+    // Idempotency guard: a user whose email already matches the anonymized pattern (e.g. this
+    // email was re-submitted after a prior successful anonymization) needs no Keycloak/Postgres
+    // work — but if an earlier run ended in PARTIAL (Elasticsearch failed after Keycloak/Postgres
+    // had already committed), the row's email is already the anon value, so this is also the only
+    // way to retry just the Elasticsearch step: still attempt it here, using the row's current
+    // (already-anonymized) values, before returning.
     if (/^deleted_user_.+@anon\.local$/.test(user.email || "")) {
+      if (isElasticsearchEnabled()) {
+        try {
+          const fieldsAndValues =
+            await this.fieldsService.getFieldsAndFieldsValues(user.userId);
+          await this.userElasticsearchService.updateUserProfile(user.userId, {
+            email: user.email,
+            username: user.username,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            dob: null,
+            gender: user.gender,
+            mobile: null,
+            country: null,
+            permanentCountry: null,
+            currentCountry: null,
+            status: user.status,
+            customFields: this.mapAnonymizedCustomFieldsForEs(fieldsAndValues),
+          });
+        } catch (esError) {
+          LoggerUtil.error(
+            `${API_RESPONSES.SERVER_ERROR}`,
+            `Elasticsearch resync failed for already-anonymized user ${user.userId}: ${esError.message}`,
+            APIID.USER_ANONYMIZE
+          );
+          return {
+            status: "PARTIAL",
+            message:
+              "Already anonymized; Elasticsearch resync attempted but failed again — retry later.",
+          };
+        }
+      }
       return {
         status: "SKIPPED",
         message: API_RESPONSES.USER_ALREADY_ANONYMIZED,
@@ -3351,6 +3393,15 @@ export class PostgresUserService implements IServicelocator {
       }
     });
 
+    return this.mapAnonymizedCustomFieldsForEs(fieldsAndValues);
+  }
+
+  /**
+   * Maps raw FieldValues+Fields rows into the shape Elasticsearch's customFields expects,
+   * blanking the PII ones per isPiiCustomField. Shared by anonymizeUserPostgresData (fresh
+   * anonymization) and the idempotent-retry Elasticsearch resync in anonymizeUserRow.
+   */
+  private mapAnonymizedCustomFieldsForEs(fieldsAndValues: any[]): any[] {
     return fieldsAndValues.map((f) => ({
       fieldId: f.fieldId,
       code: f.fieldname,
