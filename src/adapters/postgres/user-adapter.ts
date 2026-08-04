@@ -2973,10 +2973,10 @@ export class PostgresUserService implements IServicelocator {
    * GDPR-style anonymization: overwrites only email/username/firstName/lastName/dob/gender/mobile/
    * country/permanentCountry/currentCountry/status (+ reason/updatedBy/updatedAt) in Postgres —
    * gender is set to the existing "i do not want to disclose" enum value rather than null, since
-   * the column is NOT NULL — mirrors email/username/firstName/lastName into Keycloak (account stays
-   * enabled, but its active sessions/refresh tokens are invalidated), and mirrors the full field set
-   * into Elasticsearch. Accepts multiple emails per call, processed with bounded concurrency so one
-   * failure never blocks the rest.
+   * the column is NOT NULL — mirrors email/username/firstName/lastName into Keycloak, disables the
+   * Keycloak account (`enabled: false`), and invalidates its active sessions/refresh tokens, and
+   * mirrors the full field set into Elasticsearch. Accepts multiple emails per call, processed with
+   * bounded concurrency so one failure never blocks the rest.
    */
   public async anonymizeUsers(
     userAnonymizeDto: UserAnonymizeDto,
@@ -3177,7 +3177,8 @@ export class PostgresUserService implements IServicelocator {
 
     const anonymizedIdentity = this.generateAnonymizedIdentity(user.userId);
 
-    // 1. Keycloak: only email/username/firstName/lastName. Account stays enabled.
+    // 1. Keycloak: email/username/firstName/lastName, and disable the account so it can no
+    // longer authenticate anywhere (including directly against Keycloak, outside this service).
     const keycloakResult = await updateUserInKeyCloak(
       {
         userId: user.userId,
@@ -3185,6 +3186,7 @@ export class PostgresUserService implements IServicelocator {
         username: anonymizedIdentity,
         firstName: "deleted",
         lastName: "user",
+        enabled: false,
       },
       keycloakToken
     );
@@ -3195,9 +3197,10 @@ export class PostgresUserService implements IServicelocator {
       };
     }
 
-    // 1b. Keycloak: invalidate any active sessions/refresh tokens for this user so an
-    // already-logged-in session can't keep refreshing its access token post-anonymization.
-    // Account `enabled` is left untouched — this only kills sessions, it does not disable the account.
+    // 1b. Keycloak: invalidate any active sessions/refresh tokens for this user. Disabling the
+    // account (step 1) blocks new logins, but doesn't retroactively revoke an already-issued
+    // session/refresh token, so this is still needed to stop an already-logged-in session from
+    // continuing to refresh its access token post-anonymization.
     const logoutResult = await logoutUserInKeyCloak(user.userId, keycloakToken);
     if (logoutResult.success === false) {
       LoggerUtil.error(
@@ -3239,6 +3242,7 @@ export class PostgresUserService implements IServicelocator {
           username: user.username,
           firstName: user.firstName,
           lastName: user.lastName,
+          enabled: true,
         },
         keycloakToken
       );

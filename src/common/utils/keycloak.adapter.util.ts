@@ -257,6 +257,7 @@ interface UpdateUserQuery {
   lastName?: string; // Optional
   username?: string; // Optional
   email?: string; // Optional
+  enabled?: boolean; // Optional — defaults to true (existing behavior) when omitted
 }
 
 // Define the structure of the function response
@@ -291,7 +292,7 @@ async function updateUserInKeyCloak(
   }
 
   const payload: Record<string, unknown> = {
-    enabled: true,
+    enabled: query.enabled ?? true,
     ...keycloakOptionalString('firstName', query.firstName),
     ...keycloakOptionalString('lastName', query.lastName),
     ...keycloakOptionalString('username', query.username),

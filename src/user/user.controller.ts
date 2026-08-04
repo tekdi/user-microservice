@@ -311,8 +311,9 @@ export class UserController {
       .buildUserAdapter()
       .deleteUserById(userId, response);
   }
-  // GDPR-style anonymize: overwrites email/username/firstName/lastName/dob/gender/mobile/status
-  // in Postgres + Keycloak (email/username/firstName/lastName only) + Elasticsearch. Accepts multiple emails.
+  // GDPR-style anonymize: overwrites email/username/firstName/lastName/dob/gender/mobile/country/status
+  // in Postgres + Keycloak (email/username/firstName/lastName, disables the account, and invalidates
+  // its sessions/refresh tokens) + Elasticsearch. Accepts multiple emails.
   @UseFilters(new AllExceptionsFilter(APIID.USER_ANONYMIZE))
   @Post('anonymize')
   @UseGuards(JwtAuthGuard)
