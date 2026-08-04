@@ -65,11 +65,17 @@ export class AuthService {
         .buildUserAdapter()
         .findUserStatusForLogin(username);
 
-      // Handle case: user not found or user is inactive
-      if (!userData || userData.status === 'inactive') {
+      // Handle case: user not found, inactive, or anonymized (archived)
+      if (
+        !userData ||
+        userData.status === 'inactive' ||
+        userData.status === 'archived'
+      ) {
         const errorMessage = !userData
           ? 'User details not found for user'
-          : 'User is inactive, please verify your email';
+          : userData.status === 'archived'
+            ? 'This account is no longer available'
+            : 'User is inactive, please verify your email';
 
         return APIResponse.error(
           response,
