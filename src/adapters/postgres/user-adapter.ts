@@ -56,7 +56,6 @@ import { IUser } from '../../elasticsearch/interfaces/user.interface';
 import { isElasticsearchEnabled } from 'src/common/utils/elasticsearch.util';
 import { ReferralsService } from 'src/referrals/referrals.service';
 import { buildReferLink } from 'src/referrals/utils/referral-slug.util';
-import { isPiiCustomField } from '@utils/pii-fields.constant';
 
 interface UpdateField {
   userId: string; // Required
@@ -3315,6 +3314,16 @@ export class PostgresUserService implements IServicelocator {
         loggedInUserId
       );
     } catch (pgError) {
+      // --- Option A revert starts here ---
+      // Postgres failed (or threw) after Keycloak already committed the rename+disable above, so
+      // the two systems are now out of sync: Keycloak shows the anonymized identity, but Postgres
+      // still has the original PII (its own transaction rolled back automatically on throw, so
+      // Users/FieldValues were never partially written — nothing to undo on the Postgres side).
+      // To put Keycloak back the way it was, we don't need to have "stored" the original values
+      // anywhere separately: `user` is the same object this function was called with, fetched
+      // *before* any write happened — its fields (user.email/username/firstName/lastName) were
+      // never reassigned, so they're still the pre-anonymization values sitting in memory here.
+      // We just send them back to Keycloak as-is, plus enabled: true to undo the disable from step 1.
       const revert = await updateUserInKeyCloak(
         {
           userId: user.userId,
@@ -3326,6 +3335,9 @@ export class PostgresUserService implements IServicelocator {
         },
         keycloakToken
       );
+      // --- Option A revert ends here: if this call succeeds, Keycloak + Postgres are both back to
+      // their pre-anonymization state (safe to retry). If it fails too, see the log/message below —
+      // that's the one case this can't fully undo (Keycloak already changed, revert didn't take).
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
         `Postgres anonymize failed for user ${user.userId}: ${
@@ -3348,6 +3360,20 @@ export class PostgresUserService implements IServicelocator {
     }
 
     // 4. Elasticsearch: mirror the same field set + the nulled custom fields.
+    // This is a single API call (one Elasticsearch "update by script" request) — it either fully
+    // applies or fully throws; there's no partial/some-fields-updated outcome from this one call.
+    // `customFields` is not merged element-by-element into whatever ES already had — the painless
+    // script (PROFILE_PATCH_SCRIPT in user-elasticsearch.service.ts) replaces the ENTIRE
+    // profile.customFields array with exactly what we send here. Practically:
+    //  - `anonymizedCustomFields` (built in anonymizeUserPostgresData/mapAnonymizedCustomFieldsForEs)
+    //    only contains fields that actually have a FieldValues row for this user right now — if the
+    //    user never filled in a given custom field, it was never in Postgres, so it's simply absent
+    //    from this array too (nothing to "not find" or fail on — it's just not included).
+    //  - PII-flagged fields (fieldParams.isPiData === true) are included with value: "" (blanked),
+    //    not removed as array entries — the field still exists in the document with an empty value.
+    //  - Any field ES previously had that isn't in this computed array (e.g. it was later removed
+    //    from Postgres, or never existed there) will disappear from the ES document after this call,
+    //    since the whole array is replaced to match current Postgres state, not merged with the old one.
     if (isElasticsearchEnabled()) {
       try {
         await this.userElasticsearchService.updateUserProfile(user.userId, {
@@ -3390,10 +3416,10 @@ export class PostgresUserService implements IServicelocator {
   }
 
   /**
-   * Atomically updates the Users row and nulls its PII custom field values (address
-   * line/city/state/pincode/mobile-type fields per isPiiCustomField — every other custom field
-   * is left untouched). Returns the full custom-field list (PII fields blanked) so the caller can
-   * mirror the same state into Elasticsearch.
+   * Atomically updates the Users row and nulls its PII custom field values — a field is treated
+   * as PII if its `Fields.fieldParams` has `isPiData: true` (admin-configured per field, not a
+   * hardcoded name/pattern list) — every other custom field is left untouched. Returns the full
+   * custom-field list (PII fields blanked) so the caller can mirror the same state into Elasticsearch.
    */
   private async anonymizeUserPostgresData(
     userId: string,
@@ -3405,7 +3431,7 @@ export class PostgresUserService implements IServicelocator {
     );
 
     const piiFieldValuesIds = fieldsAndValues
-      .filter((f) => isPiiCustomField(f.fieldname, f.type))
+      .filter((f) => f.fieldParams?.isPiData === true)
       .map((f) => f.fieldValuesId)
       .filter(Boolean);
 
@@ -3436,8 +3462,9 @@ export class PostgresUserService implements IServicelocator {
 
   /**
    * Maps raw FieldValues+Fields rows into the shape Elasticsearch's customFields expects,
-   * blanking the PII ones per isPiiCustomField. Shared by anonymizeUserPostgresData (fresh
-   * anonymization) and the idempotent-retry Elasticsearch resync in anonymizeUserRow.
+   * blanking the ones flagged `fieldParams.isPiData === true`. Shared by
+   * anonymizeUserPostgresData (fresh anonymization) and the idempotent-retry Elasticsearch
+   * resync in anonymizeUserRow.
    */
   private mapAnonymizedCustomFieldsForEs(fieldsAndValues: any[]): any[] {
     return fieldsAndValues.map((f) => ({
@@ -3445,7 +3472,7 @@ export class PostgresUserService implements IServicelocator {
       code: f.fieldname,
       label: f.label,
       type: f.type,
-      value: isPiiCustomField(f.fieldname, f.type) ? "" : f.value,
+      value: f.fieldParams?.isPiData === true ? "" : f.value,
     }));
   }
 
