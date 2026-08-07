@@ -28,6 +28,7 @@ import { CohortAcademicYearService } from 'src/adapters/postgres/cohortAcademicY
 import { AuthUtils } from '@utils/auth-util';
 import { NotificationRequest } from '@utils/notification.axios';
 import { ConfigModule } from '@nestjs/config';
+import { CacheModule } from 'src/cache/cache.module';
 
 /**
  * Cohort Members Module
@@ -81,6 +82,7 @@ import { ConfigModule } from '@nestjs/config';
     ElasticsearchModule,
     forwardRef(() => FormsModule),
     ConfigModule,
+    CacheModule,
   ],
   controllers: [CohortMembersController],
   providers: [

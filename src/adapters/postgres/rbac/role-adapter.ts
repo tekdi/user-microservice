@@ -15,6 +15,7 @@ import { isUUID } from "class-validator";
 import APIResponse from "src/common/responses/response";
 import { Response } from "express";
 import { APIID } from "src/common/utils/api-id.config";
+import { CacheService } from "src/cache/cache.service";
 
 @Injectable()
 export class PostgresRoleService {
@@ -24,7 +25,8 @@ export class PostgresRoleService {
     @InjectRepository(UserRoleMapping)
     private readonly userRoleMappingRepository: Repository<UserRoleMapping>,
     @InjectRepository(RolePrivilegeMapping)
-    private readonly roleprivilegeMappingRepository: Repository<RolePrivilegeMapping>
+    private readonly roleprivilegeMappingRepository: Repository<RolePrivilegeMapping>,
+    private readonly cacheService: CacheService
   ) {}
   public async createRole(
     request: any,
@@ -330,6 +332,13 @@ export class PostgresRoleService {
         await this.userRoleMappingRepository.delete({
           roleId: roleId,
         });
+
+      // Any user who held this role must lose its privileges on next
+      // rbac_token issuance; drop cached entries for this tenant now.
+      await this.cacheService.delByPattern(
+        `rbac:privileges:*:${roleToDelete.tenantId}`
+      );
+
       return APIResponse.success(
         res,
         apiId,

@@ -21,4 +21,5 @@ export interface IServicelocator {
   );
   // updatePrivilege(privilegeId, request, privilegeDto)
   deletePrivilege(privilegeId, response?: Response);
+  getPermissionRegistry(response?: Response);
 }

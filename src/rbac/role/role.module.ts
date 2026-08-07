@@ -8,12 +8,14 @@ import { HttpModule } from "@nestjs/axios";
 import { RoleAdapter } from "./roleadapter";
 import { UserRoleMapping } from "../assign-role/entities/assign-role.entity";
 import { RolePrivilegeMapping } from "../assign-privilege/entities/assign-privilege.entity";
+import { CacheModule } from "src/cache/cache.module";
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Role, UserRoleMapping, RolePrivilegeMapping]),
     HttpModule,
     PostgresModule,
+    CacheModule,
   ],
   controllers: [RoleController],
   providers: [RoleAdapter, PostgresRoleService],

@@ -11,6 +11,7 @@ import { Role } from "../role/entities/role.entity";
 import { Repository } from "typeorm";
 import { RolePrivilegeMapping } from "../assign-privilege/entities/assign-privilege.entity";
 import { UserRoleMapping } from "../assign-role/entities/assign-role.entity";
+import { CacheModule } from "src/cache/cache.module";
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { UserRoleMapping } from "../assign-role/entities/assign-role.entity";
     TypeOrmModule.forFeature([Privilege, Role, RolePrivilegeMapping]),
     HttpModule,
     PostgresModule,
+    CacheModule,
   ],
   controllers: [PrivilegeController],
   providers: [

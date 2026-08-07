@@ -25,6 +25,7 @@ import { CohortAcademicYearService } from './cohortAcademicYear-adapter';
 import { AuthUtils } from '@utils/auth-util';
 import { ElasticsearchModule } from 'src/elasticsearch/elasticsearch.module';
 import { ReferralsModule } from 'src/referrals/referrals.module';
+import { CacheModule } from 'src/cache/cache.module';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { ReferralsModule } from 'src/referrals/referrals.module';
     ]),
     ElasticsearchModule,
     ReferralsModule,
+    CacheModule,
   ],
   providers: [
     PostgresUserService,

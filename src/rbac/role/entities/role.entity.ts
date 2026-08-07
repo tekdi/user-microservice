@@ -21,6 +21,15 @@ export class Role {
   @Column("uuid")
   tenantId: string;
 
+  @Column({ type: "text", nullable: true })
+  description: string | null;
+
+  @Column({ name: "isSystemRole", default: false })
+  isSystemRole: boolean;
+
+  @Column({ name: "isPermissionEditable", default: true })
+  isPermissionEditable: boolean;
+
   @CreateDateColumn({
     type: "timestamp with time zone",
     default: () => "CURRENT_TIMESTAMP",

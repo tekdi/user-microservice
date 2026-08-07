@@ -64,6 +64,18 @@ export class PrivilegeController {
       .getPrivilegebyRoleId(tenantId, roleId, request, response);
   }
 
+  @UseFilters(new AllExceptionsFilter(APIID.PERMISSION_REGISTRY_LIST))
+  @Get("/registry/grouped")
+  @ApiBasicAuth("access-token")
+  @ApiOkResponse({
+    description: "Permission registry grouped by module/submodule.",
+  })
+  public async getPermissionRegistry(@Res() response: Response) {
+    return await this.privilegeAdapter
+      .buildPrivilegeAdapter()
+      .getPermissionRegistry(response);
+  }
+
   @UseFilters(new AllExceptionsFilter(APIID.PRIVILEGE_BYPRIVILEGEID))
   @Get("/:privilegeId")
   @ApiBasicAuth("access-token")
