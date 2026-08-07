@@ -872,16 +872,24 @@ export class CohortService {
     cohortSearchDto: CohortSearchDto,
     response
   ) {
-    const payload = await this.cacheService.getOrLoad({
-      namespace: `cohort:${tenantId}`,
-      key: `search:${hashCacheKey({ academicYearId, cohortSearchDto })}`,
-      dependsOn: ["fieldsdef"],
-      ttlSeconds: COHORT_TTL_SECONDS,
-      loader: async () => {
-        const result = await this.searchCohortData(tenantId, academicYearId, cohortSearchDto, response);
-        return response.headersSent ? null : result;
-      },
-    });
+    // A free-text `filters.name` (cohort-name search) is high-cardinality and
+    // rarely repeats — caching it would fill the store with near-unique keys
+    // that almost never hit. So a name search bypasses the cache and runs the
+    // live query; all other searches stay cached under cohort:{tenantId}.
+    const useCache = !cohortSearchDto?.filters?.name;
+    const runQuery = async () => {
+      const result = await this.searchCohortData(tenantId, academicYearId, cohortSearchDto, response);
+      return response.headersSent ? null : result;
+    };
+    const payload = useCache
+      ? await this.cacheService.getOrLoad({
+          namespace: `cohort:${tenantId}`,
+          key: `search:${hashCacheKey({ academicYearId, cohortSearchDto })}`,
+          dependsOn: ["fieldsdef"],
+          ttlSeconds: COHORT_TTL_SECONDS,
+          loader: runQuery,
+        })
+      : await runQuery();
     if (payload === null || payload === undefined) {
       return; // an error response was already written inside the loader
     }
