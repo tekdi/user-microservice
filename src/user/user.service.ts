@@ -807,7 +807,7 @@ export class UserService {
   // with near-unique keys that almost never hit. So a search request bypasses
   // the cache entirely and runs the live query.
   async findAllUserDetails(userSearchDto, tenantId?: string, includeCustomFields: boolean = true) {
-    if (!tenantId || tenantId.trim() === "" || userSearchDto?.filters?.search) {
+    if (!tenantId || tenantId.trim() === "" || userSearchDto?.filters?.search || userSearchDto?.filters?.firstName) {
       return this.findAllUserDetailsUncached(userSearchDto, tenantId, includeCustomFields);
     }
     return this.cacheService.getOrLoad({
