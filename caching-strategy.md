@@ -138,6 +138,45 @@ TTL constants live next to their consumers: `USER_CORE_TTL_SECONDS`,
 `COHORTMEMBER_TTL_SECONDS`, `TENANT_TTL_SECONDS`, `FORM_TTL_SECONDS`.
 `usertenant` and `userroles` use an inline `600` rather than a named constant.
 
+### 2.1 Namespaces by module — disable reference
+
+To bypass a cache via `CACHE_DISABLED_NAMESPACES`, list the **family** (kills every
+tenant/user) or the **exact** namespace (kills one). Matching is family-or-exact —
+see [cache.service.ts](src/cache/cache.service.ts) `isNamespaceCacheable`. Read once
+at boot, so a change needs a process restart; confirm the loaded list at
+`GET /health` → `cache.disabledNamespaces`.
+
+| Module | Family (env value) | Full form | Caches |
+|---|---|---|---|
+| **user** | `user` | `user:{userId}` | `GET /user/read/:userId` core row |
+| | `userlist` | `userlist:{tenantId}` | `POST /user/list` |
+| | `userfilter` | `userfilter` | filtered `/list` (3 call sites) |
+| | `ufields` | `ufields:{userId}` | per-user custom-field hydration |
+| | `usertenant` | `usertenant:{userId}` | user↔tenant mappings |
+| | `userroles` | `userroles:{userId}` | role resolution |
+| **cohort** | `cohort` | `cohort:{tenantId}` | `POST /cohort/search`, read, hierarchy, mycohorts |
+| **cohortMembers** | `cohortmember` | `cohortmember:{tenantId}` | member `list` / `read` |
+| | `cfields` | `cfields:{cohortId}` | per-cohort custom-field hydration |
+| **fields** | `fields` | `fields:{tenantId}`, `fields:global` | `/fields/search`, `formFields`, `options/read` |
+| **forms** | `form` | `form:{tenantId}`, `form:global` | `GET /form/read` |
+| **tenant** | `tenant` | `tenant` | `/tenant/read`, `/tenant/search` |
+
+`fieldsdef` is deliberately omitted: it is a pure invalidation epoch, holds no
+entries, and listing it in `CACHE_DISABLED_NAMESPACES` has no effect on any read.
+
+```bash
+# one module family off, all tenants/users
+CACHE_DISABLED_NAMESPACES=userlist
+# several
+CACHE_DISABLED_NAMESPACES=userlist,cohort,form,tenant
+# one tenant's cohort cache only, others stay cached
+CACHE_DISABLED_NAMESPACES=cohort:11111111-1111-4111-8111-111111111111
+```
+
+Invalidation INCRs keep running while a namespace is bypassed, so re-enabling is
+always safe — entries written before the bypass are already unreachable under a
+newer version.
+
 ---
 
 ## 3. Module-by-module: what is cached
