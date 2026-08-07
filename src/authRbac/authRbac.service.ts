@@ -11,6 +11,9 @@ import APIResponse from "src/common/responses/response";
 import { UserAdapter } from "src/user/useradapter";
 import { Response } from "express";
 import { APIID } from "src/common/utils/api-id.config";
+import { CacheService } from "src/cache/cache.service";
+
+const PRIVILEGES_CACHE_TTL_SECONDS = 60;
 
 @Injectable()
 export class AuthRbacService {
@@ -22,7 +25,8 @@ export class AuthRbacService {
     private jwtService: JwtService,
     private configService: ConfigService,
     private readonly userAdapter: UserAdapter,
-    private readonly postgresRoleService: PostgresRoleService
+    private readonly postgresRoleService: PostgresRoleService,
+    private readonly cacheService: CacheService
   ) {
     this.issuer = this.configService.get<string>("ISSUER");
     this.audience = this.configService.get<string>("AUDIENCE");
@@ -75,7 +79,11 @@ export class AuthRbacService {
     }
 
     userData["roles"] = userRoles.map(({ code }) => code);
-    userData["privileges"] = await this.getPrivileges(userRoles);
+    userData["privileges"] = await this.getPrivileges(
+      userRoles,
+      userData?.userId,
+      tenantId
+    );
     userData["tenantId"] = tenantId;
 
     const issuer = this.issuer;
@@ -99,7 +107,17 @@ export class AuthRbacService {
     );
   }
 
-  async getPrivileges(userRoleData) {
+  async getPrivileges(userRoleData, userId?: string, tenantId?: string) {
+    const cacheKey =
+      userId && tenantId ? `rbac:privileges:${userId}:${tenantId}` : null;
+
+    if (cacheKey) {
+      const cached = await this.cacheService.get<string[]>(cacheKey);
+      if (cached) {
+        return cached;
+      }
+    }
+
     const roleIds = userRoleData.map(({ roleid }) => roleid);
     if (!roleIds.length) {
       return [];
@@ -109,6 +127,15 @@ export class AuthRbacService {
     );
 
     const privileges = privilegesData.map(({ code }) => code);
+
+    if (cacheKey) {
+      await this.cacheService.set(
+        cacheKey,
+        privileges,
+        PRIVILEGES_CACHE_TTL_SECONDS
+      );
+    }
+
     return privileges;
   }
 }

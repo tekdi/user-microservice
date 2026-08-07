@@ -18,6 +18,27 @@ export class Privilege {
   @Column()
   code: string;
 
+  @Column({ type: "varchar", nullable: true })
+  module: string | null;
+
+  @Column({ type: "varchar", nullable: true })
+  submodule: string | null;
+
+  @Column({ type: "varchar", nullable: true })
+  action: string | null;
+
+  @Column({ type: "text", nullable: true })
+  description: string | null;
+
+  @Column({ name: "isVisibleInUI", default: true })
+  isVisibleInUI: boolean;
+
+  @Column({ name: "displayOrder", default: 0 })
+  displayOrder: number;
+
+  @Column({ type: "jsonb", nullable: true })
+  metadata: Record<string, any> | null;
+
   @CreateDateColumn({
     type: "timestamp with time zone",
     default: () => "CURRENT_TIMESTAMP",

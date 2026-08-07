@@ -231,6 +231,7 @@ export class PostgresPrivilegeService {
         await this.rolePrivilegeMappingRepository.delete({
           privilegeId: privilegeId,
         });
+
       return APIResponse.success(
         res,
         APIID.PRIVILEGE_DELETE,
@@ -243,6 +244,47 @@ export class PostgresPrivilegeService {
       return APIResponse.error(
         res,
         APIID.PRIVILEGE_DELETE,
+        "Internal Server Error",
+        errorMessage,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  /**
+   * Full permission registry grouped by module/submodule, for the permission
+   * dashboard UI. Only rows with isVisibleInUI=true are returned.
+   */
+  public async getPermissionRegistry(response: Response) {
+    const apiId = APIID.PERMISSION_REGISTRY_LIST;
+    try {
+      const privileges = await this.privilegeRepository.find({
+        where: { isVisibleInUI: true },
+        order: { displayOrder: "ASC" },
+      });
+
+      const grouped: Record<string, Record<string, any[]>> = {};
+      for (const privilege of privileges) {
+        const moduleKey = privilege.module || "Uncategorized";
+        const submoduleKey = privilege.submodule || "General";
+        grouped[moduleKey] = grouped[moduleKey] || {};
+        grouped[moduleKey][submoduleKey] =
+          grouped[moduleKey][submoduleKey] || [];
+        grouped[moduleKey][submoduleKey].push(privilege);
+      }
+
+      return APIResponse.success(
+        response,
+        apiId,
+        grouped,
+        HttpStatus.OK,
+        "Permission registry fetched successfully."
+      );
+    } catch (e) {
+      const errorMessage = e.message || "Internal server error";
+      return APIResponse.error(
+        response,
+        apiId,
         "Internal Server Error",
         errorMessage,
         HttpStatus.INTERNAL_SERVER_ERROR

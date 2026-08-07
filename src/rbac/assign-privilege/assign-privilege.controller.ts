@@ -15,6 +15,7 @@ import {
 } from "@nestjs/common";
 import { AssignPrivilegeAdapter } from "./assign-privilege.apater";
 import { CreatePrivilegeRoleDto } from "./dto/create-assign-privilege.dto";
+import { UpdateRolePrivilegesDto } from "./dto/update-assign-privilege.dto";
 import { Response, Request } from "express";
 import {
   ApiBasicAuth,
@@ -68,6 +69,49 @@ export class AssignPrivilegeController {
     return await this.assignPrivilegeAdpater
       .buildPrivilegeRoleAdapter()
       .getPrivilegeRole(roleId, request, response);
+  }
+
+  @Patch("/:roleid")
+  @UsePipes(new ValidationPipe())
+  @ApiBasicAuth("access-token")
+  @ApiBody({ type: UpdateRolePrivilegesDto })
+  @ApiOkResponse({ description: "Role privileges updated successfully." })
+  public async updatePrivileges(
+    @Param("roleid") roleId: string,
+    @Body() updateRolePrivilegesDto: UpdateRolePrivilegesDto,
+    @Res() response: Response
+  ) {
+    return await this.assignPrivilegeAdpater
+      .buildPrivilegeRoleAdapter()
+      .updateRolePrivileges(roleId, updateRolePrivilegesDto, response);
+  }
+
+  @Delete("/:roleid/:privilegeId")
+  @ApiBasicAuth("access-token")
+  @ApiOkResponse({ description: "Privilege removed from role successfully." })
+  public async removePrivilegeFromRole(
+    @Param("roleid") roleId: string,
+    @Param("privilegeId") privilegeId: string,
+    @Res() response: Response
+  ) {
+    return await this.assignPrivilegeAdpater
+      .buildPrivilegeRoleAdapter()
+      .deletePrivilegeFromRole(roleId, privilegeId, response);
+  }
+
+  @Get("/:roleid/grouped")
+  @ApiBasicAuth("access-token")
+  @ApiOkResponse({
+    description:
+      "Full permission registry grouped by module/submodule with assigned flags for this role.",
+  })
+  public async getGroupedPermissions(
+    @Param("roleid") roleId: string,
+    @Res() response: Response
+  ) {
+    return await this.assignPrivilegeAdpater
+      .buildPrivilegeRoleAdapter()
+      .getGroupedPermissionsForRole(roleId, response);
   }
 
   // @Delete("/:id")
