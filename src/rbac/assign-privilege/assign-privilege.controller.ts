@@ -10,8 +10,10 @@ import {
   ValidationPipe,
   Req,
   Res,
+  Headers,
   SerializeOptions,
   UseGuards,
+  ParseUUIDPipe,
 } from "@nestjs/common";
 import { AssignPrivilegeAdapter } from "./assign-privilege.apater";
 import { CreatePrivilegeRoleDto } from "./dto/create-assign-privilege.dto";
@@ -88,30 +90,34 @@ export class AssignPrivilegeController {
 
   @Delete("/:roleid/:privilegeId")
   @ApiBasicAuth("access-token")
+  @ApiHeader({ name: "tenantid" })
   @ApiOkResponse({ description: "Privilege removed from role successfully." })
   public async removePrivilegeFromRole(
-    @Param("roleid") roleId: string,
-    @Param("privilegeId") privilegeId: string,
+    @Param("roleid", ParseUUIDPipe) roleId: string,
+    @Param("privilegeId", ParseUUIDPipe) privilegeId: string,
+    @Headers("tenantid") tenantId: string,
     @Res() response: Response
   ) {
     return await this.assignPrivilegeAdpater
       .buildPrivilegeRoleAdapter()
-      .deletePrivilegeFromRole(roleId, privilegeId, response);
+      .deletePrivilegeFromRole(roleId, privilegeId, tenantId, response);
   }
 
   @Get("/:roleid/grouped")
   @ApiBasicAuth("access-token")
+  @ApiHeader({ name: "tenantid" })
   @ApiOkResponse({
     description:
       "Full permission registry grouped by module/submodule with assigned flags for this role.",
   })
   public async getGroupedPermissions(
     @Param("roleid") roleId: string,
+    @Headers("tenantid") tenantId: string,
     @Res() response: Response
   ) {
     return await this.assignPrivilegeAdpater
       .buildPrivilegeRoleAdapter()
-      .getGroupedPermissionsForRole(roleId, response);
+      .getGroupedPermissionsForRole(roleId, tenantId, response);
   }
 
   // @Delete("/:id")

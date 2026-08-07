@@ -9,8 +9,17 @@ export interface IServicelocatorprivilegeRole {
     response: Response
   );
   getPrivilegeRole(userId, request, response: Response);
-  getGroupedPermissionsForRole(roleId: string, response: Response);
-  deletePrivilegeFromRole(roleId: string, privilegeId: string, response: Response);
+  getGroupedPermissionsForRole(
+    roleId: string,
+    tenantId: string,
+    response: Response
+  );
+  deletePrivilegeFromRole(
+    roleId: string,
+    privilegeId: string,
+    tenantId: string,
+    response: Response
+  );
   updateRolePrivileges(
     roleId: string,
     dto: UpdateRolePrivilegesDto,

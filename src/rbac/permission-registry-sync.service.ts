@@ -36,21 +36,30 @@ export class PermissionRegistrySyncService implements OnModuleInit {
     const existingCodes = new Set(existing.map((p) => p.code));
 
     const missing = registryCodes.filter((code) => !existingCodes.has(code));
-    for (const code of missing) {
-      const [modulePrefix, action] = code.split(".");
-      await this.privilegeRepository.save({
-        title: code,
-        code,
-        module: modulePrefix
-          ? modulePrefix.charAt(0).toUpperCase() + modulePrefix.slice(1)
-          : null,
-        action: action || null,
-        isVisibleInUI: true,
-        createdBy: "system",
-        updatedBy: "system",
-      } as Partial<Privilege>);
-    }
     if (missing.length) {
+      const rows = missing.map((code) => {
+        const [modulePrefix, action] = code.split(".");
+        return {
+          title: code,
+          code,
+          module: modulePrefix
+            ? modulePrefix.charAt(0).toUpperCase() + modulePrefix.slice(1)
+            : null,
+          action: action || null,
+          isVisibleInUI: true,
+          createdBy: "system",
+          updatedBy: "system",
+        } as Partial<Privilege>;
+      });
+
+      // Single batch upsert keyed on the unique `code` column — safe under
+      // concurrent startups (multiple replicas racing this same diff) since
+      // conflicting rows are skipped at the DB level instead of duplicated.
+      await this.privilegeRepository.upsert(rows, {
+        conflictPaths: ["code"],
+        skipUpdateIfNoValuesChanged: true,
+      });
+
       this.logger.log(
         `Permission registry sync: inserted ${missing.length} new privilege(s): ${missing.join(", ")}`
       );

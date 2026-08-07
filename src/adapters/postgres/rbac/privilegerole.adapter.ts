@@ -158,41 +158,50 @@ export class PostgresAssignPrivilegeService {
       const addPrivilegeIds = dto.addPrivilegeIds ?? [];
       const removePrivilegeIds = dto.removePrivilegeIds ?? [];
 
-      let removed = 0;
-      if (removePrivilegeIds.length) {
-        const deleteResult = await this.rolePrivilegeMappingRepository.delete({
-          roleId,
-          privilegeId: In(removePrivilegeIds),
-        });
-        removed = deleteResult.affected || 0;
-      }
+      const { added, removed } =
+        await this.rolePrivilegeMappingRepository.manager.transaction(
+          async (manager) => {
+            const mappingRepo = manager.getRepository(RolePrivilegeMapping);
+            let removedCount = 0;
+            let addedCount = 0;
 
-      let added = 0;
-      if (addPrivilegeIds.length) {
-        const existingMappings = await this.rolePrivilegeMappingRepository.find(
-          {
-            where: {
-              roleId,
-              privilegeId: In(addPrivilegeIds),
-            },
+            if (removePrivilegeIds.length) {
+              const deleteResult = await mappingRepo.delete({
+                roleId,
+                tenantId: role.tenantId,
+                privilegeId: In(removePrivilegeIds),
+              });
+              removedCount = deleteResult.affected || 0;
+            }
+
+            if (addPrivilegeIds.length) {
+              const existingMappings = await mappingRepo.find({
+                where: {
+                  roleId,
+                  tenantId: role.tenantId,
+                  privilegeId: In(addPrivilegeIds),
+                },
+              });
+              const alreadyAssigned = new Set(
+                existingMappings.map((m) => m.privilegeId)
+              );
+              const toInsert = addPrivilegeIds
+                .filter((privilegeId) => !alreadyAssigned.has(privilegeId))
+                .map((privilegeId) => ({
+                  roleId,
+                  tenantId: role.tenantId,
+                  privilegeId,
+                }));
+
+              if (toInsert.length) {
+                await mappingRepo.save(toInsert);
+                addedCount = toInsert.length;
+              }
+            }
+
+            return { added: addedCount, removed: removedCount };
           }
         );
-        const alreadyAssigned = new Set(
-          existingMappings.map((m) => m.privilegeId)
-        );
-        const toInsert = addPrivilegeIds
-          .filter((privilegeId) => !alreadyAssigned.has(privilegeId))
-          .map((privilegeId) => ({
-            roleId,
-            tenantId: role.tenantId,
-            privilegeId,
-          }));
-
-        if (toInsert.length) {
-          await this.rolePrivilegeMappingRepository.save(toInsert);
-          added = toInsert.length;
-        }
-      }
 
       await this.cacheService.delByPattern(
         `rbac:privileges:*:${role.tenantId}`
@@ -229,12 +238,13 @@ export class PostgresAssignPrivilegeService {
   public async deletePrivilegeFromRole(
     roleId: string,
     privilegeId: string,
+    tenantId: string,
     response: Response
   ) {
     const apiId = APIID.ASSIGNPRIVILEGE_DELETE;
     try {
       const existing = await this.rolePrivilegeMappingRepository.findOne({
-        where: { roleId, privilegeId },
+        where: { roleId, privilegeId, tenantId },
       });
 
       if (!existing) {
@@ -261,11 +271,10 @@ export class PostgresAssignPrivilegeService {
       await this.rolePrivilegeMappingRepository.delete({
         roleId,
         privilegeId,
+        tenantId,
       });
 
-      await this.cacheService.delByPattern(
-        `rbac:privileges:*:${existing.tenantId}`
-      );
+      await this.cacheService.delByPattern(`rbac:privileges:*:${tenantId}`);
 
       return await APIResponse.success(
         response,
@@ -355,6 +364,7 @@ export class PostgresAssignPrivilegeService {
    */
   public async getGroupedPermissionsForRole(
     roleId: string,
+    tenantId: string,
     response: Response
   ) {
     const apiId = APIID.ROLE_PERMISSIONS_GET;
@@ -362,8 +372,13 @@ export class PostgresAssignPrivilegeService {
       const [allPrivileges, assignedMappings] = await Promise.all([
         this.rolePrivilegeMappingRepository.manager
           .getRepository(Privilege)
-          .find({ where: { isVisibleInUI: true }, order: { displayOrder: "ASC" } }),
-        this.rolePrivilegeMappingRepository.find({ where: { roleId } }),
+          .find({
+            where: { isVisibleInUI: true },
+            order: { displayOrder: "ASC" },
+          }),
+        this.rolePrivilegeMappingRepository.find({
+          where: { roleId, tenantId },
+        }),
       ]);
 
       const assignedPrivilegeIds = new Set(

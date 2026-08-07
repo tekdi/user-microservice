@@ -15,7 +15,7 @@ export class Privilege {
   @Column({ name: "name" })
   title: string;
 
-  @Column()
+  @Column({ unique: true })
   code: string;
 
   @Column({ type: "varchar", nullable: true })
