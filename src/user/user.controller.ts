@@ -124,7 +124,7 @@ export class UserController {
   @Post("/create")
   // @UseGuards(JwtAuthGuard)
   @UsePipes(new ValidationPipe())
-  // @ApiBasicAuth("access-token")
+  @ApiBasicAuth("access-token")
   @ApiCreatedResponse({ description: API_RESPONSES.USER_CREATE_SUCCESSFULLY })
   @ApiBody({ type: UserCreateDto })
   @ApiForbiddenResponse({ description: API_RESPONSES.USER_EXISTS })
@@ -134,6 +134,12 @@ export class UserController {
   @ApiConflictResponse({ description: API_RESPONSES.DUPLICATE_DATA })
   @ApiHeader({
     name: "academicyearid",
+  })
+  @ApiHeader({
+    name: "authorization",
+    description:
+      "Bearer access token — REQUIRED when registering a user with a non-learner role. Omit for learner self-registration.",
+    required: false,
   })
   async createUser(
     @Headers() headers,
