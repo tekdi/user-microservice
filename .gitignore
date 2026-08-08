@@ -5,6 +5,8 @@
 .env
 .cursor
 .github
+sonar-project.properties
+.scannerwork
 # Logs
 logs
 *.log
