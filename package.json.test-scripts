@@ -1,0 +1,37 @@
+// Add these scripts to your package.json file:
+
+{
+  "scripts": {
+    // Existing scripts...
+    
+    // Location-specific test scripts
+    "test:location": "jest --testPathPattern=location",
+    "test:location:unit": "jest test/location-unit.spec.ts",
+    "test:location:refactored": "jest test/location-refactored.spec.ts", 
+    "test:location:e2e": "jest --config ./test/jest-e2e.json test/location.e2e-spec.ts",
+    "test:location:performance": "jest --config ./test/jest-e2e.json test/location-performance.spec.ts",
+    "test:location:all": "npm run test:location:refactored && npm run test:location:e2e && npm run test:location:performance",
+    
+    // Coverage reports
+    "test:location:coverage": "jest --testPathPattern=location --coverage",
+    "test:location:watch": "jest --testPathPattern=location --watch",
+    
+    // Full test suite
+    "test:e2e:all": "jest --config ./test/jest-e2e.json",
+    "test:full": "npm run test && npm run test:e2e:all"
+  },
+  
+  "jest": {
+    "moduleFileExtensions": ["js", "json", "ts"],
+    "rootDir": "src",
+    "testRegex": ".*\\.spec\\.ts$",
+    "transform": {
+      "^.+\\.(t|j)s$": "ts-jest"
+    },
+    "collectCoverageFrom": [
+      "**/*.(t|j)s"
+    ],
+    "coverageDirectory": "../coverage",
+    "testEnvironment": "node"
+  }
+}
