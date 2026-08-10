@@ -63,6 +63,8 @@ export const API_RESPONSES = {
   COHORT_VALID_UUID: "Invalid input: CohortId must be a valid UUID.",
   COHORT_MEMBER_GET_SUCCESSFULLY:
     "Cohort members details fetched successfully.",
+  COHORT_MEMBER_REPORT_FILTER_SUCCESS:
+    "Cohort members report-filter results fetched successfully.",
   COHORTMEMBER_NOTFOUND: "Invalid input: Cohort Member not exist.",
   ACADEMICYEAR_GET_SUCCESSFULLY: "Get Successfully Academic year list",
   FORM_CREATED_SUCCESSFULLY: "Form created successfully",
@@ -298,6 +300,9 @@ export const API_RESPONSES = {
 
   // Country Management Messages
   COUNTRY_LIST_SUCCESS: "Countries retrieved successfully",
+
+  // Aspire Leaders Specific Messages
+  ASPIRE_LEADERS_COUNTRY_LIST_SUCCESS: "Countries retrieved successfully",
 
   // Referral Management Messages
   REFERRAL_CREATED_SUCCESSFULLY: "Referral created successfully",

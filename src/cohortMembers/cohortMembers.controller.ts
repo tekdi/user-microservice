@@ -29,6 +29,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { CohortMembersSearchDto } from './dto/cohortMembers-search.dto';
+import { CohortMembersReportFilterDto } from './dto/cohortMembers-report-filter.dto';
 import { CohortMembersDto } from './dto/cohortMembers.dto';
 import { CohortMembersAdapter } from './cohortMembersadapter';
 import { CohortMembersUpdateDto } from './dto/cohortMember-update.dto';
@@ -197,6 +198,42 @@ export class CohortMembersController {
         cohortMembersSearchDto,
         tenantId,
         academicyearId,
+        response
+      );
+  }
+
+  /**
+   * Aspire Leaders-specific lean reporting endpoint (see
+   * docs/regional-admin-cohort-country-report.md). Given a cohortId + a chunk of
+   * userIds, returns the matching CohortMembers rows - automatically
+   * country-filtered when the calling admin is a Regional Admin, unfiltered when
+   * they're an Admin. Role/allowed-countries are resolved server-side from
+   * `userId` (never accepted as client-supplied fields), using the same
+   * caller-identity convention already used by createCohortMembers() above -
+   * this controller does not enforce JwtAuthGuard, so `userId` here is the admin
+   * identity asserted by the calling service (Aspire-specific-service/LMS/Event
+   * Management Service), exactly as it already is on /create.
+   */
+  @UseFilters(new AllExceptionsFilter(APIID.COHORT_MEMBER_REPORT_FILTER))
+  @Post('/report-filter')
+  @ApiBasicAuth('access-token')
+  @ApiCreatedResponse({ description: 'Filtered cohort members list.' })
+  @ApiBadRequestResponse({ description: 'Bad request' })
+  @ApiBody({ type: CohortMembersReportFilterDto })
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  public async reportFilterCohortMembers(
+    @Query('userId') userId: string,
+    @Body() cohortMembersReportFilterDto: CohortMembersReportFilterDto,
+    @Res() response: Response
+  ) {
+    if (!userId || !isUUID(userId)) {
+      throw new BadRequestException('unauthorized!');
+    }
+    return this.cohortMemberAdapter
+      .buildCohortMembersAdapter()
+      .reportFilterCohortMembers(
+        cohortMembersReportFilterDto,
+        userId,
         response
       );
   }

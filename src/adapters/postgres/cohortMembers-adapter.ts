@@ -828,6 +828,11 @@ export class PostgresCohortMembersService {
       cohortMembers.createdBy = loginUser;
       cohortMembers.updatedBy = loginUser;
       cohortMembers.cohortAcademicYearId = cohortacAdemicyearId;
+      // Aspire Leaders-specific: resolve and cache this member's country id once,
+      // at insert time - see resolveUserCohortCountryId() for why this is never
+      // recomputed afterward.
+      (cohortMembers as any).userCohortCountryId =
+        await this.resolveUserCohortCountryId(cohortMembers.userId);
       // Create a new CohortMembers entity and populate it with cohortMembers data
       const savedCohortMember = await this.cohortMembersRepository.save(
         cohortMembers
@@ -2519,6 +2524,12 @@ export class PostgresCohortMembersService {
               });
             } else {
               // Create new cohort member
+              // Aspire Leaders-specific: resolve and cache this member's country id
+              // once, at insert time - see resolveUserCohortCountryId() for why this
+              // is never recomputed afterward.
+              const userCohortCountryId = await this.resolveUserCohortCountryId(
+                userId
+              );
               const cohortMemberForAcademicYear = {
                 ...cohortMembers,
                 cohortAcademicYearId: cohortExists[0].cohortAcademicYearId,
@@ -2530,6 +2541,7 @@ export class PostgresCohortMembersService {
                     : MemberStatus.ACTIVE
                   : MemberStatus.ACTIVE,
                 statusReason: cohortMembersDto.statusReason || '',
+                userCohortCountryId,
               };
 
               result = await this.cohortMembersRepository.save(
@@ -6894,5 +6906,172 @@ export class PostgresCohortMembersService {
       [userId, tenantId]
     );
     return result.length > 0;
+  }
+
+  /**
+   * Aspire Leaders-specific: resolves a member's Users.country free-text value to
+   * countries.id via a single indexed join (case + whitespace insensitive match on
+   * countries.name). Called exactly once, at CohortMembers insert time
+   * (createCohortMembers / createBulkCohortMembers), and the result is cached on
+   * user_cohort_country_id - it is never recomputed after that, even if the user
+   * later changes their profile country, because the country is a property of
+   * *that cohort application*, not a live mirror of the user's current profile.
+   * Returns null when the user has no country set, or it doesn't match any row
+   * in `countries` - both are expected, not error, cases.
+   */
+  private async resolveUserCohortCountryId(
+    userId: string
+  ): Promise<string | null> {
+    const rows = await this.usersRepository.query(
+      `SELECT c.id AS "countryId"
+       FROM "Users" u
+       JOIN countries c ON LOWER(TRIM(c.name)) = LOWER(TRIM(u.country))
+       WHERE u."userId" = $1
+       LIMIT 1`,
+      [userId]
+    );
+    return rows?.[0]?.countryId ?? null;
+  }
+
+  /**
+   * Aspire Leaders-specific: resolves the calling Regional Admin's own allowed
+   * countries into countries.id values, for use as the report-filter's
+   * user_cohort_country_id IN (...) clause. Country ids are NEVER accepted from
+   * the caller/frontend - they are always looked up here, server-side, from the
+   * admin's own profile.
+   *
+   * Mirrors the existing (already-live) frontend convention in
+   * mfes/authentication/src/pages/login.tsx (storeUserRoleAndDetails): a Regional
+   * Admin's allowed countries live in their first custom field value, stored as
+   * either a JSON array string or a comma-separated string of country names -
+   * there is exactly one such custom field on a Regional Admin's profile today.
+   */
+  private async resolveRegionalAdminCountryIds(
+    adminUserId: string
+  ): Promise<string[]> {
+    const [firstFieldValue] = await this.fieldValuesRepository.find({
+      where: { itemId: adminUserId },
+      order: { createdAt: 'ASC' },
+      take: 1,
+    });
+
+    const rawValue =
+      firstFieldValue?.value ??
+      firstFieldValue?.textValue ??
+      firstFieldValue?.checkboxValue ??
+      firstFieldValue?.dropdownValue;
+    if (!rawValue) {
+      return [];
+    }
+
+    // Tolerate both storage shapes already used across the codebase for
+    // multi-value custom fields: a JSON array string, or a comma-separated string.
+    let countryNames: string[];
+    try {
+      const parsed = JSON.parse(rawValue);
+      countryNames = Array.isArray(parsed) ? parsed : [String(parsed)];
+    } catch {
+      countryNames = String(rawValue).split(',');
+    }
+    countryNames = countryNames.map((name) => name.trim()).filter(Boolean);
+    if (countryNames.length === 0) {
+      return [];
+    }
+
+    const normalizedNames = countryNames.map((name) => name.toLowerCase());
+    const rows = await this.usersRepository.query(
+      `SELECT id FROM countries WHERE LOWER(TRIM(name)) = ANY($1::text[])`,
+      [normalizedNames]
+    );
+    return rows.map((row: { id: string }) => row.id);
+  }
+
+  /**
+   * Aspire Leaders-specific lean reporting endpoint: given a cohort and a chunk
+   * of userIds (as produced by LMS/Assessment/Event/Referral report pagination),
+   * returns the matching CohortMembers rows - automatically country-filtered
+   * when the calling admin is a Regional Admin, unfiltered when they're an Admin.
+   *
+   * Role is resolved server-side from `adminUserId` via the existing
+   * getFirstRoleName() helper - never accepted as a client-supplied field, since
+   * it is this endpoint's access-control boundary.
+   */
+  public async reportFilterCohortMembers(
+    reportFilterDto: { cohortId: string; userIds: string[] },
+    adminUserId: string,
+    response: Response
+  ) {
+    const apiId = APIID.COHORT_MEMBER_REPORT_FILTER;
+    try {
+      const { cohortId, userIds } = reportFilterDto;
+
+      // Nothing to match - skip the query entirely rather than issuing an
+      // `IN ()` query.
+      if (!userIds || userIds.length === 0) {
+        return APIResponse.success(
+          response,
+          apiId,
+          { count: 0, items: [] },
+          HttpStatus.OK,
+          API_RESPONSES.COHORT_MEMBER_REPORT_FILTER_SUCCESS
+        );
+      }
+
+      const roleName = await this.userService.getFirstRoleName(adminUserId);
+      const isRegionalAdmin = roleName === 'Regional Admin';
+
+      const whereCondition: Record<string, unknown> = {
+        cohortId,
+        userId: In(userIds),
+      };
+
+      if (isRegionalAdmin) {
+        const allowedCountryIds = await this.resolveRegionalAdminCountryIds(
+          adminUserId
+        );
+
+        // Regional Admin has no resolvable allowed country - nothing can match,
+        // skip the query entirely rather than issuing an `IN ()` query.
+        if (allowedCountryIds.length === 0) {
+          return APIResponse.success(
+            response,
+            apiId,
+            { count: 0, items: [] },
+            HttpStatus.OK,
+            API_RESPONSES.COHORT_MEMBER_REPORT_FILTER_SUCCESS
+          );
+        }
+
+        whereCondition.userCohortCountryId = In(allowedCountryIds);
+      }
+      // Admin role (or any non-Regional-Admin role): no country filtering,
+      // behaves exactly as the cohortId + userId IN (...) match always has.
+
+      const items = await this.cohortMembersRepository.find({
+        where: whereCondition,
+      });
+
+      return APIResponse.success(
+        response,
+        apiId,
+        { count: items.length, items },
+        HttpStatus.OK,
+        API_RESPONSES.COHORT_MEMBER_REPORT_FILTER_SUCCESS
+      );
+    } catch (error) {
+      const fullMessage = error?.message ?? String(error);
+      LoggerUtil.error(
+        API_RESPONSES.SERVER_ERROR,
+        `Error in reportFilterCohortMembers: ${fullMessage}`,
+        apiId
+      );
+      return APIResponse.error(
+        response,
+        apiId,
+        API_RESPONSES.INTERNAL_SERVER_ERROR,
+        API_RESPONSES.INTERNAL_SERVER_ERROR,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
   }
 }
