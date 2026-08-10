@@ -136,6 +136,7 @@ export class AppModule implements OnModuleInit {
       'PaymentsModule',
       'PathwaysModule',
       'ContentModule',
+      'AspireLeadersSpecificModule',
     ]);
   }
 }

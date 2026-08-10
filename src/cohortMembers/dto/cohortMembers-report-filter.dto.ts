@@ -16,7 +16,7 @@ import {
 export class CohortMembersReportFilterDto {
   @ApiProperty({
     description: 'Cohort to filter within',
-    example: 'a1b2c3d4-e111-2222-3333-444455556666',
+    example: 'a1b2c3d4-e111-4222-8333-444455556666',
   })
   @IsUUID()
   cohortId: string;

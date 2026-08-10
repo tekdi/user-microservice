@@ -8,7 +8,7 @@ import {
   Min,
   Max,
 } from 'class-validator';
-import { Expose, Type } from 'class-transformer';
+import { Expose, Transform, Type } from 'class-transformer';
 
 export const ASPIRE_LEADERS_COUNTRY_LIST_DEFAULT_LIMIT = 500;
 export const ASPIRE_LEADERS_COUNTRY_LIST_MAX_LIMIT = 500;
@@ -61,7 +61,11 @@ export class ListCountriesQueryDto {
   })
   @Expose()
   @IsOptional()
-  @Type(() => Boolean)
+  @Transform(({ value }) => {
+    if (value === 'true') return true;
+    if (value === 'false') return false;
+    return value;
+  })
   @IsBoolean()
   is_active?: boolean;
 }

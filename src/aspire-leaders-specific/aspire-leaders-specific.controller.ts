@@ -34,7 +34,7 @@ export class AspireLeadersSpecificController {
   @ApiOperation({
     summary: 'List countries',
     description:
-      'Retrieves countries with optional filter by name (case-insensitive partial match) and status (is_active), with pagination and total count. Default limit is 100.',
+      'Retrieves countries with optional filter by name (case-insensitive partial match) and status (is_active), with pagination and total count. Default limit is 500.',
   })
   @ApiHeader({
     name: 'Authorization',
@@ -75,7 +75,7 @@ export class AspireLeadersSpecificController {
         result: {
           count: 1,
           totalCount: 1,
-          limit: 100,
+          limit: 500,
           offset: 0,
           items: [
             {

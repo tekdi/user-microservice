@@ -7001,7 +7001,10 @@ export class PostgresCohortMembersService {
    *
    * Role is resolved server-side from `adminUserId` via the existing
    * getFirstRoleName() helper - never accepted as a client-supplied field, since
-   * it is this endpoint's access-control boundary.
+   * it is this endpoint's access-control boundary. Fails closed: only the two
+   * known roles ('Admin', 'Regional Admin') are allowed through - an
+   * unresolvable adminUserId or any other/unrecognized role is rejected rather
+   * than falling through to Admin's unfiltered behavior.
    */
   public async reportFilterCohortMembers(
     reportFilterDto: { cohortId: string; userIds: string[] },
@@ -7025,6 +7028,20 @@ export class PostgresCohortMembersService {
       }
 
       const roleName = await this.userService.getFirstRoleName(adminUserId);
+
+      // Fail closed: only these two known roles are allowed through. An
+      // unresolvable adminUserId (null) or any other/unrecognized role must
+      // be rejected here rather than falling through to Admin's unfiltered
+      // behavior - this check is this endpoint's entire access-control boundary.
+      if (roleName !== 'Admin' && roleName !== 'Regional Admin') {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.UNAUTHORIZED,
+          API_RESPONSES.UNAUTHORIZED,
+          HttpStatus.FORBIDDEN
+        );
+      }
       const isRegionalAdmin = roleName === 'Regional Admin';
 
       const whereCondition: Record<string, unknown> = {
