@@ -6940,50 +6940,57 @@ export class PostgresCohortMembersService {
    * the caller/frontend - they are always looked up here, server-side, from the
    * admin's own profile.
    *
-   * Mirrors the existing (already-live) frontend convention in
-   * mfes/authentication/src/pages/login.tsx (storeUserRoleAndDetails): a Regional
-   * Admin's allowed countries live in their first custom field value, stored as
-   * either a JSON array string or a comma-separated string of country names -
-   * there is exactly one such custom field on a Regional Admin's profile today.
+   * Verified against real data (not assumed): a Regional Admin's allowed
+   * countries live in the ONE custom field with Fields.name = 'country' AND
+   * Fields.context IS NULL - a general profile-level field, fieldId
+   * 6469c3ac-8c46-49d7-852a-00f9589737c5 in QA. This must NOT be confused with
+   * the several COHORTMEMBER-scoped "country of origin"/"country of residence"
+   * fields (Fields.context = 'COHORTS'), which hold a *cohort applicant's*
+   * country, not the admin's own - hence the explicit `context IS NULL` filter.
+   *
+   * The value is a single string joining the selected countries.name values
+   * with commas (e.g. "India,United States"). A plain split(',') is unsafe:
+   * several real countries.name values contain an internal comma themselves
+   * (e.g. "Bolivia, Plurinational State of", "Korea, Democratic People's
+   * Republic of") - so instead of splitting, this matches by substring
+   * containment against the real country list, longest name first, removing
+   * each match as it's found so a comma-containing name is matched whole
+   * before its comma-free prefix gets a chance to spuriously match on its own.
    */
   private async resolveRegionalAdminCountryIds(
     adminUserId: string
   ): Promise<string[]> {
-    const [firstFieldValue] = await this.fieldValuesRepository.find({
-      where: { itemId: adminUserId },
-      order: { createdAt: 'ASC' },
-      take: 1,
-    });
+    const [fieldValueRow] = await this.usersRepository.query(
+      `SELECT fv."dropdownValue", fv.value
+       FROM "FieldValues" fv
+       JOIN "Fields" f ON f."fieldId" = fv."fieldId"
+       WHERE fv."itemId" = $1
+         AND f.name = 'country'
+         AND f.context IS NULL
+       LIMIT 1`,
+      [adminUserId]
+    );
 
-    const rawValue =
-      firstFieldValue?.value ??
-      firstFieldValue?.textValue ??
-      firstFieldValue?.checkboxValue ??
-      firstFieldValue?.dropdownValue;
+    const rawValue = fieldValueRow?.dropdownValue || fieldValueRow?.value;
     if (!rawValue) {
       return [];
     }
 
-    // Tolerate both storage shapes already used across the codebase for
-    // multi-value custom fields: a JSON array string, or a comma-separated string.
-    let countryNames: string[];
-    try {
-      const parsed = JSON.parse(rawValue);
-      countryNames = Array.isArray(parsed) ? parsed : [String(parsed)];
-    } catch {
-      countryNames = String(rawValue).split(',');
-    }
-    countryNames = countryNames.map((name) => name.trim()).filter(Boolean);
-    if (countryNames.length === 0) {
-      return [];
-    }
+    const allCountries: { id: string; name: string }[] =
+      await this.usersRepository.query(
+        `SELECT id, name FROM countries ORDER BY LENGTH(name) DESC`
+      );
 
-    const normalizedNames = countryNames.map((name) => name.toLowerCase());
-    const rows = await this.usersRepository.query(
-      `SELECT id FROM countries WHERE LOWER(TRIM(name)) = ANY($1::text[])`,
-      [normalizedNames]
-    );
-    return rows.map((row: { id: string }) => row.id);
+    let remaining = String(rawValue);
+    const matchedIds: string[] = [];
+    for (const country of allCountries) {
+      const idx = remaining.toLowerCase().indexOf(country.name.toLowerCase());
+      if (idx !== -1) {
+        matchedIds.push(country.id);
+        remaining = remaining.slice(0, idx) + remaining.slice(idx + country.name.length);
+      }
+    }
+    return matchedIds;
   }
 
   /**
