@@ -1074,7 +1074,7 @@ export class PostgresUserService implements IServicelocator {
 
   /**
    * Optimized: Get tenant/role data with only essential fields
-   * Returns: tenantId, userTenantMappingId, roleId, roleName
+   * Returns: tenantId, userTenantMappingId, roleId, roleName, roleCode
    * Does NOT fetch: tenantName, privileges (for performance optimization)
    *
    * TO ENABLE PRIVILEGES/TENANTNAME IN FUTURE:
@@ -1210,6 +1210,7 @@ export class PostgresUserService implements IServicelocator {
         const roleId = roleData.roleid || roleData.roleId;
         // Handle both lowercase and camelCase property names from TypeORM
         const roleName = roleData.title || roleData.Title;
+        const roleCode = roleData.code || roleData.Code;
 
         // ============================================================================
         // OPTIMIZATION: Privileges commented out - not needed by frontend
@@ -1223,6 +1224,7 @@ export class PostgresUserService implements IServicelocator {
           userTenantMappingId: userTenantMappingId,
           roleId: roleId,
           roleName: roleName,
+          roleCode: roleCode,
           // privileges: privileges, // Commented out - not needed by frontend
         });
       }
