@@ -1,4 +1,4 @@
-import { ConsoleLogger, HttpStatus, Injectable } from "@nestjs/common";
+import { ConsoleLogger, HttpStatus, Injectable, Inject } from "@nestjs/common";
 import { FieldsDto } from "./dto/fields.dto";
 import {
   FieldsOptionsSearchDto,
@@ -24,17 +24,62 @@ import jwt_decode from "jwt-decode";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
 import { API_RESPONSES } from "@utils/response.messages";
 import { FieldValuesDeleteDto } from "./dto/field-values-delete.dto";
+import { AuditLoggerService } from "@tekdi/audit-logger/nestjs";
+import { requestContext } from "@utils/request-context";
+import { getAuditContext } from "@utils/audit-helper";
 import { check } from "prettier";
+import { CacheService } from "../cache/cache.service";
+import { hashCacheKey } from "../cache/cache-key.util";
+
+const UFIELDS_TTL_SECONDS = 3600; // ufields:{userId}, 1 h
+const USERFILTER_TTL_SECONDS = 300; // userfilter, 5 min
+const FIELDSDEF_TTL_SECONDS = 3600; // fields:{tenantId}, 1 h
+
 @Injectable()
 export class FieldsService {
   constructor(
     @InjectRepository(Fields)
-    private fieldsRepository: Repository<Fields>,
+    private readonly fieldsRepository: Repository<Fields>,
     @InjectRepository(FieldValues)
-    private fieldsValuesRepository: Repository<FieldValues>
+    private readonly fieldsValuesRepository: Repository<FieldValues>,
+    private readonly cacheService: CacheService,
+    @Inject(AuditLoggerService)
+    private readonly auditLoggerService: AuditLoggerService
   ) { }
 
+  private emitAuditSafely(event: any): void {
+    try {
+      this.auditLoggerService.emit(event);
+    } catch (err: any) {
+      LoggerUtil.error(`Audit emission failed: ${err?.message || err}`, "", "AuditLogger");
+    }
+  }
+
+  // No tenant header on this endpoint, so it shares the global fields namespace.
   async getFormCustomField(requiredData, response) {
+    const payload = await this.cacheService.getOrLoad({
+      namespace: "fields:global",
+      key: `formFields:${requiredData?.context || "none"}:${requiredData?.contextType || "none"}`,
+      dependsOn: ["fieldsdef"],
+      ttlSeconds: FIELDSDEF_TTL_SECONDS,
+      loader: async () => {
+        const result = await this.getFormCustomFieldData(requiredData, response);
+        return response.headersSent ? null : result;
+      },
+    });
+    if (payload === null || payload === undefined) {
+      return; // error response already written inside the loader
+    }
+    return APIResponse.success(
+      response,
+      "FormData",
+      payload,
+      HttpStatus.OK,
+      "Fields fetched successfully."
+    );
+  }
+
+  private async getFormCustomFieldData(requiredData, response) {
     const apiId = "FormData";
     try {
       let whereClause = '(context IS NULL AND "contextType" IS NULL)';
@@ -56,13 +101,8 @@ export class FieldsService {
             HttpStatus.NOT_FOUND
           );
         }
-        return APIResponse.success(
-          response,
-          apiId,
-          data,
-          HttpStatus.OK,
-          "Fields fetched successfully."
-        );
+        // Raw payload for the caching wrapper; it writes the success response.
+        return data;
       }
 
       if (requiredData.context) {
@@ -90,13 +130,8 @@ export class FieldsService {
         const coreFields = corefield[requiredData.context.toLowerCase()];
         data.push(...coreFields);
       }
-      return APIResponse.success(
-        response,
-        apiId,
-        data,
-        HttpStatus.OK,
-        "Fields fetched successfully."
-      );
+      // Raw payload for the caching wrapper; it writes the success response.
+      return data;
     } catch (error) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
@@ -339,7 +374,8 @@ export class FieldsService {
     return schema;
   }
 
-  async createFields(request: any, fieldsDto: FieldsDto, response: Response) {
+  async createFields(fieldsDto: FieldsDto, response: Response) {
+    const request = requestContext.getStore() as any;
     const apiId = APIID.FIELDS_CREATE;
     try {
       const fieldsData: any = {}; // Define an empty object to store field data
@@ -384,6 +420,16 @@ export class FieldsService {
         fieldsData.sourceDetails.source == "table" &&
         fieldsData.fieldParams
       ) {
+        if (!this.isValidSqlIdentifier(fieldsData.sourceDetails.table)) {
+          return APIResponse.error(
+            response,
+            apiId,
+            "BAD_REQUEST",
+            `Error: Invalid source table name.`,
+            HttpStatus.BAD_REQUEST
+          );
+        }
+
         for (const sourceFieldName of fieldsData.fieldParams.options) {
           if (
             fieldsData.dependsOn &&
@@ -393,13 +439,14 @@ export class FieldsService {
             storeWithoutControllingField.push(sourceFieldName["name"]);
           }
 
-          const query = `SELECT "name", "value" 
-          FROM public.${fieldsData.sourceDetails.table} 
-          WHERE value = '${sourceFieldName["value"]}' 
+          const query = `SELECT "name", "value"
+          FROM public.${fieldsData.sourceDetails.table}
+          WHERE value = $1
           GROUP BY  "name", "value"`;
 
           const checkSourceData = await this.fieldsValuesRepository.query(
-            query
+            query,
+            [sourceFieldName["value"]]
           );
 
           //If code is not exist in db
@@ -455,6 +502,7 @@ export class FieldsService {
       }
 
       const result = await this.fieldsRepository.save(fieldsData);
+      await this.invalidateFieldDefinitionCaches(fieldsData?.tenantId);
 
       return await APIResponse.success(
         response,
@@ -482,10 +530,10 @@ export class FieldsService {
 
   async updateFields(
     fieldId: any,
-    request: any,
     fieldsUpdateDto: FieldsUpdateDto,
     response: Response
   ) {
+    const request = requestContext.getStore() as any;
     const apiId = APIID.FIELDS_CREATE;
     try {
       const decoded: any = jwt_decode(request.headers.authorization);
@@ -522,6 +570,16 @@ export class FieldsService {
         fieldsData.fieldParams.options &&
         getSourceDetails.sourceDetails.source == "table"
       ) {
+        if (!this.isValidSqlIdentifier(getSourceDetails.sourceDetails.table)) {
+          return APIResponse.error(
+            response,
+            apiId,
+            "BAD_REQUEST",
+            `Error: Invalid source table name.`,
+            HttpStatus.BAD_REQUEST
+          );
+        }
+
         for (const sourceFieldName of fieldsData.fieldParams.options) {
           if (
             getSourceDetails.dependsOn &&
@@ -532,13 +590,14 @@ export class FieldsService {
           }
 
           // check options exits in source table column or not
-          const query = `SELECT "name", "value" 
-          FROM public.${getSourceDetails.sourceDetails.table} 
-          WHERE value = '${sourceFieldName["value"]}' 
+          const query = `SELECT "name", "value"
+          FROM public.${getSourceDetails.sourceDetails.table}
+          WHERE value = $1
           GROUP BY  "name", "value"`;
 
           const checkSourceData = await this.fieldsValuesRepository.query(
-            query
+            query,
+            [sourceFieldName["value"]]
           );
 
           //If code is not exist in db
@@ -604,8 +663,11 @@ export class FieldsService {
           }
 
           // check options exits in fieldParams column or not
-          const query = `SELECT COUNT(*) FROM public."Fields" WHERE "fieldId"='${fieldId}' AND "fieldParams" -> 'options' @> '[{"value": "${sourceFieldName["value"]}"}]' `;
-          const checkSourceData = await this.fieldsRepository.query(query);
+          const query = `SELECT COUNT(*) FROM public."Fields" WHERE "fieldId"=$1 AND "fieldParams" -> 'options' @> $2::jsonb`;
+          const checkSourceData = await this.fieldsRepository.query(query, [
+            fieldId,
+            JSON.stringify([{ value: sourceFieldName["value"] }]),
+          ]);
 
           //If fields is not present then create a new options
           if (checkSourceData[0].count == 0) {
@@ -633,6 +695,7 @@ export class FieldsService {
       }
 
       const result = await this.fieldsRepository.update(fieldId, fieldsData);
+      await this.invalidateFieldDefinitionCaches(fieldsData?.tenantId);
       return await APIResponse.success(
         response,
         apiId,
@@ -694,18 +757,24 @@ export class FieldsService {
     controllingfieldfk?: string,
     dependsOn?: string
   ) {
+    if (!this.isValidSqlIdentifier(tableName)) {
+      throw new Error(`Invalid source table name: ${tableName}`);
+    }
+
+    const params: any[] = [name, value, createdBy];
     let createSourceFields = `INSERT INTO public.${tableName} ("name", "value", "createdBy"`;
 
     // Add controllingfieldfk to the columns if it is defined
     if (controllingfieldfk !== undefined && controllingfieldfk !== "") {
       createSourceFields += `, controllingfieldfk`;
+      params.push(controllingfieldfk);
     }
 
-    createSourceFields += `) VALUES ('${name}', '${value}', '${createdBy}'`;
+    createSourceFields += `) VALUES ($1, $2, $3`;
 
     // Add controllingfieldfk to the values if it is defined
     if (controllingfieldfk !== undefined && controllingfieldfk !== "") {
-      createSourceFields += `, '${controllingfieldfk}'`;
+      createSourceFields += `, $4`;
     }
 
     createSourceFields += `);`;
@@ -716,7 +785,8 @@ export class FieldsService {
 
     //Insert data into source table
     const checkSourceData = await this.fieldsValuesRepository.query(
-      createSourceFields
+      createSourceFields,
+      params
     );
     if (checkSourceData.length == 0) {
       return false;
@@ -730,16 +800,24 @@ export class FieldsService {
     updatedBy: string,
     controllingfieldfk?: string
   ) {
-    let updateSourceDetails = `UPDATE public.${tableName} SET "name"='${name}',"updatedBy"='${updatedBy}'`;
-
-    if (controllingfieldfk !== undefined) {
-      updateSourceDetails += `, controllingfieldfk='${controllingfieldfk}'`;
+    if (!this.isValidSqlIdentifier(tableName)) {
+      throw new Error(`Invalid source table name: ${tableName}`);
     }
 
-    updateSourceDetails += ` WHERE value='${value}';`;
+    const params: any[] = [name, updatedBy];
+    let updateSourceDetails = `UPDATE public.${tableName} SET "name"=$1,"updatedBy"=$2`;
+
+    if (controllingfieldfk !== undefined) {
+      params.push(controllingfieldfk);
+      updateSourceDetails += `, controllingfieldfk=$${params.length}`;
+    }
+
+    params.push(value);
+    updateSourceDetails += ` WHERE value=$${params.length};`;
 
     const updateSourceData = await this.fieldsValuesRepository.query(
-      updateSourceDetails
+      updateSourceDetails,
+      params
     );
     if (updateSourceData.length == 0) {
       return false;
@@ -781,7 +859,38 @@ export class FieldsService {
     }
   }
 
+  // Wrapper writes the success response; the inner method returns the payload
+  // and still writes its own error responses (headersSent tells the wrapper,
+  // so failures are never cached).
   async searchFields(
+    tenantId: string,
+    request: any,
+    fieldsSearchDto: FieldsSearchDto,
+    response: Response
+  ) {
+    const payload = await this.cacheService.getOrLoad({
+      namespace: `fields:${tenantId ?? "global"}`,
+      key: `search:${hashCacheKey(fieldsSearchDto)}`,
+      dependsOn: ["fieldsdef"],
+      ttlSeconds: FIELDSDEF_TTL_SECONDS,
+      loader: async () => {
+        const result = await this.searchFieldsData(tenantId, request, fieldsSearchDto, response);
+        return response.headersSent ? null : result;
+      },
+    });
+    if (payload === null || payload === undefined) {
+      return; // an error response was already written inside the loader
+    }
+    return APIResponse.success(
+      response,
+      APIID.FIELDS_SEARCH,
+      payload,
+      HttpStatus.OK,
+      "Fields fetched successfully."
+    );
+  }
+
+  private async searchFieldsData(
     tenantId: string,
     request: any,
     fieldsSearchDto: FieldsSearchDto,
@@ -834,13 +943,8 @@ export class FieldsService {
           HttpStatus.NOT_FOUND
         );
       }
-      return APIResponse.success(
-        response,
-        apiId,
-        fieldData,
-        HttpStatus.OK,
-        "Fields fetched successfully."
-      );
+      // Raw payload for the caching wrapper; it writes the success response.
+      return fieldData;
     } catch (error) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
@@ -880,7 +984,6 @@ export class FieldsService {
   }
 
   async createFieldValues(
-    request: any,
     fieldValuesDto: FieldValuesDto,
     res: Response
   ) {
@@ -897,13 +1000,40 @@ export class FieldsService {
           HttpStatus.NOT_FOUND
         );
       }
-      return APIResponse.success(
+      if (result) {
+        // itemId here may be a userId or a cohortId; bumping ufields for a
+        // cohortId is harmless (nothing ever reads ufields with a cohortId).
+        // userfilter covers both contexts, and userlist:{t} is bumped for
+        // each tenant the item maps to (empty when itemId isn't a user).
+        const tenantIds = await this.getUserTenantIds(fieldValuesDto.itemId);
+        await this.cacheService.invalidate([
+          `ufields:${fieldValuesDto.itemId}`,
+          `cfields:${fieldValuesDto.itemId}`,
+          "userfilter",
+          ...tenantIds.map((t) => `userlist:${t}`),
+        ]);
+      }
+      const apiRes = APIResponse.success(
         res,
         apiId,
         result,
         HttpStatus.CREATED,
         "Field Values created successfully"
       );
+
+      const auditCtx = getAuditContext();
+      this.emitAuditSafely({
+        entityType: "FIELD_VALUE",
+        entityId: "MULTIPLE",
+        eventAction: "CREATED",
+        ...auditCtx,
+        metadata: {
+          fieldId: fieldValuesDto.fieldId,
+          itemId: fieldValuesDto.itemId,
+          value: fieldValuesDto.value
+        }
+      });
+      return apiRes;
     } catch (error) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,
@@ -1174,8 +1304,35 @@ export class FieldsService {
     return { offset, limit, whereClause };
   }
 
-  //Get all fields options
+  // The endpoint carries no tenant header, so it lives under the global fields
+  // namespace — the same field-definition writes bump both.
   public async getFieldOptions(
+    fieldsOptionsSearchDto: FieldsOptionsSearchDto,
+    response: Response
+  ) {
+    const payload = await this.cacheService.getOrLoad({
+      namespace: "fields:global",
+      key: `options:${hashCacheKey(fieldsOptionsSearchDto)}`,
+      dependsOn: ["fieldsdef"],
+      ttlSeconds: FIELDSDEF_TTL_SECONDS,
+      loader: async () => {
+        const result = await this.getFieldOptionsData(fieldsOptionsSearchDto, response);
+        return response.headersSent ? null : result;
+      },
+    });
+    if (payload === null || payload === undefined) {
+      return; // error response already written inside the loader
+    }
+    return APIResponse.success(
+      response,
+      APIID.FIELDVALUES_SEARCH,
+      payload,
+      HttpStatus.OK,
+      "Field options fetched successfully."
+    );
+  }
+
+  private async getFieldOptionsData(
     fieldsOptionsSearchDto: FieldsOptionsSearchDto,
     response: Response
   ) {
@@ -1207,18 +1364,38 @@ export class FieldsService {
         condition.contextType = contextType;
       }
 
+      if (!this.isValidSqlIdentifier(fieldName)) {
+        return await APIResponse.error(
+          response,
+          apiId,
+          "BAD_REQUEST",
+          `Error: Invalid fieldName.`,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
       const fetchFieldParams = await this.fieldsRepository.findOne({
         where: condition,
       });
       let order;
       if (sort?.length) {
         const orderKey = sort[1].toUpperCase();
+        if (!this.isValidSqlIdentifier(sort[0])) {
+          return await APIResponse.error(
+            response,
+            apiId,
+            "BAD_REQUEST",
+            `Error: Invalid sort field.`,
+            HttpStatus.BAD_REQUEST
+          );
+        }
         order = `ORDER BY "${sort[0]}" ${orderKey}`;
       } else {
         order = `ORDER BY ${fieldName}_name ASC`;
       }
       if (fetchFieldParams?.sourceDetails?.source === "table") {
         let whereClause;
+        let whereParams: any[] = [];
         if (controllingfieldfk) {
           if (!fetchFieldParams.dependsOn) {
             return await APIResponse.error(
@@ -1229,17 +1406,22 @@ export class FieldsService {
               HttpStatus.NOT_FOUND
             );
           }
-          let foreignKeys = controllingfieldfk.toString();
-          whereClause = `"${fetchFieldParams?.dependsOn}_id" IN(${foreignKeys})`;
+          const foreignKeysArr = controllingfieldfk.map((fk) => fk.toString());
+          const placeholders = foreignKeysArr
+            .map((_, idx) => `$${idx + 1}`)
+            .join(",");
+          whereClause = `"${fetchFieldParams?.dependsOn}_id" IN(${placeholders})`;
+          whereParams = foreignKeysArr;
         }
-        
+
         dynamicOptions = await this.findDynamicOptions(
           fieldName,
           whereClause,
           offset,
           limit,
           order,
-          optionName
+          optionName,
+          whereParams
         );
       } else if (fetchFieldParams?.sourceDetails?.source === "jsonFile") {
         const filePath = path.join(
@@ -1310,13 +1492,8 @@ export class FieldsService {
         values: queryData,
       };
 
-      return await APIResponse.success(
-        response,
-        apiId,
-        result,
-        HttpStatus.OK,
-        "Field options fetched successfully."
-      );
+      // Raw payload for the caching wrapper; it writes the success response.
+      return result;
     } catch (e) {
       LoggerUtil.error(`${API_RESPONSES.SERVER_ERROR}`, `Error: ${e.message}`);
       const errorMessage = e?.message || API_RESPONSES.SERVER_ERROR;
@@ -1380,11 +1557,27 @@ export class FieldsService {
 
       //Delete data from source table
       if (getField?.sourceDetails?.source == "table") {
-        const whereCond = requiredData.option
-          ? `WHERE "value"='${requiredData.option}'`
-          : "";
+        if (!this.isValidSqlIdentifier(getField?.sourceDetails?.table)) {
+          return await APIResponse.error(
+            response,
+            apiId,
+            "BAD_REQUEST",
+            `Error: Invalid source table name.`,
+            HttpStatus.BAD_REQUEST
+          );
+        }
+
+        const deleteParams: any[] = [];
+        let whereCond = "";
+        if (requiredData.option) {
+          deleteParams.push(requiredData.option);
+          whereCond = `WHERE "value"=$1`;
+        }
         const query = `DELETE FROM public.${getField?.sourceDetails?.table} ${whereCond}`;
-        const [_, affectedRow] = await this.fieldsRepository.query(query);
+        const [_, affectedRow] = await this.fieldsRepository.query(
+          query,
+          deleteParams
+        );
 
         if (affectedRow === 0) {
           return await APIResponse.error(
@@ -1400,8 +1593,11 @@ export class FieldsService {
       //Delete data from fieldParams column
       if (getField?.sourceDetails?.source == "fieldparams") {
         // check options exits in fieldParams column or not
-        const query = `SELECT * FROM public."Fields" WHERE "fieldId"='${getField.fieldId}' AND "fieldParams" -> 'options' @> '[{"value": "${removeOption}"}]' `;
-        const checkSourceData = await this.fieldsRepository.query(query);
+        const query = `SELECT * FROM public."Fields" WHERE "fieldId"=$1 AND "fieldParams" -> 'options' @> $2::jsonb`;
+        const checkSourceData = await this.fieldsRepository.query(query, [
+          getField.fieldId,
+          JSON.stringify([{ value: removeOption }]),
+        ]);
 
         if (checkSourceData.length > 0) {
           let fieldParamsOptions = checkSourceData[0].fieldParams.options;
@@ -1432,6 +1628,7 @@ export class FieldsService {
         }
       }
       if (result.affected > 0) {
+        await this.invalidateFieldDefinitionCaches(getField?.tenantId);
         return await APIResponse.success(
           response,
           apiId,
@@ -1459,13 +1656,19 @@ export class FieldsService {
     offset?: any,
     limit?: any,
     order?: any,
-    optionSelected?: any
+    optionSelected?: any,
+    whereParams: any[] = []
   ) {
     try {
+      if (!this.isValidSqlIdentifier(tableName)) {
+        return null;
+      }
+
       const orderCond = order || "";
       const offsetCond = offset ? `offset ${offset}` : "";
       const limitCond = limit ? `limit ${limit}` : "";
       const conditions = [];
+      const params: any[] = [...whereParams];
 
       if (whereClause) {
         conditions.push(`${whereClause}`);
@@ -1475,14 +1678,15 @@ export class FieldsService {
       conditions.push(`is_active=1`);
 
       if (optionSelected) {
-        conditions.push(`"${tableName}_name" ILike '%${optionSelected}%'`);
+        params.push(`%${optionSelected}%`);
+        conditions.push(`"${tableName}_name" ILike $${params.length}`);
       }
 
       const whereCond = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
 
       const query = `SELECT *,COUNT(*) OVER() AS total_count FROM public."${tableName}" ${whereCond} ${orderCond} ${offsetCond} ${limitCond}`;
 
-      const result = await this.fieldsRepository.query(query);
+      const result = await this.fieldsRepository.query(query, params);
       if (!result) {
         return null;
       }
@@ -1538,15 +1742,25 @@ export class FieldsService {
   }
 
   // OPTIMIZED VERSION - Much faster alternative to avoid JSON aggregation
+  // One shared userfilter cache for all three call sites (user search, cohort
+  // search, cron). A null result is never cached.
   async filterUserUsingCustomFieldsOptimized(context: string, stateDistBlockData: any) {
     if (context !== "COHORT" && context !== "USERS") {
       return null;
     }
-
-    // No filters provided — return null so callers treat it as no custom field constraint
     if (!stateDistBlockData || Object.keys(stateDistBlockData).length === 0) {
       return null;
     }
+
+    return this.cacheService.getOrLoad<string[]>({
+      namespace: "userfilter",
+      key: `${context}:${hashCacheKey(stateDistBlockData)}`,
+      ttlSeconds: USERFILTER_TTL_SECONDS,
+      loader: () => this.filterUserUsingCustomFieldsUncached(context, stateDistBlockData),
+    });
+  }
+
+  private async filterUserUsingCustomFieldsUncached(context: string, stateDistBlockData: any) {
 
     const idColumn = context === "COHORT" ? `c."cohortId"` : `u."userId"`;
     const baseTable = context === "COHORT" ? `"Cohort" c` : `"Users" u`;
@@ -1925,6 +2139,37 @@ export class FieldsService {
     if (!itemIds || itemIds.length === 0) {
       return {};
     }
+
+    // Per-owner bulk hydration: ufields:{userId} for Users, cfields:{cohortId}
+    // for Cohort. Both declare dependsOn fieldsdef, so one epoch bump makes
+    // every owner's entries stale at once.
+    if (tableName === "Users" || tableName === "Cohort") {
+      const nsPrefix = tableName === "Users" ? "ufields" : "cfields";
+      const hydrated = await this.cacheService.bulkGetOrLoad<any[]>({
+        ids: itemIds,
+        namespaceFor: (id) => `${nsPrefix}:${id}`,
+        dependsOn: ["fieldsdef"],
+        ttlSeconds: UFIELDS_TTL_SECONDS,
+        loader: async (missingIds) => {
+          const fetched = await this.fetchBulkCustomFieldDetails(missingIds, tableName);
+          return new Map(Object.entries(fetched));
+        },
+      });
+
+      const result: Record<string, any[]> = {};
+      itemIds.forEach((id) => {
+        result[id] = hydrated.get(id) ?? [];
+      });
+      return result;
+    }
+
+    return this.fetchBulkCustomFieldDetails(itemIds, tableName);
+  }
+
+  private async fetchBulkCustomFieldDetails(
+    itemIds: string[],
+    tableName: string
+  ): Promise<Record<string, any[]>> {
     let joinCond: string;
     if (tableName === "Users") {
       joinCond = `fv."itemId" = u."userId"`;
@@ -2075,6 +2320,50 @@ export class FieldsService {
     }
   }
 
+  /**
+   * Single invalidation point for every field-DEFINITION write
+   * (POST /fields/create, PATCH /fields/update/:fieldId,
+   * DELETE /fields/options/delete/:fieldName).
+   *
+   *  - `fieldsdef` is the global epoch. Every definition-dependent read
+   *    (ufields, cfields, cohort, cohortmember, fields, form) declares it as
+   *    a dependsOn, so this one INCR invalidates them across ALL tenants —
+   *    which matters because a global (tenantId IS NULL) field definition
+   *    affects every tenant and we cannot enumerate them.
+   *  - the writing tenant's own `fields:{t}` / `form:{t}` are bumped
+   *    explicitly as well, so the two move together rather than relying on
+   *    the epoch alone.
+   *  - forms embed field definitions, hence the form bump.
+   */
+  private async invalidateFieldDefinitionCaches(tenantId?: string): Promise<void> {
+    await this.cacheService.invalidate([
+      "fieldsdef",
+      "fields:global",
+      "form:global",
+      ...(tenantId ? [`fields:${tenantId}`, `form:${tenantId}`] : []),
+    ]);
+  }
+
+  /**
+   * Tenants a user maps to — used to bump userlist:{t} from write paths that
+   * only know the userId. Empty for non-user itemIds. Never throws: a failed
+   * lookup must not turn an already-committed write into an error response
+   * (the userfilter/ufields bumps still run; only the userlist bump is lost,
+   * and its 3-min TTL bounds the exposure).
+   */
+  private async getUserTenantIds(userId: string): Promise<string[]> {
+    try {
+      const rows = await this.fieldsValuesRepository.query(
+        `SELECT "tenantId" FROM public."UserTenantMapping" WHERE "userId" = $1`,
+        [userId]
+      );
+      return rows.map((r) => r.tenantId).filter(Boolean);
+    } catch (error) {
+      LoggerUtil.warn(`Tenant lookup for cache invalidation failed: ${error.message}`, "FieldsService");
+      return [];
+    }
+  }
+
   public async getFieldsByIds(fieldIds: string[]) {
     return this.fieldsRepository.find({
       where: {
@@ -2116,13 +2405,34 @@ export class FieldsService {
         )
         .execute();
 
-      return await APIResponse.success(
+      const deletedItemIds = [...new Set(conditions.map((c) => c.itemId))];
+      const tenantIdLists = await Promise.all(deletedItemIds.map((id) => this.getUserTenantIds(id)));
+      await this.cacheService.invalidate([
+        ...deletedItemIds.map((id) => `ufields:${id}`),
+        ...deletedItemIds.map((id) => `cfields:${id}`),
+        "userfilter",
+        ...[...new Set(tenantIdLists.flat())].map((t) => `userlist:${t}`),
+      ]);
+
+      const apiRes = await APIResponse.success(
         response,
         apiId,
         result,
         HttpStatus.OK,
         "Field Values deleted successfully."
       );
+
+      const auditCtx = getAuditContext();
+      this.emitAuditSafely({
+        entityType: "FIELD_VALUE",
+        entityId: "MULTIPLE",
+        eventAction: "DELETED",
+        ...auditCtx,
+        metadata: {
+          deletedFieldValues: fieldValuesDeleteDto.fieldValues
+        }
+      });
+      return apiRes;
     } catch (e) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}`,

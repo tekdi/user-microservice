@@ -211,6 +211,7 @@ export class CohortMembersController {
     }
     const result = await this.cohortMembersService
       .updateCohortMembers(
+        request,
         cohortMembersId,
         loginUser,
         cohortMemberUpdateDto,

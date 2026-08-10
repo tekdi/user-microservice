@@ -1,4 +1,5 @@
 import { HttpStatus, Injectable } from "@nestjs/common";
+import { AuditLoggerService } from "@tekdi/audit-logger/nestjs";
 import { User } from "./entities/user-entity";
 import { FieldValues } from "src/fields/entities/fields-values.entity";
 import { InjectRepository } from "@nestjs/typeorm";
@@ -30,6 +31,8 @@ import APIResponse from "src/common/responses/response";
 import { Request, Response, query } from "express";
 import { APIID } from "src/common/utils/api-id.config";
 import { FieldsService } from "src/fields/fields.service";
+import { CacheService } from "../cache/cache.service";
+import { hashCacheKey } from "../cache/cache-key.util";
 import { RoleService } from "src/rbac/role/role.service";
 import { CustomFieldsValidation } from "@utils/custom-field-validation";
 import { NotificationRequest } from "@utils/notification.axios";
@@ -42,6 +45,10 @@ import { CohortAcademicYearService } from "src/cohortAcademicYear/cohortAcademic
 import { AcademicYearService } from "src/academicyears/academicyears.service";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
 import { AuthUtils } from "@utils/auth-util";
+import { getAuditContext } from "@utils/audit-helper";
+import { requestContext } from "@utils/request-context";
+
+
 import { OtpSendDTO } from "./dto/otpSend.dto";
 import { OtpVerifyDTO } from "./dto/otpVerify.dto";
 import { SendPasswordResetOTPDto } from "./dto/passwordReset.dto";
@@ -59,6 +66,9 @@ interface UpdateField {
   username?: string; // Optional
   email?: string; // Optional
 }
+const USERLIST_TTL_SECONDS = 180; // userlist:{tenantId}, 3 min
+const USER_CORE_TTL_SECONDS = 900; // GET /read/:userId, 15 min
+
 @Injectable()
 export class UserService {
   axios = require("axios");
@@ -100,6 +110,8 @@ export class UserService {
     private readonly authUtils: AuthUtils,
     private readonly automaticMemberService: AutomaticMemberService,
     private readonly kafkaService: KafkaService,
+    private readonly cacheService: CacheService,
+    private readonly auditLoggerService: AuditLoggerService,
     dataSource: DataSource
   ) {
     this.jwt_secret = this.configService.get<string>("RBAC_JWT_SECRET");
@@ -117,16 +129,28 @@ export class UserService {
     this.dataSource = dataSource; // Store dataSource in class property
   }
 
+  private emitAuditSafely(event: any): void {
+    try {
+      this.auditLoggerService.emit(event);
+    } catch (err: any) {
+      LoggerUtil.error(`Audit emission failed: ${err?.message || err}`, "", "AuditLogger");
+    }
+  }
+
+  // Entity metadata is immutable per deploy, so compute once per process — no
+  // Redis involved.
+  private coreColumnNamesMemo: string[] | null = null;
 
   public async getCoreColumnNames() {
-    const userMetadata = this.dataSource.getMetadata(User);
-    const columnNames = userMetadata.columns.map((column) => column.propertyName);
-    return columnNames;
+    if (!this.coreColumnNamesMemo) {
+      const userMetadata = this.dataSource.getMetadata(User);
+      this.coreColumnNamesMemo = userMetadata.columns.map((column) => column.propertyName);
+    }
+    return this.coreColumnNamesMemo;
   }
 
 
   public async sendPasswordResetLink(
-    request: any,
     username: string,
     redirectUrl: string,
     response: Response
@@ -244,7 +268,6 @@ export class UserService {
   }
 
   async forgotPassword(
-    request: any,
     body: any,
     response: Response<any, Record<string, any>>
   ) {
@@ -281,7 +304,6 @@ export class UserService {
       let apiResponse: any;
       try {
         apiResponse = await this.resetKeycloakPassword(
-          request,
           userData,
           keyClocktoken,
           body.newPassword,
@@ -359,12 +381,12 @@ export class UserService {
 
   async searchUser(
     tenantId: string,
-    request: any,
     response: any,
     userSearchDto: UserSearchDto,
     includeCustomFields: boolean = true
   ) {
     const apiId = APIID.USER_LIST;
+    const request = requestContext.getStore() as any;
     try {
       const findData = await this.findAllUserDetails(userSearchDto, tenantId, includeCustomFields);
       if (findData === false) {
@@ -413,7 +435,6 @@ export class UserService {
  */
   async searchUserMultiTenant(
     tenantId: string,
-    request: any,
     response: any,
     userHierarchyViewDto: UserHierarchyViewDto
   ) {
@@ -776,7 +797,23 @@ export class UserService {
   //   }
   //   return result;
   // }
+  // Full response cache of the POST /list search under userlist:{tenantId}.
+  // The tenant-less caller (domain email lookup) bypasses the cache: no
+  // tenant to key by, and it feeds an auth-adjacent flow that must not be
+  // cached. `false` (no results) is never cached.
   async findAllUserDetails(userSearchDto, tenantId?: string, includeCustomFields: boolean = true) {
+    if (!tenantId || tenantId.trim() === "") {
+      return this.findAllUserDetailsUncached(userSearchDto, tenantId, includeCustomFields);
+    }
+    return this.cacheService.getOrLoad({
+      namespace: `userlist:${tenantId}`,
+      key: hashCacheKey({ userSearchDto, includeCustomFields }),
+      ttlSeconds: USERLIST_TTL_SECONDS,
+      loader: () => this.findAllUserDetailsUncached(userSearchDto, tenantId, includeCustomFields),
+    });
+  }
+
+  private async findAllUserDetailsUncached(userSearchDto, tenantId?: string, includeCustomFields: boolean = true) {
   let { limit, offset, filters, exclude, sort } = userSearchDto;
   let excludeCohortIdes;
   let excludeUserIdes;
@@ -997,6 +1034,43 @@ export class UserService {
 }
 
 
+  /**
+   * user:{userId} core-row cache for GET /read/:userId. Purely additive: it
+   * runs exactly the same two fetches the endpoint already ran and returns
+   * the same [userDetails, userRole] pair, only skipping the DB round-trips
+   * on a hit. Keyed by tenantId because findUserRoles is tenant-scoped;
+   * dependsOn ufields:{userId}. `false`/null results are never cached, so a
+   * missing user or a failed lookup always re-reads.
+   *
+   * NOTE: the cached pair carries role + tenantStatus (via tenantData and
+   * userRole), so every role / user-tenant write must bump user:{id}.
+   */
+  private async getCachedUserCoreRow(userData: UserData): Promise<[any, any]> {
+    const loadPair = (): Promise<[any, any]> =>
+      Promise.all([
+        this.findUserDetails(userData?.userId),
+        userData && userData?.tenantId
+          ? this.findUserRoles(userData?.userId, userData?.tenantId)
+          : Promise.resolve(null),
+      ]) as Promise<[any, any]>;
+
+    const cached = await this.cacheService.getOrLoad<[any, any]>({
+      namespace: `user:${userData.userId}`,
+      key: `core:${userData?.tenantId ?? "no-tenant"}`,
+      dependsOn: [`ufields:${userData.userId}`],
+      ttlSeconds: USER_CORE_TTL_SECONDS,
+      // findUserDetails returns `false` when the user doesn't exist. The pair
+      // would still be a non-empty array, so return null instead to keep the
+      // "not found" out of the cache.
+      loader: async () => {
+        const pair = await loadPair();
+        return pair[0] ? pair : null;
+      },
+    });
+
+    return cached ?? [false, null];
+  }
+
   async getUsersDetailsById(userData: UserData, response: any) {
     const apiId = APIID.USER_GET;
     try {
@@ -1029,12 +1103,7 @@ export class UserService {
         userData: {},
       };
 
-      const [userDetails, userRole] = await Promise.all([
-        this.findUserDetails(userData?.userId),
-        userData && userData?.tenantId
-          ? this.findUserRoles(userData?.userId, userData?.tenantId)
-          : Promise.resolve(null),
-      ]);
+      const [userDetails, userRole] = await this.getCachedUserCoreRow(userData);
 
       let roleInUpper;
       if (userRole) {
@@ -1263,7 +1332,10 @@ export class UserService {
     return Array.from(tenantMap.values());
   }
 
-  async updateUser(userDto, response: Response) {
+  public async updateUser(
+    userDto: any,
+    response: Response
+  ) {
     const apiId = APIID.USER_UPDATE;
     try {
       const updatedData = {};
@@ -1410,6 +1482,23 @@ export class UserService {
         if (editFailures.length > 0) {
           editIssues["editFieldsFailure"] = editFailures;
         }
+        if (updatedData["customFields"]?.length > 0) {
+          await this.cacheService.invalidate(`ufields:${userDto.userId}`);
+        }
+      }
+
+      // List/filter caches go stale on any Users or FieldValues change; the
+      // update DTO doesn't carry a tenant, so bump every tenant the user maps to.
+      if (userDto.userData || updatedData["customFields"]?.length > 0) {
+        const tenantRows = await this.userTenantMappingRepository.find({
+          where: { userId: userDto.userId },
+          select: ["tenantId"],
+        });
+        await this.cacheService.invalidate([
+          `user:${userDto.userId}`,
+          "userfilter",
+          ...tenantRows.map((row) => `userlist:${row.tenantId}`),
+        ]);
       }
 
       if (userDto.automaticMember && userDto?.automaticMember?.value === true) {
@@ -1462,6 +1551,18 @@ export class UserService {
         apiId,
         userDto?.userId
       );
+
+      const auditCtx = getAuditContext();
+      this.emitAuditSafely({
+        entityType: "USER",
+        entityId: userDto.userId,
+        eventAction: "UPDATED",
+        ...auditCtx,
+        metadata: {
+          tenantId: userDto.userData?.tenantId,
+          updatedFields: userDto.userData // Capturing the update payload as requested by BRD
+        }
+      });
 
       // Send response to the client
       const apiResponse = await APIResponse.success(
@@ -1649,11 +1750,11 @@ export class UserService {
 
 
   async createUser(
-    request: any,
     userCreateDto: UserCreateDto,
     academicYearId: string,
     response: Response
   ) {
+    const request = requestContext.getStore() as any;
     const apiId = APIID.USER_CREATE;
 
     const userContext = {
@@ -1800,12 +1901,20 @@ export class UserService {
             apiId,
             userContext.username
           );
+          const keycloakStatusCode =
+            typeof resKeycloak.statusCode === "number" &&
+            resKeycloak.statusCode >= 400 &&
+            resKeycloak.statusCode < 600
+              ? resKeycloak.statusCode
+              : HttpStatus.INTERNAL_SERVER_ERROR;
           return APIResponse.error(
             response,
             apiId,
-            API_RESPONSES.SERVER_ERROR,
+            keycloakStatusCode === HttpStatus.BAD_REQUEST
+              ? API_RESPONSES.BAD_REQUEST
+              : API_RESPONSES.SERVER_ERROR,
             `${resKeycloak.message}`,
-            HttpStatus.INTERNAL_SERVER_ERROR
+            keycloakStatusCode
           );
         }
       }
@@ -1826,7 +1935,6 @@ export class UserService {
 
       const dbStart = Date.now();
       const result = await this.createUserInDatabase(
-        request,
         userCreateDto,
         academicYearId,
         response
@@ -1891,6 +1999,7 @@ export class UserService {
               additionalData
             );
           }
+          await this.cacheService.invalidate([`ufields:${userId}`, "userfilter"]);
           LoggerUtil.log(`[TIMING] customFieldsInsert: ${Date.now() - cfInsertStart}ms`, apiId);
         }
       }
@@ -1903,16 +2012,22 @@ export class UserService {
         userContext.username
       );
 
+      // Audit Log
+      const auditCtx = getAuditContext();
+      this.emitAuditSafely({
+        entityType: "USER",
+        entityId: result.userId,
+        eventAction: "USER_CREATED",
+        ...auditCtx,
+        metadata: {
+          username: userContext.username,
+          email: userContext.email,
+          roles: userCreateDto.tenantCohortRoleMapping?.map(m => m.roleId) || [],
+          tenantId: userCreateDto.tenantCohortRoleMapping?.[0]?.tenantId || null
+        }
+      });
 
-      APIResponse.success(
-        response,
-        apiId,
-        { userData: { ...result, createFailures } },
-        HttpStatus.CREATED,
-        API_RESPONSES.USER_CREATE_SUCCESSFULLY
-      );
-
-      // Produce user created event to Kafka asynchronously - after response is sent to client
+      // Produce user created event to Kafka asynchronously (fire-and-forget, does not block response)
       this.publishUserEvent('created', result.userId, apiId)
         .catch(error => LoggerUtil.error(
           `Failed to publish user created event to Kafka for ${userContext.username}`,
@@ -1920,6 +2035,14 @@ export class UserService {
           apiId,
           userContext.username
         ));
+
+      return APIResponse.success(
+        response,
+        apiId,
+        { userData: { ...result, createFailures } },
+        HttpStatus.CREATED,
+        API_RESPONSES.USER_CREATE_SUCCESSFULLY
+      );
     } catch (e) {
       LoggerUtil.error(
         `${API_RESPONSES.SERVER_ERROR}: ${request.url}`,
@@ -2109,11 +2232,11 @@ export class UserService {
   }
 
   async createUserInDatabase(
-    request: any,
     userCreateDto,
     academicYearId?: string,
     response?: Response
   ): Promise<User> {
+    const request = requestContext.getStore() as any;
     const user = new User();
     user.userId = userCreateDto?.userId,
       user.username = userCreateDto?.username,
@@ -2375,6 +2498,19 @@ export class UserService {
         await this.handleTenantMappingForUser(userId, tenantId, createdBy, userType, userTenantStatus);
       }
 
+      // Single choke point for UserRoleMapping/UserTenantMapping writes from
+      // user-create, SSO and assign-tenant — bump everything they affect.
+      if (roleId || tenantId) {
+        await this.cacheService.invalidate([
+          // user:{id} — the cached core row exposes role + tenantStatus
+          // through tenantData/userRole, so these writes must bump it.
+          `user:${userId}`,
+          `usertenant:${userId}`,
+          `userroles:${userId}`,
+          ...(tenantId ? [`userlist:${tenantId}`] : []),
+        ]);
+      }
+
       LoggerUtil.log(API_RESPONSES.USER_TENANT);
     } catch (error) {
       LoggerUtil.error(
@@ -2404,12 +2540,12 @@ export class UserService {
   }
 
   public async resetUserPassword(
-    request: any,
     extraField: string,
     newPassword: string,
     response: Response
   ) {
     const apiId = APIID.USER_RESET_PASSWORD;
+    const request = requestContext.getStore() as any;
     try {
       const user = request.user;
 
@@ -2435,7 +2571,6 @@ export class UserService {
       try {
         // Step 1: Reset password in Keycloak
         apiResponse = await this.resetKeycloakPassword(
-          request,
           userData,
           resToken,
           newPassword,
@@ -2573,12 +2708,12 @@ export class UserService {
   }
 
   public async resetKeycloakPassword(
-    request: any,
     userData: any,
     token: string,
     newPassword: string,
     userId: string
   ) {
+    const request = requestContext.getStore() as any;
     const data = JSON.stringify({
       temporary: "false",
       type: "password",
@@ -2807,6 +2942,13 @@ export class UserService {
         );
       }
 
+      // Tenant ids must be read before the mappings are deleted — they name
+      // the userlist:{t} namespaces to bump afterwards.
+      const tenantRowsForInvalidation = await this.userTenantMappingRepository.find({
+        where: { userId },
+        select: ["tenantId"],
+      });
+
       // Delete dependent tables first
 
       await this.cohortMemberRepository.delete({
@@ -2826,6 +2968,16 @@ export class UserService {
 
       // Finally delete user
       const userResult = await this.usersRepository.delete(userId);
+
+      await this.cacheService.invalidate([
+        `user:${userId}`,
+        `ufields:${userId}`,
+        `usertenant:${userId}`,
+        `userroles:${userId}`,
+        "userfilter",
+        ...tenantRowsForInvalidation.map((row) => `userlist:${row.tenantId}`),
+      ]);
+      // Audit Log trigger removed here as it is handled at the end of the method
 
       const keycloakResponse = await getKeycloakAdminToken();
       const token = keycloakResponse.data.access_token;
@@ -2864,6 +3016,15 @@ export class UserService {
           `Error: ${error.message}`,
           apiId
         ));
+
+      const auditCtx = getAuditContext();
+      this.emitAuditSafely({
+        entityType: "USER",
+        entityId: userId,
+        eventAction: "DELETED",
+        ...auditCtx
+      });
+
       return apiResponse;
     } catch (e) {
       LoggerUtil.error(
@@ -3320,11 +3481,11 @@ export class UserService {
   }
 
   async checkUser(
-    request: any,
     response: any,
     filters: ExistUserDto
   ) {
     const apiId = APIID.USER_LIST;
+    const request = requestContext.getStore() as any;
     try {
       const whereClause: any = {};
 
@@ -3393,7 +3554,8 @@ export class UserService {
   }
 
 
-  async suggestUsername(request: Request, response: Response, suggestUserDto: SuggestUserDto) {
+  async suggestUsername(response: Response, suggestUserDto: SuggestUserDto) {
+
     const apiId = APIID.USER_LIST;
     try {
       // Fetch user data from the database to check if the username already exists

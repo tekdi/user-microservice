@@ -10,17 +10,44 @@ import { TenantUpdateDto } from './dto/tenant-update.dto';
 import { Request, Response } from "express";
 import { TenantSearchDTO } from './dto/tenant-search.dto';
 import { TenantCreateDto } from './dto/tenant-create.dto';
+import { CacheService } from '../cache/cache.service';
+import { hashCacheKey } from '../cache/cache-key.util';
+
+const TENANT_TTL_SECONDS = 3600; // tenant, 1 h
 
 @Injectable()
 export class TenantService {
     constructor(
         @InjectRepository(Tenant)
         private tenantRepository: Repository<Tenant>,
+        private readonly cacheService: CacheService,
     ) { }
 
     public async getTenants(request: Request, response: Response): Promise<Response> {
+        const payload = await this.cacheService.getOrLoad({
+            namespace: "tenant",
+            key: "read:all",
+            ttlSeconds: TENANT_TTL_SECONDS,
+            loader: async () => {
+                const result = await this.getTenantsData(request, response);
+                return response.headersSent ? null : result;
+            },
+        });
+        if (payload === null || payload === undefined) {
+            return; // error response already written inside the loader
+        }
+        return APIResponse.success(
+            response,
+            APIID.TENANT_LIST,
+            payload,
+            HttpStatus.OK,
+            API_RESPONSES.TENANT_GET
+        );
+    }
+
+    private async getTenantsData(request: Request, response: Response): Promise<any> {
         const apiId = APIID.TENANT_LIST;
-    
+
         try {
             const result = await this.tenantRepository.find({
                 where: { status: TenantStatus.ACTIVE },
@@ -106,13 +133,8 @@ export class TenantService {
                 groupedResult.push(...orphanChildren);
             }
     
-            return APIResponse.success(
-                response,
-                apiId,
-                groupedResult,
-                HttpStatus.OK,
-                API_RESPONSES.TENANT_GET
-            );
+            // Raw payload for the caching wrapper; it writes the response.
+            return groupedResult;
     
         } catch (error) {
             const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
@@ -134,6 +156,28 @@ export class TenantService {
     
 
     public async searchTenants(request: Request, tenantSearchDTO: TenantSearchDTO, response: Response): Promise<Response> {
+        const payload = await this.cacheService.getOrLoad({
+            namespace: "tenant",
+            key: `search:${hashCacheKey(tenantSearchDTO)}`,
+            ttlSeconds: TENANT_TTL_SECONDS,
+            loader: async () => {
+                const result = await this.searchTenantsData(request, tenantSearchDTO, response);
+                return response.headersSent ? null : result;
+            },
+        });
+        if (payload === null || payload === undefined) {
+            return; // error response already written inside the loader
+        }
+        return APIResponse.success(
+            response,
+            APIID.TENANT_SEARCH,
+            payload,
+            HttpStatus.OK,
+            API_RESPONSES.TENANT_SEARCH_SUCCESS
+        );
+    }
+
+    private async searchTenantsData(request: Request, tenantSearchDTO: TenantSearchDTO, response: Response): Promise<any> {
         let apiId = APIID.TENANT_SEARCH;
         try {
             const { limit, offset, filters } = tenantSearchDTO;
@@ -190,13 +234,8 @@ export class TenantService {
                 );
             }
 
-            return APIResponse.success(
-                response,
-                apiId,
-                { getTenantDetails, totalCount },
-                HttpStatus.OK,
-                API_RESPONSES.TENANT_SEARCH_SUCCESS
-            );
+            // Raw payload for the caching wrapper; it writes the response.
+            return { getTenantDetails, totalCount };
 
         } catch (error) {
             const errorMessage = error.message || API_RESPONSES.INTERNAL_SERVER_ERROR;
@@ -270,6 +309,8 @@ export class TenantService {
 
             let result = await this.tenantRepository.save(tenantCreateDto);
             if (result) {
+                // Tenant writes emit no Kafka event, so invalidate directly.
+                await this.cacheService.invalidate("tenant");
                 return APIResponse.success(
                     response,
                     apiId,
@@ -335,6 +376,7 @@ export class TenantService {
             let result = await this.tenantRepository.delete(tenantId);
 
             if (result && result.affected && result.affected > 0) {
+                await this.cacheService.invalidate("tenant");
                 return APIResponse.success(
                     response,
                     apiId,
@@ -487,6 +529,7 @@ export class TenantService {
 
             let result = await this.tenantRepository.update(tenantId, tenantUpdateDto);
             if (result && result.affected && result.affected > 0) {
+                await this.cacheService.invalidate("tenant");
                 return APIResponse.success(
                     response,
                     apiId,
