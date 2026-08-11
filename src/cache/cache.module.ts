@@ -1,4 +1,4 @@
-import { Global, Inject, Module, OnApplicationShutdown, Optional } from "@nestjs/common";
+import { Global, Inject, Module, OnApplicationShutdown, OnModuleInit, Optional } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { CACHE_MANAGER } from "@nestjs/cache-manager";
 import { createCache } from "cache-manager";
@@ -69,8 +69,35 @@ const CONTEXT = "CacheModule";
   ],
   exports: [CacheService, CacheMetrics, CacheHealthIndicator],
 })
-export class CacheModule implements OnApplicationShutdown {
-  constructor(@Optional() @Inject(CACHE_REDIS_HANDLE) private readonly redisHandle?: KeyvRedis<string>) {}
+export class CacheModule implements OnModuleInit, OnApplicationShutdown {
+  constructor(
+    @Optional() @Inject(CACHE_REDIS_HANDLE) private readonly redisHandle?: KeyvRedis<string>,
+    @Optional() @Inject(CACHE_CONFIG) private readonly config?: CacheConfig,
+  ) {}
+
+  // Startup connectivity check. A failed probe only logs — it never throws,
+  // so Redis being down cannot stop the app from booting.
+  async onModuleInit(): Promise<void> {
+    if (this.config?.provider !== "redis" || !this.redisHandle) return;
+
+    const timeoutMs = this.config.opTimeoutMs;
+    try {
+      const client: any = await this.raceTimeout(this.redisHandle.getClient(), timeoutMs);
+      await this.raceTimeout(client.ping(), timeoutMs);
+      LoggerUtil.log("Redis connected", CONTEXT);
+    } catch {
+      LoggerUtil.error("Redis not connected", "", CONTEXT);
+    }
+  }
+
+  private raceTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+    return Promise.race([
+      promise,
+      new Promise<T>((_, reject) =>
+        setTimeout(() => reject(new Error(`timed out after ${timeoutMs}ms`)), timeoutMs),
+      ),
+    ]);
+  }
 
   async onApplicationShutdown(): Promise<void> {
     await this.redisHandle?.disconnect();

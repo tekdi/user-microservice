@@ -28,6 +28,7 @@ export default class APIResponse {
       return response.status(statusCode).json(resObj);
     } catch (e) {
       console.error("APIResponse.success failed", e);
+      if (response.headersSent) return;
       return response.status(500).json({
         id,
         ver: "1.0",
@@ -68,6 +69,7 @@ export default class APIResponse {
       return response.status(statusCode).json(resObj);
     } catch (e) {
       console.error("APIResponse.error failed", e);
+      if (response.headersSent) return;
       return response.status(500).json({
         id,
         ver: "1.0",
