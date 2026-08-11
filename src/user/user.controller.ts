@@ -114,10 +114,7 @@ export class UserController {
       userId: userId,
       fieldValue: fieldValueBoolean,
     };
-    const result = await this.userService
-      .getUsersDetailsById(userData, response);
-
-    return response.status(result.statusCode).json(result);
+    return await this.userService.getUsersDetailsById(userData, response);
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.USER_CREATE))
@@ -298,9 +295,7 @@ export class UserController {
     @Body() existUserDto: ExistUserDto,
     @Res() response: Response
   ) {
-    const result = await this.userService
-      .checkUser(response, existUserDto);
-    return response.status(result.statusCode).json(result);
+    return await this.userService.checkUser(response, existUserDto);
   }
 
 
@@ -315,9 +310,7 @@ export class UserController {
     @Body() suggestUserDto: SuggestUserDto,
     @Res() response: Response
   ) {
-    const result = await this.userService
-      .suggestUsername(response, suggestUserDto);
-    return response.status(result.statusCode).json(result);
+    return await this.userService.suggestUsername(response, suggestUserDto);
   }
 
 
