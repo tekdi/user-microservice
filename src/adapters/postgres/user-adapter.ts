@@ -772,11 +772,21 @@ export class PostgresUserService implements IServicelocator {
     if (userDetails.length > 0) {
       result.totalCount = parseInt(userDetails[0].total_count, 10);
 
-      // Get user custom field data only if includeCustomFields is true
+      // Get user custom field data only if includeCustomFields is true.
+      // Pre-fetch the country list once for the whole page rather than once
+      // per user inside the loop below (getUserCustomFieldDetails would
+      // otherwise run its own `SELECT name FROM countries` for every row).
+      const countryNames = includeCustomFields
+        ? await this.fieldsService.getCountryNames()
+        : [];
       for (const userData of userDetails) {
         if (includeCustomFields) {
           const customFields =
-            await this.fieldsService.getUserCustomFieldDetails(userData.userId);
+            await this.fieldsService.getUserCustomFieldDetails(
+              userData.userId,
+              undefined,
+              countryNames
+            );
           userData['customFields'] = customFields.map((data) => ({
             fieldId: data?.fieldId,
             label: data?.label,
@@ -1074,7 +1084,7 @@ export class PostgresUserService implements IServicelocator {
 
   /**
    * Optimized: Get tenant/role data with only essential fields
-   * Returns: tenantId, userTenantMappingId, roleId, roleName
+   * Returns: tenantId, userTenantMappingId, roleId, roleName, roleCode
    * Does NOT fetch: tenantName, privileges (for performance optimization)
    *
    * TO ENABLE PRIVILEGES/TENANTNAME IN FUTURE:
@@ -1210,6 +1220,7 @@ export class PostgresUserService implements IServicelocator {
         const roleId = roleData.roleid || roleData.roleId;
         // Handle both lowercase and camelCase property names from TypeORM
         const roleName = roleData.title || roleData.Title;
+        const roleCode = roleData.code || roleData.Code;
 
         // ============================================================================
         // OPTIMIZATION: Privileges commented out - not needed by frontend
@@ -1223,6 +1234,7 @@ export class PostgresUserService implements IServicelocator {
           userTenantMappingId: userTenantMappingId,
           roleId: roleId,
           roleName: roleName,
+          roleCode: roleCode,
           // privileges: privileges, // Commented out - not needed by frontend
         });
       }
