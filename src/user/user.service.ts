@@ -801,8 +801,13 @@ export class UserService {
   // The tenant-less caller (domain email lookup) bypasses the cache: no
   // tenant to key by, and it feeds an auth-adjacent flow that must not be
   // cached. `false` (no results) is never cached.
+  //
+  // A free-text `filters.search` (partial match across username/name/firstName)
+  // is high-cardinality and rarely repeats — caching it would fill the store
+  // with near-unique keys that almost never hit. So a search request bypasses
+  // the cache entirely and runs the live query.
   async findAllUserDetails(userSearchDto, tenantId?: string, includeCustomFields: boolean = true) {
-    if (!tenantId || tenantId.trim() === "") {
+    if (!tenantId || tenantId.trim() === "" || userSearchDto?.filters?.search || userSearchDto?.filters?.firstName) {
       return this.findAllUserDetailsUncached(userSearchDto, tenantId, includeCustomFields);
     }
     return this.cacheService.getOrLoad({
