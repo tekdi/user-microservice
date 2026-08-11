@@ -40,7 +40,7 @@ import { JwtUtil } from "@utils/jwt-token";
 import { ConfigService } from "@nestjs/config";
 import { formatTime } from "@utils/formatTimeConversion";
 import { API_RESPONSES } from "@utils/response.messages";
-import { TokenExpiredError, JsonWebTokenError } from "jsonwebtoken";
+import { TokenExpiredError, JsonWebTokenError, verify as jwtVerify } from "jsonwebtoken";
 import { CohortAcademicYearService } from "src/cohortAcademicYear/cohortAcademicYear.service";
 import { AcademicYearService } from "src/academicyears/academicyears.service";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
@@ -801,8 +801,13 @@ export class UserService {
   // The tenant-less caller (domain email lookup) bypasses the cache: no
   // tenant to key by, and it feeds an auth-adjacent flow that must not be
   // cached. `false` (no results) is never cached.
+  //
+  // A free-text `filters.search` (partial match across username/name/firstName)
+  // is high-cardinality and rarely repeats — caching it would fill the store
+  // with near-unique keys that almost never hit. So a search request bypasses
+  // the cache entirely and runs the live query.
   async findAllUserDetails(userSearchDto, tenantId?: string, includeCustomFields: boolean = true) {
-    if (!tenantId || tenantId.trim() === "") {
+    if (!tenantId || tenantId.trim() === "" || userSearchDto?.filters?.search || userSearchDto?.filters?.firstName) {
       return this.findAllUserDetailsUncached(userSearchDto, tenantId, includeCustomFields);
     }
     return this.cacheService.getOrLoad({
@@ -1824,6 +1829,63 @@ export class UserService {
           "BAD_REQUEST",
           validatedRoles.join("; "),
           HttpStatus.BAD_REQUEST
+        );
+      }
+
+      // If any requested role is NOT learner, a valid access token is required.
+      const hasNonLearnerRole =
+        Array.isArray(validatedRoles) &&
+        validatedRoles.some(
+          (role) => role?.code?.toLowerCase() !== "learner"
+        );
+
+      if (hasNonLearnerRole) {
+        const authHeader: string | undefined = request.headers.authorization;
+        const bearerToken =
+          authHeader && authHeader.startsWith("Bearer ")
+            ? authHeader.slice(7)
+            : null;
+
+        if (!bearerToken) {
+          LoggerUtil.warn(
+            `Access token required for non-learner role registration (user: ${userContext.username})`,
+            apiId
+          );
+          return APIResponse.error(
+            response,
+            apiId,
+            "UNAUTHORIZED",
+            "An access token is required to register a user with this role.",
+            HttpStatus.UNAUTHORIZED
+          );
+        }
+
+        try {
+          const publicKey = this.configService.get<string>(
+            "KEYCLOAK_REALM_RSA_PUBLIC_KEY"
+          );
+          jwtVerify(bearerToken, publicKey);
+        } catch (tokenErr) {
+          LoggerUtil.warn(
+            `Invalid or expired access token for non-learner role registration (user: ${userContext.username}): ${tokenErr.message}`,
+            apiId
+          );
+          return APIResponse.error(
+            response,
+            apiId,
+            "UNAUTHORIZED",
+            "The provided access token is invalid or has expired.",
+            HttpStatus.UNAUTHORIZED
+          );
+        }
+
+        // Token is valid — extract caller identity for audit trail
+        const decoded: any = jwt_decode(request.headers.authorization);
+        userCreateDto.createdBy = userCreateDto.createdBy ?? decoded?.sub;
+        userCreateDto.updatedBy = userCreateDto.updatedBy ?? decoded?.sub;
+        LoggerUtil.log(
+          `Non-learner role registration authorized for ${userContext.username} by caller ${decoded?.sub}`,
+          apiId
         );
       }
 
@@ -4255,9 +4317,9 @@ export class UserService {
     // Base query structure
     let baseQuery = `
       WITH filtered_users AS (
-        SELECT DISTINCT u."userId", u."username", u."firstName", u."name", u."middleName",
+        SELECT DISTINCT u."userId", u."username", u."firstName", u."name", u."middleName", u."enrollmentId",
           u."lastName", u."email", u."mobile", u."gender", u."dob",
-          u."status", u."createdAt", utm."tenantId", utm."status" as "tenantStatus"
+          u."status", u."createdAt", utm."tenantId", utm."status" as "tenantStatus", utm."createdAt" as "tenantJoinedAt"
         FROM "Users" u
         LEFT JOIN "UserTenantMapping" utm ON u."userId" = utm."userId"
     `;
@@ -4409,6 +4471,8 @@ export class UserService {
           dob: row.dob,
           status: row.tenantStatus,
           createdAt: row.createdAt,
+          tenantJoinedAt: row.tenantJoinedAt,
+          enrollmentId: row.enrollmentId,
           tenantId: row.tenantId,
           roles: [],
           customfield: customFieldsData[userId] || [],

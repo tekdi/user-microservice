@@ -47,6 +47,14 @@ export class FieldsService {
     private readonly auditLoggerService: AuditLoggerService
   ) { }
 
+  // Table/column names can't be parameterized like values, so raw-SQL identifiers
+  // built from request data are checked against this allowlist before interpolation.
+  private static readonly SQL_IDENTIFIER_PATTERN = /^[a-zA-Z0-9_]+$/;
+
+  private isValidSqlIdentifier(value: any): boolean {
+    return typeof value === "string" && FieldsService.SQL_IDENTIFIER_PATTERN.test(value);
+  }
+
   private emitAuditSafely(event: any): void {
     try {
       this.auditLoggerService.emit(event);
