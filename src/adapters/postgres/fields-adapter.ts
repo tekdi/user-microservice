@@ -27,7 +27,6 @@ import { API_RESPONSES } from '@utils/response.messages';
 import { v4 as uuidv4 } from 'uuid';
 import { FieldValueConverter } from 'src/utils/field-value-converter';
 import { FieldStatus } from 'src/fields/dto/field-values-create.dto';
-import { COUNTRY_SET } from '../../common/country-registry';
 @Injectable()
 export class PostgresFieldsService implements IServicelocatorfields {
   constructor(
@@ -2021,26 +2020,47 @@ export class PostgresFieldsService implements IServicelocatorfields {
     return value.replace(/'/g, "''");
   }
   private readonly COUNTRY_SEPARATOR = '|';
-  //COUNTRY_SET need to take from form table in future for TODO
-  private normalizeLegacyCountries(value: string): string[] {
+
+  /**
+   * Fetches the canonical country name list from the `countries` table -
+   * the single source of truth also used by the report-filter/backfill flow
+   * (see docs/regional-admin-cohort-country-report.md). Replaces a
+   * hardcoded ISO list that drifted out of sync with this table's spelling
+   * (e.g. "Turkey" vs "Türkiye"), silently dropping legitimately-saved
+   * countries on read. Called once per getUserCustomFieldDetails() request
+   * (not per row) and only when a country-type field is actually present.
+   */
+  private async getCountryNames(): Promise<string[]> {
+    const rows: { name: string }[] = await this.fieldsRepository.query(
+      `SELECT name FROM countries`
+    );
+    return rows.map((row) => row.name);
+  }
+
+  private normalizeLegacyCountries(
+    value: string,
+    countryNames: string[]
+  ): string[] {
     if (!value) return [];
 
     const input = value.trim();
+    const countrySet = new Set(countryNames);
 
     // Fast path: already pipe-separated
     if (input.includes(this.COUNTRY_SEPARATOR)) {
       return input
         .split(this.COUNTRY_SEPARATOR)
         .map((v) => v.trim())
-        .filter((v) => COUNTRY_SET.has(v));
+        .filter((v) => countrySet.has(v));
     }
 
     const result: string[] = [];
     let remaining = input;
 
-    const countries = Array.from(COUNTRY_SET).sort(
-      (a, b) => b.length - a.length
-    );
+    // Longest name first, so a comma-containing name (e.g. "Bolivia,
+    // Plurinational State of") is matched whole before its comma-free
+    // prefix could spuriously match on its own.
+    const countries = [...countryNames].sort((a, b) => b.length - a.length);
 
     for (const country of countries) {
       // Exact match (modern or clean legacy)
@@ -2068,10 +2088,13 @@ export class PostgresFieldsService implements IServicelocatorfields {
     return result;
   }
 
-  private parseCountries(value?: string): string[] {
+  private parseCountries(
+    value: string | undefined,
+    countryNames: string[]
+  ): string[] {
     if (!value) return [];
 
-    const parsed = this.normalizeLegacyCountries(value);
+    const parsed = this.normalizeLegacyCountries(value, countryNames);
 
     if (parsed.length === 0) {
       LoggerUtil.warn(`Invalid country value: "${value}"`);
@@ -2201,6 +2224,13 @@ export class PostgresFieldsService implements IServicelocatorfields {
       );
     }
 
+    // Fetch the canonical country list once (not per row), only when this
+    // user actually has a country-type field to parse.
+    const hasCountryField = result.some((data) =>
+      data?.label?.toLowerCase().includes('country')
+    );
+    const countryNames = hasCountryField ? await this.getCountryNames() : [];
+
     // Process results with pre-loaded dynamic options
     result = result.map((data) => {
       const originalValue = data.value;
@@ -2251,7 +2281,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
             : originalValue;
 
         if (valueToParse) {
-          processedValue = this.parseCountries(valueToParse);
+          processedValue = this.parseCountries(valueToParse, countryNames);
         } else {
           processedValue = [];
         }
