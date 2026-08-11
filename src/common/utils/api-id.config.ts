@@ -74,6 +74,13 @@ export const APIID = {
   // Privilege Assignment APIs
   ASSIGNPRIVILEGE_CREATE: "api.assignprivilege.create",
   ASSIGNPRIVILEGE_GET: "api.assignprivilege.get",
+  ASSIGNPRIVILEGE_DELETE: "api.assignprivilege.delete",
+  ASSIGNPRIVILEGE_UPDATE: "api.assignprivilege.update",
+
+  // Permission Registry / Dashboard APIs
+  PERMISSION_REGISTRY_LIST: "api.permissions.list",
+  ROLE_PERMISSIONS_GET: "api.role.permissions.get",
+  ROLE_PERMISSIONS_UPDATE: "api.role.permissions.update",
 
   // Cohort Management APIs
   COHORT_CREATE: "api.cohort.create",

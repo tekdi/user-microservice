@@ -15,6 +15,7 @@ import { Role } from "src/rbac/role/entities/role.entity";
 import { Response } from "express";
 import APIResponse from "src/common/responses/response";
 import { APIID } from "src/common/utils/api-id.config";
+import { CacheService } from "src/cache/cache.service";
 @Injectable()
 export class PostgresPrivilegeService {
   constructor(
@@ -23,7 +24,8 @@ export class PostgresPrivilegeService {
     @InjectRepository(RolePrivilegeMapping)
     private rolePrivilegeMappingRepository: Repository<RolePrivilegeMapping>,
     @InjectRepository(Role)
-    private roleRepository: Repository<Role>
+    private roleRepository: Repository<Role>,
+    private readonly cacheService: CacheService
   ) {}
 
   public async createPrivilege(
@@ -223,6 +225,18 @@ export class PostgresPrivilegeService {
           HttpStatus.NOT_FOUND
         );
       }
+      // Capture affected tenants before removing the mappings, so their
+      // cached effective privileges can be invalidated below.
+      const affectedMappings = await this.rolePrivilegeMappingRepository.find(
+        {
+          where: { privilegeId: privilegeId },
+          select: ["tenantId"],
+        }
+      );
+      const affectedTenantIds = new Set(
+        affectedMappings.map((m) => m.tenantId)
+      );
+
       // Delete the privilege
       const response = await this.privilegeRepository.delete(privilegeId);
 
@@ -231,6 +245,13 @@ export class PostgresPrivilegeService {
         await this.rolePrivilegeMappingRepository.delete({
           privilegeId: privilegeId,
         });
+
+      await Promise.all(
+        [...affectedTenantIds].map((tenantId) =>
+          this.cacheService.delByPattern(`rbac:privileges:*:${tenantId}`)
+        )
+      );
+
       return APIResponse.success(
         res,
         APIID.PRIVILEGE_DELETE,
@@ -243,6 +264,47 @@ export class PostgresPrivilegeService {
       return APIResponse.error(
         res,
         APIID.PRIVILEGE_DELETE,
+        "Internal Server Error",
+        errorMessage,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  /**
+   * Full permission registry grouped by module/submodule, for the permission
+   * dashboard UI. Only rows with isVisibleInUI=true are returned.
+   */
+  public async getPermissionRegistry(response: Response) {
+    const apiId = APIID.PERMISSION_REGISTRY_LIST;
+    try {
+      const privileges = await this.privilegeRepository.find({
+        where: { isVisibleInUI: true },
+        order: { displayOrder: "ASC" },
+      });
+
+      const grouped: Record<string, Record<string, any[]>> = {};
+      for (const privilege of privileges) {
+        const moduleKey = privilege.module || "Uncategorized";
+        const submoduleKey = privilege.submodule || "General";
+        grouped[moduleKey] = grouped[moduleKey] || {};
+        grouped[moduleKey][submoduleKey] =
+          grouped[moduleKey][submoduleKey] || [];
+        grouped[moduleKey][submoduleKey].push(privilege);
+      }
+
+      return APIResponse.success(
+        response,
+        apiId,
+        grouped,
+        HttpStatus.OK,
+        "Permission registry fetched successfully."
+      );
+    } catch (e) {
+      const errorMessage = e.message || "Internal server error";
+      return APIResponse.error(
+        response,
+        apiId,
         "Internal Server Error",
         errorMessage,
         HttpStatus.INTERNAL_SERVER_ERROR

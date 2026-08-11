@@ -2253,10 +2253,15 @@ export class PostgresCohortMembersService {
       return new Map();
     }
 
+    // Pre-fetch the country list once for the whole batch rather than once
+    // per user below (getUserCustomFieldDetails would otherwise run its own
+    // `SELECT name FROM countries` for every userId).
+    const countryNames = await this.fieldsService.getCountryNames();
+
     // Batch load all user custom fields
     const customFieldsPromises = userIds.map((userId) =>
       this.fieldsService
-        .getUserCustomFieldDetails(userId)
+        .getUserCustomFieldDetails(userId, undefined, countryNames)
         .then((fields) => ({ userId, fields }))
         .catch(() => ({ userId, fields: [] }))
     );
@@ -2946,6 +2951,11 @@ export class PostgresCohortMembersService {
         if (optimizedResults.length > 0) {
           totalCount = Number.parseInt(optimizedResults[0].total_count, 10);
 
+          // Pre-fetch the country list once for the whole page rather than
+          // once per user inside the map below (getUserCustomFieldDetails
+          // would otherwise run its own `SELECT name FROM countries` per user).
+          const countryNames = await this.fieldsService.getCountryNames();
+
           // Enrich the results with form data and custom fields
           finalUserDetails = await Promise.all(
             optimizedResults.map(async (user) => {
@@ -2993,7 +3003,11 @@ export class PostgresCohortMembersService {
 
               // Get custom fields
               const fieldValues =
-                await this.fieldsService.getUserCustomFieldDetails(user.userId);
+                await this.fieldsService.getUserCustomFieldDetails(
+                  user.userId,
+                  undefined,
+                  countryNames
+                );
               let fieldValuesForCohort =
                 await this.fieldsService.getFieldsAndFieldsValues(
                   user.cohortMembershipId
