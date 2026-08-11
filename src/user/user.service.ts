@@ -4260,9 +4260,9 @@ export class UserService {
     // Base query structure
     let baseQuery = `
       WITH filtered_users AS (
-        SELECT DISTINCT u."userId", u."username", u."firstName", u."name", u."middleName",
+        SELECT DISTINCT u."userId", u."username", u."firstName", u."name", u."middleName", u."enrollmentId",
           u."lastName", u."email", u."mobile", u."gender", u."dob",
-          u."status", u."createdAt", utm."tenantId", utm."status" as "tenantStatus"
+          u."status", u."createdAt", utm."tenantId", utm."status" as "tenantStatus", utm."createdAt" as "tenantJoinedAt"
         FROM "Users" u
         LEFT JOIN "UserTenantMapping" utm ON u."userId" = utm."userId"
     `;
@@ -4414,6 +4414,8 @@ export class UserService {
           dob: row.dob,
           status: row.tenantStatus,
           createdAt: row.createdAt,
+          tenantJoinedAt: row.tenantJoinedAt,
+          enrollmentId: row.enrollmentId,
           tenantId: row.tenantId,
           roles: [],
           customfield: customFieldsData[userId] || [],
