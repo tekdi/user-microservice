@@ -772,11 +772,21 @@ export class PostgresUserService implements IServicelocator {
     if (userDetails.length > 0) {
       result.totalCount = parseInt(userDetails[0].total_count, 10);
 
-      // Get user custom field data only if includeCustomFields is true
+      // Get user custom field data only if includeCustomFields is true.
+      // Pre-fetch the country list once for the whole page rather than once
+      // per user inside the loop below (getUserCustomFieldDetails would
+      // otherwise run its own `SELECT name FROM countries` for every row).
+      const countryNames = includeCustomFields
+        ? await this.fieldsService.getCountryNames()
+        : [];
       for (const userData of userDetails) {
         if (includeCustomFields) {
           const customFields =
-            await this.fieldsService.getUserCustomFieldDetails(userData.userId);
+            await this.fieldsService.getUserCustomFieldDetails(
+              userData.userId,
+              undefined,
+              countryNames
+            );
           userData['customFields'] = customFields.map((data) => ({
             fieldId: data?.fieldId,
             label: data?.label,

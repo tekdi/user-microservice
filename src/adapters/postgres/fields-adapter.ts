@@ -2030,7 +2030,7 @@ export class PostgresFieldsService implements IServicelocatorfields {
    * countries on read. Called once per getUserCustomFieldDetails() request
    * (not per row) and only when a country-type field is actually present.
    */
-  private async getCountryNames(): Promise<string[]> {
+  public async getCountryNames(): Promise<string[]> {
     const rows: { name: string }[] = await this.fieldsRepository.query(
       `SELECT name FROM countries`
     );
@@ -2109,7 +2109,12 @@ export class PostgresFieldsService implements IServicelocatorfields {
     */
   public async getUserCustomFieldDetails(
     userId: string,
-    fieldOption?: boolean
+    fieldOption?: boolean,
+    // Pass a pre-fetched country list when calling this in a per-user loop/batch
+    // (e.g. a user list/search endpoint) so the countries table is queried once
+    // for the whole batch instead of once per user. Self-fetches when omitted,
+    // so every single-user call site is unaffected.
+    countryNames?: string[]
   ) {
     // Optimized query: Filter FieldValues first, then apply DISTINCT ON
     // This avoids scanning the entire FieldValues table
@@ -2225,11 +2230,19 @@ export class PostgresFieldsService implements IServicelocatorfields {
     }
 
     // Fetch the canonical country list once (not per row), only when this
-    // user actually has a country-type field to parse.
-    const hasCountryField = result.some((data) =>
-      data?.label?.toLowerCase().includes('country')
-    );
-    const countryNames = hasCountryField ? await this.getCountryNames() : [];
+    // user actually has a country-type field to parse. Skipped entirely when
+    // the caller already passed a pre-fetched list in (see the `countryNames`
+    // param) - that's what per-user loops/batches should do to avoid one
+    // `SELECT name FROM countries` per user.
+    let resolvedCountryNames = countryNames ?? [];
+    if (countryNames === undefined) {
+      const hasCountryField = result.some((data) =>
+        data?.label?.toLowerCase().includes('country')
+      );
+      resolvedCountryNames = hasCountryField
+        ? await this.getCountryNames()
+        : [];
+    }
 
     // Process results with pre-loaded dynamic options
     result = result.map((data) => {
@@ -2281,7 +2294,10 @@ export class PostgresFieldsService implements IServicelocatorfields {
             : originalValue;
 
         if (valueToParse) {
-          processedValue = this.parseCountries(valueToParse, countryNames);
+          processedValue = this.parseCountries(
+            valueToParse,
+            resolvedCountryNames
+          );
         } else {
           processedValue = [];
         }
