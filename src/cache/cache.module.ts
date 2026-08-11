@@ -86,7 +86,7 @@ export class CacheModule implements OnModuleInit, OnApplicationShutdown {
       await this.raceTimeout(client.ping(), timeoutMs);
       LoggerUtil.log("Redis connected", CONTEXT);
     } catch {
-      LoggerUtil.error("Redis disconnected", "", CONTEXT);
+      LoggerUtil.error("Redis not connected", "", CONTEXT);
     }
   }
 
