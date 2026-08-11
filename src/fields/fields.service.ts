@@ -47,6 +47,14 @@ export class FieldsService {
     private readonly auditLoggerService: AuditLoggerService
   ) { }
 
+  // Table/column names can't be parameterized like values, so raw-SQL identifiers
+  // built from request data are checked against this allowlist before interpolation.
+  private static readonly SQL_IDENTIFIER_PATTERN = /^[a-zA-Z0-9_]+$/;
+
+  private isValidSqlIdentifier(value: any): boolean {
+    return typeof value === "string" && FieldsService.SQL_IDENTIFIER_PATTERN.test(value);
+  }
+
   private emitAuditSafely(event: any): void {
     try {
       this.auditLoggerService.emit(event);
@@ -420,6 +428,16 @@ export class FieldsService {
         fieldsData.sourceDetails.source == "table" &&
         fieldsData.fieldParams
       ) {
+        if (!this.isValidSqlIdentifier(fieldsData.sourceDetails.table)) {
+          return APIResponse.error(
+            response,
+            apiId,
+            "BAD_REQUEST",
+            `Error: Invalid source table name.`,
+            HttpStatus.BAD_REQUEST
+          );
+        }
+
         for (const sourceFieldName of fieldsData.fieldParams.options) {
           if (
             fieldsData.dependsOn &&
@@ -429,13 +447,14 @@ export class FieldsService {
             storeWithoutControllingField.push(sourceFieldName["name"]);
           }
 
-          const query = `SELECT "name", "value" 
-          FROM public.${fieldsData.sourceDetails.table} 
-          WHERE value = '${sourceFieldName["value"]}' 
+          const query = `SELECT "name", "value"
+          FROM public.${fieldsData.sourceDetails.table}
+          WHERE value = $1
           GROUP BY  "name", "value"`;
 
           const checkSourceData = await this.fieldsValuesRepository.query(
-            query
+            query,
+            [sourceFieldName["value"]]
           );
 
           //If code is not exist in db
@@ -559,6 +578,16 @@ export class FieldsService {
         fieldsData.fieldParams.options &&
         getSourceDetails.sourceDetails.source == "table"
       ) {
+        if (!this.isValidSqlIdentifier(getSourceDetails.sourceDetails.table)) {
+          return APIResponse.error(
+            response,
+            apiId,
+            "BAD_REQUEST",
+            `Error: Invalid source table name.`,
+            HttpStatus.BAD_REQUEST
+          );
+        }
+
         for (const sourceFieldName of fieldsData.fieldParams.options) {
           if (
             getSourceDetails.dependsOn &&
@@ -569,13 +598,14 @@ export class FieldsService {
           }
 
           // check options exits in source table column or not
-          const query = `SELECT "name", "value" 
-          FROM public.${getSourceDetails.sourceDetails.table} 
-          WHERE value = '${sourceFieldName["value"]}' 
+          const query = `SELECT "name", "value"
+          FROM public.${getSourceDetails.sourceDetails.table}
+          WHERE value = $1
           GROUP BY  "name", "value"`;
 
           const checkSourceData = await this.fieldsValuesRepository.query(
-            query
+            query,
+            [sourceFieldName["value"]]
           );
 
           //If code is not exist in db
@@ -641,8 +671,11 @@ export class FieldsService {
           }
 
           // check options exits in fieldParams column or not
-          const query = `SELECT COUNT(*) FROM public."Fields" WHERE "fieldId"='${fieldId}' AND "fieldParams" -> 'options' @> '[{"value": "${sourceFieldName["value"]}"}]' `;
-          const checkSourceData = await this.fieldsRepository.query(query);
+          const query = `SELECT COUNT(*) FROM public."Fields" WHERE "fieldId"=$1 AND "fieldParams" -> 'options' @> $2::jsonb`;
+          const checkSourceData = await this.fieldsRepository.query(query, [
+            fieldId,
+            JSON.stringify([{ value: sourceFieldName["value"] }]),
+          ]);
 
           //If fields is not present then create a new options
           if (checkSourceData[0].count == 0) {
@@ -732,18 +765,24 @@ export class FieldsService {
     controllingfieldfk?: string,
     dependsOn?: string
   ) {
+    if (!this.isValidSqlIdentifier(tableName)) {
+      throw new Error(`Invalid source table name: ${tableName}`);
+    }
+
+    const params: any[] = [name, value, createdBy];
     let createSourceFields = `INSERT INTO public.${tableName} ("name", "value", "createdBy"`;
 
     // Add controllingfieldfk to the columns if it is defined
     if (controllingfieldfk !== undefined && controllingfieldfk !== "") {
       createSourceFields += `, controllingfieldfk`;
+      params.push(controllingfieldfk);
     }
 
-    createSourceFields += `) VALUES ('${name}', '${value}', '${createdBy}'`;
+    createSourceFields += `) VALUES ($1, $2, $3`;
 
     // Add controllingfieldfk to the values if it is defined
     if (controllingfieldfk !== undefined && controllingfieldfk !== "") {
-      createSourceFields += `, '${controllingfieldfk}'`;
+      createSourceFields += `, $4`;
     }
 
     createSourceFields += `);`;
@@ -754,7 +793,8 @@ export class FieldsService {
 
     //Insert data into source table
     const checkSourceData = await this.fieldsValuesRepository.query(
-      createSourceFields
+      createSourceFields,
+      params
     );
     if (checkSourceData.length == 0) {
       return false;
@@ -768,16 +808,24 @@ export class FieldsService {
     updatedBy: string,
     controllingfieldfk?: string
   ) {
-    let updateSourceDetails = `UPDATE public.${tableName} SET "name"='${name}',"updatedBy"='${updatedBy}'`;
-
-    if (controllingfieldfk !== undefined) {
-      updateSourceDetails += `, controllingfieldfk='${controllingfieldfk}'`;
+    if (!this.isValidSqlIdentifier(tableName)) {
+      throw new Error(`Invalid source table name: ${tableName}`);
     }
 
-    updateSourceDetails += ` WHERE value='${value}';`;
+    const params: any[] = [name, updatedBy];
+    let updateSourceDetails = `UPDATE public.${tableName} SET "name"=$1,"updatedBy"=$2`;
+
+    if (controllingfieldfk !== undefined) {
+      params.push(controllingfieldfk);
+      updateSourceDetails += `, controllingfieldfk=$${params.length}`;
+    }
+
+    params.push(value);
+    updateSourceDetails += ` WHERE value=$${params.length};`;
 
     const updateSourceData = await this.fieldsValuesRepository.query(
-      updateSourceDetails
+      updateSourceDetails,
+      params
     );
     if (updateSourceData.length == 0) {
       return false;
@@ -1324,18 +1372,38 @@ export class FieldsService {
         condition.contextType = contextType;
       }
 
+      if (!this.isValidSqlIdentifier(fieldName)) {
+        return await APIResponse.error(
+          response,
+          apiId,
+          "BAD_REQUEST",
+          `Error: Invalid fieldName.`,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
       const fetchFieldParams = await this.fieldsRepository.findOne({
         where: condition,
       });
       let order;
       if (sort?.length) {
         const orderKey = sort[1].toUpperCase();
+        if (!this.isValidSqlIdentifier(sort[0])) {
+          return await APIResponse.error(
+            response,
+            apiId,
+            "BAD_REQUEST",
+            `Error: Invalid sort field.`,
+            HttpStatus.BAD_REQUEST
+          );
+        }
         order = `ORDER BY "${sort[0]}" ${orderKey}`;
       } else {
         order = `ORDER BY ${fieldName}_name ASC`;
       }
       if (fetchFieldParams?.sourceDetails?.source === "table") {
         let whereClause;
+        let whereParams: any[] = [];
         if (controllingfieldfk) {
           if (!fetchFieldParams.dependsOn) {
             return await APIResponse.error(
@@ -1346,17 +1414,22 @@ export class FieldsService {
               HttpStatus.NOT_FOUND
             );
           }
-          let foreignKeys = controllingfieldfk.toString();
-          whereClause = `"${fetchFieldParams?.dependsOn}_id" IN(${foreignKeys})`;
+          const foreignKeysArr = controllingfieldfk.map((fk) => fk.toString());
+          const placeholders = foreignKeysArr
+            .map((_, idx) => `$${idx + 1}`)
+            .join(",");
+          whereClause = `"${fetchFieldParams?.dependsOn}_id" IN(${placeholders})`;
+          whereParams = foreignKeysArr;
         }
-        
+
         dynamicOptions = await this.findDynamicOptions(
           fieldName,
           whereClause,
           offset,
           limit,
           order,
-          optionName
+          optionName,
+          whereParams
         );
       } else if (fetchFieldParams?.sourceDetails?.source === "jsonFile") {
         const filePath = path.join(
@@ -1492,11 +1565,27 @@ export class FieldsService {
 
       //Delete data from source table
       if (getField?.sourceDetails?.source == "table") {
-        const whereCond = requiredData.option
-          ? `WHERE "value"='${requiredData.option}'`
-          : "";
+        if (!this.isValidSqlIdentifier(getField?.sourceDetails?.table)) {
+          return await APIResponse.error(
+            response,
+            apiId,
+            "BAD_REQUEST",
+            `Error: Invalid source table name.`,
+            HttpStatus.BAD_REQUEST
+          );
+        }
+
+        const deleteParams: any[] = [];
+        let whereCond = "";
+        if (requiredData.option) {
+          deleteParams.push(requiredData.option);
+          whereCond = `WHERE "value"=$1`;
+        }
         const query = `DELETE FROM public.${getField?.sourceDetails?.table} ${whereCond}`;
-        const [_, affectedRow] = await this.fieldsRepository.query(query);
+        const [_, affectedRow] = await this.fieldsRepository.query(
+          query,
+          deleteParams
+        );
 
         if (affectedRow === 0) {
           return await APIResponse.error(
@@ -1512,8 +1601,11 @@ export class FieldsService {
       //Delete data from fieldParams column
       if (getField?.sourceDetails?.source == "fieldparams") {
         // check options exits in fieldParams column or not
-        const query = `SELECT * FROM public."Fields" WHERE "fieldId"='${getField.fieldId}' AND "fieldParams" -> 'options' @> '[{"value": "${removeOption}"}]' `;
-        const checkSourceData = await this.fieldsRepository.query(query);
+        const query = `SELECT * FROM public."Fields" WHERE "fieldId"=$1 AND "fieldParams" -> 'options' @> $2::jsonb`;
+        const checkSourceData = await this.fieldsRepository.query(query, [
+          getField.fieldId,
+          JSON.stringify([{ value: removeOption }]),
+        ]);
 
         if (checkSourceData.length > 0) {
           let fieldParamsOptions = checkSourceData[0].fieldParams.options;
@@ -1572,13 +1664,19 @@ export class FieldsService {
     offset?: any,
     limit?: any,
     order?: any,
-    optionSelected?: any
+    optionSelected?: any,
+    whereParams: any[] = []
   ) {
     try {
+      if (!this.isValidSqlIdentifier(tableName)) {
+        return null;
+      }
+
       const orderCond = order || "";
       const offsetCond = offset ? `offset ${offset}` : "";
       const limitCond = limit ? `limit ${limit}` : "";
       const conditions = [];
+      const params: any[] = [...whereParams];
 
       if (whereClause) {
         conditions.push(`${whereClause}`);
@@ -1588,14 +1686,15 @@ export class FieldsService {
       conditions.push(`is_active=1`);
 
       if (optionSelected) {
-        conditions.push(`"${tableName}_name" ILike '%${optionSelected}%'`);
+        params.push(`%${optionSelected}%`);
+        conditions.push(`"${tableName}_name" ILike $${params.length}`);
       }
 
       const whereCond = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
 
       const query = `SELECT *,COUNT(*) OVER() AS total_count FROM public."${tableName}" ${whereCond} ${orderCond} ${offsetCond} ${limitCond}`;
 
-      const result = await this.fieldsRepository.query(query);
+      const result = await this.fieldsRepository.query(query, params);
       if (!result) {
         return null;
       }
