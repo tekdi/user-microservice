@@ -24,10 +24,12 @@ import {
   ValidationPipe,
   Query,
   UseFilters,
+  UseGuards,
   BadRequestException,
   Request,
   HttpStatus,
 } from '@nestjs/common';
+import { JwtAuthGuard } from 'src/common/guards/keycloak.guard';
 import { CohortMembersSearchDto } from './dto/cohortMembers-search.dto';
 import { CohortMembersReportFilterDto } from './dto/cohortMembers-report-filter.dto';
 import { CohortMembersDto } from './dto/cohortMembers.dto';
@@ -207,14 +209,21 @@ export class CohortMembersController {
    * docs/regional-admin-cohort-country-report.md). Given a cohortId + a chunk of
    * userIds, returns the matching CohortMembers rows - automatically
    * country-filtered when the calling admin is a Regional Admin, unfiltered when
-   * they're an Admin. Role/allowed-countries are resolved server-side from
-   * `userId` (never accepted as client-supplied fields), using the same
-   * caller-identity convention already used by createCohortMembers() above -
-   * this controller does not enforce JwtAuthGuard, so `userId` here is the admin
-   * identity asserted by the calling service (Aspire-specific-service/LMS/Event
-   * Management Service), exactly as it already is on /create.
+   * they're an Admin.
+   *
+   * Unlike every other endpoint on this controller, the caller identity here
+   * is NOT taken from a client-supplied `?userId=`/`userid` header - country
+   * filtering is this endpoint's access-control boundary, so a spoofable
+   * identity would defeat the whole point. JwtAuthGuard verifies the forwarded
+   * Authorization bearer token's signature against Keycloak's RSA public key
+   * and derives `adminUserId` from its verified `sub` claim. LMS,
+   * Aspire-specific-service, and Event Management Service already forward the
+   * original caller's Authorization header on every call into user-microservice
+   * (needed for their own downstream calls anyway), so this requires no change
+   * on their side beyond continuing to do that.
    */
   @UseFilters(new AllExceptionsFilter(APIID.COHORT_MEMBER_REPORT_FILTER))
+  @UseGuards(JwtAuthGuard)
   @Post('/report-filter')
   @ApiBasicAuth('access-token')
   @ApiCreatedResponse({ description: 'Filtered cohort members list.' })
@@ -222,18 +231,19 @@ export class CohortMembersController {
   @ApiBody({ type: CohortMembersReportFilterDto })
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   public async reportFilterCohortMembers(
-    @Query('userId') userId: string,
+    @Req() request: RequestWithUser,
     @Body() cohortMembersReportFilterDto: CohortMembersReportFilterDto,
     @Res() response: Response
   ) {
-    if (!userId || !isUUID(userId)) {
+    const adminUserId = request.user?.userId;
+    if (!adminUserId || !isUUID(adminUserId)) {
       throw new BadRequestException('unauthorized!');
     }
     return this.cohortMemberAdapter
       .buildCohortMembersAdapter()
       .reportFilterCohortMembers(
         cohortMembersReportFilterDto,
-        userId,
+        adminUserId,
         response
       );
   }
