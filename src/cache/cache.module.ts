@@ -28,18 +28,17 @@ const CONTEXT = "CacheModule";
     {
       // Single shared KeyvRedis instance (one Redis connection) reused by both
       // the value cache below and the raw-client version store — undefined
-      // for the memory provider, or if redis was requested without REDIS_URL.
+      // for the memory provider, or whenever caching is disabled.
+      // loadCacheConfig() already forces config.enabled=false if provider is
+      // "redis" with no REDIS_URL, so by the time this factory runs,
+      // enabled && provider === "redis" implies redisUrl is set.
       provide: CACHE_REDIS_HANDLE,
       useFactory: (config: CacheConfig): KeyvRedis<string> | undefined => {
-        if (config.provider !== "redis") return undefined;
-        if (!config.redisUrl) {
-          LoggerUtil.error(
-            "CACHE_PROVIDER=redis but REDIS_URL is not set",
-            "Falling back to memory cache store",
-            CONTEXT,
-          );
-          return undefined;
-        }
+        // CACHE_ENABLED=false must mean no Redis connection at all, not just
+        // "reads/writes are skipped" — otherwise a disabled cache still opens
+        // a live socket and the startup probe reports it as connected.
+        if (!config.enabled) return undefined;
+        if (config.provider !== "redis" || !config.redisUrl) return undefined;
         const redisStore = new KeyvRedis<string>(config.redisUrl, { throwOnErrors: false });
         redisStore.on("error", (error: unknown) => {
           LoggerUtil.warn(`Redis cache store error: ${error instanceof Error ? error.message : String(error)}`, CONTEXT);
