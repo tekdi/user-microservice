@@ -829,10 +829,13 @@ export class PostgresCohortMembersService {
       cohortMembers.updatedBy = loginUser;
       cohortMembers.cohortAcademicYearId = cohortacAdemicyearId;
       // Aspire Leaders-specific: resolve and cache this member's country id once,
-      // at insert time - see resolveUserCohortCountryId() for why this is never
-      // recomputed afterward.
+      // at insert time - see resolveUserCohortCountryIds() for why this is never
+      // recomputed afterward. Single-user call is just a batch of one - no
+      // separate single-user query method needed.
       (cohortMembers as any).userCohortCountryId =
-        await this.resolveUserCohortCountryId(cohortMembers.userId);
+        (
+          await this.resolveUserCohortCountryIds([cohortMembers.userId])
+        ).get(cohortMembers.userId) ?? null;
       // Create a new CohortMembers entity and populate it with cohortMembers data
       const savedCohortMember = await this.cohortMembersRepository.save(
         cohortMembers
@@ -2399,6 +2402,13 @@ export class PostgresCohortMembersService {
       );
     }
 
+    // Aspire Leaders-specific: resolve every userId's cohort-country in one
+    // batched query up front, rather than once per user inside the loop below
+    // (see resolveUserCohortCountryIds() - avoids an N+1 query per bulk import).
+    const userCohortCountryIds = await this.resolveUserCohortCountryIds(
+      cohortMembersDto.userId
+    );
+
     for (const userId of cohortMembersDto.userId) {
       // why checking from user table because it is possible to make first time part of any cohort
       const userExists = await this.checkUserExist(userId);
@@ -2529,12 +2539,11 @@ export class PostgresCohortMembersService {
               });
             } else {
               // Create new cohort member
-              // Aspire Leaders-specific: resolve and cache this member's country id
-              // once, at insert time - see resolveUserCohortCountryId() for why this
-              // is never recomputed afterward.
-              const userCohortCountryId = await this.resolveUserCohortCountryId(
-                userId
-              );
+              // Aspire Leaders-specific: cache this member's country id, once,
+              // at insert time - resolved above in one batched query for the
+              // whole bulk request, never recomputed afterward.
+              const userCohortCountryId =
+                userCohortCountryIds.get(userId) ?? null;
               const cohortMemberForAcademicYear = {
                 ...cohortMembers,
                 cohortAcademicYearId: cohortExists[0].cohortAcademicYearId,
@@ -6923,28 +6932,39 @@ export class PostgresCohortMembersService {
   }
 
   /**
-   * Aspire Leaders-specific: resolves a member's Users.country free-text value to
-   * countries.id via a single indexed join (case + whitespace insensitive match on
-   * countries.name). Called exactly once, at CohortMembers insert time
-   * (createCohortMembers / createBulkCohortMembers), and the result is cached on
-   * user_cohort_country_id - it is never recomputed after that, even if the user
-   * later changes their profile country, because the country is a property of
-   * *that cohort application*, not a live mirror of the user's current profile.
-   * Returns null when the user has no country set, or it doesn't match any row
-   * in `countries` - both are expected, not error, cases.
+   * Aspire Leaders-specific: resolves each given userId's Users.country
+   * free-text value to countries.id via a single indexed join (case +
+   * whitespace insensitive match on countries.name) - one query for however
+   * many userIds are passed, not one per userId, so this is the only method
+   * needed for both createCohortMembers() (a batch of one) and
+   * createBulkCohortMembers() (a real batch, avoiding an N+1 query there).
+   * Called exactly once per insert, at CohortMembers insert time, and the
+   * result is cached on user_cohort_country_id - it is never recomputed
+   * after that, even if the user later changes their profile country,
+   * because the country is a property of *that cohort application*, not a
+   * live mirror of the user's current profile. userIds absent from the
+   * returned Map simply have no resolvable country (no country set, or it
+   * doesn't match any row in `countries`) - expected, not an error.
    */
-  private async resolveUserCohortCountryId(
-    userId: string
-  ): Promise<string | null> {
+  private async resolveUserCohortCountryIds(
+    userIds: string[]
+  ): Promise<Map<string, string>> {
+    const map = new Map<string, string>();
+    if (!userIds || userIds.length === 0) {
+      return map;
+    }
+
     const rows = await this.usersRepository.query(
-      `SELECT c.id AS "countryId"
+      `SELECT u."userId" AS "userId", c.id AS "countryId"
        FROM "Users" u
        JOIN countries c ON LOWER(TRIM(c.name)) = LOWER(TRIM(u.country))
-       WHERE u."userId" = $1
-       LIMIT 1`,
-      [userId]
+       WHERE u."userId" = ANY($1::uuid[])`,
+      [userIds]
     );
-    return rows?.[0]?.countryId ?? null;
+    for (const row of rows) {
+      map.set(row.userId, row.countryId);
+    }
+    return map;
   }
 
   /**
