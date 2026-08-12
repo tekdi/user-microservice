@@ -30,7 +30,6 @@ function toNumber(value: string | undefined, fallback: number): number {
 
 export function loadCacheConfig(configService: ConfigService): CacheConfig {
   const provider = (configService.get<string>("CACHE_PROVIDER") || "memory").toLowerCase();
-    console.log(configService.get<string>("CACHE_ENABLED"))
 
   let enabled = toBool(configService.get<string>("CACHE_ENABLED"), false);
   const redisUrl = configService.get<string>("REDIS_URL");
