@@ -2983,11 +2983,11 @@ export class PostgresUserService implements IServicelocator {
   /**
    * GDPR-style anonymization: overwrites only email/username/firstName/lastName/dob/gender/mobile/
    * country/permanentCountry/currentCountry/status (+ reason/updatedBy/updatedAt) in Postgres —
-   * gender is set to the existing "i do not want to disclose" enum value rather than null, since
-   * the column is NOT NULL — mirrors email/username/firstName/lastName into Keycloak, disables the
-   * Keycloak account (`enabled: false`), and invalidates its active sessions/refresh tokens, and
-   * mirrors the full field set into Elasticsearch. Accepts multiple emails per call, processed with
-   * bounded concurrency so one failure never blocks the rest.
+   * `gender` is set to `null` (the column was relaxed to nullable specifically for this) — mirrors
+   * email/username/firstName/lastName into Keycloak, disables the Keycloak account (`enabled: false`),
+   * and invalidates its active sessions/refresh tokens, and mirrors the full field set into
+   * Elasticsearch. Accepts multiple emails per call, processed with bounded concurrency so one
+   * failure never blocks the rest.
    */
   public async anonymizeUsers(
     userAnonymizeDto: UserAnonymizeDto,
@@ -3314,7 +3314,7 @@ export class PostgresUserService implements IServicelocator {
           firstName: "deleted",
           lastName: "user",
           dob: null,
-          gender: "i do not want to disclose",
+          gender: null,
           mobile: null,
           country: null,
           permanentCountry: null,
@@ -3394,7 +3394,7 @@ export class PostgresUserService implements IServicelocator {
           firstName: "deleted",
           lastName: "user",
           dob: null,
-          gender: "i do not want to disclose",
+          gender: null,
           mobile: null,
           country: null,
           permanentCountry: null,

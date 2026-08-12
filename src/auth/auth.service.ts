@@ -71,11 +71,14 @@ export class AuthService {
         userData.status === 'inactive' ||
         userData.status === 'archived'
       ) {
-        const errorMessage = !userData
-          ? 'User details not found for user'
-          : userData.status === 'archived'
-            ? 'This account is no longer available'
-            : 'User is inactive, please verify your email';
+        let errorMessage: string;
+        if (!userData) {
+          errorMessage = 'User details not found for user';
+        } else if (userData.status === 'archived') {
+          errorMessage = 'This account is no longer available';
+        } else {
+          errorMessage = 'User is inactive, please verify your email';
+        }
 
         return APIResponse.error(
           response,
