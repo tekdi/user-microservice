@@ -6932,7 +6932,7 @@ export class PostgresCohortMembersService {
   }
 
   /**
-   * Aspire Leaders-specific: resolves each given userId's Users.country
+   * Aspire Leaders-specific: resolves each given userId's Users.currentCountry
    * free-text value to countries.id via a single indexed join (case +
    * whitespace insensitive match on countries.name) - one query for however
    * many userIds are passed, not one per userId, so this is the only method
@@ -6943,8 +6943,8 @@ export class PostgresCohortMembersService {
    * after that, even if the user later changes their profile country,
    * because the country is a property of *that cohort application*, not a
    * live mirror of the user's current profile. userIds absent from the
-   * returned Map simply have no resolvable country (no country set, or it
-   * doesn't match any row in `countries`) - expected, not an error.
+   * returned Map simply have no resolvable country (no currentCountry set,
+   * or it doesn't match any row in `countries`) - expected, not an error.
    */
   private async resolveUserCohortCountryIds(
     userIds: string[]
@@ -6957,7 +6957,7 @@ export class PostgresCohortMembersService {
     const rows = await this.usersRepository.query(
       `SELECT u."userId" AS "userId", c.id AS "countryId"
        FROM "Users" u
-       JOIN countries c ON LOWER(TRIM(c.name)) = LOWER(TRIM(u.country))
+       JOIN countries c ON LOWER(TRIM(c.name)) = LOWER(TRIM(u."currentCountry"))
        WHERE u."userId" = ANY($1::uuid[])`,
       [userIds]
     );

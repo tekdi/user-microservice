@@ -61,8 +61,9 @@ export class CohortMembers {
   rejectionEmailSent: boolean;
 
   /**
-   * Aspire Leaders-specific: resolved countries.id for this member's Users.country
-   * free-text value, at the moment they joined this cohort. Set exactly once by
+   * Aspire Leaders-specific: resolved countries.id for this member's
+   * Users.currentCountry free-text value, at the moment they joined this
+   * cohort. Set exactly once by
    * PostgresCohortMembersService at insert time (create/bulkCreate) and never
    * updated afterward - a user's country can legitimately differ across the
    * different cohorts they've applied to over time, so this is a per-application
