@@ -40,7 +40,7 @@ export class User {
       'non-binary',
       'i do not want to disclose',
     ],
-    nullable: false,
+    nullable: true,
   })
   gender: string;
 

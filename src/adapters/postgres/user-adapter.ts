@@ -1,5 +1,5 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { User } from '../../user/entities/user-entity';
+import { User, UserStatus } from '../../user/entities/user-entity';
 import { FieldValues } from 'src/fields/entities/fields-values.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
@@ -10,6 +10,7 @@ import {
   clearCachedAdminToken,
   createUserInKeyCloak,
   updateUserInKeyCloak,
+  logoutUserInKeyCloak,
   checkIfUsernameExistsInKeycloak,
   checkIfEmailExistsInKeycloak,
 } from '../../common/utils/keycloak.adapter.util';
@@ -49,6 +50,7 @@ import { ActionType, UserUpdateDTO } from 'src/user/dto/user-update.dto';
 import config from '../../common/config';
 import { CalendarField } from 'src/fields/fieldValidators/fieldTypeClasses';
 import { UserCreateSsoDto } from 'src/user/dto/user-create-sso.dto';
+import { UserAnonymizeDto } from 'src/user/dto/user-anonymize.dto';
 import { UserElasticsearchService } from '../../elasticsearch/user-elasticsearch.service';
 import { IUser } from '../../elasticsearch/interfaces/user.interface';
 import { isElasticsearchEnabled } from 'src/common/utils/elasticsearch.util';
@@ -2978,6 +2980,534 @@ export class PostgresUserService implements IServicelocator {
       );
     }
   }
+  /**
+   * GDPR-style anonymization: overwrites only email/username/firstName/lastName/dob/gender/mobile/
+   * country/permanentCountry/currentCountry/status (+ reason/updatedBy/updatedAt) in Postgres —
+   * `gender` is set to `null` (the column was relaxed to nullable specifically for this) — mirrors
+   * email/username/firstName/lastName into Keycloak, disables the Keycloak account (`enabled: false`),
+   * and invalidates its active sessions/refresh tokens, and mirrors the full field set into
+   * Elasticsearch. Accepts multiple emails per call, processed with bounded concurrency so one
+   * failure never blocks the rest.
+   */
+  public async anonymizeUsers(
+    userAnonymizeDto: UserAnonymizeDto,
+    request: any,
+    response: Response
+  ) {
+    const apiId = APIID.USER_ANONYMIZE;
+    try {
+      const { emails, reason } = userAnonymizeDto;
+
+      // De-duplicate (case-insensitive) before building the concurrency pool — a duplicate email
+      // in the request would otherwise be processed twice concurrently against the same row.
+      const uniqueEmails = Array.from(
+        new Set(emails.map((email) => email.trim().toLowerCase()))
+      );
+      const duplicatesRemoved = emails.length - uniqueEmails.length;
+
+      // Resolve acting admin id from JWT, same pattern used by updateUser().
+      let loggedInUserId: string | null = null;
+      if (request?.user?.userId) {
+        loggedInUserId = request.user.userId;
+      } else if (request?.headers?.authorization) {
+        try {
+          const token = request.headers.authorization
+            .replace(/^Bearer\s+/i, "")
+            .trim();
+          const decoded: { sub?: string } = token ? jwt_decode(token) : null;
+          loggedInUserId = decoded?.sub ?? null;
+        } catch {
+          loggedInUserId = null;
+        }
+      }
+
+      if (!loggedInUserId) {
+        return APIResponse.error(
+          response,
+          apiId,
+          "Unauthorized",
+          "Unable to identify the calling user from the access token.",
+          HttpStatus.UNAUTHORIZED
+        );
+      }
+
+      // Admin-only: same tenant-scoped 'admin' role check already used elsewhere in this codebase
+      // (see isUserAdmin() in cohortMembers-adapter.ts) — reuses the same Keycloak bearer token
+      // already required for authentication, no separate rbac_token needed.
+      const tenantId = request?.headers?.tenantid;
+      if (!tenantId) {
+        return APIResponse.error(
+          response,
+          apiId,
+          "Bad Request",
+          "Please provide a tenantid header.",
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      const isAdmin = await this.isUserAdminForAnonymize(
+        loggedInUserId,
+        tenantId
+      );
+      if (!isAdmin) {
+        return APIResponse.error(
+          response,
+          apiId,
+          "Forbidden",
+          API_RESPONSES.USER_ANONYMIZE_FORBIDDEN,
+          HttpStatus.FORBIDDEN
+        );
+      }
+
+      // Fetch the Keycloak admin token once and reuse it for the whole batch (already cached/deduped
+      // internally by getKeycloakAdminToken) instead of re-fetching per user.
+      const keycloakTokenResponse = await getKeycloakAdminToken();
+      const keycloakToken = keycloakTokenResponse.data.access_token;
+
+      // Bounded concurrency: each user triggers 2 Keycloak admin calls plus Postgres/Elasticsearch
+      // writes, so running the full batch (up to 100 emails) at once could exhaust the Keycloak
+      // admin connection pool / trip its rate limiting. A failure on one email still can't block
+      // the rest — each is captured individually, same as Promise.allSettled.
+      const ANONYMIZE_CONCURRENCY = 5;
+      const settled = await this.runWithConcurrency(
+        uniqueEmails,
+        ANONYMIZE_CONCURRENCY,
+        (email) =>
+          this.anonymizeSingleUser(email, reason, loggedInUserId, keycloakToken)
+      );
+
+      const results = settled.map((result, index) => {
+        if (result.status === "fulfilled") {
+          return result.value;
+        }
+        return {
+          email: uniqueEmails[index],
+          status: "FAILED",
+          message: result.reason?.message || "Anonymization failed",
+        };
+      });
+
+      return await APIResponse.success(
+        response,
+        apiId,
+        duplicatesRemoved > 0 ? { results, duplicatesRemoved } : { results },
+        HttpStatus.OK,
+        API_RESPONSES.USER_ANONYMIZE_SUCCESSFULLY
+      );
+    } catch (e) {
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${e.message}`,
+        apiId
+      );
+      return APIResponse.error(
+        response,
+        apiId,
+        API_RESPONSES.SERVER_ERROR,
+        `Error : ${e?.message}`,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  /**
+   * Runs `worker` over `items` with at most `limit` in flight at once. Results are returned in
+   * the same shape as Promise.allSettled — a rejection on one item is captured, never thrown —
+   * so callers get bounded concurrency without losing the "one failure can't block the rest" property.
+   */
+  private async runWithConcurrency<T, R>(
+    items: T[],
+    limit: number,
+    worker: (item: T, index: number) => Promise<R>
+  ): Promise<PromiseSettledResult<R>[]> {
+    const results: PromiseSettledResult<R>[] = new Array(items.length);
+    let nextIndex = 0;
+    const poolSize = Math.max(1, Math.min(limit, items.length));
+
+    const runners = Array.from({ length: poolSize }, async () => {
+      while (nextIndex < items.length) {
+        const current = nextIndex++;
+        try {
+          const value = await worker(items[current], current);
+          results[current] = { status: "fulfilled", value };
+        } catch (reason) {
+          results[current] = { status: "rejected", reason };
+        }
+      }
+    });
+
+    await Promise.all(runners);
+    return results;
+  }
+
+  private generateAnonymizedIdentity(userId: string): string {
+    return `deleted_user_${userId}@anon.local`;
+  }
+
+  /**
+   * Looks up every `Users` row matching `email` — email carries no DB-level unique constraint in
+   * this service (only `username` does), so more than one account can share an email — and
+   * anonymizes each matching row, aggregating their outcomes into a single result for this email.
+   */
+  private async anonymizeSingleUser(
+    email: string,
+    reason: string,
+    loggedInUserId: string | null,
+    keycloakToken: string
+  ): Promise<{ email: string; status: string; message?: string }> {
+    const normalizedEmail = email.trim().toLowerCase();
+    const users = await this.usersRepository.find({
+      where: { email: normalizedEmail },
+    });
+    if (users.length === 0) {
+      return {
+        email,
+        status: "NOT_FOUND",
+        message: API_RESPONSES.USER_NOT_FOUND_FOR_ANONYMIZE,
+      };
+    }
+
+    const rowResults = await Promise.all(
+      users.map((user) =>
+        this.anonymizeUserRow(user, reason, loggedInUserId, keycloakToken)
+      )
+    );
+
+    if (rowResults.some((r) => r.status === "FAILED")) {
+      return {
+        email,
+        status: "FAILED",
+        message: rowResults
+          .map((r) => r.message)
+          .filter(Boolean)
+          .join("; "),
+      };
+    }
+    if (rowResults.some((r) => r.status === "PARTIAL")) {
+      return {
+        email,
+        status: "PARTIAL",
+        message:
+          rowResults.length > 1
+            ? `${rowResults.length} accounts share this email; at least one had a partial failure — check logs by userId.`
+            : rowResults[0].message,
+      };
+    }
+    if (rowResults.every((r) => r.status === "SKIPPED")) {
+      return {
+        email,
+        status: "SKIPPED",
+        message: API_RESPONSES.USER_ALREADY_ANONYMIZED,
+      };
+    }
+
+    return {
+      email,
+      status: "ANONYMIZED",
+      ...(rowResults.length > 1
+        ? {
+            message: `${rowResults.length} accounts shared this email; all were anonymized.`,
+          }
+        : {}),
+    };
+  }
+
+  /**
+   * Anonymizes a single `Users` row: Keycloak profile update + session invalidation, then an
+   * atomic Postgres update (Users row + its PII custom field values), then the Elasticsearch mirror.
+   */
+  private async anonymizeUserRow(
+    user: User,
+    reason: string,
+    loggedInUserId: string | null,
+    keycloakToken: string
+  ): Promise<{ status: string; message?: string }> {
+    // Idempotency guard: a user whose email already matches the anonymized pattern (e.g. this
+    // email was re-submitted after a prior successful anonymization) needs no Keycloak/Postgres
+    // work — but if an earlier run ended in PARTIAL (Elasticsearch failed after Keycloak/Postgres
+    // had already committed), the row's email is already the anon value, so this is also the only
+    // way to retry just the Elasticsearch step: still attempt it here, using the row's current
+    // (already-anonymized) values, before returning.
+    if (/^deleted_user_.+@anon\.local$/.test(user.email || "")) {
+      if (isElasticsearchEnabled()) {
+        try {
+          const fieldsAndValues =
+            await this.fieldsService.getFieldsAndFieldsValues(user.userId);
+          await this.userElasticsearchService.updateUserProfile(user.userId, {
+            email: user.email,
+            username: user.username,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            dob: null,
+            gender: user.gender,
+            mobile: null,
+            country: null,
+            permanentCountry: null,
+            currentCountry: null,
+            status: user.status,
+            customFields: this.mapAnonymizedCustomFieldsForEs(fieldsAndValues),
+          });
+        } catch (esError) {
+          LoggerUtil.error(
+            `${API_RESPONSES.SERVER_ERROR}`,
+            `Elasticsearch resync failed for already-anonymized user ${user.userId}: ${esError.message}`,
+            APIID.USER_ANONYMIZE
+          );
+          return {
+            status: "PARTIAL",
+            message:
+              "Already anonymized; Elasticsearch resync attempted but failed again — retry later.",
+          };
+        }
+      }
+      return {
+        status: "SKIPPED",
+        message: API_RESPONSES.USER_ALREADY_ANONYMIZED,
+      };
+    }
+
+    const anonymizedIdentity = this.generateAnonymizedIdentity(user.userId);
+
+    // 1. Keycloak: email/username/firstName/lastName, and disable the account so it can no
+    // longer authenticate anywhere (including directly against Keycloak, outside this service).
+    const keycloakResult = await updateUserInKeyCloak(
+      {
+        userId: user.userId,
+        email: anonymizedIdentity,
+        username: anonymizedIdentity,
+        firstName: "deleted",
+        lastName: "user",
+        enabled: false,
+      },
+      keycloakToken
+    );
+    if (keycloakResult.success === false) {
+      return {
+        status: "FAILED",
+        message: `Keycloak update failed: ${keycloakResult.message}`,
+      };
+    }
+
+    // 1b. Keycloak: invalidate any active sessions/refresh tokens for this user. Disabling the
+    // account (step 1) blocks new logins, but doesn't retroactively revoke an already-issued
+    // session/refresh token, so this is still needed to stop an already-logged-in session from
+    // continuing to refresh its access token post-anonymization.
+    const logoutResult = await logoutUserInKeyCloak(user.userId, keycloakToken);
+    if (logoutResult.success === false) {
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Keycloak session invalidation failed for user ${user.userId}: ${logoutResult.message}`,
+        APIID.USER_ANONYMIZE
+      );
+    }
+
+    // 2 & 3. Postgres: overwrite the Users row and null its PII custom field values atomically.
+    // If this fails after Keycloak already succeeded, best-effort revert the Keycloak profile so
+    // the two systems don't silently diverge (identity anonymized in Keycloak, PII still in Postgres).
+    let anonymizedCustomFields: any[];
+    try {
+      anonymizedCustomFields = await this.anonymizeUserPostgresData(
+        user.userId,
+        {
+          email: anonymizedIdentity,
+          username: anonymizedIdentity,
+          firstName: "deleted",
+          lastName: "user",
+          dob: null,
+          gender: null,
+          mobile: null,
+          country: null,
+          permanentCountry: null,
+          currentCountry: null,
+          status: UserStatus.ARCHIVED,
+          reason,
+          updatedBy: loggedInUserId ?? undefined,
+        },
+        loggedInUserId
+      );
+    } catch (pgError) {
+      // --- Option A revert starts here ---
+      // Postgres failed (or threw) after Keycloak already committed the rename+disable above, so
+      // the two systems are now out of sync: Keycloak shows the anonymized identity, but Postgres
+      // still has the original PII (its own transaction rolled back automatically on throw, so
+      // Users/FieldValues were never partially written — nothing to undo on the Postgres side).
+      // To put Keycloak back the way it was, we don't need to have "stored" the original values
+      // anywhere separately: `user` is the same object this function was called with, fetched
+      // *before* any write happened — its fields (user.email/username/firstName/lastName) were
+      // never reassigned, so they're still the pre-anonymization values sitting in memory here.
+      // We just send them back to Keycloak as-is, plus enabled: true to undo the disable from step 1.
+      const revert = await updateUserInKeyCloak(
+        {
+          userId: user.userId,
+          email: user.email,
+          username: user.username,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          enabled: true,
+        },
+        keycloakToken
+      );
+      // --- Option A revert ends here: if this call succeeds, Keycloak + Postgres are both back to
+      // their pre-anonymization state (safe to retry). If it fails too, see the log/message below —
+      // that's the one case this can't fully undo (Keycloak already changed, revert didn't take).
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Postgres anonymize failed for user ${user.userId}: ${
+          pgError.message
+        }. Keycloak revert ${
+          revert.success
+            ? "succeeded"
+            : `FAILED: ${revert.message} — Keycloak identity is now out of sync with Postgres, manual reconciliation required`
+        }.`,
+        APIID.USER_ANONYMIZE
+      );
+      return {
+        status: "FAILED",
+        message: `Postgres update failed: ${pgError.message}${
+          revert.success
+            ? ""
+            : " — Keycloak revert also failed; this account needs manual reconciliation."
+        }`,
+      };
+    }
+
+    // 4. Elasticsearch: mirror the same field set + the nulled custom fields.
+    // This is a single API call (one Elasticsearch "update by script" request) — it either fully
+    // applies or fully throws; there's no partial/some-fields-updated outcome from this one call.
+    // `customFields` is not merged element-by-element into whatever ES already had — the painless
+    // script (PROFILE_PATCH_SCRIPT in user-elasticsearch.service.ts) replaces the ENTIRE
+    // profile.customFields array with exactly what we send here. Practically:
+    //  - `anonymizedCustomFields` (built in anonymizeUserPostgresData/mapAnonymizedCustomFieldsForEs)
+    //    only contains fields that actually have a FieldValues row for this user right now — if the
+    //    user never filled in a given custom field, it was never in Postgres, so it's simply absent
+    //    from this array too (nothing to "not find" or fail on — it's just not included).
+    //  - PII-flagged fields (fieldParams.isPiData === true) are included with value: "" (blanked),
+    //    not removed as array entries — the field still exists in the document with an empty value.
+    //  - Any field ES previously had that isn't in this computed array (e.g. it was later removed
+    //    from Postgres, or never existed there) will disappear from the ES document after this call,
+    //    since the whole array is replaced to match current Postgres state, not merged with the old one.
+    if (isElasticsearchEnabled()) {
+      try {
+        await this.userElasticsearchService.updateUserProfile(user.userId, {
+          email: anonymizedIdentity,
+          username: anonymizedIdentity,
+          firstName: "deleted",
+          lastName: "user",
+          dob: null,
+          gender: null,
+          mobile: null,
+          country: null,
+          permanentCountry: null,
+          currentCountry: null,
+          status: UserStatus.ARCHIVED,
+          customFields: anonymizedCustomFields,
+        });
+      } catch (esError) {
+        LoggerUtil.error(
+          `${API_RESPONSES.SERVER_ERROR}`,
+          `Elasticsearch anonymize failed for user ${user.userId}: ${esError.message}`,
+          APIID.USER_ANONYMIZE
+        );
+        return {
+          status: "PARTIAL",
+          message:
+            "Anonymized in Keycloak and Postgres; Elasticsearch update failed and needs retry.",
+        };
+      }
+    }
+
+    if (logoutResult.success === false) {
+      return {
+        status: "ANONYMIZED",
+        message:
+          "Anonymized successfully, but invalidating the Keycloak session failed — an already-logged-in session may keep working until its access token naturally expires.",
+      };
+    }
+
+    return { status: "ANONYMIZED" };
+  }
+
+  /**
+   * Atomically updates the Users row and nulls its PII custom field values — a field is treated
+   * as PII if its `Fields.fieldParams` has `isPiData: true` (admin-configured per field, not a
+   * hardcoded name/pattern list) — every other custom field is left untouched. Returns the full
+   * custom-field list (PII fields blanked) so the caller can mirror the same state into Elasticsearch.
+   */
+  private async anonymizeUserPostgresData(
+    userId: string,
+    fields: Partial<User>,
+    loggedInUserId: string | null
+  ): Promise<any[]> {
+    const fieldsAndValues = await this.fieldsService.getFieldsAndFieldsValues(
+      userId
+    );
+
+    const piiFieldValuesIds = fieldsAndValues
+      .filter((f) => f.fieldParams?.isPiData === true)
+      .map((f) => f.fieldValuesId)
+      .filter(Boolean);
+
+    await this.usersRepository.manager.transaction(async (manager) => {
+      await manager.update(User, { userId }, fields as any);
+      if (piiFieldValuesIds.length > 0) {
+        await manager.update(
+          FieldValues,
+          { fieldValuesId: In(piiFieldValuesIds) },
+          {
+            value: "", // FieldValues.value is NOT NULL; blank string is the closest equivalent to null here.
+            textValue: null,
+            numberValue: null,
+            calendarValue: null,
+            dropdownValue: null,
+            radioValue: null,
+            checkboxValue: null,
+            textareaValue: null,
+            fileValue: null,
+            updatedBy: loggedInUserId ?? undefined,
+          }
+        );
+      }
+    });
+
+    return this.mapAnonymizedCustomFieldsForEs(fieldsAndValues);
+  }
+
+  /**
+   * Maps raw FieldValues+Fields rows into the shape Elasticsearch's customFields expects,
+   * blanking the ones flagged `fieldParams.isPiData === true`. Shared by
+   * anonymizeUserPostgresData (fresh anonymization) and the idempotent-retry Elasticsearch
+   * resync in anonymizeUserRow.
+   */
+  private mapAnonymizedCustomFieldsForEs(fieldsAndValues: any[]): any[] {
+    return fieldsAndValues.map((f) => ({
+      fieldId: f.fieldId,
+      code: f.fieldname,
+      label: f.label,
+      type: f.type,
+      value: f.fieldParams?.isPiData === true ? "" : f.value,
+    }));
+  }
+
+  /**
+   * Tenant-scoped "is this user an admin" check for gating /user/anonymize — same query as the
+   * existing isUserAdmin() in cohortMembers-adapter.ts (Roles.code === 'admin' via
+   * UserRolesMapping), duplicated locally rather than shared across adapters since neither
+   * exposes this as a public method today.
+   */
+  private async isUserAdminForAnonymize(
+    userId: string,
+    tenantId: string
+  ): Promise<boolean> {
+    const result = await this.usersRepository.query(
+      `SELECT 1 FROM "UserRolesMapping" URM
+       JOIN "Roles" R ON R."roleId" = URM."roleId"
+       WHERE URM."userId" = $1 AND URM."tenantId" = $2 AND R."code" = 'admin'
+       LIMIT 1`,
+      [userId, tenantId]
+    );
+    return result.length > 0;
+  }
+
   private formatMobileNumber(mobile: string): string {
     return `+91${mobile}`;
   }
