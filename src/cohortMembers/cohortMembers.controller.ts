@@ -550,6 +550,46 @@ export class CohortMembersController {
   }
 
   /**
+   * Aspire Leaders-specific: manual/external-cron trigger endpoint for
+   * user_cohort_country_id reconciliation (see
+   * docs/regional-admin-cohort-country-report.md §11.7). Re-derives the
+   * correct hidden country for every CohortMembers row whose cohort
+   * application window is still open, correcting any drift regardless of
+   * cause. Closed cohorts are never touched.
+   *
+   * Unlike the shortlisting evaluation endpoint above, this is a global,
+   * cross-tenant maintenance operation over CohortMembers/Users/countries/
+   * FieldValues, so it takes no tenant/academic-year headers or body.
+   *
+   * @returns JSON response with the count of CohortMembers rows corrected
+   */
+  @Post('cron/reconcile-country')
+  async reconcileCohortMemberCountry(@Res() res: Response) {
+    const apiId = APIID.COHORT_MEMBER_RECONCILE_COUNTRY;
+
+    try {
+      const result =
+        await this.cohortMembersCronService.triggerCohortCountryReconciliation();
+
+      return APIResponse.success(
+        res,
+        apiId,
+        result,
+        HttpStatus.OK,
+        API_RESPONSES.COHORT_MEMBER_RECONCILE_COUNTRY_SUCCESS
+      );
+    } catch (error) {
+      return APIResponse.error(
+        res,
+        apiId,
+        `Error: ${error.message}`,
+        API_RESPONSES.INTERNAL_SERVER_ERROR,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  /**
    * Manual trigger endpoint for sending rejection email notifications
    * Allows immediate processing of rejection email notifications for testing or urgent processing
    *

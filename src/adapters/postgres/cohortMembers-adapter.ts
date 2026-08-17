@@ -6968,6 +6968,54 @@ export class PostgresCohortMembersService {
   }
 
   /**
+   * Aspire Leaders-specific: nightly (or manually-triggered) reconciliation
+   * for user_cohort_country_id drift across the whole table. Re-derives the
+   * correct value for every CohortMembers row whose cohort's application
+   * window is still open, and corrects any row that's out of sync with the
+   * user's current profile country. Closed cohorts are never touched - same
+   * freeze guarantee as the real-time sync in
+   * PostgresUserService.syncOpenCohortCountryOnProfileUpdate() (identical
+   * "still open" check and LEFT JOIN-based resolution, just unscoped to a
+   * single userId here).
+   *
+   * This is the actual correctness guarantee described in
+   * docs/regional-admin-cohort-country-report.md §11.7: it doesn't matter WHY
+   * a row drifted (a transient real-time-sync failure, the bulk-import gap
+   * that's deliberately not hooked in real time per §11.5/§11.8, a manual DB
+   * edit, anything) - this catches and fixes all of it, unconditionally, on
+   * whatever schedule it's run (see CohortMembersCronService).
+   *
+   * One set-based UPDATE across the whole table, not a per-user loop - see
+   * §11.5 for why this is the right shape even at 100k+ CohortMembers rows.
+   */
+  public async reconcileOpenCohortCountries(): Promise<{
+    updatedCount: number;
+  }> {
+    const applicationEndFieldId = process.env.APPLICATION_END_FIELD_ID ?? null;
+    const result = await this.usersRepository.query(
+      `UPDATE "CohortMembers" cm
+       SET user_cohort_country_id = c.id
+       FROM "Users" u
+       LEFT JOIN countries c
+         ON LOWER(TRIM(c.name)) = LOWER(TRIM(u."currentCountry"))
+       WHERE cm."userId" = u."userId"
+         AND cm.user_cohort_country_id IS DISTINCT FROM c.id
+         AND (
+           SELECT fv."calendarValue" >= NOW()
+           FROM "FieldValues" fv
+           WHERE fv."itemId" = cm."cohortId"
+             AND fv."fieldId" = $1
+             AND fv."calendarValue" IS NOT NULL
+           ORDER BY fv."createdAt" DESC
+           LIMIT 1
+         ) IS NOT FALSE
+       RETURNING cm."cohortMembershipId"`,
+      [applicationEndFieldId]
+    );
+    return { updatedCount: Array.isArray(result) ? result.length : 0 };
+  }
+
+  /**
    * Aspire Leaders-specific: resolves the calling Regional Admin's own allowed
    * countries into countries.id values, for use as the report-filter's
    * user_cohort_country_id IN (...) clause. Country ids are NEVER accepted from
