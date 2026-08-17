@@ -106,6 +106,11 @@ export const API_RESPONSES = {
 
   USER_NOT_FOUND_FOR_DELETE: "User not found for delete.",
   USER_NOT_FOUND_FOR_PASSWORD_RESET: "User not found for password reset.",
+  USER_NOT_FOUND_FOR_ANONYMIZE: "User not found for anonymize.",
+  USER_ALREADY_ANONYMIZED: "User is already anonymized.",
+  USER_ANONYMIZE_SUCCESSFULLY: "Users processed for anonymization.",
+  USER_ANONYMIZE_FORBIDDEN:
+    "You do not have permission to perform this action.",
 
   //get User Details
   USER_GET_SUCCESSFULLY: "User details fetched successfully.",

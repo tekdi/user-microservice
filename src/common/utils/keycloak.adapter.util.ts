@@ -257,6 +257,7 @@ interface UpdateUserQuery {
   lastName?: string; // Optional
   username?: string; // Optional
   email?: string; // Optional
+  enabled?: boolean; // Optional — defaults to true (existing behavior) when omitted
 }
 
 // Define the structure of the function response
@@ -291,7 +292,7 @@ async function updateUserInKeyCloak(
   }
 
   const payload: Record<string, unknown> = {
-    enabled: true,
+    enabled: query.enabled ?? true,
     ...keycloakOptionalString('firstName', query.firstName),
     ...keycloakOptionalString('lastName', query.lastName),
     ...keycloakOptionalString('username', query.username),
@@ -349,6 +350,53 @@ async function updateUserInKeyCloak(
     const errorMessage =
       axiosError.response?.data?.errorMessage ||
       'Failed to update user in Keycloak';
+
+    return {
+      success: false,
+      statusCode: axiosError.response?.status || 500,
+      message: errorMessage,
+    };
+  }
+}
+
+/**
+ * Invalidates every active session and refresh token for a Keycloak user, without disabling
+ * the account (`enabled` is left untouched). Used by anonymization so an already-logged-in
+ * user can't keep refreshing their access token after their profile has been anonymized.
+ */
+async function logoutUserInKeyCloak(
+  userId: string,
+  token: string
+): Promise<UpdateUserResponse> {
+  if (!userId) {
+    return {
+      success: false,
+      statusCode: 400,
+      message: 'User cannot be logged out, userId missing',
+    };
+  }
+
+  const config: AxiosRequestConfig = {
+    method: 'post',
+    url: `${process.env.KEYCLOAK}${process.env.KEYCLOAK_ADMIN}/${userId}/logout`,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+  };
+
+  try {
+    const response: AxiosResponse = await axios(config);
+    return {
+      success: true,
+      statusCode: response.status,
+      message: 'User sessions invalidated successfully in Keycloak',
+    };
+  } catch (error: any) {
+    const axiosError: AxiosError = error;
+    const errorMessage =
+      axiosError.response?.data?.errorMessage ||
+      'Failed to invalidate user sessions in Keycloak';
 
     return {
       success: false,
@@ -418,6 +466,7 @@ export {
   clearCachedAdminToken,
   createUserInKeyCloak,
   updateUserInKeyCloak,
+  logoutUserInKeyCloak,
   checkIfEmailExistsInKeycloak,
   checkIfUsernameExistsInKeycloak,
 };
