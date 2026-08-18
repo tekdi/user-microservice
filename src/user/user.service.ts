@@ -4209,7 +4209,7 @@ export class UserService {
       let batchCenterData = {};
       if (result.length > 0) {
         const userIds = result.map((row: any) => row.userId);
-        batchCenterData = await this.getBatchAndCenterNames(userIds,tenantId);
+        batchCenterData = await this.getBatchAndCenterNames(userIds, tenantId, academicYearId);
       }
 
       // Process and combine all data
@@ -4444,7 +4444,8 @@ export class UserService {
     sortDirection: string,
     customFieldNames?: string[],
     nameFilter?: string,
-    statusFilter?: string[]
+    statusFilter?: string[],
+    academicYearId?: string
   ): Promise<{ totalCount: number; users: any[] }> {
     const apiId = APIID.USER_LIST;
 
@@ -4465,7 +4466,7 @@ export class UserService {
           : Promise.resolve({}),
 
         // Step 3: Get all cohort associations (batch and center data)
-        this.getBatchAndCenterNames(userIds,tenantId)
+        this.getBatchAndCenterNames(userIds, tenantId, academicYearId)
       ]);
 
       // Handle any failed promises
@@ -4507,7 +4508,7 @@ export class UserService {
   /**
    * Get all cohort associations for users with complete details for cohortData structure
    */
-  private async getBatchAndCenterNames(userIds: string[],tenantId: string): Promise<any> {
+  private async getBatchAndCenterNames(userIds: string[], tenantId: string, academicYearId: string): Promise<any> {
     const apiId = APIID.USER_LIST;
   
     if (!userIds || userIds.length === 0) {
@@ -4526,12 +4527,15 @@ export class UserService {
           cohort."parentId"
         FROM public."CohortMembers" cm
         LEFT JOIN public."Cohort" cohort ON cm."cohortId" = cohort."cohortId"
+        Join public."CohortAcademicYear" ay ON ay."cohortAcademicYearId" = cm."cohortAcademicYearId"
         WHERE cm."userId" = ANY($1::uuid[])
         AND cohort."tenantId" = $2::uuid
+        AND ay."academicYearId" = $3::uuid
       `;
-  
-      const assignments = await this.usersRepository.query(assignmentQuery, [userIds,tenantId]);
-      
+
+
+      const assignments = await this.cohortMemberRepository.query(assignmentQuery, [userIds, tenantId, academicYearId]);
+
       if (assignments.length === 0) {
         LoggerUtil.warn(`No cohort memberships found for any of the ${userIds.length} users`, apiId);
         return {};
@@ -4568,9 +4572,11 @@ export class UserService {
           FROM 
             public."CohortMembers" cm
             ${condition}
+          JOIN public."CohortAcademicYear" ay ON ay."cohortAcademicYearId" = cm."cohortAcademicYearId"
           WHERE 
             cm."userId" = ANY($1::uuid[])
             AND cm."cohortId" = ANY($2::uuid[])
+             AND ay."academicYearId" = $3::uuid
           ORDER BY cm."createdAt" DESC
         `;
       };
@@ -4597,16 +4603,16 @@ export class UserService {
   
       if (batchData.userIds.length > 0) {
         const batchResult = await this.usersRepository.query(
-          buildQuery(true), 
-          [batchData.userIds, batchData.cohortIds]
+          buildQuery(true),
+          [batchData.userIds, batchData.cohortIds, academicYearId]
         );
         result.push(...batchResult);
       }
   
       if (centerData.userIds.length > 0) {
         const centerResult = await this.usersRepository.query(
-          buildQuery(false), 
-          [centerData.userIds, centerData.cohortIds]
+          buildQuery(false),
+          [centerData.userIds, centerData.cohortIds, academicYearId]
         );
         result.push(...centerResult);
       }
