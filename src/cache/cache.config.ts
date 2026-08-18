@@ -14,8 +14,6 @@ export interface CacheConfig {
   opTimeoutMs: number;
   cbFailures: number;
   cbCooldownMs: number;
-  /** §1.6 periodic counter logging cadence. */
-  metricsIntervalMs: number;
 }
 
 function toBool(value: string | undefined, fallback: boolean): boolean {
@@ -64,6 +62,5 @@ export function loadCacheConfig(configService: ConfigService): CacheConfig {
     opTimeoutMs: toNumber(configService.get<string>("CACHE_OP_TIMEOUT_MS"), 150),
     cbFailures: toNumber(configService.get<string>("CACHE_CB_FAILURES"), 5),
     cbCooldownMs: toNumber(configService.get<string>("CACHE_CB_COOLDOWN_MS"), 30000),
-    metricsIntervalMs: toNumber(configService.get<string>("CACHE_METRICS_INTERVAL_MS"), 60000),
   };
 }
