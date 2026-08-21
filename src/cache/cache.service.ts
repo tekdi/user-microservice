@@ -68,6 +68,7 @@ export class CacheService {
       const cached = await this.safeGet(cacheKey);
       if (cached.ok && cached.value !== undefined && cached.value !== null) {
         this.metrics.record(namespace, "hit");
+        this.logCacheEvent("HIT", namespace, key);
         return cached.value as T;
       }
       this.metrics.record(namespace, cached.ok ? "miss" : "error");
@@ -80,6 +81,7 @@ export class CacheService {
     if (versions && this.isCacheable(result)) {
       const cacheKey = this.buildEntryKey(namespace, key, versions, dependsOn);
       await this.safeSet(cacheKey, result, ttlSeconds);
+      this.logCacheEvent("SET", namespace, key);
     }
 
     return result;
@@ -116,16 +118,22 @@ export class CacheService {
       const mgetOutcome = await this.safeMget(keys);
 
       if (mgetOutcome.ok) {
+        const hitsByFamily = new Map<string, number>();
         cacheableIds.forEach((id, idx) => {
           const value = mgetOutcome.value[idx];
           if (value !== undefined && value !== null) {
             result.set(id, value as T);
             this.metrics.record(namespaceFor(id), "hit");
+            const family = CacheMetrics.family(namespaceFor(id));
+            hitsByFamily.set(family, (hitsByFamily.get(family) ?? 0) + 1);
           } else {
             missingIds.push(id);
             this.metrics.record(namespaceFor(id), "miss");
           }
         });
+        for (const [family, count] of hitsByFamily) {
+          this.logCacheEvent("HIT", family, `bulk x${count}`);
+        }
       } else {
         missingIds.push(...cacheableIds);
         cacheableIds.forEach((id) => this.metrics.record(namespaceFor(id), "error"));
@@ -155,6 +163,16 @@ export class CacheService {
         }
         if (toSet.length > 0) {
           await this.safeMset(toSet);
+          const setsByFamily = new Map<string, number>();
+          for (const id of missingIds) {
+            if (!entryKeyById.has(id)) continue; // wasn't cacheable to begin with
+            if (!this.isCacheable(loaded.get(id))) continue;
+            const family = CacheMetrics.family(namespaceFor(id));
+            setsByFamily.set(family, (setsByFamily.get(family) ?? 0) + 1);
+          }
+          for (const [family, count] of setsByFamily) {
+            this.logCacheEvent("SET", family, `bulk x${count}`);
+          }
         }
       }
     }
@@ -180,12 +198,7 @@ export class CacheService {
       uniqueNamespaces.map(async (namespace) => {
         const outcome = await this.executeOp(() => this.versionStore.incr(this.versionKey(namespace)));
         if (outcome.ok) {
-          LoggerUtil.log(
-            `cache INCR ns=${namespace} v=${outcome.value} caller=${caller}`,
-            CONTEXT,
-            undefined,
-            "debug",
-          );
+          LoggerUtil.log(`cache INCR ns=${namespace} v=${outcome.value} caller=${caller}`, CONTEXT);
         } else {
           LoggerUtil.error(
             `Failed to invalidate namespace ${namespace} (caller=${caller})`,
@@ -204,6 +217,11 @@ export class CacheService {
     const frame = stack[3]?.trim() ?? "unknown";
     const match = frame.match(/at\s+([^\s(]+)/);
     return match ? match[1] : "unknown";
+  }
+
+  /** One line per HIT/SET, logged at the moment it happens on a live call. */
+  private logCacheEvent(kind: "HIT" | "SET", namespace: string, key: string): void {
+    LoggerUtil.log(`cache ${kind} ns=${namespace} key=${key}`, CONTEXT);
   }
 
   /** §1.6 snapshot of per-namespace counters (also surfaced by /health). */

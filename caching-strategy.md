@@ -85,12 +85,11 @@ the hazard in §6.1.**
 |---|---|---|
 | `CACHE_ENABLED` | `false` | master switch; `false` = every call is pass-through, **including INCRs** |
 | `CACHE_PROVIDER` | `memory` | `memory` \| `redis` |
-| `REDIS_URL` | — | required when provider is `redis`; if empty it logs an error and **silently falls back to memory** |
+| `REDIS_URL` | — | required when provider is `redis`; if empty, caching is **forced off entirely** for the process (logged as an error) rather than silently falling back to memory — a memory cache that looks like Redis on one box would break cross-pod invalidation in any multi-instance deployment |
 | `CACHE_KEY_PREFIX` | `ums` | per-service prefix |
 | `CACHE_DISABLED_NAMESPACES` | empty | comma-separated bypass list; matches by family (`userlist`) or exact (`cohort:{uuid}`) |
 | `CACHE_OP_TIMEOUT_MS` | `150` | per-op timeout |
 | `CACHE_CB_FAILURES` / `CACHE_CB_COOLDOWN_MS` | `5` / `30000` | circuit breaker |
-| `CACHE_METRICS_INTERVAL_MS` | `60000` | metrics log cadence |
 
 `memory` is **per-process**: each pod gets its own cache *and its own counters*,
 so an INCR on one pod does not invalidate another. It is safe only for
@@ -98,9 +97,14 @@ single-process dev.
 
 ### 1.6 Observability
 
-- Per-namespace `hit / miss / error / bypass` counters, logged every
-  `CACHE_METRICS_INTERVAL_MS` as `cache metrics {...}`. Counters are grouped by
-  **family**, so `ufields:{userId}` reports under `ufields`.
+- Per-namespace `hit / miss / error / bypass` counters, updated on every call
+  and available on demand via `getMetricsSnapshot()` / `GET /health`. Counters
+  are grouped by **family**, so `ufields:{userId}` reports under `ufields`.
+  There is no periodic dump — logging is event-based (below), not timer-based.
+- `cache HIT ns=… key=…` / `cache SET ns=… key=…` debug line at the moment
+  each cache read/write happens on a live call. Bulk hydration
+  (`bulkGetOrLoad`) logs one aggregated line per family per call instead of
+  one per id, e.g. `key=bulk x12`.
 - `cache INCR ns=… v=… caller=…` debug line on every invalidation. **A write
   that produces no INCR line is an unhooked write path.**
 - `GET /health` reports `cache.redis` (`ok` / `unreachable` / `not-configured` /
