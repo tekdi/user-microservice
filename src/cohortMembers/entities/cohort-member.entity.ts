@@ -59,4 +59,18 @@ export class CohortMembers {
    */
   @Column({ name: 'rejection_email_sent', type: 'boolean', default: false })
   rejectionEmailSent: boolean;
+
+  /**
+   * Aspire Leaders-specific: resolved countries.id for this member's
+   * Users.currentCountry free-text value, at the moment they joined this
+   * cohort. Set exactly once by
+   * PostgresCohortMembersService at insert time (create/bulkCreate) and never
+   * updated afterward - a user's country can legitimately differ across the
+   * different cohorts they've applied to over time, so this is a per-application
+   * snapshot, not a live mirror of the user's current profile. Null when the
+   * user's country was blank or didn't match any row in `countries`. Not a
+   * generic platform field - used only for Regional Admin report filtering.
+   */
+  @Column({ name: 'user_cohort_country_id', type: 'uuid', nullable: true })
+  userCohortCountryId: string | null;
 }
