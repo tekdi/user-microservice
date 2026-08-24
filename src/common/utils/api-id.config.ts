@@ -70,6 +70,8 @@ export const APIID = {
   COHORT_MEMBER_SEND_REJECTION_EMAILS: "api.cohortmember.sendRejectionEmails",
   COHORT_MEMBER_SEND_SHORTLISTING_EMAILS:
     "api.cohortmember.sendShortlistingEmails",
+  COHORT_MEMBER_REPORT_FILTER: "api.cohortmember.reportFilter",
+  COHORT_MEMBER_RECONCILE_COUNTRY: "api.cohortmember.reconcileCountry",
 
   // Privilege Assignment APIs
   ASSIGNPRIVILEGE_CREATE: "api.assignprivilege.create",
@@ -197,4 +199,6 @@ export const APIID = {
   CACHE_CLEAR_ALL: "api.cache.clear.all",
   // Country Management APIs
   COUNTRY_LIST: "api.country.list",
+  // Aspire Leaders Specific APIs
+  ASPIRE_LEADERS_COUNTRY_LIST: "api.aspire-leaders-specific.country.list",
 } as const;

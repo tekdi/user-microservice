@@ -24,11 +24,14 @@ import {
   ValidationPipe,
   Query,
   UseFilters,
+  UseGuards,
   BadRequestException,
   Request,
   HttpStatus,
 } from '@nestjs/common';
+import { JwtAuthGuard } from 'src/common/guards/keycloak.guard';
 import { CohortMembersSearchDto } from './dto/cohortMembers-search.dto';
+import { CohortMembersReportFilterDto } from './dto/cohortMembers-report-filter.dto';
 import { CohortMembersDto } from './dto/cohortMembers.dto';
 import { CohortMembersAdapter } from './cohortMembersadapter';
 import { CohortMembersUpdateDto } from './dto/cohortMember-update.dto';
@@ -197,6 +200,50 @@ export class CohortMembersController {
         cohortMembersSearchDto,
         tenantId,
         academicyearId,
+        response
+      );
+  }
+
+  /**
+   * Aspire Leaders-specific lean reporting endpoint (see
+   * docs/regional-admin-cohort-country-report.md). Given a cohortId + a chunk of
+   * userIds, returns the matching CohortMembers rows - automatically
+   * country-filtered when the calling admin is a Regional Admin, unfiltered when
+   * they're an Admin.
+   *
+   * Unlike every other endpoint on this controller, the caller identity here
+   * is NOT taken from a client-supplied `?userId=`/`userid` header - country
+   * filtering is this endpoint's access-control boundary, so a spoofable
+   * identity would defeat the whole point. JwtAuthGuard verifies the forwarded
+   * Authorization bearer token's signature against Keycloak's RSA public key
+   * and derives `adminUserId` from its verified `sub` claim. LMS,
+   * Aspire-specific-service, and Event Management Service already forward the
+   * original caller's Authorization header on every call into user-microservice
+   * (needed for their own downstream calls anyway), so this requires no change
+   * on their side beyond continuing to do that.
+   */
+  @UseFilters(new AllExceptionsFilter(APIID.COHORT_MEMBER_REPORT_FILTER))
+  @UseGuards(JwtAuthGuard)
+  @Post('/report-filter')
+  @ApiBasicAuth('access-token')
+  @ApiCreatedResponse({ description: 'Filtered cohort members list.' })
+  @ApiBadRequestResponse({ description: 'Bad request' })
+  @ApiBody({ type: CohortMembersReportFilterDto })
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  public async reportFilterCohortMembers(
+    @Req() request: RequestWithUser,
+    @Body() cohortMembersReportFilterDto: CohortMembersReportFilterDto,
+    @Res() response: Response
+  ) {
+    const adminUserId = request.user?.userId;
+    if (!adminUserId || !isUUID(adminUserId)) {
+      throw new BadRequestException('unauthorized!');
+    }
+    return this.cohortMemberAdapter
+      .buildCohortMembersAdapter()
+      .reportFilterCohortMembers(
+        cohortMembersReportFilterDto,
+        adminUserId,
         response
       );
   }
@@ -492,6 +539,46 @@ export class CohortMembersController {
       );
 
       // Return error response
+      return APIResponse.error(
+        res,
+        apiId,
+        `Error: ${error.message}`,
+        API_RESPONSES.INTERNAL_SERVER_ERROR,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  /**
+   * Aspire Leaders-specific: manual/external-cron trigger endpoint for
+   * user_cohort_country_id reconciliation (see
+   * docs/regional-admin-cohort-country-report.md §11.7). Re-derives the
+   * correct hidden country for every CohortMembers row whose cohort
+   * application window is still open, correcting any drift regardless of
+   * cause. Closed cohorts are never touched.
+   *
+   * Unlike the shortlisting evaluation endpoint above, this is a global,
+   * cross-tenant maintenance operation over CohortMembers/Users/countries/
+   * FieldValues, so it takes no tenant/academic-year headers or body.
+   *
+   * @returns JSON response with the count of CohortMembers rows corrected
+   */
+  @Post('cron/reconcile-country')
+  async reconcileCohortMemberCountry(@Res() res: Response) {
+    const apiId = APIID.COHORT_MEMBER_RECONCILE_COUNTRY;
+
+    try {
+      const result =
+        await this.cohortMembersCronService.triggerCohortCountryReconciliation();
+
+      return APIResponse.success(
+        res,
+        apiId,
+        result,
+        HttpStatus.OK,
+        API_RESPONSES.COHORT_MEMBER_RECONCILE_COUNTRY_SUCCESS
+      );
+    } catch (error) {
       return APIResponse.error(
         res,
         apiId,

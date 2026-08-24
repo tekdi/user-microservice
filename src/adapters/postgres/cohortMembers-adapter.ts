@@ -828,6 +828,14 @@ export class PostgresCohortMembersService {
       cohortMembers.createdBy = loginUser;
       cohortMembers.updatedBy = loginUser;
       cohortMembers.cohortAcademicYearId = cohortacAdemicyearId;
+      // Aspire Leaders-specific: resolve and cache this member's country id once,
+      // at insert time - see resolveUserCohortCountryIds() for why this is never
+      // recomputed afterward. Single-user call is just a batch of one - no
+      // separate single-user query method needed.
+      (cohortMembers as any).userCohortCountryId =
+        (
+          await this.resolveUserCohortCountryIds([cohortMembers.userId])
+        ).get(cohortMembers.userId) ?? null;
       // Create a new CohortMembers entity and populate it with cohortMembers data
       const savedCohortMember = await this.cohortMembersRepository.save(
         cohortMembers
@@ -2399,6 +2407,13 @@ export class PostgresCohortMembersService {
       );
     }
 
+    // Aspire Leaders-specific: resolve every userId's cohort-country in one
+    // batched query up front, rather than once per user inside the loop below
+    // (see resolveUserCohortCountryIds() - avoids an N+1 query per bulk import).
+    const userCohortCountryIds = await this.resolveUserCohortCountryIds(
+      cohortMembersDto.userId
+    );
+
     for (const userId of cohortMembersDto.userId) {
       // why checking from user table because it is possible to make first time part of any cohort
       const userExists = await this.checkUserExist(userId);
@@ -2529,6 +2544,11 @@ export class PostgresCohortMembersService {
               });
             } else {
               // Create new cohort member
+              // Aspire Leaders-specific: cache this member's country id, once,
+              // at insert time - resolved above in one batched query for the
+              // whole bulk request, never recomputed afterward.
+              const userCohortCountryId =
+                userCohortCountryIds.get(userId) ?? null;
               const cohortMemberForAcademicYear = {
                 ...cohortMembers,
                 cohortAcademicYearId: cohortExists[0].cohortAcademicYearId,
@@ -2540,6 +2560,7 @@ export class PostgresCohortMembersService {
                     : MemberStatus.ACTIVE
                   : MemberStatus.ACTIVE,
                 statusReason: cohortMembersDto.statusReason || '',
+                userCohortCountryId,
               };
 
               result = await this.cohortMembersRepository.save(
@@ -6913,5 +6934,255 @@ export class PostgresCohortMembersService {
       [userId, tenantId]
     );
     return result.length > 0;
+  }
+
+  /**
+   * Aspire Leaders-specific: resolves each given userId's Users.currentCountry
+   * free-text value to countries.id via a single indexed join (case +
+   * whitespace insensitive match on countries.name) - one query for however
+   * many userIds are passed, not one per userId, so this is the only method
+   * needed for both createCohortMembers() (a batch of one) and
+   * createBulkCohortMembers() (a real batch, avoiding an N+1 query there).
+   * Called exactly once per insert, at CohortMembers insert time, and the
+   * result is cached on user_cohort_country_id - it is never recomputed
+   * after that, even if the user later changes their profile country,
+   * because the country is a property of *that cohort application*, not a
+   * live mirror of the user's current profile. userIds absent from the
+   * returned Map simply have no resolvable country (no currentCountry set,
+   * or it doesn't match any row in `countries`) - expected, not an error.
+   */
+  private async resolveUserCohortCountryIds(
+    userIds: string[]
+  ): Promise<Map<string, string>> {
+    const map = new Map<string, string>();
+    if (!userIds || userIds.length === 0) {
+      return map;
+    }
+
+    const rows = await this.usersRepository.query(
+      `SELECT u."userId" AS "userId", c.id AS "countryId"
+       FROM "Users" u
+       JOIN countries c ON LOWER(TRIM(c.name)) = LOWER(TRIM(u."currentCountry"))
+       WHERE u."userId" = ANY($1::uuid[])`,
+      [userIds]
+    );
+    for (const row of rows) {
+      map.set(row.userId, row.countryId);
+    }
+    return map;
+  }
+
+  /**
+   * Aspire Leaders-specific: nightly (or manually-triggered) reconciliation
+   * for user_cohort_country_id drift across the whole table. Re-derives the
+   * correct value for every CohortMembers row whose cohort's application
+   * window is still open, and corrects any row that's out of sync with the
+   * user's current profile country. Closed cohorts are never touched - same
+   * freeze guarantee as the real-time sync in
+   * PostgresUserService.syncOpenCohortCountryOnProfileUpdate() (identical
+   * "still open" check and LEFT JOIN-based resolution, just unscoped to a
+   * single userId here).
+   *
+   * This is the actual correctness guarantee described in
+   * docs/regional-admin-cohort-country-report.md §11.7: it doesn't matter WHY
+   * a row drifted (a transient real-time-sync failure, the bulk-import gap
+   * that's deliberately not hooked in real time per §11.5/§11.8, a manual DB
+   * edit, anything) - this catches and fixes all of it, unconditionally, on
+   * whatever schedule it's run (see CohortMembersCronService).
+   *
+   * One set-based UPDATE across the whole table, not a per-user loop - see
+   * §11.5 for why this is the right shape even at 100k+ CohortMembers rows.
+   */
+  public async reconcileOpenCohortCountries(): Promise<{
+    updatedCount: number;
+  }> {
+    const applicationEndFieldId = process.env.APPLICATION_END_FIELD_ID ?? null;
+    const result = await this.usersRepository.query(
+      `UPDATE "CohortMembers" cm
+       SET user_cohort_country_id = c.id
+       FROM "Users" u
+       LEFT JOIN countries c
+         ON LOWER(TRIM(c.name)) = LOWER(TRIM(u."currentCountry"))
+       WHERE cm."userId" = u."userId"
+         AND cm.user_cohort_country_id IS DISTINCT FROM c.id
+         AND (
+           SELECT fv."calendarValue" >= NOW()
+           FROM "FieldValues" fv
+           WHERE fv."itemId" = cm."cohortId"
+             AND fv."fieldId" = $1
+             AND fv."calendarValue" IS NOT NULL
+           ORDER BY fv."createdAt" DESC
+           LIMIT 1
+         ) IS NOT FALSE
+       RETURNING cm."cohortMembershipId"`,
+      [applicationEndFieldId]
+    );
+    return { updatedCount: Array.isArray(result) ? result.length : 0 };
+  }
+
+  /**
+   * Aspire Leaders-specific: resolves the calling Regional Admin's own allowed
+   * countries into countries.id values, for use as the report-filter's
+   * user_cohort_country_id IN (...) clause. Country ids are NEVER accepted from
+   * the caller/frontend - they are always looked up here, server-side, from the
+   * admin's own profile.
+   *
+   * Verified against real data (not assumed): a Regional Admin's allowed
+   * countries live in the ONE custom field with Fields.name = 'country' AND
+   * Fields.context IS NULL - a general profile-level field, fieldId
+   * 6469c3ac-8c46-49d7-852a-00f9589737c5 in QA. This must NOT be confused with
+   * the several COHORTMEMBER-scoped "country of origin"/"country of residence"
+   * fields (Fields.context = 'COHORTS'), which hold a *cohort applicant's*
+   * country, not the admin's own - hence the explicit `context IS NULL` filter.
+   *
+   * The value is a single string joining the selected countries.name values
+   * with commas (e.g. "India,United States"). A plain split(',') is unsafe:
+   * several real countries.name values contain an internal comma themselves
+   * (e.g. "Bolivia, Plurinational State of", "Korea, Democratic People's
+   * Republic of") - so instead of splitting, this matches by substring
+   * containment against the real country list, longest name first, removing
+   * each match as it's found so a comma-containing name is matched whole
+   * before its comma-free prefix gets a chance to spuriously match on its own.
+   */
+  private async resolveRegionalAdminCountryIds(
+    adminUserId: string
+  ): Promise<string[]> {
+    const [fieldValueRow] = await this.usersRepository.query(
+      `SELECT fv."dropdownValue", fv.value
+       FROM "FieldValues" fv
+       JOIN "Fields" f ON f."fieldId" = fv."fieldId"
+       WHERE fv."itemId" = $1
+         AND f.name = 'country'
+         AND f.context IS NULL
+       LIMIT 1`,
+      [adminUserId]
+    );
+
+    const rawValue = fieldValueRow?.dropdownValue || fieldValueRow?.value;
+    if (!rawValue) {
+      return [];
+    }
+
+    const allCountries: { id: string; name: string }[] =
+      await this.usersRepository.query(
+        `SELECT id, name FROM countries ORDER BY LENGTH(name) DESC`
+      );
+
+    let remaining = String(rawValue);
+    const matchedIds: string[] = [];
+    for (const country of allCountries) {
+      const idx = remaining.toLowerCase().indexOf(country.name.toLowerCase());
+      if (idx !== -1) {
+        matchedIds.push(country.id);
+        remaining = remaining.slice(0, idx) + remaining.slice(idx + country.name.length);
+      }
+    }
+    return matchedIds;
+  }
+
+  /**
+   * Aspire Leaders-specific lean reporting endpoint: given a cohort and a chunk
+   * of userIds (as produced by LMS/Assessment/Event/Referral report pagination),
+   * returns the matching CohortMembers rows - automatically country-filtered
+   * when the calling admin is a Regional Admin, unfiltered when they're an Admin.
+   *
+   * Role is resolved server-side from `adminUserId` via the existing
+   * getFirstRoleName() helper - never accepted as a client-supplied field, since
+   * it is this endpoint's access-control boundary. Fails closed: only the two
+   * known roles ('Admin', 'Regional Admin') are allowed through - an
+   * unresolvable adminUserId or any other/unrecognized role is rejected rather
+   * than falling through to Admin's unfiltered behavior.
+   */
+  public async reportFilterCohortMembers(
+    reportFilterDto: { cohortId: string; userIds: string[] },
+    adminUserId: string,
+    response: Response
+  ) {
+    const apiId = APIID.COHORT_MEMBER_REPORT_FILTER;
+    try {
+      const { cohortId, userIds } = reportFilterDto;
+
+      // Nothing to match - skip the query entirely rather than issuing an
+      // `IN ()` query.
+      if (!userIds || userIds.length === 0) {
+        return APIResponse.success(
+          response,
+          apiId,
+          { count: 0, items: [] },
+          HttpStatus.OK,
+          API_RESPONSES.COHORT_MEMBER_REPORT_FILTER_SUCCESS
+        );
+      }
+
+      const roleName = await this.userService.getFirstRoleName(adminUserId);
+
+      // Fail closed: only these two known roles are allowed through. An
+      // unresolvable adminUserId (null) or any other/unrecognized role must
+      // be rejected here rather than falling through to Admin's unfiltered
+      // behavior - this check is this endpoint's entire access-control boundary.
+      if (roleName !== 'Admin' && roleName !== 'Regional Admin') {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.UNAUTHORIZED,
+          API_RESPONSES.UNAUTHORIZED,
+          HttpStatus.FORBIDDEN
+        );
+      }
+      const isRegionalAdmin = roleName === 'Regional Admin';
+
+      const whereCondition: Record<string, unknown> = {
+        cohortId,
+        userId: In(userIds),
+      };
+
+      if (isRegionalAdmin) {
+        const allowedCountryIds = await this.resolveRegionalAdminCountryIds(
+          adminUserId
+        );
+
+        // Regional Admin has no resolvable allowed country - nothing can match,
+        // skip the query entirely rather than issuing an `IN ()` query.
+        if (allowedCountryIds.length === 0) {
+          return APIResponse.success(
+            response,
+            apiId,
+            { count: 0, items: [] },
+            HttpStatus.OK,
+            API_RESPONSES.COHORT_MEMBER_REPORT_FILTER_SUCCESS
+          );
+        }
+
+        whereCondition.userCohortCountryId = In(allowedCountryIds);
+      }
+      // Admin role (or any non-Regional-Admin role): no country filtering,
+      // behaves exactly as the cohortId + userId IN (...) match always has.
+
+      const items = await this.cohortMembersRepository.find({
+        where: whereCondition,
+      });
+
+      return APIResponse.success(
+        response,
+        apiId,
+        { count: items.length, items },
+        HttpStatus.OK,
+        API_RESPONSES.COHORT_MEMBER_REPORT_FILTER_SUCCESS
+      );
+    } catch (error) {
+      const fullMessage = error?.message ?? String(error);
+      LoggerUtil.error(
+        API_RESPONSES.SERVER_ERROR,
+        `Error in reportFilterCohortMembers: ${fullMessage}`,
+        apiId
+      );
+      return APIResponse.error(
+        response,
+        apiId,
+        API_RESPONSES.INTERNAL_SERVER_ERROR,
+        API_RESPONSES.INTERNAL_SERVER_ERROR,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
   }
 }

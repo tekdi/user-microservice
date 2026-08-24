@@ -1,6 +1,7 @@
 import { CohortMembersSearchDto } from 'src/cohortMembers/dto/cohortMembers-search.dto';
 import { CohortMembersDto } from 'src/cohortMembers/dto/cohortMembers.dto';
 import { CohortMembersUpdateDto } from 'src/cohortMembers/dto/cohortMember-update.dto';
+import { CohortMembersReportFilterDto } from 'src/cohortMembers/dto/cohortMembers-report-filter.dto';
 import { Response } from 'express';
 
 /**
@@ -136,6 +137,22 @@ export interface IServicelocatorcohortMembers {
     tenantId: string,
     academicyearId: string,
     userId: string,
+    response: Response
+  );
+
+  /**
+   * Aspire Leaders-specific lean reporting endpoint. Given a cohort and a chunk
+   * of userIds, returns the matching CohortMembers rows - automatically
+   * country-filtered when the calling admin (adminUserId) is a Regional Admin,
+   * unfiltered when they're an Admin. Role and allowed countries are always
+   * resolved server-side from adminUserId, never accepted from the caller.
+   * @param reportFilterDto - cohortId + userIds chunk to filter
+   * @param adminUserId - the calling admin's userId, used to resolve their role/countries
+   * @param response - Express response object
+   */
+  reportFilterCohortMembers(
+    reportFilterDto: CohortMembersReportFilterDto,
+    adminUserId: string,
     response: Response
   );
 }

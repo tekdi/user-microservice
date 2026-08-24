@@ -262,4 +262,91 @@ export class CohortMembersCronService {
       throw error;
     }
   }
+
+  /**
+   * Aspire Leaders-specific: nightly (or manually-triggered) reconciliation
+   * of user_cohort_country_id drift, scoped to still-open cohorts only. This
+   * is the correctness backstop for the real-time sync in
+   * PostgresUserService.syncOpenCohortCountryOnProfileUpdate() - it doesn't
+   * matter why a row drifted (transient failure, the bulk-import gap, a
+   * manual DB edit); this fixes it regardless. See
+   * docs/regional-admin-cohort-country-report.md §11.7.
+   *
+   * NOTE: This internal cron job is DISABLED by default, matching the
+   * shortlisting-evaluation convention above - an external cron can instead
+   * call the manual-trigger method below via the controller endpoint.
+   */
+  // @Cron(CronExpression.EVERY_DAY_AT_2AM, { disabled: !CohortMembersCronService.INTERNAL_CRON_ENABLED })
+  async handleCohortCountryReconciliation() {
+    const startTime = Date.now();
+
+    try {
+      this.logger.log(
+        "Starting scheduled user_cohort_country_id reconciliation"
+      );
+
+      const result = await this.triggerCohortCountryReconciliation();
+
+      const processingTime = Date.now() - startTime;
+
+      this.logger.log(
+        `Scheduled cohort country reconciliation completed in ${processingTime}ms. Result: ${JSON.stringify(
+          result
+        )}`
+      );
+
+      LoggerUtil.log(
+        "Scheduled cohort country reconciliation completed successfully",
+        `Processing time: ${processingTime}ms, Result: ${JSON.stringify(
+          result
+        )}`,
+        "CohortMembersCron"
+      );
+    } catch (error) {
+      const processingTime = Date.now() - startTime;
+
+      this.logger.error(
+        `Scheduled cohort country reconciliation failed after ${processingTime}ms: ${error.message}`,
+        error.stack
+      );
+
+      LoggerUtil.error(
+        "Scheduled cohort country reconciliation failed",
+        `Error: ${error.message}, Processing time: ${processingTime}ms`,
+        "CohortMembersCron"
+      );
+    }
+  }
+
+  /**
+   * Manual trigger for user_cohort_country_id reconciliation. Can be called
+   * from the controller endpoint (external cron or ad-hoc ops use) or from
+   * the internal disabled @Cron handler above.
+   *
+   * @returns Promise with the count of CohortMembers rows corrected
+   */
+  async triggerCohortCountryReconciliation(): Promise<{
+    updatedCount: number;
+  }> {
+    this.logger.log("Manual trigger of cohort country reconciliation");
+
+    try {
+      const result =
+        await this.cohortMembersService.reconcileOpenCohortCountries();
+
+      this.logger.log(
+        `Manual cohort country reconciliation completed successfully: ${JSON.stringify(
+          result
+        )}`
+      );
+      return result;
+    } catch (error) {
+      this.logger.error(
+        `Manual cohort country reconciliation failed: ${error.message}`,
+        error.stack
+      );
+
+      throw error;
+    }
+  }
 }

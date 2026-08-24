@@ -1286,6 +1286,12 @@ export class PostgresUserService implements IServicelocator {
         );
       }
 
+      // Aspire Leaders-specific: snapshot before the update, so we can tell
+      // afterward whether currentCountry actually changed - see
+      // syncOpenCohortCountryOnProfileUpdate() and
+      // docs/regional-admin-cohort-country-report.md §11.
+      const previousCurrentCountry = user.currentCountry;
+
       //mutideviceId
       if (userDto?.userData?.deviceId) {
         let deviceIds: any;
@@ -1385,6 +1391,25 @@ export class PostgresUserService implements IServicelocator {
       if (userDto.userData) {
         await this.updateBasicUserDetails(userDto.userId, sanitizedUserData);
         updatedData['basicDetails'] = userDto.userData;
+
+        // Aspire Leaders-specific: only when currentCountry was actually part
+        // of this update AND actually changed - most profile edits never
+        // touch it, so this adds no overhead to the common case. Fires after
+        // the real update above has already succeeded; deliberately not
+        // hooked into updateBasicUserDetails() itself, since that's also
+        // called by bulk-import's updateExistingUserForBulk() - see
+        // docs/regional-admin-cohort-country-report.md §11.5/§11.8 for why
+        // that path is intentionally left to the nightly reconciliation job
+        // instead.
+        if (
+          Object.prototype.hasOwnProperty.call(
+            sanitizedUserData,
+            'currentCountry'
+          ) &&
+          sanitizedUserData['currentCountry'] !== previousCurrentCountry
+        ) {
+          await this.syncOpenCohortCountryOnProfileUpdate(userDto.userId);
+        }
       }
 
       LoggerUtil.log(
@@ -1644,6 +1669,73 @@ export class PostgresUserService implements IServicelocator {
     } catch (error) {
       // Re-throw or handle the error as needed
       throw new Error('An error occurred while updating user details');
+    }
+  }
+
+  /**
+   * Aspire Leaders-specific: when a user's currentCountry changes, re-resolves
+   * user_cohort_country_id for every one of their CohortMembers rows whose
+   * cohort's application window is still open. Closed cohorts are frozen -
+   * this query never touches them, regardless of profile edits - see
+   * docs/regional-admin-cohort-country-report.md §11 for the full design.
+   *
+   * "Still open" reuses the same Application End Date convention already used
+   * elsewhere in this codebase (createCohortMembers()/updateCohortMembers() in
+   * cohortMembers-adapter.ts): a FieldValues row keyed by itemId=cohortId,
+   * fieldId=APPLICATION_END_FIELD_ID, trusting only the typed calendarValue
+   * column (§11.2 - confirmed safe against real data, avoids a fragile
+   * text-to-date cast at the SQL level). No matching row (or the env var not
+   * configured at all) means "always open", consistent with those other two
+   * call sites.
+   *
+   * One set-based UPDATE, scoped to this one user's own CohortMembers rows -
+   * not a bulk operation, so this has no N+1/scale concern regardless of how
+   * many users update their profile in aggregate (§11.5). The LEFT JOIN to
+   * countries (not an INNER JOIN) matters: if the new currentCountry doesn't
+   * resolve to any known country, this correctly NULLs out
+   * user_cohort_country_id rather than silently leaving a stale value in
+   * place, mirroring resolveUserCohortCountryIds()'s insert-time behavior.
+   *
+   * Best-effort: logs and swallows failures rather than failing the profile
+   * update itself. The nightly reconciliation job
+   * (CohortMembersCronService.reconcileOpenCohortCountries()) is the actual
+   * correctness guarantee for anything this misses (§11.7) - this is not the
+   * only path to eventual correctness, so a failure here is not silent data
+   * loss.
+   */
+  private async syncOpenCohortCountryOnProfileUpdate(
+    userId: string
+  ): Promise<void> {
+    try {
+      const applicationEndFieldId = process.env.APPLICATION_END_FIELD_ID ?? null;
+      await this.usersRepository.query(
+        `UPDATE "CohortMembers" cm
+         SET user_cohort_country_id = c.id
+         FROM "Users" u
+         LEFT JOIN countries c
+           ON LOWER(TRIM(c.name)) = LOWER(TRIM(u."currentCountry"))
+         WHERE cm."userId" = u."userId"
+           AND u."userId" = $1
+           AND cm.user_cohort_country_id IS DISTINCT FROM c.id
+           AND (
+             SELECT fv."calendarValue" >= NOW()
+             FROM "FieldValues" fv
+             WHERE fv."itemId" = cm."cohortId"
+               AND fv."fieldId" = $2
+               AND fv."calendarValue" IS NOT NULL
+             ORDER BY fv."createdAt" DESC
+             LIMIT 1
+           ) IS NOT FALSE`,
+        [userId, applicationEndFieldId]
+      );
+    } catch (error) {
+      LoggerUtil.error(
+        API_RESPONSES.SERVER_ERROR,
+        `[CohortCountrySync] Failed to sync user_cohort_country_id for userId=${userId}: ${
+          error?.message ?? error
+        }`,
+        APIID.USER_UPDATE
+      );
     }
   }
 
