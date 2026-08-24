@@ -588,6 +588,13 @@ export class PostgresUserService implements IServicelocator {
         }
 
         if (userKeys.includes(key) || (key === 'country' && !isRegionalAdmin)) {
+          // Aspire Leaders: a "country" filter from the client now targets the
+          // user's CURRENT country of residence. Users.country (country of
+          // origin) is retired from the profile and is no longer maintained, so
+          // filtering on it would miss every user who joined after the change.
+          // The key itself is left alone so the comparisons below keep working;
+          // only the column the SQL touches changes.
+          const columnKey = key === 'country' ? 'currentCountry' : key;
           if (
             key !== 'firstName' &&
             Array.isArray(value) &&
@@ -609,7 +616,7 @@ export class PostgresUserService implements IServicelocator {
           if (key === 'firstName') {
             // Escape SQL special characters to prevent SQL injection
             const escapedValue = this.escapeSqlLiteral(String(value));
-            whereCondition += ` U."${key}" ILIKE '%${escapedValue}%'`;
+            whereCondition += ` U."${columnKey}" ILIKE '%${escapedValue}%'`;
           } else {
             if (
               key === 'status' ||
@@ -644,13 +651,13 @@ export class PostgresUserService implements IServicelocator {
                       return `'${escaped}'`;
                     })
                     .join(',');
-                  whereCondition += ` U."${key}" IN(${status})`;
+                  whereCondition += ` U."${columnKey}" IN(${status})`;
                 }
               }
             } else {
               // Escape SQL special characters to prevent SQL injection
               const escapedValue = this.escapeSqlLiteral(String(value));
-              whereCondition += ` U."${key}" = '${escapedValue}'`;
+              whereCondition += ` U."${columnKey}" = '${escapedValue}'`;
             }
           }
           index++;
