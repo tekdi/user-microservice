@@ -476,7 +476,7 @@ export class ReferralsService {
         u."lastName",
         u."email",
         u."status"               AS "accountStatus",
-        u."country",
+        u."currentCountry"       AS "country",
         u."createdAt",
         u."auto_tags"            AS "tags",
         ua."createdAt"           AS "attributedAt"
@@ -718,8 +718,12 @@ export class ReferralsService {
     }
 
     // ── Country filter ────────────────────────────────────────────────────────
+    // Aspire Leaders: filters on the referred user's CURRENT country of
+    // residence. This used to read u."country" (country of origin), which is
+    // retired from the profile and no longer maintained - and which also
+    // disagreed with every other regional-admin report on the platform.
     if (filters.countries?.length) {
-      conds.push(`u."country" = ANY($${idx++})`);
+      conds.push(`u."currentCountry" = ANY($${idx++})`);
       params.push(filters.countries);
     }
 

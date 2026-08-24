@@ -979,10 +979,13 @@ export class PostgresCohortMembersService {
               }
               const placeholders = value.map(() => `$${paramIndex++}`).join(', ');
               queryParams.push(...value);
-              return `U."country" IN (${placeholders})`;
+              // Aspire Leaders: "country" from the client now means the user's
+              // current country of residence. Users.country (country of origin)
+              // is retired from the profile and no longer maintained.
+              return `U."currentCountry" IN (${placeholders})`;
             } else {
               queryParams.push(value);
-              return `U."country"=$${paramIndex++}`;
+              return `U."currentCountry"=$${paramIndex++}`;
             }
           }
           case 'permanentCountry': {
@@ -1287,10 +1290,12 @@ export class PostgresCohortMembersService {
                 .map(() => `$${parameterIndex++}`)
                 .join(', ');
               parameters.push(...value);
-              return `U."country" IN (${placeholders})`;
+              // Aspire Leaders: see the note on the other `country` builder -
+              // the client's "country" filter maps to Users.currentCountry.
+              return `U."currentCountry" IN (${placeholders})`;
             }
             parameters.push(value);
-            return `U."country"=$${parameterIndex++}`;
+            return `U."currentCountry"=$${parameterIndex++}`;
           }
           case 'currentCountry': {
             if (Array.isArray(value)) {
