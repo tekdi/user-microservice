@@ -193,6 +193,31 @@ export class PostgresRoleService {
           HttpStatus.BAD_REQUEST
         );
       }
+
+      // isSystemRole is an optional filter; accept boolean or "true"/"false".
+      let isSystemRole: boolean | undefined;
+      if (
+        whereClause.isSystemRole !== undefined &&
+        whereClause.isSystemRole !== null &&
+        whereClause.isSystemRole !== ""
+      ) {
+        if (typeof whereClause.isSystemRole === "boolean") {
+          isSystemRole = whereClause.isSystemRole;
+        } else if (
+          typeof whereClause.isSystemRole === "string" &&
+          ["true", "false"].includes(whereClause.isSystemRole.toLowerCase())
+        ) {
+          isSystemRole = whereClause.isSystemRole.toLowerCase() === "true";
+        } else {
+          return APIResponse.error(
+            response,
+            APIID.ROLE_SEARCH,
+            `Please Enter valid isSystemRole value (true or false).`,
+            "Invalid isSystemRole value.",
+            HttpStatus.BAD_REQUEST
+          );
+        }
+      }
       if (
         whereClause.userId &&
         whereClause.tenantId &&
@@ -200,7 +225,8 @@ export class PostgresRoleService {
       ) {
         const userRoleMappingData = await this.findUserRoleData(
           whereClause.userId,
-          whereClause.tenantId
+          whereClause.tenantId,
+          isSystemRole
         );
         const roleIds = userRoleMappingData.map((data) => data.roleid);
 
@@ -231,7 +257,8 @@ export class PostgresRoleService {
       ) {
         const data = await this.findUserRoleData(
           whereClause.userId,
-          whereClause.tenantId
+          whereClause.tenantId,
+          isSystemRole
         );
         return APIResponse.success(
           response,
@@ -241,7 +268,10 @@ export class PostgresRoleService {
           "Role For User Id fetched successfully."
         );
       } else if (whereClause.tenantId && whereClause.field === "Privilege") {
-        const userRoleData = await this.findRoleData(whereClause.tenantId);
+        const userRoleData = await this.findRoleData(
+          whereClause.tenantId,
+          isSystemRole
+        );
         const result = await this.findPrivilegeByRoleId(
           userRoleData.map((data) => data.roleId)
         );
@@ -264,7 +294,10 @@ export class PostgresRoleService {
           "Role For Tenant with Privileges fetched successfully."
         );
       } else if (whereClause.tenantId && !whereClause.field) {
-        const data = await this.findRoleData(whereClause.tenantId);
+        const data = await this.findRoleData(
+          whereClause.tenantId,
+          isSystemRole
+        );
         return APIResponse.success(
           response,
           apiId,
@@ -358,24 +391,37 @@ export class PostgresRoleService {
     }
   }
 
-  public async findRoleData(id: string) {
+  public async findRoleData(id: string, isSystemRole?: boolean) {
+    const where: any = {
+      tenantId: id,
+    };
+    if (isSystemRole !== undefined) {
+      where.isSystemRole = isSystemRole;
+    }
     const data = await this.roleRepository.find({
-      where: {
-        tenantId: id,
-      },
+      where,
       select: ["roleId", "title", "code"],
     });
     return data;
   }
 
-  public async findUserRoleData(userId: string, tenantId: string) {
-    const userRoleData = await this.userRoleMappingRepository
+  public async findUserRoleData(
+    userId: string,
+    tenantId: string,
+    isSystemRole?: boolean
+  ) {
+    const query = this.userRoleMappingRepository
       .createQueryBuilder("urp")
       .innerJoin(Role, "r", "r.roleId=urp.roleId")
       .select(["urp.roleId as roleid", "r.title as title", "r.code as code"])
       .where("urp.userId= :userId", { userId })
-      .andWhere("urp.tenantId=:tenantId", { tenantId })
-      .getRawMany();
+      .andWhere("urp.tenantId=:tenantId", { tenantId });
+
+    if (isSystemRole !== undefined) {
+      query.andWhere("r.isSystemRole = :isSystemRole", { isSystemRole });
+    }
+
+    const userRoleData = await query.getRawMany();
     return userRoleData;
   }
 

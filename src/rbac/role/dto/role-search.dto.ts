@@ -18,6 +18,10 @@ export class RoleSearchDto {
   @ApiProperty({
     type: Object,
     description: "Filters",
+    example: {
+      tenantId: "tenant-uuid",
+      isSystemRole: true,
+    },
   })
   @ApiPropertyOptional()
   filters: object;
