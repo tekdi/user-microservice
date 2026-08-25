@@ -261,6 +261,7 @@ export class CohortMembersController {
   @UsePipes(new ValidationPipe())
   public async updateCohortMembers(
     @Param('cohortmembershipid') cohortMembersId: string,
+    @Headers() headers,
     @Req() request,
     @Body() cohortMemberUpdateDto: CohortMembersUpdateDto,
     @Res() response: Response,
@@ -270,13 +271,19 @@ export class CohortMembersController {
     if (!loginUser || !isUUID(loginUser)) {
       throw new BadRequestException('unauthorized!');
     }
+    // Not validated here on purpose: this route has never required tenantid,
+    // and it is only used to resolve whether the caller is an admin (which
+    // gates the Application End Date check on a "submitted" status). Absent or
+    // malformed means "not an admin", i.e. exactly the behaviour before.
+    const tenantId = headers['tenantid'];
     const result = await this.cohortMemberAdapter
       .buildCohortMembersAdapter()
       .updateCohortMembers(
         cohortMembersId,
         loginUser,
         cohortMemberUpdateDto,
-        response
+        response,
+        tenantId
       );
   }
 
