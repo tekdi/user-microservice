@@ -64,12 +64,16 @@ export interface IServicelocatorcohortMembers {
    * @param loginUser - The user ID of the person making the update
    * @param cohortMemberUpdateDto - Data transfer object containing update information
    * @param response - Express response object
+   * @param tenantId - Tenant of the caller, used only to resolve whether they
+   * are an admin (admins may set "submitted" after the Application End Date).
+   * Optional: omitted/unknown is treated as non-admin.
    */
   updateCohortMembers(
     cohortMembershipId: string,
     loginUser: any,
     cohortMemberUpdateDto: CohortMembersUpdateDto,
-    response: any
+    response: any,
+    tenantId?: string
   );
 
   /**

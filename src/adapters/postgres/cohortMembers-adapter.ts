@@ -1541,7 +1541,8 @@ export class PostgresCohortMembersService {
     cohortMembershipId: string,
     loginUser: any,
     cohortMembersUpdateDto: CohortMembersUpdateDto,
-    res
+    res,
+    tenantId?: string
   ) {
     const apiId = APIID.COHORT_MEMBER_UPDATE;
     try {
@@ -1608,11 +1609,21 @@ export class PostgresCohortMembersService {
       const previousStatus = cohortMembershipToUpdate.status;
       const { status, statusReason } = cohortMembersUpdateDto;
 
-      // Validate Application End Date when status is being set to "submitted" (only if configured)
+      // Validate Application End Date when status is being set to "submitted"
+      // (only if configured and not admin). An admin must be able to put a
+      // member back to "submitted" after the window has closed - e.g. resetting
+      // an applicant to re-run the shortlisting rules against them - which is
+      // exactly the bypass createCohortMembers() already has. A non-admin
+      // caller (a learner submitting their own application) is still held to
+      // the end date. Fails closed: an unresolvable caller or a missing
+      // tenantid header counts as non-admin, so the check still applies.
       if (status === 'submitted') {
         const applicationEndDateFieldId = process.env.APPLICATION_END_FIELD_ID;
+        const callerIsAdmin = applicationEndDateFieldId
+          ? await this.isUserAdmin(loginUser, tenantId)
+          : false;
 
-        if (applicationEndDateFieldId) {
+        if (applicationEndDateFieldId && !callerIsAdmin) {
           const cohortId = cohortMembershipToUpdate.cohortId;
 
           // Query FieldValues table for the Application End Date field
@@ -6925,7 +6936,15 @@ export class PostgresCohortMembersService {
     }
   }
 
-  private async isUserAdmin(userId: string, tenantId: string): Promise<boolean> {
+  private async isUserAdmin(
+    userId: string,
+    tenantId?: string
+  ): Promise<boolean> {
+    // No identity or no tenant context to scope the role lookup to - treat as
+    // non-admin rather than querying with a null and hoping.
+    if (!userId || !tenantId) {
+      return false;
+    }
     const result = await this.usersRepository.query(
       `SELECT 1 FROM "UserRolesMapping" URM
        JOIN "Roles" R ON R."roleId" = URM."roleId"
