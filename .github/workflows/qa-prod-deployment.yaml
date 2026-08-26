@@ -18,15 +18,12 @@ jobs:
     environment: ${{ github.event.inputs.environment }}
 
     steps:
-      # 1. Checkout
       - name: Check out repository
         uses: actions/checkout@v4
 
-      # 2. Set TAG
       - name: Set TAG
         run: echo "TAG=${{ github.event.inputs.tag }}" >> $GITHUB_ENV
 
-      # 3. Configure AWS
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -34,21 +31,20 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      # 4. Write ConfigMap
-      - name: Write ConfigMap manifest
+      - name: Write ConfigMap
+        env:
+          ENV_FILE_CONTENT_BACKEND: ${{ secrets.ENV_FILE_CONTENT_BACKEND }}
         run: |
           mkdir -p manifest
-          echo "${{ secrets.ENV_FILE_CONTENT_BACKEND }}" | base64 -d > manifest/configmap.yaml
+          printf '%s' "$ENV_FILE_CONTENT_BACKEND" | base64 -d > manifest/configmap.yaml
 
-      # 5. Update Deployment Manifest
-      - name: Update Deployment Manifest
+      - name: Update Deployment
         env:
           IMAGE_TAG: ${{ github.event.inputs.tag }}
           ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
         run: |
           envsubst < manifest/backend.yaml > manifest/backend-service-updated.yaml
 
-      # 6. Deploy
       - name: Deploy to AWS EKS
         env:
           EKS_CLUSTER_NAME: ${{ secrets.EKS_CLUSTER_NAME }}
@@ -57,7 +53,6 @@ jobs:
         run: |
           aws eks update-kubeconfig --name $EKS_CLUSTER_NAME --region $AWS_REGION
 
-          # Ensure namespace exists (fix for your previous failure)
           kubectl get ns $NAMESPACE >/dev/null 2>&1 || kubectl create ns $NAMESPACE
 
           kubectl apply -f manifest/configmap.yaml -n $NAMESPACE
