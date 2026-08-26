@@ -358,12 +358,16 @@ export class CronService {
                     `cohortmember:${tenantId}`,
                   ]);
 
+                  const eventdata={
+                    userId: user.userId,
+                    tenantId: tenantId,
+                    status: UserTenantMappingStatus.ACTIVE,
+                  }
                   // Publish Kafka event for user tenant mapping status update
                   try {
                     await this.userTenantMappingService.publishUserTenantMappingEvent(
                       'updated_status',
-                      user.userId,
-                      tenantId,
+                      eventdata,
                       this.apiId
                     );
                   } catch (kafkaError) {
@@ -522,7 +526,7 @@ export class CronService {
               `Created role mapping for user ${user.userId} (${user.email}) with learner role`
             );
           }
-
+          
           await this.cacheService.invalidate([
             `user:${user.userId}`,
             `usertenant:${user.userId}`,
@@ -530,12 +534,17 @@ export class CronService {
             `userlist:${pragyanpathTenantId}`,
           ]);
 
+          const eventdata = {
+            userId: user.userId,
+            tenantId: pragyanpathTenantId,
+            roleId: SSO_DEFAULTS.DEFAULT_LEARNER_ROLE_ID,
+            status: UserTenantMappingStatus.ACTIVE,
+          };
           // Step 4.5: Publish Kafka events
           try {
             await this.userTenantMappingService.publishUserTenantMappingEvent(
               'created',
-              user.userId,
-              pragyanpathTenantId,
+              eventdata,
               this.pragyanpathApiId
             );
           } catch (kafkaError) {
