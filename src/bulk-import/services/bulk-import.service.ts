@@ -819,23 +819,13 @@ export class BulkImportService {
       return undefined;
     };
 
-    const countryOfOrigin =
-      trimOrEmpty(userData['country of origin']) ??
-      trimOrEmpty(userData.country);
-    if (countryOfOrigin) {
-      dto.country = countryOfOrigin;
-    } else {
-      dto.country = undefined;
-    }
-
-    const permanent =
-      trimOrEmpty(userData['permanent address country']) ??
-      trimOrEmpty(userData.permanentCountry);
-    if (permanent) {
-      dto.permanentCountry = permanent;
-    } else {
-      dto.permanentCountry = undefined;
-    }
+    // Country of origin and permanent-address country are retired from the
+    // profile - only the current country of residence is imported now. Old
+    // templates carrying those headers still import without erroring; the
+    // values are simply ignored. Cleared explicitly because the `...userData`
+    // spread above would otherwise land them on the DTO.
+    dto.country = undefined;
+    dto.permanentCountry = undefined;
 
     const current =
       trimOrEmpty(userData['current address country']) ??
@@ -1364,6 +1354,9 @@ export class BulkImportService {
 
     // Step 3: Extract dynamic fields from both forms
     // Define core fields that should be excluded from dynamic extraction
+    // `country` and `permanentCountry` are retired from the profile and no
+    // longer have a default column, but stay listed here so a form that has
+    // not been updated yet cannot re-introduce them as dynamic columns.
     const coreFieldsToExclude = [
       'firstName',
       'lastName',
@@ -1513,8 +1506,6 @@ export class BulkImportService {
       'email',
       'gender',
       'date of birth (yyyy-mm-dd)',
-      'country of origin',
-      'permanent address country',
       'current address country',
     ];
 
@@ -1778,8 +1769,6 @@ export class BulkImportService {
         middleName: userCreateDto.middleName,
         gender: userCreateDto.gender,
         email: userCreateDto.email,
-        country: userCreateDto.country,
-        permanentCountry: userCreateDto.permanentCountry,
         currentCountry: userCreateDto.currentCountry,
         state: userCreateDto.state,
         dob: userCreateDto.dob ? new Date(userCreateDto.dob) : undefined,
