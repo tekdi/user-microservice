@@ -96,7 +96,10 @@ export class User {
   })
   status: UserStatus;
 
-  @Column({ nullable: true })
+  // 'text', not the implicit varchar: anonymize/archive reasons are free-form
+  // and routinely exceed 255 chars. Requires the matching ALTER on any existing
+  // database - the table was created with varchar(255) and synchronize is off.
+  @Column({ type: 'text', nullable: true })
   reason: string;
 
   userRoleMappings: User;
