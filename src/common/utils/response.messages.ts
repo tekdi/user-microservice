@@ -310,11 +310,6 @@ export const API_RESPONSES = {
 
   // Aspire Leaders Specific Messages
   ASPIRE_LEADERS_COUNTRY_LIST_SUCCESS: "Countries retrieved successfully",
-  REGIONAL_ADMIN_COUNTRY_REQUIRED:
-    "Country is required for a Regional Admin. Please select at least one country.",
-  REGIONAL_ADMIN_COUNTRY_FIELD_NOT_CONFIGURED:
-    "The profile-level 'country' custom field is not configured. A Regional Admin cannot be created until it exists.",
-
   // Referral Management Messages
   REFERRAL_CREATED_SUCCESSFULLY: "Referral created successfully",
   REFERRAL_GET_SUCCESS: "Referral retrieved successfully",

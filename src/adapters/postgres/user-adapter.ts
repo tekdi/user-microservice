@@ -1292,25 +1292,7 @@ export class PostgresUserService implements IServicelocator {
       // docs/regional-admin-cohort-country-report.md §11.
       const previousCurrentCountry = user.currentCountry;
 
-      // Aspire Leaders-specific: a Regional Admin's country cannot be cleared -
-      // it is what scopes their entire data visibility. Checked before anything
-      // is mutated, so a rejected update leaves the user untouched.
-      const regionalAdminCountryError =
-        await this.validateRegionalAdminCountryOnUpdate(userDto);
-      if (regionalAdminCountryError) {
-        LoggerUtil.error(
-          API_RESPONSES.BAD_REQUEST,
-          regionalAdminCountryError,
-          apiId
-        );
-        return APIResponse.error(
-          response,
-          apiId,
-          API_RESPONSES.BAD_REQUEST,
-          regionalAdminCountryError,
-          HttpStatus.BAD_REQUEST
-        );
-      }
+      
 
       //mutideviceId
       if (userDto?.userData?.deviceId) {
@@ -1976,28 +1958,6 @@ export class PostgresUserService implements IServicelocator {
         }
       }
 
-      // Aspire Leaders-specific: country is mandatory for a Regional Admin,
-      // whose data visibility is scoped by it. Checked outside the customFields
-      // block above on purpose - the whole point is to catch a payload that
-      // omits the country field (or customFields) entirely.
-      const regionalAdminCountryError = await this.validateRegionalAdminCountry(
-        userCreateDto,
-        request
-      );
-      if (regionalAdminCountryError) {
-        LoggerUtil.error(
-          API_RESPONSES.BAD_REQUEST,
-          regionalAdminCountryError,
-          apiId
-        );
-        return APIResponse.error(
-          response,
-          apiId,
-          API_RESPONSES.BAD_REQUEST,
-          regionalAdminCountryError,
-          HttpStatus.BAD_REQUEST
-        );
-      }
 
       // check and validate all fields
       const validatedRoles: any = await this.validateRequestBody(
@@ -2351,175 +2311,11 @@ export class PostgresUserService implements IServicelocator {
     };
   }
 
-  /**
-   * Aspire Leaders-specific: resolves the fieldId of the ONE profile-level
-   * "country" custom field - Fields.name = 'country' AND Fields.context IS NULL.
-   * This is the field that holds an admin's OWN allowed countries and must not
-   * be confused with the COHORTMEMBER-scoped "country of origin"/"country of
-   * residence" fields (Fields.context = 'COHORTS'), which hold a cohort
-   * applicant's country - hence the explicit `context IS NULL` filter. Same
-   * field resolved by
-   * PostgresCohortMembersService.resolveRegionalAdminCountryIds().
-   *
-   * Returns null when the field does not exist, so callers can decide whether
-   * to fail closed.
-   */
-  private async getProfileCountryFieldId(): Promise<string | null> {
-    const [row] = await this.usersRepository.query(
-      `SELECT "fieldId"
-       FROM "Fields"
-       WHERE name = 'country' AND context IS NULL
-       LIMIT 1`
-    );
-    return row?.fieldId ?? null;
-  }
+  
 
-  /**
-   * A custom field value arrives as a plain string for single-select fields and
-   * as an array for multi-select ones (country is multi-select). Both shapes -
-   * and both kinds of "empty" (absent, and present-but-blank) - count as
-   * missing.
-   */
-  private hasNonEmptyFieldValue(value: unknown): boolean {
-    if (Array.isArray(value)) {
-      return value.some(
-        (entry) =>
-          entry !== null && entry !== undefined && String(entry).trim() !== ''
-      );
-    }
-    return value !== null && value !== undefined && String(value).trim() !== '';
-  }
+  
 
-  /**
-   * Aspire Leaders-specific: true when the user being created is being given
-   * the 'Regional Admin' role.
-   *
-   * The role reaches this endpoint two different ways and both are honoured:
-   * as roleId(s) inside tenantCohortRoleMapping (the real assignment, resolved
-   * against the Roles table here - note Roles.name maps to the entity's `title`
-   * property), and as a plain `role` name on the request body, which the
-   * notification branch in sendPasswordResetLink() already reads. Matching is
-   * case/whitespace-insensitive.
-   */
-  private async isRegionalAdminAssignment(
-    userCreateDto,
-    request
-  ): Promise<boolean> {
-    const isRegionalAdminName = (value: unknown) =>
-      typeof value === 'string' &&
-      value.trim().toLowerCase() === 'regional admin';
 
-    if (isRegionalAdminName(request?.body?.role)) {
-      return true;
-    }
-
-    const roleIds: string[] = (userCreateDto?.tenantCohortRoleMapping ?? [])
-      .map((mapping) => mapping?.roleId)
-      .filter((roleId): roleId is string => typeof roleId === 'string');
-
-    if (roleIds.length === 0) {
-      return false;
-    }
-
-    const roles = await this.roleRepository.find({
-      where: { roleId: In(roleIds) },
-    });
-
-    return roles.some((role) => isRegionalAdminName(role?.title));
-  }
-
-  /**
-   * Aspire Leaders-specific: country is a REQUIRED field for a Regional Admin -
-   * their entire data visibility is scoped by it, so an admin created without a
-   * country would end up either unscoped or unable to see anything.
-   *
-   * Enforced server-side because the generic custom-field validation in
-   * validateCustomField() only checks the fields actually present in the
-   * payload and never asserts that a required one was supplied - so a frontend
-   * "required" marker alone is bypassable.
-   *
-   * Returns an error message string when the payload is invalid, null when it
-   * is fine (including when the created user is not a Regional Admin at all).
-   */
-  private async validateRegionalAdminCountry(
-    userCreateDto,
-    request
-  ): Promise<string | null> {
-    if (!(await this.isRegionalAdminAssignment(userCreateDto, request))) {
-      return null;
-    }
-
-    const countryFieldId = await this.getProfileCountryFieldId();
-    if (!countryFieldId) {
-      // Fail closed: without the field there is no way to scope this admin.
-      return API_RESPONSES.REGIONAL_ADMIN_COUNTRY_FIELD_NOT_CONFIGURED;
-    }
-
-    const countryField = (userCreateDto?.customFields ?? []).find(
-      (field) => field?.fieldId === countryFieldId
-    );
-
-    if (!countryField || !this.hasNonEmptyFieldValue(countryField.value)) {
-      return API_RESPONSES.REGIONAL_ADMIN_COUNTRY_REQUIRED;
-    }
-
-    return null;
-  }
-
-  /**
-   * Aspire Leaders-specific update-side counterpart of
-   * validateRegionalAdminCountry(): an existing Regional Admin's country may be
-   * CHANGED but never emptied, since it is what scopes everything they can see.
-   *
-   * The edit form sends the country custom field only when it actually changed,
-   * and sends `value: []` to mean "clear every country" - so an empty value
-   * here is a deliberate wipe, which is exactly what must be refused. A payload
-   * that doesn't carry the country field at all is left alone: updateUser only
-   * touches field values present in the request, so the stored country
-   * survives.
-   *
-   * updateUser never reassigns roles, so the target's CURRENT role is the role
-   * that matters, and it is read from the DB - never from the payload.
-   *
-   * Returns an error message string when the update would leave a Regional
-   * Admin with no country, null otherwise.
-   */
-  private async validateRegionalAdminCountryOnUpdate(
-    userDto
-  ): Promise<string | null> {
-    const customFields = userDto?.customFields;
-    if (!Array.isArray(customFields) || customFields.length === 0) {
-      return null;
-    }
-
-    const countryFieldId = await this.getProfileCountryFieldId();
-    if (!countryFieldId) {
-      // No country field configured at all - there is nothing this update can
-      // clear, so don't block an otherwise valid edit.
-      return null;
-    }
-
-    const countryField = customFields.find(
-      (field) => field?.fieldId === countryFieldId
-    );
-
-    // Country untouched by this update, or set to a real value - both fine.
-    if (!countryField || this.hasNonEmptyFieldValue(countryField.value)) {
-      return null;
-    }
-
-    // The role lookup is deliberately last: it only runs for an update that
-    // really is trying to clear the country.
-    const roleName = await this.getFirstRoleName(userDto.userId);
-    if (
-      typeof roleName === 'string' &&
-      roleName.trim().toLowerCase() === 'regional admin'
-    ) {
-      return API_RESPONSES.REGIONAL_ADMIN_COUNTRY_REQUIRED;
-    }
-
-    return null;
-  }
 
   async validateRequestBody(userCreateDto, academicYearId) {
     const errorCollector = this.createErrorCollector();
