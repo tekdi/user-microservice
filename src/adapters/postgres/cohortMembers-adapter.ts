@@ -3072,6 +3072,11 @@ export class PostgresCohortMembersService {
         totalCount = originalTotalCount;
       }
 
+      // Aspire Leaders-specific: add the per-application country snapshot
+      // alongside the live `currentCountry` every caller already gets. Purely
+      // additive - see the helper.
+      finalUserDetails = await this.attachApplicationCountry(finalUserDetails);
+
       // Create the new response structure with totalCount inside result and userDetails array
       const resultWithTotalCount = {
         totalCount: totalCount,
@@ -3098,6 +3103,96 @@ export class PostgresCohortMembersService {
         e.message ?? 'Internal Server Error',
         HttpStatus.INTERNAL_SERVER_ERROR
       );
+    }
+  }
+
+  /**
+   * Aspire Leaders-specific: adds a display-only `applicationCountry` to each
+   * row of the Applicant List.
+   *
+   * Why this exists: the Country column on that list renders
+   * `Users.currentCountry`, which is the applicant's *live* profile value.
+   * `CohortMembers.user_cohort_country_id` is instead the country snapshot
+   * taken when the applicant joined that specific cohort, deliberately frozen
+   * once the cohort's application window closes (see the field's doc comment on
+   * the entity, resolveUserCohortCountryIds() and reconcileOpenCohortCountries()).
+   * Admins reason about applicants in terms of that snapshot, so the list
+   * surfaces both: for a closed cohort the two values can legitimately diverge.
+   * Mirrors the `user_cohort_country` column the Application report already
+   * renders next to `currentCountry` (ApplicationExportHandler in
+   * Aspire-specific-service).
+   *
+   * Deliberately NOT gated on the caller's role. /cohortmember/list-application
+   * is already restricted by shiksha-middleware to admin / regional_admin /
+   * alp_program_admin, so there is no non-admin caller to withhold it from, and
+   * a role check here would only risk missing one of those three roles. It is
+   * also not sensitive relative to what this endpoint already returns: the
+   * snapshot is the same applicant's country as the `currentCountry` every
+   * caller receives unconditionally.
+   *
+   * Deliberately implemented as one extra batched query on the already-paginated
+   * page of rows rather than as a column added to getUsers()/buildBaseQuery():
+   * those two queries are shared with searchCohortMembers() (the cohort /
+   * ongoing-students list, which must NOT grow this column) and other callers,
+   * and this must not alter their responses or add a join to their plans. Cost
+   * is a single indexed lookup over at most `limit` membership ids.
+   *
+   * Fails soft: any error resolving the countries is logged and the input array
+   * is returned untouched, because a missing extra column must never turn a
+   * working Applicant List into an error.
+   *
+   * `applicationCountry` falls back to the row's `currentCountry` when the
+   * snapshot is null, which is expected for members created through bulk import
+   * (not hooked into the real-time country sync - see
+   * docs/regional-admin-cohort-country-report.md §11.5/§11.8) and for members
+   * whose country never matched a row in `countries`.
+   */
+  private async attachApplicationCountry(userDetails: any[]): Promise<any[]> {
+    if (!userDetails?.length) {
+      return userDetails;
+    }
+
+    try {
+      const membershipIds = Array.from(
+        new Set(
+          userDetails
+            .map((user) => user?.cohortMembershipId)
+            .filter((id) => typeof id === 'string' && isUUID(id))
+        )
+      );
+      if (membershipIds.length === 0) {
+        return userDetails;
+      }
+
+      const rows = await this.cohortMembersRepository.query(
+        `SELECT cm."cohortMembershipId" AS "cohortMembershipId",
+                c.name AS "countryName"
+         FROM "CohortMembers" cm
+         LEFT JOIN countries c ON c.id = cm.user_cohort_country_id
+         WHERE cm."cohortMembershipId" = ANY($1::uuid[])`,
+        [membershipIds]
+      );
+
+      const countryNameByMembershipId = new Map<string, string | null>(
+        rows.map((row) => [row.cohortMembershipId, row.countryName ?? null])
+      );
+
+      return userDetails.map((user) => ({
+        ...user,
+        applicationCountry:
+          countryNameByMembershipId.get(user?.cohortMembershipId) ??
+          user?.currentCountry ??
+          null,
+      }));
+    } catch (error) {
+      LoggerUtil.error(
+        API_RESPONSES.SERVER_ERROR,
+        `Failed to attach applicationCountry: ${
+          error?.message ?? String(error)
+        }`,
+        APIID.COHORT_MEMBER_SEARCH
+      );
+      return userDetails;
     }
   }
 

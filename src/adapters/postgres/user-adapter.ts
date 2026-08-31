@@ -1292,6 +1292,8 @@ export class PostgresUserService implements IServicelocator {
       // docs/regional-admin-cohort-country-report.md §11.
       const previousCurrentCountry = user.currentCountry;
 
+      
+
       //mutideviceId
       if (userDto?.userData?.deviceId) {
         let deviceIds: any;
@@ -1956,6 +1958,7 @@ export class PostgresUserService implements IServicelocator {
         }
       }
 
+
       // check and validate all fields
       const validatedRoles: any = await this.validateRequestBody(
         userCreateDto,
@@ -2307,6 +2310,12 @@ export class PostgresUserService implements IServicelocator {
       },
     };
   }
+
+  
+
+  
+
+
 
   async validateRequestBody(userCreateDto, academicYearId) {
     const errorCollector = this.createErrorCollector();
