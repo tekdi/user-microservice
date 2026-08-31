@@ -102,7 +102,7 @@ export class ReferralsService {
     return this.normalizeReferral({ ...entity, referLink: buildReferLink(entity.slug) });
   }
 
-  async listReferralEntities(dto: ListReferralsDto = {}) {
+  async listReferralEntities(dto: ListReferralsDto = {}, adminUserId?: string) {
     const { limit = 10, offset = 0, filters } = dto;
     const query = this.referralRepo.createQueryBuilder('referral');
 
@@ -125,6 +125,21 @@ export class ReferralsService {
       if (filters.countries && filters.countries.length > 0) {
         query.andWhere('referral.country IN (:...countries)', { countries: filters.countries });
       }
+    }
+
+    // Aspire Leaders-specific: Regional Admin can only ever see referrals
+    // whose own country (ReferralEntity.country) is inside their assigned
+    // countries - independent of/in addition to whatever filters.countries
+    // above already narrowed to. Admins are unaffected. See
+    // docs/regional-admin-referral-country-report.md §6.
+    const scope = await this.resolveReferralCountryScope(adminUserId);
+    if (scope.restricted) {
+      if (scope.allowedCountries.length === 0) {
+        return { data: [], total: 0, limit, offset };
+      }
+      query.andWhere('LOWER(TRIM(referral.country)) IN (:...regionalAdminCountries)', {
+        regionalAdminCountries: scope.allowedCountries.map((c) => c.toLowerCase().trim()),
+      });
     }
 
     query.orderBy('referral.createdAt', 'DESC');
@@ -454,12 +469,25 @@ export class ReferralsService {
 
   // ── Referral Report (user-centric) ────────────────────────────────────────
 
-  async getReferralReport(dto: ReferralReportRequestDto) {
+  async getReferralReport(dto: ReferralReportRequestDto, adminUserId?: string) {
     const { limit = 10, offset = 0, filters = {} } = dto;
+
+    // Aspire Leaders-specific: Regional Admin scoping on ReferralEntity.country
+    // - independent of/in addition to the existing `filters.countries` (which
+    // filters attributed USERS' own country, u."country" - unchanged, see the
+    // existing condition inside buildReportBase). See
+    // docs/regional-admin-referral-country-report.md §6 decision.
+    const scope = await this.resolveReferralCountryScope(adminUserId);
+    if (scope.restricted && scope.allowedCountries.length === 0) {
+      return { data: [], totalCount: 0, limit, offset, hasMore: false };
+    }
 
     const { fromSql, whereClause, params } = this.buildReportBase(
       filters,
       true,
+      scope.restricted
+        ? scope.allowedCountries.map((c) => c.toLowerCase().trim())
+        : null,
     );
 
     const listSql = `
@@ -547,11 +575,33 @@ export class ReferralsService {
     return { data, totalCount, limit, offset, hasMore: offset + limit < totalCount };
   }
 
-  async getReferralSummary(dto: ReferralReportRequestDto) {
+  async getReferralSummary(dto: ReferralReportRequestDto, adminUserId?: string) {
     const { limit = 50, offset = 0, filters = {} } = dto;
 
-    // Only slug / cohort filters narrow which referral entities appear;
-    // status, country, name are not applied here (we compute all counts).
+    // Aspire Leaders-specific: this report previously had NO country filter
+    // at all. Now supports an optional ReferralEntity.country filter (any
+    // admin may pass filters.countries), automatically narrowed/defaulted to
+    // a Regional Admin's own allowed countries - see
+    // docs/regional-admin-referral-country-report.md §6.
+    const scope = await this.resolveReferralCountryScope(adminUserId);
+    let regionalAdminCountriesLower: string[] | null = null;
+    if (scope.restricted) {
+      const allowedLower = scope.allowedCountries.map((c) => c.toLowerCase().trim());
+      const requested = filters.countries?.length
+        ? filters.countries
+            .map((c) => c.toLowerCase().trim())
+            .filter((c) => allowedLower.includes(c))
+        : allowedLower;
+      if (requested.length === 0) {
+        return { data: [], totalCount: 0, limit, offset, hasMore: false };
+      }
+      regionalAdminCountriesLower = requested;
+    } else if (filters.countries?.length) {
+      regionalAdminCountriesLower = filters.countries.map((c) => c.toLowerCase().trim());
+    }
+
+    // Only slug / cohort / country filters narrow which referral entities
+    // appear; status, name are not applied here (we compute all counts).
     const { fromSql, whereClause, params, cohortIdsParamIdx } = this.buildReportBase(
       {
         slug_id: filters.slug_id,
@@ -559,6 +609,7 @@ export class ReferralsService {
         cohortIds: filters.cohortIds,
       },
       true,
+      regionalAdminCountriesLower,
     );
 
     const countSql = `SELECT COUNT(DISTINCT re."id")::int AS count ${fromSql} ${whereClause}`;
@@ -675,9 +726,106 @@ export class ReferralsService {
     return { data, totalCount, limit, offset, hasMore: offset + limit < totalCount };
   }
 
+  /**
+   * Aspire Leaders-specific: same role resolution used by the cohort-country
+   * report filter (getFirstRoleName() in user-adapter.ts) - duplicated here
+   * rather than injecting PostgresUserService, to avoid cross-module coupling
+   * for a single query (same tradeoff already made for
+   * resolveRegionalAdminCountryIds() in cohortMembers-adapter.ts).
+   */
+  private async getFirstRoleName(userId: string): Promise<string | null> {
+    const [row] = await this.dataSource.query(
+      `SELECT R.name AS "roleName"
+       FROM public."UserTenantMapping" UTM
+       INNER JOIN public."UserRolesMapping" URM ON URM."userId" = UTM."userId" AND URM."tenantId" = UTM."tenantId"
+       INNER JOIN public."Roles" R ON R."roleId" = URM."roleId"
+       WHERE UTM."userId" = $1
+       ORDER BY UTM."Id"
+       LIMIT 1`,
+      [userId],
+    );
+    return row?.roleName ?? null;
+  }
+
+  /**
+   * Aspire Leaders-specific: resolves a Regional Admin's own allowed countries
+   * (same custom-field source as resolveRegionalAdminCountryIds() in
+   * cohortMembers-adapter.ts), returned as country NAMES rather than
+   * countries.id - referral filtering here is scoped by ReferralEntity.country,
+   * a free-text column with no FK to `countries`, so there is no id to resolve
+   * against. Same comma-in-country-name-safe substring matching as the cohort
+   * version (see that method's docstring for why a plain split(',') is unsafe).
+   */
+  private async resolveRegionalAdminCountryNames(adminUserId: string): Promise<string[]> {
+    const [fieldValueRow] = await this.dataSource.query(
+      `SELECT fv."dropdownValue", fv.value
+       FROM "FieldValues" fv
+       JOIN "Fields" f ON f."fieldId" = fv."fieldId"
+       WHERE fv."itemId" = $1
+         AND f.name = 'country'
+         AND f.context IS NULL
+       LIMIT 1`,
+      [adminUserId],
+    );
+
+    const rawValue = fieldValueRow?.dropdownValue || fieldValueRow?.value;
+    if (!rawValue) {
+      return [];
+    }
+
+    const allCountries: { name: string }[] = await this.dataSource.query(
+      `SELECT name FROM countries ORDER BY LENGTH(name) DESC`,
+    );
+
+    let remaining = String(rawValue);
+    const matchedNames: string[] = [];
+    for (const country of allCountries) {
+      const idx = remaining.toLowerCase().indexOf(country.name.toLowerCase());
+      if (idx !== -1) {
+        matchedNames.push(country.name);
+        remaining = remaining.slice(0, idx) + remaining.slice(idx + country.name.length);
+      }
+    }
+    return matchedNames;
+  }
+
+  /**
+   * Aspire Leaders-specific: resolves whether the calling admin's referral
+   * report/list access should be restricted to their own countries
+   * (ReferralEntity.country - the referrer's own country, the single column
+   * decided on for Regional-Admin scoping across all 3 referral reports), and
+   * to which ones. Regional Admin -> restricted to their own allowed
+   * countries; Admin -> unrestricted; any other/unresolved role -> fails
+   * closed (restricted to zero countries), matching the fail-closed
+   * convention used by reportFilterCohortMembers() in cohortMembers-adapter.ts.
+   */
+  private async resolveReferralCountryScope(
+    adminUserId?: string,
+  ): Promise<{ restricted: boolean; allowedCountries: string[] }> {
+    if (!adminUserId) {
+      return { restricted: true, allowedCountries: [] };
+    }
+
+    const roleName = await this.getFirstRoleName(adminUserId);
+
+    if (roleName === 'Admin') {
+      return { restricted: false, allowedCountries: [] };
+    }
+
+    if (roleName === 'Regional Admin') {
+      const allowedCountries = await this.resolveRegionalAdminCountryNames(adminUserId);
+      return { restricted: true, allowedCountries };
+    }
+
+    // Unrecognized/unresolved role - fail closed rather than falling through
+    // to Admin's unfiltered behavior.
+    return { restricted: true, allowedCountries: [] };
+  }
+
   private buildReportBase(
     filters: ReferralReportFiltersDto,
     useLeftJoin = true,
+    regionalAdminCountriesLower: string[] | null = null,
   ): { fromSql: string; whereClause: string; params: any[]; cohortIdsParamIdx: number | null } {
     const conds: string[] = [];
     const params: any[] = [];
@@ -770,6 +918,13 @@ export class ReferralsService {
       }
 
       if (sc.length) conds.push(`(${sc.join(' OR ')})`);
+    }
+
+    // ── Regional-Admin scoping (referrer's own country, independent of any
+    // referred-user-country filter above) ──────────────────────────────────
+    if (regionalAdminCountriesLower !== null) {
+      conds.push(`LOWER(TRIM(re."country")) = ANY($${idx++})`);
+      params.push(regionalAdminCountriesLower);
     }
 
     const whereClause = conds.length ? `WHERE ${conds.join(' AND ')}` : '';

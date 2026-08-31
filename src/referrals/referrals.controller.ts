@@ -1,6 +1,7 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query, UsePipes, ValidationPipe, UseFilters, Res, HttpStatus } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query, Req, UseGuards, UsePipes, ValidationPipe, UseFilters, Res, HttpStatus } from '@nestjs/common';
 import { ApiBody, ApiOkResponse, ApiTags } from '@nestjs/swagger';
-import { Response } from 'express';
+import { Request, Response } from 'express';
+import { JwtAuthGuard } from 'src/common/guards/keycloak.guard';
 import { CreateReferralEntityDto } from './dto/create-referral-entity.dto';
 import { ImportReferralsDto } from './dto/import-referrals.dto';
 import { UpdateReferralSlugDto } from './dto/update-referral-slug.dto';
@@ -11,6 +12,18 @@ import APIResponse from '../common/responses/response';
 import { APIID } from '../common/utils/api-id.config';
 import { API_RESPONSES } from '../common/utils/response.messages';
 import { AllExceptionsFilter } from '../common/filters/exception.filter';
+
+// Extend Express Request type to include the JWT-verified user, same shape
+// used by cohortMembers.controller.ts's report-filter endpoint.
+interface RequestWithUser extends Request {
+  user?: {
+    sub: string;
+    userId: string;
+    name: string;
+    username: string;
+    [key: string]: any;
+  };
+}
 
 @ApiTags('Referrals')
 @Controller('referrals')
@@ -34,12 +47,14 @@ export class ReferralsController {
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.REFERRAL_LIST))
+  @UseGuards(JwtAuthGuard)
   @Post('list')
   @UsePipes(new ValidationPipe({ transform: true }))
   @ApiBody({ type: ListReferralsDto })
   @ApiOkResponse({ description: 'List referral entities with pagination and filters' })
-  async list(@Body() dto: ListReferralsDto, @Res() response: Response) {
-    const result = await this.referralsService.listReferralEntities(dto);
+  async list(@Body() dto: ListReferralsDto, @Req() request: RequestWithUser, @Res() response: Response) {
+    const adminUserId = request.user?.userId;
+    const result = await this.referralsService.listReferralEntities(dto, adminUserId);
     return APIResponse.success(
       response,
       APIID.REFERRAL_LIST,
@@ -130,12 +145,14 @@ export class ReferralsController {
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.REFERRAL_SUMMARY))
+  @UseGuards(JwtAuthGuard)
   @Post('report/summary')
   @UsePipes(new ValidationPipe({ transform: true }))
   @ApiBody({ type: ReferralReportRequestDto })
   @ApiOkResponse({ description: 'Per-referral-entity aggregated status counts' })
-  async getSummary(@Body() dto: ReferralReportRequestDto, @Res() response: Response) {
-    const result = await this.referralsService.getReferralSummary(dto);
+  async getSummary(@Body() dto: ReferralReportRequestDto, @Req() request: RequestWithUser, @Res() response: Response) {
+    const adminUserId = request.user?.userId;
+    const result = await this.referralsService.getReferralSummary(dto, adminUserId);
     return APIResponse.success(
       response,
       APIID.REFERRAL_SUMMARY,
@@ -146,12 +163,14 @@ export class ReferralsController {
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.REFERRAL_REPORT))
+  @UseGuards(JwtAuthGuard)
   @Post('report')
   @UsePipes(new ValidationPipe({ transform: true }))
   @ApiBody({ type: ReferralReportRequestDto })
   @ApiOkResponse({ description: 'Referral tracking report with per-slug user counts aggregated by status, cohort and tag' })
-  async getReport(@Body() dto: ReferralReportRequestDto, @Res() response: Response) {
-    const result = await this.referralsService.getReferralReport(dto);
+  async getReport(@Body() dto: ReferralReportRequestDto, @Req() request: RequestWithUser, @Res() response: Response) {
+    const adminUserId = request.user?.userId;
+    const result = await this.referralsService.getReferralReport(dto, adminUserId);
     return APIResponse.success(
       response,
       APIID.REFERRAL_REPORT,
