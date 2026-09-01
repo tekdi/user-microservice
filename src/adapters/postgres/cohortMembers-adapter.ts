@@ -997,43 +997,22 @@ export class PostgresCohortMembersService {
             }
           }
           case 'applicationCountry': {
-            // Aspire Leaders-specific: the Applicant List's Country dropdown
-            // filters on the *application* country - the snapshot taken on
-            // CohortMembers.user_cohort_country_id when the applicant joined
-            // this cohort - not on the applicant's live profile country. Both
-            // are shown on that list (Country vs Application Country, see
-            // attachApplicationCountry()), and for a closed cohort they can
-            // legitimately differ; an admin picking "India" must not get back
-            // an applicant who applied from Iceland and has since moved.
-            //
-            // Only listWithApplication() sends this key (getCohortMembersData()
-            // rewrites its `country` filter into it) - searchCohortMembers()
-            // and every other getUsers() caller keep filtering on
-            // Users.currentCountry exactly as before.
-            //
-            // COALESCE mirrors attachApplicationCountry()'s fallback so the
-            // filter matches the value the list actually renders: members with
-            // no resolved snapshot (bulk imports, or a country that never
-            // matched a row in `countries` - see
-            // docs/regional-admin-cohort-country-report.md §11.5/§11.8) are
-            // matched on their currentCountry rather than silently dropped.
-            // Comparison is trimmed + lower-cased, like every other
-            // countries.name match in this file (resolveUserCohortCountryIds(),
-            // reconcileOpenCohortCountries()), because the dropdown values and
-            // the countries table are maintained separately.
-            const values = Array.isArray(value) ? value : [value];
-            const names = values
-              .filter((name) => typeof name === 'string')
-              .map((name) => name.trim().toLowerCase())
-              .filter(Boolean);
-            if (names.length === 0) {
+            // Aspire Leaders-specific: the Applicant List's Country filter
+            // means the application-country snapshot on
+            // CohortMembers.user_cohort_country_id (what the list renders next
+            // to the live profile country), not Users.currentCountry. Only
+            // listWithApplication() sends this key; every other getUsers()
+            // caller keeps filtering on Users.currentCountry.
+            const built = this.buildApplicationCountryCondition(
+              value,
+              queryParams,
+              paramIndex
+            );
+            if (!built) {
               return null;
             }
-            queryParams.push(names);
-            return `LOWER(TRIM(COALESCE(
-              (SELECT c.name FROM countries c WHERE c.id = CM.user_cohort_country_id),
-              U."currentCountry"
-            ))) = ANY($${paramIndex++}::text[])`;
+            paramIndex = built.nextIndex;
+            return built.condition;
           }
           case 'permanentCountry': {
             if (Array.isArray(value)) {
@@ -1345,27 +1324,20 @@ export class PostgresCohortMembersService {
             return `U."currentCountry"=$${parameterIndex++}`;
           }
           case 'applicationCountry': {
-            // Aspire Leaders-specific: the Applicant List's Country filter
-            // targets the application-country snapshot on
-            // CohortMembers.user_cohort_country_id, not the applicant's live
-            // profile country - see the identical `applicationCountry` case in
-            // getUsers() for the full reasoning. This builder is the one the
-            // Applicant List uses when its Application Progress (completion
-            // percentage) filter is also active, so both paths of
-            // listWithApplication() must apply the same country rule.
-            const values = Array.isArray(value) ? value : [value];
-            const names = values
-              .filter((name) => typeof name === 'string')
-              .map((name) => name.trim().toLowerCase())
-              .filter(Boolean);
-            if (names.length === 0) {
+            // Aspire Leaders-specific: same rule as the `applicationCountry`
+            // case in getUsers() - this builder is the path the Applicant List
+            // takes when its Application Progress filter is also active, so
+            // both paths must apply the same country rule.
+            const built = this.buildApplicationCountryCondition(
+              value,
+              parameters,
+              parameterIndex
+            );
+            if (!built) {
               return null;
             }
-            parameters.push(names);
-            return `LOWER(TRIM(COALESCE(
-              (SELECT c.name FROM countries c WHERE c.id = CM.user_cohort_country_id),
-              U."currentCountry"
-            ))) = ANY($${parameterIndex++}::text[])`;
+            parameterIndex = built.nextIndex;
+            return built.condition;
           }
           case 'currentCountry': {
             if (Array.isArray(value)) {
@@ -2995,17 +2967,10 @@ export class PostgresCohortMembersService {
               } else if (typeof value === 'string') {
                 whereClause[key] = value.split(',').map((id) => id.trim());
               }
-            } else if (
-              key === 'country' ||
-              key === 'currentCountry' ||
-              key === 'applicationCountry'
-            ) {
+            } else if (this.isApplicationCountryFilterKey(key)) {
               // Aspire Leaders-specific: same rewrite getCohortMembersData()
-              // does for the other path of this endpoint - on the Applicant
-              // List the single Country filter means the application-country
-              // snapshot, not Users.currentCountry, whichever of the three
-              // spellings the client sent. See the `applicationCountry` case
-              // in buildBaseQuery().
+              // does for the other path of this endpoint - see
+              // isApplicationCountryFilterKey().
               whereClause['applicationCountry'] = value;
             } else {
               whereClause[key] = value;
@@ -3186,6 +3151,65 @@ export class PostgresCohortMembersService {
   }
 
   /**
+   * Aspire Leaders-specific: the Applicant List has exactly ONE Country
+   * dropdown and it means the application-country snapshot. All three
+   * spellings are folded into it because they are all that same dropdown: the
+   * admin UI has sent `currentCountry` since Users.country (country of origin)
+   * was retired from the profile, `country` is the older spelling, and
+   * `applicationCountry` is what it says. Accepting all three means this does
+   * not depend on the frontend deploying in step with this service.
+   */
+  private isApplicationCountryFilterKey(key: string): boolean {
+    return (
+      key === 'applicationCountry'
+    );
+  }
+
+  /**
+   * Aspire Leaders-specific: shared SQL for the Applicant List's Country
+   * filter, used by both getUsers() and buildBaseQuery() so the two paths of
+   * listWithApplication() cannot drift apart.
+   *
+   * Matches on the cohort-application country snapshot
+   * (CohortMembers.user_cohort_country_id), with a COALESCE fallback to
+   * Users.currentCountry that mirrors attachApplicationCountry(), so members
+   * with no resolved snapshot (bulk imports, or a country that never matched a
+   * row in `countries`) are matched on the value the list actually renders
+   * rather than silently dropped. Comparison is trimmed + lower-cased like
+   * every other countries.name match in this file, because the dropdown values
+   * and the countries table are maintained separately.
+   *
+   * The country lookup is a scalar subquery inside the one list query - a
+   * primary-key index lookup per row in the same statement, not a per-row
+   * round trip - so it adds no N+1.
+   *
+   * Returns null when the filter carries no usable value, meaning "add no
+   * condition"; otherwise the condition plus the next free parameter index
+   * (one parameter is pushed onto `parameters`).
+   */
+  private buildApplicationCountryCondition(
+    value: any,
+    parameters: any[],
+    parameterIndex: number
+  ): { condition: string; nextIndex: number } | null {
+    const names = (Array.isArray(value) ? value : [value])
+      .filter((name) => typeof name === 'string')
+      .map((name) => name.trim().toLowerCase())
+      .filter(Boolean);
+    if (names.length === 0) {
+      return null;
+    }
+    parameters.push(names);
+    return {
+      condition: `LOWER(TRIM(COALESCE(
+              (SELECT c.name FROM countries c WHERE c.id = CM.user_cohort_country_id),
+              U."currentCountry"
+            ))) = ANY($${parameterIndex}::text[])`,
+      nextIndex: parameterIndex + 1,
+    };
+  }
+
+  /**
    * Aspire Leaders-specific: adds a display-only `applicationCountry` to each
    * row of the Applicant List.
    *
@@ -3312,21 +3336,11 @@ export class PostgresCohortMembersService {
           }
         } else if (
           countryFiltersApplicationCountry &&
-          (key === 'country' ||
-            key === 'currentCountry' ||
-            key === 'applicationCountry')
+          this.isApplicationCountryFilterKey(key)
         ) {
-          // Aspire Leaders-specific: same dropdown, different column - the
-          // Applicant List has exactly ONE Country filter and it means the
-          // application-country snapshot, not Users.currentCountry. See the
-          // `applicationCountry` case in getUsers().
-          //
-          // All three spellings are folded into it because they are all that
-          // one dropdown: the admin UI has sent `currentCountry` since
-          // Users.country (country of origin) was retired from the profile,
-          // `country` is the older spelling, and `applicationCountry` is what
-          // it says. Accepting all three means the fix does not depend on the
-          // frontend deploying in step with this service.
+          // Aspire Leaders-specific: on the Applicant List the single Country
+          // dropdown means the application-country snapshot, not
+          // Users.currentCountry. See isApplicationCountryFilterKey().
           whereClause['applicationCountry'] = value;
         } else {
           whereClause[key] = value;

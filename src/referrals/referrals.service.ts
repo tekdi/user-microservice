@@ -132,7 +132,7 @@ export class ReferralsService {
     // countries - independent of/in addition to whatever filters.countries
     // above already narrowed to. Admins are unaffected. See
     // docs/regional-admin-referral-country-report.md §6.
-    const scope = await this.resolveReferralCountryScope(adminUserId);
+    const scope = await this.getReferralCountryScope(adminUserId);
     if (scope.restricted) {
       if (scope.allowedCountries.length === 0) {
         return { data: [], total: 0, limit, offset };
@@ -477,7 +477,7 @@ export class ReferralsService {
     // filters attributed USERS' own country, u."country" - unchanged, see the
     // existing condition inside buildReportBase). See
     // docs/regional-admin-referral-country-report.md §6 decision.
-    const scope = await this.resolveReferralCountryScope(adminUserId);
+    const scope = await this.getReferralCountryScope(adminUserId);
     if (scope.restricted && scope.allowedCountries.length === 0) {
       return { data: [], totalCount: 0, limit, offset, hasMore: false };
     }
@@ -583,7 +583,7 @@ export class ReferralsService {
     // admin may pass filters.countries), automatically narrowed/defaulted to
     // a Regional Admin's own allowed countries - see
     // docs/regional-admin-referral-country-report.md §6.
-    const scope = await this.resolveReferralCountryScope(adminUserId);
+    const scope = await this.getReferralCountryScope(adminUserId);
     let regionalAdminCountriesLower: string[] | null = null;
     if (scope.restricted) {
       const allowedLower = scope.allowedCountries.map((c) => c.toLowerCase().trim());
@@ -756,7 +756,7 @@ export class ReferralsService {
    * against. Same comma-in-country-name-safe substring matching as the cohort
    * version (see that method's docstring for why a plain split(',') is unsafe).
    */
-  private async resolveRegionalAdminCountryNames(adminUserId: string): Promise<string[]> {
+  private async getRegionalAdminCountryNames(adminUserId: string): Promise<string[]> {
     const [fieldValueRow] = await this.dataSource.query(
       `SELECT fv."dropdownValue", fv.value
        FROM "FieldValues" fv
@@ -799,7 +799,7 @@ export class ReferralsService {
    * closed (restricted to zero countries), matching the fail-closed
    * convention used by reportFilterCohortMembers() in cohortMembers-adapter.ts.
    */
-  private async resolveReferralCountryScope(
+  private async getReferralCountryScope(
     adminUserId?: string,
   ): Promise<{ restricted: boolean; allowedCountries: string[] }> {
     if (!adminUserId) {
@@ -813,7 +813,7 @@ export class ReferralsService {
     }
 
     if (roleName === 'Regional Admin') {
-      const allowedCountries = await this.resolveRegionalAdminCountryNames(adminUserId);
+      const allowedCountries = await this.getRegionalAdminCountryNames(adminUserId);
       return { restricted: true, allowedCountries };
     }
 
