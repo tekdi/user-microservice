@@ -183,6 +183,7 @@ export class PostgresUserService implements IServicelocator {
       const roleFromBody = requestBody.role;
 
       // Admin roles that use the admin account verification template
+      // This list can be updated in the future based on role code and check from database if needed. For now, we use role names for simplicity.
       const adminRoles = [
         'Regional Admin',
         'ALP Program Admin',
