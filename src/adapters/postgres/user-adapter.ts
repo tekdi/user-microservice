@@ -234,6 +234,7 @@ export class PostgresUserService implements IServicelocator {
           '{expireTime}': time,
           '{resetPasswordUrl}': resetPasswordUrlPath,
           '{redirectUrl}': redirectUrl,
+          '{userRole}': roleFromBody || userRole || '',
         },
         email: {
           receipients: [emailOfUser],
