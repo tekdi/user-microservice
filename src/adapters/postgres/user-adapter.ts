@@ -182,18 +182,27 @@ export class PostgresUserService implements IServicelocator {
       const requestBody = request?.body || {};
       const roleFromBody = requestBody.role;
 
+      // Admin roles that use the admin account verification template
+      const adminRoles = [
+        'Regional Admin',
+        'ALP Program Admin',
+        'Outreach Admin',
+        'ELP Admin',
+        'Data Reporting Admin',
+        'Finance Admin',
+        'Tech Admin',
+      ];
+
       let notificationKey;
 
-      if (roleFromBody) {
-        // If role is sent from body, use role-specific notification key
-        if (roleFromBody === 'Regional Admin') {
-          notificationKey =
-            userData?.status === 'inactive'
-              ? 'onRegionalAdminCreated'
-              : 'OnForgotPasswordReset';
-        }
+      if (adminRoles.includes(roleFromBody)) {
+        // If an admin role is sent from body, use role-specific notification key
+        notificationKey =
+          userData?.status === 'inactive'
+            ? 'onRegionalAdminCreated'
+            : 'OnForgotPasswordReset';
       } else {
-        // Use existing logic if no role is sent from body
+        // Use existing logic for any other role or when no role is sent from body
         notificationKey =
           userData?.status === 'inactive'
             ? 'onStudentCreated'
