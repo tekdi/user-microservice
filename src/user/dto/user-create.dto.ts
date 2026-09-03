@@ -9,6 +9,7 @@ import {
   Length,
   IsEnum,
   IsDateString,
+  Matches,
 } from "class-validator";
 import { User } from "../entities/user-entity";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
@@ -111,6 +112,7 @@ export class UserCreateDto {
     description: 'Gender of the user',
     enum: ['male', 'female', 'transgender']
   })
+  @IsNotEmpty()
   @Expose()
   @IsEnum(['male', 'female', 'transgender'])
   gender: string;
@@ -126,10 +128,13 @@ export class UserCreateDto {
   @NotInFuture({ message: 'The birth date cannot be in the future' })
   dob: string;
 
-  @ApiPropertyOptional({
+  @ApiProperty({
     type: String,
-    description: "The contact number of the user",
+    description: "The contact number of the user (must be exactly 10 digits)",
+    example: "9876543210",
   })
+  @IsNotEmpty({ message: "Mobile number is required" })
+  @Matches(/^[0-9]{10}$/, { message: "Mobile number must be exactly 10 digits" })
   @Expose()
   mobile: string;
 

@@ -273,6 +273,16 @@ class LocationFiltersDto {
   @IsString()
   @IsNotEmpty({ message: 'Name search keyword cannot be empty' })
   name?: string;
+
+  @ApiPropertyOptional({
+    type: String,
+    description: "Enrollment ID to filter by",
+    example: "enrollment-uuid-1"
+  })
+  @Expose()
+  @IsOptional()
+  @IsString()
+  enrollmentId?: string;
 }
 
 enum SortDirection {

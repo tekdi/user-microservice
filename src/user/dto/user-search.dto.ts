@@ -61,6 +61,14 @@ export class setFilters {
   @IsArray()
   username: string[];
 
+  @ApiPropertyOptional({
+    type: String,
+    description: "Enrollment ID",
+  })
+  @IsOptional()
+  @IsString()
+  enrollmentId: string;
+
 
   @ApiProperty({
     type: [String],
