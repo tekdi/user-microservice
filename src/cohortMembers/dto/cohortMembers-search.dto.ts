@@ -79,6 +79,47 @@ class FiltersDto {
   @MinLength(2, { message: 'Search text must be at least 2 characters long' })
   searchtext?: string;
 
+  /**
+   * Aspire Leaders: country NAMES from the admin UI's Country dropdown.
+   *
+   * On the Applicant List (POST /cohortmember/list-application) all three
+   * spellings - `applicationCountry`, `currentCountry` and `country` - mean the
+   * same single dropdown and are matched on the APPLICATION country: the
+   * snapshot on CohortMembers.user_cohort_country_id taken when the applicant
+   * joined that cohort (falling back to Users.currentCountry when it never
+   * resolved), i.e. the "Application Country" column that list renders. On
+   * every other endpoint they keep matching Users.currentCountry.
+   *
+   * Not typed @IsArray: a single country name string is accepted too (both
+   * query builders normalise it), and tightening it would 400 existing callers.
+   */
+  @ApiPropertyOptional({
+    type: [String],
+    description:
+      'Country names. On /cohortmember/list-application these filter the application country (the "Application Country" column), not the live profile country.',
+    example: ['India', 'Iceland'],
+  })
+  @IsOptional()
+  applicationCountry?: string[] | string;
+
+  @ApiPropertyOptional({
+    type: [String],
+    description:
+      'Alias of applicationCountry on /cohortmember/list-application; filters Users.currentCountry elsewhere.',
+    example: ['India'],
+  })
+  @IsOptional()
+  currentCountry?: string[] | string;
+
+  @ApiPropertyOptional({
+    type: [String],
+    description:
+      'Legacy alias of applicationCountry on /cohortmember/list-application; filters Users.currentCountry elsewhere.',
+    example: ['India'],
+  })
+  @IsOptional()
+  country?: string[] | string;
+
   @ApiPropertyOptional({
     type: [String],
     description: 'Auto tags to filter users',
