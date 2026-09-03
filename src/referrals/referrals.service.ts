@@ -794,32 +794,33 @@ export class ReferralsService {
    * report/list access should be restricted to their own countries
    * (ReferralEntity.country - the referrer's own country, the single column
    * decided on for Regional-Admin scoping across all 3 referral reports), and
-   * to which ones. Regional Admin -> restricted to their own allowed
-   * countries; Admin -> unrestricted; any other/unresolved role -> fails
-   * closed (restricted to zero countries), matching the fail-closed
-   * convention used by reportFilterCohortMembers() in cohortMembers-adapter.ts.
+   * to which ones.
+   *
+   * Country scoping applies to Regional Admin ONLY. Every other role that
+   * can reach these endpoints (Admin, Tech Admin, ...) sees all referrals
+   * unfiltered - an earlier version allow-listed only 'Admin' and fell
+   * through to `restricted: true, allowedCountries: []` for anything else,
+   * which made the list/report endpoints return an empty page (HTTP 200,
+   * total 0) for Tech Admin instead of the full list. Access control for
+   * these endpoints is JwtAuthGuard on the controller, not this method.
    */
   private async getReferralCountryScope(
     adminUserId?: string,
   ): Promise<{ restricted: boolean; allowedCountries: string[] }> {
+    // No resolvable caller - fail closed rather than serving every referral
+    // to an unidentified request. Unreachable through the guarded routes.
     if (!adminUserId) {
       return { restricted: true, allowedCountries: [] };
     }
 
     const roleName = await this.getFirstRoleName(adminUserId);
 
-    if (roleName === 'Admin') {
-      return { restricted: false, allowedCountries: [] };
-    }
-
     if (roleName === 'Regional Admin') {
       const allowedCountries = await this.getRegionalAdminCountryNames(adminUserId);
       return { restricted: true, allowedCountries };
     }
 
-    // Unrecognized/unresolved role - fail closed rather than falling through
-    // to Admin's unfiltered behavior.
-    return { restricted: true, allowedCountries: [] };
+    return { restricted: false, allowedCountries: [] };
   }
 
   private buildReportBase(
