@@ -844,6 +844,7 @@ export class UserService {
       'U.name AS "name"',
       'UTM.tenantId AS "tenantId"',
       'U.middleName AS "middleName"',
+      'UTM.createdAt As "tenantJoinedAt"',
       'U.lastName AS "lastName"',
       'U.gender AS "gender"',
       'U.dob AS "dob"',
@@ -860,7 +861,8 @@ export class UserService {
     .groupBy('U.userId')
     .addGroupBy('UTM.tenantId')
     .addGroupBy('UTM.status')
-    .addGroupBy('R.name');
+    .addGroupBy('R.name')
+    .addGroupBy('UTM.createdAt');
 
   // --- Filters ---
   if (filters && Object.keys(filters).length > 0) {
@@ -892,6 +894,14 @@ export class UserService {
             });
             break;
           }
+
+            case "enrollmentId":
+              const enrollmentValue = Array.isArray(value) ? value[0] : value;
+              queryBuilder.andWhere(`U.enrollmentId = :${key}`, {
+                [key]: enrollmentValue,
+              });
+              break;
+
 
           case "username":
             if (Array.isArray(value) && value.every((item) => typeof item === "string")) {
@@ -3871,6 +3881,7 @@ export class UserService {
       const filterResult = this.findDeepestFilter(filters);
       const nameFilter = filters?.name;
       const statusFilter = filters?.status;
+      const enrollmentIdFilter = filters?.enrollmentId;
 
       // Filter out center and batch from customfields request (they belong in cohortData)
       const filteredCustomFields = customfields ? customfields.filter(field =>
@@ -3892,7 +3903,8 @@ export class UserService {
         nameFilter,
         statusFilter,
         filteredCustomFields,
-        academicYearId
+        academicYearId,
+        enrollmentIdFilter
       );
 
       // Return early if no users found
@@ -4231,7 +4243,8 @@ export class UserService {
     nameFilter?: string,
     statusFilter?: string[],
     customFieldNames?: string[],
-    academicYearId?: string
+    academicYearId?: string,
+    enrollmentIdFilter?: string
   ): Promise<{ totalCount: number; users: any[] }> {
     const apiId = APIID.USER_LIST;
 
@@ -4250,7 +4263,8 @@ export class UserService {
         limit,
         offset,
         academicYearId,
-        parentTenantId
+        parentTenantId,
+        enrollmentIdFilter
       );
       const result = await this.usersRepository.query(queryBuilder.query, queryBuilder.params);
       const totalCount = result.length > 0 ? parseInt(result[0].total_count) : 0;
@@ -4305,7 +4319,8 @@ export class UserService {
     limit: number = 10,
     offset: number = 0,
     academicYearId?: string,
-    parentTenantId?: string | null
+    parentTenantId?: string | null,
+    enrollmentIdFilter?: string
   ): { query: string; params: any[] } {
 
     const conditions: string[] = [];
@@ -4328,6 +4343,12 @@ export class UserService {
     conditions.push(`utm."tenantId" = $${paramIndex}`);
     params.push(tenantId);
     paramIndex++;
+
+    if (enrollmentIdFilter && enrollmentIdFilter.trim()) {
+      conditions.push(`u."enrollmentId" = $${paramIndex}`); // Ensure enrollmentId is not null
+      params.push(enrollmentIdFilter.trim());
+      paramIndex++;
+    }
 
     // Track whether CohortMembers (alias cm) has already been joined
     let cmJoined = false;

@@ -25,7 +25,7 @@ spec:
         ports:
         - containerPort: 3000
         envFrom:
-        - configMapRef:
+        - secretRef:
             name: backend-service-config
         resources: {}
       - name: cloudwatch-logs-agent
