@@ -895,13 +895,13 @@ export class UserService {
             break;
           }
 
-          case "enrollmentId":
-            const enrollmentValue = Array.isArray(value) ? value[0] : value;
-            queryBuilder.andWhere(`U.enrollmentId ILIKE :${key}`, {
-              [key]: `%${enrollmentValue}%`,
-            });
-            break;
-          
+            case "enrollmentId":
+              const enrollmentValue = Array.isArray(value) ? value[0] : value;
+              queryBuilder.andWhere(`U.enrollmentId = :${key}`, {
+                [key]: enrollmentValue,
+              });
+              break;
+
 
           case "username":
             if (Array.isArray(value) && value.every((item) => typeof item === "string")) {
