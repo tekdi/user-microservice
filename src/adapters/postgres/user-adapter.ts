@@ -64,6 +64,13 @@ interface UpdateField {
   username?: string; // Optional
   email?: string; // Optional
 }
+/**
+ * Privilege that lets a non-admin call POST /user/v1/anonymize. Matches the code already
+ * seeded in the Privileges table ('Delete User'), and the one the middleware config and
+ * PERMISSIONS.USERS_DELETE both refer to.
+ */
+const ANONYMIZE_REQUIRED_PRIVILEGE = "users.delete";
+
 @Injectable()
 export class PostgresUserService implements IServicelocator {
   axios = require('axios');
@@ -3124,7 +3131,8 @@ export class PostgresUserService implements IServicelocator {
       );
       const duplicatesRemoved = emails.length - uniqueEmails.length;
 
-      // Resolve acting admin id from JWT, same pattern used by updateUser().
+      // Resolve acting admin id from JWT, same pattern used by updateUser(). This is also the
+      // identity the authorization check below is made against, so it has to be resolved first.
       let loggedInUserId: string | null = null;
       if (request?.user?.userId) {
         loggedInUserId = request.user.userId;
@@ -3150,9 +3158,8 @@ export class PostgresUserService implements IServicelocator {
         );
       }
 
-      // Admin-only: same tenant-scoped 'admin' role check already used elsewhere in this codebase
-      // (see isUserAdmin() in cohortMembers-adapter.ts) — reuses the same Keycloak bearer token
-      // already required for authentication, no separate rbac_token needed.
+      // Roles and privileges are tenant-scoped, so the tenant has to be known before we can
+      // decide whether this caller is allowed to anonymize anyone.
       const tenantId = request?.headers?.tenantid;
       if (!tenantId) {
         return APIResponse.error(
@@ -3164,19 +3171,25 @@ export class PostgresUserService implements IServicelocator {
         );
       }
 
-      // const isAdmin = await this.isUserAdminForAnonymize(
-      //   loggedInUserId,
-      //   tenantId
-      // );
-      // if (!isAdmin) {
-      //   return APIResponse.error(
-      //     response,
-      //     apiId,
-      //     "Forbidden",
-      //     API_RESPONSES.USER_ANONYMIZE_FORBIDDEN,
-      //     HttpStatus.FORBIDDEN
-      //   );
-      // }
+      // Authorization: resolved server-side from the caller's own userId + tenantid, so the
+      // client only ever sends its Keycloak bearer token. This is the same roles -> privileges
+      // lookup that GET /user/v1/auth/rbac/token performs to build its payload, just read
+      // directly instead of round-tripping through a second token the caller would have to
+      // fetch and forward. Read live rather than from the privilege cache: anonymization is
+      // irreversible and rare, so a stale-by-up-to-60s answer is not worth the saved query.
+      const canAnonymize = await this.callerCanAnonymize(
+        loggedInUserId,
+        tenantId
+      );
+      if (!canAnonymize) {
+        return APIResponse.error(
+          response,
+          apiId,
+          "Forbidden",
+          API_RESPONSES.USER_ANONYMIZE_FORBIDDEN,
+          HttpStatus.FORBIDDEN
+        );
+      }
 
       // Fetch the Keycloak admin token once and reuse it for the whole batch (already cached/deduped
       // internally by getKeycloakAdminToken) instead of re-fetching per user.
@@ -3257,6 +3270,37 @@ export class PostgresUserService implements IServicelocator {
 
     await Promise.all(runners);
     return results;
+  }
+
+  /**
+   * Whether `userId` may anonymize users within `tenantId`: true when any role they hold in that
+   * tenant maps to the `users.delete` privilege.
+   *
+   * Purely privilege-driven — no role code is special-cased, 'admin' included. Access is whatever
+   * RolePrivilegesMapping says it is, so granting or revoking the privilege in the database is the
+   * only thing that changes who can call this, with no code change and no role allowlist to keep
+   * in sync.
+   *
+   * Reuses PostgresRoleService rather than hand-rolling SQL so this stays in step with how
+   * AuthRbacService.signInRbac() resolves the very same data for the rbac_token payload.
+   */
+  private async callerCanAnonymize(
+    userId: string,
+    tenantId: string
+  ): Promise<boolean> {
+    const userRoles = await this.postgresRoleService.findUserRoleData(
+      userId,
+      tenantId
+    );
+    if (!userRoles?.length) {
+      return false;
+    }
+
+    const privileges = await this.postgresRoleService.findPrivilegeByRoleId(
+      userRoles.map(({ roleid }) => roleid)
+    );
+
+    return privileges.some(({ code }) => code === ANONYMIZE_REQUIRED_PRIVILEGE);
   }
 
   private generateAnonymizedIdentity(userId: string): string {
@@ -3605,26 +3649,6 @@ export class PostgresUserService implements IServicelocator {
       type: f.type,
       value: f.fieldParams?.isPiData === true ? "" : f.value,
     }));
-  }
-
-  /**
-   * Tenant-scoped "is this user an admin" check for gating /user/anonymize — same query as the
-   * existing isUserAdmin() in cohortMembers-adapter.ts (Roles.code === 'admin' via
-   * UserRolesMapping), duplicated locally rather than shared across adapters since neither
-   * exposes this as a public method today.
-   */
-  private async isUserAdminForAnonymize(
-    userId: string,
-    tenantId: string
-  ): Promise<boolean> {
-    const result = await this.usersRepository.query(
-      `SELECT 1 FROM "UserRolesMapping" URM
-       JOIN "Roles" R ON R."roleId" = URM."roleId"
-       WHERE URM."userId" = $1 AND URM."tenantId" = $2 AND R."code" = 'admin'
-       LIMIT 1`,
-      [userId, tenantId]
-    );
-    return result.length > 0;
   }
 
   private formatMobileNumber(mobile: string): string {
