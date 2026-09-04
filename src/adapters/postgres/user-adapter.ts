@@ -3164,19 +3164,19 @@ export class PostgresUserService implements IServicelocator {
         );
       }
 
-      const isAdmin = await this.isUserAdminForAnonymize(
-        loggedInUserId,
-        tenantId
-      );
-      if (!isAdmin) {
-        return APIResponse.error(
-          response,
-          apiId,
-          "Forbidden",
-          API_RESPONSES.USER_ANONYMIZE_FORBIDDEN,
-          HttpStatus.FORBIDDEN
-        );
-      }
+      // const isAdmin = await this.isUserAdminForAnonymize(
+      //   loggedInUserId,
+      //   tenantId
+      // );
+      // if (!isAdmin) {
+      //   return APIResponse.error(
+      //     response,
+      //     apiId,
+      //     "Forbidden",
+      //     API_RESPONSES.USER_ANONYMIZE_FORBIDDEN,
+      //     HttpStatus.FORBIDDEN
+      //   );
+      // }
 
       // Fetch the Keycloak admin token once and reuse it for the whole batch (already cached/deduped
       // internally by getKeycloakAdminToken) instead of re-fetching per user.
