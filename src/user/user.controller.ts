@@ -313,8 +313,13 @@ export class UserController {
   }
   // GDPR-style anonymize: overwrites email/username/firstName/lastName/dob/gender/mobile/country/status
   // in Postgres + Keycloak (email/username/firstName/lastName, disables the account, and invalidates
-  // its sessions/refresh tokens) + Elasticsearch. Accepts multiple emails. Admin-only: the caller
-  // must hold the 'admin' role for the tenant given in the tenantid header (checked in the adapter).
+  // its sessions/refresh tokens) + Elasticsearch. Accepts multiple emails.
+  //
+  // Authorization is privilege-based and resolved server-side: only the Keycloak bearer token
+  // and tenantid are required from the caller. The adapter reads the caller's roles/privileges
+  // for that tenant straight from the database — the same lookup GET /user/v1/auth/rbac/token
+  // performs — and requires the 'admin' role or the `users.delete` privilege. No rbac_token
+  // header is involved, so no client needs to thread one through.
   @UseFilters(new AllExceptionsFilter(APIID.USER_ANONYMIZE))
   @Post('anonymize')
   @UseGuards(JwtAuthGuard)
@@ -323,7 +328,10 @@ export class UserController {
   @UsePipes(new ValidationPipe({ transform: true }))
   @ApiBody({ type: UserAnonymizeDto })
   @ApiOkResponse({ description: 'Users processed for anonymization.' })
-  @ApiForbiddenResponse({ description: 'Caller is not an admin for the given tenant.' })
+  @ApiForbiddenResponse({
+    description:
+      "Caller holds neither the 'admin' role nor the users.delete privilege for this tenant.",
+  })
   public async anonymizeUsers(
     @Req() request: Request,
     @Res() response: Response,
