@@ -224,7 +224,7 @@ export class PostgresUserService implements IServicelocator {
       const userRole = await this.getFirstRoleName(userData.userId);
       let resetPasswordUrlPath = frontEndUrl;
 
-      if (userRole === 'Admin' || userRole === 'Regional Admin') {
+      if (userRole === 'Admin' || adminRoles.includes(userRole)) {
         resetPasswordUrlPath = backEndUrl;
       }
 
