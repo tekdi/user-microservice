@@ -1025,6 +1025,10 @@ export class UserService {
         label: data?.label,
         selectedValues: data?.selectedValues,
         type: data?.type,
+        createdAt: data?.createdAt,
+        updatedAt: data?.updatedAt, 
+        createdBy: data?.createdBy,
+        updatedBy: data?.updatedBy,
       }));
       result.getUserDetails.push(userData);
     }
