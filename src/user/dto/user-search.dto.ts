@@ -41,6 +41,25 @@ export class setFilters {
   })
   currentCountry: string | string[];
 
+  /**
+   * Aspire Leaders: country NAMES matched against the application-country
+   * snapshot on CohortMembers.user_cohort_country_id (falling back to
+   * Users.currentCountry when a snapshot never resolved).
+   *
+   * This list is not cohort-scoped, so a user is kept when ANY of their cohort
+   * applications carries a matching snapshot. Purely additive - omit it (or
+   * send an empty array) and the query is exactly what it was before this
+   * filter existed. Independent of `currentCountry`; sending both ANDs them.
+   */
+  @ApiPropertyOptional({
+    type: [String],
+    description:
+      'Country names matched against the application-country snapshot of ANY of the user\'s cohort memberships. Optional and additive.',
+    example: ['India', 'Iceland'],
+  })
+  @IsOptional()
+  applicationCountry?: string[] | string;
+
   @ApiPropertyOptional({
     type: String,
     description: 'Block',

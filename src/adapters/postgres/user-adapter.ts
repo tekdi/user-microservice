@@ -593,6 +593,34 @@ export class PostgresUserService implements IServicelocator {
       const isRegionalAdmin = filters.role === 'Regional Admin';
 
       for (const [key, value] of Object.entries(filters)) {
+        // Aspire Leaders-specific: the All Participants list's optional
+        // "Application Country" filter - country NAMES matched against the
+        // application-country snapshot on CohortMembers.user_cohort_country_id.
+        //
+        // This list is not scoped to a cohort, so "application country" here
+        // means ANY of the user's cohort applications: a user is kept when at
+        // least one of their CohortMembers rows carries a matching snapshot,
+        // whatever cohort it belongs to. Handled explicitly (and `continue`d)
+        // because it is not a Users column and would otherwise fall through to
+        // searchCustomFields and be looked up as a custom field that does not
+        // exist.
+        //
+        // Strictly additive: when the filter is absent, or carries no usable
+        // country name, NO condition is added and this query stays byte-for-
+        // byte what it is today.
+        if (key === 'applicationCountry') {
+          const applicationCountryCondition =
+            this.buildAnyApplicationCountryCondition(value);
+          if (applicationCountryCondition) {
+            if (index > 0) {
+              whereCondition += ` AND `;
+            }
+            whereCondition += ` ${applicationCountryCondition}`;
+            index++;
+          }
+          continue;
+        }
+
         // Special handling for country field based on role
         if (key === 'country') {
           if (isRegionalAdmin) {
@@ -4268,6 +4296,49 @@ export class PostgresUserService implements IServicelocator {
    * @param value - The string value to escape
    * @returns Escaped string safe for SQL interpolation
    */
+  /**
+   * Aspire Leaders-specific: SQL for the All Participants list's "Application
+   * Country" filter - keep users who have at least ONE cohort application whose
+   * country snapshot (CohortMembers.user_cohort_country_id) matches.
+   *
+   * Not cohort-scoped, unlike the Applicant List's version of this filter
+   * (buildApplicationCountryCondition() in cohortMembers-adapter): this list
+   * spans every cohort, so an EXISTS over the user's CohortMembers rows is the
+   * right shape - it also means a user with several applications is returned
+   * once, not once per membership.
+   *
+   * The COALESCE fallback to Users.currentCountry mirrors that other builder
+   * and attachApplicationCountry(): a membership whose snapshot never resolved
+   * (bulk imports, or a country absent from `countries`) is matched on the
+   * value the UI renders as its application country, rather than silently
+   * dropped. Comparison is trimmed + lower-cased because the dropdown values
+   * and the countries table are maintained separately.
+   *
+   * Returns null when there is no usable country name, meaning "add no
+   * condition" - the caller then leaves the query untouched.
+   */
+  private buildAnyApplicationCountryCondition(value: any): string | null {
+    const names = (Array.isArray(value) ? value : [value])
+      .filter((name) => typeof name === 'string')
+      .map((name) => name.trim().toLowerCase())
+      .filter(Boolean);
+    if (names.length === 0) {
+      return null;
+    }
+    const nameList = names
+      .map((name) => `'${this.escapeSqlLiteral(name)}'`)
+      .join(',');
+    return `EXISTS (
+        SELECT 1
+        FROM public."CohortMembers" ACM
+        WHERE ACM."userId" = U."userId"
+          AND LOWER(TRIM(COALESCE(
+            (SELECT c.name FROM countries c WHERE c.id = ACM.user_cohort_country_id),
+            U."currentCountry"
+          ))) IN (${nameList})
+      )`;
+  }
+
   private escapeSqlLiteral(value: string): string {
     if (!value || typeof value !== 'string') return '';
     // Escape single quotes by doubling them (PostgreSQL standard)

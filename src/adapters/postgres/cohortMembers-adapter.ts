@@ -3151,18 +3151,19 @@ export class PostgresCohortMembersService {
   }
 
   /**
-   * Aspire Leaders-specific: the Applicant List has exactly ONE Country
-   * dropdown and it means the application-country snapshot. All three
-   * spellings are folded into it because they are all that same dropdown: the
-   * admin UI has sent `currentCountry` since Users.country (country of origin)
-   * was retired from the profile, `country` is the older spelling, and
-   * `applicationCountry` is what it says. Accepting all three means this does
-   * not depend on the frontend deploying in step with this service.
+   * Aspire Leaders-specific: which filter key means the application-country
+   * snapshot rather than Users.currentCountry.
+   *
+   * Only the explicit `applicationCountry` spelling does. The Applicant List
+   * now has TWO independent country dropdowns - "Application Country"
+   * (`applicationCountry`, the CohortMembers.user_cohort_country_id snapshot)
+   * and "Current Country" (`currentCountry`, the live profile column) - which
+   * the SQL builders apply as separate ANDed conditions. So `currentCountry`
+   * and the legacy `country` spelling must NOT be folded in here: doing so
+   * would collapse both dropdowns back onto one dimension.
    */
   private isApplicationCountryFilterKey(key: string): boolean {
-    return (
-      key === 'applicationCountry'
-    );
+    return key === 'applicationCountry';
   }
 
   /**
