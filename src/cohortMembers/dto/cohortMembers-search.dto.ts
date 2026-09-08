@@ -80,15 +80,18 @@ class FiltersDto {
   searchtext?: string;
 
   /**
-   * Aspire Leaders: country NAMES from the admin UI's Country dropdown.
-   *
-   * On the Applicant List (POST /cohortmember/list-application) all three
-   * spellings - `applicationCountry`, `currentCountry` and `country` - mean the
-   * same single dropdown and are matched on the APPLICATION country: the
+   * Aspire Leaders: country NAMES, matched on the APPLICATION country - the
    * snapshot on CohortMembers.user_cohort_country_id taken when the applicant
    * joined that cohort (falling back to Users.currentCountry when it never
-   * resolved), i.e. the "Application Country" column that list renders. On
-   * every other endpoint they keep matching Users.currentCountry.
+   * resolved), i.e. the "Application Country" column the Applicant List
+   * renders.
+   *
+   * The Applicant List (POST /cohortmember/list-application) has TWO
+   * independent country dropdowns and this is the first of them; send
+   * `currentCountry` below for the other. Both may be sent together and are
+   * ANDed, which is what makes "applied from India, living in Iceland now"
+   * answerable. This is also the dimension a Regional Admin's assigned
+   * countries scope the list on.
    *
    * Not typed @IsArray: a single country name string is accepted too (both
    * query builders normalise it), and tightening it would 400 existing callers.
@@ -96,7 +99,7 @@ class FiltersDto {
   @ApiPropertyOptional({
     type: [String],
     description:
-      'Country names. On /cohortmember/list-application these filter the application country (the "Application Country" column), not the live profile country.',
+      'Country names filtering the application-country snapshot (the "Application Country" column on /cohortmember/list-application), not the live profile country.',
     example: ['India', 'Iceland'],
   })
   @IsOptional()
@@ -105,7 +108,7 @@ class FiltersDto {
   @ApiPropertyOptional({
     type: [String],
     description:
-      'Alias of applicationCountry on /cohortmember/list-application; filters Users.currentCountry elsewhere.',
+      'Country names filtering the live profile country (Users.currentCountry, the "Country" column). Independent of applicationCountry; sending both ANDs them.',
     example: ['India'],
   })
   @IsOptional()
@@ -114,7 +117,7 @@ class FiltersDto {
   @ApiPropertyOptional({
     type: [String],
     description:
-      'Legacy alias of applicationCountry on /cohortmember/list-application; filters Users.currentCountry elsewhere.',
+      'Legacy spelling of currentCountry - filters Users.currentCountry on every endpoint.',
     example: ['India'],
   })
   @IsOptional()
