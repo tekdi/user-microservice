@@ -43,8 +43,9 @@ export class setFilters {
 
   /**
    * Aspire Leaders: country NAMES matched against the application-country
-   * snapshot on CohortMembers.user_cohort_country_id (falling back to
-   * Users.currentCountry when a snapshot never resolved).
+   * snapshot on CohortMembers.user_cohort_country_id. Memberships whose
+   * snapshot never resolved are NOT matched - there is no fallback to
+   * Users.currentCountry.
    *
    * This list is not cohort-scoped, so a user is kept when ANY of their cohort
    * applications carries a matching snapshot. Purely additive - omit it (or
