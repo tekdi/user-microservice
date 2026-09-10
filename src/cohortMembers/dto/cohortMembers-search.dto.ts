@@ -82,9 +82,10 @@ class FiltersDto {
   /**
    * Aspire Leaders: country NAMES, matched on the APPLICATION country - the
    * snapshot on CohortMembers.user_cohort_country_id taken when the applicant
-   * joined that cohort (falling back to Users.currentCountry when it never
-   * resolved), i.e. the "Application Country" column the Applicant List
-   * renders.
+   * joined that cohort, i.e. the "Application Country" column the Applicant
+   * List renders. Members whose snapshot never resolved are NOT matched (there
+   * is no fallback to Users.currentCountry) - send `currentCountry` below to
+   * filter on the live profile value instead.
    *
    * The Applicant List (POST /cohortmember/list-application) has TWO
    * independent country dropdowns and this is the first of them; send

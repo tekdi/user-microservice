@@ -3172,13 +3172,21 @@ export class PostgresCohortMembersService {
    * listWithApplication() cannot drift apart.
    *
    * Matches on the cohort-application country snapshot
-   * (CohortMembers.user_cohort_country_id), with a COALESCE fallback to
-   * Users.currentCountry that mirrors attachApplicationCountry(), so members
-   * with no resolved snapshot (bulk imports, or a country that never matched a
-   * row in `countries`) are matched on the value the list actually renders
-   * rather than silently dropped. Comparison is trimmed + lower-cased like
-   * every other countries.name match in this file, because the dropdown values
-   * and the countries table are maintained separately.
+   * (CohortMembers.user_cohort_country_id) and nothing else - there is
+   * deliberately NO COALESCE fallback to Users.currentCountry, mirroring
+   * attachApplicationCountry(). A member whose snapshot never resolved is
+   * therefore not matched by this filter, which is the same thing the list now
+   * renders for them (`applicationCountry: null`): filtering by a country must
+   * not return rows whose Application Country column is empty. Consequence to
+   * be aware of when reading this: only memberships created after the column
+   * was introduced carry a snapshot, since resolveUserCohortCountryIds() writes
+   * it at insert time and nothing backfills older rows. On a database where the
+   * column is still entirely null, every applicationCountry filter therefore
+   * matches nothing - that is correct, not a bug, and is fixed with data (the
+   * UPDATE in docs/regional-admin-cohort-country-report.md § "Backfill
+   * (existing rows)"), not with code. Comparison is trimmed + lower-cased like every
+   * other countries.name match in this file, because the dropdown values and
+   * the countries table are maintained separately.
    *
    * The country lookup is a scalar subquery inside the one list query - a
    * primary-key index lookup per row in the same statement, not a per-row
@@ -3202,10 +3210,9 @@ export class PostgresCohortMembersService {
     }
     parameters.push(names);
     return {
-      condition: `LOWER(TRIM(COALESCE(
-              (SELECT c.name FROM countries c WHERE c.id = CM.user_cohort_country_id),
-              U."currentCountry"
-            ))) = ANY($${parameterIndex}::text[])`,
+      condition: `LOWER(TRIM(
+              (SELECT c.name FROM countries c WHERE c.id = CM.user_cohort_country_id)
+            )) = ANY($${parameterIndex}::text[])`,
       nextIndex: parameterIndex + 1,
     };
   }
@@ -3245,11 +3252,24 @@ export class PostgresCohortMembersService {
    * is returned untouched, because a missing extra column must never turn a
    * working Applicant List into an error.
    *
-   * `applicationCountry` falls back to the row's `currentCountry` when the
-   * snapshot is null, which is expected for members created through bulk import
-   * (not hooked into the real-time country sync - see
-   * docs/regional-admin-cohort-country-report.md §11.5/§11.8) and for members
+   * `applicationCountry` is `null` whenever the snapshot is null - it is NOT
+   * backfilled from the row's `currentCountry`. Reporting the live profile
+   * country under the "Application Country" label would make a missing snapshot
+   * indistinguishable from a snapshot that happens to equal the live country,
+   * which defeats the whole point of the column on a closed cohort. A null
+   * snapshot is expected for members created before the column was introduced
+   * (nothing backfills those - see the UPDATE in
+   * docs/regional-admin-cohort-country-report.md § "Backfill (existing rows)"
+   * if they ever need populating), for members created through bulk import (not
+   * hooked into the real-time country sync - see §11.5/§11.8) and for members
    * whose country never matched a row in `countries`.
+   *
+   * Note the `applicationCountry` *filter* still COALESCEs to `currentCountry`
+   * (resolveApplicationCountryCondition() and the Application report's own
+   * condition in user-adapter.ts), so a row can be matched by a country filter
+   * and still display a null application country. That is deliberate: making
+   * the filter strict too would silently drop every member whose snapshot has
+   * not been backfilled out of existing admin filter results.
    */
   private async attachApplicationCountry(userDetails: any[]): Promise<any[]> {
     if (!userDetails?.length) {
@@ -3265,7 +3285,12 @@ export class PostgresCohortMembersService {
         )
       );
       if (membershipIds.length === 0) {
-        return userDetails;
+        // Still emit the key so the column is always present in the response
+        // shape, now that it no longer falls back to `currentCountry`.
+        return userDetails.map((user) => ({
+          ...user,
+          applicationCountry: null,
+        }));
       }
 
       const rows = await this.cohortMembersRepository.query(
@@ -3284,9 +3309,7 @@ export class PostgresCohortMembersService {
       return userDetails.map((user) => ({
         ...user,
         applicationCountry:
-          countryNameByMembershipId.get(user?.cohortMembershipId) ??
-          user?.currentCountry ??
-          null,
+          countryNameByMembershipId.get(user?.cohortMembershipId) ?? null,
       }));
     } catch (error) {
       LoggerUtil.error(

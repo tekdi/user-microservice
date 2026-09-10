@@ -4307,12 +4307,14 @@ export class PostgresUserService implements IServicelocator {
    * right shape - it also means a user with several applications is returned
    * once, not once per membership.
    *
-   * The COALESCE fallback to Users.currentCountry mirrors that other builder
-   * and attachApplicationCountry(): a membership whose snapshot never resolved
-   * (bulk imports, or a country absent from `countries`) is matched on the
-   * value the UI renders as its application country, rather than silently
-   * dropped. Comparison is trimmed + lower-cased because the dropdown values
-   * and the countries table are maintained separately.
+   * There is deliberately NO COALESCE fallback to Users.currentCountry, which
+   * mirrors that other builder and attachApplicationCountry(): a membership
+   * whose snapshot never resolved is not matched, because the UI renders no
+   * application country for it either. Only memberships created after the
+   * column was introduced carry a snapshot; older rows are not backfilled, so
+   * this filter simply does not match them. Comparison is trimmed + lower-cased
+   * because the dropdown values and the countries table are maintained
+   * separately.
    *
    * Returns null when there is no usable country name, meaning "add no
    * condition" - the caller then leaves the query untouched.
@@ -4332,10 +4334,9 @@ export class PostgresUserService implements IServicelocator {
         SELECT 1
         FROM public."CohortMembers" ACM
         WHERE ACM."userId" = U."userId"
-          AND LOWER(TRIM(COALESCE(
-            (SELECT c.name FROM countries c WHERE c.id = ACM.user_cohort_country_id),
-            U."currentCountry"
-          ))) IN (${nameList})
+          AND LOWER(TRIM(
+            (SELECT c.name FROM countries c WHERE c.id = ACM.user_cohort_country_id)
+          )) IN (${nameList})
       )`;
   }
 
