@@ -1,16 +1,18 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { IsArray, IsEnum, IsNumber, IsObject, IsOptional, IsString, Min } from 'class-validator';
-import { ReferralEntitySubType, ReferralEntityType } from '../referrals.types';
+import { normalizeReferralEnum, ReferralEntitySubType, ReferralEntityType } from '../referrals.types';
 
 export class ReferralFiltersDto {
-  @ApiPropertyOptional({ enum: ReferralEntityType, description: 'Filter by referral type' })
+  @ApiPropertyOptional({ enum: ReferralEntityType, description: 'Filter by referral type (case-insensitive)' })
   @IsOptional()
+  @Transform(({ value }) => normalizeReferralEnum(value))
   @IsEnum(ReferralEntityType)
   type?: ReferralEntityType;
 
-  @ApiPropertyOptional({ enum: ReferralEntitySubType, description: 'Filter by referral sub-type' })
+  @ApiPropertyOptional({ enum: ReferralEntitySubType, description: 'Filter by referral sub-type (case-insensitive)' })
   @IsOptional()
+  @Transform(({ value }) => normalizeReferralEnum(value))
   @IsEnum(ReferralEntitySubType)
   subType?: ReferralEntitySubType;
 
