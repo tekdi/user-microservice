@@ -11,7 +11,7 @@ import { CreateReferralEntityDto } from './dto/create-referral-entity.dto';
 import { ImportReferralsDto } from './dto/import-referrals.dto';
 import { UpdateReferralSlugDto } from './dto/update-referral-slug.dto';
 import { ListReferralsDto } from './dto/list-referrals.dto';
-import { ReferralEntitySubType, ReferralEntityType } from './referrals.types';
+import { normalizeReferralEnum, ReferralEntitySubType, ReferralEntityType } from './referrals.types';
 import {
   buildReferLink,
   generateReferralSlug,
@@ -358,8 +358,8 @@ export class ReferralsService {
       const cols = lines[rowIdx].split(',').map((c) => c.trim());
       const firstName = cols[iFirst] ?? '';
       const lastName = iLast >= 0 ? cols[iLast] : '';
-      const type = cols[iType] as ReferralEntityType;
-      const subType = cols[iSubType] as ReferralEntitySubType;
+      const type = normalizeReferralEnum(cols[iType]) as ReferralEntityType;
+      const subType = normalizeReferralEnum(cols[iSubType]) as ReferralEntitySubType;
       const region = iRegion >= 0 ? cols[iRegion] : undefined;
       const contactEmail = iEmail >= 0 ? cols[iEmail] : undefined;
       const country = iCountry >= 0 ? cols[iCountry] : undefined;
@@ -410,7 +410,21 @@ export class ReferralsService {
       const batchPromises = batch.map(async (dto, idx) => {
         const globalIdx = i + idx;
         try {
-          const saved = await this.createReferralEntity(dto, createdBy);
+          // Nest's ValidationPipe skips array bodies, so the DTO's @Transform/@IsEnum
+          // never run for this route - normalize and validate the enums here instead.
+          const normalized = {
+            ...dto,
+            type: normalizeReferralEnum(dto.type) as ReferralEntityType,
+            subType: normalizeReferralEnum(dto.subType) as ReferralEntitySubType,
+          };
+          if (!Object.values(ReferralEntityType).includes(normalized.type)) {
+            throw new BadRequestException(`Invalid type: ${dto.type}`);
+          }
+          if (!Object.values(ReferralEntitySubType).includes(normalized.subType)) {
+            throw new BadRequestException(`Invalid subType: ${dto.subType}`);
+          }
+
+          const saved = await this.createReferralEntity(normalized, createdBy);
           created.push(saved);
         } catch (e: any) {
           errors.push({ index: globalIdx, data: dto, error: e?.message ?? 'Failed' });

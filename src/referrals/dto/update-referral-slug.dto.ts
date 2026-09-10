@@ -1,6 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 import { IsArray, IsEmail, IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
-import { ReferralEntityStatus, ReferralEntitySubType, ReferralEntityType } from '../referrals.types';
+import { normalizeReferralEnum, ReferralEntityStatus, ReferralEntitySubType, ReferralEntityType } from '../referrals.types';
 
 export class UpdateReferralSlugDto {
   @ApiPropertyOptional({ description: 'New slug. Allowed characters: letters (A-Z, a-z), digits, hyphens (-), underscores (_), dots (.) and tildes (~). Input is lowercased before storage.' })
@@ -21,13 +22,15 @@ export class UpdateReferralSlugDto {
   @MaxLength(255)
   lastName?: string;
 
-  @ApiPropertyOptional({ enum: ReferralEntityType })
+  @ApiPropertyOptional({ enum: ReferralEntityType, description: 'Case-insensitive; stored lowercase' })
   @IsOptional()
+  @Transform(({ value }) => normalizeReferralEnum(value))
   @IsEnum(ReferralEntityType)
   type?: ReferralEntityType;
 
-  @ApiPropertyOptional({ enum: ReferralEntitySubType })
+  @ApiPropertyOptional({ enum: ReferralEntitySubType, description: 'Case-insensitive; stored lowercase' })
   @IsOptional()
+  @Transform(({ value }) => normalizeReferralEnum(value))
   @IsEnum(ReferralEntitySubType)
   subType?: ReferralEntitySubType;
 

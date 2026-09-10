@@ -1,6 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 import { IsArray, IsEmail, IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
 import {
+  normalizeReferralEnum,
   ReferralEntityStatus,
   ReferralEntitySubType,
   ReferralEntityType,
@@ -24,11 +26,13 @@ export class CreateReferralEntityDto {
   @MaxLength(255)
   lastName?: string;
 
-  @ApiProperty({ enum: ReferralEntityType })
+  @ApiProperty({ enum: ReferralEntityType, description: 'Case-insensitive; stored lowercase' })
+  @Transform(({ value }) => normalizeReferralEnum(value))
   @IsEnum(ReferralEntityType)
   type: ReferralEntityType;
 
-  @ApiProperty({ enum: ReferralEntitySubType })
+  @ApiProperty({ enum: ReferralEntitySubType, description: 'Case-insensitive; stored lowercase' })
+  @Transform(({ value }) => normalizeReferralEnum(value))
   @IsEnum(ReferralEntitySubType)
   subType: ReferralEntitySubType;
 
