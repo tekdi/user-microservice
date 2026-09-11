@@ -4330,13 +4330,25 @@ export class PostgresUserService implements IServicelocator {
     const nameList = names
       .map((name) => `'${this.escapeSqlLiteral(name)}'`)
       .join(',');
+    // The countries lookup is deliberately UNCORRELATED - it does not
+    // reference ACM - so Postgres evaluates it once as an InitPlan and the
+    // EXISTS degenerates to a uuid equality check against
+    // user_cohort_country_id, which an index can serve. The previous form
+    // wrapped a correlated `SELECT c.name ... WHERE c.id = ACM.
+    // user_cohort_country_id` in LOWER(TRIM(...)), forcing one subquery
+    // execution per membership row examined - and because the outer query
+    // selects COUNT(*) OVER(), LIMIT gives no early exit, so that ran for
+    // every user in the table. Semantics are unchanged: a NULL snapshot
+    // matches nothing either way, preserving the no-COALESCE behaviour
+    // described above.
     return `EXISTS (
         SELECT 1
         FROM public."CohortMembers" ACM
         WHERE ACM."userId" = U."userId"
-          AND LOWER(TRIM(
-            (SELECT c.name FROM countries c WHERE c.id = ACM.user_cohort_country_id)
-          )) IN (${nameList})
+          AND ACM.user_cohort_country_id IN (
+            SELECT c.id FROM countries c
+            WHERE LOWER(TRIM(c.name)) IN (${nameList})
+          )
       )`;
   }
 
