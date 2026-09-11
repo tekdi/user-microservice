@@ -3210,9 +3210,15 @@ export class PostgresCohortMembersService {
     }
     parameters.push(names);
     return {
-      condition: `LOWER(TRIM(
-              (SELECT c.name FROM countries c WHERE c.id = CM.user_cohort_country_id)
-            )) = ANY($${parameterIndex}::text[])`,
+      // Uncorrelated countries lookup - see the matching comment on
+      // buildAnyApplicationCountryCondition() in user-adapter. Resolving the
+      // names to ids once lets this become an indexable uuid comparison
+      // instead of one scalar subquery per candidate CohortMembers row.
+      // NULL-handling is unchanged: an unresolved snapshot matches nothing.
+      condition: `CM.user_cohort_country_id IN (
+              SELECT c.id FROM countries c
+              WHERE LOWER(TRIM(c.name)) = ANY($${parameterIndex}::text[])
+            )`,
       nextIndex: parameterIndex + 1,
     };
   }
