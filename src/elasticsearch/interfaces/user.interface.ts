@@ -3,6 +3,13 @@ export interface IApplication {
   formId?: string;
   submissionId?: string;
   cohortmemberstatus?: string;
+  /**
+   * Country snapshot taken when the user applied to this cohort
+   * (CohortMembers.user_cohort_country_id). Null when no snapshot exists —
+   * unlike the `applicationCountry` *filter*, this display value is NOT
+   * coalesced to the live profile country.
+   */
+  applicationCountry?: string | null;
   formstatus: string;
   completionPercentage?: number; // FIXED: Add completionPercentage from form submission
   lastSavedAt: string;
