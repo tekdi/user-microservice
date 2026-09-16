@@ -226,6 +226,8 @@ export class FormsService {
         return ["COHORTMEMBER"];
       case "tenant":
         return ["TENANT"];
+      case "placementproperty":
+        return ["PLACEMENTPROPERTY"];
       default:
         return [];
     }

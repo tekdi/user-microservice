@@ -1245,12 +1245,22 @@ ${whereCase}`;
 
             if (existingMapping) {
               // Update status, updatedBy, and cohortMemberRole (if provided) while preserving original entity fields
-              const updatedMapping = {
+let updatedMapping;
+              if(tenantId === '6c8b810a-66c2-4f0d-8c0c-c025415a4414') {
+                  updatedMapping = {
                 ...existingMapping,
                 ...(cohortMembersDto.cohortMemberRole && { cohortMemberRole: cohortMembersDto.cohortMemberRole }),
-                status: MemberStatus.ACTIVE,
+                status:cohortMembersDto.status,
+                updatedBy: loginUser,
+              };  
+              }else {
+               updatedMapping = {
+                ...existingMapping,
+                ...(cohortMembersDto.cohortMemberRole && { cohortMemberRole: cohortMembersDto.cohortMemberRole }),
+                status:  MemberStatus.ACTIVE,
                 updatedBy: loginUser,
               };
+            }
               const result = await this.cohortMembersRepository.save(updatedMapping);
               results.push(result);
             } else {
