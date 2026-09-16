@@ -742,23 +742,35 @@ export class ReferralsService {
 
   /**
    * Aspire Leaders-specific: same role resolution used by the cohort-country
-   * report filter (getFirstRoleName() in user-adapter.ts) - duplicated here
+   * report filter (getRoleIdentifiers() in user-adapter.ts) - duplicated here
    * rather than injecting PostgresUserService, to avoid cross-module coupling
    * for a single query (same tradeoff already made for
    * resolveRegionalAdminCountryIds() in cohortMembers-adapter.ts).
+   *
+   * Returns EVERY role the user holds. It previously returned only the first
+   * (`ORDER BY UTM."Id" LIMIT 1`), which made a multi-role user's scoping
+   * depend on which grant happened to sort first - and here that failed
+   * OPEN: a Regional Admin whose first role was anything else was treated as
+   * unrestricted and saw every country's referrals.
    */
-  private async getFirstRoleName(userId: string): Promise<string | null> {
-    const [row] = await this.dataSource.query(
-      `SELECT R.name AS "roleName"
+  private async getRoleIdentifiers(userId: string): Promise<Set<string>> {
+    const rows: { roleName?: string; roleCode?: string }[] =
+      await this.dataSource.query(
+        `SELECT DISTINCT R.name AS "roleName", R.code AS "roleCode"
        FROM public."UserTenantMapping" UTM
        INNER JOIN public."UserRolesMapping" URM ON URM."userId" = UTM."userId" AND URM."tenantId" = UTM."tenantId"
        INNER JOIN public."Roles" R ON R."roleId" = URM."roleId"
-       WHERE UTM."userId" = $1
-       ORDER BY UTM."Id"
-       LIMIT 1`,
-      [userId],
-    );
-    return row?.roleName ?? null;
+       WHERE UTM."userId" = $1`,
+        [userId],
+      );
+
+    const identifiers = new Set<string>();
+    for (const row of rows ?? []) {
+      for (const value of [row.roleName, row.roleCode]) {
+        if (value) identifiers.add(value.trim().toLowerCase());
+      }
+    }
+    return identifiers;
   }
 
   /**
@@ -827,9 +839,14 @@ export class ReferralsService {
       return { restricted: true, allowedCountries: [] };
     }
 
-    const roleName = await this.getFirstRoleName(adminUserId);
+    const roleIdentifiers = await this.getRoleIdentifiers(adminUserId);
+    const hasRole = (...candidates: string[]): boolean =>
+      candidates.some((candidate) => roleIdentifiers.has(candidate));
 
-    if (roleName === 'Regional Admin') {
+    // Admin wins when a user holds both: roles are additive grants, so being
+    // given Admin should not be silently narrowed by also holding Regional
+    // Admin. Matches the same precedence in reportFilterCohortMembers().
+    if (hasRole('regional admin', 'regional_admin') && !hasRole('admin')) {
       const allowedCountries = await this.getRegionalAdminCountryNames(adminUserId);
       return { restricted: true, allowedCountries };
     }

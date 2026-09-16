@@ -1108,6 +1108,37 @@ export class PostgresUserService implements IServicelocator {
   }
 
   /**
+   * Every role identifier granted to a user - each role's `name` AND its
+   * `code`, lower-cased, in one flat set.
+   */
+  async getRoleIdentifiers(userId: string): Promise<Set<string>> {
+    const query = `
+      SELECT DISTINCT
+        R.name AS "roleName",
+        R.code AS "roleCode"
+      FROM 
+        public."UserTenantMapping" UTM
+      INNER JOIN 
+        public."UserRolesMapping" URM ON URM."userId" = UTM."userId" AND URM."tenantId" = UTM."tenantId"
+      INNER JOIN 
+        public."Roles" R ON R."roleId" = URM."roleId"
+      WHERE 
+        UTM."userId" = $1;
+    `;
+
+    const result: { roleName?: string; roleCode?: string }[] =
+      await this.usersRepository.query(query, [userId]);
+
+    const identifiers = new Set<string>();
+    for (const row of result ?? []) {
+      for (const value of [row.roleName, row.roleCode]) {
+        if (value) identifiers.add(value.trim().toLowerCase());
+      }
+    }
+    return identifiers;
+  }
+
+  /**
    * Optimized: Get only the first tenant name for a user (lightweight query)
    * Used for notifications where only tenant name is needed
    */
