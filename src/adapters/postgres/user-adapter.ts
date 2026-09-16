@@ -1108,6 +1108,49 @@ export class PostgresUserService implements IServicelocator {
   }
 
   /**
+   * Every role CODE granted to a user, lower-cased.
+   *
+   * Two reasons it is not getFirstRoleName():
+   *  - That method answers with `ORDER BY UTM."Id" LIMIT 1`, one arbitrary
+   *    grant. Fine for the landing-page routing it was written for, wrong for
+   *    "is this user allowed to do X": a multi-role user would be judged on
+   *    whichever grant happens to sort first.
+   *  - It returns `name`, but roles are identified by `code` in
+   *    shiksha-middleware's route config and in the admin frontend
+   *    (`admin`, `regional_admin`, `alp_program_admin`). Matching on `name`
+   *    silently rejected roles the middleware had already admitted. `code` is
+   *    the single spelling every layer agrees on, and is NOT NULL on Roles.
+   *
+   * NOT scoped to a tenant - returns roles across every tenant the user
+   * belongs to. Callers needing per-tenant authorisation must narrow further.
+   */
+  async getRoleCodes(userId: string): Promise<Set<string>> {
+    const query = `
+      SELECT DISTINCT
+        R.code AS "roleCode"
+      FROM 
+        public."UserTenantMapping" UTM
+      INNER JOIN 
+        public."UserRolesMapping" URM ON URM."userId" = UTM."userId" AND URM."tenantId" = UTM."tenantId"
+      INNER JOIN 
+        public."Roles" R ON R."roleId" = URM."roleId"
+      WHERE 
+        UTM."userId" = $1;
+    `;
+
+    const result: { roleCode?: string }[] = await this.usersRepository.query(
+      query,
+      [userId]
+    );
+
+    const codes = new Set<string>();
+    for (const row of result ?? []) {
+      if (row.roleCode) codes.add(row.roleCode.trim().toLowerCase());
+    }
+    return codes;
+  }
+
+  /**
    * Optimized: Get only the first tenant name for a user (lightweight query)
    * Used for notifications where only tenant name is needed
    */

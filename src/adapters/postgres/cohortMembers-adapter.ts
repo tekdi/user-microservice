@@ -7349,23 +7349,32 @@ export class PostgresCohortMembersService {
    * Aspire Leaders-specific lean reporting endpoint: given a cohort and a chunk
    * of userIds (as produced by LMS/Assessment/Event/Referral report pagination),
    * returns the matching CohortMembers rows - automatically country-filtered
-   * when the calling admin is a Regional Admin, unfiltered when they're an Admin.
+   * when the calling admin is a Regional Admin, unfiltered for every other
+   * admin role (Admin, ALP Program Admin, ...).
    *
-   * Role is resolved server-side from `adminUserId` via the existing
-   * getFirstRoleName() helper - never accepted as a client-supplied field, since
-   * it is this endpoint's access-control boundary. Fails closed: only the two
-   * known roles ('Admin', 'Regional Admin') are allowed through - an
-   * unresolvable adminUserId or any other/unrecognized role is rejected rather
-   * than falling through to Admin's unfiltered behavior.
+   * Role is resolved server-side from `adminUserId` via getRoleCodes(), which
+   * returns EVERY role code the caller holds - never accepted as a
+   * client-supplied field, since it decides whether country scoping applies. This method does not itself reject callers: access
+   * control for the endpoint is JwtAuthGuard on the controller plus the
+   * middleware's ROLE_CHECK.
    */
   public async reportFilterCohortMembers(
-    reportFilterDto: { cohortId: string; userIds: string[] },
+    reportFilterDto: {
+      cohortId: string;
+      userIds: string[];
+      countrySource?: 'applicationCountry' | 'currentCountry';
+    },
     adminUserId: string,
     response: Response
   ) {
     const apiId = APIID.COHORT_MEMBER_REPORT_FILTER;
     try {
       const { cohortId, userIds } = reportFilterDto;
+      // Which country column this report means - see ReportCountrySource.
+      // Defaults to the frozen application country, so every caller that
+      // predates this field behaves exactly as before.
+      const useCurrentCountry =
+        reportFilterDto.countrySource === 'currentCountry';
 
       // Nothing to match - skip the query entirely rather than issuing an
       // `IN ()` query.
@@ -7379,22 +7388,25 @@ export class PostgresCohortMembersService {
         );
       }
 
-      const roleName = await this.userService.getFirstRoleName(adminUserId);
+      // Country scoping applies to Regional Admin ONLY. Every other role that
+      // can reach this endpoint - Admin, ALP Program Admin, and any admin role
+      // added later - sees the cohort unfiltered.
+      const roleCodes = await this.userService.getRoleCodes(adminUserId);
 
-      // Fail closed: only these two known roles are allowed through. An
-      // unresolvable adminUserId (null) or any other/unrecognized role must
-      // be rejected here rather than falling through to Admin's unfiltered
-      // behavior - this check is this endpoint's entire access-control boundary.
-      if (roleName !== 'Admin' && roleName !== 'Regional Admin') {
-        return APIResponse.error(
-          response,
-          apiId,
-          API_RESPONSES.UNAUTHORIZED,
-          API_RESPONSES.UNAUTHORIZED,
-          HttpStatus.FORBIDDEN
-        );
-      }
-      const isRegionalAdmin = roleName === 'Regional Admin';
+      // Admin wins when a user holds both: roles are additive grants, so being
+      // given Admin should not be silently narrowed by also holding Regional
+      // Admin.
+      const isRegionalAdmin =
+        roleCodes.has('regional_admin') && !roleCodes.has('admin');
+
+      // In 'currentCountry' mode the country comes from the user's live
+      // profile, not from the frozen per-application snapshot, so it has to be
+      // resolved here on every call rather than read off the CohortMembers
+      // row. One batched query for the whole chunk (same helper the insert
+      // path uses), not one per userId.
+      const currentCountryIdByUserId = useCurrentCountry
+        ? await this.resolveUserCohortCountryIds(userIds)
+        : new Map<string, string>();
 
       const whereCondition: Record<string, unknown> = {
         cohortId,
@@ -7418,7 +7430,32 @@ export class PostgresCohortMembersService {
           );
         }
 
-        whereCondition.userCohortCountryId = In(allowedCountryIds);
+        if (useCurrentCountry) {
+          // Restrict on Users.currentCountry instead of the frozen
+          // user_cohort_country_id: narrow the userId list itself, since the
+          // column being matched does not live on CohortMembers at all. A user
+          // whose currentCountry does not resolve to a known country is
+          // excluded - fail closed, same rule as every other country check.
+          const allowed = new Set(allowedCountryIds);
+          const allowedUserIds = userIds.filter((userId) => {
+            const countryId = currentCountryIdByUserId.get(userId);
+            return Boolean(countryId) && allowed.has(countryId);
+          });
+
+          if (allowedUserIds.length === 0) {
+            return APIResponse.success(
+              response,
+              apiId,
+              { count: 0, items: [] },
+              HttpStatus.OK,
+              API_RESPONSES.COHORT_MEMBER_REPORT_FILTER_SUCCESS
+            );
+          }
+
+          whereCondition.userId = In(allowedUserIds);
+        } else {
+          whereCondition.userCohortCountryId = In(allowedCountryIds);
+        }
       }
       // Admin role (or any non-Regional-Admin role): no country filtering,
       // behaves exactly as the cohortId + userId IN (...) match always has.
@@ -7427,10 +7464,29 @@ export class PostgresCohortMembersService {
         where: whereCondition,
       });
 
+      // In 'currentCountry' mode the reported country must be the live one too,
+      // or an explicit country narrowing downstream would still be matching the
+      // frozen application country. `userCohortCountryId` stays the response's
+      // country field so callers need no second code path; `countrySource` in
+      // the response says which country it actually holds.
+      const responseItems = useCurrentCountry
+        ? items.map((item) => ({
+            ...item,
+            userCohortCountryId:
+              currentCountryIdByUserId.get(item.userId) ?? null,
+          }))
+        : items;
+
       return APIResponse.success(
         response,
         apiId,
-        { count: items.length, items },
+        {
+          count: responseItems.length,
+          items: responseItems,
+          countrySource: useCurrentCountry
+            ? 'currentCountry'
+            : 'applicationCountry',
+        },
         HttpStatus.OK,
         API_RESPONSES.COHORT_MEMBER_REPORT_FILTER_SUCCESS
       );
