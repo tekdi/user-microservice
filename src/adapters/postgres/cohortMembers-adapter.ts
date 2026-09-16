@@ -7346,10 +7346,9 @@ export class PostgresCohortMembersService {
    * when the calling admin is a Regional Admin, unfiltered for every other
    * admin role (Admin, ALP Program Admin, ...).
    *
-   * Role is resolved server-side from `adminUserId` via getRoleIdentifiers(),
-   * which returns EVERY role the caller holds, by both name and code - never
-   * accepted as a client-supplied field, since it decides whether country
-   * scoping applies. This method does not itself reject callers: access
+   * Role is resolved server-side from `adminUserId` via getRoleCodes(), which
+   * returns EVERY role code the caller holds - never accepted as a
+   * client-supplied field, since it decides whether country scoping applies. This method does not itself reject callers: access
    * control for the endpoint is JwtAuthGuard on the controller plus the
    * middleware's ROLE_CHECK.
    */
@@ -7386,21 +7385,13 @@ export class PostgresCohortMembersService {
       // Country scoping applies to Regional Admin ONLY. Every other role that
       // can reach this endpoint - Admin, ALP Program Admin, and any admin role
       // added later - sees the cohort unfiltered.
-      const roleIdentifiers = await this.userService.getRoleIdentifiers(
-        adminUserId
-      );
-
-      // Identifiers hold both the role name and its code, lower-cased, so
-      // either spelling matches whichever way the role happens to be seeded.
-      const hasRole = (...candidates: string[]): boolean =>
-        candidates.some((candidate) => roleIdentifiers.has(candidate));
+      const roleCodes = await this.userService.getRoleCodes(adminUserId);
 
       // Admin wins when a user holds both: roles are additive grants, so being
       // given Admin should not be silently narrowed by also holding Regional
       // Admin.
       const isRegionalAdmin =
-        hasRole('regional admin', 'regional_admin') &&
-        !hasRole('admin');
+        roleCodes.has('regional_admin') && !roleCodes.has('admin');
 
       // In 'currentCountry' mode the country comes from the user's live
       // profile, not from the frozen per-application snapshot, so it has to be

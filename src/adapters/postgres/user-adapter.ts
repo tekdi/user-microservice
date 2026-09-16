@@ -1108,13 +1108,25 @@ export class PostgresUserService implements IServicelocator {
   }
 
   /**
-   * Every role identifier granted to a user - each role's `name` AND its
-   * `code`, lower-cased, in one flat set.
+   * Every role CODE granted to a user, lower-cased.
+   *
+   * Two reasons it is not getFirstRoleName():
+   *  - That method answers with `ORDER BY UTM."Id" LIMIT 1`, one arbitrary
+   *    grant. Fine for the landing-page routing it was written for, wrong for
+   *    "is this user allowed to do X": a multi-role user would be judged on
+   *    whichever grant happens to sort first.
+   *  - It returns `name`, but roles are identified by `code` in
+   *    shiksha-middleware's route config and in the admin frontend
+   *    (`admin`, `regional_admin`, `alp_program_admin`). Matching on `name`
+   *    silently rejected roles the middleware had already admitted. `code` is
+   *    the single spelling every layer agrees on, and is NOT NULL on Roles.
+   *
+   * NOT scoped to a tenant - returns roles across every tenant the user
+   * belongs to. Callers needing per-tenant authorisation must narrow further.
    */
-  async getRoleIdentifiers(userId: string): Promise<Set<string>> {
+  async getRoleCodes(userId: string): Promise<Set<string>> {
     const query = `
       SELECT DISTINCT
-        R.name AS "roleName",
         R.code AS "roleCode"
       FROM 
         public."UserTenantMapping" UTM
@@ -1126,16 +1138,16 @@ export class PostgresUserService implements IServicelocator {
         UTM."userId" = $1;
     `;
 
-    const result: { roleName?: string; roleCode?: string }[] =
-      await this.usersRepository.query(query, [userId]);
+    const result: { roleCode?: string }[] = await this.usersRepository.query(
+      query,
+      [userId]
+    );
 
-    const identifiers = new Set<string>();
+    const codes = new Set<string>();
     for (const row of result ?? []) {
-      for (const value of [row.roleName, row.roleCode]) {
-        if (value) identifiers.add(value.trim().toLowerCase());
-      }
+      if (row.roleCode) codes.add(row.roleCode.trim().toLowerCase());
     }
-    return identifiers;
+    return codes;
   }
 
   /**
