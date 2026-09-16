@@ -43,6 +43,14 @@ import { UserElasticsearchService } from '../../elasticsearch/user-elasticsearch
 import { FieldValues } from '../../fields/entities/fields-values.entity';
 import { PostgresFieldsService } from '../../adapters/postgres/fields-adapter';
 import { HttpService } from '../../common/utils/http-service';
+import { OBSERVER_ROLE_CODE } from '../../common/utils/roles.constants';
+
+/**
+ * Role assigned to imported users when the caller does not name one. This is
+ * the student role the importer has always used - kept as the default so that
+ * existing callers, which send no roleId, import exactly as before.
+ */
+const DEFAULT_IMPORT_ROLE_ID = '493c04e2-a9db-47f2-b304-503da358d5f4';
 
 @Injectable()
 export class BulkImportService {
@@ -79,6 +87,11 @@ export class BulkImportService {
    * @param failureIncrement - Number of failed imports to increment by
    * @param status - Optional status update
    */
+  /** Delegates to the one role check, in PostgresUserService. */
+  private async isObserverRole(roleId: string): Promise<boolean> {
+    return this.userService.isObserverRole(roleId);
+  }
+
   private async sendProgressUpdate(
     importJobId: string,
     successIncrement: number,
@@ -177,7 +190,8 @@ export class BulkImportService {
     cohortId: string,
     tenantId: string,
     request: any,
-    response: Response
+    response: Response,
+    roleId?: string
   ): Promise<{
     totalProcessed: number;
     successCount: number;
@@ -207,6 +221,12 @@ export class BulkImportService {
       if (!uuidRegex.test(cohortId)) {
         throw new Error('Cohort ID must be a valid UUID format.');
       }
+
+      // Which role the imported users get. Defaults to the student role, which
+      // is what every existing caller imports, so omitting it keeps the old
+      // behaviour exactly.
+      const importRoleId = roleId || DEFAULT_IMPORT_ROLE_ID;
+      const isObserverImport = await this.isObserverRole(importRoleId);
 
       BulkImportLogger.initializeLogger(cohortId);
       // Parse file based on mimetype
@@ -293,7 +313,7 @@ export class BulkImportService {
             const userCreateDto = this.mapToUserCreateDto(user);
             // Do NOT include cohortIds in tenantRoleMapping to avoid internal cohort member creation
             const tenantRoleMapping: tenantRoleMappingDto = {
-              roleId: '493c04e2-a9db-47f2-b304-503da358d5f4',
+              roleId: importRoleId,
               cohortIds: [], // Set to empty array to satisfy type, but do not include cohortId
               tenantId: tenantId,
             };
@@ -425,7 +445,9 @@ export class BulkImportService {
               userId: processedUserIds,
               cohortId: [cohortId],
               status: MemberStatus.SHORTLISTED,
-              statusReason: 'Updated via bulk import',
+              statusReason: isObserverImport
+                ? `Added as ${OBSERVER_ROLE_CODE} via bulk import`
+                : 'Updated via bulk import',
             } as any,
             null,
             tenantId,
@@ -439,8 +461,12 @@ export class BulkImportService {
         }
 
         // --- BULK FORM SUBMISSION CREATION ---
-        // 1. Get the active form for this cohort
-        const forms = await this.formsService.getFormDetail(
+        // Only applicants have an application to submit. Observers are added
+        // to the cohort to watch it, so generating an application form
+        // submission for them would invent an application that never happened.
+        const forms = isObserverImport
+          ? null
+          : await this.formsService.getFormDetail(
           'COHORTMEMBER', // context
           'COHORTMEMBER', // contextType
           tenantId,

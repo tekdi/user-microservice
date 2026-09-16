@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, IsUUID } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
 import { Express } from 'express';
 
 export class BulkImportDto {
@@ -19,6 +19,17 @@ export class BulkImportDto {
   @IsUUID()
   @IsString()
   cohortId: string;
+
+  @ApiProperty({
+    type: String,
+    required: false,
+    description:
+      'Role to assign to the imported users. Defaults to the student role. Pass the observer role to bulk-insert observers - they are added to the cohort as shortlisted members and, unlike applicants, get no application form submission.',
+  })
+  @IsOptional()
+  @IsUUID()
+  @IsString()
+  roleId?: string;
 }
 
 export interface BulkImportUserData {
