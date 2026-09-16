@@ -74,7 +74,8 @@ export class BulkImportController {
         bulkImportDto.cohortId,
         tenantId,
         req,
-        res
+        res,
+        bulkImportDto.roleId
       );
     } catch (error) {
       throw error;

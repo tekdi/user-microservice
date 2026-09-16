@@ -16,7 +16,12 @@ import {
 } from '../../common/utils/keycloak.adapter.util';
 import { ErrorResponse } from 'src/error-response';
 import { SuccessResponse } from 'src/success-response';
-import { CohortMembers } from 'src/cohortMembers/entities/cohort-member.entity';
+import {
+  CohortMembers,
+  MemberStatus,
+} from 'src/cohortMembers/entities/cohort-member.entity';
+import { OBSERVER_ROLE_CODE } from '@utils/roles.constants';
+import { LmsEnrollmentService } from 'src/common/services/lms-enrollment.service';
 import { isUUID } from 'class-validator';
 import { UserSearchDto } from 'src/user/dto/user-search.dto';
 import { UserTenantMapping } from 'src/userTenantMapping/entities/user-tenant-mapping.entity';
@@ -100,6 +105,7 @@ export class PostgresUserService implements IServicelocator {
     @InjectRepository(Role)
     private roleRepository: Repository<Role>,
     private fieldsService: PostgresFieldsService,
+    private readonly lmsEnrollmentService: LmsEnrollmentService,
     private readonly postgresRoleService: PostgresRoleService,
     private readonly notificationRequest: NotificationRequest,
     private readonly jwtUtil: JwtUtil,
@@ -1726,6 +1732,51 @@ export class PostgresUserService implements IServicelocator {
     return deviceIds;
   }
 
+  /**
+   * Points a user's role for one tenant at `roleId`, creating the mapping only
+   * if they have none there yet.
+   *
+   * Keyed on (userId, tenantId) and written with update-then-insert rather than
+   * a plain save, because a user must hold exactly one role per tenant: an
+   * unconditional insert would leave them with two mappings and make their
+   * effective role whichever row a given query happened to read first. The
+   * update is issued against the criteria rather than a fetched row's id, so
+   * pre-existing duplicates collapse onto the requested role instead of being
+   * added to.
+   *
+   * Callers that decide behaviour from a requested role - the bulk import
+   * deriving observer handling from the roleId it was passed - must call this
+   * first, so that the role actually persisted is the one the behaviour was
+   * chosen from.
+   */
+  async updateUserRoleForTenant(
+    userId: string,
+    tenantId: string,
+    roleId: string,
+    actorId?: string
+  ): Promise<void> {
+    if (!userId || !tenantId || !roleId) {
+      return;
+    }
+
+    const updatedBy = actorId ?? userId;
+
+    const updateResult = await this.userRoleMappingRepository.update(
+      { userId, tenantId },
+      { roleId, updatedBy }
+    );
+
+    if (!updateResult.affected) {
+      await this.userRoleMappingRepository.save({
+        userId,
+        tenantId,
+        roleId,
+        createdBy: updatedBy,
+        updatedBy,
+      });
+    }
+  }
+
   async updateBasicUserDetails(
     userId: string,
     userData: Partial<User>
@@ -2349,6 +2400,12 @@ export class PostgresUserService implements IServicelocator {
     if (result && userDto.tenantCohortRoleMapping) {
       for (const mapData of userDto.tenantCohortRoleMapping) {
         if (mapData.cohortIds) {
+          // Membership status depends on who is being created - see
+          // getCohortMemberStatusForRole().
+          const memberStatus = await this.getCohortMemberStatusForRole(
+            mapData.roleId
+          );
+
           for (const cohortId of mapData.cohortIds) {
             const query = `
             SELECT * FROM public."CohortAcademicYear"
@@ -2358,14 +2415,36 @@ export class PostgresUserService implements IServicelocator {
               query
             );
 
-            const cohortData = {
+            const cohortData: Record<string, unknown> = {
               userId: result?.userId,
               cohortId,
               cohortAcademicYearId:
                 getCohortAcademicYearId[0]?.cohortAcademicYearId ?? null,
             };
 
+            if (memberStatus) {
+              cohortData.status = memberStatus;
+              cohortData.statusReason = `Added as ${OBSERVER_ROLE_CODE}`;
+            }
+
             await this.addCohortMember(cohortData);
+
+            // Reaching `shortlisted` is what entitles a member to their
+            // cohort's courses, wherever the row is written from - the
+            // cohort-member adapter enrolls on its own three paths, and this
+            // is the fourth. Deliberately not awaited: LMS being slow or down
+            // must not fail or delay user creation, exactly as at the
+            // equivalent call in updateCohortMembers().
+            if (memberStatus === MemberStatus.SHORTLISTED) {
+              this.lmsEnrollmentService
+                .enrollShortlistedUserToLMSCourses(result.userId, cohortId)
+                .catch((error) => {
+                  LoggerUtil.error(
+                    `Failed to enroll user ${result.userId} to LMS courses for cohort ${cohortId}`,
+                    `Error: ${error.message}`
+                  );
+                });
+            }
           }
         }
 
@@ -2630,6 +2709,47 @@ export class PostgresUserService implements IServicelocator {
     } else {
       return true;
     }
+  }
+
+  /**
+   * Cohort membership status for a user being created with the given role.
+   *
+   * Applicants earn their way through the funnel (applied -> submitted ->
+   * shortlisted), so their membership is left at the entity default and this
+   * returns null. Observers are not applicants: they are placed directly into
+   * the cohorts they observe, so they enter at `shortlisted` and never pass
+   * through the earlier states. Returning null rather than the default value
+   * keeps this a purely additive check - every existing role behaves exactly
+   * as it did before.
+   *
+   * The role is matched on its code, not a hardcoded roleId, so this survives
+   * the role being recreated or differing per tenant. Configurable via
+   * OBSERVER_ROLE_CODE.
+   */
+  async getCohortMemberStatusForRole(
+    roleId?: string
+  ): Promise<MemberStatus | null> {
+    return (await this.isObserverRole(roleId))
+      ? MemberStatus.SHORTLISTED
+      : null;
+  }
+
+  /**
+   * Whether the given role is the observer role. The single place that answers
+   * this question - the bulk import asks it too, to decide whether to generate
+   * an application form submission.
+   */
+  async isObserverRole(roleId?: string): Promise<boolean> {
+    if (!roleId) {
+      return false;
+    }
+
+    const role = await this.roleRepository.findOne({
+      where: { roleId },
+      select: ['code'],
+    });
+
+    return role?.code?.toLowerCase() === OBSERVER_ROLE_CODE;
   }
 
   async addCohortMember(cohortData) {

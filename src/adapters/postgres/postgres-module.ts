@@ -26,6 +26,7 @@ import { AuthUtils } from '@utils/auth-util';
 import { ElasticsearchModule } from 'src/elasticsearch/elasticsearch.module';
 import { ReferralsModule } from 'src/referrals/referrals.module';
 import { CacheModule } from 'src/cache/cache.module';
+import { LmsEnrollmentService } from 'src/common/services/lms-enrollment.service';
 
 @Module({
   imports: [
@@ -51,6 +52,7 @@ import { CacheModule } from 'src/cache/cache.module';
   ],
   providers: [
     PostgresUserService,
+    LmsEnrollmentService,
     PostgresFieldsService,
     PostgresRoleService,
     NotificationRequest,
@@ -62,6 +64,7 @@ import { CacheModule } from 'src/cache/cache.module';
   ],
   exports: [
     PostgresUserService,
+    LmsEnrollmentService,
     PostgresFieldsService,
     NotificationRequest,
     JwtUtil,
