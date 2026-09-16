@@ -13,6 +13,10 @@ export enum MemberStatus {
   ARCHIVED = "archived",
   REASSIGNED = "reassigned",
   PENDING = "pending",
+  INTRAINING = "in_training",
+  COURSECOMPLETED = "course_completed",
+  PLACED = "placed",
+  RETENTIONCOMPLETE = "retention_complete",
 }
 
 @Entity("CohortMembers")
