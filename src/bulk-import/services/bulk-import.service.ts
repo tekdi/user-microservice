@@ -1806,6 +1806,24 @@ export class BulkImportService {
         updateUserDto
       );
 
+      // Persist the requested role before anything downstream acts on it.
+      // The batch decides observer handling - cohort statusReason, and whether
+      // to create an application form submission - from the roleId this import
+      // was given, so an existing user left on their previous mapping would
+      // receive observer behaviour while still being recorded as, say, a
+      // student. New users get this via createUserInDatabase(); this is the
+      // same step for the update path.
+      for (const mapping of userCreateDto.tenantCohortRoleMapping ?? []) {
+        if (mapping?.tenantId && mapping?.roleId) {
+          await this.userService.updateUserRoleForTenant(
+            existingUserId,
+            mapping.tenantId,
+            mapping.roleId,
+            userCreateDto.updatedBy
+          );
+        }
+      }
+
       // Update custom fields if provided
       if (
         userCreateDto.customFields &&

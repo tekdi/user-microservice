@@ -1689,6 +1689,51 @@ export class PostgresUserService implements IServicelocator {
     return deviceIds;
   }
 
+  /**
+   * Points a user's role for one tenant at `roleId`, creating the mapping only
+   * if they have none there yet.
+   *
+   * Keyed on (userId, tenantId) and written with update-then-insert rather than
+   * a plain save, because a user must hold exactly one role per tenant: an
+   * unconditional insert would leave them with two mappings and make their
+   * effective role whichever row a given query happened to read first. The
+   * update is issued against the criteria rather than a fetched row's id, so
+   * pre-existing duplicates collapse onto the requested role instead of being
+   * added to.
+   *
+   * Callers that decide behaviour from a requested role - the bulk import
+   * deriving observer handling from the roleId it was passed - must call this
+   * first, so that the role actually persisted is the one the behaviour was
+   * chosen from.
+   */
+  async updateUserRoleForTenant(
+    userId: string,
+    tenantId: string,
+    roleId: string,
+    actorId?: string
+  ): Promise<void> {
+    if (!userId || !tenantId || !roleId) {
+      return;
+    }
+
+    const updatedBy = actorId ?? userId;
+
+    const updateResult = await this.userRoleMappingRepository.update(
+      { userId, tenantId },
+      { roleId, updatedBy }
+    );
+
+    if (!updateResult.affected) {
+      await this.userRoleMappingRepository.save({
+        userId,
+        tenantId,
+        roleId,
+        createdBy: updatedBy,
+        updatedBy,
+      });
+    }
+  }
+
   async updateBasicUserDetails(
     userId: string,
     userData: Partial<User>
