@@ -1,6 +1,13 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Expose } from 'class-transformer';
-import { IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
+import {
+  IsEnum,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsUUID,
+} from 'class-validator';
+import { MemberStatus } from '../entities/cohort-member.entity';
 
 /**
  * Moves one user from one cohort to another within the same academic year.
@@ -37,6 +44,32 @@ export class CohortMemberMoveDto {
   @IsNotEmpty()
   @IsUUID(undefined, { message: 'toCohortId must be a valid UUID' })
   toCohortId: string;
+
+  @ApiPropertyOptional({
+    enum: MemberStatus,
+    default: MemberStatus.SHORTLISTED,
+    description:
+      'Status to put the destination membership in. Defaults to shortlisted. LMS enrollment runs only when this resolves to shortlisted, matching every other path in the service, where enrollment is a consequence of that status rather than of the operation.',
+  })
+  @Expose()
+  @IsOptional()
+  @IsEnum(MemberStatus, {
+    message: `status must be one of: ${Object.values(MemberStatus).join(', ')}`,
+  })
+  status?: MemberStatus;
+
+  @ApiPropertyOptional({
+    enum: MemberStatus,
+    default: MemberStatus.INACTIVE,
+    description:
+      'Status to leave the source membership in. Defaults to inactive. The row is always updated, never deleted, whichever status is used.',
+  })
+  @Expose()
+  @IsOptional()
+  @IsEnum(MemberStatus, {
+    message: `fromStatus must be one of: ${Object.values(MemberStatus).join(', ')}`,
+  })
+  fromStatus?: MemberStatus;
 
   @ApiPropertyOptional({
     type: String,

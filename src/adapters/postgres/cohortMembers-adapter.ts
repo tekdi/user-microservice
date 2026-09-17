@@ -839,6 +839,11 @@ export class PostgresCohortMembersService {
         },
       });
 
+      // Both statuses are caller-overridable; the defaults are the move's
+      // normal meaning - vacate the old cohort, place them in the new one.
+      const targetStatus = moveDto.status ?? MemberStatus.SHORTLISTED;
+      const sourceStatus = moveDto.fromStatus ?? MemberStatus.INACTIVE;
+
       const statusReason =
         moveDto.statusReason ?? `Moved from cohort ${fromCohortId} to ${toCohortId}`;
       const previousSourceStatus = sourceMembership.status;
@@ -857,7 +862,7 @@ export class PostgresCohortMembersService {
             CohortMembers,
             { cohortMembershipId: sourceMembership.cohortMembershipId },
             {
-              status: MemberStatus.INACTIVE,
+              status: sourceStatus,
               statusReason,
               updatedBy: loginUser,
               updatedAt: new Date(),
@@ -869,7 +874,7 @@ export class PostgresCohortMembersService {
               CohortMembers,
               { cohortMembershipId: existingTarget.cohortMembershipId },
               {
-                status: MemberStatus.SHORTLISTED,
+                status: targetStatus,
                 statusReason,
                 updatedBy: loginUser,
                 updatedAt: new Date(),
@@ -885,7 +890,7 @@ export class PostgresCohortMembersService {
             userId,
             cohortId: toCohortId,
             cohortAcademicYearId: toCohortAcademicYearId,
-            status: MemberStatus.SHORTLISTED,
+            status: targetStatus,
             statusReason,
             userCohortCountryId,
             createdBy: loginUser,
@@ -894,24 +899,31 @@ export class PostgresCohortMembersService {
         }
       );
 
-      // Outside the transaction on purpose - see the method doc.
+      // Outside the transaction on purpose - see the method doc. Gated on the
+      // destination status rather than run unconditionally: everywhere else in
+      // this service enrollment is a consequence of reaching `shortlisted`, and
+      // a move that places someone as `applied` or `inactive` should not hand
+      // them the cohort's courses.
       let lmsEnrollment: { attempted: boolean; success: boolean; error?: string } = {
-        attempted: true,
-        success: true,
+        attempted: false,
+        success: false,
       };
-      try {
-        await this.enrollShortlistedUserToLMSCourses(userId, toCohortId);
-      } catch (error) {
-        lmsEnrollment = {
-          attempted: true,
-          success: false,
-          error: error.message,
-        };
-        ShortlistingLogger.logShortlistingError(
-          `Failed to enroll user ${userId} to LMS courses for cohort ${toCohortId} during move`,
-          error.message,
-          'LMSEnrollment'
-        );
+      if (targetStatus === MemberStatus.SHORTLISTED) {
+        lmsEnrollment = { attempted: true, success: true };
+        try {
+          await this.enrollShortlistedUserToLMSCourses(userId, toCohortId);
+        } catch (error) {
+          lmsEnrollment = {
+            attempted: true,
+            success: false,
+            error: error.message,
+          };
+          ShortlistingLogger.logShortlistingError(
+            `Failed to enroll user ${userId} to LMS courses for cohort ${toCohortId} during move`,
+            error.message,
+            'LMSEnrollment'
+          );
+        }
       }
 
       if (isElasticsearchEnabled()) {
@@ -920,13 +932,13 @@ export class PostgresCohortMembersService {
             this.updateElasticsearchWithFieldSpecificChanges(
               userId,
               fromCohortId,
-              { cohortmemberstatus: MemberStatus.INACTIVE, statusReason },
+              { cohortmemberstatus: sourceStatus, statusReason },
               null
             ),
             this.updateElasticsearchWithFieldSpecificChanges(
               userId,
               toCohortId,
-              { cohortmemberstatus: MemberStatus.SHORTLISTED, statusReason },
+              { cohortmemberstatus: targetStatus, statusReason },
               null
             ),
           ]);
@@ -948,13 +960,13 @@ export class PostgresCohortMembersService {
             cohortId: fromCohortId,
             cohortMembershipId: sourceMembership.cohortMembershipId,
             previousStatus: previousSourceStatus,
-            status: MemberStatus.INACTIVE,
+            status: sourceStatus,
           },
           to: {
             cohortId: toCohortId,
             cohortMembershipId: targetMembership?.cohortMembershipId,
             previousStatus: previousTargetStatus,
-            status: MemberStatus.SHORTLISTED,
+            status: targetStatus,
             created: !existingTarget,
           },
           statusReason,
