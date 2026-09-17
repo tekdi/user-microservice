@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { CohortMembersDto } from 'src/cohortMembers/dto/cohortMembers.dto';
+import { CohortMemberMoveDto } from 'src/cohortMembers/dto/cohortMember-move.dto';
 import { CohortMembersSearchDto } from 'src/cohortMembers/dto/cohortMembers-search.dto';
 import {
   CohortMembers,
@@ -706,6 +707,290 @@ export class PostgresCohortMembersService {
     return results;
   }
 
+  /**
+   * Moves one user from one cohort to another within the same academic year.
+   *
+   * The source membership is set to `inactive` rather than deleted or archived,
+   * so the row - and the form submission and progress that hang off its
+   * cohortMembershipId - survives the move and the user's history in that
+   * cohort stays readable.
+   *
+   * The destination is always left at `shortlisted`, whether its membership had
+   * to be created or already existed in some other status: a move is an
+   * administrative placement, not an application, so the user does not re-enter
+   * the funnel at `applied`. An existing destination membership is updated in
+   * place rather than duplicated.
+   *
+   * Both writes go in one transaction, because a move that deactivated the
+   * source without landing the destination would strand the user in no cohort
+   * at all. LMS enrollment is deliberately outside it: it is a remote call that
+   * must not hold a database transaction open, and it is re-runnable if it
+   * fails, so its outcome is reported in the response rather than rolling the
+   * move back.
+   *
+   * The user is NOT de-enrolled from the source cohort's courses - leaving a
+   * cohort this way is not a rejection, and course progress there is preserved.
+   */
+  public async moveCohortMember(
+    loginUser: any,
+    moveDto: CohortMemberMoveDto,
+    res: Response,
+    tenantId: string,
+    academicyearId: string
+  ) {
+    const apiId = APIID.COHORT_MEMBER_MOVE;
+    try {
+      const { userId, fromCohortId, toCohortId } = moveDto;
+
+      if (fromCohortId === toCohortId) {
+        return APIResponse.error(
+          res,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          API_RESPONSES.COHORT_MEMBER_MOVE_SAME_COHORT,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      const [existUser, academicYear] = await Promise.all([
+        this.checkUserExist(userId),
+        this.academicyearService.getActiveAcademicYear(
+          academicyearId,
+          tenantId
+        ),
+      ]);
+
+      if (!existUser) {
+        return APIResponse.error(
+          res,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          API_RESPONSES.INVALID_USERID,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      if (!academicYear) {
+        return APIResponse.error(
+          res,
+          apiId,
+          HttpStatus.NOT_FOUND.toLocaleString(),
+          API_RESPONSES.ACADEMICYEAR_NOT_FOUND,
+          HttpStatus.NOT_FOUND
+        );
+      }
+
+      // Both cohorts must be mapped to this academic year - a move across
+      // academic years is a different operation and is not supported here.
+      const [fromCohortYear, toCohortYear] = await Promise.all([
+        this.isCohortExistForYear(academicyearId, fromCohortId),
+        this.isCohortExistForYear(academicyearId, toCohortId),
+      ]);
+
+      if (!fromCohortYear?.length) {
+        return APIResponse.error(
+          res,
+          apiId,
+          HttpStatus.NOT_FOUND.toLocaleString(),
+          API_RESPONSES.COHORTID_NOTFOUND_FOT_THIS_YEAR(fromCohortId),
+          HttpStatus.NOT_FOUND
+        );
+      }
+
+      if (!toCohortYear?.length) {
+        return APIResponse.error(
+          res,
+          apiId,
+          HttpStatus.NOT_FOUND.toLocaleString(),
+          API_RESPONSES.COHORTID_NOTFOUND_FOT_THIS_YEAR(toCohortId),
+          HttpStatus.NOT_FOUND
+        );
+      }
+
+      const fromCohortAcademicYearId = fromCohortYear[0].cohortAcademicYearId;
+      const toCohortAcademicYearId = toCohortYear[0].cohortAcademicYearId;
+
+      const sourceMembership = await this.cohortMembersRepository.findOne({
+        where: {
+          userId,
+          cohortId: fromCohortId,
+          cohortAcademicYearId: fromCohortAcademicYearId,
+        },
+      });
+
+      if (!sourceMembership) {
+        return APIResponse.error(
+          res,
+          apiId,
+          HttpStatus.NOT_FOUND.toLocaleString(),
+          API_RESPONSES.COHORT_MEMBER_MOVE_SOURCE_NOT_FOUND(
+            userId,
+            fromCohortId
+          ),
+          HttpStatus.NOT_FOUND
+        );
+      }
+
+      const existingTarget = await this.cohortMembersRepository.findOne({
+        where: {
+          userId,
+          cohortId: toCohortId,
+          cohortAcademicYearId: toCohortAcademicYearId,
+        },
+      });
+
+      // Both statuses are caller-overridable; the defaults are the move's
+      // normal meaning - vacate the old cohort, place them in the new one.
+      const targetStatus = moveDto.status ?? MemberStatus.SHORTLISTED;
+      const sourceStatus = moveDto.fromStatus ?? MemberStatus.INACTIVE;
+
+      const statusReason =
+        moveDto.statusReason ?? `Moved from cohort ${fromCohortId} to ${toCohortId}`;
+      const previousSourceStatus = sourceMembership.status;
+      const previousTargetStatus = existingTarget?.status ?? null;
+
+      // Resolved before the transaction: this is the same country snapshot
+      // every other insert path takes, and it only matters when the
+      // destination membership has to be created.
+      const userCohortCountryId = existingTarget
+        ? null
+        : (await this.resolveUserCohortCountryIds([userId])).get(userId) ?? null;
+
+      const targetMembership = await this.cohortMembersRepository.manager.transaction(
+        async (manager) => {
+          await manager.update(
+            CohortMembers,
+            { cohortMembershipId: sourceMembership.cohortMembershipId },
+            {
+              status: sourceStatus,
+              statusReason,
+              updatedBy: loginUser,
+              updatedAt: new Date(),
+            }
+          );
+
+          if (existingTarget) {
+            await manager.update(
+              CohortMembers,
+              { cohortMembershipId: existingTarget.cohortMembershipId },
+              {
+                status: targetStatus,
+                statusReason,
+                updatedBy: loginUser,
+                updatedAt: new Date(),
+              }
+            );
+
+            return manager.findOne(CohortMembers, {
+              where: { cohortMembershipId: existingTarget.cohortMembershipId },
+            });
+          }
+
+          return manager.save(CohortMembers, {
+            userId,
+            cohortId: toCohortId,
+            cohortAcademicYearId: toCohortAcademicYearId,
+            status: targetStatus,
+            statusReason,
+            userCohortCountryId,
+            createdBy: loginUser,
+            updatedBy: loginUser,
+          });
+        }
+      );
+
+      // Outside the transaction on purpose - see the method doc. Gated on the
+      // destination status rather than run unconditionally: everywhere else in
+      // this service enrollment is a consequence of reaching `shortlisted`, and
+      // a move that places someone as `applied` or `inactive` should not hand
+      // them the cohort's courses.
+      let lmsEnrollment: { attempted: boolean; success: boolean; error?: string } = {
+        attempted: false,
+        success: false,
+      };
+      if (targetStatus === MemberStatus.SHORTLISTED) {
+        lmsEnrollment = { attempted: true, success: true };
+        try {
+          await this.enrollShortlistedUserToLMSCourses(userId, toCohortId);
+        } catch (error) {
+          lmsEnrollment = {
+            attempted: true,
+            success: false,
+            error: error.message,
+          };
+          ShortlistingLogger.logShortlistingError(
+            `Failed to enroll user ${userId} to LMS courses for cohort ${toCohortId} during move`,
+            error.message,
+            'LMSEnrollment'
+          );
+        }
+      }
+
+      if (isElasticsearchEnabled()) {
+        try {
+          await Promise.all([
+            this.updateElasticsearchWithFieldSpecificChanges(
+              userId,
+              fromCohortId,
+              { cohortmemberstatus: sourceStatus, statusReason },
+              null
+            ),
+            this.updateElasticsearchWithFieldSpecificChanges(
+              userId,
+              toCohortId,
+              { cohortmemberstatus: targetStatus, statusReason },
+              null
+            ),
+          ]);
+        } catch (error) {
+          LoggerUtil.error(
+            `${API_RESPONSES.SERVER_ERROR}`,
+            `Elasticsearch update failed after moving user ${userId}: ${error.message}`,
+            apiId
+          );
+        }
+      }
+
+      return APIResponse.success(
+        res,
+        apiId,
+        {
+          userId,
+          from: {
+            cohortId: fromCohortId,
+            cohortMembershipId: sourceMembership.cohortMembershipId,
+            previousStatus: previousSourceStatus,
+            status: sourceStatus,
+          },
+          to: {
+            cohortId: toCohortId,
+            cohortMembershipId: targetMembership?.cohortMembershipId,
+            previousStatus: previousTargetStatus,
+            status: targetStatus,
+            created: !existingTarget,
+          },
+          statusReason,
+          lmsEnrollment,
+        },
+        HttpStatus.OK,
+        API_RESPONSES.COHORT_MEMBER_MOVED_SUCCESSFULLY
+      );
+    } catch (e) {
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${e.message}`,
+        apiId
+      );
+      return APIResponse.error(
+        res,
+        apiId,
+        API_RESPONSES.INTERNAL_SERVER_ERROR,
+        e.message || API_RESPONSES.INTERNAL_SERVER_ERROR,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
   public async createCohortMembers(
     loginUser: any,
     cohortMembers: CohortMembersDto,
@@ -953,7 +1238,22 @@ export class PostgresCohortMembersService {
       const processCondition = ([key, value]) => {
         switch (key) {
           case 'role': {
-            // FIXED: Use parameterized query to prevent SQL injection
+            // searchCohortMembers() wraps every non-date filter value in an
+            // array before it gets here, so a single "role": "Observer" arrives
+            // as ['Observer']. Pushed as-is it was serialised to the Postgres
+            // array literal '{Observer}' and compared against a text column,
+            // which never matched - handled like every other multi-value
+            // filter below instead.
+            if (Array.isArray(value)) {
+              if (this.isEmptyInFilterArray(value)) {
+                return null;
+              }
+              const placeholders = value
+                .map(() => `$${paramIndex++}`)
+                .join(', ');
+              queryParams.push(...value);
+              return `R."name" IN (${placeholders})`;
+            }
             queryParams.push(value);
             return `R."name"=$${paramIndex++}`;
           }
@@ -1284,9 +1584,22 @@ export class PostgresCohortMembersService {
 
       const processCondition = ([key, value]) => {
         switch (key) {
-          case 'role':
+          case 'role': {
+            // Same array-wrapped value as in getUsers() - see the note there.
+            // Same array-wrapped value as in getUsers() - see the note there.
+            if (Array.isArray(value)) {
+              if (this.isEmptyInFilterArray(value)) {
+                return null;
+              }
+              const placeholders = value
+                .map(() => `$${parameterIndex++}`)
+                .join(', ');
+              parameters.push(...value);
+              return `R."name" IN (${placeholders})`;
+            }
             parameters.push(value);
             return `R."name"=$${parameterIndex++}`;
+          }
           case 'status': {
             if (Array.isArray(value) && this.isEmptyInFilterArray(value)) {
               return null;

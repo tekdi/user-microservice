@@ -320,4 +320,10 @@ export const API_RESPONSES = {
   REFERRAL_BULK_SUCCESS: "Bulk referrals processed successfully",
   REFERRAL_REPORT_SUCCESS: "Referral report retrieved successfully",
   REFERRAL_SUMMARY_SUCCESS: "Referral summary retrieved successfully",
+  // Cohort Member Move Messages
+  COHORT_MEMBER_MOVED_SUCCESSFULLY: "Cohort member moved successfully",
+  COHORT_MEMBER_MOVE_SAME_COHORT:
+    "fromCohortId and toCohortId must be different.",
+  COHORT_MEMBER_MOVE_SOURCE_NOT_FOUND: (userId, cohortId) =>
+    `User '${userId}' is not a member of cohort '${cohortId}' for this academic year.`,
 };

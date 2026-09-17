@@ -2,6 +2,7 @@ import {
   ApiTags,
   ApiBody,
   ApiCreatedResponse,
+  ApiOkResponse,
   ApiBasicAuth,
   ApiHeader,
   ApiQuery,
@@ -35,6 +36,7 @@ import { CohortMembersReportFilterDto } from './dto/cohortMembers-report-filter.
 import { CohortMembersDto } from './dto/cohortMembers.dto';
 import { CohortMembersAdapter } from './cohortMembersadapter';
 import { CohortMembersUpdateDto } from './dto/cohortMember-update.dto';
+import { CohortMemberMoveDto } from './dto/cohortMember-move.dto';
 import { Response } from 'express';
 import { AllExceptionsFilter } from 'src/common/filters/exception.filter';
 import { APIID } from 'src/common/utils/api-id.config';
@@ -284,6 +286,58 @@ export class CohortMembersController {
         cohortMemberUpdateDto,
         response,
         tenantId
+      );
+  }
+
+  //move a user from one cohort to another
+  @UseFilters(new AllExceptionsFilter(APIID.COHORT_MEMBER_MOVE))
+  @Post('/move')
+  @ApiBasicAuth('access-token')
+  @ApiOkResponse({
+    description: 'Cohort member moved successfully.',
+  })
+  @ApiNotFoundResponse({ description: 'Data not found' })
+  @ApiBadRequestResponse({ description: 'Bad request' })
+  @ApiBody({ type: CohortMemberMoveDto })
+  @ApiHeader({ name: 'tenantid' })
+  @ApiHeader({ name: 'academicyearid' })
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  public async moveCohortMember(
+    @Headers() headers,
+    @Req() request,
+    @Body() moveDto: CohortMemberMoveDto,
+    @Res() response: Response,
+    @Query('userId') userId: string
+  ) {
+    // Same convention as /update: the logged-in user arrives as a query param
+    // from the middleware and is recorded as updatedBy/createdBy.
+    const loginUser = userId;
+    if (!loginUser || !isUUID(loginUser)) {
+      throw new BadRequestException('unauthorized!');
+    }
+
+    const tenantId = headers['tenantid'];
+    if (!tenantId || !isUUID(tenantId)) {
+      throw new BadRequestException(
+        'tenantid is required and must be a valid UUID.'
+      );
+    }
+
+    const academicyearId = headers['academicyearid'];
+    if (!academicyearId || !isUUID(academicyearId)) {
+      throw new BadRequestException(
+        'academicyearId is required and must be a valid UUID.'
+      );
+    }
+
+    return await this.cohortMemberAdapter
+      .buildCohortMembersAdapter()
+      .moveCohortMember(
+        loginUser,
+        moveDto,
+        response,
+        tenantId,
+        academicyearId
       );
   }
 
