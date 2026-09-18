@@ -228,6 +228,10 @@ export class FormsService {
         return ["TENANT"];
       case "placementproperty":
         return ["PLACEMENTPROPERTY"];
+      case "placement":
+        return ["PLACEMENT"];
+      case "retention":
+        return ["RETENTION"];
       default:
         return [];
     }
