@@ -1489,6 +1489,23 @@ export class PostgresCohortMembersService {
       }
     }
 
+    // Archived users are gone from the platform - the anonymize/archive flow
+    // sets Users.status = 'archived' - so they are not cohort members anyone is
+    // listing. Filtered on Users.status, which is a different column from the
+    // CohortMembers.status the `status` filter targets: a live membership row
+    // still points at an archived user, which is exactly how they were leaking
+    // into both listings.
+    {
+      const archivedUserCondition = `U."status" <> 'archived'`;
+      if (whereCase === 'WHERE ') {
+        whereCase += archivedUserCondition;
+      } else if (whereCase) {
+        whereCase += ` AND ${archivedUserCondition}`;
+      } else {
+        whereCase = `WHERE ${archivedUserCondition}`;
+      }
+    }
+
     if (whereCase === 'WHERE ' || whereCase.trim() === 'WHERE') {
       whereCase = '';
     }
@@ -1737,6 +1754,23 @@ export class PostgresCohortMembersService {
         .filter((c) => c !== null && c !== '');
       if (conditions.length > 0) {
         whereCase += conditions.join(' AND ');
+      }
+    }
+
+    // Archived users are gone from the platform - the anonymize/archive flow
+    // sets Users.status = 'archived' - so they are not cohort members anyone is
+    // listing. Filtered on Users.status, which is a different column from the
+    // CohortMembers.status the `status` filter targets: a live membership row
+    // still points at an archived user, which is exactly how they were leaking
+    // into both listings.
+    {
+      const archivedUserCondition = `U."status" <> 'archived'`;
+      if (whereCase === 'WHERE ') {
+        whereCase += archivedUserCondition;
+      } else if (whereCase) {
+        whereCase += ` AND ${archivedUserCondition}`;
+      } else {
+        whereCase = `WHERE ${archivedUserCondition}`;
       }
     }
 
