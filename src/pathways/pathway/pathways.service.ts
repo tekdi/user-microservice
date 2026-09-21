@@ -27,7 +27,7 @@ import { ConfigService } from '@nestjs/config';
 import { CacheService } from 'src/cache/cache.service';
 import { CourseCompletionWebhookDto } from './dto/course-completion-webhook.dto';
 import { NotificationRequest } from '../../common/utils/notification.axios';
-import { resolveReportCountryScope } from '@utils/report-country-scope';
+import { getReportCountryScope } from '@utils/report-country-scope';
 
 const PATHWAY_SUBTYPE_PROGRAM_NAMES: Record<string, string> = {
   CAL: 'Campus Leader Training!',
@@ -1989,7 +1989,7 @@ export class PathwaysService {
       // intersected with their optional Country dropdown. Resolved before the
       // query so an empty intersection short-circuits to an empty page instead
       // of an `IN ()`.
-      const countryScope = await resolveReportCountryScope(
+      const countryScope = await getReportCountryScope(
         this.dataSource,
         adminUserId,
         filters?.countries

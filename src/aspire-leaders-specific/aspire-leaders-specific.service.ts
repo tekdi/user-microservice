@@ -13,7 +13,7 @@ import { API_RESPONSES } from '@utils/response.messages';
 import { APIID } from '@utils/api-id.config';
 import { LoggerUtil } from 'src/common/logger/LoggerUtil';
 import { ReportCountryFilterDto } from './dto/report-country-filter.dto';
-import { resolveReportCountryScope } from '@utils/report-country-scope';
+import { getReportCountryScope } from '@utils/report-country-scope';
 
 @Injectable()
 export class AspireLeadersSpecificService {
@@ -71,7 +71,7 @@ export class AspireLeadersSpecificService {
       // `blocked` means the intersection is empty - a Regional Admin with no
       // resolvable country, or one asking only for countries outside their
       // assignment - and must yield nothing rather than everything.
-      const scope = await resolveReportCountryScope(
+      const scope = await getReportCountryScope(
         this.dataSource,
         adminUserId,
         countries,

@@ -139,7 +139,7 @@ const normalizeNames = (names: string[]): string[] =>
  * there is no scope to apply, and serving every country would be the unsafe
  * direction to be wrong in. Unreachable through a guarded route.
  */
-export async function resolveReportCountryScope(
+export async function getReportCountryScope(
   dataSource: DataSource,
   adminUserId: string | undefined,
   requestedCountries: string[] | undefined,
