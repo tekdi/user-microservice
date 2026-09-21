@@ -310,6 +310,8 @@ export const API_RESPONSES = {
 
   // Aspire Leaders Specific Messages
   ASPIRE_LEADERS_COUNTRY_LIST_SUCCESS: "Countries retrieved successfully",
+  ASPIRE_LEADERS_REPORT_COUNTRY_FILTER_SUCCESS:
+    "Report country filter results fetched successfully.",
   // Referral Management Messages
   REFERRAL_CREATED_SUCCESSFULLY: "Referral created successfully",
   REFERRAL_GET_SUCCESS: "Referral retrieved successfully",

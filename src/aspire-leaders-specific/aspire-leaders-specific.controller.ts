@@ -2,11 +2,14 @@ import {
   Controller,
   Post,
   Body,
+  Req,
   Res,
   HttpCode,
   HttpStatus,
+  UseGuards,
   UsePipes,
   ValidationPipe,
+  BadRequestException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -18,9 +21,16 @@ import {
   ApiUnauthorizedResponse,
   ApiInternalServerErrorResponse,
 } from '@nestjs/swagger';
-import { Response } from 'express';
+import { Response, Request } from 'express';
+import { isUUID } from 'class-validator';
+import { JwtAuthGuard } from 'src/common/guards/keycloak.guard';
 import { AspireLeadersSpecificService } from './aspire-leaders-specific.service';
 import { ListCountriesQueryDto } from './dto/list-countries.dto';
+import { ReportCountryFilterDto } from './dto/report-country-filter.dto';
+
+interface RequestWithUser extends Request {
+  user?: { userId: string; [key: string]: any };
+}
 
 @ApiTags('Aspire Leaders Specific')
 @Controller('aspire-leaders-specific')
@@ -98,5 +108,66 @@ export class AspireLeadersSpecificController {
     @Res() response: Response,
   ): Promise<Response> {
     return this.aspireLeadersSpecificService.listCountries(query, response);
+  }
+
+  /**
+   * Country-scopes a chunk of userIds for a report that has NO cohort - the
+   * pathway assessment report, for one.
+   *
+   * The identity that decides the scope is taken from the bearer token
+   * JwtAuthGuard has already verified against Keycloak's RSA public key, never
+   * from a `userid` header or a body field: country scoping is this endpoint's
+   * access-control boundary, so a spoofable caller would defeat it entirely.
+   * Same rule as POST /cohortmember/report-filter.
+   */
+  @UseGuards(JwtAuthGuard)
+  @Post('report-country-filter')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Country-filter a chunk of userIds for a cohort-less report',
+    description:
+      "Returns the subset of the given userIds the calling admin may see, by country, each with the currentCountry it matched on. A Regional Admin is restricted to their assigned countries (resolved server-side); the optional `countries` body field narrows within that and can never widen it.",
+  })
+  @ApiHeader({
+    name: 'Authorization',
+    description: 'Bearer token for authentication',
+    required: true,
+  })
+  @ApiBody({ type: ReportCountryFilterDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Eligible userIds retrieved successfully',
+    schema: {
+      example: {
+        result: {
+          count: 1,
+          items: [
+            {
+              userId: 'a1b2c3d4-e111-2222-3333-444455556666',
+              currentCountry: 'India',
+            },
+          ],
+        },
+      },
+    },
+  })
+  @ApiBadRequestResponse({ description: 'Bad Request' })
+  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
+  @ApiInternalServerErrorResponse({ description: 'Internal Server Error' })
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  async reportCountryFilter(
+    @Req() request: RequestWithUser,
+    @Body() dto: ReportCountryFilterDto,
+    @Res() response: Response,
+  ): Promise<Response> {
+    const adminUserId = request.user?.userId;
+    if (!adminUserId || !isUUID(adminUserId)) {
+      throw new BadRequestException('unauthorized!');
+    }
+    return this.aspireLeadersSpecificService.reportCountryFilter(
+      dto,
+      adminUserId,
+      response,
+    );
   }
 }

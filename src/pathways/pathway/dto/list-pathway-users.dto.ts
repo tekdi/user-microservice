@@ -79,6 +79,36 @@ class ListPathwayUsersFiltersDto {
   @IsOptional()
   @IsBoolean()
   valid?: boolean;
+
+  /**
+   * Aspire Leaders-specific: country NAMES to narrow the report to, as sent by
+   * the admin UI's Country dropdown. Optional - omit for no narrowing.
+   *
+   * Matched against Users.currentCountry (the user's LIVE profile country),
+   * which is the country rule every report on the platform scopes on except
+   * the application report - see REPORT_COUNTRY_SOURCE in
+   * Aspire-specific-service's cohort-country-filter.ts.
+   *
+   * This can only ever SUBTRACT from the server-side allowed-country check
+   * that already runs for a Regional Admin (see
+   * PathwaysService.getPathwayReportCountryScope), so it cannot be used to
+   * reach outside an admin's assigned countries.
+   *
+   * NOTE: this route runs ValidationPipe({ whitelist: true }), so this field
+   * MUST stay declared here - an undeclared property is silently stripped from
+   * the body, which would make a caller's narrowing quietly disappear.
+   */
+  @ApiPropertyOptional({
+    type: [String],
+    description:
+      "Country NAMES to narrow the report to, matched against the user's live currentCountry. Omit for no narrowing.",
+    example: ['India', 'Kenya'],
+  })
+  @Expose()
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  countries?: string[];
 }
 
 class ListPathwayUsersSortDto {

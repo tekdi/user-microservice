@@ -555,6 +555,7 @@ export class PathwaysController {
   @ApiInternalServerErrorResponse({ description: "Internal Server Error" })
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   async listPathwayUsers(
+    @Req() request: RequestWithUser,
     @Body() listPathwayUsersDto: ListPathwayUsersDto,
     @Headers("tenantid") tenantId: string,
     @Res() response: Response
@@ -562,7 +563,20 @@ export class PathwaysController {
     if (!tenantId || !isUUID(tenantId)) {
       throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
     }
-    return this.pathwaysService.listPathwayUsers(listPathwayUsersDto, response);
+    // Aspire Leaders: the caller's identity decides whether this report is
+    // country-scoped (Regional Admin) or not, so it is taken from the token
+    // JwtAuthGuard already verified - never from a `userid` header or a body
+    // field, both of which are spoofable. Mirrors the same rule on
+    // POST /cohortmember/report-filter.
+    const adminUserId = request.user?.userId;
+    if (!adminUserId || !isUUID(adminUserId)) {
+      throw new BadRequestException('unauthorized!');
+    }
+    return this.pathwaysService.listPathwayUsers(
+      listPathwayUsersDto,
+      response,
+      adminUserId
+    );
   }
 
   // ── Volunteer-specific routes ──────────────────────────────────────────────

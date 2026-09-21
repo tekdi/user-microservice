@@ -201,4 +201,5 @@ export const APIID = {
   COUNTRY_LIST: "api.country.list",
   // Aspire Leaders Specific APIs
   ASPIRE_LEADERS_COUNTRY_LIST: "api.aspire-leaders-specific.country.list",
+  ASPIRE_LEADERS_REPORT_COUNTRY_FILTER: "api.aspire-leaders-specific.report.countryFilter",
 } as const;
