@@ -20,7 +20,10 @@ import {
   CohortMembers,
   MemberStatus,
 } from 'src/cohortMembers/entities/cohort-member.entity';
-import { OBSERVER_ROLE_CODE } from '@utils/roles.constants';
+import {
+  OBSERVER_ROLE_CODE,
+  STUDENT_ROLE_CODE,
+} from '@utils/roles.constants';
 import { LmsEnrollmentService } from 'src/common/services/lms-enrollment.service';
 import { isUUID } from 'class-validator';
 import { UserSearchDto } from 'src/user/dto/user-search.dto';
@@ -593,6 +596,22 @@ export class PostgresUserService implements IServicelocator {
       (key) => key !== 'district' && key !== 'state'
     );
 
+    // Aspire Leaders: every user list screen and CSV export shows students
+    // only, so a request that names no role is read as a request for students.
+    // A caller that wants some other role - or deliberately wants every role -
+    // keeps sending `filters.role` and is untouched by this.
+    //
+    // The default is matched on `Roles.code` rather than `Roles.name` (see
+    // `roleFilterColumn` below), because a caller-supplied role is a display
+    // name while the constant is a code, and a per-tenant or renamed "Student"
+    // row would otherwise silently match nothing.
+    const roleFilterIsDefault = !filters?.role;
+    const roleFilterColumn = roleFilterIsDefault ? 'code' : 'name';
+    filters = { ...(filters ?? {}) };
+    if (roleFilterIsDefault) {
+      filters.role = STUDENT_ROLE_CODE;
+    }
+
     if (filters && Object.keys(filters).length > 0) {
       // this is project requirement to handle country filter based on role so this is aspire specific code
       // Check if role is Regional Admin to determine country filtering strategy
@@ -718,7 +737,8 @@ export class PostgresUserService implements IServicelocator {
             if (index > 0) {
               whereCondition += ` AND `;
             }
-            whereCondition += ` R."name" = '${value}'`;
+            const escapedRole = this.escapeSqlLiteral(String(value));
+            whereCondition += ` R."${roleFilterColumn}" = '${escapedRole}'`;
             index++;
           } else if (key == 'searchtext') {
             // searchtext will be processed separately after the filters loop

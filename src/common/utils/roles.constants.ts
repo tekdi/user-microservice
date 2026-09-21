@@ -16,3 +16,13 @@
 export const OBSERVER_ROLE_CODE = (
   process.env.OBSERVER_ROLE_CODE ?? 'observer'
 ).toLowerCase();
+
+/**
+ * Students are the only role the user list screens and their CSV exports are
+ * meant to show, so `POST user/v1/list` falls back to this code when a request
+ * carries no `filters.role` of its own. Matched on `Roles.code`, like the other
+ * constants here, so a per-tenant or renamed "Student" row still resolves.
+ */
+export const STUDENT_ROLE_CODE = (
+  process.env.STUDENT_ROLE_CODE ?? 'student'
+).toLowerCase();
