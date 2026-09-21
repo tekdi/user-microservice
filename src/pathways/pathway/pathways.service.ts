@@ -27,6 +27,7 @@ import { ConfigService } from '@nestjs/config';
 import { CacheService } from 'src/cache/cache.service';
 import { CourseCompletionWebhookDto } from './dto/course-completion-webhook.dto';
 import { NotificationRequest } from '../../common/utils/notification.axios';
+import { getReportCountryScope } from '@utils/report-country-scope';
 
 const PATHWAY_SUBTYPE_PROGRAM_NAMES: Record<string, string> = {
   CAL: 'Campus Leader Training!',
@@ -1945,7 +1946,8 @@ export class PathwaysService {
    */
   async listPathwayUsers(
     dto: ListPathwayUsersDto,
-    response: Response
+    response: Response,
+    adminUserId?: string
   ): Promise<Response> {
     const apiId = APIID.PATHWAY_USER_LIST;
     try {
@@ -1983,11 +1985,49 @@ export class PathwaysService {
         );
       }
 
+      // Aspire Leaders country rule: the caller's own scope (Regional Admin)
+      // intersected with their optional Country dropdown. Resolved before the
+      // query so an empty intersection short-circuits to an empty page instead
+      // of an `IN ()`.
+      const countryScope = await getReportCountryScope(
+        this.dataSource,
+        adminUserId,
+        filters?.countries
+      );
+      if (countryScope.blocked) {
+        return APIResponse.success(
+          response,
+          apiId,
+          { count: 0, limit: limit ?? 10, offset: offset ?? 0, items: [] },
+          HttpStatus.OK,
+          API_RESPONSES.PATHWAY_USER_LIST_SUCCESS
+        );
+      }
+
       const queryBuilder = this.userPathwayHistoryRepository
         .createQueryBuilder('history')
         .innerJoinAndSelect('history.user', 'user')
         .leftJoinAndSelect('history.pathway', 'pathway')
         .where('history.pathway_id IN (:...pathwayIds)', { pathwayIds });
+
+      // Scopes on the user's LIVE profile country, the same column every
+      // report on the platform scopes on except the application report.
+      // Case/whitespace-insensitive because currentCountry is free text with no
+      // FK to `countries`. A user with no currentCountry is excluded - fail
+      // closed, same rule as every other country check.
+      //
+      // Written as the unquoted `user.currentCountry` on purpose: the alias
+      // here is `user`, a RESERVED WORD in Postgres, so it only works quoted.
+      // TypeORM adds those quotes itself, but only for `alias.property` -
+      // pre-quoting the column (user."currentCountry") stops that rewrite from
+      // matching, and the raw reserved word then reaches Postgres as a syntax
+      // error at the dot. Every other clause in this builder does the same.
+      if (countryScope.countries) {
+        queryBuilder.andWhere(
+          'LOWER(TRIM(user.currentCountry)) IN (:...scopedCountries)',
+          { scopedCountries: countryScope.countries }
+        );
+      }
 
       // Apply Filters
       if (filters) {
@@ -2031,6 +2071,7 @@ export class PathwaysService {
         'user.lastName',
         'user.email',
         'user.gender',
+        'user.currentCountry',
         'pathway.id',
         'pathway.name',
         'pathway.type',
@@ -2086,6 +2127,9 @@ export class PathwaysService {
           lastName: item.user?.lastName,
           email: item.user?.email,
           gender: item.user?.gender,
+          // The country this report is scoped by, so an export can print the
+          // exact value it was filtered on rather than resolving it again.
+          currentCountry: item.user?.currentCountry ?? null,
           activatedAt: item.activated_at,
           deactivatedAt: item.deactivated_at ?? null,
           completedAt: item.completed_at ?? null,
