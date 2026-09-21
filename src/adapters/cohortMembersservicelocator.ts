@@ -1,6 +1,7 @@
 import { CohortMembersSearchDto } from 'src/cohortMembers/dto/cohortMembers-search.dto';
 import { CohortMembersDto } from 'src/cohortMembers/dto/cohortMembers.dto';
 import { CohortMembersUpdateDto } from 'src/cohortMembers/dto/cohortMember-update.dto';
+import { CohortMemberMoveDto } from 'src/cohortMembers/dto/cohortMember-move.dto';
 import { CohortMembersReportFilterDto } from 'src/cohortMembers/dto/cohortMembers-report-filter.dto';
 import { Response } from 'express';
 
@@ -74,6 +75,20 @@ export interface IServicelocatorcohortMembers {
     cohortMemberUpdateDto: CohortMembersUpdateDto,
     response: any,
     tenantId?: string
+  );
+
+  /**
+   * Moves one user from one cohort to another within the same academic year:
+   * the source membership becomes inactive and the destination becomes
+   * shortlisted (created if absent), followed by LMS enrollment for the
+   * destination cohort.
+   */
+  moveCohortMember(
+    loginUser: any,
+    moveDto: CohortMemberMoveDto,
+    response: any,
+    tenantId: string,
+    academicyearId: string
   );
 
   /**

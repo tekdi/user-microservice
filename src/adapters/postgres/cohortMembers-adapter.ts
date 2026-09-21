@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { CohortMembersDto } from 'src/cohortMembers/dto/cohortMembers.dto';
+import { CohortMemberMoveDto } from 'src/cohortMembers/dto/cohortMember-move.dto';
 import { CohortMembersSearchDto } from 'src/cohortMembers/dto/cohortMembers-search.dto';
 import {
   CohortMembers,
@@ -25,6 +26,7 @@ import { API_RESPONSES } from '@utils/response.messages';
 import { LoggerUtil } from 'src/common/logger/LoggerUtil';
 import { ShortlistingLogger } from 'src/common/logger/ShortlistingLogger';
 import { PostgresUserService } from './user-adapter';
+import { LmsEnrollmentService } from 'src/common/services/lms-enrollment.service';
 import { isValid } from 'date-fns';
 import { FieldValuesOptionDto } from 'src/user/dto/user-create.dto';
 import { ElasticsearchService } from 'src/elasticsearch/elasticsearch.service';
@@ -54,6 +56,7 @@ export class PostgresCohortMembersService {
     private readonly notificationRequest: NotificationRequest,
     private fieldsService: PostgresFieldsService,
     private readonly userService: PostgresUserService,
+    private readonly lmsEnrollmentService: LmsEnrollmentService,
     private readonly formsService: FormsService,
     private readonly formSubmissionService: FormSubmissionService,
     private readonly userElasticsearchService: UserElasticsearchService
@@ -704,6 +707,290 @@ export class PostgresCohortMembersService {
     return results;
   }
 
+  /**
+   * Moves one user from one cohort to another within the same academic year.
+   *
+   * The source membership is set to `inactive` rather than deleted or archived,
+   * so the row - and the form submission and progress that hang off its
+   * cohortMembershipId - survives the move and the user's history in that
+   * cohort stays readable.
+   *
+   * The destination is always left at `shortlisted`, whether its membership had
+   * to be created or already existed in some other status: a move is an
+   * administrative placement, not an application, so the user does not re-enter
+   * the funnel at `applied`. An existing destination membership is updated in
+   * place rather than duplicated.
+   *
+   * Both writes go in one transaction, because a move that deactivated the
+   * source without landing the destination would strand the user in no cohort
+   * at all. LMS enrollment is deliberately outside it: it is a remote call that
+   * must not hold a database transaction open, and it is re-runnable if it
+   * fails, so its outcome is reported in the response rather than rolling the
+   * move back.
+   *
+   * The user is NOT de-enrolled from the source cohort's courses - leaving a
+   * cohort this way is not a rejection, and course progress there is preserved.
+   */
+  public async moveCohortMember(
+    loginUser: any,
+    moveDto: CohortMemberMoveDto,
+    res: Response,
+    tenantId: string,
+    academicyearId: string
+  ) {
+    const apiId = APIID.COHORT_MEMBER_MOVE;
+    try {
+      const { userId, fromCohortId, toCohortId } = moveDto;
+
+      if (fromCohortId === toCohortId) {
+        return APIResponse.error(
+          res,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          API_RESPONSES.COHORT_MEMBER_MOVE_SAME_COHORT,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      const [existUser, academicYear] = await Promise.all([
+        this.checkUserExist(userId),
+        this.academicyearService.getActiveAcademicYear(
+          academicyearId,
+          tenantId
+        ),
+      ]);
+
+      if (!existUser) {
+        return APIResponse.error(
+          res,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          API_RESPONSES.INVALID_USERID,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      if (!academicYear) {
+        return APIResponse.error(
+          res,
+          apiId,
+          HttpStatus.NOT_FOUND.toLocaleString(),
+          API_RESPONSES.ACADEMICYEAR_NOT_FOUND,
+          HttpStatus.NOT_FOUND
+        );
+      }
+
+      // Both cohorts must be mapped to this academic year - a move across
+      // academic years is a different operation and is not supported here.
+      const [fromCohortYear, toCohortYear] = await Promise.all([
+        this.isCohortExistForYear(academicyearId, fromCohortId),
+        this.isCohortExistForYear(academicyearId, toCohortId),
+      ]);
+
+      if (!fromCohortYear?.length) {
+        return APIResponse.error(
+          res,
+          apiId,
+          HttpStatus.NOT_FOUND.toLocaleString(),
+          API_RESPONSES.COHORTID_NOTFOUND_FOT_THIS_YEAR(fromCohortId),
+          HttpStatus.NOT_FOUND
+        );
+      }
+
+      if (!toCohortYear?.length) {
+        return APIResponse.error(
+          res,
+          apiId,
+          HttpStatus.NOT_FOUND.toLocaleString(),
+          API_RESPONSES.COHORTID_NOTFOUND_FOT_THIS_YEAR(toCohortId),
+          HttpStatus.NOT_FOUND
+        );
+      }
+
+      const fromCohortAcademicYearId = fromCohortYear[0].cohortAcademicYearId;
+      const toCohortAcademicYearId = toCohortYear[0].cohortAcademicYearId;
+
+      const sourceMembership = await this.cohortMembersRepository.findOne({
+        where: {
+          userId,
+          cohortId: fromCohortId,
+          cohortAcademicYearId: fromCohortAcademicYearId,
+        },
+      });
+
+      if (!sourceMembership) {
+        return APIResponse.error(
+          res,
+          apiId,
+          HttpStatus.NOT_FOUND.toLocaleString(),
+          API_RESPONSES.COHORT_MEMBER_MOVE_SOURCE_NOT_FOUND(
+            userId,
+            fromCohortId
+          ),
+          HttpStatus.NOT_FOUND
+        );
+      }
+
+      const existingTarget = await this.cohortMembersRepository.findOne({
+        where: {
+          userId,
+          cohortId: toCohortId,
+          cohortAcademicYearId: toCohortAcademicYearId,
+        },
+      });
+
+      // Both statuses are caller-overridable; the defaults are the move's
+      // normal meaning - vacate the old cohort, place them in the new one.
+      const targetStatus = moveDto.status ?? MemberStatus.SHORTLISTED;
+      const sourceStatus = moveDto.fromStatus ?? MemberStatus.INACTIVE;
+
+      const statusReason =
+        moveDto.statusReason ?? `Moved from cohort ${fromCohortId} to ${toCohortId}`;
+      const previousSourceStatus = sourceMembership.status;
+      const previousTargetStatus = existingTarget?.status ?? null;
+
+      // Resolved before the transaction: this is the same country snapshot
+      // every other insert path takes, and it only matters when the
+      // destination membership has to be created.
+      const userCohortCountryId = existingTarget
+        ? null
+        : (await this.resolveUserCohortCountryIds([userId])).get(userId) ?? null;
+
+      const targetMembership = await this.cohortMembersRepository.manager.transaction(
+        async (manager) => {
+          await manager.update(
+            CohortMembers,
+            { cohortMembershipId: sourceMembership.cohortMembershipId },
+            {
+              status: sourceStatus,
+              statusReason,
+              updatedBy: loginUser,
+              updatedAt: new Date(),
+            }
+          );
+
+          if (existingTarget) {
+            await manager.update(
+              CohortMembers,
+              { cohortMembershipId: existingTarget.cohortMembershipId },
+              {
+                status: targetStatus,
+                statusReason,
+                updatedBy: loginUser,
+                updatedAt: new Date(),
+              }
+            );
+
+            return manager.findOne(CohortMembers, {
+              where: { cohortMembershipId: existingTarget.cohortMembershipId },
+            });
+          }
+
+          return manager.save(CohortMembers, {
+            userId,
+            cohortId: toCohortId,
+            cohortAcademicYearId: toCohortAcademicYearId,
+            status: targetStatus,
+            statusReason,
+            userCohortCountryId,
+            createdBy: loginUser,
+            updatedBy: loginUser,
+          });
+        }
+      );
+
+      // Outside the transaction on purpose - see the method doc. Gated on the
+      // destination status rather than run unconditionally: everywhere else in
+      // this service enrollment is a consequence of reaching `shortlisted`, and
+      // a move that places someone as `applied` or `inactive` should not hand
+      // them the cohort's courses.
+      let lmsEnrollment: { attempted: boolean; success: boolean; error?: string } = {
+        attempted: false,
+        success: false,
+      };
+      if (targetStatus === MemberStatus.SHORTLISTED) {
+        lmsEnrollment = { attempted: true, success: true };
+        try {
+          await this.enrollShortlistedUserToLMSCourses(userId, toCohortId);
+        } catch (error) {
+          lmsEnrollment = {
+            attempted: true,
+            success: false,
+            error: error.message,
+          };
+          ShortlistingLogger.logShortlistingError(
+            `Failed to enroll user ${userId} to LMS courses for cohort ${toCohortId} during move`,
+            error.message,
+            'LMSEnrollment'
+          );
+        }
+      }
+
+      if (isElasticsearchEnabled()) {
+        try {
+          await Promise.all([
+            this.updateElasticsearchWithFieldSpecificChanges(
+              userId,
+              fromCohortId,
+              { cohortmemberstatus: sourceStatus, statusReason },
+              null
+            ),
+            this.updateElasticsearchWithFieldSpecificChanges(
+              userId,
+              toCohortId,
+              { cohortmemberstatus: targetStatus, statusReason },
+              null
+            ),
+          ]);
+        } catch (error) {
+          LoggerUtil.error(
+            `${API_RESPONSES.SERVER_ERROR}`,
+            `Elasticsearch update failed after moving user ${userId}: ${error.message}`,
+            apiId
+          );
+        }
+      }
+
+      return APIResponse.success(
+        res,
+        apiId,
+        {
+          userId,
+          from: {
+            cohortId: fromCohortId,
+            cohortMembershipId: sourceMembership.cohortMembershipId,
+            previousStatus: previousSourceStatus,
+            status: sourceStatus,
+          },
+          to: {
+            cohortId: toCohortId,
+            cohortMembershipId: targetMembership?.cohortMembershipId,
+            previousStatus: previousTargetStatus,
+            status: targetStatus,
+            created: !existingTarget,
+          },
+          statusReason,
+          lmsEnrollment,
+        },
+        HttpStatus.OK,
+        API_RESPONSES.COHORT_MEMBER_MOVED_SUCCESSFULLY
+      );
+    } catch (e) {
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${e.message}`,
+        apiId
+      );
+      return APIResponse.error(
+        res,
+        apiId,
+        API_RESPONSES.INTERNAL_SERVER_ERROR,
+        e.message || API_RESPONSES.INTERNAL_SERVER_ERROR,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
   public async createCohortMembers(
     loginUser: any,
     cohortMembers: CohortMembersDto,
@@ -951,7 +1238,22 @@ export class PostgresCohortMembersService {
       const processCondition = ([key, value]) => {
         switch (key) {
           case 'role': {
-            // FIXED: Use parameterized query to prevent SQL injection
+            // searchCohortMembers() wraps every non-date filter value in an
+            // array before it gets here, so a single "role": "Observer" arrives
+            // as ['Observer']. Pushed as-is it was serialised to the Postgres
+            // array literal '{Observer}' and compared against a text column,
+            // which never matched - handled like every other multi-value
+            // filter below instead.
+            if (Array.isArray(value)) {
+              if (this.isEmptyInFilterArray(value)) {
+                return null;
+              }
+              const placeholders = value
+                .map(() => `$${paramIndex++}`)
+                .join(', ');
+              queryParams.push(...value);
+              return `R."name" IN (${placeholders})`;
+            }
             queryParams.push(value);
             return `R."name"=$${paramIndex++}`;
           }
@@ -1282,9 +1584,22 @@ export class PostgresCohortMembersService {
 
       const processCondition = ([key, value]) => {
         switch (key) {
-          case 'role':
+          case 'role': {
+            // Same array-wrapped value as in getUsers() - see the note there.
+            // Same array-wrapped value as in getUsers() - see the note there.
+            if (Array.isArray(value)) {
+              if (this.isEmptyInFilterArray(value)) {
+                return null;
+              }
+              const placeholders = value
+                .map(() => `$${parameterIndex++}`)
+                .join(', ');
+              parameters.push(...value);
+              return `R."name" IN (${placeholders})`;
+            }
             parameters.push(value);
             return `R."name"=$${parameterIndex++}`;
+          }
           case 'status': {
             if (Array.isArray(value) && this.isEmptyInFilterArray(value)) {
               return null;
@@ -3210,9 +3525,15 @@ export class PostgresCohortMembersService {
     }
     parameters.push(names);
     return {
-      condition: `LOWER(TRIM(
-              (SELECT c.name FROM countries c WHERE c.id = CM.user_cohort_country_id)
-            )) = ANY($${parameterIndex}::text[])`,
+      // Uncorrelated countries lookup - see the matching comment on
+      // buildAnyApplicationCountryCondition() in user-adapter. Resolving the
+      // names to ids once lets this become an indexable uuid comparison
+      // instead of one scalar subquery per candidate CohortMembers row.
+      // NULL-handling is unchanged: an unresolved snapshot matches nothing.
+      condition: `CM.user_cohort_country_id IN (
+              SELECT c.id FROM countries c
+              WHERE LOWER(TRIM(c.name)) = ANY($${parameterIndex}::text[])
+            )`,
       nextIndex: parameterIndex + 1,
     };
   }
@@ -6328,239 +6649,20 @@ export class PostgresCohortMembersService {
   }
 
   /**
-   * Enrolls a shortlisted user to LMS courses for their cohort
-   * Fetches all published courses for the cohort and enrolls the user
+   * Enrolls a shortlisted user to LMS courses for their cohort.
    *
-   * @param userId - The user ID to enroll
-   * @param cohortId - The cohort ID to get courses for
-   * @returns Promise that resolves when enrollment is complete
+   * Thin delegate: the implementation moved to LmsEnrollmentService so that
+   * PostgresUserService can enroll too - see that class for why it lives
+   * outside both adapters.
    */
   private async enrollShortlistedUserToLMSCourses(
     userId: string,
     cohortId: string
   ) {
-    try {
-      const startTime = Date.now();
-
-      // Log enrollment start
-      ShortlistingLogger.logLMSEnrollmentStart({
-        dateTime: new Date().toISOString(),
-        userId: userId,
-        cohortId: cohortId,
-      });
-
-      // Step 1: Fetch courses for the cohort
-      const courses = await this.fetchLMSCoursesForCohort(cohortId);
-
-      if (!courses || courses.length === 0) {
-        ShortlistingLogger.logShortlisting(
-          `No courses found for cohort ${cohortId}. Skipping LMS enrollment for user ${userId}`,
-          'LMSEnrollment'
-        );
-        return;
-      }
-      // Update enrollment start log with course count
-      ShortlistingLogger.logLMSEnrollmentStart({
-        dateTime: new Date().toISOString(),
-        userId: userId,
-        cohortId: cohortId,
-        courseCount: courses.length,
-      });
-
-      // Step 2: Enroll user to all courses
-      const enrollmentResults = await this.enrollUserToCourses(
-        userId,
-        courses,
-        cohortId
-      );
-
-      // Log enrollment completion
-      const processingTime = Date.now() - startTime;
-      const successCount = enrollmentResults.filter(
-        (r) => r.status === 'success'
-      ).length;
-      const failureCount = enrollmentResults.filter(
-        (r) => r.status === 'failed'
-      ).length;
-
-      ShortlistingLogger.logLMSEnrollmentCompletion({
-        dateTime: new Date().toISOString(),
-        userId: userId,
-        cohortId: cohortId,
-        totalCourses: courses.length,
-        successfulEnrollments: successCount,
-        failedEnrollments: failureCount,
-        processingTime: processingTime,
-      });
-    } catch (error) {
-      ShortlistingLogger.logShortlistingError(
-        `Failed to enroll user ${userId} to LMS courses for cohort ${cohortId}`,
-        error.message,
-        'LMSEnrollment'
-      );
-      // Don't throw error to avoid breaking the shortlisting flow
-    }
-  }
-
-  /**
-   * Fetches LMS courses for a specific cohort
-   * Makes API call to LMS service to get published courses
-   *
-   * @param cohortId - The cohort ID to fetch courses for
-   * @returns Promise with array of courses or empty array if none found
-   */
-  private async fetchLMSCoursesForCohort(cohortId: string) {
-    try {
-      const lmsBaseUrl = process.env.LMS_SERVICE_URL;
-      const tenantId = process.env.DEFAULT_TENANT_ID;
-      const organisationId = process.env.DEFAULT_ORGANISATION_ID;
-
-      if (!lmsBaseUrl || !tenantId || !organisationId) {
-        throw new Error('LMS service configuration missing');
-      }
-
-      const requestUrl = `${lmsBaseUrl}/lms-service/v1/courses/search`;
-      const requestParams = {
-        status: 'published',
-        cohortId: cohortId,
-      };
-      const requestHeaders = {
-        tenantid: tenantId,
-        organisationid: organisationId,
-      };
-
-      // Build the full URL with query parameters for logging
-      const url = new URL(requestUrl);
-      Object.keys(requestParams).forEach((key) => {
-        url.searchParams.append(key, requestParams[key]);
-      });
-      const fullUrl = url.toString();
-
-      const response = await axios.get(requestUrl, {
-        params: requestParams,
-        headers: requestHeaders,
-      });
-
-      // FIXED: Access the correct path for courses data
-      const courses = response.data?.result?.courses || [];
-      return courses;
-    } catch (error) {
-      ShortlistingLogger.logShortlistingError(
-        `Failed to fetch LMS courses for cohort ${cohortId}`,
-        error.message,
-        'LMSEnrollment'
-      );
-
-      return [];
-    }
-  }
-
-  /**
-   * Enrolls a user to multiple courses in bulk
-   * Makes API call to LMS service to create enrollments
-   *
-   * @param userId - The user ID to enroll
-   * @param courses - Array of courses to enroll the user in
-   * @returns Promise with enrollment results
-   */
-  private async enrollUserToCourses(
-    userId: string,
-    courses: any[],
-    cohortId: string
-  ): Promise<
-    Array<{
-      courseId: string;
-      status: 'success' | 'failed';
-      result?: any;
-      error?: any;
-    }>
-  > {
-    const lmsBaseUrl = process.env.LMS_SERVICE_URL;
-    const tenantId = process.env.DEFAULT_TENANT_ID;
-    const organisationId = process.env.DEFAULT_ORGANISATION_ID;
-
-    const courseIds = courses
-      .map((c) => c.courseId || c.id || c.course_id)
-      .filter((id) => !!id);
-
-    try {
-      const requestUrl = `${lmsBaseUrl}/lms-service/v1/enrollments`;
-
-      const requestBody = {
-        courseId: courseIds,
-        learnerId: userId,
-        status: 'published',
-      };
-      const requestHeaders = {
-        tenantid: tenantId,
-        organisationid: organisationId,
-        'Content-Type': 'application/json',
-      };
-
-      const response = await axios.post(requestUrl, requestBody, {
-        headers: requestHeaders,
-        params: {
-          userId: userId, // Add userId as query parameter as required by LMS service
-        },
-      });
-
-      // Log successful enrollment for all courses in bulk
-      ShortlistingLogger.logLMSEnrollmentSuccess({
-        dateTime: new Date().toISOString(),
-        userId: userId,
-        cohortId: cohortId,
-        courseId: courseIds.join(','),
-        enrollmentId: 'bulk', // response.data is an array now
-      });
-
-      // Map to the expected return format extracting individual course results
-      const successfullyEnrolled = response.data?.successfullyEnrolled || [];
-      const alreadyEnrolledCourseIds = response.data?.alreadyEnrolledCourseIds || [];
-      const failedCourseIds = response.data?.failedCourseIds || [];
-
-      return courseIds.map((id) => {
-        if (failedCourseIds.includes(id)) {
-          return {
-            courseId: id,
-            status: 'failed',
-            error: 'LMS API reported failure for this course',
-          };
-        }
-        if (alreadyEnrolledCourseIds.includes(id)) {
-          // Previously, a 409 threw an error and was recorded as 'failed' in the loop
-          return {
-            courseId: id,
-            status: 'failed',
-            error: 'User already enrolled (409 Conflict)',
-          };
-        }
-
-        const successMatch = successfullyEnrolled.find(
-          (e: any) => e.courseId === id
-        );
-        return {
-          courseId: id,
-          status: 'success',
-          result: successMatch || { status: 'PUBLISHED' },
-        };
-      });
-    } catch (error) {
-      // Log failed enrollment
-      ShortlistingLogger.logLMSEnrollmentFailure({
-        dateTime: new Date().toISOString(),
-        userId: userId,
-        cohortId: cohortId,
-        courseId: courseIds.join(','),
-        failureReason: error.message,
-        errorCode: error.response?.status?.toString() || 'UNKNOWN',
-      });
-
-      return courseIds.map(id => ({
-        courseId: id,
-        status: 'failed',
-        error: error.message,
-      }));
-    }
+    return this.lmsEnrollmentService.enrollShortlistedUserToLMSCourses(
+      userId,
+      cohortId
+    );
   }
 
   /**
@@ -6586,7 +6688,8 @@ export class PostgresCohortMembersService {
       });
 
       // Step 1: Fetch courses for the cohort
-      const courses = await this.fetchLMSCoursesForCohort(cohortId);
+      const courses =
+        await this.lmsEnrollmentService.fetchLMSCoursesForCohort(cohortId);
 
       if (!courses || courses.length === 0) {
         ShortlistingLogger.logShortlisting(

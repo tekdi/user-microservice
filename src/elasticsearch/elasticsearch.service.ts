@@ -198,6 +198,7 @@ export class ElasticsearchService {
                 formId: app.formId || "",
                 submissionId: app.submissionId || "",
                 cohortmemberstatus: app.cohortmemberstatus || "",
+                applicationCountry: app.applicationCountry ?? null,
                 formstatus: app.formstatus || "",
                 completionPercentage: app.completionPercentage || 0,
                 progress: app.progress || {},

@@ -4,6 +4,7 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
+  Index,
 } from 'typeorm';
 
 export enum MemberStatus {
@@ -17,6 +18,20 @@ export enum MemberStatus {
   REJECTED = 'rejected',
 }
 
+/**
+ * Serves the application-country EXISTS filter built by
+ * buildAnyApplicationCountryCondition() (user-adapter) and
+ * buildApplicationCountryCondition() (cohortMembers-adapter): "userId" seeks
+ * straight to one user's memberships, and carrying user_cohort_country_id in
+ * the index lets the country check be satisfied without touching the heap.
+ *
+ * synchronize is off, so this decorator documents the index only - it must be
+ * created manually against each database:
+ *
+ *   CREATE INDEX CONCURRENTLY idx_cohortmembers_user_country
+ *     ON public."CohortMembers" ("userId", user_cohort_country_id);
+ */
+@Index('idx_cohortmembers_user_country', ['userId', 'userCohortCountryId'])
 @Entity('CohortMembers')
 export class CohortMembers {
   @PrimaryGeneratedColumn('uuid')

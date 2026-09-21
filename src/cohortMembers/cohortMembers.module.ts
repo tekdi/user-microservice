@@ -29,6 +29,7 @@ import { AuthUtils } from '@utils/auth-util';
 import { NotificationRequest } from '@utils/notification.axios';
 import { ConfigModule } from '@nestjs/config';
 import { CacheModule } from 'src/cache/cache.module';
+import { LmsEnrollmentService } from 'src/common/services/lms-enrollment.service';
 
 /**
  * Cohort Members Module
@@ -88,6 +89,7 @@ import { CacheModule } from 'src/cache/cache.module';
   providers: [
     CohortMembersAdapter, // Service locator for database adapters
     PostgresCohortMembersService, // PostgreSQL implementation of cohort member operations
+    LmsEnrollmentService, // Shared LMS enrollment for shortlisted members
     PostgresAcademicYearService, // Academic year service for validation
     CohortMembersCronService, // Automated cron job service for shortlisting evaluation
     PostgresRoleService, // Role service for user role operations
