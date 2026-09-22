@@ -18,6 +18,25 @@ export const OBSERVER_ROLE_CODE = (
 ).toLowerCase();
 
 /**
+ * Auto tags stamped on an observer's Users row at creation time.
+ *
+ * `completed_alumni` is what gates pathway assignment
+ * (PathwaysService.assignPathwayToUser refuses a user without it), so an
+ * observer needs it to be assignable to a pathway at all.
+ *
+ * It also forces a "rejected" result in shortlisting evaluation
+ * (evaluateMemberRules), but that only ever runs over members in `submitted`
+ * status, and observers are placed straight into `shortlisted` - so the two
+ * do not meet. Worth re-checking if observers ever gain a `submitted` state.
+ */
+export const OBSERVER_AUTO_TAGS: string[] = (
+  process.env.OBSERVER_AUTO_TAGS ?? 'completed_alumni'
+)
+  .split(',')
+  .map((tag) => tag.trim())
+  .filter((tag) => tag.length > 0);
+
+/**
  * Students are the only role the user list screens and their CSV exports are
  * meant to show, so `POST user/v1/list` falls back to this code when a request
  * carries no `filters.role` of its own. Matched on `Roles.code`, like the other

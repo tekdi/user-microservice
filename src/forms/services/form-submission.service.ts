@@ -38,6 +38,7 @@ import { CohortMembers } from 'src/cohortMembers/entities/cohort-member.entity';
 import { Cohort } from 'src/cohort/entities/cohort.entity';
 import { FieldValueConverter } from 'src/utils/field-value-converter';
 import { ReferralsService } from 'src/referrals/referrals.service';
+import { STUDENT_ROLE_CODE } from 'src/common/utils/roles.constants';
 
 interface DateRange {
   start: string;
@@ -284,7 +285,11 @@ export class FormSubmissionService {
   public async syncUserToElasticsearch(userId: string): Promise<IUser> {
     const userDoc = await this.buildUserDocumentForElasticsearch(userId);
     if (!userDoc) {
-      throw new BadRequestException(`User with ID ${userId} not found`);
+      // The builder returns null both for a missing user and for a user who is
+      // not a student, since only students are indexed.
+      throw new BadRequestException(
+        `User with ID ${userId} not found, or is not a student and so is not indexed`
+      );
     }
 
     if (!isElasticsearchEnabled()) {
@@ -2142,6 +2147,26 @@ export class FormSubmissionService {
    *
    * Made public so it can be used as an upsert callback from other services (e.g., cohortMembers-adapter).
    */
+  /**
+   * Whether the user holds the student role, matched on `Roles.code` across
+   * every tenant they belong to (a user may be a student in one tenant only).
+   */
+  private async hasStudentRole(userId: string): Promise<boolean> {
+    const rows: { roleCode?: string }[] = await this.formRepository.manager.query(
+      `
+      SELECT DISTINCT R.code AS "roleCode"
+      FROM public."UserRolesMapping" URM
+      INNER JOIN public."Roles" R ON R."roleId" = URM."roleId"
+      WHERE URM."userId" = $1;
+    `,
+      [userId]
+    );
+
+    return (rows ?? []).some(
+      (row) => row.roleCode?.trim().toLowerCase() === STUDENT_ROLE_CODE
+    );
+  }
+
   public async buildUserDocumentForElasticsearch(
     userId: string
   ): Promise<IUser | null> {
@@ -2149,6 +2174,16 @@ export class FormSubmissionService {
     const userRepo = this.formRepository.manager.getRepository('Users');
     const user = await userRepo.findOne({ where: { userId } });
     if (!user) return null;
+
+    // Aspire Leaders: the ES index backs the student-facing list and search
+    // screens, so only students are indexed. Returning null here means every
+    // caller that builds a document from the database - bulk import and
+    // syncUserToElasticsearch alike - skips a non-student without needing its
+    // own check. Documents already in the index are left alone; this only
+    // stops new non-student writes.
+    if (!(await this.hasStudentRole(userId))) {
+      return null;
+    }
     // Fetch profile custom fields (these are not form submission fields)
     let profileCustomFields = await this.fieldsService.getFieldsAndFieldsValues(
       userId
