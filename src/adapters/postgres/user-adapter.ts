@@ -21,6 +21,7 @@ import {
   MemberStatus,
 } from 'src/cohortMembers/entities/cohort-member.entity';
 import {
+  OBSERVER_AUTO_TAGS,
   OBSERVER_ROLE_CODE,
   STUDENT_ROLE_CODE,
 } from '@utils/roles.constants';
@@ -2287,7 +2288,17 @@ export class PostgresUserService implements IServicelocator {
 
       // Add Elasticsearch sync with custom fields
       try {
-        if (isElasticsearchEnabled()) {
+        // Aspire Leaders: the ES index backs the student-facing list and search
+        // screens, so only students are indexed. A non-student is skipped
+        // silently - creating the user in Keycloak and the database has already
+        // succeeded, and their absence from the index is the intended state,
+        // not an error. The role lookup is short-circuited away entirely when
+        // Elasticsearch is switched off.
+        const indexInElasticsearch =
+          isElasticsearchEnabled() &&
+          (await this.getRoleCodes(result.userId)).has(STUDENT_ROLE_CODE);
+
+        if (indexInElasticsearch) {
           // Get custom fields from the processed result (these may only have fieldId and value)
           const customFields = result['customFields'] ?? [];
 
@@ -2413,6 +2424,17 @@ export class PostgresUserService implements IServicelocator {
 
     if (userDto?.dob) {
       user.dob = new Date(userDto.dob);
+    }
+
+    // Observers carry their auto tags from the moment they exist - stamped
+    // before the insert rather than updated afterwards, so there is no window
+    // where an observer row is missing them. Merged into whatever the caller
+    // supplied instead of overwriting, and de-duplicated, so re-sending a tag
+    // the caller already set is harmless.
+    if (await this.isObserverCreate(userDto)) {
+      user.auto_tags = Array.from(
+        new Set([...(user.auto_tags ?? []), ...OBSERVER_AUTO_TAGS])
+      );
     }
 
     const result = await this.usersRepository.save(user);
@@ -2752,6 +2774,21 @@ export class PostgresUserService implements IServicelocator {
     return (await this.isObserverRole(roleId))
       ? MemberStatus.SHORTLISTED
       : null;
+  }
+
+  /**
+   * Whether this create request is creating an observer, i.e. any of its
+   * tenant/role mappings names the observer role.
+   */
+  private async isObserverCreate(userDto: {
+    tenantCohortRoleMapping?: { roleId?: string }[];
+  }): Promise<boolean> {
+    for (const mapping of userDto?.tenantCohortRoleMapping ?? []) {
+      if (await this.isObserverRole(mapping?.roleId)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /**
