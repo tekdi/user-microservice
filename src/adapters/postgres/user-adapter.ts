@@ -218,6 +218,12 @@ export class PostgresUserService implements IServicelocator {
           userData?.status === 'inactive'
             ? 'onRegionalAdminCreated'
             : 'OnForgotPasswordReset';
+      } else if (roleFromBody === 'Observer') {
+        // Observer role uses its own account creation template
+        notificationKey =
+          userData?.status === 'inactive'
+            ? 'OnObserverCreate'
+            : 'OnForgotPasswordReset';
       } else {
         // Use existing logic for any other role or when no role is sent from body
         notificationKey =
