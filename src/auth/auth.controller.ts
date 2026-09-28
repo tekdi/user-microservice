@@ -31,11 +31,16 @@ import { JwtAuthGuard } from "src/common/guards/keycloak.guard";
 import { APIID } from "src/common/utils/api-id.config";
 import { AllExceptionsFilter } from "src/common/filters/exception.filter";
 import { Response } from "express";
+import { PasswordEncryptionService } from "src/common/services/password-encryption.service";
+import APIResponse from "src/common/responses/response";
 
 @ApiTags("Auth")
 @Controller("auth")
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(
+    private authService: AuthService,
+    private passwordEncryptionService: PasswordEncryptionService
+  ) {}
 
   @UseFilters(new AllExceptionsFilter(APIID.LOGIN))
   @Post("/login")
@@ -84,5 +89,24 @@ export class AuthController {
     const { refresh_token: refreshToken } = body;
 
     await this.authService.logout(refreshToken, response);
+  }
+
+  @UseFilters(new AllExceptionsFilter(APIID.AUTH_PUBLIC_KEY))
+  @Get("/public-key")
+  @HttpCode(HttpStatus.OK)
+  @ApiOkResponse({ description: "RSA public key used to encrypt sensitive fields." })
+  public async getPublicKey(@Res() response: Response) {
+    const result = {
+      keyId: this.passwordEncryptionService.getKeyId(),
+      publicKey: this.passwordEncryptionService.getPublicKey(),
+    };
+
+    return APIResponse.success(
+      response,
+      APIID.AUTH_PUBLIC_KEY,
+      result,
+      HttpStatus.OK,
+      "Public key fetched successfully."
+    );
   }
 }
