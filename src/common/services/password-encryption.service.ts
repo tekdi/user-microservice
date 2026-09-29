@@ -70,6 +70,30 @@ export class PasswordEncryptionService {
     return this.loadPublicKey();
   }
 
+  /**
+   * Transition helper: decrypts RSA-OAEP ciphertext when present, otherwise
+   * returns the value untouched so callers keep working with clients that
+   * have not yet switched to encrypting the field client-side.
+   *
+   * A misconfigured/invalid key pair still throws (loadPrivateKey rejects
+   * before any decrypt attempt) — only a decrypt/format failure on the
+   * payload itself is treated as "this wasn't encrypted".
+   */
+  decryptIfEncrypted(value: string): string {
+    if (typeof value !== "string" || value.length === 0) {
+      return value;
+    }
+
+    try {
+      return this.decrypt(value);
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        return value;
+      }
+      throw error;
+    }
+  }
+
   getKeyId(): string {
     return this.configService.get<string>("PASSWORD_ENCRYPTION_KEY_ID") || "v1";
   }

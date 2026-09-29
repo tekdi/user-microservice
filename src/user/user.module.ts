@@ -24,6 +24,7 @@ import { NotificationRequest } from "src/common/utils/notification.axios";
 import { JwtUtil } from "src/common/utils/jwt-token";
 import { JwtModule } from "@nestjs/jwt";
 import { AuthUtils } from "src/common/utils/auth-util";
+import { PasswordEncryptionService } from "src/common/services/password-encryption.service";
 
 @Module({
   imports: [
@@ -48,7 +49,7 @@ import { AuthUtils } from "src/common/utils/auth-util";
     KafkaModule,
   ],
   controllers: [UserController],
-  providers: [UserService, UploadS3Service, AutomaticMemberService, NotificationRequest, JwtUtil, AuthUtils],
+  providers: [UserService, UploadS3Service, AutomaticMemberService, NotificationRequest, JwtUtil, AuthUtils, PasswordEncryptionService],
   exports: [UserService], // Export UserService so it can be used in other modules
 })
 export class UserModule {}
