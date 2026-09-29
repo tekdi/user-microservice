@@ -41,7 +41,6 @@ export class AuthService {
       // /auth/public-key and encrypts client-side) or plaintext during rollout.
       const decryptedPassword =
         this.passwordEncryptionService.decryptIfEncrypted(password);
-        console.log("AuthService login decrypted password:", decryptedPassword); 
       const {
         access_token,
         expires_in,
