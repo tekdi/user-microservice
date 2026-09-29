@@ -1924,11 +1924,9 @@ export class UserService {
       const userSchema = new UserCreateDto(userCreateDto);
       // Accepts either an RSA-OAEP encrypted password (once the client fetches
       // /auth/public-key and encrypts client-side) or plaintext during rollout.
-      console.log('userSchema.password before decryption:', userSchema.password); 
       userSchema.password = this.passwordEncryptionService.decryptIfEncrypted(
         userSchema.password
       );
-console.log('userSchema.password after decryption:', userSchema.password);
       const kcTokenStart = Date.now();
       const keycloakResponse = await getKeycloakAdminToken();
       const token = keycloakResponse.data.access_token;
