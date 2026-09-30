@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { HttpModule } from "@nestjs/axios";
+import { ThrottlerModule } from "@nestjs/throttler";
 import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
 import { JwtStrategy } from "src/common/guards/keycloak.strategy";
@@ -27,6 +28,13 @@ import { RolePermission } from "src/permissionRbac/rolePermissionMapping/entitie
     HttpModule,
     RolePermissionModule,
     UserModule,
+    ThrottlerModule.forRoot([
+      {
+        name: "login",
+        ttl: 60000,
+        limit: 5,
+      },
+    ]),
   ],
   controllers: [AuthController],
   providers: [

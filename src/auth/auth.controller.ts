@@ -21,6 +21,7 @@ import {
   UseGuards,
   UseFilters,
 } from "@nestjs/common";
+import { ThrottlerGuard } from "@nestjs/throttler";
 import {
   AuthDto,
   RefreshTokenRequestBody,
@@ -38,6 +39,7 @@ export class AuthController {
   constructor(private authService: AuthService) {}
 
   @UseFilters(new AllExceptionsFilter(APIID.LOGIN))
+  @UseGuards(ThrottlerGuard)
   @Post("/login")
   @ApiBody({ type: AuthDto })
   @UsePipes(ValidationPipe)
