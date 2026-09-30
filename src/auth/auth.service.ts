@@ -15,6 +15,7 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { User } from "src/user/entities/user-entity";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
+import { PasswordEncryptionService } from "src/common/services/password-encryption.service";
 
 type LoginResponse = {
   access_token: string;
@@ -27,6 +28,7 @@ export class AuthService {
   constructor(
     private readonly userService: UserService,
     private readonly keycloakService: KeycloakService,
+    private readonly passwordEncryptionService: PasswordEncryptionService,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>
   ) { }
@@ -35,13 +37,17 @@ export class AuthService {
     const apiId = APIID.LOGIN;
     const { username, password } = authDto;
     try {
+      // Accepts either an RSA-OAEP encrypted password (once the client fetches
+      // /auth/public-key and encrypts client-side) or plaintext during rollout.
+      const decryptedPassword =
+        this.passwordEncryptionService.decryptIfEncrypted(password);
       const {
         access_token,
         expires_in,
         refresh_token,
         refresh_expires_in,
         token_type,
-      } = await this.keycloakService.login(username, password);
+      } = await this.keycloakService.login(username, decryptedPassword);
 
       const res = {
         access_token,
