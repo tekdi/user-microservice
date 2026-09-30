@@ -109,6 +109,24 @@ class ListPathwayUsersFiltersDto {
   @IsArray()
   @IsString({ each: true })
   countries?: string[];
+
+  /**
+   * Aspire Leaders: role NAME (Roles.name, e.g. "Observer") to list instead of
+   * the default. Omit it and the list shows students only, matched on
+   * Roles.code = STUDENT_ROLE_CODE - the same default POST user/v1/list uses.
+   *
+   * Like `countries`, this MUST stay declared here or ValidationPipe's
+   * whitelist strips it and the caller silently gets students.
+   */
+  @ApiPropertyOptional({
+    description:
+      'Role name to list (e.g. "Observer"). Omit to list students only.',
+    example: 'Observer',
+  })
+  @Expose()
+  @IsOptional()
+  @IsString()
+  role?: string;
 }
 
 class ListPathwayUsersSortDto {
