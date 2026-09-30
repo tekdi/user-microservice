@@ -28,6 +28,7 @@ import { CacheService } from 'src/cache/cache.service';
 import { CourseCompletionWebhookDto } from './dto/course-completion-webhook.dto';
 import { NotificationRequest } from '../../common/utils/notification.axios';
 import { getReportCountryScope } from '@utils/report-country-scope';
+import { STUDENT_ROLE_CODE } from '../../common/utils/roles.constants';
 
 const PATHWAY_SUBTYPE_PROGRAM_NAMES: Record<string, string> = {
   CAL: 'Campus Leader Training!',
@@ -2028,6 +2029,24 @@ export class PathwaysService {
           { scopedCountries: countryScope.countries }
         );
       }
+
+      // Aspire Leaders: like POST user/v1/list, a request that names no role
+      // lists students only. The default is matched on Roles.code (a stable
+      // code), an explicit filters.role on Roles.name (the display name the UI
+      // sends). EXISTS rather than a join so a user holding several roles is
+      // still one row per history entry.
+      const roleFilter = filters?.role?.trim();
+      queryBuilder.andWhere(
+        `EXISTS (
+          SELECT 1 FROM public."UserRolesMapping" urm
+          INNER JOIN public."Roles" r ON r."roleId" = urm."roleId"
+          WHERE urm."userId" = history.user_id
+            AND ${roleFilter ? 'r."name" = :roleName' : 'LOWER(TRIM(r."code")) = :roleCode'}
+        )`,
+        roleFilter
+          ? { roleName: roleFilter }
+          : { roleCode: STUDENT_ROLE_CODE }
+      );
 
       // Apply Filters
       if (filters) {
