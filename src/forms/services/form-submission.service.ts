@@ -38,7 +38,6 @@ import { CohortMembers } from 'src/cohortMembers/entities/cohort-member.entity';
 import { Cohort } from 'src/cohort/entities/cohort.entity';
 import { FieldValueConverter } from 'src/utils/field-value-converter';
 import { ReferralsService } from 'src/referrals/referrals.service';
-import { STUDENT_ROLE_CODE } from 'src/common/utils/roles.constants';
 
 interface DateRange {
   start: string;
@@ -2147,26 +2146,6 @@ export class FormSubmissionService {
    *
    * Made public so it can be used as an upsert callback from other services (e.g., cohortMembers-adapter).
    */
-  /**
-   * Whether the user holds the student role, matched on `Roles.code` across
-   * every tenant they belong to (a user may be a student in one tenant only).
-   */
-  private async hasStudentRole(userId: string): Promise<boolean> {
-    const rows: { roleCode?: string }[] = await this.formRepository.manager.query(
-      `
-      SELECT DISTINCT R.code AS "roleCode"
-      FROM public."UserRolesMapping" URM
-      INNER JOIN public."Roles" R ON R."roleId" = URM."roleId"
-      WHERE URM."userId" = $1;
-    `,
-      [userId]
-    );
-
-    return (rows ?? []).some(
-      (row) => row.roleCode?.trim().toLowerCase() === STUDENT_ROLE_CODE
-    );
-  }
-
   public async buildUserDocumentForElasticsearch(
     userId: string
   ): Promise<IUser | null> {
@@ -2181,7 +2160,7 @@ export class FormSubmissionService {
     // syncUserToElasticsearch alike - skips a non-student without needing its
     // own check. Documents already in the index are left alone; this only
     // stops new non-student writes.
-    if (!(await this.hasStudentRole(userId))) {
+    if (!(await this.userElasticsearchService.isStudent(userId))) {
       return null;
     }
     // Fetch profile custom fields (these are not form submission fields)

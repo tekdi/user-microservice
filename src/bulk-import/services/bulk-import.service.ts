@@ -871,29 +871,6 @@ export class BulkImportService {
     return dto;
   }
 
-  private async updateElasticsearch(user: User, cohortId: string) {
-    const userDoc = {
-      userId: user.userId,
-      profile: {
-        userId: user.userId,
-        username: user.username,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        email: user.email,
-        status: user.status,
-      },
-      applications: [
-        {
-          cohortId: cohortId,
-          status: 'shortlisted',
-          cohortmemberstatus: 'active',
-        },
-      ],
-    };
-
-    await this.elasticsearchService.index('users', user.userId, userDoc);
-  }
-
   /**
    * Core user creation logic for bulk import (no Express response handling)
    */

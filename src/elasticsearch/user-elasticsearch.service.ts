@@ -1,8 +1,11 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { InjectDataSource } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
 import { ElasticsearchService } from './elasticsearch.service';
 import { IUser, IApplication, ICourse } from './interfaces/user.interface';
 import { v4 as uuidv4 } from 'uuid';
 import { isElasticsearchEnabled } from '../common/utils/elasticsearch.util';
+import { STUDENT_ROLE_CODE } from '../common/utils/roles.constants';
 @Injectable()
 export class UserElasticsearchService implements OnModuleInit {
   private readonly indexName = 'users';
@@ -24,7 +27,48 @@ export class UserElasticsearchService implements OnModuleInit {
     }
   `;
 
-  constructor(private readonly elasticsearchService: ElasticsearchService) {}
+  constructor(
+    private readonly elasticsearchService: ElasticsearchService,
+    @InjectDataSource() private readonly dataSource: DataSource
+  ) {}
+
+  /**
+   * Whether the user holds the student role, matched on `Roles.code` across
+   * every tenant they belong to (a user may be a student in one tenant only).
+   *
+   * Aspire Leaders: the ES index backs the student-facing list and search
+   * screens, so only students are indexed. Every write method below checks
+   * this first, so no caller - user create/update, bulk import, cohort
+   * members, form submissions, the upsert fallbacks or the raw ES controller -
+   * can push a non-student into the index.
+   */
+  async isStudent(userId: string): Promise<boolean> {
+    if (!userId) return false;
+    const rows: { roleCode?: string }[] = await this.dataSource.query(
+      `
+      SELECT DISTINCT R.code AS "roleCode"
+      FROM public."UserRolesMapping" URM
+      INNER JOIN public."Roles" R ON R."roleId" = URM."roleId"
+      WHERE URM."userId" = $1;
+    `,
+      [userId]
+    );
+
+    return (rows ?? []).some(
+      (row) => row.roleCode?.trim().toLowerCase() === STUDENT_ROLE_CODE
+    );
+  }
+
+  /**
+   * Returns true (and logs) when the write for this user must be skipped
+   * because they are not a student. Their absence from the index is the
+   * intended state, not an error, so callers get a noop result, not a throw.
+   */
+  private async skipNonStudent(userId: string, op: string): Promise<boolean> {
+    if (await this.isStudent(userId)) return false;
+    this.logger.debug(`${op}: ${userId} is not a student, skipping ES write`);
+    return true;
+  }
 
   async isAvailable(): Promise<boolean> {
     try {
@@ -193,6 +237,9 @@ export class UserElasticsearchService implements OnModuleInit {
   }
 
   async createUser(user: IUser) {
+    if (await this.skipNonStudent(user?.userId, 'createUser')) {
+      return { result: 'noop', skipped: true };
+    }
     try {
       // Handle empty date values
       if (user.profile.dob === '') {
@@ -471,6 +518,9 @@ export class UserElasticsearchService implements OnModuleInit {
     updateData: any,
     fetchUserFromDb?: (userId: string) => Promise<IUser | null>
   ): Promise<any> {
+    if (await this.skipNonStudent(userId, 'updateUser')) {
+      return { result: 'noop', skipped: true };
+    }
     try {
       return await this.elasticsearchService.update(
         this.indexName,
@@ -1106,6 +1156,9 @@ export class UserElasticsearchService implements OnModuleInit {
     application: IApplication,
     fetchUserFromDb?: (userId: string) => Promise<IUser | null>
   ): Promise<void> {
+    if (await this.skipNonStudent(userId, 'updateApplication')) {
+      return;
+    }
     try {
       const exists = await this.exists(userId);
       let existingCohortMemberStatus;
@@ -1286,6 +1339,9 @@ export class UserElasticsearchService implements OnModuleInit {
     courseId: string,
     course: Partial<ICourse>
   ): Promise<any> {
+    if (await this.skipNonStudent(userId, 'updateCourse')) {
+      return { result: 'noop', skipped: true };
+    }
     try {
       const script = {
         source: `
@@ -1332,6 +1388,9 @@ export class UserElasticsearchService implements OnModuleInit {
     pageId: string,
     pageData: { completed: boolean; fields: Record<string, any> }
   ): Promise<any> {
+    if (await this.skipNonStudent(userId, 'updateApplicationPage')) {
+      return { result: 'noop', skipped: true };
+    }
     try {
       // Validate input
       if (!userId || !cohortId || !pageId) {
