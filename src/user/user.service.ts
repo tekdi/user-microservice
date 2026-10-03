@@ -8,6 +8,7 @@ import { tenantRoleMappingDto, UserCreateDto } from "./dto/user-create.dto";
 import jwt_decode from "jwt-decode";
 import {
   getKeycloakAdminToken,
+  invalidateKeycloakAdminToken,
   createUserInKeyCloak,
   updateUserInKeyCloak,
   checkIfUsernameExistsInKeycloak,
@@ -1929,8 +1930,23 @@ export class UserService {
       );
 
       const kcCreateStart = Date.now();
-      const resKeycloak = await createUserInKeyCloak(userSchema, token, validatedRoles[0]?.title)
+      let resKeycloak = await createUserInKeyCloak(userSchema, token, validatedRoles[0]?.title)
 
+      // The cached admin token can be rejected by Keycloak as 401 even though it
+      // looked unexpired to us (e.g. invalidated by a concurrent admin login).
+      // Retry once with a freshly-issued token before giving up.
+      if (typeof resKeycloak !== 'string' && resKeycloak.statusCode === 401) {
+        LoggerUtil.error(
+          `Keycloak admin token rejected (401) for ${userContext.username} — retrying once with a fresh token`,
+          `email: ${userSchema.email || 'No email provided'}`,
+          apiId,
+          userContext.username
+        );
+        invalidateKeycloakAdminToken();
+        const retryKeycloakResponse = await getKeycloakAdminToken();
+        const retryToken = retryKeycloakResponse?.data?.access_token;
+        resKeycloak = await createUserInKeyCloak(userSchema, retryToken, validatedRoles[0]?.title);
+      }
 
       LoggerUtil.log(`[TIMING] createUserInKeyCloak: ${Date.now() - kcCreateStart}ms`, apiId);
 

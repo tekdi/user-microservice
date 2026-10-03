@@ -29,6 +29,10 @@ const TOKEN_BUFFER_SECONDS = 3;
 
 let cachedAdminToken: { response: any; expiresAt: number } | null = null;
 
+function invalidateKeycloakAdminToken() {
+  cachedAdminToken = null;
+}
+
 async function getKeycloakAdminToken() {
   const now = Date.now();
 
@@ -121,6 +125,10 @@ async function createUserInKeyCloak(query, token, role: string) {
   } catch (error) {
     // Handle errors and log relevant details
     if (error.response) {
+      LoggerUtil.error(
+        `Keycloak admin API rejected user creation (status ${error.response.status})`,
+        `body: ${JSON.stringify(error.response.data)}`,
+      );
       return {
         statusCode: error.response.status,
         message: error.response.data.errorMessage || "Error occurred during user creation",
@@ -358,6 +366,7 @@ export {
   getUserGroup,
   getUserRole,
   getKeycloakAdminToken,
+  invalidateKeycloakAdminToken,
   createUserInKeyCloak,
   updateUserInKeyCloak,
   updateUserEnabledStatusInKeycloak,
