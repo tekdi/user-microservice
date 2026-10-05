@@ -18,6 +18,14 @@ export class AuthDto {
   @IsNotEmpty()
   password: string;
 
+  @ApiProperty({
+    type: String,
+    description: "reCAPTCHA token obtained on the client",
+  })
+  @IsString({ message: "captchaToken is required" })
+  @IsNotEmpty({ message: "captchaToken is required" })
+  captchaToken: string;
+
   constructor(partial: AuthDto) {
     Object.assign(this, partial);
   }
