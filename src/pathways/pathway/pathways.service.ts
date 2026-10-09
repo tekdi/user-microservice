@@ -31,9 +31,9 @@ import { getReportCountryScope } from '@utils/report-country-scope';
 import { STUDENT_ROLE_CODE } from '../../common/utils/roles.constants';
 
 const PATHWAY_SUBTYPE_PROGRAM_NAMES: Record<string, string> = {
-  CAL: 'Campus Leader Training!',
-  DL: 'Domain Leader Training!',
-  CL: 'Community Leader Training!',
+  CAL: 'CAL Onboarding Course',
+  DL: 'DL Onboarding Course',
+  CL: 'CL Onboarding Course',
 };
 
 @Injectable()
