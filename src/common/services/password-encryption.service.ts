@@ -45,17 +45,11 @@ export class PasswordEncryptionService {
 
     const privateKey = this.loadPrivateKey();
 
-    let payload: Buffer;
     try {
-      payload = Buffer.from(encryptedValue, "base64");
+      const payload = Buffer.from(encryptedValue, "base64");
       if (payload.length === 0) {
         throw new Error("empty payload");
       }
-    } catch {
-      throw new BadRequestException("Invalid encrypted payload");
-    }
-
-    try {
       const decrypted = crypto.privateDecrypt(
         { key: privateKey, ...RSA_OAEP_OPTIONS },
         payload
