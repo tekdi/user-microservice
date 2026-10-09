@@ -1,4 +1,10 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import {
+  BadRequestException,
+  HttpException,
+  Injectable,
+  Logger,
+  OnModuleInit,
+} from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { ElasticsearchService } from './elasticsearch.service';
@@ -9,6 +15,12 @@ import { STUDENT_ROLE_CODE } from '../common/utils/roles.constants';
 @Injectable()
 export class UserElasticsearchService implements OnModuleInit {
   private readonly indexName = 'users';
+  /**
+   * How long a cursor-mode PIT survives between page requests. Generous
+   * enough for a slow export page (country filtering + XLSX streaming) and
+   * cheap for Elasticsearch, which frees it on the last page anyway.
+   */
+  private static readonly SEARCH_PIT_KEEP_ALIVE = '5m';
   private readonly logger = new Logger(UserElasticsearchService.name);
 
   /**
@@ -596,14 +608,26 @@ export class UserElasticsearchService implements OnModuleInit {
    * - Handles pagination in the service (not controller).
    * - If limit/offset are not provided, returns up to 10,000 records (safe cap).
    * - All formatting and logic are handled here for consistency and reusability.
+   *
+   * Cursor mode (opt-in, for full exports): send `paginate: 'cursor'` instead
+   * of `offset`, then pass back `result.nextCursor` as `cursor` until it is
+   * null. Pages via a point-in-time + `search_after`, so every page costs the
+   * same and there is no `max_result_window` depth limit; the snapshot also
+   * keeps rows from shifting between pages while users are edited. Without
+   * `paginate`/`cursor` the original offset behaviour is unchanged.
    */
   async searchUsers(body: any) {
     const logger = new Logger('UserElasticsearchService');
+    // PIT opened by THIS call; closed here if the call fails before handing
+    // it back as a cursor. A PIT received via `cursor` is left alone on error
+    // so the caller can retry the same page - it expires via keep-alive.
+    let openedPitId: string | undefined;
     try {
       if (!body) {
         throw new Error('Search query is required');
       }
-      const { limit, offset, ...query } = body;
+      const { limit, offset, cursor, paginate, ...query } = body;
+      const cursorMode = paginate === 'cursor' || cursor != null;
 
       // Add validation for limit and offset
       if (
@@ -1073,63 +1097,228 @@ export class UserElasticsearchService implements OnModuleInit {
       }
       const size = limit ? Math.min(Number(limit), 10000) : 100;
       const from = offset ? Math.max(Number(offset), 0) : 0;
+      const sort = query.sort ?? [{ updatedAt: 'desc' }];
+      const _source = {
+        includes: [
+          'userId',
+          'profile.*',
+          'applications.*',
+          'applications.completionPercentage',
+          'courses.*',
+          'createdAt',
+          'updatedAt',
+        ],
+      };
+
+      if (cursorMode) {
+        return await this.searchUsersPage(
+          searchQuery,
+          sort,
+          _source,
+          size,
+          cursor,
+          query,
+          (pitId) => (openedPitId = pitId)
+        );
+      }
 
       const esResult = await this.elasticsearchService.search(
         this.indexName,
         searchQuery,
-        {
-          size,
-          from,
-          sort: query.sort ?? [{ updatedAt: 'desc' }],
-          _source: {
-            includes: [
-              'userId',
-              'profile.*',
-              'applications.*',
-              'applications.completionPercentage',
-              'courses.*',
-              'createdAt',
-              'updatedAt',
-            ],
-          },
-        }
+        { size, from, sort, _source }
       );
       // Format the response as required
-      let hits = esResult.hits || [];
-      // If cohortId filter is present, filter applications array in each user
-      const cohortIdFilter = query.filters?.cohortId ?? query.cohortId;
-      if (cohortIdFilter) {
-        hits = hits.map((hit: any) => {
-          if (hit._source && Array.isArray(hit._source.applications)) {
-            hit._source.applications = hit._source.applications.filter(
-              (app: any) => app.cohortId === cohortIdFilter
-            );
-          }
-          return hit;
-        });
-      }
-      return {
-        id: 'api.ES.Fetch',
-        ver: '1.0',
-        ts: new Date().toISOString(),
-        params: {
-          resmsgid: uuidv4(),
-          status: 'successful',
-          err: null,
-          errmsg: null,
-          successmessage: 'Elasticsearch  Fetch successfully',
-        },
-        responseCode: 200,
-        result: {
-          data: hits,
-          totalCount: esResult.total?.value ?? esResult.total ?? 0,
-        },
-      };
+      return this.buildSearchResponse(
+        this.scopeApplicationsToCohort(esResult.hits || [], query),
+        { totalCount: this.toTotalCount(esResult.total) }
+      );
     } catch (error) {
+      if (openedPitId) {
+        await this.elasticsearchService.closePointInTime(openedPitId);
+      }
+      // Cursor validation errors keep their 400; everything else keeps the
+      // original wrapped-500 behaviour.
+      if (error instanceof HttpException) {
+        throw error;
+      }
       const message = `Failed to search users in Elasticsearch: ${error.message}`;
       logger.error(message, error.stack);
       throw new Error(message);
     }
+  }
+
+  /**
+   * One cursor-mode page of searchUsers(): opens a PIT on the first page,
+   * continues with `search_after` on the next ones, and closes the PIT once
+   * the last row has been served (nextCursor: null).
+   *
+   * The cursor also carries the first page's exact total and the rows served
+   * so far, so the last page is detected without an extra empty round-trip
+   * and the total is counted only once instead of on every page.
+   */
+  private async searchUsersPage(
+    searchQuery: Record<string, any>,
+    sort: any[],
+    _source: Record<string, any>,
+    size: number,
+    cursor: string | undefined,
+    query: any,
+    onPitOpened: (pitId: string) => void
+  ) {
+    const state = cursor != null ? this.decodeSearchCursor(cursor) : null;
+    const isFirstPage = state === null;
+
+    let pitId = state?.pitId;
+    if (isFirstPage) {
+      pitId = await this.elasticsearchService.openPointInTime(
+        this.indexName,
+        UserElasticsearchService.SEARCH_PIT_KEEP_ALIVE
+      );
+      onPitOpened(pitId);
+    }
+
+    // `search_after` needs a unique, total ordering: add `userId` (keyword,
+    // one doc per user) as the tie-breaker unless the caller already sorts
+    // on it.
+    const hasUserIdSort = sort.some(
+      (s: any) => s === 'userId' || (s && typeof s === 'object' && 'userId' in s)
+    );
+    const cursorSort = hasUserIdSort ? sort : [...sort, { userId: 'asc' }];
+
+    const esResult = await this.elasticsearchService.search(
+      this.indexName,
+      searchQuery,
+      {
+        size,
+        sort: cursorSort,
+        _source,
+        pit: {
+          id: pitId,
+          keep_alive: UserElasticsearchService.SEARCH_PIT_KEEP_ALIVE,
+        },
+        ...(isFirstPage ? {} : { search_after: state.searchAfter }),
+        // The total is fixed by the PIT snapshot: count it once.
+        track_total_hits: isFirstPage,
+      }
+    );
+
+    const hits = esResult.hits || [];
+    const totalCount = isFirstPage
+      ? this.toTotalCount(esResult.total)
+      : state.total;
+    const served = (state?.served ?? 0) + hits.length;
+    // Elasticsearch may hand back a refreshed PIT id; always continue with it.
+    const nextPitId = esResult.pitId ?? pitId;
+
+    const isLastPage =
+      hits.length < size || served >= totalCount || !esResult.lastSort;
+
+    let nextCursor: string | null = null;
+    if (isLastPage) {
+      await this.elasticsearchService.closePointInTime(nextPitId);
+    } else {
+      nextCursor = this.encodeSearchCursor({
+        pitId: nextPitId,
+        searchAfter: esResult.lastSort,
+        total: totalCount,
+        served,
+      });
+    }
+
+    return this.buildSearchResponse(this.scopeApplicationsToCohort(hits, query), {
+      totalCount,
+      nextCursor,
+    });
+  }
+
+  private encodeSearchCursor(state: {
+    pitId: string;
+    searchAfter: any[];
+    total: number;
+    served: number;
+  }): string {
+    return Buffer.from(
+      JSON.stringify({
+        p: state.pitId,
+        s: state.searchAfter,
+        t: state.total,
+        n: state.served,
+      })
+    ).toString('base64url');
+  }
+
+  private decodeSearchCursor(cursor: unknown): {
+    pitId: string;
+    searchAfter: any[];
+    total: number;
+    served: number;
+  } {
+    try {
+      if (typeof cursor !== 'string' || cursor.length === 0) {
+        throw new Error('cursor must be a non-empty string');
+      }
+      const raw = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
+      if (
+        typeof raw?.p !== 'string' ||
+        !Array.isArray(raw?.s) ||
+        raw.s.length === 0 ||
+        !Number.isInteger(raw?.t) ||
+        !Number.isInteger(raw?.n) ||
+        raw.t < 0 ||
+        raw.n < 0
+      ) {
+        throw new Error('malformed cursor');
+      }
+      return { pitId: raw.p, searchAfter: raw.s, total: raw.t, served: raw.n };
+    } catch {
+      throw new BadRequestException('Invalid or expired search cursor');
+    }
+  }
+
+  /** ES `hits.total` is `{ value }` (or a bare number on older shapes). */
+  private toTotalCount(
+    total: number | { value: number } | undefined
+  ): number {
+    return typeof total === 'number' ? total : total?.value ?? 0;
+  }
+
+  /** Keep only the filtered cohort's application on each user, if filtered. */
+  private scopeApplicationsToCohort(hits: any[], query: any): any[] {
+    const cohortIdFilter = query.filters?.cohortId ?? query.cohortId;
+    if (!cohortIdFilter) {
+      return hits;
+    }
+    return hits.map((hit: any) => {
+      if (hit._source && Array.isArray(hit._source.applications)) {
+        hit._source.applications = hit._source.applications.filter(
+          (app: any) => app.cohortId === cohortIdFilter
+        );
+      }
+      return hit;
+    });
+  }
+
+  private buildSearchResponse(
+    data: any[],
+    extra: { totalCount: number; nextCursor?: string | null }
+  ) {
+    return {
+      id: 'api.ES.Fetch',
+      ver: '1.0',
+      ts: new Date().toISOString(),
+      params: {
+        resmsgid: uuidv4(),
+        status: 'successful',
+        err: null,
+        errmsg: null,
+        successmessage: 'Elasticsearch  Fetch successfully',
+      },
+      responseCode: 200,
+      result: {
+        data,
+        ...extra,
+      },
+    };
   }
 
   private async exists(userId: string): Promise<boolean> {
