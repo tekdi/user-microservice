@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { IsString, IsNotEmpty } from "class-validator";
+import { IsString, IsNotEmpty, IsOptional } from "class-validator";
 
 export class AuthDto {
   @ApiProperty({
@@ -18,13 +18,14 @@ export class AuthDto {
   @IsNotEmpty()
   password: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     type: String,
-    description: "reCAPTCHA token obtained on the client",
+    description:
+      "reCAPTCHA token obtained on the client. Required unless CAPTCHA_ENABLED=false on the server.",
   })
-  @IsString({ message: "captchaToken is required" })
-  @IsNotEmpty({ message: "captchaToken is required" })
-  captchaToken: string;
+  @IsOptional()
+  @IsString({ message: "captchaToken must be a string" })
+  captchaToken?: string;
 
   constructor(partial: AuthDto) {
     Object.assign(this, partial);
