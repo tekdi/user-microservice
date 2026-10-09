@@ -15,6 +15,8 @@ import { KeycloakService } from "src/common/utils/keycloak.service";
 import { RolePermissionModule } from "src/permissionRbac/rolePermissionMapping/role-permission.module";
 import { RolePermissionService } from "src/permissionRbac/rolePermissionMapping/role-permission-mapping.service";
 import { RolePermission } from "src/permissionRbac/rolePermissionMapping/entities/rolePermissionMapping";
+import { PasswordEncryptionService } from "src/common/services/password-encryption.service";
+import { CaptchaService } from "src/common/services/captcha.service";
 
 @Module({
   imports: [
@@ -43,6 +45,9 @@ import { RolePermission } from "src/permissionRbac/rolePermissionMapping/entitie
     RbacJwtStrategy,
     KeycloakService,
     RolePermissionService,
+    PasswordEncryptionService,
+    CaptchaService,
   ],
+  exports: [PasswordEncryptionService],
 })
 export class AuthModule {}
