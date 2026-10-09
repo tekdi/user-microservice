@@ -13,12 +13,14 @@ interface SearchResponse {
       _score: number;
       _ignored?: string[];
       _source: IUser;
+      sort?: any[];
     }>;
     total: {
       value: number;
       relation: string;
     };
   };
+  pit_id?: string;
 }
 
 @Injectable()
@@ -143,23 +145,59 @@ export class ElasticsearchService {
     }
   }
 
+  /**
+   * Open a point-in-time (PIT) snapshot of an index for deep, consistent
+   * paging with `search_after`. Read-only; Elasticsearch drops it on
+   * closePointInTime() or once `keepAlive` passes without a search using it.
+   */
+  async openPointInTime(index: string, keepAlive: string): Promise<string> {
+    const response = await this.client.openPointInTime({
+      index,
+      keep_alive: keepAlive,
+    });
+    return response.id;
+  }
+
+  /**
+   * Release a PIT early. Best-effort: an already expired/closed PIT is not an
+   * error worth failing a request for, since it would expire anyway.
+   */
+  async closePointInTime(id: string): Promise<void> {
+    try {
+      await this.client.closePointInTime({ id });
+    } catch (error) {
+      this.logger.warn(`Failed to close point-in-time: ${error?.message}`);
+    }
+  }
+
   async search(
     index: string,
     query: Record<string, any>,
     options: Record<string, any> = {}
   ) {
     try {
+      // A PIT search carries its own index; Elasticsearch rejects `index`
+      // alongside `pit`. `track_total_hits` defaults to true but may be
+      // overridden by the caller (e.g. off for follow-up cursor pages).
       const response = (await this.client.search({
-        index,
+        ...(options.pit ? {} : { index }),
+        track_total_hits: true,
         ...options,
         query,
-        track_total_hits: true,
       })) as SearchResponse;
 
-      if (!response.hits?.hits || response.hits.hits.length === 0) {
+      const rawHits = response.hits?.hits ?? [];
+      // Sort values of the last hit - the `search_after` key for the next page.
+      const lastSort = rawHits.length
+        ? rawHits[rawHits.length - 1].sort
+        : undefined;
+
+      if (rawHits.length === 0) {
         return {
           hits: [],
-          total: response.hits.total || { value: 0, relation: "eq" },
+          total: response.hits?.total || { value: 0, relation: "eq" },
+          lastSort,
+          pitId: response.pit_id,
         };
       }
 
@@ -216,6 +254,8 @@ export class ElasticsearchService {
       return {
         hits: transformedHits,
         total: response.hits.total,
+        lastSort,
+        pitId: response.pit_id,
       };
     } catch (error) {
       this.logger.error(`Failed to search in ${index}:`, error);
