@@ -136,6 +136,13 @@ export const API_RESPONSES = {
   USER_CREATE_SUCCESSFULLY: `User created successfully`,
   USER_CREATE_IN_DB: "User created in user table successfully",
   USER_CREATE_FAILED: "User creation failed",
+  USER_CREATE_ROLE_REQUIRED:
+    "tenantCohortRoleMapping with a valid tenantId and roleId is required.",
+  USER_CREATE_ROLE_NOT_FOUND: "One or more roles do not exist for the given tenant.",
+  USER_CREATE_ADMIN_ROLE_FORBIDDEN:
+    "This API does not have privilege to create admin roles. Only student role is allowed.",
+  USER_ADMIN_CREATE_STUDENT_ROLE_FORBIDDEN:
+    "This API can only create admin roles. Student role creation is not allowed.",
   USER_CREATE_FAILED_WITH_ERROR: (error) =>
     `User creation failed with error: ${error}`,
   USER_CREATE_FAILED_WITH_ERROR_AND_EMAIL: (error, email) =>
