@@ -47,6 +47,7 @@ export const APIID = {
   LOGOUT: "api.logout",
   REFRESH: "api.refresh",
   USER_AUTH: "api.user.auth",
+  AUTH_PUBLIC_KEY: "api.auth.publicKey",
   RBAC_TOKEN: "api.rbac.token",
   ACADEMICYEAR_CREATE: "api.academicyear.create",
   ACADEMICYEAR_LIST: "api.academicyear.list",

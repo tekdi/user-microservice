@@ -2196,7 +2196,11 @@ export class FieldsService {
         fv."value", 
         f."type", 
         f."fieldParams",
-        f."sourceDetails"
+        f."sourceDetails",
+        fv."createdAt",
+        fv."updatedAt",
+        fv."createdBy",
+        fv."updatedBy"
       FROM public."${tableName}" u
       LEFT JOIN (
         SELECT DISTINCT ON (fv."fieldId", fv."itemId") fv.*
@@ -2288,6 +2292,10 @@ export class FieldsService {
             label: data.label,
             type: data.type,
             selectedValues: processedValue,
+            createdAt: data.createdAt,
+            updatedAt: data.updatedAt,
+            createdBy: data.createdBy,
+            updatedBy: data.updatedBy,
           };
         })
       );
@@ -2310,6 +2318,10 @@ export class FieldsService {
           label: field.label,
           selectedValues: field.selectedValues,
           type: field.type,
+          createdAt: field.createdAt,
+          updatedAt: field.updatedAt,
+          createdBy: field.createdBy,
+          updatedBy: field.updatedBy,
         });
       });
 

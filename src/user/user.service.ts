@@ -1,4 +1,4 @@
-import { HttpStatus, Injectable } from "@nestjs/common";
+import { BadRequestException, HttpStatus, Injectable } from "@nestjs/common";
 import { AuditLoggerService } from "@tekdi/audit-logger/nestjs";
 import { User } from "./entities/user-entity";
 import { FieldValues } from "src/fields/entities/fields-values.entity";
@@ -59,6 +59,8 @@ import { randomInt } from 'crypto';
 type UUID = string;
 import { AutomaticMemberService } from "src/automatic-member/automatic-member.service";
 import { KafkaService } from "src/kafka/kafka.service";
+import { PasswordEncryptionService } from "src/common/services/password-encryption.service";
+import { CaptchaService } from "src/common/services/captcha.service";
 
 interface UpdateField {
   userId: string; // Required
@@ -105,6 +107,7 @@ export class UserService {
     private readonly roleService: RoleService,
     private readonly notificationRequest: NotificationRequest,
     private readonly jwtUtil: JwtUtil,
+    private readonly captchaService: CaptchaService,
     private configService: ConfigService,
     private academicYearService: AcademicYearService,
     private readonly cohortAcademicYearService: CohortAcademicYearService,
@@ -113,6 +116,7 @@ export class UserService {
     private readonly kafkaService: KafkaService,
     private readonly cacheService: CacheService,
     private readonly auditLoggerService: AuditLoggerService,
+    private readonly passwordEncryptionService: PasswordEncryptionService,
     dataSource: DataSource
   ) {
     this.jwt_secret = this.configService.get<string>("RBAC_JWT_SECRET");
@@ -1036,6 +1040,10 @@ export class UserService {
         label: data?.label,
         selectedValues: data?.selectedValues,
         type: data?.type,
+        createdAt: data?.createdAt,
+        updatedAt: data?.updatedAt, 
+        createdBy: data?.createdBy,
+        updatedBy: data?.updatedBy,
       }));
       result.getUserDetails.push(userData);
     }
@@ -1917,7 +1925,11 @@ export class UserService {
       }
 
       const userSchema = new UserCreateDto(userCreateDto);
-
+      // Accepts either an RSA-OAEP encrypted password (once the client fetches
+      // /auth/public-key and encrypts client-side) or plaintext during rollout.
+      userSchema.password = this.passwordEncryptionService.decryptIfEncrypted(
+        userSchema.password
+      );
       const kcTokenStart = Date.now();
       const keycloakResponse = await getKeycloakAdminToken();
       const token = keycloakResponse.data.access_token;
@@ -2802,10 +2814,15 @@ export class UserService {
     userId: string
   ) {
     const request = requestContext.getStore() as any;
+    // Accepts either an RSA-OAEP encrypted password (once the client fetches
+    // /auth/public-key and encrypts client-side) or plaintext during rollout.
+    // Shared by both the Forgot Password and Reset Password flows.
+    const decryptedPassword =
+      this.passwordEncryptionService.decryptIfEncrypted(newPassword);
     const data = JSON.stringify({
       temporary: "false",
       type: "password",
-      value: newPassword,
+      value: decryptedPassword,
     });
 
     if (!token) {
@@ -3147,6 +3164,14 @@ export class UserService {
   // send SignUP OTP
   async sendOtp(body: OtpSendDTO, response: Response) {
     const apiId = APIID.SEND_OTP;
+
+    // CAPTCHA must pass before any Keycloak call; kept outside the try so the
+        // 400 is not converted into a 500 by the catch below.
+        const isCaptchaValid = await this.captchaService.verify(body.captchaToken);
+        if (!isCaptchaValid) {
+          throw new BadRequestException("CAPTCHA verification failed");
+        }
+
     try {
       const { mobile, reason } = body;
       if (!mobile || !/^\d{10}$/.test(mobile)) {

@@ -33,12 +33,17 @@ import { NestFactory } from "@nestjs/core";
 import { AppModule } from "./app.module";
 import { SwaggerModule, DocumentBuilder } from "@nestjs/swagger";
 import { RequestMethod, ValidationPipe } from "@nestjs/common";
+import { NestExpressApplication } from "@nestjs/platform-express";
 import { join } from "path";
 import express = require("express");
 import { AllExceptionsFilter } from "./common/filters/exception.filter";
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  // Trust the first proxy hop (ALB/ingress) so req.ip reflects the real
+  // client IP from X-Forwarded-For, not the load balancer's IP — required
+  // for per-IP rate limiting on /auth/login to work correctly.
+  app.set("trust proxy", 1);
   app.use(
     process.env.IMAGEPATH,
     express.static(join(__dirname, "..", "uploads"))

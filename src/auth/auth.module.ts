@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { HttpModule } from "@nestjs/axios";
+import { ThrottlerModule } from "@nestjs/throttler";
 import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
 import { JwtStrategy } from "src/common/guards/keycloak.strategy";
@@ -14,6 +15,8 @@ import { KeycloakService } from "src/common/utils/keycloak.service";
 import { RolePermissionModule } from "src/permissionRbac/rolePermissionMapping/role-permission.module";
 import { RolePermissionService } from "src/permissionRbac/rolePermissionMapping/role-permission-mapping.service";
 import { RolePermission } from "src/permissionRbac/rolePermissionMapping/entities/rolePermissionMapping";
+import { PasswordEncryptionService } from "src/common/services/password-encryption.service";
+import { CaptchaService } from "src/common/services/captcha.service";
 
 @Module({
   imports: [
@@ -27,6 +30,13 @@ import { RolePermission } from "src/permissionRbac/rolePermissionMapping/entitie
     HttpModule,
     RolePermissionModule,
     UserModule,
+    ThrottlerModule.forRoot([
+      {
+        name: "login",
+        ttl: 60000,
+        limit: 5,
+      },
+    ]),
   ],
   controllers: [AuthController],
   providers: [
@@ -35,6 +45,9 @@ import { RolePermission } from "src/permissionRbac/rolePermissionMapping/entitie
     RbacJwtStrategy,
     KeycloakService,
     RolePermissionService,
+    PasswordEncryptionService,
+    CaptchaService,
   ],
+  exports: [PasswordEncryptionService],
 })
 export class AuthModule {}

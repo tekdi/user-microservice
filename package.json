@@ -46,6 +46,7 @@
     "@nestjs/platform-express": "^11.1.9",
     "@nestjs/schedule": "^6.0.1",
     "@nestjs/swagger": "^11.2.3",
+    "@nestjs/throttler": "^6.7.0",
     "@nestjs/typeorm": "^11.0.0",
     "@tekdi/audit-logger": "github:tekdi/audit-logs#product-release1.0.0",
     "@types/multer": "^2.0.0",

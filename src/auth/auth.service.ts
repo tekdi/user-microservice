@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   HttpStatus,
   Injectable,
   NotFoundException,
@@ -15,6 +16,8 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { User } from "src/user/entities/user-entity";
 import { LoggerUtil } from "src/common/logger/LoggerUtil";
+import { PasswordEncryptionService } from "src/common/services/password-encryption.service";
+import { CaptchaService } from "src/common/services/captcha.service";
 
 type LoginResponse = {
   access_token: string;
@@ -27,21 +30,35 @@ export class AuthService {
   constructor(
     private readonly userService: UserService,
     private readonly keycloakService: KeycloakService,
+    private readonly passwordEncryptionService: PasswordEncryptionService,
+    private readonly captchaService: CaptchaService,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>
   ) { }
 
   async login(authDto, response: Response) {
     const apiId = APIID.LOGIN;
-    const { username, password } = authDto;
+    const { username, password, captchaToken } = authDto;
+
+    // CAPTCHA must pass before any Keycloak call; kept outside the try so the
+    // 400 is not converted into a 500 by the catch below.
+    const isCaptchaValid = await this.captchaService.verify(captchaToken);
+    if (!isCaptchaValid) {
+      throw new BadRequestException("CAPTCHA verification failed");
+    }
+
     try {
+      // Accepts either an RSA-OAEP encrypted password (once the client fetches
+      // /auth/public-key and encrypts client-side) or plaintext during rollout.
+      const decryptedPassword =
+        this.passwordEncryptionService.decryptIfEncrypted(password);
       const {
         access_token,
         expires_in,
         refresh_token,
         refresh_expires_in,
         token_type,
-      } = await this.keycloakService.login(username, password);
+      } = await this.keycloakService.login(username, decryptedPassword);
 
       const res = {
         access_token,
