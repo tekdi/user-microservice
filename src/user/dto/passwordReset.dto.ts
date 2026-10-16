@@ -21,6 +21,11 @@ export class ResetUserPasswordDto {
   @ApiProperty()
   @IsString()
   @IsNotEmpty()
+  oldPassword: string;
+
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
   newPassword: string;
 }
 

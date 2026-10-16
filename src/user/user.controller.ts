@@ -280,6 +280,7 @@ export class UserController {
     return await this.userService
       .resetUserPassword(
         reqBody.userName,
+        reqBody.oldPassword,
         reqBody.newPassword,
         response
       );
