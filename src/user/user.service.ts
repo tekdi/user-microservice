@@ -61,6 +61,7 @@ import { AutomaticMemberService } from "src/automatic-member/automatic-member.se
 import { KafkaService } from "src/kafka/kafka.service";
 import { PasswordEncryptionService } from "src/common/services/password-encryption.service";
 import { CaptchaService } from "src/common/services/captcha.service";
+import { KeycloakService } from "src/common/utils/keycloak.service";
 
 interface UpdateField {
   userId: string; // Required
@@ -107,6 +108,7 @@ export class UserService {
     private readonly roleService: RoleService,
     private readonly notificationRequest: NotificationRequest,
     private readonly jwtUtil: JwtUtil,
+    private readonly keycloakService: KeycloakService,
     private readonly captchaService: CaptchaService,
     private configService: ConfigService,
     private academicYearService: AcademicYearService,
@@ -2641,6 +2643,7 @@ export class UserService {
 
   public async resetUserPassword(
     extraField: string,
+    oldPassword: string,
     newPassword: string,
     response: Response
   ) {
@@ -2662,6 +2665,25 @@ export class UserService {
           API_RESPONSES.USERID_NOT_FOUND(userId),
           HttpStatus.NOT_FOUND
         );
+      }
+
+      // Verify the old password against the authenticated user (not the body's userName)
+      const decryptedOldPassword =
+        this.passwordEncryptionService.decryptIfEncrypted(oldPassword);
+      try {
+        await this.keycloakService.login(user.username, decryptedOldPassword);
+      } catch (e) {
+        const status = e?.response?.status;
+        if (status === 400 || status === 401) {
+          return APIResponse.error(
+            response,
+            apiId,
+            API_RESPONSES.UNAUTHORIZED,
+            API_RESPONSES.OLD_PASSWORD_INCORRECT,
+            HttpStatus.UNAUTHORIZED
+          );
+        }
+        throw e;
       }
 
       const keycloakResponse = await getKeycloakAdminToken();

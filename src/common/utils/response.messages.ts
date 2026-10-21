@@ -128,6 +128,7 @@ export const API_RESPONSES = {
   USER_CREATE_FAILED_WITH_ERROR_AND_USERNAME: (error, username) =>
     `User creation failed with error: ${error}. Username: ${username}`,
   USERID_NOT_FOUND: (userId) => `User Id '${userId}' does not exist.`,
+  OLD_PASSWORD_INCORRECT: "Old password is incorrect",
   TENANTID_NOT_FOUND: (tenantId) => `Tenant Id '${tenantId}' does not exist.`,
 
   //UUID constants

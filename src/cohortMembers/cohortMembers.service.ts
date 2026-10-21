@@ -1250,7 +1250,7 @@ let updatedMapping;
                   updatedMapping = {
                 ...existingMapping,
                 ...(cohortMembersDto.cohortMemberRole && { cohortMemberRole: cohortMembersDto.cohortMemberRole }),
-                status:cohortMembersDto.status,
+                status:cohortMembersDto.status ?? MemberStatus.ACTIVE,
                 updatedBy: loginUser,
               };  
               }else {
