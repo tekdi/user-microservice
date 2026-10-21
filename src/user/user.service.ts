@@ -3929,6 +3929,7 @@ export class UserService {
       const nameFilter = filters?.name;
       const statusFilter = filters?.status;
       const enrollmentIdFilter = filters?.enrollmentId;
+      const additionalFieldFilters = this.extractAdditionalFieldFilters(filters);
 
       // Filter out center and batch from customfields request (they belong in cohortData)
       const filteredCustomFields = customfields ? customfields.filter(field =>
@@ -3951,7 +3952,8 @@ export class UserService {
         statusFilter,
         filteredCustomFields,
         academicYearId,
-        enrollmentIdFilter
+        enrollmentIdFilter,
+        additionalFieldFilters
       );
 
       // Return early if no users found
@@ -4176,6 +4178,15 @@ export class UserService {
   } as const;
 
   /**
+   * Independent (non-hierarchical) field filters. Each one is applied as an extra AND condition
+   * on top of the deepest hierarchical filter, keyed by request filter name -> custom field name.
+   */
+  private readonly ADDITIONAL_FIELD_FILTERS = {
+    domain: 'domain',
+    skills: 'skills'
+  } as const;
+
+  /**
    * Ordered hierarchy array for level checking (most specific to least specific)
    */
   private readonly FILTER_HIERARCHY_ORDER = [
@@ -4213,6 +4224,22 @@ export class UserService {
    */
   private getCohortFilterLevels(): string[] {
     return [this.HIERARCHICAL_FILTER_LEVELS.BATCH as string, this.HIERARCHICAL_FILTER_LEVELS.CENTER as string];
+  }
+
+  /**
+   * Collect non-empty values for the independent field filters (domain, skills)
+   */
+  private extractAdditionalFieldFilters(filters: Record<string, any>): { fieldName: string; values: string[] }[] {
+    if (!filters || typeof filters !== 'object') {
+      return [];
+    }
+    return Object.entries(this.ADDITIONAL_FIELD_FILTERS)
+      .map(([filterKey, fieldName]) => ({
+        fieldName: fieldName as string,
+        values: (Array.isArray(filters[filterKey]) ? filters[filterKey] : [])
+          .filter((v: any) => typeof v === 'string' && v.trim().length > 0)
+      }))
+      .filter(f => f.values.length > 0);
   }
 
   /**
@@ -4291,7 +4318,8 @@ export class UserService {
     statusFilter?: string[],
     customFieldNames?: string[],
     academicYearId?: string,
-    enrollmentIdFilter?: string
+    enrollmentIdFilter?: string,
+    additionalFieldFilters: { fieldName: string; values: string[] }[] = []
   ): Promise<{ totalCount: number; users: any[] }> {
     const apiId = APIID.USER_LIST;
 
@@ -4311,7 +4339,8 @@ export class UserService {
         offset,
         academicYearId,
         parentTenantId,
-        enrollmentIdFilter
+        enrollmentIdFilter,
+        additionalFieldFilters
       );
       const result = await this.usersRepository.query(queryBuilder.query, queryBuilder.params);
       const totalCount = result.length > 0 ? parseInt(result[0].total_count) : 0;
@@ -4367,7 +4396,8 @@ export class UserService {
     offset: number = 0,
     academicYearId?: string,
     parentTenantId?: string | null,
-    enrollmentIdFilter?: string
+    enrollmentIdFilter?: string,
+    additionalFieldFilters: { fieldName: string; values: string[] }[] = []
   ): { query: string; params: any[] } {
 
     const conditions: string[] = [];
@@ -4442,6 +4472,23 @@ export class UserService {
         params.push(fieldValueTenantIds);
         paramIndex++;
       }
+    }
+
+    // Independent field filters (domain, skills): one EXISTS per field so they combine with AND
+    for (const { fieldName, values } of additionalFieldFilters) {
+      const fieldValueTenantIds = parentTenantId && parentTenantId !== tenantId
+        ? [tenantId, parentTenantId]
+        : [tenantId];
+      conditions.push(`EXISTS (
+        SELECT 1 FROM "FieldValues" fvx
+        JOIN "Fields" fx ON fvx."fieldId" = fx."fieldId"
+        WHERE fvx."itemId" = u."userId"
+          AND fx."name" = $${paramIndex}
+          AND fvx."value" && $${paramIndex + 1}
+          AND fvx."tenantId"::text = ANY($${paramIndex + 2}::text[])
+      )`);
+      params.push(fieldName, values, fieldValueTenantIds);
+      paramIndex += 3;
     }
 
     // Academic year filter: join CohortMembers (if not already joined) and CohortAcademicYear

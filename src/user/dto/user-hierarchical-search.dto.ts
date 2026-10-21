@@ -237,6 +237,32 @@ class LocationFiltersDto {
 
   @ApiPropertyOptional({
     type: [String],
+    description: "Array of domain values to filter by",
+    example: ["domain1", "domain2"]
+  })
+  @Expose()
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(100, { message: 'Domain filter cannot contain more than 100 entries' })
+  @IsString({ each: true })
+  @IsValidLocationFilter()
+  domain?: string[];
+
+  @ApiPropertyOptional({
+    type: [String],
+    description: "Array of skill values to filter by",
+    example: ["skill1", "skill2"]
+  })
+  @Expose()
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(100, { message: 'Skills filter cannot contain more than 100 entries' })
+  @IsString({ each: true })
+  @IsValidLocationFilter()
+  skills?: string[];
+
+  @ApiPropertyOptional({
+    type: [String],
     description: "Array of Batch/Cohort IDs to filter by",
     example: ["batch-uuid-1", "batch-uuid-2"]
   })
