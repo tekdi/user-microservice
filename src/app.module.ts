@@ -133,7 +133,7 @@ export class AppModule implements OnModuleInit {
       'BulkImportModule',
       'TerminusModule',
       'CacheModule',
-      'PaymentsModule',
+      //'PaymentsModule',
       'PathwaysModule',
       'ContentModule',
       'AspireLeadersSpecificModule',
