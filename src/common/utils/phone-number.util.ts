@@ -10,7 +10,7 @@ import {
 
 // US/CA numbers can never be classified as MOBILE - they always come back as
 // FIXED_LINE_OR_MOBILE, so that type must be accepted too.
-const ALLOWED_MOBILE_TYPES = ['MOBILE', 'FIXED_LINE_OR_MOBILE'];
+const ALLOWED_MOBILE_TYPES = new Set(['MOBILE', 'FIXED_LINE_OR_MOBILE']);
 
 export enum MobileValidationError {
   INVALID_COUNTRY = 'INVALID_COUNTRY',
@@ -59,7 +59,7 @@ export class PhoneNumberUtil {
       return { valid: false, error: MobileValidationError.COUNTRY_MISMATCH };
     }
 
-    if (!ALLOWED_MOBILE_TYPES.includes(parsed.getType())) {
+    if (!ALLOWED_MOBILE_TYPES.has(parsed.getType())) {
       return { valid: false, error: MobileValidationError.NOT_MOBILE };
     }
 
