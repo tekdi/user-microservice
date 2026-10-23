@@ -1,4 +1,4 @@
-FROM node:20 as dependencies
+FROM node:22.23.4-alpine as dependencies
 WORKDIR usr/src/app
 COPY package*.json  ./
 RUN npm install --legacy-peer-deps
