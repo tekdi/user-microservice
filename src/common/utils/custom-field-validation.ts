@@ -9,12 +9,6 @@ export class CustomFieldsValidation {
         }
         break;
 
-      case 'mobile':
-        if (fieldValue.length < 7 || fieldValue.length > 12) {
-          result = false;
-        }
-        break;
-
       case 'date':
         const regex = /^\d{4}-\d{2}-\d{2}$/;
 

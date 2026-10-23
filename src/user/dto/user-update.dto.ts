@@ -8,6 +8,7 @@ import {
   ValidateIf,
   Length,
   IsDate,
+  IsBoolean,
 } from 'class-validator';
 import { Expose, Type } from 'class-transformer';
 import { UserStatus } from '../entities/user-entity';
@@ -99,6 +100,38 @@ class UserDataDTO {
   @IsOptional()
   @IsString()
   email: string | null;
+
+  @ApiProperty({
+    type: () => String,
+    required: false,
+    description:
+      'Mobile number in any format; validated against mobile_country_code and stored as E.164. null clears it.',
+    example: '9876543210',
+  })
+  @IsOptional()
+  @IsString()
+  mobile?: string | null;
+
+  @ApiProperty({
+    type: () => String,
+    required: false,
+    description: 'ISO 3166-1 alpha-2 country of the mobile number',
+    example: 'IN',
+  })
+  @IsOptional()
+  @IsString()
+  mobile_country_code?: string | null;
+
+  @ApiProperty({
+    type: () => Boolean,
+    required: false,
+    description:
+      'Optional opt-in to WhatsApp groups and programme messages on this mobile number',
+    example: true,
+  })
+  @IsOptional()
+  @IsBoolean()
+  mobile_consent?: boolean;
 
   @ApiProperty({ type: () => String })
   @IsOptional()

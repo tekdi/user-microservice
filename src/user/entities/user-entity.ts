@@ -74,8 +74,12 @@ export class User {
   })
   updatedAt: Date;
 
-  @Column({ nullable: true })
-  mobile: number;
+  // E.164, e.g. +919876543210 (validated against mobile_country_code)
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  mobile: string;
+
+  @Column({ type: 'boolean', default: false })
+  mobile_consent: boolean;
 
   @Column('text', { array: true, nullable: true })
   deviceId: string[];
@@ -113,7 +117,8 @@ export class User {
   )
   userTenantMapping: UserTenantMapping[];
 
-  @Column({ nullable: true })
+  // ISO 3166-1 alpha-2 of the mobile number, e.g. IN
+  @Column({ type: 'varchar', length: 5, nullable: true })
   mobile_country_code: string;
 
   @Column({ nullable: true })

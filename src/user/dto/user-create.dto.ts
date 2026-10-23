@@ -11,6 +11,7 @@ import {
   IsOptional,
   Length,
   IsEnum,
+  IsBoolean,
 } from 'class-validator';
 import { User } from '../entities/user-entity';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -135,10 +136,24 @@ export class UserCreateDto {
 
   @ApiPropertyOptional({
     type: String,
-    description: 'The contact number of the user',
+    description:
+      'Mobile number in any format (e.g. "98765 43210"); validated against mobile_country_code and stored as E.164',
+    example: '9876543210',
   })
   @Expose()
+  @IsOptional()
   mobile: string;
+
+  @ApiPropertyOptional({
+    type: Boolean,
+    description:
+      'Optional opt-in to WhatsApp groups and programme messages on this mobile number',
+    example: true,
+  })
+  @Expose()
+  @IsOptional()
+  @IsBoolean()
+  mobile_consent: boolean;
 
   @ApiPropertyOptional({
     type: String,
@@ -250,9 +265,12 @@ export class UserCreateDto {
 
   @ApiPropertyOptional({
     type: String,
-    description: 'The country code',
+    description: 'ISO 3166-1 alpha-2 country of the mobile number',
+    example: 'IN',
   })
   @Expose()
+  @IsOptional()
+  @IsString()
   mobile_country_code: string;
 
   @ApiPropertyOptional({
