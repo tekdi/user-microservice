@@ -55,6 +55,7 @@ export interface IProfile {
   email: string;
   mobile: string;
   mobile_country_code: string;
+  mobile_consent?: boolean;
   referLink?: string;
   gender: string;
   dob: string;

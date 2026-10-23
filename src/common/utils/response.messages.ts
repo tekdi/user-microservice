@@ -211,6 +211,15 @@ export const API_RESPONSES = {
   OTP_INVALID: "OTP invalid",
   OTP_VALID: "OTP validation Sucessfully",
   MOBILE_VALID: "Invalid mobile number. Must be 10 digits.",
+  //Profile mobile number
+  MOBILE_COUNTRY_REQUIRED: "Mobile country code is required",
+  MOBILE_INVALID_COUNTRY: (countryCode) =>
+    `Invalid mobile country code: ${countryCode}`,
+  MOBILE_INVALID_FOR_COUNTRY: (countryCode) =>
+    `Invalid mobile number for selected country (${countryCode})`,
+  MOBILE_COUNTRY_MISMATCH: (countryCode) =>
+    `Mobile number does not belong to selected country (${countryCode})`,
+  MOBILE_NOT_MOBILE: "Number is not a mobile number",
   OTP_VALIDED_REQUIRED_KEY: "Missing required fields",
   INVALID_HASH_FORMATE: "Invalid hash format",
   SMS_ERROR: "SMS notification failed",

@@ -44,4 +44,15 @@ export class ListCountryDto extends PaginationDto {
   @Type(() => Boolean)
   @IsBoolean()
   is_active?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Return only countries that have a phone dial code (for the mobile country dropdown)',
+    example: true,
+  })
+  @Expose()
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  phone_enabled?: boolean;
 }

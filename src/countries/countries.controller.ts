@@ -56,6 +56,10 @@ export class CountriesController {
         summary: 'Search by name',
         value: { name: 'India' },
       },
+      phoneEnabled: {
+        summary: 'Mobile country dropdown (countries with a dial code)',
+        value: { is_active: true, phone_enabled: true, limit: 250 },
+      },
       byStatus: {
         summary: 'Filter by active status',
         value: { is_active: true },
@@ -81,6 +85,8 @@ export class CountriesController {
               id: 'a1b2c3d4-e111-2222-3333-444455556666',
               name: 'India',
               is_active: true,
+              iso_code: 'IN',
+              dial_code: '+91',
               created_at: '2026-03-02T12:00:00.000Z',
             },
           ],
