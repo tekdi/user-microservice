@@ -91,7 +91,7 @@ import { AspireLeadersSpecificModule } from './aspire-leaders-specific/aspire-le
     BulkImportModule,
     TerminusModule,
     CacheModule,
-    PaymentsModule,
+    //PaymentsModule,
     PathwaysModule,
     CountriesModule,
     ContentModule,
