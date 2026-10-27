@@ -114,5 +114,5 @@ export class UserDto {
     description: 'The country code',
   })
   @Expose()
-  mobile_country_code: string;
+  mobileCountryCode: string;
 }

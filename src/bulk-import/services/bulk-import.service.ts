@@ -891,6 +891,10 @@ export class BulkImportService {
     }
     // Always set username to email (in case mapping missed it)
     userCreateDto.username = userCreateDto.email;
+    // Excel numeric cells arrive as numbers (9876543210), not strings
+    if (userCreateDto.mobile !== undefined && userCreateDto.mobile !== null) {
+      userCreateDto.mobile = String(userCreateDto.mobile);
+    }
     // Remove mobile if empty or not provided, to skip validation
     if (!userCreateDto.mobile || userCreateDto.mobile.trim() === '') {
       userCreateDto.mobile = undefined;
@@ -899,6 +903,26 @@ export class BulkImportService {
     // For bulk import, mobile is optional - if not provided, remove it from the DTO to skip validation
     if (!userCreateDto.mobile) {
       delete userCreateDto.mobile;
+    }
+    // Mobile: same country-aware validation as the create API.
+    // CSV gives strings ("yes"/"true"/"1"); Excel can also give a boolean
+    // (TRUE) or a number (1). Anything else - including objects - is false.
+    const rawConsent: unknown = userCreateDto.mobileConsent;
+    if (rawConsent !== undefined) {
+      userCreateDto.mobileConsent =
+        rawConsent === true ||
+        rawConsent === 1 ||
+        (typeof rawConsent === 'string' &&
+          ['true', 'yes', '1'].includes(rawConsent.trim().toLowerCase()));
+    }
+    const mobileFields = await this.userService.validatesMobileFields(
+      userCreateDto
+    );
+    if (mobileFields?.error) {
+      throw new Error(mobileFields.error);
+    }
+    if (mobileFields?.values) {
+      Object.assign(userCreateDto, mobileFields.values);
     }
     // Age validation
     const minAge = this.configService.get('MINIMUM_AGE');
@@ -1775,7 +1799,14 @@ export class BulkImportService {
         currentCountry: userCreateDto.currentCountry,
         state: userCreateDto.state,
         dob: userCreateDto.dob ? new Date(userCreateDto.dob) : undefined,
-        mobile: userCreateDto.mobile ? Number(userCreateDto.mobile) : undefined,
+        // Only overwrite the stored mobile when this row has one (already validated)
+        mobile: userCreateDto.mobile || undefined,
+        mobileCountryCode: userCreateDto.mobile
+          ? userCreateDto.mobileCountryCode
+          : undefined,
+        mobileConsent: userCreateDto.mobile
+          ? userCreateDto.mobileConsent
+          : undefined,
       };
 
       await this.userService.updateBasicUserDetails(

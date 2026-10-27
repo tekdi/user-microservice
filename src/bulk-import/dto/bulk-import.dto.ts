@@ -39,7 +39,7 @@ export interface BulkImportUserData {
   lastName: string;
   email: string;
   mobile?: string;
-  mobile_country_code?: string;
+  mobileCountryCode?: string;
   gender?: string;
   dob?: string;
   country?: string;

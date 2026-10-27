@@ -42,6 +42,11 @@ import { PostgresFieldsService } from './fields-adapter';
 import { PostgresRoleService } from './rbac/role-adapter';
 import { FieldValuesDto } from 'src/fields/dto/field-values.dto';
 import { CustomFieldsValidation } from '@utils/custom-field-validation';
+import {
+  MobileValidationError,
+  PhoneNumberUtil,
+} from '@utils/phone-number.util';
+import { Country } from 'src/countries/entities/country.entity';
 import { NotificationRequest } from '@utils/notification.axios';
 import { JwtUtil } from '@utils/jwt-token';
 import { ConfigService } from '@nestjs/config';
@@ -1090,7 +1095,8 @@ export class PostgresUserService implements IServicelocator {
         'createdAt',
         'createdBy',
         'deviceId',
-        'mobile_country_code',
+        'mobileCountryCode',
+        'mobileConsent',
         'country',
         'permanentCountry',
         'currentCountry',
@@ -1413,6 +1419,26 @@ export class PostgresUserService implements IServicelocator {
       // syncOpenCohortCountryOnProfileUpdate() and
       // docs/regional-admin-cohort-country-report.md §11.
       const previousCurrentCountry = user.currentCountry;
+
+      // Validate mobile before any Keycloak/DB write so a bad number cannot
+      // leave the update half-applied. Fields not in the payload fall back to
+      // the stored values (e.g. a country-only change re-validates the number).
+      const mobileFields = await this.validatesMobileFields(
+        userDto?.userData ?? {},
+        user
+      );
+      if (mobileFields?.error) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          mobileFields.error,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+      if (mobileFields?.values) {
+        Object.assign(userDto.userData, mobileFields.values);
+      }
 
       
 
@@ -2126,6 +2152,20 @@ export class PostgresUserService implements IServicelocator {
       }
 
 
+      const mobileFields = await this.validatesMobileFields(userCreateDto);
+      if (mobileFields?.error) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          mobileFields.error,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+      if (mobileFields?.values) {
+        Object.assign(userCreateDto, mobileFields.values);
+      }
+
       // check and validate all fields
       const validatedRoles: any = await this.validateRequestBody(
         userCreateDto,
@@ -2338,8 +2378,9 @@ export class PostgresUserService implements IServicelocator {
               lastName: result.lastName,
               middleName: result.middleName || '',
               email: result.email || '',
-              mobile: result.mobile ? result.mobile.toString() : '',
-              mobile_country_code: result.mobile_country_code || '',
+              mobile: result.mobile || '',
+              mobileCountryCode: result.mobileCountryCode || '',
+              mobileConsent: result.mobileConsent === true,
               referLink: referLinkForElastic ?? undefined,
               gender: result.gender,
               dob:
@@ -2415,8 +2456,9 @@ export class PostgresUserService implements IServicelocator {
     user.gender = userDto?.gender;
     user.status = userDto?.status as User['status'];
     user.email = userDto?.email?.toLowerCase();
-    user.mobile = Number(userDto?.mobile) || null;
-    user.mobile_country_code = userDto?.mobile_country_code;
+    user.mobile = userDto?.mobile || null;
+    user.mobileCountryCode = userDto?.mobileCountryCode || null;
+    user.mobileConsent = userDto?.mobileConsent === true;
     user.createdBy = userDto?.createdBy ?? null;
     user.updatedBy = userDto?.updatedBy ?? null;
     user.country = userDto?.country ?? null;
@@ -2508,6 +2550,109 @@ export class PostgresUserService implements IServicelocator {
     return result;
   }
 
+  /**
+   * Validates mobile / mobileCountryCode / mobileConsent from a create or
+   * update payload and returns the values to persist. Returns null when the
+   * payload touches none of them. Fields missing from the payload fall back to
+   * `stored` (update). The country must exist in `countries` with a dial code;
+   * lengths and number ranges come from libphonenumber-js. Consent is an
+   * optional opt-in (WhatsApp/programme messages) and never blocks saving.
+   */
+  async validatesMobileFields(
+    input: {
+      mobile?: string | number | null;
+      mobileCountryCode?: string | null;
+      mobileConsent?: boolean;
+    },
+    stored?: Partial<User>
+  ): Promise<{
+    error?: string;
+    values?: Partial<
+      Pick<User, 'mobile' | 'mobileCountryCode' | 'mobileConsent'>
+    >;
+  } | null> {
+    const keys = ['mobile', 'mobileCountryCode', 'mobileConsent'];
+    const has = (key: string) => input?.[key] !== undefined;
+    if (!keys.some(has)) {
+      return null;
+    }
+
+    // Profile forms echo back every loaded field on save. Values identical to
+    // the stored ones are not re-validated, so a user with a legacy number can
+    // still save other profile fields.
+    const normalize = (v: unknown) => (v === '' || v === undefined ? null : v);
+    if (
+      stored &&
+      keys.every(
+        (key) => !has(key) || normalize(input[key]) === normalize(stored[key])
+      )
+    ) {
+      return null;
+    }
+
+    const mobile = has('mobile') ? input.mobile : stored?.mobile;
+    const countryCode = has('mobileCountryCode')
+      ? input.mobileCountryCode
+      : stored?.mobileCountryCode;
+    const consent = has('mobileConsent')
+      ? input.mobileConsent
+      : stored?.mobileConsent;
+
+    // No number: clear the country and consent with it.
+    if (mobile === null || mobile === undefined || String(mobile).trim() === '') {
+      return {
+        values: { mobile: null, mobileCountryCode: null, mobileConsent: false },
+      };
+    }
+
+    // Only the consent changed (user ticked/unticked the opt-in): the stored
+    // number is not re-validated.
+    if (
+      stored &&
+      normalize(mobile) === normalize(stored.mobile) &&
+      normalize(countryCode) === normalize(stored.mobileCountryCode)
+    ) {
+      return { values: { mobileConsent: consent === true } };
+    }
+
+    if (!countryCode || String(countryCode).trim() === '') {
+      return { error: API_RESPONSES.MOBILE_COUNTRY_REQUIRED };
+    }
+
+    const iso = String(countryCode).trim().toUpperCase();
+    const country = await this.usersRepository.manager
+      .getRepository(Country)
+      .findOne({
+        where: { iso_code: iso, is_active: true },
+        select: ['id', 'dial_code'],
+      });
+    if (!country?.dial_code) {
+      return { error: API_RESPONSES.MOBILE_INVALID_COUNTRY(countryCode) };
+    }
+
+    const result = PhoneNumberUtil.validateAndNormalize(iso, mobile);
+    if (!result.valid) {
+      switch (result.error) {
+        case MobileValidationError.COUNTRY_MISMATCH:
+          return { error: API_RESPONSES.MOBILE_COUNTRY_MISMATCH(iso) };
+        case MobileValidationError.NOT_MOBILE:
+          return { error: API_RESPONSES.MOBILE_NOT_MOBILE };
+        case MobileValidationError.INVALID_COUNTRY:
+          return { error: API_RESPONSES.MOBILE_INVALID_COUNTRY(countryCode) };
+        default:
+          return { error: API_RESPONSES.MOBILE_INVALID_FOR_COUNTRY(iso) };
+      }
+    }
+
+    return {
+      values: {
+        mobile: result.e164,
+        mobileCountryCode: result.countryCode,
+        mobileConsent: consent === true,
+      },
+    };
+  }
+
   createErrorCollector() {
     const errors: string[] = [];
 
@@ -2547,16 +2692,6 @@ export class PostgresUserService implements IServicelocator {
         );
         if (!checkValidEmail) {
           errorCollector.addError(`Invalid email address`);
-        }
-      }
-
-      if (key === 'mobile') {
-        const checkValidMobile = CustomFieldsValidation.validate(
-          'mobile',
-          userCreateDto.mobile
-        );
-        if (!checkValidMobile) {
-          errorCollector.addError(`Mobile number must be 7 to 12 digits long`);
         }
       }
 
@@ -3658,6 +3793,8 @@ export class PostgresUserService implements IServicelocator {
             dob: null,
             gender: user.gender,
             mobile: null,
+            mobileCountryCode: null,
+            mobileConsent: false,
             country: null,
             permanentCountry: null,
             currentCountry: null,
@@ -3733,6 +3870,8 @@ export class PostgresUserService implements IServicelocator {
           dob: null,
           gender: null,
           mobile: null,
+          mobileCountryCode: null,
+          mobileConsent: false,
           country: null,
           permanentCountry: null,
           currentCountry: null,
@@ -3813,6 +3952,8 @@ export class PostgresUserService implements IServicelocator {
           dob: null,
           gender: null,
           mobile: null,
+          mobileCountryCode: null,
+          mobileConsent: false,
           country: null,
           permanentCountry: null,
           currentCountry: null,
@@ -4376,8 +4517,9 @@ export class PostgresUserService implements IServicelocator {
         lastName: user.lastName,
         middleName: user.middleName || '',
         email: user.email || '',
-        mobile: user.mobile?.toString() || '',
-        mobile_country_code: user.mobile_country_code || '',
+        mobile: user.mobile || '',
+        mobileCountryCode: user.mobileCountryCode || '',
+        mobileConsent: user.mobileConsent === true,
         dob: formattedDob,
         country: user.country,
         permanentCountry: user.permanentCountry || '',
@@ -4416,8 +4558,9 @@ export class PostgresUserService implements IServicelocator {
                 lastName: dbUser.lastName,
                 middleName: dbUser.middleName || '',
                 email: dbUser.email || '',
-                mobile: dbUser.mobile?.toString() || '',
-                mobile_country_code: dbUser.mobile_country_code || '',
+                mobile: dbUser.mobile || '',
+                mobileCountryCode: dbUser.mobileCountryCode || '',
+                mobileConsent: dbUser.mobileConsent === true,
                 dob: formattedDob,
                 gender: dbUser.gender,
                 country: dbUser.country || '',

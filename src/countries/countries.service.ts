@@ -1,6 +1,6 @@
 import { Injectable, HttpStatus } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, ILike } from 'typeorm';
+import { Repository, ILike, IsNull, Not } from 'typeorm';
 import { Country } from './entities/country.entity';
 import { ListCountryDto, COUNTRY_LIST_MAX_LIMIT } from './dto/list-country.dto';
 import APIResponse from 'src/common/responses/response';
@@ -33,6 +33,10 @@ export class CountriesService {
       if (listCountryDto.is_active !== undefined) {
         whereCondition.is_active = listCountryDto.is_active;
       }
+      // Mobile country dropdown: only countries that have a phone dial code
+      if (listCountryDto.phone_enabled === true) {
+        whereCondition.dial_code = Not(IsNull());
+      }
 
       const requestedLimit = listCountryDto.limit ?? 10;
       const limit = Math.min(requestedLimit, COUNTRY_LIST_MAX_LIMIT);
@@ -43,7 +47,7 @@ export class CountriesService {
         order: { name: 'ASC' },
         take: limit,
         skip: offset,
-        select: ['id', 'name', 'is_active', 'created_at'],
+        select: ['id', 'name', 'is_active', 'iso_code', 'dial_code', 'created_at'],
       });
 
       const result = {
