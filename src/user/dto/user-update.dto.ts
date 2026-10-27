@@ -105,7 +105,7 @@ class UserDataDTO {
     type: () => String,
     required: false,
     description:
-      'Mobile number in any format; validated against mobile_country_code and stored as E.164. null clears it.',
+      'Mobile number in any format; validated against mobileCountryCode and stored as E.164. null clears it.',
     example: '9876543210',
   })
   @IsOptional()
@@ -120,7 +120,7 @@ class UserDataDTO {
   })
   @IsOptional()
   @IsString()
-  mobile_country_code?: string | null;
+  mobileCountryCode?: string | null;
 
   @ApiProperty({
     type: () => Boolean,
@@ -131,7 +131,7 @@ class UserDataDTO {
   })
   @IsOptional()
   @IsBoolean()
-  mobile_consent?: boolean;
+  mobileConsent?: boolean;
 
   @ApiProperty({ type: () => String })
   @IsOptional()

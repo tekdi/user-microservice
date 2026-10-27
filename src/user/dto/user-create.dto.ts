@@ -137,7 +137,7 @@ export class UserCreateDto {
   @ApiPropertyOptional({
     type: String,
     description:
-      'Mobile number in any format (e.g. "98765 43210"); validated against mobile_country_code and stored as E.164',
+      'Mobile number in any format (e.g. "98765 43210"); validated against mobileCountryCode and stored as E.164',
     example: '9876543210',
   })
   @Expose()
@@ -153,7 +153,7 @@ export class UserCreateDto {
   @Expose()
   @IsOptional()
   @IsBoolean()
-  mobile_consent: boolean;
+  mobileConsent: boolean;
 
   @ApiPropertyOptional({
     type: String,
@@ -271,7 +271,7 @@ export class UserCreateDto {
   @Expose()
   @IsOptional()
   @IsString()
-  mobile_country_code: string;
+  mobileCountryCode: string;
 
   @ApiPropertyOptional({
     type: String,

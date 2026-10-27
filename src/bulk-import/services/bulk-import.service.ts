@@ -907,9 +907,9 @@ export class BulkImportService {
     // Mobile: same country-aware validation as the create API.
     // CSV gives strings ("yes"/"true"/"1"); Excel can also give a boolean
     // (TRUE) or a number (1). Anything else - including objects - is false.
-    const rawConsent: unknown = userCreateDto.mobile_consent;
+    const rawConsent: unknown = userCreateDto.mobileConsent;
     if (rawConsent !== undefined) {
-      userCreateDto.mobile_consent =
+      userCreateDto.mobileConsent =
         rawConsent === true ||
         rawConsent === 1 ||
         (typeof rawConsent === 'string' &&
@@ -1801,11 +1801,11 @@ export class BulkImportService {
         dob: userCreateDto.dob ? new Date(userCreateDto.dob) : undefined,
         // Only overwrite the stored mobile when this row has one (already validated)
         mobile: userCreateDto.mobile || undefined,
-        mobile_country_code: userCreateDto.mobile
-          ? userCreateDto.mobile_country_code
+        mobileCountryCode: userCreateDto.mobile
+          ? userCreateDto.mobileCountryCode
           : undefined,
-        mobile_consent: userCreateDto.mobile
-          ? userCreateDto.mobile_consent
+        mobileConsent: userCreateDto.mobile
+          ? userCreateDto.mobileConsent
           : undefined,
       };
 

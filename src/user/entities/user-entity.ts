@@ -74,12 +74,12 @@ export class User {
   })
   updatedAt: Date;
 
-  // E.164, e.g. +919876543210 (validated against mobile_country_code)
+  // E.164, e.g. +919876543210 (validated against mobileCountryCode)
   @Column({ type: 'varchar', length: 20, nullable: true })
   mobile: string;
 
   @Column({ type: 'boolean', default: false })
-  mobile_consent: boolean;
+  mobileConsent: boolean;
 
   @Column('text', { array: true, nullable: true })
   deviceId: string[];
@@ -119,7 +119,7 @@ export class User {
 
   // ISO 3166-1 alpha-2 of the mobile number, e.g. IN
   @Column({ type: 'varchar', length: 5, nullable: true })
-  mobile_country_code: string;
+  mobileCountryCode: string;
 
   @Column({ nullable: true })
   provider: string;

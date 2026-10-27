@@ -1095,8 +1095,8 @@ export class PostgresUserService implements IServicelocator {
         'createdAt',
         'createdBy',
         'deviceId',
-        'mobile_country_code',
-        'mobile_consent',
+        'mobileCountryCode',
+        'mobileConsent',
         'country',
         'permanentCountry',
         'currentCountry',
@@ -2379,8 +2379,8 @@ export class PostgresUserService implements IServicelocator {
               middleName: result.middleName || '',
               email: result.email || '',
               mobile: result.mobile || '',
-              mobile_country_code: result.mobile_country_code || '',
-              mobile_consent: result.mobile_consent === true,
+              mobileCountryCode: result.mobileCountryCode || '',
+              mobileConsent: result.mobileConsent === true,
               referLink: referLinkForElastic ?? undefined,
               gender: result.gender,
               dob:
@@ -2457,8 +2457,8 @@ export class PostgresUserService implements IServicelocator {
     user.status = userDto?.status as User['status'];
     user.email = userDto?.email?.toLowerCase();
     user.mobile = userDto?.mobile || null;
-    user.mobile_country_code = userDto?.mobile_country_code || null;
-    user.mobile_consent = userDto?.mobile_consent === true;
+    user.mobileCountryCode = userDto?.mobileCountryCode || null;
+    user.mobileConsent = userDto?.mobileConsent === true;
     user.createdBy = userDto?.createdBy ?? null;
     user.updatedBy = userDto?.updatedBy ?? null;
     user.country = userDto?.country ?? null;
@@ -2551,7 +2551,7 @@ export class PostgresUserService implements IServicelocator {
   }
 
   /**
-   * Validates mobile / mobile_country_code / mobile_consent from a create or
+   * Validates mobile / mobileCountryCode / mobileConsent from a create or
    * update payload and returns the values to persist. Returns null when the
    * payload touches none of them. Fields missing from the payload fall back to
    * `stored` (update). The country must exist in `countries` with a dial code;
@@ -2561,17 +2561,17 @@ export class PostgresUserService implements IServicelocator {
   async validatesMobileFields(
     input: {
       mobile?: string | number | null;
-      mobile_country_code?: string | null;
-      mobile_consent?: boolean;
+      mobileCountryCode?: string | null;
+      mobileConsent?: boolean;
     },
     stored?: Partial<User>
   ): Promise<{
     error?: string;
     values?: Partial<
-      Pick<User, 'mobile' | 'mobile_country_code' | 'mobile_consent'>
+      Pick<User, 'mobile' | 'mobileCountryCode' | 'mobileConsent'>
     >;
   } | null> {
-    const keys = ['mobile', 'mobile_country_code', 'mobile_consent'];
+    const keys = ['mobile', 'mobileCountryCode', 'mobileConsent'];
     const has = (key: string) => input?.[key] !== undefined;
     if (!keys.some(has)) {
       return null;
@@ -2591,17 +2591,17 @@ export class PostgresUserService implements IServicelocator {
     }
 
     const mobile = has('mobile') ? input.mobile : stored?.mobile;
-    const countryCode = has('mobile_country_code')
-      ? input.mobile_country_code
-      : stored?.mobile_country_code;
-    const consent = has('mobile_consent')
-      ? input.mobile_consent
-      : stored?.mobile_consent;
+    const countryCode = has('mobileCountryCode')
+      ? input.mobileCountryCode
+      : stored?.mobileCountryCode;
+    const consent = has('mobileConsent')
+      ? input.mobileConsent
+      : stored?.mobileConsent;
 
     // No number: clear the country and consent with it.
     if (mobile === null || mobile === undefined || String(mobile).trim() === '') {
       return {
-        values: { mobile: null, mobile_country_code: null, mobile_consent: false },
+        values: { mobile: null, mobileCountryCode: null, mobileConsent: false },
       };
     }
 
@@ -2610,9 +2610,9 @@ export class PostgresUserService implements IServicelocator {
     if (
       stored &&
       normalize(mobile) === normalize(stored.mobile) &&
-      normalize(countryCode) === normalize(stored.mobile_country_code)
+      normalize(countryCode) === normalize(stored.mobileCountryCode)
     ) {
-      return { values: { mobile_consent: consent === true } };
+      return { values: { mobileConsent: consent === true } };
     }
 
     if (!countryCode || String(countryCode).trim() === '') {
@@ -2647,8 +2647,8 @@ export class PostgresUserService implements IServicelocator {
     return {
       values: {
         mobile: result.e164,
-        mobile_country_code: result.countryCode,
-        mobile_consent: consent === true,
+        mobileCountryCode: result.countryCode,
+        mobileConsent: consent === true,
       },
     };
   }
@@ -3793,8 +3793,8 @@ export class PostgresUserService implements IServicelocator {
             dob: null,
             gender: user.gender,
             mobile: null,
-            mobile_country_code: null,
-            mobile_consent: false,
+            mobileCountryCode: null,
+            mobileConsent: false,
             country: null,
             permanentCountry: null,
             currentCountry: null,
@@ -3870,8 +3870,8 @@ export class PostgresUserService implements IServicelocator {
           dob: null,
           gender: null,
           mobile: null,
-          mobile_country_code: null,
-          mobile_consent: false,
+          mobileCountryCode: null,
+          mobileConsent: false,
           country: null,
           permanentCountry: null,
           currentCountry: null,
@@ -3952,8 +3952,8 @@ export class PostgresUserService implements IServicelocator {
           dob: null,
           gender: null,
           mobile: null,
-          mobile_country_code: null,
-          mobile_consent: false,
+          mobileCountryCode: null,
+          mobileConsent: false,
           country: null,
           permanentCountry: null,
           currentCountry: null,
@@ -4518,8 +4518,8 @@ export class PostgresUserService implements IServicelocator {
         middleName: user.middleName || '',
         email: user.email || '',
         mobile: user.mobile || '',
-        mobile_country_code: user.mobile_country_code || '',
-        mobile_consent: user.mobile_consent === true,
+        mobileCountryCode: user.mobileCountryCode || '',
+        mobileConsent: user.mobileConsent === true,
         dob: formattedDob,
         country: user.country,
         permanentCountry: user.permanentCountry || '',
@@ -4559,8 +4559,8 @@ export class PostgresUserService implements IServicelocator {
                 middleName: dbUser.middleName || '',
                 email: dbUser.email || '',
                 mobile: dbUser.mobile || '',
-                mobile_country_code: dbUser.mobile_country_code || '',
-                mobile_consent: dbUser.mobile_consent === true,
+                mobileCountryCode: dbUser.mobileCountryCode || '',
+                mobileConsent: dbUser.mobileConsent === true,
                 dob: formattedDob,
                 gender: dbUser.gender,
                 country: dbUser.country || '',
