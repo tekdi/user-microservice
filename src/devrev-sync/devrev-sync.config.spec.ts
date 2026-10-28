@@ -100,4 +100,37 @@ describe("DevRevSyncConfig", () => {
       ).toBe(true);
     });
   });
+
+  describe("DEVREV_PROFILE_FIELD_MAP", () => {
+    it("normalizes field names and accepts a single name or a list", () => {
+      const c = config({
+        DEVREV_PROFILE_FIELD_MAP: JSON.stringify({
+          first_generation: ["iAmFirst-GenerationToGoToUniversity."],
+          study_major: "fieldOfStudy",
+        }),
+      });
+      expect(c.profileFieldMap).toEqual({
+        first_generation: ["iamfirstgenerationtogotouniversity"],
+        study_major: ["fieldofstudy"],
+      });
+      expect(c.warnings).toEqual([]);
+    });
+
+    it("drops targets this service doesn't fill", () => {
+      const c = config({
+        DEVREV_PROFILE_FIELD_MAP: JSON.stringify({
+          is_alumni: ["x"],
+          university: [],
+        }),
+      });
+      expect(c.profileFieldMap).toEqual({});
+      expect(c.warnings).toHaveLength(2);
+    });
+
+    it("warns when the value is not a JSON object", () => {
+      const c = config({ DEVREV_PROFILE_FIELD_MAP: "[1,2]" });
+      expect(c.profileFieldMap).toEqual({});
+      expect(c.warnings).toEqual([expect.stringContaining("not a JSON object")]);
+    });
+  });
 });

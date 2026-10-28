@@ -94,7 +94,11 @@ export class LearnerSyncService {
         lookupField: "aspire_user_id",
         lookupValue: userId,
         title: profileTitle(learner),
-        fields: buildLearnerProfile(learner, enrollments[0] ?? null, revUserId),
+        fields: buildLearnerProfile(learner, revUserId, (field) =>
+          this.logger.warn(
+            `learner ${userId}: ${field} answer is not yes/no; left out`
+          )
+        ),
         userId,
       });
       await this.tryLink(

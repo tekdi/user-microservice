@@ -35,7 +35,6 @@ function snapshot(overrides: Partial<LearnerSnapshot> = {}): LearnerSnapshot {
       currentCountry: "Kenya",
       createdAt: new Date("2026-01-02T08:30:00Z"),
       temporaryPassword: false,
-      autoTags: [],
       applicationCountry: "Nigeria",
       customFields: {},
     },
@@ -103,10 +102,8 @@ describe("LearnerSyncService", () => {
       uniqueKey: `LRNR:${USER_ID}`,
       lookupField: "aspire_user_id",
     });
-    expect(profileCall.fields).toMatchObject({
-      rev_user_id: "don:revu/1",
-      latest_alp_cohort: "ALP-2026-C4",
-    });
+    expect(profileCall.fields).toMatchObject({ rev_user_id: "don:revu/1" });
+    expect(profileCall.fields).not.toHaveProperty("latest_alp_cohort");
     expect(latestCall).toMatchObject({
       uniqueKey: `ALPE:${USER_ID}:ALP-2026-C4`,
       cohortId: "c2",

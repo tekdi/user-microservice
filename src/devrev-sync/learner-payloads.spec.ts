@@ -9,7 +9,9 @@ import {
   learnerProfileUniqueKey,
   LearnerSource,
   lifecycleStage,
+  normalizeFieldName,
   payloadHash,
+  profileFieldFor,
   toBool,
   toCustomFields,
   toDate,
@@ -29,7 +31,6 @@ function learner(overrides: Partial<LearnerSource> = {}): LearnerSource {
     currentCountry: "Kenya",
     createdAt: new Date("2026-01-02T08:30:00Z"),
     temporaryPassword: false,
-    autoTags: [],
     applicationCountry: "Nigeria",
     customFields: {},
     ...overrides,
@@ -147,13 +148,8 @@ describe("learner payloads", () => {
   });
 
   describe("buildLearnerProfile", () => {
-    it("maps user columns and the latest enrollment", () => {
-      const fields = buildLearnerProfile(
-        learner(),
-        enrollment(),
-        "don:identity:revu/9"
-      );
-      expect(fields).toMatchObject({
+    it("maps the user columns this service owns", () => {
+      expect(buildLearnerProfile(learner(), "don:identity:revu/9")).toEqual({
         aspire_user_id: USER_ID,
         full_name: "Amina Okafor",
         email: "amina@example.com",
@@ -164,27 +160,28 @@ describe("learner payloads", () => {
         current_country: "Kenya",
         registration_date: "2026-01-02",
         is_activated: true,
-        is_alumni: false,
-        latest_alp_cohort: "ALP-2026-C2",
-        latest_alp_status: "Shortlisted",
       });
+    });
+
+    it("never sends the unowned summary fields", () => {
+      const fields = buildLearnerProfile(learner(), null);
+      for (const name of [
+        "is_alumni",
+        "latest_alp_cohort",
+        "latest_alp_status",
+        "alp_graduation_cohort",
+        "activation_date",
+        "elp_activated",
+      ]) {
+        expect(fields).not.toHaveProperty(name);
+      }
     });
 
     it("treats a still-temporary password as not activated", () => {
       expect(
-        buildLearnerProfile(learner({ temporaryPassword: true }), null, null)
+        buildLearnerProfile(learner({ temporaryPassword: true }), null)
           .is_activated
       ).toBe(false);
-    });
-
-    it("marks alumni from the completed_alumni tag", () => {
-      expect(
-        buildLearnerProfile(
-          learner({ autoTags: ["completed_alumni"] }),
-          null,
-          null
-        ).is_alumni
-      ).toBe(true);
     });
 
     it("maps only known custom fields and parses the boolean ones", () => {
@@ -197,13 +194,58 @@ describe("learner payloads", () => {
             favourite_colour: "green",
           },
         }),
-        null,
         null
       );
       expect(fields.university).toBe("University of Nairobi");
       expect(fields.first_generation).toBe(true);
       expect(fields.limited_income).toBe(false);
       expect(fields).not.toHaveProperty("favourite_colour");
+    });
+
+    it("leaves out and reports a yes/no answer it can't read", () => {
+      const unknown: string[] = [];
+      const fields = buildLearnerProfile(
+        learner({ customFields: { limited_income: "Pune", study_major: "" } }),
+        null,
+        (field) => unknown.push(field)
+      );
+      expect(fields.limited_income).toBeUndefined();
+      expect(fields.study_major).toBeUndefined();
+      expect(unknown).toEqual(["limited_income"]);
+    });
+  });
+
+  describe("custom field names", () => {
+    const map = {
+      first_generation: ["iamfirstgenerationtogotouniversity"],
+      university: ["nameofyourcurrentormostrecentuniversity"],
+      limited_income: ["icomefromalimitedincome", "icomefromalimitedincomebackground"],
+    };
+
+    it("normalizes case and punctuation", () => {
+      expect(normalizeFieldName("iAmFirst-GenerationToGoToUniversity.")).toBe(
+        "iamfirstgenerationtogotouniversity"
+      );
+    });
+
+    it("matches every cohort's copy of a field by name prefix", () => {
+      expect(profileFieldFor("iAmFirstGenerationToGoToUniversity", map)).toBe(
+        "first_generation"
+      );
+      expect(
+        profileFieldFor(
+          "iAmFirstGenerationToGoToUniversityDescriptionFirstGenerationMeans",
+          map
+        )
+      ).toBe("first_generation");
+      expect(
+        profileFieldFor("nameOfYourCurrentOrMostRecentUniversity/college", map)
+      ).toBe("university");
+    });
+
+    it("ignores fields that match nothing", () => {
+      expect(profileFieldFor("universityWebsite", map)).toBeUndefined();
+      expect(profileFieldFor("", map)).toBeUndefined();
     });
   });
 

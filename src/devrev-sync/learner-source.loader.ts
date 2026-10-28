@@ -3,7 +3,11 @@ import { InjectDataSource } from "@nestjs/typeorm";
 import { DataSource } from "typeorm";
 import { STUDENT_ROLE_CODE } from "../common/utils/roles.constants";
 import { DevRevSyncConfig } from "./devrev-sync.config";
-import { EnrollmentSource, LearnerSource } from "./learner-payloads";
+import {
+  EnrollmentSource,
+  LearnerSource,
+  profileFieldFor,
+} from "./learner-payloads";
 
 export interface LearnerSnapshot {
   learner: LearnerSource;
@@ -28,7 +32,7 @@ export class LearnerSourceLoader {
     const [user] = await this.dataSource.query(
       // dob is a DATE: read as text so pg doesn't turn it into a local-midnight Date
       `SELECT "userId", "firstName", "middleName", "lastName", "email", "gender",
-              "dob"::text AS "dob", "currentCountry", "createdAt", "temporaryPassword", "auto_tags"
+              "dob"::text AS "dob", "currentCountry", "createdAt", "temporaryPassword"
          FROM public."Users"
         WHERE "userId" = $1`,
       [userId]
@@ -64,12 +68,15 @@ export class LearnerSourceLoader {
         this.config.isCohortAllowed(m.cohortId)
     );
 
-    const latestCountryId = alpMemberships.find((m) => m.countryId)?.countryId;
+    // Profile data describes the learner, not one cohort, so it comes from
+    // every membership even while the allowlist limits the enrollments.
+    const all = memberships as any[];
+    const latestCountryId = all.find((m) => m.countryId)?.countryId;
     const [applicationCountry, customFields] = await Promise.all([
       latestCountryId ? this.countryName(latestCountryId) : null,
       this.customFields(
         userId,
-        alpMemberships.map((m) => m.cohortMembershipId)
+        all.map((m) => m.cohortMembershipId)
       ),
     ]);
 
@@ -86,7 +93,6 @@ export class LearnerSourceLoader {
         currentCountry: user.currentCountry,
         createdAt: user.createdAt,
         temporaryPassword: user.temporaryPassword,
-        autoTags: user.auto_tags,
         applicationCountry,
         customFields,
       },
@@ -119,27 +125,34 @@ export class LearnerSourceLoader {
   }
 
   /**
-   * Values for the fields in DEVREV_PROFILE_FIELD_MAP. Application answers are
-   * stored against the user or the membership, so both are read; the most
-   * recently updated value wins.
+   * Values for the fields in DEVREV_PROFILE_FIELD_MAP, matched by Fields.name
+   * prefix. Application answers are stored against the user or the
+   * membership, so both are read; the most recently updated value wins.
    */
   private async customFields(
     userId: string,
     membershipIds: string[]
   ): Promise<Record<string, string | null>> {
-    const fieldIds = Object.keys(this.config.profileFieldMap);
-    if (fieldIds.length === 0) return {};
+    const map = this.config.profileFieldMap;
+    const patterns = Object.values(map)
+      .flat()
+      .map((prefix) => `${prefix}%`);
+    if (patterns.length === 0) return {};
 
     const rows = await this.dataSource.query(
-      `SELECT "fieldId", "value"
-         FROM public."FieldValues"
-        WHERE "itemId" = ANY($1::uuid[]) AND "fieldId" = ANY($2::uuid[])
-        ORDER BY "updatedAt" ASC NULLS FIRST`,
-      [[userId, ...membershipIds], fieldIds]
+      `SELECT F."name", FV."value"
+         FROM public."FieldValues" FV
+         JOIN public."Fields" F ON F."fieldId" = FV."fieldId"
+        WHERE FV."itemId" = ANY($1::uuid[])
+          AND regexp_replace(lower(F."name"), '[^a-z0-9]', '', 'g') LIKE ANY($2::text[])
+        ORDER BY FV."updatedAt" ASC NULLS FIRST`,
+      [[userId, ...membershipIds], patterns]
     );
     const values: Record<string, string | null> = {};
     for (const row of rows as any[]) {
-      values[this.config.profileFieldMap[row.fieldId]] = row.value;
+      const target = profileFieldFor(row.name, map);
+      // An empty answer on a newer form doesn't hide an older real one.
+      if (target && (row.value ?? "").trim()) values[target] = row.value;
     }
     return values;
   }

@@ -41,7 +41,7 @@ The service never changes DevRev schemas.
 | `DEVREV_REV_ORG_ID` | — | The "Aspire Learners" rev org (`don:identity:...`) |
 | `DEVREV_LINK_TYPE_PROFILE_ID` | — | Link type "Aspire learner profile" (Rev User → `learner_profile`), e.g. `don:core:dvrv-in-1:devo/2qphGDPJVV:custom_link_type/5` |
 | `DEVREV_LINK_TYPE_RECORD_ID` | — | Link type "Aspire learner record" (Rev User → `alp_enrollment`), e.g. `don:core:dvrv-in-1:devo/2qphGDPJVV:custom_link_type/3` |
-| `DEVREV_PROFILE_FIELD_MAP` | `{}` | JSON: `FieldValues.fieldId` → `learner_profile` field. Allowed targets: `university`, `study_major`, `education_level`, `first_generation`, `limited_income` |
+| `DEVREV_PROFILE_FIELD_MAP` | `{}` | JSON: `learner_profile` field → `Fields.name` prefix or list of prefixes (see below) |
 | `DEVREV_ALP_COHORT_TYPES` | empty | Comma-separated `Cohort.type` values that count as ALP. Empty = every cohort |
 | `DEVREV_SYNC_COHORT_ALLOWLIST` | empty | Comma-separated cohort IDs, for a phased rollout. Empty = all |
 | `DEVREV_SYNC_CONCURRENCY` | `2` | Worker concurrency (never two jobs for the same learner at once) |
@@ -49,6 +49,17 @@ The service never changes DevRev schemas.
 | `DEVREV_SYNC_MAX_ATTEMPTS` | `5` | Job attempts; backoff 5s, 10s, 20s, 40s, or DevRev's `Retry-After` |
 | `DEVREV_SYNC_DEBOUNCE_MS` | `30000` | Delay that collapses bursts of changes |
 | `DEVREV_SYNC_TIMEOUT_MS` | `15000` | Per-request timeout |
+
+**Profile custom fields.** Each cohort's application form has its own copy of a field,
+and some field names carry the help text, so fields are matched by **name prefix**,
+ignoring case and punctuation, never by `fieldId`. Allowed targets: `university`,
+`study_major`, `education_level`, `first_generation`, `limited_income`. The newest
+non-empty answer across the user and all their memberships wins. A yes/no answer that
+can't be read is left out and logged by field name only. QA example:
+
+```
+DEVREV_PROFILE_FIELD_MAP={"university":["nameOfYourCurrentOrMostRecentUniversity"],"study_major":["fieldOfStudy"],"education_level":["whatStageOfYourUniversityEducationAreYouCurrentlyIn"],"first_generation":["iAmFirstGenerationToGoToUniversity","iAmTheFirstGenerationToGoToUniversity"],"limited_income":["iComeFromALimitedIncomeBackground"]}
+```
 
 Both link type IDs are checked at startup: each must be a `custom_link_type/<n>` ID
 (a `tenant_fragment/...` schema ID causes `unexpected_id_type`), the two must differ, and
@@ -101,5 +112,6 @@ ALTER TABLE public."DevRevSync" ADD COLUMN IF NOT EXISTS "retryable" boolean;
 - **Stages after enrollment:** `lifecycle_stage` and `latest_alp_status` stop at
   Shortlisted/Withdrawn here. In Progress, Completed, Passed and the Failed stages need
   LMS data (open question Q2).
-- **Fields needing other services:** `is_enrolled` (orientation at 100%), `activation_date`,
-  `alp_graduation_cohort`, and the masterclass and ELP fields are not sent.
+- **`learner_profile` fields with no owner:** `latest_alp_cohort`, `latest_alp_status`,
+  `is_alumni`, `alp_graduation_cohort` and the ELP summary fields are not sent.
+  `activation_date` has no source (`Users` stores no activation time).

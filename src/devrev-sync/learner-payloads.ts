@@ -9,9 +9,6 @@ import { createHash } from "crypto";
  * the tnt__ prefix; toCustomFields() adds it.
  */
 
-/** Tag that marks an ALP graduate (also gates pathway assignment). */
-export const ALUMNI_TAG = "completed_alumni";
-
 /** learner_profile fields that DEVREV_PROFILE_FIELD_MAP may target. */
 export const MAPPABLE_PROFILE_FIELDS: ReadonlySet<string> = new Set([
   "university",
@@ -36,10 +33,9 @@ export interface LearnerSource {
   currentCountry: string | null;
   createdAt: Date | string | null;
   temporaryPassword: boolean | null;
-  autoTags: string[] | null;
   /** Country name resolved from the latest membership's user_cohort_country_id. */
   applicationCountry: string | null;
-  /** DevRev field name -> raw FieldValues.value, already mapped by fieldId. */
+  /** learner_profile field name -> raw FieldValues.value (DEVREV_PROFILE_FIELD_MAP). */
   customFields: Record<string, string | null>;
 }
 
@@ -136,6 +132,34 @@ export function toBool(value: string | null | undefined): boolean | undefined {
   return undefined;
 }
 
+/**
+ * Fields.name compared without case or punctuation, so "iAmFirst-Generation…"
+ * and "iamfirstgeneration…" match.
+ */
+export function normalizeFieldName(name: string | null | undefined): string {
+  return (name ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+/**
+ * The learner_profile field a custom field feeds, by Fields.name prefix
+ * (longest match wins), or undefined.
+ */
+export function profileFieldFor(
+  fieldName: string,
+  map: Record<string, string[]>
+): string | undefined {
+  const name = normalizeFieldName(fieldName);
+  let best: { target: string; length: number } | undefined;
+  for (const [target, prefixes] of Object.entries(map)) {
+    for (const prefix of prefixes) {
+      if (name.startsWith(prefix) && prefix.length > (best?.length ?? 0)) {
+        best = { target, length: prefix.length };
+      }
+    }
+  }
+  return best?.target;
+}
+
 export function fullName(
   src: Pick<LearnerSource, "firstName" | "middleName" | "lastName">
 ): string {
@@ -187,10 +211,16 @@ export function buildRevUser(
   return body;
 }
 
+/**
+ * The learner_profile fields this service owns (section 7.2 of the technical
+ * solution). The summary fields (latest_alp_*, is_alumni, ELP fields) have no
+ * owning service yet and are never sent. `onUnknown` hears about answers
+ * that can't be mapped; they are left out, never sent as a guess.
+ */
 export function buildLearnerProfile(
   src: LearnerSource,
-  latest: EnrollmentSource | null,
-  revUserId: string | null
+  revUserId: string | null,
+  onUnknown: (field: string) => void = () => undefined
 ): FieldMap {
   const fields: FieldMap = {
     aspire_user_id: src.userId,
@@ -203,16 +233,19 @@ export function buildLearnerProfile(
     current_country: src.currentCountry ?? undefined,
     registration_date: toDate(src.createdAt),
     is_activated: src.temporaryPassword === false,
-    is_alumni: (src.autoTags ?? []).includes(ALUMNI_TAG),
-    latest_alp_cohort: latest?.cohortName,
-    latest_alp_status: latest ? lifecycleStage(latest.status) : undefined,
   };
 
   for (const [name, raw] of Object.entries(src.customFields ?? {})) {
     if (!MAPPABLE_PROFILE_FIELDS.has(name)) continue;
-    fields[name] = BOOLEAN_PROFILE_FIELDS.has(name)
-      ? toBool(raw)
-      : (raw ?? "").trim() || undefined;
+    const text = (raw ?? "").trim();
+    if (!text) continue;
+    if (!BOOLEAN_PROFILE_FIELDS.has(name)) {
+      fields[name] = text;
+      continue;
+    }
+    const value = toBool(text);
+    if (value === undefined) onUnknown(name);
+    fields[name] = value;
   }
   return fields;
 }

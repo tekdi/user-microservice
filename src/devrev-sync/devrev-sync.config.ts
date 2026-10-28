@@ -1,5 +1,9 @@
 import { Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import {
+  MAPPABLE_PROFILE_FIELDS,
+  normalizeFieldName,
+} from "./learner-payloads";
 
 /** A custom link type ID, e.g. don:core:dvrv-in-1:devo/2qphGDPJVV:custom_link_type/5. */
 const LINK_TYPE_ID = /^don:core:[a-z0-9-]+:devo\/[A-Za-z0-9]+:custom_link_type\/\d+$/;
@@ -45,8 +49,12 @@ export class DevRevSyncConfig {
   readonly cohortAllowlist: Set<string>;
   /** Cohort.type values that count as ALP. Empty = every cohort is ALP. */
   readonly alpCohortTypes: Set<string>;
-  /** FieldValues.fieldId -> learner_profile field name, e.g. { "<uuid>": "university" }. */
-  readonly profileFieldMap: Record<string, string>;
+  /**
+   * learner_profile field -> normalized Fields.name prefixes. Each cohort's
+   * form has its own copy of a field (and some names carry the help text),
+   * so fields are matched by name prefix, not by fieldId.
+   */
+  readonly profileFieldMap: Record<string, string[]>;
 
   constructor(configService: ConfigService) {
     const get = (key: string, fallback = ""): string =>
@@ -158,19 +166,46 @@ export class DevRevSyncConfig {
     return value;
   }
 
-  private parseFieldMap(raw: string): Record<string, string> {
+  /**
+   * DEVREV_PROFILE_FIELD_MAP, e.g.
+   *   {"first_generation": ["iAmFirstGenerationToGoToUniversity"], "study_major": "fieldOfStudy"}
+   * Unknown targets and malformed entries are dropped with a warning.
+   */
+  private parseFieldMap(raw: string): Record<string, string[]> {
     if (!raw) return {};
+    let parsed: any;
     try {
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-        return parsed;
-      }
+      parsed = JSON.parse(raw);
     } catch {
-      // fall through to the warning below
+      parsed = null;
     }
-    this.warnings.push(
-      "DEVREV_PROFILE_FIELD_MAP is not a JSON object; custom profile fields will not sync"
-    );
-    return {};
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      this.warnings.push(
+        "DEVREV_PROFILE_FIELD_MAP is not a JSON object; custom profile fields will not sync"
+      );
+      return {};
+    }
+
+    const map: Record<string, string[]> = {};
+    for (const [target, names] of Object.entries(parsed)) {
+      if (!MAPPABLE_PROFILE_FIELDS.has(target)) {
+        this.warnings.push(
+          `DEVREV_PROFILE_FIELD_MAP: "${target}" is not a learner_profile field this service fills; ignored`
+        );
+        continue;
+      }
+      const prefixes = (Array.isArray(names) ? names : [names])
+        .filter((n): n is string => typeof n === "string")
+        .map(normalizeFieldName)
+        .filter(Boolean);
+      if (prefixes.length === 0) {
+        this.warnings.push(
+          `DEVREV_PROFILE_FIELD_MAP: "${target}" has no field names; ignored`
+        );
+        continue;
+      }
+      map[target] = prefixes;
+    }
+    return map;
   }
 }
