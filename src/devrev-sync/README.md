@@ -126,7 +126,8 @@ ALTER TABLE public."DevRevSync" ADD COLUMN IF NOT EXISTS "retryable" boolean;
 
 | Endpoint | Auth | Purpose |
 | --- | --- | --- |
-| `POST /resync` with `{ "userId" }` or `{ "cohortId" }` | JWT | Re-send a learner or a whole cohort in full. Also the backfill entry point |
+| `POST /resync` with `{ "userId" }` or `{ "cohortId" }` | JWT | Re-send a learner or a whole cohort in full, ignoring the "unchanged" check. Use after fixing a schema or data problem |
+| `POST /backfill` with `{ "cohortId", "dryRun"? }` | JWT | Queue every learner in a cohort. Payload hashes are kept, so a repeat only sends what changed. `dryRun: true` only counts. Run cohort by cohort, oldest first |
 | `GET /status?cohortId=` | JWT | Counts by record type and status, queue counts, the latest 50 failures |
 | `POST /cron/retry-failed` | none, like the other `cron/*` endpoints | Re-queue learners with a retryable `FAILED` record (see Failures). Point the external scheduler at it, e.g. every 15 minutes |
 

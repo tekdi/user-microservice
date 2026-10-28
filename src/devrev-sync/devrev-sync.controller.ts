@@ -12,7 +12,7 @@ import {
 } from "@nestjs/common";
 import { ApiBasicAuth, ApiTags } from "@nestjs/swagger";
 import { InjectRepository } from "@nestjs/typeorm";
-import { IsOptional, IsUUID } from "class-validator";
+import { IsBoolean, IsOptional, IsUUID } from "class-validator";
 import { Response } from "express";
 import { Repository } from "typeorm";
 import { JwtAuthGuard } from "../common/guards/keycloak.guard";
@@ -32,8 +32,19 @@ export class DevRevResyncDto {
   cohortId?: string;
 }
 
+export class DevRevBackfillDto {
+  @IsUUID()
+  cohortId: string;
+
+  /** Count the learners that would be queued, and queue nothing. */
+  @IsOptional()
+  @IsBoolean()
+  dryRun?: boolean;
+}
+
 const API = {
   RESYNC: "api.devrev-sync.resync",
+  BACKFILL: "api.devrev-sync.backfill",
   STATUS: "api.devrev-sync.status",
   RETRY: "api.devrev-sync.retry-failed",
 };
@@ -85,6 +96,31 @@ export class DevRevSyncController {
       { queued },
       HttpStatus.OK,
       `Queued ${queued} learner(s) for DevRev sync`
+    );
+  }
+
+  /**
+   * Queue every learner in a cohort. Unlike resync, payload hashes are kept,
+   * so a repeated backfill only sends records that changed. dryRun counts the
+   * learners without queueing. Run cohort by cohort, oldest first.
+   */
+  @Post("backfill")
+  @UseGuards(JwtAuthGuard)
+  @ApiBasicAuth("access-token")
+  async backfill(@Body() body: DevRevBackfillDto, @Res() res: Response) {
+    if (!this.queue.isRunning) return this.disabled(res, API.BACKFILL);
+    const userIds = await this.loader.userIdsInCohort(body.cohortId);
+    const queued = body.dryRun
+      ? 0
+      : await this.queue.enqueueLearners(userIds);
+    return APIResponse.success(
+      res,
+      API.BACKFILL,
+      { learners: userIds.length, queued, dryRun: !!body.dryRun },
+      HttpStatus.OK,
+      body.dryRun
+        ? `${userIds.length} learner(s) would be queued for DevRev sync`
+        : `Queued ${queued} learner(s) for DevRev sync`
     );
   }
 
