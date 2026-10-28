@@ -1,6 +1,18 @@
 import { Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 
+/** A custom link type ID, e.g. don:core:dvrv-in-1:devo/2qphGDPJVV:custom_link_type/5. */
+const LINK_TYPE_ID = /^don:core:[a-z0-9-]+:devo\/[A-Za-z0-9]+:custom_link_type\/\d+$/;
+
+/**
+ * Link types that must never be used. custom_link_type/4 is an accidental
+ * second "Aspire learner record" that targets learner_profile; it is being
+ * deprecated in DevRev (link types can't be deleted).
+ */
+export const DEPRECATED_LINK_TYPE_IDS: ReadonlySet<string> = new Set([
+  "don:core:dvrv-in-1:devo/2qphGDPJVV:custom_link_type/4",
+]);
+
 /**
  * Every DevRev sync setting, read once from the environment.
  *
@@ -19,6 +31,7 @@ export class DevRevSyncConfig {
   readonly baseUrl: string;
   readonly token: string;
   readonly revOrgId: string;
+  /** Empty when unset or invalid: links of that kind are then skipped. */
   readonly profileLinkTypeId: string;
   readonly recordLinkTypeId: string;
 
@@ -64,10 +77,22 @@ export class DevRevSyncConfig {
       /\/+$/,
       ""
     );
-    this.token = get("DEVREV_TOKEN");
+    // DEVREV_API_TOKEN is the name the other services use; DEVREV_TOKEN is
+    // still read so existing environments keep working.
+    this.token = get("DEVREV_API_TOKEN") || get("DEVREV_TOKEN");
     this.revOrgId = get("DEVREV_REV_ORG_ID");
-    this.profileLinkTypeId = get("DEVREV_LINK_TYPE_PROFILE_ID");
-    this.recordLinkTypeId = get("DEVREV_LINK_TYPE_RECORD_ID");
+    this.profileLinkTypeId = this.linkTypeId("DEVREV_LINK_TYPE_PROFILE_ID", get);
+    this.recordLinkTypeId = this.linkTypeId("DEVREV_LINK_TYPE_RECORD_ID", get);
+    if (
+      this.profileLinkTypeId &&
+      this.profileLinkTypeId === this.recordLinkTypeId
+    ) {
+      this.errors.push(
+        "DEVREV_LINK_TYPE_PROFILE_ID and DEVREV_LINK_TYPE_RECORD_ID are the same; links will not sync"
+      );
+      this.profileLinkTypeId = "";
+      this.recordLinkTypeId = "";
+    }
 
     this.concurrency = int("DEVREV_SYNC_CONCURRENCY", 2);
     this.ratePerSecond = int("DEVREV_SYNC_RATE_PER_SEC", 5);
@@ -107,6 +132,31 @@ export class DevRevSyncConfig {
 
   /** Problems found while reading the environment; logged once at startup. */
   readonly warnings: string[] = [];
+  /** Settings rejected at startup; logged as errors. The setting is treated as unset. */
+  readonly errors: string[] = [];
+
+  /**
+   * Reads a link type ID and rejects anything that isn't a custom_link_type
+   * DON. A schema ID (tenant_fragment/...) or a pasted "KEY=value" here is
+   * what made links.create fail with unexpected_id_type.
+   */
+  private linkTypeId(key: string, get: (key: string) => string): string {
+    const value = get(key);
+    if (!value) return "";
+    if (!LINK_TYPE_ID.test(value)) {
+      this.errors.push(
+        `${key} is not a custom_link_type ID (expected don:core:...:custom_link_type/<n>); these links will not sync`
+      );
+      return "";
+    }
+    if (DEPRECATED_LINK_TYPE_IDS.has(value)) {
+      this.errors.push(
+        `${key} is a deprecated link type (${value}); these links will not sync`
+      );
+      return "";
+    }
+    return value;
+  }
 
   private parseFieldMap(raw: string): Record<string, string> {
     if (!raw) return {};

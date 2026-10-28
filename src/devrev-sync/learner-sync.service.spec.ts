@@ -5,13 +5,15 @@ import { LearnerSnapshot } from "./learner-source.loader";
 import { LearnerSyncError, LearnerSyncService } from "./learner-sync.service";
 
 const USER_ID = "6f1c2a3b-0000-4000-8000-000000000001";
+const PROFILE_LINK = "don:core:dvrv-in-1:devo/test:custom_link_type/5";
+const RECORD_LINK = "don:core:dvrv-in-1:devo/test:custom_link_type/3";
 
 const BASE_ENV = {
   DEVREV_SYNC_ENABLED: "true",
   DEVREV_TOKEN: "t",
   DEVREV_REV_ORG_ID: "don:identity:org/1",
-  DEVREV_LINK_TYPE_PROFILE_ID: "don:lt/profile",
-  DEVREV_LINK_TYPE_RECORD_ID: "don:lt/record",
+  DEVREV_LINK_TYPE_PROFILE_ID: PROFILE_LINK,
+  DEVREV_LINK_TYPE_RECORD_ID: RECORD_LINK,
 };
 
 function config(env: Record<string, string> = {}): DevRevSyncConfig {
@@ -124,9 +126,9 @@ describe("LearnerSyncService", () => {
         linkType,
       ])
     ).toEqual([
-      ["don:revu/1", "don:lt/profile"],
-      ["don:revu/1", "don:lt/record"],
-      ["don:revu/1", "don:lt/record"],
+      ["don:revu/1", PROFILE_LINK],
+      ["don:revu/1", RECORD_LINK],
+      ["don:revu/1", RECORD_LINK],
     ]);
   });
 

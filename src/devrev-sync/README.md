@@ -37,10 +37,10 @@ The service never changes DevRev schemas.
 | `DEVREV_SYNC_ALP_ENROLLMENT` | `true` | Switch for `alp_enrollment` |
 | `DEVREV_SYNC_REV_USERS` | `true` | Switch for Rev Users and links (also needs `DEVREV_REV_ORG_ID`) |
 | `DEVREV_BASE_URL` | `https://api.devrev.ai` | Public API only, never `/internal` |
-| `DEVREV_TOKEN` | — | DevRev token. Required unless dry-run. Never logged |
+| `DEVREV_API_TOKEN` | — | DevRev token (same name as the other services; `DEVREV_TOKEN` is read as a fallback). Required unless dry-run. Never logged |
 | `DEVREV_REV_ORG_ID` | — | The "Aspire Learners" rev org (`don:identity:...`) |
-| `DEVREV_LINK_TYPE_PROFILE_ID` | — | Link type "Aspire learner profile" (Rev User → `learner_profile`) |
-| `DEVREV_LINK_TYPE_RECORD_ID` | — | Link type "Aspire learner record" (Rev User → `alp_enrollment`) |
+| `DEVREV_LINK_TYPE_PROFILE_ID` | — | Link type "Aspire learner profile" (Rev User → `learner_profile`), e.g. `don:core:dvrv-in-1:devo/2qphGDPJVV:custom_link_type/5` |
+| `DEVREV_LINK_TYPE_RECORD_ID` | — | Link type "Aspire learner record" (Rev User → `alp_enrollment`), e.g. `don:core:dvrv-in-1:devo/2qphGDPJVV:custom_link_type/3` |
 | `DEVREV_PROFILE_FIELD_MAP` | `{}` | JSON: `FieldValues.fieldId` → `learner_profile` field. Allowed targets: `university`, `study_major`, `education_level`, `first_generation`, `limited_income` |
 | `DEVREV_ALP_COHORT_TYPES` | empty | Comma-separated `Cohort.type` values that count as ALP. Empty = every cohort |
 | `DEVREV_SYNC_COHORT_ALLOWLIST` | empty | Comma-separated cohort IDs, for a phased rollout. Empty = all |
@@ -49,6 +49,11 @@ The service never changes DevRev schemas.
 | `DEVREV_SYNC_MAX_ATTEMPTS` | `5` | Job attempts; backoff 5s, 10s, 20s, 40s, or DevRev's `Retry-After` |
 | `DEVREV_SYNC_DEBOUNCE_MS` | `30000` | Delay that collapses bursts of changes |
 | `DEVREV_SYNC_TIMEOUT_MS` | `15000` | Per-request timeout |
+
+Both link type IDs are checked at startup: each must be a `custom_link_type/<n>` ID
+(a `tenant_fragment/...` schema ID causes `unexpected_id_type`), the two must differ, and
+`custom_link_type/4` (a deprecated duplicate) is refused. An invalid ID is logged as an
+error and those links are skipped until it is fixed; nothing else stops.
 
 Redis comes from the existing `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD` and `REDIS_DB`.
 

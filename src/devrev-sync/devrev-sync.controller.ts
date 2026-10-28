@@ -163,7 +163,7 @@ export class DevRevSyncController {
       res,
       apiId,
       "CONFLICT",
-      "DevRev sync is not running (DEVREV_SYNC_ENABLED is off or DEVREV_TOKEN is empty)",
+      "DevRev sync is not running (DEVREV_SYNC_ENABLED is off or the DevRev token is empty)",
       HttpStatus.CONFLICT
     );
   }

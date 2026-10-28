@@ -54,15 +54,23 @@ export class DevRevSyncQueue implements OnModuleInit, OnModuleDestroy {
       return;
     }
     this.config.warnings.forEach((warning) => this.logger.warn(warning));
+    this.config.errors.forEach((error) => this.logger.error(error));
     if (!this.config.canRun) {
       this.logger.error(
-        "DevRev sync is enabled but DEVREV_TOKEN is empty; sync stays off"
+        "DevRev sync is enabled but DEVREV_API_TOKEN (or DEVREV_TOKEN) is empty; sync stays off"
       );
       return;
     }
     if (this.config.syncRevUsers && !this.config.canSyncRevUsers) {
       this.logger.warn(
         "DEVREV_REV_ORG_ID is empty; Rev Users and links will not sync"
+      );
+    } else if (
+      this.config.canSyncRevUsers &&
+      (!this.config.profileLinkTypeId || !this.config.recordLinkTypeId)
+    ) {
+      this.logger.warn(
+        "A DevRev link type ID is missing or invalid; those Rev User links are skipped until it is fixed"
       );
     }
 
