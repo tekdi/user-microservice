@@ -124,7 +124,7 @@ export class DevRevSyncController {
     );
   }
 
-  /** Counts by record type and status, queue counts, and the latest 50 failures. */
+  /** Counts by record type and status, queue counts, and the latest 50 FAILED or REJECTED records. */
   @Get("status")
   @UseGuards(JwtAuthGuard)
   @ApiBasicAuth("access-token")
@@ -146,12 +146,14 @@ export class DevRevSyncController {
         "s.externalId",
         "s.userId",
         "s.cohortId",
+        "s.status",
         "s.attempts",
-        "s.retryable",
         "s.lastError",
         "s.updatedAt",
       ])
-      .where("s.status = :failed", { failed: DevRevSyncStatus.FAILED })
+      .where("s.status IN (:...failed)", {
+        failed: [DevRevSyncStatus.FAILED, DevRevSyncStatus.REJECTED],
+      })
       .orderBy("s.updatedAt", "DESC")
       .limit(50);
     if (cohortId) {
@@ -174,9 +176,9 @@ export class DevRevSyncController {
   }
 
   /**
-   * Re-queue learners with a FAILED record that retrying can fix (see
-   * DevRevRecordService.userIdsToRetry). Schema errors and other 4xx are left
-   * for a resync after the fix. Meant for the external scheduler, like the
+   * Re-queue learners with a FAILED record (see
+   * DevRevRecordService.userIdsToRetry). REJECTED records (schema errors and
+   * other 4xx) are left for a resync after the fix. Meant for the external scheduler, like the
    * other cron/* endpoints in this service, e.g. every 15 minutes.
    */
   @Post("cron/retry-failed")

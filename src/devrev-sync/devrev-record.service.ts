@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { In, IsNull, LessThan, Repository } from "typeorm";
+import { In, LessThan, Repository } from "typeorm";
 import {
   DevRevApiError,
   DevRevClient,
@@ -188,20 +188,16 @@ export class DevRevRecordService {
   }
 
   /**
-   * Learners with a FAILED record worth retrying: not a schema error or other
-   * 4xx, and still within AUTO_RETRY_ROUNDS. Rows written before "retryable"
-   * existed (null) count as retryable. Records past the limit need a resync.
+   * Learners with a FAILED record (one retrying can fix) still within
+   * AUTO_RETRY_ROUNDS. REJECTED records and those past the limit need a resync.
    */
   async userIdsToRetry(): Promise<string[]> {
-    const attempts = LessThan(
-      this.config.maxAttempts * (1 + AUTO_RETRY_ROUNDS)
-    );
     const rows = await this.syncRepository.find({
       select: ["userId"],
-      where: [
-        { status: DevRevSyncStatus.FAILED, retryable: true, attempts },
-        { status: DevRevSyncStatus.FAILED, retryable: IsNull(), attempts },
-      ],
+      where: {
+        status: DevRevSyncStatus.FAILED,
+        attempts: LessThan(this.config.maxAttempts * (1 + AUTO_RETRY_ROUNDS)),
+      },
     });
     return [...new Set(rows.map((r) => r.userId))];
   }
@@ -288,15 +284,16 @@ export class DevRevRecordService {
       }
       row.attempts = 0;
       row.lastError = null;
-      row.retryable = null;
       return await this.syncRepository.save(row);
     } catch (error) {
-      row.status = DevRevSyncStatus.FAILED;
-      row.attempts = (row.attempts ?? 0) + 1;
       // Database and unexpected errors are worth another try; DevRev says
       // for its own (schema errors and other 4xx are not).
-      row.retryable =
+      const retryable =
         error instanceof DevRevApiError ? error.retryable : true;
+      row.status = retryable
+        ? DevRevSyncStatus.FAILED
+        : DevRevSyncStatus.REJECTED;
+      row.attempts = (row.attempts ?? 0) + 1;
       row.lastError =
         (error as Error).message?.slice(0, 2000) ?? "unknown error";
       await this.syncRepository.save(row);

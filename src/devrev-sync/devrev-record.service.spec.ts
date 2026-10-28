@@ -204,26 +204,24 @@ describe("DevRevRecordService", () => {
         `alp_enrollment|${USER_ID}:ALP-2026-C2`
       );
       expect(saved).toMatchObject({
-        status: DevRevSyncStatus.FAILED,
+        status: DevRevSyncStatus.REJECTED,
         attempts: 1,
       });
       expect(saved.devrevId).toBeUndefined();
       expect(saved.lastError).toContain("not in referenced custom schema");
-      expect(saved.retryable).toBe(false);
     });
 
-    it("marks a 5xx or database failure as retryable", async () => {
+    it("marks a 5xx or database failure as FAILED, so it is retried", async () => {
+      const status = () =>
+        repository.rows.get(`alp_enrollment|${USER_ID}:ALP-2026-C2`).status;
+
       client.post.mockRejectedValueOnce(apiError(503, "unavailable", true));
       await service.upsertCustomObject(enrollment()).catch(() => undefined);
-      expect(
-        repository.rows.get(`alp_enrollment|${USER_ID}:ALP-2026-C2`).retryable
-      ).toBe(true);
+      expect(status()).toBe(DevRevSyncStatus.FAILED);
 
       client.post.mockRejectedValueOnce(new Error("connection reset"));
       await service.upsertCustomObject(enrollment()).catch(() => undefined);
-      expect(
-        repository.rows.get(`alp_enrollment|${USER_ID}:ALP-2026-C2`).retryable
-      ).toBe(true);
+      expect(status()).toBe(DevRevSyncStatus.FAILED);
     });
 
     it("clears the failure state once a write succeeds", async () => {
@@ -237,7 +235,6 @@ describe("DevRevRecordService", () => {
         status: DevRevSyncStatus.SYNCED,
         attempts: 0,
         lastError: null,
-        retryable: null,
       });
     });
 
@@ -339,7 +336,7 @@ describe("DevRevRecordService", () => {
   });
 
   describe("userIdsToRetry", () => {
-    it("asks only for retryable failures within the auto-retry limit", async () => {
+    it("asks only for FAILED records within the auto-retry limit", async () => {
       repository.find.mockResolvedValueOnce([
         { userId: "u1" },
         { userId: "u1" },
@@ -350,14 +347,10 @@ describe("DevRevRecordService", () => {
 
       expect(userIds).toEqual(["u1", "u2"]);
       const { where } = repository.find.mock.calls[0][0];
-      expect(where).toHaveLength(2);
-      for (const clause of where) {
-        expect(clause.status).toBe(DevRevSyncStatus.FAILED);
-        // 5 job attempts + 3 auto-retry rounds of 5
-        expect(clause.attempts).toMatchObject({ _type: "lessThan", _value: 20 });
-      }
-      expect(where[0].retryable).toBe(true);
-      expect(where[1].retryable).toMatchObject({ _type: "isNull" });
+      // REJECTED rows are never picked up
+      expect(where.status).toBe(DevRevSyncStatus.FAILED);
+      // 5 job attempts + 3 auto-retry rounds of 5
+      expect(where.attempts).toMatchObject({ _type: "lessThan", _value: 20 });
     });
   });
 });

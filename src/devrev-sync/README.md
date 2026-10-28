@@ -105,22 +105,17 @@ DEVREV_SYNC_COHORT_ALLOWLIST=<one test cohort id>
 
 `synchronize` is off, so create the table by hand before enabling sync. The DDL is in
 the doc comment of [entities/devrev-sync.entity.ts](entities/devrev-sync.entity.ts).
-A table created before the `retryable` column was added needs:
-
-```sql
-ALTER TABLE public."DevRevSync" ADD COLUMN IF NOT EXISTS "retryable" boolean;
-```
 
 ## Failures
 
 - 429, 5xx and network errors are retried: twice in place, then by the queue with
   backoff (5s, 10s, 20s, 40s, or DevRev's `Retry-After`).
 - Any other 4xx fails at once with no retries: `field_not_in_schema`, an invalid enum
-  value, "No tenant fragment found", `unexpected_id_type`. The row is `FAILED` with
-  `retryable = false`. Fix the cause, then call `POST /resync`.
+  value, "No tenant fragment found", `unexpected_id_type`. The row is `REJECTED`.
+  Fix the cause, then call `POST /resync`.
 - A create conflict (409) is not an error: the record is found and updated.
-- `cron/retry-failed` re-queues only `retryable` failures, for up to 3 more rounds
-  after the job's own attempts.
+- `cron/retry-failed` re-queues only `FAILED` records (never `REJECTED`), for up to 3
+  more rounds after the job's own attempts.
 
 ## Endpoints (prefix `/user/v1/devrev-sync`)
 
@@ -128,8 +123,8 @@ ALTER TABLE public."DevRevSync" ADD COLUMN IF NOT EXISTS "retryable" boolean;
 | --- | --- | --- |
 | `POST /resync` with `{ "userId" }` or `{ "cohortId" }` | JWT | Re-send a learner or a whole cohort in full, ignoring the "unchanged" check. Use after fixing a schema or data problem |
 | `POST /backfill` with `{ "cohortId", "dryRun"? }` | JWT | Queue every learner in a cohort. Payload hashes are kept, so a repeat only sends what changed. `dryRun: true` only counts. Run cohort by cohort, oldest first |
-| `GET /status?cohortId=` | JWT | Counts by record type and status, queue counts, the latest 50 failures |
-| `POST /cron/retry-failed` | none, like the other `cron/*` endpoints | Re-queue learners with a retryable `FAILED` record (see Failures). Point the external scheduler at it, e.g. every 15 minutes |
+| `GET /status?cohortId=` | JWT | Counts by record type and status, queue counts, the latest 50 `FAILED` or `REJECTED` records |
+| `POST /cron/retry-failed` | none, like the other `cron/*` endpoints | Re-queue learners with a `FAILED` record (see Failures). Point the external scheduler at it, e.g. every 15 minutes |
 
 ## Not covered yet
 
