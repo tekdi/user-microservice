@@ -111,6 +111,7 @@ export class DevRevSyncController {
         "s.userId",
         "s.cohortId",
         "s.attempts",
+        "s.retryable",
         "s.lastError",
         "s.updatedAt",
       ])
@@ -137,18 +138,17 @@ export class DevRevSyncController {
   }
 
   /**
-   * Re-queue every learner with a FAILED record. Meant for the external
-   * scheduler (like the other cron/* endpoints in this service), e.g. every 15 minutes.
+   * Re-queue learners with a FAILED record that retrying can fix (see
+   * DevRevRecordService.userIdsToRetry). Schema errors and other 4xx are left
+   * for a resync after the fix. Meant for the external scheduler, like the
+   * other cron/* endpoints in this service, e.g. every 15 minutes.
    */
   @Post("cron/retry-failed")
   async retryFailed(@Res() res: Response) {
     if (!this.queue.isRunning) return this.disabled(res, API.RETRY);
-    const rows = await this.syncRepository
-      .createQueryBuilder("s")
-      .select("DISTINCT s.userId", "userId")
-      .where("s.status = :failed", { failed: DevRevSyncStatus.FAILED })
-      .getRawMany();
-    const queued = await this.queue.enqueueLearners(rows.map((r) => r.userId));
+    const queued = await this.queue.enqueueLearners(
+      await this.records.userIdsToRetry()
+    );
     return APIResponse.success(
       res,
       API.RETRY,

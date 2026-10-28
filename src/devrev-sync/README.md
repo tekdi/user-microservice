@@ -32,7 +32,7 @@ The service never changes DevRev schemas.
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `DEVREV_SYNC_ENABLED` | `false` | Master switch |
-| `DEVREV_SYNC_DRY_RUN` | `false` | Log request bodies instead of calling DevRev. Rows get status `DRY_RUN`; no DevRev IDs are stored |
+| `DEVREV_SYNC_DRY_RUN` | `false` | Log request bodies instead of calling DevRev, with names, emails, gender and date of birth masked. Rows get status `DRY_RUN`; no DevRev IDs are stored |
 | `DEVREV_SYNC_LEARNER_PROFILE` | `true` | Switch for `learner_profile` |
 | `DEVREV_SYNC_ALP_ENROLLMENT` | `true` | Switch for `alp_enrollment` |
 | `DEVREV_SYNC_REV_USERS` | `true` | Switch for Rev Users and links (also needs `DEVREV_REV_ORG_ID`) |
@@ -69,6 +69,22 @@ DEVREV_SYNC_COHORT_ALLOWLIST=<one test cohort id>
 
 `synchronize` is off, so create the table by hand before enabling sync. The DDL is in
 the doc comment of [entities/devrev-sync.entity.ts](entities/devrev-sync.entity.ts).
+A table created before the `retryable` column was added needs:
+
+```sql
+ALTER TABLE public."DevRevSync" ADD COLUMN IF NOT EXISTS "retryable" boolean;
+```
+
+## Failures
+
+- 429, 5xx and network errors are retried: twice in place, then by the queue with
+  backoff (5s, 10s, 20s, 40s, or DevRev's `Retry-After`).
+- Any other 4xx fails at once with no retries: `field_not_in_schema`, an invalid enum
+  value, "No tenant fragment found", `unexpected_id_type`. The row is `FAILED` with
+  `retryable = false`. Fix the cause, then call `POST /resync`.
+- A create conflict (409) is not an error: the record is found and updated.
+- `cron/retry-failed` re-queues only `retryable` failures, for up to 3 more rounds
+  after the job's own attempts.
 
 ## Endpoints (prefix `/user/v1/devrev-sync`)
 
@@ -76,7 +92,7 @@ the doc comment of [entities/devrev-sync.entity.ts](entities/devrev-sync.entity.
 | --- | --- | --- |
 | `POST /resync` with `{ "userId" }` or `{ "cohortId" }` | JWT | Re-send a learner or a whole cohort in full. Also the backfill entry point |
 | `GET /status?cohortId=` | JWT | Counts by record type and status, queue counts, the latest 50 failures |
-| `POST /cron/retry-failed` | none, like the other `cron/*` endpoints | Re-queue learners with a `FAILED` record. Point the external scheduler at it, e.g. every 15 minutes |
+| `POST /cron/retry-failed` | none, like the other `cron/*` endpoints | Re-queue learners with a retryable `FAILED` record (see Failures). Point the external scheduler at it, e.g. every 15 minutes |
 
 ## Not covered yet
 

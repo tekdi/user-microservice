@@ -25,24 +25,13 @@ export class DevRevApiError extends Error {
     this.name = "DevRevApiError";
   }
 
-  /** create hit an existing unique_key. */
-  get isConflict(): boolean {
-    const text = `${JSON.stringify(this.body ?? {})} ${this.message}`;
-    return (
-      this.status === 409 ||
-      /unique|already exist|duplicate|conflict/i.test(text)
-    );
-  }
-
   /**
-   * The DevRev schema doesn't match what we sent: unknown field, bad enum
-   * value, or the type's schema was never created. Retrying can't fix it.
+   * create hit an existing unique_key. DevRev answers a conflicting create
+   * with 409 (developer.devrev.ai/about/errors); matching on message text
+   * would also catch 400s that merely mention "unique_key".
    */
-  get isSchemaError(): boolean {
-    const text = `${JSON.stringify(this.body ?? {})} ${this.message}`;
-    return /field_not_in_schema|not in referenced custom schema|no tenant fragment|invalid enum|not a valid value/i.test(
-      text
-    );
+  get isConflict(): boolean {
+    return this.status === 409;
   }
 }
 
@@ -73,6 +62,34 @@ const LOGGED_REQUEST_FIELDS = [
   "target",
 ];
 
+/**
+ * Keys whose values are personal data. Masked even in the dry-run log, which
+ * otherwise shows the whole body so payloads can be reviewed.
+ */
+const PERSONAL_KEYS: ReadonlySet<string> = new Set([
+  "display_name",
+  "email",
+  "title",
+  "tnt__full_name",
+  "tnt__email",
+  "tnt__date_of_birth",
+  "tnt__gender",
+]);
+
+/** A copy of a request body with personal values replaced by "<redacted>". */
+export function redactForLog(value: any): any {
+  if (Array.isArray(value)) return value.map(redactForLog);
+  if (!value || typeof value !== "object") return value;
+  const out: Record<string, any> = {};
+  for (const [key, v] of Object.entries(value)) {
+    out[key] =
+      PERSONAL_KEYS.has(key) && v !== undefined && v !== null && v !== ""
+        ? "<redacted>"
+        : redactForLog(v);
+  }
+  return out;
+}
+
 /** Short `key=value` summary of a request body for the logs. */
 export function describeRequest(body: Record<string, any>): string {
   if (!body || typeof body !== "object") return "";
@@ -100,7 +117,9 @@ export class DevRevClient {
    */
   async post<T = any>(endpoint: string, body: Record<string, any>): Promise<T> {
     if (this.config.dryRun) {
-      this.logger.log(`[dry-run] POST /${endpoint} ${JSON.stringify(body)}`);
+      this.logger.log(
+        `[dry-run] POST /${endpoint} ${JSON.stringify(redactForLog(body))}`
+      );
       return this.dryRunResponse(endpoint) as T;
     }
 

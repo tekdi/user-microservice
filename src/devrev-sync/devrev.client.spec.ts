@@ -112,7 +112,7 @@ describe("DevRevClient", () => {
     expect(error.status).toBeNull();
   });
 
-  it("does not retry a 400 and flags schema errors", async () => {
+  it("does not retry a schema error", async () => {
     post.mockRejectedValue(
       httpError(400, {
         type: "bad_request",
@@ -126,7 +126,31 @@ describe("DevRevClient", () => {
 
     expect(post).toHaveBeenCalledTimes(1);
     expect(error.retryable).toBe(false);
-    expect(error.isSchemaError).toBe(true);
+    expect(error.isConflict).toBe(false);
+  });
+
+  it.each([
+    ["unexpected_id_type", "unexpected_id_type: custom_link_type"],
+    ["invalid enum", "invalid enum value 'Waitlisted' for field tnt__lifecycle_stage"],
+    ["no tenant fragment", "No tenant fragment found for leaf type elp_pathway"],
+  ])("does not retry %s", async (_name, message) => {
+    post.mockRejectedValue(httpError(400, { message }));
+
+    const error = await client.post("links.create", {}).catch((e) => e);
+
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(error.retryable).toBe(false);
+  });
+
+  it("does not treat a 400 that mentions unique_key as a conflict", async () => {
+    post.mockRejectedValue(
+      httpError(400, { message: "unique_key must not be empty" })
+    );
+
+    const error = await client
+      .post("custom-objects.create", {})
+      .catch((e) => e);
+
     expect(error.isConflict).toBe(false);
   });
 
@@ -215,6 +239,31 @@ describe("DevRevClient", () => {
     expect(post).not.toHaveBeenCalled();
     expect(idOf(created)).toMatch(/^don:dry-run:/);
     expect(firstArray(listed)).toEqual([]);
+  });
+
+  it("masks personal data in the dry-run log", async () => {
+    const dryRun = new DevRevClient(
+      config({ DEVREV_SYNC_DRY_RUN: "true", DEVREV_TOKEN: "" })
+    );
+
+    await dryRun.post("custom-objects.create", {
+      title: "Amina Yusuf · ALP-2026-C2",
+      unique_key: "LRNR:u1",
+      custom_fields: {
+        tnt__full_name: "Amina Yusuf",
+        tnt__email: "amina@example.com",
+        tnt__date_of_birth: "2001-02-03",
+        tnt__gender: "female",
+        tnt__current_country: "Kenya",
+      },
+    });
+
+    const line = logged.find((l) => l.startsWith("[dry-run]"));
+    expect(line).toContain("LRNR:u1");
+    expect(line).toContain("Kenya");
+    for (const value of ["Amina", "amina@example.com", "2001-02-03", "female"]) {
+      expect(line).not.toContain(value);
+    }
   });
 
   describe("response parsing", () => {

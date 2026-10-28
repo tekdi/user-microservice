@@ -43,6 +43,7 @@ export enum DevRevLeafType {
  *     "status"        varchar(16) NOT NULL DEFAULT 'PENDING',
  *     "attempts"      integer NOT NULL DEFAULT 0,
  *     "lastError"     text,
+ *     "retryable"     boolean,
  *     "lastSyncedAt"  timestamptz,
  *     "createdAt"     timestamptz NOT NULL DEFAULT now(),
  *     "updatedAt"     timestamptz NOT NULL DEFAULT now(),
@@ -51,6 +52,10 @@ export enum DevRevLeafType {
  *   CREATE INDEX IF NOT EXISTS idx_devrev_sync_status ON public."DevRevSync" ("status", "updatedAt");
  *   CREATE INDEX IF NOT EXISTS idx_devrev_sync_user   ON public."DevRevSync" ("userId");
  *   CREATE INDEX IF NOT EXISTS idx_devrev_sync_cohort ON public."DevRevSync" ("cohortId");
+ *
+ * Tables created before "retryable" was added need:
+ *
+ *   ALTER TABLE public."DevRevSync" ADD COLUMN IF NOT EXISTS "retryable" boolean;
  */
 @Entity("DevRevSync")
 @Index("uq_devrev_sync_key", ["leafType", "externalId"], { unique: true })
@@ -95,6 +100,13 @@ export class DevRevSync {
   /** Error code and message only, never the payload. */
   @Column({ type: "text", nullable: true })
   lastError: string | null;
+
+  /**
+   * For a FAILED row: whether retrying can help. false for schema errors and
+   * other 4xx, which retry-failed leaves alone until fixed and re-synced.
+   */
+  @Column({ type: "boolean", nullable: true })
+  retryable: boolean | null;
 
   @Column({ type: "timestamptz", nullable: true })
   lastSyncedAt: Date | null;

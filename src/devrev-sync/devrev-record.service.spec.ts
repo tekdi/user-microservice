@@ -43,6 +43,7 @@ function memoryRepository() {
       return row;
     }),
     update: jest.fn(async () => ({ affected: 1 })),
+    find: jest.fn(async (_options: any) => [] as Partial<DevRevSync>[]),
   };
 }
 
@@ -165,6 +166,31 @@ describe("DevRevRecordService", () => {
       expect(row.devrevId).toBe("don:enr/2");
     });
 
+    it("links a re-created record again", async () => {
+      client.post.mockResolvedValueOnce({ custom_object: { id: "don:enr/1" } });
+      const first = await service.upsertCustomObject(enrollment());
+      client.post.mockResolvedValueOnce({});
+      await service.ensureLink(first, "don:revu/1", "don:lt/3");
+      client.post
+        .mockClear()
+        .mockRejectedValueOnce(apiError(404, "not found"))
+        .mockResolvedValueOnce({ custom_object: { id: "don:enr/2" } })
+        .mockResolvedValueOnce({});
+
+      const row = await service.upsertCustomObject(
+        enrollment({ cohort: "ALP-2026-C2", week: 2 })
+      );
+      await service.ensureLink(row, "don:revu/1", "don:lt/3");
+
+      expect(client.post).toHaveBeenLastCalledWith("links.create", {
+        link_type: "custom_link",
+        custom_link_type: "don:lt/3",
+        source: "don:revu/1",
+        target: "don:enr/2",
+      });
+      expect(row.linked).toBe(true);
+    });
+
     it("records the failure on the row and rethrows", async () => {
       client.post.mockRejectedValueOnce(
         apiError(400, "field 'tnt__x' not in referenced custom schema")
@@ -183,6 +209,36 @@ describe("DevRevRecordService", () => {
       });
       expect(saved.devrevId).toBeUndefined();
       expect(saved.lastError).toContain("not in referenced custom schema");
+      expect(saved.retryable).toBe(false);
+    });
+
+    it("marks a 5xx or database failure as retryable", async () => {
+      client.post.mockRejectedValueOnce(apiError(503, "unavailable", true));
+      await service.upsertCustomObject(enrollment()).catch(() => undefined);
+      expect(
+        repository.rows.get(`alp_enrollment|${USER_ID}:ALP-2026-C2`).retryable
+      ).toBe(true);
+
+      client.post.mockRejectedValueOnce(new Error("connection reset"));
+      await service.upsertCustomObject(enrollment()).catch(() => undefined);
+      expect(
+        repository.rows.get(`alp_enrollment|${USER_ID}:ALP-2026-C2`).retryable
+      ).toBe(true);
+    });
+
+    it("clears the failure state once a write succeeds", async () => {
+      client.post.mockRejectedValueOnce(apiError(400, "bad"));
+      await service.upsertCustomObject(enrollment()).catch(() => undefined);
+      client.post.mockResolvedValueOnce({ custom_object: { id: "don:enr/1" } });
+
+      const row = await service.upsertCustomObject(enrollment());
+
+      expect(row).toMatchObject({
+        status: DevRevSyncStatus.SYNCED,
+        attempts: 0,
+        lastError: null,
+        retryable: null,
+      });
     });
 
     it("in dry-run, stores no DevRev ID so a real run creates the record later", async () => {
@@ -279,6 +335,29 @@ describe("DevRevRecordService", () => {
       await service.ensureLink(record(), "don:revu/1", "");
 
       expect(client.post).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("userIdsToRetry", () => {
+    it("asks only for retryable failures within the auto-retry limit", async () => {
+      repository.find.mockResolvedValueOnce([
+        { userId: "u1" },
+        { userId: "u1" },
+        { userId: "u2" },
+      ]);
+
+      const userIds = await service.userIdsToRetry();
+
+      expect(userIds).toEqual(["u1", "u2"]);
+      const { where } = repository.find.mock.calls[0][0];
+      expect(where).toHaveLength(2);
+      for (const clause of where) {
+        expect(clause.status).toBe(DevRevSyncStatus.FAILED);
+        // 5 job attempts + 3 auto-retry rounds of 5
+        expect(clause.attempts).toMatchObject({ _type: "lessThan", _value: 20 });
+      }
+      expect(where[0].retryable).toBe(true);
+      expect(where[1].retryable).toMatchObject({ _type: "isNull" });
     });
   });
 });

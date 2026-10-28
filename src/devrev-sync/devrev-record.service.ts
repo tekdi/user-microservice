@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { In, Repository } from "typeorm";
+import { In, IsNull, LessThan, Repository } from "typeorm";
 import {
   DevRevApiError,
   DevRevClient,
@@ -30,6 +30,12 @@ export interface CustomObjectUpsert {
 }
 
 const TENANT_FRAGMENT = { tenant_fragment: true };
+
+/**
+ * Rounds of retry-failed a record gets after its job used up its attempts
+ * ("auto-retry every 15 minutes, up to 3 more times").
+ */
+export const AUTO_RETRY_ROUNDS = 3;
 
 /**
  * Writes single DevRev records and keeps DevRevSync in step with them.
@@ -71,8 +77,11 @@ export class DevRevRecordService {
           return row.devrevId;
         } catch (error) {
           // Deleted in DevRev by hand: forget the ID and create it again.
+          // The old link went with the record, so the new one needs linking.
           if (!(error instanceof DevRevApiError) || error.status !== 404)
             throw error;
+          row.devrevId = null;
+          row.linked = false;
         }
       }
 
@@ -178,6 +187,25 @@ export class DevRevRecordService {
     return result.affected ?? 0;
   }
 
+  /**
+   * Learners with a FAILED record worth retrying: not a schema error or other
+   * 4xx, and still within AUTO_RETRY_ROUNDS. Rows written before "retryable"
+   * existed (null) count as retryable. Records past the limit need a resync.
+   */
+  async userIdsToRetry(): Promise<string[]> {
+    const attempts = LessThan(
+      this.config.maxAttempts * (1 + AUTO_RETRY_ROUNDS)
+    );
+    const rows = await this.syncRepository.find({
+      select: ["userId"],
+      where: [
+        { status: DevRevSyncStatus.FAILED, retryable: true, attempts },
+        { status: DevRevSyncStatus.FAILED, retryable: IsNull(), attempts },
+      ],
+    });
+    return [...new Set(rows.map((r) => r.userId))];
+  }
+
   private async findCustomObjectId(
     leafType: string,
     field: string,
@@ -260,10 +288,15 @@ export class DevRevRecordService {
       }
       row.attempts = 0;
       row.lastError = null;
+      row.retryable = null;
       return await this.syncRepository.save(row);
     } catch (error) {
       row.status = DevRevSyncStatus.FAILED;
       row.attempts = (row.attempts ?? 0) + 1;
+      // Database and unexpected errors are worth another try; DevRev says
+      // for its own (schema errors and other 4xx are not).
+      row.retryable =
+        error instanceof DevRevApiError ? error.retryable : true;
       row.lastError =
         (error as Error).message?.slice(0, 2000) ?? "unknown error";
       await this.syncRepository.save(row);
