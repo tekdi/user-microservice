@@ -3617,59 +3617,65 @@ export class UserService {
 
 
   async suggestUsername(response: Response, suggestUserDto: SuggestUserDto) {
-
-    const apiId = APIID.USER_LIST;
+    const apiId = APIID.SUGGEST_USERNAME;
     try {
-      // Fetch user data from the database to check if the username already exists
-      const findData = await this.usersRepository.findOne({
-        where: { username: ILike(suggestUserDto?.username) },
-      });
-
-      if (findData) {
-        // Define a function to generate a username  
-        const generateUsername = (): string => {
-          const randomNum = randomInt(100, 1000); // Secure random 3-digit number
-          return `${suggestUserDto.firstName}${suggestUserDto.lastName}${randomNum}`;
-        };
-
-        // Check if the generated username exists in the database
-        let newUsername = generateUsername();
-        let isUnique = false;
-
-        while (!isUnique) {
-          const existingUser = await this.usersRepository.findOne({
-            where: { username: ILike(newUsername) },
-          });
-
-          if (!existingUser) {
-            isUnique = true; // Username is unique
-          } else {
-            // Generate a new username and try again
-            newUsername = generateUsername();
-          }
-        }
-
-        // Return the unique suggested username
-        return await APIResponse.success(
+      // lowercase a-z0-9 only, so candidates are safe in ILIKE and match any casing already stored
+      const clean = (s: string) =>
+        (s ?? "").normalize("NFD").toLowerCase().replace(/[^a-z0-9]/g, "");
+      const base = `${clean(suggestUserDto.firstName)}${clean(suggestUserDto.lastName)}`;
+      if (!base) {
+        return APIResponse.error(
           response,
           apiId,
-          { suggestedUsername: newUsername },
-          HttpStatus.OK,
-          API_RESPONSES.USERNAME_SUGGEST_SUCCESSFULLY
+          API_RESPONSES.BAD_REQUEST,
+          "First and last name must contain at least one letter or digit (a-z, 0-9)",
+          HttpStatus.BAD_REQUEST
         );
       }
 
-      // If findData is not present, return a message indicating that the user was not found
+      // One indexed query returns every taken base+digits username (2-7 digits). The suggestion
+      // then takes the shortest digit length that still has a free number, so a 3-digit suffix
+      // is never returned while any 2-digit one is free.
+      // Only a suggestion, not a reservation: the unique constraint on Users.username
+      // still decides the race at create time; picking randomly among free numbers keeps clashes rare.
+      const rows = await this.usersRepository
+        .createQueryBuilder("u")
+        .select("LOWER(u.username)", "username")
+        .where("LOWER(u.username) LIKE :prefix", { prefix: `${base}%` })
+        .andWhere("LOWER(u.username) ~ :re", { re: `^${base}[0-9]{2,7}$` })
+        .getRawMany();
+      const taken = new Set<string>(rows.map((r) => r.username));
+
+      for (let digits = 2; digits <= 7; digits++) {
+        const min = 10 ** (digits - 1);
+        const max = 10 ** digits;
+        let takenCount = 0;
+        for (const t of taken) if (t.length === base.length + digits) takenCount++;
+        if (takenCount >= max - min) continue;
+
+        // in-memory loop; cheap because at least one free number exists in this range
+        let candidate: string;
+        do {
+          candidate = `${base}${randomInt(min, max)}`;
+        } while (taken.has(candidate));
+
+        return APIResponse.success(
+          response,
+          apiId,
+          { suggestedUsername: candidate },
+          HttpStatus.OK,
+          API_RESPONSES.USERNAME_SUGGESTED
+        );
+      }
+
       return APIResponse.error(
         response,
         apiId,
-        API_RESPONSES.USER_NOT_FOUND,
-        API_RESPONSES.NOT_FOUND,
-        HttpStatus.NOT_FOUND
+        API_RESPONSES.SERVER_ERROR,
+        "Could not find a free username",
+        HttpStatus.INTERNAL_SERVER_ERROR
       );
-
     } catch (error) {
-      // Handle errors gracefully
       const errorMessage = error.message || API_RESPONSES.SERVER_ERROR;
       return APIResponse.error(
         response,
