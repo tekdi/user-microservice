@@ -30,6 +30,7 @@ export class DevRevSyncConfig {
   readonly dryRun: boolean;
   readonly syncLearnerProfile: boolean;
   readonly syncAlpEnrollment: boolean;
+  readonly syncElpPathway: boolean;
   readonly syncRevUsers: boolean;
 
   readonly baseUrl: string;
@@ -77,6 +78,7 @@ export class DevRevSyncConfig {
     this.dryRun = flag("DEVREV_SYNC_DRY_RUN", false);
     this.syncLearnerProfile = flag("DEVREV_SYNC_LEARNER_PROFILE", true);
     this.syncAlpEnrollment = flag("DEVREV_SYNC_ALP_ENROLLMENT", true);
+    this.syncElpPathway = flag("DEVREV_SYNC_ELP_PATHWAY", true);
     this.syncRevUsers = flag("DEVREV_SYNC_REV_USERS", true);
 
     this.baseUrl = get("DEVREV_BASE_URL", "https://api.devrev.ai").replace(

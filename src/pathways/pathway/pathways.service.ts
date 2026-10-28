@@ -1,5 +1,5 @@
 import * as crypto from 'crypto';
-import { Injectable, HttpStatus, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, HttpStatus, BadRequestException, Logger, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, DataSource, Like, ILike, Not, Raw } from 'typeorm';
 import { Pathway, PathwayType } from './entities/pathway.entity';
@@ -29,6 +29,7 @@ import { CourseCompletionWebhookDto } from './dto/course-completion-webhook.dto'
 import { NotificationRequest } from '../../common/utils/notification.axios';
 import { getReportCountryScope } from '@utils/report-country-scope';
 import { STUDENT_ROLE_CODE } from '../../common/utils/roles.constants';
+import { DevRevSyncQueue } from '../../devrev-sync/devrev-sync.queue';
 
 const PATHWAY_SUBTYPE_PROGRAM_NAMES: Record<string, string> = {
   CAL: 'CAL Onboarding Course',
@@ -55,6 +56,7 @@ export class PathwaysService {
     private readonly configService: ConfigService,
     private readonly cacheService: CacheService,
     private readonly notificationRequest: NotificationRequest,
+    @Optional() private readonly devRevSyncQueue?: DevRevSyncQueue,
   ) {
     // Initialize S3StorageProvider for image uploads
     this.s3StorageProvider = new S3StorageProvider(this.configService);
@@ -1534,6 +1536,8 @@ export class PathwaysService {
           activeId = savedRecord.id;
         }
       });
+      // DevRev: elp_pathway for both the new and the deactivated pathway
+      this.devRevSyncQueue?.enqueueLearner(userId);
 
       const result = {
         id: activeId,
@@ -1650,6 +1654,7 @@ export class PathwaysService {
         updated_by: updated_by ?? created_by,
       });
       const saved = await this.userPathwayHistoryRepository.save(record);
+      this.devRevSyncQueue?.enqueueLearner(userId);
 
       const result = {
         id: saved.id,
@@ -2493,6 +2498,7 @@ export class PathwaysService {
           HttpStatus.OK, API_RESPONSES.COURSE_COMPLETION_ALREADY_PROCESSED
         );
       }
+      this.devRevSyncQueue?.enqueueLearner(dto.userId);
 
       // Send course-completion email for the completed VOLUNTEER pathway.
       try {        
@@ -2564,8 +2570,11 @@ export class PathwaysService {
   ): Promise<Response> {
     const apiId = APIID.VOLUNTEER_HISTORY_STATUS_UPDATE;
     try {
-      const exists = await this.userPathwayHistoryRepository.existsBy({ id: historyId });
-      if (!exists) {
+      const history = await this.userPathwayHistoryRepository.findOne({
+        where: { id: historyId },
+        select: ['id', 'user_id'],
+      });
+      if (!history) {
         return APIResponse.error(response, apiId, API_RESPONSES.NOT_FOUND, API_RESPONSES.VOLUNTEER_PATHWAY_HISTORY_NOT_FOUND, HttpStatus.NOT_FOUND);
       }
 
@@ -2592,6 +2601,7 @@ export class PathwaysService {
       if ((result.affected ?? 0) === 0) {
         return APIResponse.error(response, apiId, API_RESPONSES.BAD_REQUEST, API_RESPONSES.VOLUNTEER_PATHWAY_INVALID_STATUS_TRANSITION, HttpStatus.BAD_REQUEST);
       }
+      this.devRevSyncQueue?.enqueueLearner(history.user_id);
 
       return APIResponse.success(response, apiId, {
         id: historyId,

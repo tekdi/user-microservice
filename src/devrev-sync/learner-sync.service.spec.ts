@@ -54,6 +54,7 @@ function snapshot(overrides: Partial<LearnerSnapshot> = {}): LearnerSnapshot {
         updatedAt: null,
       },
     ],
+    pathways: [],
     ...overrides,
   };
 }
@@ -87,6 +88,7 @@ describe("LearnerSyncService", () => {
       userId: USER_ID,
       outcome: "synced",
       enrollments: 2,
+      pathways: 0,
     });
     expect(records.upsertRevUser).toHaveBeenCalledWith(
       USER_ID,
@@ -204,5 +206,67 @@ describe("LearnerSyncService", () => {
 
     expect(error.retryable).toBe(true);
     expect(error.retryAfterMs).toBe(20000);
+  });
+
+  describe("ELP pathways", () => {
+    const pathways = [
+      {
+        pathwayKey: "career_launch",
+        pathwayName: "Career Launch",
+        status: "ACTIVE",
+        isActive: true,
+        activatedAt: "2026-05-01T09:00:00Z",
+      },
+      {
+        pathwayKey: "venture",
+        pathwayName: "Venture",
+        status: "WITHDRAWN",
+        isActive: false,
+        activatedAt: "2026-03-01T09:00:00Z",
+      },
+    ];
+
+    it("syncs each pathway with the record link type", async () => {
+      loader.load.mockResolvedValue(snapshot({ enrollments: [], pathways }));
+
+      const result = await service().syncLearner(USER_ID);
+
+      expect(result).toMatchObject({ enrollments: 0, pathways: 2 });
+      const [, current, withdrawn] = records.upsertCustomObject.mock.calls.map(
+        ([input]) => input
+      );
+      expect(current).toMatchObject({
+        leafType: DevRevLeafType.ELP_PATHWAY,
+        uniqueKey: `ELPP:${USER_ID}:career_launch`,
+        lookupField: "external_id",
+        lookupValue: `${USER_ID}:career_launch`,
+        title: "Amina Okafor · Career Launch",
+      });
+      expect(current.fields).toMatchObject({
+        learner_profile: `don:learner_profile/${USER_ID}`,
+        status: "Active",
+        is_current: true,
+      });
+      expect(withdrawn.fields).toMatchObject({
+        status: "Inactive",
+        is_current: false,
+      });
+      expect(records.ensureLink.mock.calls.map(([, , type]) => type)).toEqual([
+        PROFILE_LINK,
+        RECORD_LINK,
+        RECORD_LINK,
+      ]);
+    });
+
+    it("can be switched off on its own", async () => {
+      loader.load.mockResolvedValue(snapshot({ enrollments: [], pathways }));
+
+      const result = await service({
+        DEVREV_SYNC_ELP_PATHWAY: "false",
+      }).syncLearner(USER_ID);
+
+      expect(result.pathways).toBe(0);
+      expect(records.upsertCustomObject).toHaveBeenCalledTimes(1);
+    });
   });
 });

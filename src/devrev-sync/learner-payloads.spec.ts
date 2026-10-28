@@ -1,6 +1,7 @@
 import {
   applicationStatus,
   buildAlpEnrollment,
+  buildElpPathway,
   buildLearnerProfile,
   buildRevUser,
   enrollmentKeys,
@@ -10,6 +11,9 @@ import {
   LearnerSource,
   lifecycleStage,
   normalizeFieldName,
+  PathwaySource,
+  pathwayKeys,
+  pathwayStatus,
   payloadHash,
   profileFieldFor,
   toBool,
@@ -58,6 +62,10 @@ describe("learner payloads", () => {
       expect(enrollmentKeys(USER_ID, COHORT_ID)).toEqual({
         externalId: `${USER_ID}:${COHORT_ID}`,
         uniqueKey: `ALPE:${USER_ID}:${COHORT_ID}`,
+      });
+      expect(pathwayKeys(USER_ID, "career_launch")).toEqual({
+        externalId: `${USER_ID}:career_launch`,
+        uniqueKey: `ELPP:${USER_ID}:career_launch`,
       });
     });
   });
@@ -304,6 +312,68 @@ describe("learner payloads", () => {
       ]) {
         expect(fields).not.toHaveProperty(name);
       }
+    });
+  });
+
+  describe("buildElpPathway", () => {
+    const pathway = (overrides: Partial<PathwaySource> = {}): PathwaySource => ({
+      pathwayKey: "career_launch",
+      pathwayName: "Career Launch",
+      status: "ACTIVE",
+      isActive: true,
+      activatedAt: new Date("2026-05-01T09:00:00Z"),
+      ...overrides,
+    });
+
+    it.each([
+      ["ACTIVE", "Active"],
+      ["COMPLETED", "Completed"],
+      ["INACTIVE", "Inactive"],
+      ["WITHDRAWN", "Inactive"],
+      ["active", "Active"],
+      ["PAUSED", undefined],
+    ])("status %s -> %s", (status, expected) => {
+      expect(pathwayStatus(status)).toBe(expected);
+    });
+
+    it("sends only the fields this service owns", () => {
+      expect(
+        buildElpPathway(learner(), pathway(), "don:core:profile/1")
+      ).toEqual({
+        learner_profile: "don:core:profile/1",
+        external_id: `${USER_ID}:career_launch`,
+        aspire_user_id: USER_ID,
+        pathway_code: "career_launch",
+        pathway_name: "Career Launch",
+        activated_at: "2026-05-01",
+        status: "Active",
+        is_current: true,
+      });
+    });
+
+    it("is current only while ACTIVE and is_active", () => {
+      expect(
+        buildElpPathway(learner(), pathway({ isActive: false }), null).is_current
+      ).toBe(false);
+      expect(
+        buildElpPathway(
+          learner(),
+          pathway({ status: "COMPLETED", isActive: true }),
+          null
+        ).is_current
+      ).toBe(false);
+    });
+
+    it("leaves out and reports a status DevRev doesn't have", () => {
+      const unknown: string[] = [];
+      const fields = buildElpPathway(
+        learner(),
+        pathway({ status: "PAUSED" }),
+        null,
+        (field, value) => unknown.push(`${field}=${value}`)
+      );
+      expect(fields.status).toBeUndefined();
+      expect(unknown).toEqual(["status=PAUSED"]);
     });
   });
 });

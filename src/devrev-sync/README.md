@@ -1,7 +1,8 @@
 # DevRev sync (user service)
 
-Syncs learners to DevRev: a **Rev User**, a **`learner_profile`** custom object, and one
-**`alp_enrollment`** per ALP cohort membership. Each record is linked to the Rev User.
+Syncs learners to DevRev: a **Rev User**, a **`learner_profile`** custom object, one
+**`alp_enrollment`** per ALP cohort membership and one **`elp_pathway`** per pathway the
+learner has activated. Each record is linked to the Rev User.
 The LMS and assessment services write their own fields and records separately.
 
 Sync is **off** unless `DEVREV_SYNC_ENABLED=true`. When it is off, nothing connects to
@@ -10,7 +11,8 @@ Redis, the hooks do nothing, and the admin endpoints answer 409.
 ## How it works
 
 1. A write path (user create/update, activation, cohort-member create/update/move,
-   batch shortlisting, bulk create) calls `DevRevSyncQueue.enqueueLearner(userId)`.
+   batch shortlisting, bulk create, pathway assign/switch, volunteer assign, pathway
+   completion and status change) calls `DevRevSyncQueue.enqueueLearner(userId)`.
    The call is not awaited and never throws, so a learner's request is never slowed
    or failed by DevRev.
 2. The BullMQ queue `devrev-sync-user-service` holds one `learner` job per user.
@@ -18,7 +20,7 @@ Redis, the hooks do nothing, and the admin endpoints answer 409.
    while that learner's job is running schedules exactly one follow-up job.
 3. The worker (`LearnerSyncService`) reads the learner's current state and writes:
    Rev User (found by `external_ref` = userId) → `learner_profile` → each ALP
-   `alp_enrollment` → Rev User links.
+   `alp_enrollment` → each `elp_pathway` → Rev User links.
 4. Each record is created with a `unique_key`. On a conflict, the worker finds the
    record by `tnt__external_id` (or `tnt__aspire_user_id` for the profile) and
    updates it. The DevRev ID, payload hash and link state are kept in `DevRevSync`,
@@ -40,6 +42,14 @@ the cohort name goes in the `cohort` field. `CohortMembers.status` maps as:
 | inactive, archived | not sent | not sent | not sent |
 
 Stages after enrollment come from the LMS.
+
+**Pathways.** Key `ELPP:{userId}:{pathways.key}` (built only in `pathwayKeys`), from the
+learner's current `user_pathways` row for that pathway, else the most recent one. Both
+STANDARD and VOLUNTEER pathways sync. Status: ACTIVE → Active, COMPLETED → Completed,
+INACTIVE and WITHDRAWN → Inactive (DevRev has no Withdrawn value for pathways).
+`is_current` is true only for an ACTIVE row with `is_active`. The LMS sends `progress`
+and `last_activity_at`. While `DEVREV_SYNC_COHORT_ALLOWLIST` is set, learners outside the
+allowed cohorts are skipped entirely, pathways included.
 The service never changes DevRev schemas.
 
 ## Configuration
@@ -50,12 +60,13 @@ The service never changes DevRev schemas.
 | `DEVREV_SYNC_DRY_RUN` | `false` | Log request bodies instead of calling DevRev, with names, emails, gender and date of birth masked. Rows get status `DRY_RUN`; no DevRev IDs are stored |
 | `DEVREV_SYNC_LEARNER_PROFILE` | `true` | Switch for `learner_profile` |
 | `DEVREV_SYNC_ALP_ENROLLMENT` | `true` | Switch for `alp_enrollment` |
+| `DEVREV_SYNC_ELP_PATHWAY` | `true` | Switch for `elp_pathway` |
 | `DEVREV_SYNC_REV_USERS` | `true` | Switch for Rev Users and links (also needs `DEVREV_REV_ORG_ID`) |
 | `DEVREV_BASE_URL` | `https://api.devrev.ai` | Public API only, never `/internal` |
 | `DEVREV_API_TOKEN` | — | DevRev token (same name as the other services; `DEVREV_TOKEN` is read as a fallback). Required unless dry-run. Never logged |
 | `DEVREV_REV_ORG_ID` | — | The "Aspire Learners" rev org (`don:identity:...`) |
 | `DEVREV_LINK_TYPE_PROFILE_ID` | — | Link type "Aspire learner profile" (Rev User → `learner_profile`), e.g. `don:core:dvrv-in-1:devo/2qphGDPJVV:custom_link_type/5` |
-| `DEVREV_LINK_TYPE_RECORD_ID` | — | Link type "Aspire learner record" (Rev User → `alp_enrollment`), e.g. `don:core:dvrv-in-1:devo/2qphGDPJVV:custom_link_type/3` |
+| `DEVREV_LINK_TYPE_RECORD_ID` | — | Link type "Aspire learner record" (Rev User → `alp_enrollment`, `elp_pathway`), e.g. `don:core:dvrv-in-1:devo/2qphGDPJVV:custom_link_type/3` |
 | `DEVREV_PROFILE_FIELD_MAP` | `{}` | JSON: `learner_profile` field → `Fields.name` prefix or list of prefixes (see below) |
 | `DEVREV_SYNC_COHORT_ALLOWLIST` | empty | Comma-separated cohort IDs, for a phased rollout. Empty = all |
 | `DEVREV_SYNC_CONCURRENCY` | `2` | Worker concurrency (never two jobs for the same learner at once) |

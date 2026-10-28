@@ -20,6 +20,7 @@ export enum DevRevLeafType {
   REV_USER = "rev_user",
   LEARNER_PROFILE = "learner_profile",
   ALP_ENROLLMENT = "alp_enrollment",
+  ELP_PATHWAY = "elp_pathway",
 }
 
 /**

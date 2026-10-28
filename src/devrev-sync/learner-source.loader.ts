@@ -6,6 +6,7 @@ import { DevRevSyncConfig } from "./devrev-sync.config";
 import {
   EnrollmentSource,
   LearnerSource,
+  PathwaySource,
   profileFieldFor,
 } from "./learner-payloads";
 
@@ -14,6 +15,8 @@ export interface LearnerSnapshot {
   isStudent: boolean;
   /** ALP memberships (top-level cohorts) allowed by config, newest first. */
   enrollments: EnrollmentSource[];
+  /** One per pathway the learner has activated: its newest user_pathways row. */
+  pathways: PathwaySource[];
 }
 
 /**
@@ -39,7 +42,7 @@ export class LearnerSourceLoader {
     );
     if (!user) return null;
 
-    const [roles, memberships] = await Promise.all([
+    const [roles, memberships, pathways] = await Promise.all([
       this.dataSource.query(
         `SELECT DISTINCT LOWER(TRIM(R.code)) AS "roleCode"
            FROM public."UserTenantMapping" UTM
@@ -57,6 +60,18 @@ export class LearnerSourceLoader {
            JOIN public."Cohort" C ON C."cohortId" = CM."cohortId"
           WHERE CM."userId" = $1
           ORDER BY CM."createdAt" DESC`,
+        [userId]
+      ),
+      // user_pathways keeps history: a re-activation can leave several rows
+      // per pathway, so take the current one, else the most recent.
+      this.dataSource.query(
+        `SELECT DISTINCT ON (UP.pathway_id)
+                P."key" AS "pathwayKey", P."name" AS "pathwayName",
+                UP.status, UP.is_active AS "isActive", UP.activated_at AS "activatedAt"
+           FROM public.user_pathways UP
+           JOIN public.pathways P ON P.id = UP.pathway_id
+          WHERE UP.user_id = $1
+          ORDER BY UP.pathway_id, (UP.status = 'ACTIVE') DESC, UP.activated_at DESC`,
         [userId]
       ),
     ]);
@@ -103,6 +118,13 @@ export class LearnerSourceLoader {
         status: m.status,
         createdAt: m.createdAt,
         updatedAt: m.updatedAt,
+      })),
+      pathways: (pathways as any[]).map((p) => ({
+        pathwayKey: p.pathwayKey,
+        pathwayName: p.pathwayName,
+        status: p.status,
+        isActive: p.isActive,
+        activatedAt: p.activatedAt,
       })),
     };
   }

@@ -50,6 +50,16 @@ export interface EnrollmentSource {
   updatedAt: Date | string | null;
 }
 
+export interface PathwaySource {
+  /** pathways.key: stable and unique, part of the DevRev key. */
+  pathwayKey: string;
+  pathwayName: string;
+  /** user_pathways.status: ACTIVE, COMPLETED, WITHDRAWN or INACTIVE. */
+  status: string;
+  isActive: boolean | null;
+  activatedAt: Date | string | null;
+}
+
 export type FieldMap = Record<
   string,
   string | number | boolean | string[] | null | undefined
@@ -73,7 +83,34 @@ export function enrollmentKeys(
   return { externalId, uniqueKey: `ALPE:${externalId}` };
 }
 
+/** The one place elp_pathway keys are built: ELPP:{userId}:{pathways.key}. */
+export function pathwayKeys(
+  userId: string,
+  pathwayKey: string
+): { externalId: string; uniqueKey: string } {
+  const externalId = `${userId}:${pathwayKey}`;
+  return { externalId, uniqueKey: `ELPP:${externalId}` };
+}
+
 // ---------- enum mapping ----------
+
+/**
+ * user_pathways.status -> elp_pathway.status. DevRev has no "Withdrawn"
+ * value for pathways, so a withdrawn pathway is Inactive (and not current).
+ */
+export function pathwayStatus(status: string): string | undefined {
+  switch ((status ?? "").toUpperCase()) {
+    case "ACTIVE":
+      return "Active";
+    case "COMPLETED":
+      return "Completed";
+    case "INACTIVE":
+    case "WITHDRAWN":
+      return "Inactive";
+    default:
+      return undefined;
+  }
+}
 
 /**
  * CohortMembers.status -> alp_enrollment.is_enrolled. Shortlisted means
@@ -301,6 +338,37 @@ export function buildAlpEnrollment(
     withdrawal_date:
       status === "dropout" ? toDate(enrollment.updatedAt) : undefined,
   };
+}
+
+/** The elp_pathway fields this service owns; the LMS sends progress and last_activity_at. */
+export function buildElpPathway(
+  src: LearnerSource,
+  pathway: PathwaySource,
+  learnerProfileId: string | null,
+  onUnknown: (field: string, value: string) => void = () => undefined
+): FieldMap {
+  const status = pathwayStatus(pathway.status);
+  if (status === undefined && pathway.status) onUnknown("status", pathway.status);
+  return {
+    learner_profile: learnerProfileId ?? undefined,
+    external_id: pathwayKeys(src.userId, pathway.pathwayKey).externalId,
+    aspire_user_id: src.userId,
+    pathway_code: pathway.pathwayKey,
+    pathway_name: pathway.pathwayName,
+    activated_at: toDate(pathway.activatedAt),
+    status,
+    // Only an ACTIVE row can be current, whatever is_active says.
+    is_current:
+      (pathway.status ?? "").toUpperCase() === "ACTIVE" &&
+      pathway.isActive === true,
+  };
+}
+
+export function pathwayTitle(
+  src: LearnerSource,
+  pathway: PathwaySource
+): string {
+  return `${fullName(src) || src.userId} · ${pathway.pathwayName}`;
 }
 
 export function profileTitle(src: LearnerSource): string {

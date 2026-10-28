@@ -5,11 +5,14 @@ import { DevRevSyncConfig } from "./devrev-sync.config";
 import { DevRevLeafType, DevRevSync } from "./entities/devrev-sync.entity";
 import {
   buildAlpEnrollment,
+  buildElpPathway,
   buildLearnerProfile,
   buildRevUser,
   enrollmentKeys,
   enrollmentTitle,
   learnerProfileUniqueKey,
+  pathwayKeys,
+  pathwayTitle,
   profileTitle,
 } from "./learner-payloads";
 import { LearnerSourceLoader } from "./learner-source.loader";
@@ -19,6 +22,7 @@ export interface LearnerSyncResult {
   outcome: "synced" | "skipped";
   reason?: string;
   enrollments: number;
+  pathways: number;
 }
 
 /**
@@ -38,8 +42,8 @@ export class LearnerSyncError extends Error {
 }
 
 /**
- * Syncs one learner: Rev User, learner_profile, then each ALP enrollment,
- * each linked to the Rev User. Reads current state every time, so repeated
+ * Syncs one learner: Rev User, learner_profile, then each ALP enrollment and
+ * ELP pathway, each linked to the Rev User. Reads current state every time, so repeated
  * or late jobs converge on the same result.
  */
 @Injectable()
@@ -58,6 +62,7 @@ export class LearnerSyncService {
       outcome: "skipped",
       reason,
       enrollments: 0,
+      pathways: 0,
     });
 
     if (!this.config.canRun) return skipped("sync disabled");
@@ -72,7 +77,7 @@ export class LearnerSyncService {
       return skipped("no membership in an allowed cohort");
     }
 
-    const { learner, enrollments } = snapshot;
+    const { learner, enrollments, pathways } = snapshot;
     const failures: unknown[] = [];
 
     let revUser: DevRevSync | null = null;
@@ -139,14 +144,52 @@ export class LearnerSyncService {
       }
     }
 
+    if (this.config.syncElpPathway) {
+      for (const pathway of pathways) {
+        const keys = pathwayKeys(userId, pathway.pathwayKey);
+        try {
+          const row = await this.records.upsertCustomObject({
+            leafType: DevRevLeafType.ELP_PATHWAY,
+            uniqueKey: keys.uniqueKey,
+            externalId: keys.externalId,
+            lookupField: "external_id",
+            lookupValue: keys.externalId,
+            title: pathwayTitle(learner, pathway),
+            fields: buildElpPathway(
+              learner,
+              pathway,
+              profile?.devrevId ?? null,
+              (field, value) =>
+                this.logger.warn(
+                  `learner ${userId}: elp_pathway ${field} "${value}" has no DevRev value; left out`
+                )
+            ),
+            userId,
+          });
+          await this.tryLink(
+            row,
+            revUserId,
+            this.config.recordLinkTypeId,
+            failures
+          );
+        } catch (error) {
+          failures.push(error);
+        }
+      }
+    }
+
     if (failures.length > 0) throw this.combine(userId, failures);
 
+    const counts = {
+      enrollments: this.config.syncAlpEnrollment ? enrollments.length : 0,
+      pathways: this.config.syncElpPathway ? pathways.length : 0,
+    };
     this.logger.log(
       `learner ${userId} synced: profile=${
         profile ? "yes" : "off"
-      }, enrollments=${enrollments.length}`
+      }, enrollments=${counts.enrollments}, pathways=${counts.pathways}`
     );
-    return { userId, outcome: "synced", enrollments: enrollments.length };
+    return { userId, outcome: "synced", ...counts };
   }
 
   private async tryLink(
