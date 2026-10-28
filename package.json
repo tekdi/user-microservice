@@ -38,6 +38,7 @@
     "@nestjs/typeorm": "^10.0.2",
     "@types/multer": "^1.4.12",
     "axios": "^0.26.1",
+    "bullmq": "~5.76.8",
     "cache-manager": "^3.6.1",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.13.2",

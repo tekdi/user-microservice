@@ -1,0 +1,84 @@
+# DevRev sync (user service)
+
+Syncs learners to DevRev: a **Rev User**, a **`learner_profile`** custom object, and one
+**`alp_enrollment`** per ALP cohort membership. Each record is linked to the Rev User.
+The LMS and assessment services write their own fields and records separately.
+
+Sync is **off** unless `DEVREV_SYNC_ENABLED=true`. When it is off, nothing connects to
+Redis, the hooks do nothing, and the admin endpoints answer 409.
+
+## How it works
+
+1. A write path (user create/update, activation, cohort-member create/update/move,
+   batch shortlisting, bulk create) calls `DevRevSyncQueue.enqueueLearner(userId)`.
+   The call is not awaited and never throws, so a learner's request is never slowed
+   or failed by DevRev.
+2. The BullMQ queue `devrev-sync-user-service` holds one `learner` job per user.
+   Changes within `DEVREV_SYNC_DEBOUNCE_MS` collapse into one job. A change made
+   while that learner's job is running schedules exactly one follow-up job.
+3. The worker (`LearnerSyncService`) reads the learner's current state and writes:
+   Rev User (found by `external_ref` = userId) → `learner_profile` → each ALP
+   `alp_enrollment` → Rev User links.
+4. Each record is created with a `unique_key`. On a conflict, the worker finds the
+   record by `tnt__external_id` (or `tnt__aspire_user_id` for the profile) and
+   updates it. The DevRev ID, payload hash and link state are kept in `DevRevSync`,
+   so later syncs are a single update, or no call at all when nothing changed.
+
+Only users with the student role are synced, the same rule as the Elasticsearch index.
+The service never changes DevRev schemas.
+
+## Configuration
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `DEVREV_SYNC_ENABLED` | `false` | Master switch |
+| `DEVREV_SYNC_DRY_RUN` | `false` | Log request bodies instead of calling DevRev. Rows get status `DRY_RUN`; no DevRev IDs are stored |
+| `DEVREV_SYNC_LEARNER_PROFILE` | `true` | Switch for `learner_profile` |
+| `DEVREV_SYNC_ALP_ENROLLMENT` | `true` | Switch for `alp_enrollment` |
+| `DEVREV_SYNC_REV_USERS` | `true` | Switch for Rev Users and links (also needs `DEVREV_REV_ORG_ID`) |
+| `DEVREV_BASE_URL` | `https://api.devrev.ai` | Public API only, never `/internal` |
+| `DEVREV_TOKEN` | — | DevRev token. Required unless dry-run. Never logged |
+| `DEVREV_REV_ORG_ID` | — | The "Aspire Learners" rev org (`don:identity:...`) |
+| `DEVREV_LINK_TYPE_PROFILE_ID` | — | Link type "Aspire learner profile" (Rev User → `learner_profile`) |
+| `DEVREV_LINK_TYPE_RECORD_ID` | — | Link type "Aspire learner record" (Rev User → `alp_enrollment`) |
+| `DEVREV_PROFILE_FIELD_MAP` | `{}` | JSON: `FieldValues.fieldId` → `learner_profile` field. Allowed targets: `university`, `study_major`, `education_level`, `first_generation`, `limited_income` |
+| `DEVREV_ALP_COHORT_TYPES` | empty | Comma-separated `Cohort.type` values that count as ALP. Empty = every cohort |
+| `DEVREV_SYNC_COHORT_ALLOWLIST` | empty | Comma-separated cohort IDs, for a phased rollout. Empty = all |
+| `DEVREV_SYNC_CONCURRENCY` | `2` | Worker concurrency (never two jobs for the same learner at once) |
+| `DEVREV_SYNC_RATE_PER_SEC` | `5` | Jobs per second. DevRev's limit is shared with the LMS and assessment services |
+| `DEVREV_SYNC_MAX_ATTEMPTS` | `5` | Job attempts; backoff 5s, 10s, 20s, 40s, or DevRev's `Retry-After` |
+| `DEVREV_SYNC_DEBOUNCE_MS` | `30000` | Delay that collapses bursts of changes |
+| `DEVREV_SYNC_TIMEOUT_MS` | `15000` | Per-request timeout |
+
+Redis comes from the existing `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD` and `REDIS_DB`.
+
+**Staging example:**
+
+```
+DEVREV_SYNC_ENABLED=true
+DEVREV_SYNC_DRY_RUN=true
+DEVREV_SYNC_COHORT_ALLOWLIST=<one test cohort id>
+```
+
+## Database
+
+`synchronize` is off, so create the table by hand before enabling sync. The DDL is in
+the doc comment of [entities/devrev-sync.entity.ts](entities/devrev-sync.entity.ts).
+
+## Endpoints (prefix `/user/v1/devrev-sync`)
+
+| Endpoint | Auth | Purpose |
+| --- | --- | --- |
+| `POST /resync` with `{ "userId" }` or `{ "cohortId" }` | JWT | Re-send a learner or a whole cohort in full. Also the backfill entry point |
+| `GET /status?cohortId=` | JWT | Counts by record type and status, queue counts, the latest 50 failures |
+| `POST /cron/retry-failed` | none, like the other `cron/*` endpoints | Re-queue learners with a `FAILED` record. Point the external scheduler at it, e.g. every 15 minutes |
+
+## Not covered yet
+
+- **Deletions and withdrawals by delete:** `deleteUserById`, `deleteCohortMemberById` and
+  anonymize don't touch DevRev; records stay as last synced (open question Q7).
+- **Stages after enrollment:** `lifecycle_stage` and `latest_alp_status` stop at
+  Shortlisted/Withdrawn here. In Progress, Completed, Passed and the Failed stages need
+  LMS data (open question Q2).
+- **Fields needing other services:** `is_enrolled` (orientation at 100%), `activation_date`,
+  `alp_graduation_cohort`, and the masterclass and ELP fields are not sent.
