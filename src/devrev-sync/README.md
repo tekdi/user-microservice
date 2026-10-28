@@ -25,6 +25,21 @@ Redis, the hooks do nothing, and the admin endpoints answer 409.
    so later syncs are a single update, or no call at all when nothing changed.
 
 Only users with the student role are synced, the same rule as the Elasticsearch index.
+
+**Enrollments.** Every membership of a top-level cohort is an ALP enrollment:
+`Cohort.type` and `programId` don't tell ALP from ELP, and ELP is pathways, not cohorts.
+Keys use the cohort ID (`ALPE:{userId}:{cohortId}`, built only in `enrollmentKeys`);
+the cohort name goes in the `cohort` field. `CohortMembers.status` maps as:
+
+| Status | `application_status` | `is_enrolled` | `lifecycle_stage` |
+| --- | --- | --- | --- |
+| applied, submitted | Pending | false | Applied |
+| shortlisted, active | Shortlisted | true | Shortlisted |
+| rejected | Rejected | false | Rejected |
+| dropout | Shortlisted | false | Withdrawn (`withdrawal_date` = `updatedAt`) |
+| inactive, archived | not sent | not sent | not sent |
+
+Stages after enrollment come from the LMS.
 The service never changes DevRev schemas.
 
 ## Configuration
@@ -42,7 +57,6 @@ The service never changes DevRev schemas.
 | `DEVREV_LINK_TYPE_PROFILE_ID` | — | Link type "Aspire learner profile" (Rev User → `learner_profile`), e.g. `don:core:dvrv-in-1:devo/2qphGDPJVV:custom_link_type/5` |
 | `DEVREV_LINK_TYPE_RECORD_ID` | — | Link type "Aspire learner record" (Rev User → `alp_enrollment`), e.g. `don:core:dvrv-in-1:devo/2qphGDPJVV:custom_link_type/3` |
 | `DEVREV_PROFILE_FIELD_MAP` | `{}` | JSON: `learner_profile` field → `Fields.name` prefix or list of prefixes (see below) |
-| `DEVREV_ALP_COHORT_TYPES` | empty | Comma-separated `Cohort.type` values that count as ALP. Empty = every cohort |
 | `DEVREV_SYNC_COHORT_ALLOWLIST` | empty | Comma-separated cohort IDs, for a phased rollout. Empty = all |
 | `DEVREV_SYNC_CONCURRENCY` | `2` | Worker concurrency (never two jobs for the same learner at once) |
 | `DEVREV_SYNC_RATE_PER_SEC` | `5` | Jobs per second. DevRev's limit is shared with the LMS and assessment services |
@@ -109,9 +123,11 @@ ALTER TABLE public."DevRevSync" ADD COLUMN IF NOT EXISTS "retryable" boolean;
 
 - **Deletions and withdrawals by delete:** `deleteUserById`, `deleteCohortMemberById` and
   anonymize don't touch DevRev; records stay as last synced (open question Q7).
-- **Stages after enrollment:** `lifecycle_stage` and `latest_alp_status` stop at
-  Shortlisted/Withdrawn here. In Progress, Completed, Passed and the Failed stages need
-  LMS data (open question Q2).
+- **Clearing a field:** empty values are never sent, so a value that becomes empty
+  (e.g. `withdrawal_date` after a dropout is reversed) stays in DevRev. Whether
+  `custom-objects.update` clears a field sent as `null` is unverified.
+- **`withdrawal_date` drift:** `CohortMembers` has no status history, so any later edit
+  to a dropout's membership moves the date.
 - **`learner_profile` fields with no owner:** `latest_alp_cohort`, `latest_alp_status`,
   `is_alumni`, `alp_graduation_cohort` and the ELP summary fields are not sent.
   `activation_date` has no source (`Users` stores no activation time).

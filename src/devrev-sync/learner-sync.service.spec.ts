@@ -45,7 +45,6 @@ function snapshot(overrides: Partial<LearnerSnapshot> = {}): LearnerSnapshot {
         status: "shortlisted",
         createdAt: null,
         updatedAt: null,
-        isLatest: true,
       },
       {
         cohortId: "c1",
@@ -53,7 +52,6 @@ function snapshot(overrides: Partial<LearnerSnapshot> = {}): LearnerSnapshot {
         status: "dropout",
         createdAt: null,
         updatedAt: null,
-        isLatest: false,
       },
     ],
     ...overrides,
@@ -105,16 +103,20 @@ describe("LearnerSyncService", () => {
     expect(profileCall.fields).toMatchObject({ rev_user_id: "don:revu/1" });
     expect(profileCall.fields).not.toHaveProperty("latest_alp_cohort");
     expect(latestCall).toMatchObject({
-      uniqueKey: `ALPE:${USER_ID}:ALP-2026-C4`,
+      uniqueKey: `ALPE:${USER_ID}:c2`,
+      externalId: `${USER_ID}:c2`,
+      lookupField: "external_id",
+      lookupValue: `${USER_ID}:c2`,
       cohortId: "c2",
     });
     expect(latestCall.fields).toMatchObject({
       learner_profile: `don:learner_profile/${USER_ID}`,
-      is_latest_attempt: true,
+      cohort: "ALP-2026-C4",
+      is_enrolled: true,
     });
     expect(earlierCall.fields).toMatchObject({
-      is_latest_attempt: false,
       lifecycle_stage: "Withdrawn",
+      is_enrolled: false,
     });
 
     expect(

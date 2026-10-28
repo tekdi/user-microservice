@@ -47,8 +47,6 @@ export class DevRevSyncConfig {
 
   /** Cohort IDs to sync during a phased rollout. Empty = all cohorts. */
   readonly cohortAllowlist: Set<string>;
-  /** Cohort.type values that count as ALP. Empty = every cohort is ALP. */
-  readonly alpCohortTypes: Set<string>;
   /**
    * learner_profile field -> normalized Fields.name prefixes. Each cohort's
    * form has its own copy of a field (and some names carry the help text),
@@ -109,9 +107,6 @@ export class DevRevSyncConfig {
     this.requestTimeoutMs = int("DEVREV_SYNC_TIMEOUT_MS", 15000);
 
     this.cohortAllowlist = list("DEVREV_SYNC_COHORT_ALLOWLIST");
-    this.alpCohortTypes = new Set(
-      [...list("DEVREV_ALP_COHORT_TYPES")].map((t) => t.toLowerCase())
-    );
     this.profileFieldMap = this.parseFieldMap(get("DEVREV_PROFILE_FIELD_MAP"));
   }
 
@@ -128,13 +123,6 @@ export class DevRevSyncConfig {
   isCohortAllowed(cohortId: string): boolean {
     return (
       this.cohortAllowlist.size === 0 || this.cohortAllowlist.has(cohortId)
-    );
-  }
-
-  isAlpCohortType(type: string | null | undefined): boolean {
-    return (
-      this.alpCohortTypes.size === 0 ||
-      this.alpCohortTypes.has((type ?? "").trim().toLowerCase())
     );
   }
 

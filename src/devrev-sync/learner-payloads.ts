@@ -40,15 +40,14 @@ export interface LearnerSource {
 }
 
 export interface EnrollmentSource {
+  /** Cohort.cohortId. Part of the DevRev key (Q1). */
   cohortId: string;
-  /** Cohort.name, e.g. ALP-2026-C2. Part of the DevRev key. */
+  /** Cohort.name, sent as the cohort field. Names are not unique. */
   cohortName: string;
   /** CohortMembers.status */
   status: string;
   createdAt: Date | string | null;
   updatedAt: Date | string | null;
-  /** True only on the learner's most recent ALP membership. */
-  isLatest: boolean;
 }
 
 export type FieldMap = Record<
@@ -60,13 +59,41 @@ export type FieldMap = Record<
 
 export const learnerProfileUniqueKey = (userId: string) => `LRNR:${userId}`;
 
-export const enrollmentExternalId = (userId: string, cohortName: string) =>
-  `${userId}:${cohortName}`;
-
-export const enrollmentUniqueKey = (userId: string, cohortName: string) =>
-  `ALPE:${enrollmentExternalId(userId, cohortName)}`;
+/**
+ * The one place alp_enrollment keys are built. Keys use cohortId, not the
+ * cohort name (open question Q1, decided 2026-10-28): names repeat and can be
+ * renamed, which would split or merge records. The LMS and assessment
+ * services must build the same key. Keys can't change once records exist.
+ */
+export function enrollmentKeys(
+  userId: string,
+  cohortId: string
+): { externalId: string; uniqueKey: string } {
+  const externalId = `${userId}:${cohortId}`;
+  return { externalId, uniqueKey: `ALPE:${externalId}` };
+}
 
 // ---------- enum mapping ----------
+
+/**
+ * CohortMembers.status -> alp_enrollment.is_enrolled. Shortlisted means
+ * enrolled (decided 2026-10-28); "active" is treated as shortlisted
+ * throughout. Unknown for inactive and archived.
+ */
+export function isEnrolled(status: string): boolean | undefined {
+  switch ((status ?? "").toLowerCase()) {
+    case "shortlisted":
+    case "active":
+      return true;
+    case "applied":
+    case "submitted":
+    case "rejected":
+    case "dropout":
+      return false;
+    default:
+      return undefined;
+  }
+}
 
 /** CohortMembers.status -> alp_enrollment.application_status */
 export function applicationStatus(status: string): string | undefined {
@@ -86,9 +113,10 @@ export function applicationStatus(status: string): string | undefined {
 }
 
 /**
- * CohortMembers.status -> lifecycle_stage, for the stages this service knows.
- * Stages after enrollment (In Progress, Completed, Passed, Failed - ...) come
- * from course progress in the LMS; ownership is open question Q2.
+ * CohortMembers.status -> lifecycle_stage: the pre-enrollment and exit
+ * stages, which this service owns (Q2, decided 2026-10-28). Dropout means
+ * Withdrawn. Stages after enrollment (In Progress, Completed, Passed,
+ * Failed - ...) need course data and are not sent from here.
  */
 export function lifecycleStage(status: string): string | undefined {
   switch ((status ?? "").toLowerCase()) {
@@ -250,7 +278,10 @@ export function buildLearnerProfile(
   return fields;
 }
 
-/** The alp_enrollment fields this service owns; the LMS sends the progress fields. */
+/**
+ * The alp_enrollment fields this service owns. The LMS sends the progress,
+ * completion and assessment fields; is_latest_attempt has no owner yet.
+ */
 export function buildAlpEnrollment(
   src: LearnerSource,
   enrollment: EnrollmentSource,
@@ -259,13 +290,14 @@ export function buildAlpEnrollment(
   const status = (enrollment.status ?? "").toLowerCase();
   return {
     learner_profile: learnerProfileId ?? undefined,
-    external_id: enrollmentExternalId(src.userId, enrollment.cohortName),
+    external_id: enrollmentKeys(src.userId, enrollment.cohortId).externalId,
     aspire_user_id: src.userId,
     cohort: enrollment.cohortName,
-    is_latest_attempt: enrollment.isLatest,
     application_date: toDate(enrollment.createdAt),
     application_status: applicationStatus(status),
+    is_enrolled: isEnrolled(status),
     lifecycle_stage: lifecycleStage(status),
+    // updatedAt is the best date available: CohortMembers keeps no status history.
     withdrawal_date:
       status === "dropout" ? toDate(enrollment.updatedAt) : undefined,
   };

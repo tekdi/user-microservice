@@ -7,9 +7,8 @@ import {
   buildAlpEnrollment,
   buildLearnerProfile,
   buildRevUser,
-  enrollmentExternalId,
+  enrollmentKeys,
   enrollmentTitle,
-  enrollmentUniqueKey,
   learnerProfileUniqueKey,
   profileTitle,
 } from "./learner-payloads";
@@ -111,13 +110,14 @@ export class LearnerSyncService {
 
     if (this.config.syncAlpEnrollment) {
       for (const enrollment of enrollments) {
+        const keys = enrollmentKeys(userId, enrollment.cohortId);
         try {
           const row = await this.records.upsertCustomObject({
             leafType: DevRevLeafType.ALP_ENROLLMENT,
-            uniqueKey: enrollmentUniqueKey(userId, enrollment.cohortName),
-            externalId: enrollmentExternalId(userId, enrollment.cohortName),
+            uniqueKey: keys.uniqueKey,
+            externalId: keys.externalId,
             lookupField: "external_id",
-            lookupValue: enrollmentExternalId(userId, enrollment.cohortName),
+            lookupValue: keys.externalId,
             title: enrollmentTitle(learner, enrollment),
             fields: buildAlpEnrollment(
               learner,

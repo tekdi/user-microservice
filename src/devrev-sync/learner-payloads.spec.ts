@@ -3,9 +3,9 @@ import {
   buildAlpEnrollment,
   buildLearnerProfile,
   buildRevUser,
-  enrollmentExternalId,
-  enrollmentUniqueKey,
+  enrollmentKeys,
   EnrollmentSource,
+  isEnrolled,
   learnerProfileUniqueKey,
   LearnerSource,
   lifecycleStage,
@@ -18,6 +18,7 @@ import {
 } from "./learner-payloads";
 
 const USER_ID = "6f1c2a3b-0000-4000-8000-000000000001";
+const COHORT_ID = "c0000000-0000-4000-8000-000000000002";
 
 function learner(overrides: Partial<LearnerSource> = {}): LearnerSource {
   return {
@@ -41,12 +42,11 @@ function enrollment(
   overrides: Partial<EnrollmentSource> = {}
 ): EnrollmentSource {
   return {
-    cohortId: "c0000000-0000-4000-8000-000000000002",
+    cohortId: COHORT_ID,
     cohortName: "ALP-2026-C2",
     status: "shortlisted",
     createdAt: new Date("2026-02-10T10:00:00Z"),
     updatedAt: new Date("2026-03-01T10:00:00Z"),
-    isLatest: true,
     ...overrides,
   };
 }
@@ -55,32 +55,44 @@ describe("learner payloads", () => {
   describe("keys", () => {
     it("match the agreed DevRev formats", () => {
       expect(learnerProfileUniqueKey(USER_ID)).toBe(`LRNR:${USER_ID}`);
-      expect(enrollmentExternalId(USER_ID, "ALP-2026-C2")).toBe(
-        `${USER_ID}:ALP-2026-C2`
-      );
-      expect(enrollmentUniqueKey(USER_ID, "ALP-2026-C2")).toBe(
-        `ALPE:${USER_ID}:ALP-2026-C2`
-      );
+      expect(enrollmentKeys(USER_ID, COHORT_ID)).toEqual({
+        externalId: `${USER_ID}:${COHORT_ID}`,
+        uniqueKey: `ALPE:${USER_ID}:${COHORT_ID}`,
+      });
     });
   });
 
   describe("status mapping", () => {
     it.each([
-      ["applied", "Pending", "Applied"],
-      ["submitted", "Pending", "Applied"],
-      ["shortlisted", "Shortlisted", "Shortlisted"],
-      ["active", "Shortlisted", "Shortlisted"],
-      ["dropout", "Shortlisted", "Withdrawn"],
-      ["rejected", "Rejected", "Rejected"],
-      ["inactive", undefined, undefined],
-      ["archived", undefined, undefined],
+      ["applied", "Pending", false, "Applied"],
+      ["submitted", "Pending", false, "Applied"],
+      ["shortlisted", "Shortlisted", true, "Shortlisted"],
+      ["active", "Shortlisted", true, "Shortlisted"],
+      ["dropout", "Shortlisted", false, "Withdrawn"],
+      ["rejected", "Rejected", false, "Rejected"],
+      ["inactive", undefined, undefined, undefined],
+      ["archived", undefined, undefined, undefined],
     ])(
-      "%s -> application_status %s, lifecycle_stage %s",
-      (status, application, stage) => {
+      "%s -> application_status %s, is_enrolled %s, lifecycle_stage %s",
+      (status, application, enrolled, stage) => {
         expect(applicationStatus(status)).toBe(application);
+        expect(isEnrolled(status)).toBe(enrolled);
         expect(lifecycleStage(status)).toBe(stage);
       }
     );
+
+    it("uses only values DevRev allows", () => {
+      const statuses = ["applied", "submitted", "shortlisted", "active", "dropout", "rejected"];
+      const allowedApplication = ["Pending", "Shortlisted", "Rejected"];
+      const allowedStage = [
+        "Applied", "Rejected", "Shortlisted", "Enrolled - Not Started", "In Progress",
+        "Completed", "Passed", "Failed - Final Assessment", "Failed - Masterclass", "Withdrawn",
+      ];
+      for (const status of statuses) {
+        expect(allowedApplication).toContain(applicationStatus(status));
+        expect(allowedStage).toContain(lifecycleStage(status));
+      }
+    });
 
     it("is case-insensitive and tolerates empty input", () => {
       expect(applicationStatus("SHORTLISTED")).toBe("Shortlisted");
@@ -258,29 +270,40 @@ describe("learner payloads", () => {
       );
       expect(fields).toEqual({
         learner_profile: "don:core:profile/1",
-        external_id: `${USER_ID}:ALP-2026-C2`,
+        external_id: `${USER_ID}:${COHORT_ID}`,
         aspire_user_id: USER_ID,
         cohort: "ALP-2026-C2",
-        is_latest_attempt: true,
         application_date: "2026-02-10",
         application_status: "Shortlisted",
+        is_enrolled: true,
         lifecycle_stage: "Shortlisted",
         withdrawal_date: undefined,
       });
     });
 
     it("sets the withdrawal date only for dropouts", () => {
-      expect(
-        buildAlpEnrollment(learner(), enrollment({ status: "dropout" }), null)
-          .withdrawal_date
-      ).toBe("2026-03-01");
+      const fields = buildAlpEnrollment(
+        learner(),
+        enrollment({ status: "dropout" }),
+        null
+      );
+      expect(fields.withdrawal_date).toBe("2026-03-01");
+      expect(fields.lifecycle_stage).toBe("Withdrawn");
+      expect(fields.is_enrolled).toBe(false);
     });
 
-    it("marks earlier cohorts as not the latest attempt", () => {
-      expect(
-        buildAlpEnrollment(learner(), enrollment({ isLatest: false }), null)
-          .is_latest_attempt
-      ).toBe(false);
+    it("never sends LMS-owned or unowned fields", () => {
+      const fields = buildAlpEnrollment(learner(), enrollment(), null);
+      for (const name of [
+        "is_latest_attempt",
+        "alp_progress",
+        "orientation_progress",
+        "completion_date",
+        "final_assessment_score",
+        "masterclasses_attended",
+      ]) {
+        expect(fields).not.toHaveProperty(name);
+      }
     });
   });
 });

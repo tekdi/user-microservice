@@ -12,7 +12,7 @@ import {
 export interface LearnerSnapshot {
   learner: LearnerSource;
   isStudent: boolean;
-  /** ALP memberships allowed by config, newest first. */
+  /** ALP memberships (top-level cohorts) allowed by config, newest first. */
   enrollments: EnrollmentSource[];
 }
 
@@ -52,7 +52,7 @@ export class LearnerSourceLoader {
       this.dataSource.query(
         `SELECT CM."cohortMembershipId", CM."cohortId", CM."status", CM."createdAt",
                 CM."updatedAt", CM.user_cohort_country_id AS "countryId",
-                C."name" AS "cohortName", C."type" AS "cohortType"
+                C."name" AS "cohortName", C."parentId" AS "parentId"
            FROM public."CohortMembers" CM
            JOIN public."Cohort" C ON C."cohortId" = CM."cohortId"
           WHERE CM."userId" = $1
@@ -61,11 +61,12 @@ export class LearnerSourceLoader {
       ),
     ]);
 
+    // Every top-level cohort is an ALP cohort (Q3, decided 2026-10-28):
+    // Cohort.type and programId don't tell ALP from ELP, and ELP lives in
+    // user_pathways, not cohorts. Child cohorts (batches) are not enrollments.
     const alpMemberships = (memberships as any[]).filter(
       (m) =>
-        m.cohortName &&
-        this.config.isAlpCohortType(m.cohortType) &&
-        this.config.isCohortAllowed(m.cohortId)
+        m.cohortName && !m.parentId && this.config.isCohortAllowed(m.cohortId)
     );
 
     // Profile data describes the learner, not one cohort, so it comes from
@@ -96,13 +97,12 @@ export class LearnerSourceLoader {
         applicationCountry,
         customFields,
       },
-      enrollments: alpMemberships.map((m, index) => ({
+      enrollments: alpMemberships.map((m) => ({
         cohortId: m.cohortId,
         cohortName: m.cohortName,
         status: m.status,
         createdAt: m.createdAt,
         updatedAt: m.updatedAt,
-        isLatest: index === 0,
       })),
     };
   }
