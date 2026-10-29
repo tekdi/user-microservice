@@ -327,6 +327,20 @@ describe("DevRevRecordService", () => {
       expect(row.linked).toBe(true);
     });
 
+    it("records the error on the row when the link is refused", async () => {
+      const error = apiError(400, "invalid link type");
+      client.post.mockRejectedValueOnce(error);
+      const row = record();
+
+      await expect(
+        service.ensureLink(row, "don:revu/1", "don:link-type/1")
+      ).rejects.toBe(error);
+
+      expect(row.linked).toBe(false);
+      expect(row.lastError).toBe("links.create: invalid link type");
+      expect(repository.save).toHaveBeenCalledWith(row);
+    });
+
     it("does nothing without a Rev User or link type", async () => {
       await service.ensureLink(record(), null, "don:link-type/1");
       await service.ensureLink(record(), "don:revu/1", "");

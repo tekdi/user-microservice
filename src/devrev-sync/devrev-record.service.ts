@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { In, LessThan, Repository } from "typeorm";
 import {
@@ -44,6 +44,8 @@ export const AUTO_RETRY_ROUNDS = 3;
  */
 @Injectable()
 export class DevRevRecordService {
+  private readonly logger = new Logger("DevRevSync");
+
   constructor(
     private readonly client: DevRevClient,
     private readonly config: DevRevSyncConfig,
@@ -161,8 +163,22 @@ export class DevRevRecordService {
     revUserId: string | null,
     linkTypeId: string
   ): Promise<void> {
+    if (record.linked) return;
+    const name = `${record.leafType} ${record.externalId}`;
     // In dry-run no DevRev IDs are stored, so this returns before any call.
-    if (record.linked || !revUserId || !record.devrevId || !linkTypeId) return;
+    const skipped = this.config.dryRun
+      ? "dry-run"
+      : !revUserId
+      ? "no Rev User ID"
+      : !record.devrevId
+      ? "the record has no DevRev ID"
+      : !linkTypeId
+      ? "the link type ID is missing or invalid"
+      : null;
+    if (skipped) {
+      this.logger.log(`link ${name}: skipped, ${skipped}`);
+      return;
+    }
     try {
       await this.client.post("links.create", {
         link_type: "custom_link",
@@ -170,10 +186,22 @@ export class DevRevRecordService {
         source: revUserId,
         target: record.devrevId,
       });
+      this.logger.log(`link ${name}: created (${linkTypeId})`);
     } catch (error) {
-      if (!(error instanceof DevRevApiError) || !error.isConflict) throw error;
+      if (!(error instanceof DevRevApiError) || !error.isConflict) {
+        const message = (error as Error).message ?? "unknown error";
+        this.logger.error(
+          `link ${name}: failed (source ${revUserId}, target ${record.devrevId}, type ${linkTypeId}): ${message}`
+        );
+        // The record itself is synced; keep the link error visible in the table.
+        record.lastError = `links.create: ${message}`.slice(0, 2000);
+        await this.syncRepository.save(record);
+        throw error;
+      }
+      this.logger.log(`link ${name}: already existed`);
     }
     record.linked = true;
+    record.lastError = null;
     await this.syncRepository.save(record);
   }
 
