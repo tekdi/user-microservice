@@ -105,10 +105,10 @@ describe("LearnerSyncService", () => {
     expect(profileCall.fields).toMatchObject({ rev_user_id: "don:revu/1" });
     expect(profileCall.fields).not.toHaveProperty("latest_alp_cohort");
     expect(latestCall).toMatchObject({
-      uniqueKey: `ALPE:${USER_ID}:c2`,
-      externalId: `${USER_ID}:c2`,
+      uniqueKey: `ALPE:${USER_ID}:ALP-2026-C4`,
+      externalId: `${USER_ID}:ALP-2026-C4`,
       lookupField: "external_id",
-      lookupValue: `${USER_ID}:c2`,
+      lookupValue: `${USER_ID}:ALP-2026-C4`,
       cohortId: "c2",
     });
     expect(latestCall.fields).toMatchObject({
@@ -151,6 +151,22 @@ describe("LearnerSyncService", () => {
 
     expect(result).toMatchObject({ outcome: "skipped", reason });
     expect(records.upsertCustomObject).not.toHaveBeenCalled();
+  });
+
+  it("sends one enrollment when two cohorts share a name, keeping the newer", async () => {
+    const [newer, older] = snapshot().enrollments;
+    loader.load.mockResolvedValue(
+      snapshot({ enrollments: [newer, { ...older, cohortName: newer.cohortName }] })
+    );
+
+    const result = await service().syncLearner(USER_ID);
+
+    expect(result.enrollments).toBe(1);
+    const enrollmentCalls = records.upsertCustomObject.mock.calls
+      .map(([input]) => input)
+      .filter((input) => input.leafType === DevRevLeafType.ALP_ENROLLMENT);
+    expect(enrollmentCalls).toHaveLength(1);
+    expect(enrollmentCalls[0].cohortId).toBe("c2");
   });
 
   it("respects the per-type switches", async () => {

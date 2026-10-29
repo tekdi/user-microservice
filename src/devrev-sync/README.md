@@ -30,8 +30,11 @@ Only users with the student role are synced, the same rule as the Elasticsearch 
 
 **Enrollments.** Every membership of a top-level cohort is an ALP enrollment:
 `Cohort.type` and `programId` don't tell ALP from ELP, and ELP is pathways, not cohorts.
-Keys use the cohort ID (`ALPE:{userId}:{cohortId}`, built only in `enrollmentKeys`);
-the cohort name goes in the `cohort` field. `CohortMembers.status` maps as:
+Keys use the cohort name, as the seed script and the LMS and assessment services do
+(`ALPE:{userId}:{cohortName}`, built only in `enrollmentKeys`); the name also goes in the
+`cohort` field. Names are not unique, so when a learner is in two cohorts with the same name
+only the newer membership is sent (a warning names the other cohort ID). Renaming a cohort
+starts a new DevRev record. `CohortMembers.status` maps as:
 
 | Status | `application_status` | `is_enrolled` | `lifecycle_stage` |
 | --- | --- | --- | --- |

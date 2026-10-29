@@ -59,9 +59,9 @@ describe("learner payloads", () => {
   describe("keys", () => {
     it("match the agreed DevRev formats", () => {
       expect(learnerProfileUniqueKey(USER_ID)).toBe(`LRNR:${USER_ID}`);
-      expect(enrollmentKeys(USER_ID, COHORT_ID)).toEqual({
-        externalId: `${USER_ID}:${COHORT_ID}`,
-        uniqueKey: `ALPE:${USER_ID}:${COHORT_ID}`,
+      expect(enrollmentKeys(USER_ID, " ALP-2026-C2 ")).toEqual({
+        externalId: `${USER_ID}:ALP-2026-C2`,
+        uniqueKey: `ALPE:${USER_ID}:ALP-2026-C2`,
       });
       expect(pathwayKeys(USER_ID, "career_launch")).toEqual({
         externalId: `${USER_ID}:career_launch`,
@@ -278,7 +278,7 @@ describe("learner payloads", () => {
       );
       expect(fields).toEqual({
         learner_profile: "don:core:profile/1",
-        external_id: `${USER_ID}:${COHORT_ID}`,
+        external_id: `${USER_ID}:ALP-2026-C2`,
         aspire_user_id: USER_ID,
         cohort: "ALP-2026-C2",
         application_date: "2026-02-10",

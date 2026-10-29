@@ -40,9 +40,9 @@ export interface LearnerSource {
 }
 
 export interface EnrollmentSource {
-  /** Cohort.cohortId. Part of the DevRev key (Q1). */
+  /** Cohort.cohortId, for the allowlist and DevRevSync.cohortId. */
   cohortId: string;
-  /** Cohort.name, sent as the cohort field. Names are not unique. */
+  /** Cohort.name: part of the DevRev key and sent as the cohort field. */
   cohortName: string;
   /** CohortMembers.status */
   status: string;
@@ -70,16 +70,16 @@ export type FieldMap = Record<
 export const learnerProfileUniqueKey = (userId: string) => `LRNR:${userId}`;
 
 /**
- * The one place alp_enrollment keys are built. Keys use cohortId, not the
- * cohort name (open question Q1, decided 2026-10-28): names repeat and can be
- * renamed, which would split or merge records. The LMS and assessment
- * services must build the same key. Keys can't change once records exist.
+ * The one place alp_enrollment keys are built: ALPE:{userId}:{cohort name},
+ * the format the seed script and the LMS and assessment services use
+ * (decided 2026-10-29, replacing cohortId). A learner in two cohorts with
+ * the same name gets one record, and renaming a cohort starts a new record.
  */
 export function enrollmentKeys(
   userId: string,
-  cohortId: string
+  cohortName: string
 ): { externalId: string; uniqueKey: string } {
-  const externalId = `${userId}:${cohortId}`;
+  const externalId = `${userId}:${cohortName.trim()}`;
   return { externalId, uniqueKey: `ALPE:${externalId}` };
 }
 
@@ -327,7 +327,7 @@ export function buildAlpEnrollment(
   const status = (enrollment.status ?? "").toLowerCase();
   return {
     learner_profile: learnerProfileId ?? undefined,
-    external_id: enrollmentKeys(src.userId, enrollment.cohortId).externalId,
+    external_id: enrollmentKeys(src.userId, enrollment.cohortName).externalId,
     aspire_user_id: src.userId,
     cohort: enrollment.cohortName,
     application_date: toDate(enrollment.createdAt),

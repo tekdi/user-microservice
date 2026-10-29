@@ -113,9 +113,19 @@ export class LearnerSyncService {
       );
     }
 
+    const seen = new Set<string>();
     if (this.config.syncAlpEnrollment) {
       for (const enrollment of enrollments) {
-        const keys = enrollmentKeys(userId, enrollment.cohortId);
+        const keys = enrollmentKeys(userId, enrollment.cohortName);
+        // Memberships come newest first; an older cohort with the same name
+        // would overwrite the same DevRev record, so it is left out.
+        if (seen.has(keys.externalId)) {
+          this.logger.warn(
+            `learner ${userId}: cohort ${enrollment.cohortId} has the same name as a newer cohort; left out`
+          );
+          continue;
+        }
+        seen.add(keys.externalId);
         try {
           const row = await this.records.upsertCustomObject({
             leafType: DevRevLeafType.ALP_ENROLLMENT,
@@ -181,7 +191,7 @@ export class LearnerSyncService {
     if (failures.length > 0) throw this.combine(userId, failures);
 
     const counts = {
-      enrollments: this.config.syncAlpEnrollment ? enrollments.length : 0,
+      enrollments: seen.size,
       pathways: this.config.syncElpPathway ? pathways.length : 0,
     };
     this.logger.log(
