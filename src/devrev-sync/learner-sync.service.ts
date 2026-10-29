@@ -1,0 +1,238 @@
+import { Injectable, Logger } from "@nestjs/common";
+import { DevRevApiError } from "./devrev.client";
+import { DevRevRecordService } from "./devrev-record.service";
+import { DevRevSyncConfig } from "./devrev-sync.config";
+import { DevRevLeafType, DevRevSync } from "./entities/devrev-sync.entity";
+import {
+  buildAlpEnrollment,
+  buildElpPathway,
+  buildLearnerProfile,
+  buildRevUser,
+  enrollmentKeys,
+  enrollmentTitle,
+  learnerProfileUniqueKey,
+  pathwayKeys,
+  pathwayTitle,
+  profileTitle,
+} from "./learner-payloads";
+import { LearnerSourceLoader } from "./learner-source.loader";
+
+export interface LearnerSyncResult {
+  userId: string;
+  outcome: "synced" | "skipped";
+  reason?: string;
+  enrollments: number;
+  pathways: number;
+}
+
+/**
+ * Error thrown after a partial sync so the job is retried. `retryable` is
+ * false only when every failure was one retrying can't fix (schema errors,
+ * other 4xx).
+ */
+export class LearnerSyncError extends Error {
+  constructor(
+    message: string,
+    readonly retryable: boolean,
+    readonly retryAfterMs: number | null
+  ) {
+    super(message);
+    this.name = "LearnerSyncError";
+  }
+}
+
+/**
+ * Syncs one learner: Rev User, learner_profile, then each ALP enrollment and
+ * ELP pathway, each linked to the Rev User. Reads current state every time, so repeated
+ * or late jobs converge on the same result.
+ */
+@Injectable()
+export class LearnerSyncService {
+  private readonly logger = new Logger("DevRevSync");
+
+  constructor(
+    private readonly config: DevRevSyncConfig,
+    private readonly loader: LearnerSourceLoader,
+    private readonly records: DevRevRecordService
+  ) {}
+
+  async syncLearner(userId: string): Promise<LearnerSyncResult> {
+    const skipped = (reason: string): LearnerSyncResult => ({
+      userId,
+      outcome: "skipped",
+      reason,
+      enrollments: 0,
+      pathways: 0,
+    });
+
+    if (!this.config.canRun) return skipped("sync disabled");
+
+    const snapshot = await this.loader.load(userId);
+    if (!snapshot) return skipped("user not found");
+    if (!snapshot.isStudent) return skipped("not a student");
+    if (
+      this.config.cohortAllowlist.size > 0 &&
+      snapshot.enrollments.length === 0
+    ) {
+      return skipped("no membership in an allowed cohort");
+    }
+
+    const { learner, enrollments, pathways } = snapshot;
+    const failures: unknown[] = [];
+
+    let revUser: DevRevSync | null = null;
+    if (this.config.canSyncRevUsers) {
+      revUser = await this.records.upsertRevUser(
+        userId,
+        buildRevUser(learner, this.config.revOrgId)
+      );
+    }
+    const revUserId = revUser?.devrevId ?? null;
+
+    let profile: DevRevSync | null = null;
+    if (this.config.syncLearnerProfile) {
+      profile = await this.records.upsertCustomObject({
+        leafType: DevRevLeafType.LEARNER_PROFILE,
+        uniqueKey: learnerProfileUniqueKey(userId),
+        externalId: userId,
+        lookupField: "aspire_user_id",
+        lookupValue: userId,
+        title: profileTitle(learner),
+        fields: buildLearnerProfile(learner, revUserId, (field) =>
+          this.logger.warn(
+            `learner ${userId}: ${field} answer is not yes/no; left out`
+          )
+        ),
+        userId,
+      });
+      await this.tryLink(
+        profile,
+        revUserId,
+        this.config.profileLinkTypeId,
+        failures
+      );
+    }
+
+    const seen = new Set<string>();
+    if (this.config.syncAlpEnrollment) {
+      for (const enrollment of enrollments) {
+        const keys = enrollmentKeys(userId, enrollment.cohortName);
+        // Memberships come newest first; an older cohort with the same name
+        // would overwrite the same DevRev record, so it is left out.
+        if (seen.has(keys.externalId)) {
+          this.logger.warn(
+            `learner ${userId}: cohort ${enrollment.cohortId} has the same name as a newer cohort; left out`
+          );
+          continue;
+        }
+        seen.add(keys.externalId);
+        try {
+          const row = await this.records.upsertCustomObject({
+            leafType: DevRevLeafType.ALP_ENROLLMENT,
+            uniqueKey: keys.uniqueKey,
+            externalId: keys.externalId,
+            lookupField: "external_id",
+            lookupValue: keys.externalId,
+            title: enrollmentTitle(learner, enrollment),
+            fields: buildAlpEnrollment(
+              learner,
+              enrollment,
+              profile?.devrevId ?? null
+            ),
+            userId,
+            cohortId: enrollment.cohortId,
+          });
+          await this.tryLink(
+            row,
+            revUserId,
+            this.config.recordLinkTypeId,
+            failures
+          );
+        } catch (error) {
+          failures.push(error);
+        }
+      }
+    }
+
+    if (this.config.syncElpPathway) {
+      for (const pathway of pathways) {
+        const keys = pathwayKeys(userId, pathway.pathwayKey);
+        try {
+          const row = await this.records.upsertCustomObject({
+            leafType: DevRevLeafType.ELP_PATHWAY,
+            uniqueKey: keys.uniqueKey,
+            externalId: keys.externalId,
+            lookupField: "external_id",
+            lookupValue: keys.externalId,
+            title: pathwayTitle(learner, pathway),
+            fields: buildElpPathway(
+              learner,
+              pathway,
+              profile?.devrevId ?? null,
+              (field, value) =>
+                this.logger.warn(
+                  `learner ${userId}: elp_pathway ${field} "${value}" has no DevRev value; left out`
+                )
+            ),
+            userId,
+          });
+          await this.tryLink(
+            row,
+            revUserId,
+            this.config.recordLinkTypeId,
+            failures
+          );
+        } catch (error) {
+          failures.push(error);
+        }
+      }
+    }
+
+    if (failures.length > 0) throw this.combine(userId, failures);
+
+    const counts = {
+      enrollments: seen.size,
+      pathways: this.config.syncElpPathway ? pathways.length : 0,
+    };
+    this.logger.log(
+      `learner ${userId} synced: profile=${
+        profile ? "yes" : "off"
+      }, enrollments=${counts.enrollments}, pathways=${counts.pathways}`
+    );
+    return { userId, outcome: "synced", ...counts };
+  }
+
+  private async tryLink(
+    record: DevRevSync,
+    revUserId: string | null,
+    linkTypeId: string,
+    failures: unknown[]
+  ): Promise<void> {
+    try {
+      await this.records.ensureLink(record, revUserId, linkTypeId);
+    } catch (error) {
+      failures.push(error);
+    }
+  }
+
+  private combine(userId: string, failures: unknown[]): LearnerSyncError {
+    const apiErrors = failures.filter(
+      (f): f is DevRevApiError => f instanceof DevRevApiError
+    );
+    const retryable =
+      apiErrors.length < failures.length || apiErrors.some((e) => e.retryable);
+    const retryAfterMs = apiErrors.reduce<number | null>(
+      (max, e) =>
+        e.retryAfterMs && e.retryAfterMs > (max ?? 0) ? e.retryAfterMs : max,
+      null
+    );
+    const messages = failures.map((f) => (f as Error)?.message ?? String(f));
+    return new LearnerSyncError(
+      `learner ${userId}: ${failures.length} record(s) failed: ${messages.join(
+        "; "
+      )}`,
+      retryable,
+      retryAfterMs
+    );
+  }
+}

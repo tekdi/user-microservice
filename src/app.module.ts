@@ -37,6 +37,7 @@ import { CountriesModule } from './countries/countries.module';
 import { ContentModule } from './content/content.module';
 import { ReferralsModule } from './referrals/referrals.module';
 import { AspireLeadersSpecificModule } from './aspire-leaders-specific/aspire-leaders-specific.module';
+import { DevRevSyncModule } from './devrev-sync/devrev-sync.module';
 
 /**
  * Main Application Module
@@ -97,6 +98,7 @@ import { AspireLeadersSpecificModule } from './aspire-leaders-specific/aspire-le
     ContentModule,
     ReferralsModule,
     AspireLeadersSpecificModule,
+    DevRevSyncModule, // DevRev sync of learners; off unless DEVREV_SYNC_ENABLED=true
   ],
   controllers: [AppController, HealthController],
   providers: [

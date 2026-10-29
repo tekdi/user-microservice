@@ -1,4 +1,4 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable, Optional } from '@nestjs/common';
 import { User, UserStatus } from '../../user/entities/user-entity';
 import { FieldValues } from 'src/fields/entities/fields-values.entity';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -69,6 +69,7 @@ import { UserElasticsearchService } from '../../elasticsearch/user-elasticsearch
 import { IUser } from '../../elasticsearch/interfaces/user.interface';
 import { isElasticsearchEnabled } from 'src/common/utils/elasticsearch.util';
 import { ReferralsService } from 'src/referrals/referrals.service';
+import { DevRevSyncQueue } from 'src/devrev-sync/devrev-sync.queue';
 import { buildReferLink } from 'src/referrals/utils/referral-slug.util';
 
 interface UpdateField {
@@ -123,7 +124,8 @@ export class PostgresUserService implements IServicelocator {
     private readonly cohortAcademicYearService: CohortAcademicYearService,
     private readonly authUtils: AuthUtils,
     private readonly userElasticsearchService: UserElasticsearchService,
-    private readonly referralsService: ReferralsService
+    private readonly referralsService: ReferralsService,
+    @Optional() private readonly devRevSyncQueue?: DevRevSyncQueue
   ) {
     this.jwt_secret = this.configService.get<string>('RBAC_JWT_SECRET');
     this.jwt_password_reset_expires_In = this.configService.get<string>(
@@ -411,6 +413,8 @@ export class PostgresUserService implements IServicelocator {
           // Only call the update function if there is at least one field to update
           if (Object.keys(updatePayload).length > 0) {
             await this.usersRepository.update(userDetail.userId, updatePayload);
+            // DevRev: activation changes learner_profile.is_activated
+            this.devRevSyncQueue?.enqueueLearner(userDetail.userId);
           }
         }
       } catch (e) {
@@ -1860,7 +1864,10 @@ export class PostgresUserService implements IServicelocator {
       }
 
       await Object.assign(user, userData);
-      return this.usersRepository.save(user);
+      const saved = await this.usersRepository.save(user);
+      // DevRev: covers profile edits and bulk-import updates alike
+      this.devRevSyncQueue?.enqueueLearner(saved.userId);
+      return saved;
     } catch (error) {
       // Re-throw or handle the error as needed
       throw new Error('An error occurred while updating user details');
@@ -2547,6 +2554,9 @@ export class PostgresUserService implements IServicelocator {
       }
     }
 
+    // DevRev: shared by signup, SSO and bulk import. The job runs after the
+    // debounce delay, by which time roles and custom fields are saved too.
+    this.devRevSyncQueue?.enqueueLearner(result?.userId);
     return result;
   }
 
@@ -3020,6 +3030,8 @@ export class PostgresUserService implements IServicelocator {
           await this.usersRepository.update(userData.userId, {
             temporaryPassword: false,
           });
+          // DevRev: activation changes learner_profile.is_activated
+          this.devRevSyncQueue?.enqueueLearner(userData.userId);
         }
         return await APIResponse.success(
           response,

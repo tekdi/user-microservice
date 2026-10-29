@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { CohortMembersDto } from 'src/cohortMembers/dto/cohortMembers.dto';
 import { CohortMemberMoveDto } from 'src/cohortMembers/dto/cohortMember-move.dto';
 import { CohortMembersSearchDto } from 'src/cohortMembers/dto/cohortMembers-search.dto';
@@ -36,6 +36,7 @@ import { FormSubmissionSearchDto } from 'src/forms/dto/form-submission-search.dt
 import { FormsService } from 'src/forms/forms.service';
 import { isElasticsearchEnabled } from 'src/common/utils/elasticsearch.util';
 import { UserElasticsearchService } from 'src/elasticsearch/user-elasticsearch.service';
+import { DevRevSyncQueue } from 'src/devrev-sync/devrev-sync.queue';
 import axios from 'axios';
 @Injectable()
 export class PostgresCohortMembersService {
@@ -59,7 +60,8 @@ export class PostgresCohortMembersService {
     private readonly lmsEnrollmentService: LmsEnrollmentService,
     private readonly formsService: FormsService,
     private readonly formSubmissionService: FormSubmissionService,
-    private readonly userElasticsearchService: UserElasticsearchService
+    private readonly userElasticsearchService: UserElasticsearchService,
+    @Optional() private readonly devRevSyncQueue?: DevRevSyncQueue
   ) {}
 
   /** Empty arrays would produce invalid SQL `IN ()`; skip the filter. */
@@ -926,6 +928,8 @@ export class PostgresCohortMembersService {
         }
       }
 
+      this.devRevSyncQueue?.enqueueLearner(userId);
+
       if (isElasticsearchEnabled()) {
         try {
           await Promise.all([
@@ -1127,6 +1131,7 @@ export class PostgresCohortMembersService {
       const savedCohortMember = await this.cohortMembersRepository.save(
         cohortMembers
       );
+      this.devRevSyncQueue?.enqueueLearner(savedCohortMember.userId);
 
       // Update Elasticsearch with cohort member status
       if (isElasticsearchEnabled()) {
@@ -2098,6 +2103,7 @@ export class PostgresCohortMembersService {
         ...updateData,
         status: status || cohortMembershipToUpdate.status,
       };
+      this.devRevSyncQueue?.enqueueLearner(updatedCohortMember.userId);
 
       // OPTIMIZED: Parallelize independent operations that don't depend on each other
       const parallelOperations: Promise<any>[] = [];
@@ -2997,6 +3003,11 @@ export class PostgresCohortMembersService {
           }
         }
       }
+    }
+
+    // DevRev: one sync per learner covers every cohort added or archived above
+    for (const userId of cohortMembersDto.userId ?? []) {
+      this.devRevSyncQueue?.enqueueLearner(userId);
     }
 
     if (errors.length > 0) {
@@ -4306,6 +4317,7 @@ export class PostgresCohortMembersService {
         where: { cohortMembershipId: cohortMembershipId },
         select: ['userId', 'cohortId'],
       });
+      this.devRevSyncQueue?.enqueueLearner(cohortMemberDetails?.userId);
 
       // NEW: Handle LMS enrollment for shortlisted users
       if (evaluationResult.status === 'shortlisted' && cohortMemberDetails) {
