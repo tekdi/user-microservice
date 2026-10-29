@@ -10,7 +10,27 @@ The Tenant module manages tenant/program entities in the system. Tenants represe
 - `Tenant` - Core tenant entity with program information
 
 **Dependencies**:
-- `FilesUploadService` - For handling file uploads (program images)
+- `FilesUploadService` (`src/common/services/upload-file.ts`) - Uploads program images to AWS S3 (see File Uploads)
+- `CacheService` - Caches tenant reads (see Caching)
+
+## Caching
+
+Tenant reads use `CacheService.getOrLoad` in the single namespace `tenant`, TTL 1 hour:
+- `GET /read` -> key `read:all`
+- `POST /search` -> key `search:{sha256(body)}`
+- Error responses (404/500) are never cached.
+- Tenant writes emit no Kafka event, so `create`, `update` and `delete` call `cacheService.invalidate("tenant")` after the DB write succeeds, which stales every cached read and search at once.
+
+## File Uploads
+
+`FilesUploadService.saveFile(file)` (used by create/update, `FilesInterceptor("programImages", 10)`):
+- Allowed extensions (case-insensitive): `.jpg`, `.jpeg`, `.png`, `.gif`, `.ico`, `.webp`, `.mp4`, `.mp3`, `.pdf`, `.doc`; anything else -> 400 `Invalid file type`
+- Uploads the in-memory buffer to the S3 bucket `AWS_BUCKET_NAME` (region `AWS_REGION`, credentials `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`) under key `{uuid}{ext}` with the file's mimetype
+- Verifies the object with `HeadObject` (zero `ContentLength` -> 500)
+- Returns `{ filePath, fileSize }` where `filePath` is `https://{bucket}.s3.{region}.amazonaws.com/{key}`; the URL is what is stored in `programImages`
+- S3 failure -> 500 `Failed to upload file to S3`
+
+The separate `UploadS3Service` (`src/common/services/upload-S3.service.ts`) generates presigned POST uploads (24 h expiry, key `{folder}/{filename}-{uuid}{ext}`, content type derived from the extension) and is used by the user module, not by tenant.
 
 ## Database Schema
 
@@ -106,19 +126,22 @@ The Tenant module manages tenant/program entities in the system. Tenants represe
 
 **Authentication**: Not required
 
-**Request Body** (`TenantSearchDTO`):
+**Request Body** (`TenantSearchDTO`; validated with `whitelist: true`, unknown properties are stripped):
 ```typescript
 {
   filters?: {
-    name?: string; // Case-insensitive search
-    status?: ("active" | "inactive" | "archived") | ("active" | "inactive" | "archived")[];
-    parentId?: string | null; // UUID or null for parent tenants
+    tenantId?: string; // UUID
+    name?: string; // Case-insensitive partial search (ILIKE %value%)
+    status?: ("active" | "inactive" | "archived")[]; // Non-empty array
+    parentId?: string; // UUID
     type?: string;
     domain?: string;
-    // ... other filter fields
+    programHead?: string;
+    createdBy?: string; // UUID
+    updatedBy?: string; // UUID
   };
-  limit?: number; // Default: 10
-  offset?: number; // Default: 0
+  limit: number; // Required, 1-200
+  offset: number; // Required, 0-200
 }
 ```
 
@@ -151,12 +174,14 @@ The Tenant module manages tenant/program entities in the system. Tenants represe
 3. Query tenants with pagination (`take` and `skip`)
 4. Get total count for pagination metadata
 5. Return results with total count
+6. The result is cached (see Caching)
 
 **Edge Cases**:
 - No tenants match filters → 404 Not Found
-- Invalid filter values → Handled by validation
-- `parentId = null` filter → Returns only parent tenants
+- Invalid filter values (non-UUID ids, empty or invalid `status` array, `limit`/`offset` out of range) → 400 from validation
+- `parentId` must be a UUID string in the DTO; the service also maps `null`/`'null'` to a parent-only filter
 - Empty filters → Returns all tenants (with pagination)
+- `offset` is capped at 200 by validation
 
 **Dependencies**:
 - `TenantService.searchTenants()`
@@ -185,8 +210,8 @@ The Tenant module manages tenant/program entities in the system. Tenants represe
   description: string; // Required
   programHead: string; // Required
   parentId?: string; // Optional, UUID
-  params?: object; // Optional
-  contentFilter?: object; // Optional
+  params?: object; // Optional (JSON string accepted in multipart requests and parsed)
+  contentFilter?: object; // Optional (JSON string accepted and parsed)
   programImages?: string[]; // Optional, set automatically from file uploads
 }
 ```
@@ -210,32 +235,32 @@ The Tenant module manages tenant/program entities in the system. Tenants represe
     }
   }
   ```
-- **Error (400)**: Validation errors
-- **Error (403)**: Forbidden
+- **Error (400)**: Validation errors, invalid file type
+- **Error (404)**: `parentId` given but parent tenant not found
+- **Error (409)**: Tenant with the same `name` already exists
 - **Error (500)**: Internal Server Error
 
 **Business Logic**:
-1. Extract `userId` from JWT token using `@GetUserId` decorator
+1. Extract `userId` from JWT token using `@GetUserId` decorator (the decorator decodes the Bearer token's `sub`; it does not verify the signature)
 2. Handle file uploads (if any):
    - Use `FilesInterceptor` to handle up to 10 files
-   - Upload each file using `FilesUploadService.saveFile()`
-   - Collect file paths into array
-   - Set `tenantCreateDto.programImages` with file paths
+   - Upload each file to S3 using `FilesUploadService.saveFile()`
+   - Set `tenantCreateDto.programImages` to the returned S3 URLs
 3. Set `tenantCreateDto.createdBy = userId`
-4. Call `tenantService.createTenants()` with:
-   - `TenantCreateDto`
-   - Response object
-5. Service performs:
-   - Validate required fields
-   - Create tenant record in database
-   - Set default values (status: ACTIVE, ordering: 0)
-6. Return formatted response
+4. Call `tenantService.createTenants()`, which:
+   - Parses `params` and `contentFilter` from JSON strings when sent as multipart fields (a parse failure is logged and the raw value is kept)
+   - Rejects duplicate `name` (409)
+   - Validates `parentId` exists (404)
+   - Saves the tenant (defaults: status `active`, ordering `0`)
+   - Invalidates the `tenant` cache namespace
+5. Return formatted response
 
 **Edge Cases**:
 - Missing required fields → 400 Bad Request (validation)
 - Invalid `parentId` format → 400 Bad Request
-- File upload fails → 500 Internal Server Error
-- Invalid file type/size → Handled by file upload service
+- Duplicate name → 409 Conflict (`Tenant already exists`)
+- Parent not found → 404 (`Parent tenant not found`)
+- Invalid file extension → 400 from `FilesUploadService`; S3 failure → 500
 
 **Dependencies**:
 - `TenantService.createTenants()`
@@ -243,7 +268,8 @@ The Tenant module manages tenant/program entities in the system. Tenants represe
 
 **Side Effects**:
 - Creates tenant record in database
-- Uploads files to file system
+- Uploads files to S3
+- Invalidates the `tenant` cache namespace
 
 ---
 
@@ -274,7 +300,7 @@ The Tenant module manages tenant/program entities in the system. Tenants represe
   ordering?: number; // 0-999999
   params?: object;
   contentFilter?: object;
-  programImages?: string[]; // Set automatically from file uploads
+  programImages?: string[]; // Existing URLs (array or JSON-array string) plus new uploads
   updatedBy?: string; // Auto-set from token
 }
 ```
@@ -284,32 +310,32 @@ The Tenant module manages tenant/program entities in the system. Tenants represe
 
 **Response**:
 - **Success (200)**: Tenant updated successfully
-- **Error (400)**: Bad Request
-- **Error (404)**: Tenant Not Found
+- **Error (400)**: Bad Request (validation, malformed `programImages`)
+- **Error (404)**: Tenant Not Found / Parent tenant not found
+- **Error (409)**: Duplicate name, self-parent or circular parent chain
 - **Error (500)**: Internal Server Error
 
 **Business Logic**:
 1. Extract `userId` from JWT token
 2. Extract `id` from path parameter (tenantId)
-3. Handle file uploads (if any):
-   - Upload files using `FilesUploadService`
-   - Set `tenantUpdateDto.programImages` with new file paths
-4. Set `tenantUpdateDto.updatedBy = userId`
-5. Call `tenantService.updateTenants()` with:
-   - `tenantId`
-   - `TenantUpdateDto`
-   - Response object
-6. Service performs:
-   - Check if tenant exists
-   - Update tenant record with provided fields
-   - Preserve existing values for fields not provided
-7. Return formatted response
+3. Normalise `programImages`: when it arrives as a string (multipart form-data) it must be a JSON array of strings, otherwise 400 (`Invalid format for programImages. Expected a JSON array string.` / `programImages must be an array of strings.`)
+4. Upload any files to S3 via `FilesUploadService`; the final `programImages` is the existing list (from the body) followed by the newly uploaded URLs
+5. Set `tenantUpdateDto.updatedBy = userId`
+6. Call `tenantService.updateTenants()`, which:
+   - Parses `params` / `contentFilter` JSON strings
+   - Checks the tenant exists (404)
+   - Rejects a `name` already used by another tenant (409)
+   - When `parentId` is provided: rejects self-parent (409), requires the parent to exist (404), and walks up the parent chain to reject circular hierarchies (409)
+   - Updates the row with the provided fields and invalidates the `tenant` cache
+7. Returns `{ tenantId, updatedFields }`
 
 **Edge Cases**:
 - Tenant not found → 404 Not Found
 - Invalid `id` format → 400 Bad Request (ParseUUIDPipe)
-- Invalid `parentId` (creates circular reference) → 400 Bad Request
-- File upload fails → 500 Internal Server Error
+- `parentId` equal to the tenant's own id → 409 (`A tenant cannot be its own parent`)
+- Circular parent chain → 409 (`Circular reference detected ...`)
+- Invalid `programImages` format → 400
+- Invalid file extension → 400; S3 failure → 500
 
 **Dependencies**:
 - `TenantService.updateTenants()`
@@ -317,7 +343,8 @@ The Tenant module manages tenant/program entities in the system. Tenants represe
 
 **Side Effects**:
 - Updates tenant record in database
-- Uploads new files (if provided)
+- Uploads new files to S3 (if provided)
+- Invalidates the `tenant` cache namespace
 
 ---
 
@@ -332,42 +359,35 @@ The Tenant module manages tenant/program entities in the system. Tenants represe
 **Headers**:
 - `Authorization` (required) - JWT token
 
-**Path Parameters**:
-- `id` (required, UUID) - Tenant ID to delete
-
-**Note**: The controller method signature shows `@Param("id")` but the route doesn't include `:id`. This appears to be a code inconsistency that should be fixed.
+**Route parameter**: The handler declares `@Param("id")` (UUID, `ParseUUIDPipe`); the route path is `/delete` with no `:id` segment.
 
 **Response**:
 - **Success (200)**: Tenant deleted successfully
-- **Error (400)**: Bad Request
-- **Error (404)**: Tenant Not Found
+- **Error (400)**: `id` missing or not a UUID (`ParseUUIDPipe`)
+- **Error (409)**: Tenant does not exist (`Tenant already exists` message) or has child tenants
 - **Error (500)**: Internal Server Error
 
 **Business Logic**:
 1. Extract `userId` from JWT token
-2. Extract `id` from path parameter (tenantId)
-3. Call `tenantService.deleteTenants()` with:
-   - Request object
-   - `tenantId`
-   - Response object
-4. Service performs:
-   - Check if tenant exists
-   - Check for dependent records (users, cohorts, etc.)
-   - Soft delete or hard delete based on business rules
-   - Update status to ARCHIVED (if soft delete)
-5. Return formatted response
+2. Extract `id` via `@Param("id")` with `ParseUUIDPipe`
+3. Call `tenantService.deleteTenants()`, which:
+   - Looks up the tenant by id
+   - Rejects deletion when child tenants (`parentId = id`) exist
+   - Hard-deletes the row (`repository.delete`); no soft delete or archival
+   - Invalidates the `tenant` cache
+4. Return formatted response
 
 **Edge Cases**:
-- Tenant not found → 404 Not Found
-- Tenant has dependent records → 400 Bad Request (or handle cascade)
-- Invalid `id` format → 400 Bad Request
+- Tenant not found → 409 Conflict (service reuses the `TENANT_EXISTS` message)
+- Tenant has child tenants → 409 (`Cannot delete tenant with child tenants. Please delete or reassign child tenants first.`)
+- No cascade or dependent-record check is performed in this service
 
 **Dependencies**:
 - `TenantService.deleteTenants()`
 
 **Side Effects**:
-- Deletes or archives tenant record
-- May cascade delete/update dependent records
+- Deletes the tenant row
+- Invalidates the `tenant` cache namespace
 
 ---
 
@@ -380,19 +400,22 @@ The Tenant module manages tenant/program entities in the system. Tenants represe
 **Solution**: Verify roles exist in `Roles` table with matching `tenantId`. The system falls back to all roles if tenant-specific roles not found.
 
 ### Issue: File uploads failing
-**Solution**: Check file size limits, file type restrictions, and file system permissions. Verify `FilesUploadService` configuration.
+**Solution**: Check the extension is in the allowed list, and verify `AWS_BUCKET_NAME`, `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and bucket permissions for `FilesUploadService`.
 
 ### Issue: Tenant search not returning results
 **Solution**: Check filter values match database values exactly (case-sensitive for some fields). Use `ILike` for name searches (case-insensitive).
 
 ### Issue: Circular parent-child relationships
-**Solution**: Validate `parentId` before update to prevent circular references. Check that a tenant's `parentId` doesn't point to itself or its descendants.
+**Solution**: Update rejects self-parenting and circular chains with 409. Create only checks that the parent exists.
+
+### Issue: Tenant change not visible in /read or /search
+**Solution**: Reads are cached for 1 hour in the `tenant` namespace and invalidated by the API writes. Direct database changes bypass invalidation; they appear after the TTL or after a `tenant` namespace bump.
 
 ### Performance Considerations
 - Index `parentId` column for faster hierarchical queries
 - Index `status` column for filtering active tenants
 - Consider pagination for large tenant lists
-- Cache frequently accessed tenant data if needed
+- `read` and `search` are served from the `tenant` cache namespace (1 hour)
 
 ### Common Mistakes to Avoid
 1. **Not validating parentId**: Always check if `parentId` exists and doesn't create circular references
