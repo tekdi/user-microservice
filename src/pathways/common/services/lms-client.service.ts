@@ -697,7 +697,7 @@ export class LmsClientService {
     userId: string,
     tenantId: string,
     organisationId: string
-  ): Promise<{ totalCourses: number; completedCourses: number; allCompleted: boolean } | null> {
+  ): Promise<{ totalCourses: number; completedCourses: number; allRequiredCoursesCompleted: boolean } | null> {
     if (!this.lmsServiceUrl) {
       this.logger.warn('LMS_SERVICE_URL not configured. Cannot resolve pathway completion status.');
       return null;
@@ -729,7 +729,7 @@ export class LmsClientService {
       return {
         totalCourses: Number(data?.totalCourses ?? 0),
         completedCourses: Number(data?.completedCourses ?? 0),
-        allCompleted: Boolean(data?.allCompleted),
+        allRequiredCoursesCompleted: Boolean(data?.allRequiredCoursesCompleted),
       };
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error';

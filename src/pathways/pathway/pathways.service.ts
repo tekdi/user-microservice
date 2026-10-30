@@ -2456,7 +2456,7 @@ export class PathwaysService {
       //   );
       // }
 
-      // if (!completion.allCompleted) {
+      // if (!completion.allRequiredCoursesCompleted) {
       //   return APIResponse.success(
       //     response, apiId,
       //     {
