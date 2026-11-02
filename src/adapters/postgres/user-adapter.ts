@@ -483,7 +483,8 @@ export class PostgresUserService implements IServicelocator {
 
       const findData = await this.findAllUserDetails(
         userSearchDto,
-        includeCustomFields
+        includeCustomFields,
+        tenantId
       );
 
       if (findData === false) {
@@ -580,7 +581,11 @@ export class PostgresUserService implements IServicelocator {
     }, {} as Record<string, string>);
   }
 
-  async findAllUserDetails(userSearchDto, includeCustomFields: boolean = true) {
+  async findAllUserDetails(
+    userSearchDto,
+    includeCustomFields: boolean = true,
+    tenantId?: string
+  ) {
     let { limit, offset, filters, exclude, sort } = userSearchDto;
     let excludeCohortIdes;
     let excludeUserIdes;
@@ -612,11 +617,16 @@ export class PostgresUserService implements IServicelocator {
     // `roleFilterColumn` below), because a caller-supplied role is a display
     // name while the constant is a code, and a per-tenant or renamed "Student"
     // row would otherwise silently match nothing.
+    //
+    // `role: "all"` (any case) opts out of the default and of role filtering
+    // altogether, so every role in the tenant is listed.
     const roleFilterIsDefault = !filters?.role;
     const roleFilterColumn = roleFilterIsDefault ? 'code' : 'name';
     filters = { ...(filters ?? {}) };
     if (roleFilterIsDefault) {
       filters.role = STUDENT_ROLE_CODE;
+    } else if (String(filters.role).trim().toLowerCase() === 'all') {
+      delete filters.role;
     }
 
     if (filters && Object.keys(filters).length > 0) {
@@ -754,6 +764,17 @@ export class PostgresUserService implements IServicelocator {
           }
         }
       }
+    }
+
+    // Scope the list to the caller's tenant (the `tenantid` header): only users
+    // with a role mapping in that tenant, and only their roles in it. Without
+    // this every tenant's users were returned.
+    if (tenantId && isUUID(tenantId)) {
+      if (index > 0) {
+        whereCondition += ` AND `;
+      }
+      whereCondition += ` UR."tenantId" = '${tenantId}'`;
+      index++;
     }
 
     if (exclude && Object.keys(exclude).length > 0) {
