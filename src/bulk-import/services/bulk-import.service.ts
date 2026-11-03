@@ -410,7 +410,8 @@ export class BulkImportService {
                 request,
                 result.user,
                 batchId,
-                result.index + 2
+                result.index + 2,
+                result.isNewUser
               );
             } catch (notifError) {
               // Log error but don't fail the import
@@ -812,8 +813,9 @@ export class BulkImportService {
     });
     // Always set username to email
     dto.username = dto.email;
-    // Set status to inactive for bulk imported users
-    dto.status = 'inactive';
+    // Bulk imported users are active immediately; they still get the welcome
+    // (set-password) email, see sendBulkImportNotification.
+    dto.status = 'active';
     // Ensure customFields is always an array to prevent undefined errors
     if (!dto.customFields) {
       dto.customFields = [];
@@ -1079,7 +1081,8 @@ export class BulkImportService {
     request: any,
     user: any,
     batchId: string,
-    rowNumber: number
+    rowNumber: number,
+    isNewUser: boolean
   ): Promise<void> {
     try {
       // Get user details with tenant information
@@ -1099,8 +1102,10 @@ export class BulkImportService {
         throw new Error('User ID not found');
       }
 
-      // Only inactive users get onBulkStudentCreated (welcome). Active (or any other status): no email.
-      if (userData?.status !== 'inactive') {
+      // onBulkStudentCreated (welcome / set-password) goes to users created by
+      // this import, and to existing users who never activated their account.
+      // Existing active users already have a password: no email.
+      if (!isNewUser && userData?.status !== 'inactive') {
         return;
       }
 
