@@ -3948,8 +3948,10 @@ export class PostgresUserService implements IServicelocator {
   async sendOtp(body: OtpSendDTO, response: Response) {
     const apiId = APIID.SEND_OTP;
     try {
-      const { mobile, reason } = body;
-      if (!mobile || !/^\d{10}$/.test(mobile)) {
+      const { mobile, whatsapp, reason } = body;
+      // A WhatsApp number takes precedence; SMS is the fallback for it
+      const number = whatsapp || mobile;
+      if (!number || !/^\d{10}$/.test(number)) {
         return APIResponse.error(
           response,
           apiId,
@@ -3958,17 +3960,19 @@ export class PostgresUserService implements IServicelocator {
           HttpStatus.BAD_REQUEST
         );
       }
-      // Step 1: Prepare data for OTP generation and send on Mobile
-      const { notificationPayload, hash, expires } = await this.sendOTPOnMobile(
-        mobile,
-        reason
-      );
+      // Step 1: Generate the OTP and send it on WhatsApp (SMS fallback) or SMS
+      const { notificationPayload, hash, expires, channel } = whatsapp
+        ? await this.sendOtpOnWhatsAppWithSmsFallback(whatsapp, reason)
+        : { ...(await this.sendOTPOnMobile(mobile, reason)), channel: 'sms' };
       // Step 2: Send success response
       const result = {
         data: {
-          message: `OTP sent to ${mobile}`,
+          message: `OTP sent to ${number}`,
           hash: `${hash}.${expires}`,
-          sendStatus: notificationPayload.result?.sms?.data[0],
+          channel,
+          sendStatus:
+            notificationPayload.result?.whatsapp?.data?.[0] ||
+            notificationPayload.result?.sms?.data?.[0],
           // sid: message.sid, // Twilio Message SID
         },
       };
@@ -4025,7 +4029,7 @@ export class PostgresUserService implements IServicelocator {
   async verifyOtp(body: OtpVerifyDTO, response: Response) {
     const apiId = APIID.VERIFY_OTP;
     try {
-      const { mobile, otp, hash, reason, username } = body;
+      const { mobile, whatsapp, otp, hash, reason, username } = body;
       if (!otp || !hash || !reason) {
         return APIResponse.error(
           response,
@@ -4038,7 +4042,9 @@ export class PostgresUserService implements IServicelocator {
       // Determine the value to use for verification based on the reason
       let identifier: string;
       if (reason === 'signup') {
-        if (!mobile) {
+        // WhatsApp and SMS OTPs are both hashed on the +91 number, so either field works
+        const number = mobile || whatsapp;
+        if (!number) {
           return APIResponse.error(
             response,
             apiId,
@@ -4047,7 +4053,7 @@ export class PostgresUserService implements IServicelocator {
             HttpStatus.BAD_REQUEST
           );
         }
-        identifier = this.formatMobileNumber(mobile); // Assuming this formats the mobile number
+        identifier = this.formatMobileNumber(number);
       } else if (reason === 'forgot') {
         if (!username) {
           return APIResponse.error(
@@ -4125,6 +4131,84 @@ export class PostgresUserService implements IServicelocator {
   }
 
   // send Mobile Notification
+  // Send the signup OTP on WhatsApp; if WhatsApp is not configured or the send
+  // fails, send a fresh OTP by SMS to the same number instead.
+  async sendOtpOnWhatsAppWithSmsFallback(whatsapp: string, reason: string) {
+    try {
+      const result = await this.sendOtpOnWhatsApp(whatsapp, reason);
+      return { ...result, channel: 'whatsapp' };
+    } catch (error) {
+      LoggerUtil.error(
+        'WhatsApp OTP failed, falling back to SMS',
+        error.message,
+        APIID.SEND_OTP
+      );
+      const result = await this.sendOTPOnMobile(whatsapp, reason);
+      return { ...result, channel: 'sms' };
+    }
+  }
+
+  async sendOtpOnWhatsApp(whatsapp: string, reason: string) {
+    try {
+      // Same identifier as the SMS flow, so verify-otp works unchanged
+      const mobileWithCode = this.formatMobileNumber(whatsapp);
+      const otp = this.authUtils.generateOtp(this.otpDigits).toString();
+      const { hash, expires, expiresInMinutes } = this.generateOtpHash(
+        mobileWithCode,
+        otp,
+        reason
+      );
+      const notificationPayload = await this.whatsappNotification(
+        mobileWithCode,
+        otp
+      );
+      return { notificationPayload, hash, expires, expiresInMinutes };
+    } catch (error) {
+      throw new Error(`Failed to send OTP via WhatsApp: ${error.message}`);
+    }
+  }
+
+  // Sends a Gupshup WhatsApp template via the notification service's send-raw endpoint
+  async whatsappNotification(recipient: string, otp: string) {
+    const templateId = this.configService.get<string>('WHATSAPP_TEMPLATE_ID');
+    const apiKey = this.configService.get<string>('WHATSAPP_GUPSHUP_API_KEY');
+    const gupshupSource = this.configService.get<string>(
+      'WHATSAPP_GUPSHUP_SOURCE'
+    );
+    // Fail (and so fall back to SMS) rather than report a send that never happened
+    if (!templateId || !apiKey || !gupshupSource) {
+      throw new Error(API_RESPONSES.WHATSAPP_NOT_CONFIGURED);
+    }
+    try {
+      const mailSend = await this.notificationRequest.sendRawNotification({
+        whatsapp: {
+          to: [recipient],
+          templateId,
+          templateParams: [otp],
+          gupshupSource,
+          gupshupApiKey: apiKey,
+        },
+      });
+      const errors = mailSend?.result?.whatsapp?.errors;
+      if (errors && errors.length > 0) {
+        const combinedErrorMessage = errors
+          .map((error: { error: string }) => error.error)
+          .join(', ');
+        throw new Error(`${API_RESPONSES.WHATSAPP_ERROR} :${combinedErrorMessage}`);
+      }
+      // A notification service without WhatsApp support returns no whatsapp block
+      if (!mailSend?.result?.whatsapp?.data?.length) {
+        throw new Error('Notification service did not send the WhatsApp message');
+      }
+      return mailSend;
+    } catch (error) {
+      LoggerUtil.error(API_RESPONSES.WHATSAPP_ERROR, error.message);
+      throw new Error(
+        `${API_RESPONSES.WHATSAPP_NOTIFICATION_ERROR}  ${error.message}`
+      );
+    }
+  }
+
   async smsNotification(
     context: string,
     key: string,

@@ -15,12 +15,22 @@ export class NotificationRequest {
     this.url = this.configService.get('NOTIFICATION_URL');
   }
 
+  // Template-based send: { context, key, replacements, email|sms|push }
   async sendNotification(body) {
+    return this.post('/notification/send', body);
+  }
+
+  // Template-free send, used for WhatsApp: { whatsapp: { to, templateId, templateParams, ... } }
+  async sendRawNotification(body) {
+    return this.post('/notification/send-raw', body);
+  }
+
+  private async post(path: string, body) {
     const data = JSON.stringify(body);
     const config: AxiosRequestConfig<any> = {
       method: 'POST',
       maxBodyLength: Infinity,
-      url: `${this.url}/notification/send`,
+      url: `${this.url}${path}`,
       headers: {
         'Content-Type': 'application/json',
       },
