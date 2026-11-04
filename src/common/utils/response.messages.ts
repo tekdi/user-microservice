@@ -215,6 +215,10 @@ export const API_RESPONSES = {
   INVALID_HASH_FORMATE: "Invalid hash format",
   SMS_ERROR: "SMS notification failed",
   SMS_NOTIFICATION_ERROR: "Failed to send SMS notification:",
+  WHATSAPP_ERROR: "WhatsApp notification failed",
+  WHATSAPP_NOTIFICATION_ERROR: "Failed to send WhatsApp notification:",
+  WHATSAPP_NOT_CONFIGURED:
+    "WhatsApp is not configured (WHATSAPP_TEMPLATE_ID, WHATSAPP_GUPSHUP_API_KEY, WHATSAPP_GUPSHUP_SOURCE)",
   USERNAME_REQUIRED: "Username Required",
   INVALID_REASON: "Invalid Reason",
   MOBILE_REQUIRED: "MObile Required",

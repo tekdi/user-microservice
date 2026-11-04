@@ -2,10 +2,16 @@ import { IsIn, IsString, Length, Matches, ValidateIf } from 'class-validator';
 
 export class OtpVerifyDTO {
 
-    @ValidateIf(o => o.reason === 'signup') // Only validate if reason is 'signup'
+    // For signup, either mobile or whatsapp (the number the OTP was sent to)
+    @ValidateIf(o => o.reason === 'signup' && (!o.whatsapp || o.mobile !== undefined))
     @IsString({ message: 'Mobile number must be a string.' })
     @Matches(/^\d{10}$/, { message: 'Mobile number must be exactly 10 digits.' })
     mobile: string;
+
+    @ValidateIf(o => o.whatsapp !== undefined)
+    @IsString({ message: 'WhatsApp number must be a string.' })
+    @Matches(/^\d{10}$/, { message: 'WhatsApp number must be exactly 10 digits.' })
+    whatsapp?: string;
 
     @IsString({ message: 'OTP must be a string.' })
     @Matches(/^\d{6}$/, { message: 'OTP must be exactly 6 digits.' })
