@@ -2265,7 +2265,7 @@ export class PathwaysService {
 
       const autoTags = (user as any).auto_tags;
       const hasCompletedAlumni = Array.isArray(autoTags) && autoTags.includes('completed_alumni');
-      if (!hasCompletedAlumni) {
+      if (!hasPathwayRequiredTag((user as any).auto_tags)) {
         return APIResponse.success(response, apiId, {
           isEligible: false,
           currentStatus: null,
