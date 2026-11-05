@@ -28,7 +28,7 @@ import { CacheService } from 'src/cache/cache.service';
 import { CourseCompletionWebhookDto } from './dto/course-completion-webhook.dto';
 import { NotificationRequest } from '../../common/utils/notification.axios';
 import { getReportCountryScope } from '@utils/report-country-scope';
-import { STUDENT_ROLE_CODE } from '../../common/utils/roles.constants';
+import { STUDENT_ROLE_CODE, hasPathwayRequiredTag } from '../../common/utils/roles.constants';
 
 const PATHWAY_SUBTYPE_PROGRAM_NAMES: Record<string, string> = {
   CAL: 'CAL Onboarding Course',
@@ -364,7 +364,7 @@ export class PathwaysService {
           "An active pathway with this name already exists",
           HttpStatus.CONFLICT
         );
-        
+
       }
       // Check if pathway with same key already exists
       const existingPathway = await this.pathwayRepository.findOne({
@@ -453,8 +453,7 @@ export class PathwaysService {
             if (orderConflict) {
               // If taken, fallback to max + 1
               this.logger.debug(
-                `Display order ${displayOrder} is taken. Falling back to ${
-                  maxOrder + 1
+                `Display order ${displayOrder} is taken. Falling back to ${maxOrder + 1
                 }`
               );
               displayOrder = maxOrder + 1;
@@ -541,8 +540,7 @@ export class PathwaysService {
             this.logger.debug('Invalidated pathway list cache after creation');
           } catch (cacheError: any) {
             this.logger.warn(
-              `Failed to invalidate pathway list cache: ${
-                cacheError?.message || cacheError
+              `Failed to invalidate pathway list cache: ${cacheError?.message || cacheError
               }`
             );
           }
@@ -2267,7 +2265,7 @@ export class PathwaysService {
 
       const autoTags = (user as any).auto_tags;
       const hasCompletedAlumni = Array.isArray(autoTags) && autoTags.includes('completed_alumni');
-      if (!hasCompletedAlumni) {
+      if (!hasPathwayRequiredTag((user as any).auto_tags)) {
         return APIResponse.success(response, apiId, {
           isEligible: false,
           currentStatus: null,
@@ -2495,7 +2493,7 @@ export class PathwaysService {
       }
 
       // Send course-completion email for the completed VOLUNTEER pathway.
-      try {        
+      try {
         const user = await this.userRepository.findOne({ where: { userId: dto.userId } });
         if (user?.email) {
           const pathwayName = record.pathway.name;
@@ -2513,10 +2511,10 @@ export class PathwaysService {
                 : '',
               '{notificationDate}': record.pathway.notification_date
                 ? new Date(record.pathway.notification_date).toLocaleDateString('en-GB', {
-                    day: 'numeric',
-                    month: 'short',
-                    year: 'numeric',
-                  })
+                  day: 'numeric',
+                  month: 'short',
+                  year: 'numeric',
+                })
                 : '',
               '{currentYear}': now.getFullYear(),
             },

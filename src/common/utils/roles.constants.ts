@@ -35,6 +35,24 @@ export const OBSERVER_AUTO_TAGS: string[] = (
   .split(',')
   .map((tag) => tag.trim())
   .filter((tag) => tag.length > 0);
+/**
+ * Auto tag a user must carry before a pathway can be assigned to them
+ * (PathwaysService.handlePathwayAssignment) or before they are eligible to
+ * apply to a volunteer pathway (PathwaysService.checkVolunteerEligibility).
+ *
+ * Defaults to `completed_alumni`, the alumni-programme rule. Set
+ * `PATHWAY_ASSIGN_REQUIRED_TAG=` (empty) for deployments where any learner can
+ * be put on a pathway, such as Swadhaar, where new field trainers are assigned
+ * a pathway from day one. Empty disables the check entirely.
+ */
+export const PATHWAY_ASSIGN_REQUIRED_TAG = (
+  process.env.PATHWAY_ASSIGN_REQUIRED_TAG ?? 'completed_alumni'
+).trim();
+
+/** True when the user may be assigned a pathway under PATHWAY_ASSIGN_REQUIRED_TAG. */
+export const hasPathwayRequiredTag = (autoTags: unknown): boolean =>
+  !PATHWAY_ASSIGN_REQUIRED_TAG ||
+  (Array.isArray(autoTags) && autoTags.includes(PATHWAY_ASSIGN_REQUIRED_TAG));
 
 /**
  * Students are the only role the user list screens and their CSV exports are
