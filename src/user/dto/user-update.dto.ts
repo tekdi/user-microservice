@@ -9,6 +9,7 @@ import {
   Length,
   IsDate,
   IsBoolean,
+  IsUUID,
 } from 'class-validator';
 import { Expose, Type } from 'class-transformer';
 import { UserStatus } from '../entities/user-entity';
@@ -257,4 +258,16 @@ export class UserUpdateDTO {
   @Type(() => CustomFieldDTO)
   @Expose()
   customFields: CustomFieldDTO[];
+
+  @ApiProperty({
+    type: String,
+    format: 'uuid',
+    required: false,
+    description:
+      'Cohort whose courses the user completed. Used only when userData.auto_tags adds completed_alumni: marks CohortMembers.cohortCoursesCompleted for this cohort (sent by the certificate service)',
+  })
+  @IsOptional()
+  @IsUUID()
+  @Expose()
+  completedCohortId?: string;
 }

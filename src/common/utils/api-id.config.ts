@@ -173,7 +173,8 @@ export const APIID = {
   // Volunteer Pathway APIs
   VOLUNTEER_CHECK_ELIGIBILITY: "api.volunteer.pathway.check-eligibility",
   VOLUNTEER_ACTIVE_PATHWAYS: "api.volunteer.pathway.active.list",
-  VOLUNTEER_HISTORY_STATUS_UPDATE: "api.volunteer.pathway.history.status.update",
+  VOLUNTEER_HISTORY_STATUS_UPDATE:
+    "api.volunteer.pathway.history.status.update",
   PATHWAY_COURSE_COMPLETION_WEBHOOK: "api.pathway.webhook.course-completed",
 
   // Content Management APIs
@@ -188,7 +189,6 @@ export const APIID = {
   TAG_LIST: "api.user.tag.list",
   TAG_READ: "api.user.tag.read",
 
-  
   // Interest Management APIs
   INTEREST_CREATE: "api.interest.create",
   INTEREST_UPDATE: "api.interest.update",
@@ -202,5 +202,33 @@ export const APIID = {
   COUNTRY_LIST: "api.country.list",
   // Aspire Leaders Specific APIs
   ASPIRE_LEADERS_COUNTRY_LIST: "api.aspire-leaders-specific.country.list",
-  ASPIRE_LEADERS_REPORT_COUNTRY_FILTER: "api.aspire-leaders-specific.report.countryFilter",
+  ASPIRE_LEADERS_REPORT_COUNTRY_FILTER:
+    "api.aspire-leaders-specific.report.countryFilter",
+  // Aspire Connect APIs
+  CONNECT_ME: "api.connect.me",
+  CONNECT_OPTIONS: "api.connect.options",
+  CONNECT_JOIN: "api.connect.join",
+  CONNECT_LIST: "api.connect.list",
+  CONNECT_PROFILE_READ: "api.connect.profile.read",
+  CONNECT_LINKEDIN_CLICK: "api.connect.linkedin-click",
+  CONNECT_REPORT_CREATE: "api.connect.report.create",
+  CONNECT_PROFILE_UPDATE: "api.connect.profile.update",
+  CONNECT_LEAVE: "api.connect.leave",
+  CONNECT_ADMIN_CAREER_DOMAIN_GROUP_LIST:
+    "api.connect.admin.career-domain-group.list",
+  CONNECT_ADMIN_CAREER_DOMAIN_GROUP_SAVE:
+    "api.connect.admin.career-domain-group.save",
+  CONNECT_ADMIN_CAREER_DOMAIN_GROUP_UPDATE:
+    "api.connect.admin.career-domain-group.update",
+  CONNECT_ADMIN_CAREER_DOMAIN_LIST: "api.connect.admin.career-domain.list",
+  CONNECT_ADMIN_CAREER_DOMAIN_SAVE: "api.connect.admin.career-domain.save",
+  CONNECT_ADMIN_CAREER_DOMAIN_UPDATE: "api.connect.admin.career-domain.update",
+  CONNECT_ADMIN_SUPPORT_OFFERING_LIST:
+    "api.connect.admin.support-offering.list",
+  CONNECT_ADMIN_SUPPORT_OFFERING_SAVE:
+    "api.connect.admin.support-offering.save",
+  CONNECT_ADMIN_SUPPORT_OFFERING_UPDATE:
+    "api.connect.admin.support-offering.update",
+  CONNECT_ADMIN_SAFETY_REPORT_LIST: "api.connect.admin.safety-report.list",
+  CONNECT_ADMIN_SAFETY_REPORT_UPDATE: "api.connect.admin.safety-report.update",
 } as const;
