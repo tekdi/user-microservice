@@ -25,6 +25,13 @@ import {
 } from "../constants/connect.constants";
 
 const trim = ({ value }) => (typeof value === "string" ? value.trim() : value);
+
+/** Query string "true" / "false" → boolean; anything else is left for validation */
+const toBoolean = ({ value }) => {
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return value;
+};
 const KEY_MESSAGE = "key must be lowercase letters/numbers joined by _";
 
 // ---------------------------------------------------------------------
@@ -201,9 +208,7 @@ export class UpdateSupportOfferingDto extends PartialType(
 export class ListMasterQueryDto {
   @ApiPropertyOptional({ description: "Leave out to get active and inactive" })
   @IsOptional()
-  @Transform(({ value }) =>
-    value === "true" ? true : value === "false" ? false : value
-  )
+  @Transform(toBoolean)
   @IsBoolean()
   isActive?: boolean;
 }

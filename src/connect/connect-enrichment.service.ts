@@ -63,7 +63,7 @@ export class ConnectEnrichmentService {
       ),
       this.getPlaces(userIds, tenantId),
       this.getActivePathways(userIds),
-      this.getActiveCohorts(userIds, tenantId),
+      this.getCompletedCohorts(userIds, tenantId),
       this.getCountryCodes(),
     ]);
 
@@ -181,8 +181,12 @@ export class ConnectEnrichmentService {
     return new Map(rows.map((r) => [r.userId, { id: r.id, name: r.name }]));
   }
 
-  /** Latest active cohort (by start date) in the tenant */
-  private async getActiveCohorts(
+  /**
+   * Latest completed cohort (by start date) in the tenant. Completed =
+   * CohortMembers.cohortCoursesCompleted, set when the certificate flow adds
+   * completed_alumni for that cohort
+   */
+  private async getCompletedCohorts(
     userIds: string[],
     tenantId: string
   ): Promise<Map<string, ConnectCohortRef>> {
@@ -191,7 +195,7 @@ export class ConnectEnrichmentService {
          FROM "CohortMembers" cm
          JOIN "Cohort" c ON c."cohortId" = cm."cohortId"
         WHERE cm."userId" = ANY($1::uuid[])
-          AND cm.status = 'active'
+          AND cm."cohortCoursesCompleted"
           AND c."tenantId" = $2::uuid
         ORDER BY cm."userId", c."cohort_startDate" DESC NULLS LAST`,
       [userIds, tenantId]

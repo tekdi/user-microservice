@@ -1560,6 +1560,19 @@ export class PostgresUserService implements IServicelocator {
         ) {
           await this.syncOpenCohortCountryOnProfileUpdate(userDto.userId);
         }
+
+        // Certificate flow: completed_alumni marks the course's cohort as
+        // completed (Aspire Connect shows only completed cohorts)
+        if (
+          Array.isArray(sanitizedUserData['auto_tags']) &&
+          sanitizedUserData['auto_tags'].includes('completed_alumni')
+        ) {
+          await this.markCohortCoursesCompleted(
+            userDto.userId,
+            userDto.completedCohortId,
+            request?.headers?.tenantid
+          );
+        }
       }
 
       LoggerUtil.log(
@@ -1898,6 +1911,48 @@ export class PostgresUserService implements IServicelocator {
    * only path to eventual correctness, so a failure here is not silent data
    * loss.
    */
+  /**
+   * Sets CohortMembers.cohortCoursesCompleted = true for the cohort whose
+   * certificate added completed_alumni. Without a cohort id (older callers,
+   * regenerate), falls back to the user's active memberships in the tenant.
+   * Never sets it back to false. Errors are logged, not thrown, so the
+   * auto_tags update itself still succeeds.
+   */
+  private async markCohortCoursesCompleted(
+    userId: string,
+    cohortId: string | undefined,
+    tenantId: string | undefined
+  ): Promise<void> {
+    try {
+      if (cohortId) {
+        await this.usersRepository.query(
+          `UPDATE "CohortMembers"
+              SET "cohortCoursesCompleted" = true, "updatedAt" = now()
+            WHERE "userId" = $1 AND "cohortId" = $2
+              AND NOT "cohortCoursesCompleted"`,
+          [userId, cohortId]
+        );
+      } else if (isUUID(tenantId)) {
+        await this.usersRepository.query(
+          `UPDATE "CohortMembers" cm
+              SET "cohortCoursesCompleted" = true, "updatedAt" = now()
+            WHERE cm."userId" = $1 AND cm."status" = 'active'
+              AND NOT cm."cohortCoursesCompleted"
+              AND cm."cohortId" IN (SELECT c."cohortId" FROM "Cohort" c
+                                     WHERE c."tenantId" = $2::uuid)`,
+          [userId, tenantId]
+        );
+      }
+    } catch (error) {
+      LoggerUtil.error(
+        API_RESPONSES.SERVER_ERROR,
+        `markCohortCoursesCompleted failed for ${userId}: ${error?.message}`,
+        APIID.USER_UPDATE,
+        userId
+      );
+    }
+  }
+
   private async syncOpenCohortCountryOnProfileUpdate(
     userId: string
   ): Promise<void> {

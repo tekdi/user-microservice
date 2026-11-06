@@ -191,4 +191,5 @@ export const toConnectKey = (text: string): string =>
   text
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "_")
-    .replace(/(^_+)|(_+$)/g, "");
+    // runs are already collapsed to one "_", so trim at most one per end
+    .replace(/^_|_$/g, "");

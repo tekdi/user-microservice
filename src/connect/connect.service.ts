@@ -1,4 +1,4 @@
-import * as crypto from "crypto";
+import * as crypto from "node:crypto";
 import { HttpStatus, Injectable, Logger } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { DataSource, Repository } from "typeorm";
@@ -370,7 +370,7 @@ export class ConnectService {
       // ---- total (cached briefly; depends on viewer through self + visited/reported) ----
       const countKey = CONNECT_CACHE.COUNT_KEY(
         crypto
-          .createHash("md5")
+          .createHash("sha256")
           .update(JSON.stringify({ viewerId, params }))
           .digest("hex")
       );
@@ -395,23 +395,23 @@ export class ConnectService {
         pageParams.push(seed);
         const shuffle = `hashtext(cp."userId"::text || $${pageParams.length}), cp."userId"`;
         if (sort === ConnectListSort.NEWEST_COHORT) {
-          // latest active cohort start per member, grouped once (not per row)
+          // latest completed cohort start per member, grouped once (not per row)
           pageFromWhere = `FROM connect_profiles cp
         JOIN "Users" u ON u."userId" = cp."userId"
         LEFT JOIN (SELECT cm."userId", max(c."cohort_startDate") AS "latestStart"
                      FROM "CohortMembers" cm
                      JOIN "Cohort" c ON c."cohortId" = cm."cohortId"
-                    WHERE cm."status" = 'active'
+                    WHERE cm."cohortCoursesCompleted"
                     GROUP BY cm."userId") lc ON lc."userId" = cp."userId"
         WHERE ${where.join(" AND ")}`;
           orderBy = `lc."latestStart" DESC NULLS LAST, ${shuffle}`;
         } else {
-          const viewerCohortIds = await this.getActiveCohortIds(viewerId);
+          const viewerCohortIds = await this.getCompletedCohortIds(viewerId);
           if (viewerCohortIds.length) {
             pageParams.push(viewerCohortIds);
             orderBy = `(cp."userId" IN (SELECT cm."userId" FROM "CohortMembers" cm
                           WHERE cm."cohortId" = ANY($${pageParams.length}::uuid[])
-                            AND cm."status" = 'active')) DESC, ${shuffle}`;
+                            AND cm."cohortCoursesCompleted")) DESC, ${shuffle}`;
           } else {
             orderBy = shuffle;
           }
@@ -991,7 +991,7 @@ export class ConnectService {
 
   /**
    * One search word: matches name, country, headline, about, city / state
-   * (FieldValues) or an active cohort whose name or start year contains it.
+   * (FieldValues) or a completed cohort whose name or start year contains it.
    * Matching cohorts are looked up first (Cohort is small). The FieldValues /
    * CohortMembers checks are per-member EXISTS on their (itemId / userId)
    * indexes: an IN (...) list can be too big to hash and then gets re-scanned
@@ -1033,17 +1033,20 @@ export class ConnectService {
         `EXISTS (SELECT 1 FROM "CohortMembers" cm
             WHERE cm."userId" = cp."userId"
               AND cm."cohortId" = ANY($${params.length}::uuid[])
-              AND cm."status" = 'active')`
+              AND cm."cohortCoursesCompleted")`
       );
     }
     return `(${parts.join(" OR ")})`;
   }
 
-  /** Cohorts the viewer is active in, for the "same cohort first" sort */
-  private async getActiveCohortIds(userId: string): Promise<string[]> {
+  /**
+   * Cohorts the viewer completed (CohortMembers.cohortCoursesCompleted,
+   * set by the certificate flow), for the "same cohort first" sort
+   */
+  private async getCompletedCohortIds(userId: string): Promise<string[]> {
     const rows = await this.dataSource.query(
       `SELECT DISTINCT "cohortId" FROM "CohortMembers"
-        WHERE "userId" = $1 AND "status" = 'active'`,
+        WHERE "userId" = $1 AND "cohortCoursesCompleted"`,
       [userId]
     );
     return rows.map((r) => r.cohortId);

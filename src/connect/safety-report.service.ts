@@ -80,15 +80,13 @@ export class SafetyReportService {
         if (existing) {
           return this.sendExisting(response, existing);
         }
-      } else {
-        if (!dto.subject) {
-          return cs.fail(
-            response,
-            apiId,
-            CONNECT_ERRORS.INVALID_REPORT,
-            HttpStatus.BAD_REQUEST
-          );
-        }
+      } else if (!dto.subject) {
+        return cs.fail(
+          response,
+          apiId,
+          CONNECT_ERRORS.INVALID_REPORT,
+          HttpStatus.BAD_REQUEST
+        );
       }
 
       // daily rate limit (best effort: skipped when Redis is off)
