@@ -1426,9 +1426,8 @@ export class PathwaysService {
         return APIResponse.error(response, apiId, API_RESPONSES.NOT_FOUND, 'User not found', HttpStatus.NOT_FOUND);
       }
 
-      const autoTags = (user as any).auto_tags;
-      const hasCompletedAlumni = Array.isArray(autoTags) && autoTags.includes('completed_alumni');
-      if (!hasCompletedAlumni) {
+      // Required tag is configurable via PATHWAY_ASSIGN_REQUIRED_TAG (empty disables the check)
+      if (!hasPathwayRequiredTag((user as any).auto_tags)) {
         return APIResponse.error(response, apiId, API_RESPONSES.BAD_REQUEST, API_RESPONSES.PATHWAY_ASSIGN_REQUIRES_COMPLETED_ALUMNI, HttpStatus.BAD_REQUEST);
       }
 
@@ -2263,8 +2262,6 @@ export class PathwaysService {
         return APIResponse.error(response, apiId, API_RESPONSES.NOT_FOUND, 'User not found', HttpStatus.NOT_FOUND);
       }
 
-      const autoTags = (user as any).auto_tags;
-      const hasCompletedAlumni = Array.isArray(autoTags) && autoTags.includes('completed_alumni');
       if (!hasPathwayRequiredTag((user as any).auto_tags)) {
         return APIResponse.success(response, apiId, {
           isEligible: false,
