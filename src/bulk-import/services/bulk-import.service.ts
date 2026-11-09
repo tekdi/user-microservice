@@ -790,8 +790,20 @@ export class BulkImportService {
     // Always set username from email, never from file
     return {
       ...processedRow,
-      username: processedRow.email ? processedRow.email.toLowerCase() : undefined,
+      username: this.resolveImportUsername(processedRow),
     };
+  }
+  private resolveImportUsername(row: {
+    username?: unknown;
+    mobile?: unknown;
+    email?: unknown;
+  }): string | undefined {
+    for (const candidate of [row?.username, row?.mobile, row?.email]) {
+      if (candidate === undefined || candidate === null) continue;
+      const value = String(candidate).trim().toLowerCase();
+      if (value !== '') return value;
+    }
+    return undefined;
   }
 
   /**
@@ -814,7 +826,7 @@ export class BulkImportService {
       // other mappings as needed
     });
     // Always set username to email
-    dto.username = dto.email;
+    dto.username = this.resolveImportUsername(userData);
     // Bulk imported users are active immediately; they still get the welcome
     // (set-password) email, see sendBulkImportNotification.
     dto.status = 'active';
@@ -894,7 +906,7 @@ export class BulkImportService {
       userCreateDto.password = this.generateRandomPassword();
     }
     // Always set username to email (in case mapping missed it)
-    userCreateDto.username = userCreateDto.email;
+    userCreateDto.username = this.resolveImportUsername(userCreateDto);
     // Remove mobile if empty or not provided, to skip validation
     if (!userCreateDto.mobile || userCreateDto.mobile.trim() === '') {
       userCreateDto.mobile = undefined;
