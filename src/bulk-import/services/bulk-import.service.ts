@@ -78,7 +78,7 @@ export class BulkImportService {
     private readonly fieldsService: PostgresFieldsService,
     private readonly jwtUtil: JwtUtil,
     private readonly httpService: HttpService
-  ) {}
+  ) { }
 
   /**
    * Send progress update to aspire specific service
@@ -104,7 +104,7 @@ export class BulkImportService {
       const aspireSpecificServiceUrl =
         this.configService.get('ASPIRE_SPECIFIC_SERVICE_URL') ||
         '';
-      
+
       // Validate that we have a proper URL
       if (!aspireSpecificServiceUrl || aspireSpecificServiceUrl.trim() === '') {
         this.logger.warn('[BulkImport] ASPIRE_SPECIFIC_SERVICE_URL is not configured, skipping progress update');
@@ -158,8 +158,7 @@ export class BulkImportService {
         );
       } else {
         this.logger.warn(
-          `[BulkImport] Progress update failed with status ${
-            response.status
+          `[BulkImport] Progress update failed with status ${response.status
           }: ${JSON.stringify(response.data)}`
         );
       }
@@ -173,21 +172,21 @@ export class BulkImportService {
         url: error.config?.url,
         method: error.config?.method
       });
-      
+
       // Provide specific guidance for common errors
       if (error.response?.status === 405) {
         this.logger.error(`[BulkImport] HTTP 405 Method Not Allowed - Check if the aspire specific service is running and the URL is correct`);
       } else if (error.code === 'ECONNREFUSED') {
         this.logger.error(`[BulkImport] Connection refused - Check if the aspire specific service is running on the configured URL`);
       }
-      
+
       // Don't throw error - progress update failure shouldn't stop the import
     }
   }
 
   async processBulkImport(
     file: Express.Multer.File,
-    cohortId: string,
+    cohortId: string | undefined,
     tenantId: string,
     request: any,
     response: Response,
@@ -210,18 +209,25 @@ export class BulkImportService {
     };
 
     try {
-      // Validate cohortId
-      if (!cohortId || cohortId === 'undefined' || cohortId === 'null') {
-        throw new Error('Valid cohort ID is required for bulk import.');
-      }
+      // // Validate cohortId
+      // if (!cohortId || cohortId === 'undefined' || cohortId === 'null') {
+      //   throw new Error('Valid cohort ID is required for bulk import.');
+      // }
 
-      // Validate UUID format
-      const uuidRegex =
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-      if (!uuidRegex.test(cohortId)) {
-        throw new Error('Cohort ID must be a valid UUID format.');
+      if (
+        !cohortId ||
+        cohortId.trim() === '' ||
+        cohortId === 'undefined' ||
+        cohortId === 'null'
+      ) {
+        cohortId = undefined;
+      } else {
+        const uuidRegex =
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+        if (!uuidRegex.test(cohortId)) {
+          throw new Error('Cohort ID must be a valid UUID format.');
+        }
       }
-
       // Which role the imported users get. Defaults to the student role, which
       // is what every existing caller imports, so omitting it keeps the old
       // behaviour exactly.
@@ -239,7 +245,7 @@ export class BulkImportService {
         );
       }
 
-      BulkImportLogger.logImportStart(batchId, userData.length);
+      BulkImportLogger.initializeLogger(cohortId || 'no-cohort');
       console.info(
         `[BulkImport] Starting bulk import for ${userData.length} users`
       );
@@ -280,8 +286,7 @@ export class BulkImportService {
         // Check for timeout
         if (Date.now() - importStartTime > importTimeout) {
           console.error(
-            `[BulkImport] Import timeout reached after ${
-              importTimeout / 1000 / 60
+            `[BulkImport] Import timeout reached after ${importTimeout / 1000 / 60
             } minutes`
           );
           throw new Error('Bulk import timeout - process took too long');
@@ -303,8 +308,7 @@ export class BulkImportService {
             // Validate required fields
             if (!user.email || !user.firstName || !user.lastName) {
               throw new Error(
-                `Missing required fields (email, firstName, lastName) at row ${
-                  globalIndex + 2
+                `Missing required fields (email, firstName, lastName) at row ${globalIndex + 2
                 }`
               );
             }
@@ -345,8 +349,7 @@ export class BulkImportService {
               } else {
                 // Log update success instead of creation success
                 this.logger.log(
-                  `[BulkImportLogger] Successfully updated user from row ${
-                    globalIndex + 2
+                  `[BulkImportLogger] Successfully updated user from row ${globalIndex + 2
                   }: ${createdUser.username} (${createdUser.userId})`
                 );
               }
@@ -387,9 +390,9 @@ export class BulkImportService {
 
         // Send progress update for this batch (fire-and-forget)
         // Skip progress updates when called by Kafka consumer to prevent double counting
-        if (request.headers['x-import-job-id'] && 
-            !request.headers['x-kafka-consumer'] && 
-            (batchSuccessCount > 0 || batchFailureCount > 0)) {
+        if (request.headers['x-import-job-id'] &&
+          !request.headers['x-kafka-consumer'] &&
+          (batchSuccessCount > 0 || batchFailureCount > 0)) {
           const importJobId = request.headers['x-import-job-id'];
           void this.sendProgressUpdate(
             importJobId,
@@ -436,7 +439,7 @@ export class BulkImportService {
       }
 
       // Handle cohort membership for all processed users
-      if (processedUserIds.length > 0) {
+      if (cohortId && processedUserIds.length > 0) {
         try {
           // Create or update cohort members for all users (new and existing)
           // The createBulkCohortMembers method now handles upsert logic internally
@@ -468,11 +471,11 @@ export class BulkImportService {
         const forms = isObserverImport
           ? null
           : await this.formsService.getFormDetail(
-          'COHORTMEMBER', // context
-          'COHORTMEMBER', // contextType
-          tenantId,
-          cohortId
-        );
+            'COHORTMEMBER', // context
+            'COHORTMEMBER', // contextType
+            tenantId,
+            cohortId
+          );
         const activeForm = Array.isArray(forms)
           ? forms.find((f) => f.status === 'active')
           : null;
@@ -482,7 +485,7 @@ export class BulkImportService {
           let xlsxHeaders: string[] = [];
           if (
             file.mimetype ===
-              'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
             file.mimetype === 'application/vnd.ms-excel'
           ) {
             const workbook = xlsx.read(file.buffer, { type: 'buffer' });
@@ -530,8 +533,7 @@ export class BulkImportService {
             // Check for timeout
             if (Date.now() - importStartTime > importTimeout) {
               console.error(
-                `[BulkImport] Form submission timeout reached after ${
-                  importTimeout / 1000 / 60
+                `[BulkImport] Form submission timeout reached after ${importTimeout / 1000 / 60
                 } minutes`
               );
               throw new Error(
@@ -558,22 +560,22 @@ export class BulkImportService {
                   const customFields =
                     fieldHeaderMap && Object.keys(fieldHeaderMap).length > 0
                       ? Object.entries(fieldHeaderMap).map(
-                          ([header, { fieldId }]) => {
-                            let fieldValue = user[header] !== undefined && user[header] !== null
-                              ? String(user[header])
-                              : '';
-                            
-                            // Convert pipe-separated values to comma-separated values
-                            if (fieldValue && fieldValue.includes('|')) {
-                              fieldValue = this.convertPipeToCommaSeparated(fieldValue);
-                            }
-                            
-                            return {
-                              fieldId,
-                              value: fieldValue,
-                            };
+                        ([header, { fieldId }]) => {
+                          let fieldValue = user[header] !== undefined && user[header] !== null
+                            ? String(user[header])
+                            : '';
+
+                          // Convert pipe-separated values to comma-separated values
+                          if (fieldValue && fieldValue.includes('|')) {
+                            fieldValue = this.convertPipeToCommaSeparated(fieldValue);
                           }
-                        )
+
+                          return {
+                            fieldId,
+                            value: fieldValue,
+                          };
+                        }
+                      )
                       : [];
                   // Build CreateFormSubmissionDto
                   const createFormSubmissionDto = {
@@ -721,7 +723,7 @@ export class BulkImportService {
       return this.parseCSV(file);
     } else if (
       file.mimetype ===
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
       file.mimetype === 'application/vnd.ms-excel'
     ) {
       return this.parseExcel(file);
@@ -801,7 +803,7 @@ export class BulkImportService {
     if (!value || typeof value !== 'string') {
       return value;
     }
-    
+
     // Replace pipe separators with comma separators
     return value.replace(/\|/g, ',');
   }
@@ -1681,9 +1683,8 @@ export class BulkImportService {
 
       // Try to find by email first
       if (userCreateDto.email) {
-        const emailSearchUrl = `${process.env.KEYCLOAK}${
-          process.env.KEYCLOAK_ADMIN
-        }?email=${encodeURIComponent(userCreateDto.email)}`;
+        const emailSearchUrl = `${process.env.KEYCLOAK}${process.env.KEYCLOAK_ADMIN
+          }?email=${encodeURIComponent(userCreateDto.email)}`;
 
         try {
           const emailResponse = await axios.get(emailSearchUrl, {
@@ -1706,9 +1707,8 @@ export class BulkImportService {
 
       // Try to find by username
       if (userCreateDto.username) {
-        const usernameSearchUrl = `${process.env.KEYCLOAK}${
-          process.env.KEYCLOAK_ADMIN
-        }?username=${encodeURIComponent(userCreateDto.username)}&exact=true`;
+        const usernameSearchUrl = `${process.env.KEYCLOAK}${process.env.KEYCLOAK_ADMIN
+          }?username=${encodeURIComponent(userCreateDto.username)}&exact=true`;
 
         try {
           const usernameResponse = await axios.get(usernameSearchUrl, {

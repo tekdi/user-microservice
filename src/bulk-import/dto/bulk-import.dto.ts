@@ -13,7 +13,9 @@ export class BulkImportDto {
 
   @ApiProperty({
     type: String,
-    description: 'The cohort ID to add users to',
+    required: false,
+    description:
+      'The cohort ID to add users to. Optional: without it the users are created with their role only, and no cohort membership or cohort application form submission is created.',
   })
   @IsNotEmpty()
   @IsUUID()
