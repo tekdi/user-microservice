@@ -901,17 +901,37 @@ export class BulkImportService {
       userCreateDto.createdBy = decoded?.sub;
       userCreateDto.updatedBy = decoded?.sub;
     }
-    // Auto-generate password if not provided
-    if (!userCreateDto.password) {
+
+ // Shared learner password (BULK_IMPORT_LEARNER_PASSWORD): learners who sign in with mobile OTP are then
+    // logged in with username = mobile and this password, so they must be created with exactly that.
+    // Roles listed in BULK_IMPORT_RANDOM_PASSWORD_ROLE_IDS (e.g. admins) keep a random password.
+    const learnerPassword = (process.env.BULK_IMPORT_LEARNER_PASSWORD || '').trim();
+    const randomPasswordRoleIds = (process.env.BULK_IMPORT_RANDOM_PASSWORD_ROLE_IDS || '')
+      .split(',')
+      .map((id) => id.trim())
+      .filter(Boolean);
+    const importRoleIds = (userCreateDto.tenantCohortRoleMapping ?? [])
+      .map((m: any) => m?.roleId)
+      .filter(Boolean);
+    const useLearnerPassword =
+      learnerPassword !== '' &&
+      !importRoleIds.some((id: string) => randomPasswordRoleIds.includes(id));
+
+    if (useLearnerPassword) {
+      userCreateDto.password = learnerPassword;
+    } else if (!userCreateDto.password) {
+      // Auto-generate password if not provided
       userCreateDto.password = this.generateRandomPassword();
     }
-    // Always set username to email (in case mapping missed it)
-    userCreateDto.username = this.resolveImportUsername(userCreateDto);
+    // Learners log in by mobile, so the mobile number wins over a CSV username for them
+    userCreateDto.username = useLearnerPassword
+      ? this.resolveImportUsername({ ...userCreateDto, username: undefined }) ??
+        this.resolveImportUsername(userCreateDto)
+      : this.resolveImportUsername(userCreateDto);
     // Remove mobile if empty or not provided, to skip validation
     if (!userCreateDto.mobile || userCreateDto.mobile.trim() === '') {
       userCreateDto.mobile = undefined;
     }
-
     // For bulk import, mobile is optional - if not provided, remove it from the DTO to skip validation
     if (!userCreateDto.mobile) {
       delete userCreateDto.mobile;
