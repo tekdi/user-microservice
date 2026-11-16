@@ -76,6 +76,14 @@ export class CohortMembers {
   rejectionEmailSent: boolean;
 
   /**
+   * True once a certificate for this cohort's course added the
+   * completed_alumni auto tag (set by PATCH /user/v1/update with
+   * completedCohortId). Aspire Connect shows only these cohorts.
+   */
+  @Column({ type: 'boolean', default: false })
+  cohortCoursesCompleted: boolean;
+
+  /**
    * Aspire Leaders-specific: resolved countries.id for this member's
    * Users.currentCountry free-text value, at the moment they joined this
    * cohort. Set exactly once by

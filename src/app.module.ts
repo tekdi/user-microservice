@@ -37,6 +37,7 @@ import { CountriesModule } from './countries/countries.module';
 import { ContentModule } from './content/content.module';
 import { ReferralsModule } from './referrals/referrals.module';
 import { AspireLeadersSpecificModule } from './aspire-leaders-specific/aspire-leaders-specific.module';
+import { ConnectModule } from './connect/connect.module';
 
 /**
  * Main Application Module
@@ -97,6 +98,7 @@ import { AspireLeadersSpecificModule } from './aspire-leaders-specific/aspire-le
     ContentModule,
     ReferralsModule,
     AspireLeadersSpecificModule,
+    ConnectModule,
   ],
   controllers: [AppController, HealthController],
   providers: [
@@ -137,6 +139,7 @@ export class AppModule implements OnModuleInit {
       'PathwaysModule',
       'ContentModule',
       'AspireLeadersSpecificModule',
+      'ConnectModule',
     ]);
   }
 }
