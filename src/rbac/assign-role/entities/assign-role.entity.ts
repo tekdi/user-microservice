@@ -9,6 +9,14 @@ import {
 } from "typeorm";
 import { User } from "src/user/entities/user-entity";
 import { Role } from "../../role/entities/role.entity";
+import { UserTenantMappingStatus } from "src/userTenantMapping/entities/user-tenant-mapping.entity";
+
+
+export enum UserRoleMappingStatus {
+  ACTIVE = "active",
+  ARCHIVED = "archived"
+}
+
 @Entity({ name: "UserRolesMapping" })
 export class UserRoleMapping {
   @PrimaryGeneratedColumn("uuid")
@@ -41,6 +49,13 @@ export class UserRoleMapping {
   @Column()
   updatedBy: string;
 
+  @Column({
+    type: "enum",
+    enum: UserRoleMappingStatus,
+    default: UserRoleMappingStatus.ACTIVE,
+    })
+  status: UserRoleMappingStatus;
+  
   // @ManyToOne(() => User, (user) => user.userRoleMappings)
   // @JoinColumn({ name: "userId" })
   // user: User;

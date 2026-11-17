@@ -13,7 +13,10 @@ import {
   CreateAssignRoleDto,
   ResponseAssignRoleDto,
 } from "src/rbac/assign-role/dto/create-assign-role.dto";
-import { UserRoleMapping } from "src/rbac/assign-role/entities/assign-role.entity";
+import {
+  UserRoleMapping,
+  UserRoleMappingStatus,
+} from "src/rbac/assign-role/entities/assign-role.entity";
 import { getAuditContext } from "@utils/audit-helper";
 import { Role } from "src/rbac/role/entities/role.entity";
 import { IsAlpha, IsUUID, isUUID } from "class-validator";
@@ -235,6 +238,22 @@ export class AssignRoleService {
           HttpStatus.BAD_REQUEST
         );
       }
+      // Target status to set (must be provided: active | archived)
+      const targetStatus = deleteAssignRoleDto.status;
+      if (!Object.values(UserRoleMappingStatus).includes(targetStatus)) {
+        return APIResponse.error(
+          res,
+          apiId,
+          `Invalid status. Allowed values: ${Object.values(UserRoleMappingStatus).join(", ")}`,
+          "Invalid status",
+          HttpStatus.BAD_REQUEST
+        );
+      }
+      // Only rows currently in the opposite status can be moved to the target
+      const currentStatus =
+        targetStatus === UserRoleMappingStatus.ARCHIVED
+          ? UserRoleMappingStatus.ACTIVE
+          : UserRoleMappingStatus.ARCHIVED;
       // Validate roleId format
       for (const roleId of deleteAssignRoleDto.roleId) {
         if (!isUUID(roleId)) {
@@ -265,6 +284,8 @@ export class AssignRoleService {
         where: {
           userId: deleteAssignRoleDto.userId,
           roleId: In(deleteAssignRoleDto.roleId),
+          tenantId: deleteAssignRoleDto.tenantId, // Ensure the tenantId is also checked
+          status: currentStatus,
         },
       });
       // If any roleId(s) are missing, throw an error
@@ -277,12 +298,17 @@ export class AssignRoleService {
           HttpStatus.BAD_REQUEST
         );
       }
-      // If all validations pass, proceed with deletion
-      const response = await this.userRoleMappingRepository.delete({
-        userId: deleteAssignRoleDto.userId,
-        roleId: In(deleteAssignRoleDto.roleId),
-      });
-      // The DTO carries no tenantId — the deleted mappings (roleExists) do.
+      // If all validations pass, set the requested status (soft delete / restore)
+      const response = await this.userRoleMappingRepository.update(
+        {
+          userId: deleteAssignRoleDto.userId,
+          roleId: In(deleteAssignRoleDto.roleId),
+          tenantId: deleteAssignRoleDto.tenantId,
+          status: currentStatus,
+        },
+        { status: targetStatus }
+      );
+      // Invalidate the tenant lists of the affected mappings (roleExists).
       await this.cacheService.invalidate([
         `user:${deleteAssignRoleDto.userId}`,
         `userroles:${deleteAssignRoleDto.userId}`,
@@ -295,11 +321,13 @@ export class AssignRoleService {
         this.emitAuditSafely({
           entityType: "USER_ROLE",
           entityId: `User:${deleteAssignRoleDto.userId}|Role:${roleId}`,
-          eventAction: "DELETED",
+          eventAction:
+            targetStatus === UserRoleMappingStatus.ARCHIVED ? "DELETED" : "UPDATED",
           ...auditCtx,
           metadata: {
             userId: deleteAssignRoleDto.userId,
-            roleId: roleId
+            roleId: roleId,
+            status: targetStatus,
           }
         });
       }
@@ -308,7 +336,9 @@ export class AssignRoleService {
         apiId,
         { rowCount: response.affected },
         HttpStatus.OK,
-        "Roles deleted successfully."
+        targetStatus === UserRoleMappingStatus.ARCHIVED
+          ? "Roles archived successfully."
+          : "Roles restored successfully."
       );
     } catch (e) {
       const errorMessage = e.message || "Internal server error";
