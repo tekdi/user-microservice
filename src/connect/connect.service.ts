@@ -48,7 +48,8 @@ type CareerDomainView = {
 
 /** Profile-modal data that is the same for every viewer (cached) */
 interface ConnectProfileView {
-  userId: string;
+  /** connect_profiles.id: the only member id Connect shows to other members */
+  connectUserId: string;
   name: string;
   initials: string;
   location: string | null;
@@ -102,6 +103,8 @@ export class ConnectService {
       const result = {
         isMember: status === ConnectProfileStatus.ACTIVE,
         status,
+        // own id as it appears in the list / profile APIs
+        connectUserId: profile?.id ?? null,
         termsAcceptedAt: profile?.termsAcceptedAt ?? null,
         journey: {
           name: me?.name ?? null,
@@ -419,7 +422,7 @@ export class ConnectService {
       }
       pageParams.push(limit, (page - 1) * limit);
       const rows: ConnectProfile[] = await this.dataSource.query(
-        `SELECT cp."userId", cp."headline", cp."careerDomainId", cp."currentStatus", cp."openToIds"
+        `SELECT cp."id", cp."userId", cp."headline", cp."careerDomainId", cp."currentStatus", cp."openToIds"
          ${pageFromWhere}
          ORDER BY ${orderBy}
          LIMIT $${pageParams.length - 1} OFFSET $${pageParams.length}`,
@@ -435,8 +438,9 @@ export class ConnectService {
 
       const items = rows.map((r) => {
         const d = details.get(r.userId);
+        // the real userId stays server-side; other members only get connectUserId
         return {
-          userId: r.userId,
+          connectUserId: r.id,
           name: d?.name ?? null,
           initials: d?.initials ?? null,
           location: d?.location ?? null,
@@ -472,12 +476,12 @@ export class ConnectService {
   }
 
   // ---------------------------------------------------------------------
-  // A5. GET /connect/profile/:userId
+  // A5. GET /connect/profile/:connectUserId
   // ---------------------------------------------------------------------
   async getProfile(
     viewerId: string,
     tenantId: string,
-    targetUserId: string,
+    connectUserId: string,
     response: Response
   ) {
     const apiId = APIID.CONNECT_PROFILE_READ;
@@ -487,7 +491,12 @@ export class ConnectService {
         return this.fail(response, apiId, denied.error, denied.status);
       }
 
-      const view = await this.getProfileView(targetUserId, tenantId);
+      const target = await this.resolveConnectUser(connectUserId);
+      const targetUserId = target?.userId;
+      const view =
+        target?.status === ConnectProfileStatus.ACTIVE
+          ? await this.getProfileView(targetUserId, tenantId)
+          : null;
       if (!view) {
         return this.fail(
           response,
@@ -511,12 +520,12 @@ export class ConnectService {
   }
 
   // ---------------------------------------------------------------------
-  // A6. POST /connect/profile/:userId/linkedin-click
+  // A6. POST /connect/profile/:connectUserId/linkedin-click
   // ---------------------------------------------------------------------
   async trackLinkedinClick(
     viewerId: string,
     tenantId: string,
-    targetUserId: string,
+    connectUserId: string,
     dto: LinkedinClickDto,
     response: Response
   ) {
@@ -526,7 +535,9 @@ export class ConnectService {
       if (denied) {
         return this.fail(response, apiId, denied.error, denied.status);
       }
-      if (viewerId === targetUserId) {
+      const target = await this.resolveConnectUser(connectUserId);
+      const targetUserId = target?.userId;
+      if (target && viewerId === targetUserId) {
         return this.fail(
           response,
           apiId,
@@ -534,10 +545,7 @@ export class ConnectService {
           HttpStatus.BAD_REQUEST
         );
       }
-      if (
-        (await this.getMemberStatus(targetUserId)) !==
-        ConnectProfileStatus.ACTIVE
-      ) {
+      if (target?.status !== ConnectProfileStatus.ACTIVE) {
         return this.fail(
           response,
           apiId,
@@ -711,6 +719,21 @@ export class ConnectService {
   // =====================================================================
   // Shared helpers (also used by SafetyReportService)
   // =====================================================================
+
+  /**
+   * connectUserId (connect_profiles.id, sent by the frontend) → the member's
+   * real userId and profile status, or null when no such profile exists.
+   * The real userId is never sent to other members.
+   */
+  async resolveConnectUser(
+    connectUserId: string
+  ): Promise<{ userId: string; status: ConnectProfileStatus } | null> {
+    const profile = await this.profileRepository.findOne({
+      where: { id: connectUserId },
+      select: ["userId", "status"],
+    });
+    return profile ? { userId: profile.userId, status: profile.status } : null;
+  }
 
   /** Profile status of a user, or null if they never joined (cached) */
   async getMemberStatus(userId: string): Promise<ConnectProfileStatus | null> {
@@ -971,7 +994,7 @@ export class ConnectService {
     ]);
     const d = details.get(userId);
     const view: ConnectProfileView = {
-      userId,
+      connectUserId: profile.id,
       name: d?.name ?? null,
       initials: d?.initials ?? null,
       location: d?.location ?? null,

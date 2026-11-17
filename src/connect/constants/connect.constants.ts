@@ -86,7 +86,8 @@ export const CONNECT_CACHE = {
   OPTIONS_TTL: 3600,
   MEMBER_KEY: (userId: string) => `connect:member:${userId}`,
   MEMBER_TTL: 600,
-  PROFILE_KEY: (userId: string) => `connect:profile:${userId}`,
+  // v2: the cached view carries connectUserId, not userId
+  PROFILE_KEY: (userId: string) => `connect:profile:v2:${userId}`,
   PROFILE_TTL: 600,
   COUNTRIES_KEY: "connect:member-countries",
   COUNTRIES_TTL: 600,

@@ -20,11 +20,11 @@ export class CreateConnectReportDto {
     format: "uuid",
     nullable: true,
     description:
-      "Member being reported. null = general concern (then subject is required)",
+      "connectUserId of the member being reported (from the list / profile). null = general concern (then subject is required)",
   })
   @IsOptional()
   @IsUUID()
-  reportedUserId?: string | null;
+  reportedConnectUserId?: string | null;
 
   @ApiPropertyOptional({ example: "Fake recruiter messages" })
   @Transform(trim)
