@@ -1327,6 +1327,7 @@ export class UserService {
               existingTenant.roles.push({
                 roleId: role.roleid,
                 roleName: role.title,
+                userRoleStatus: role.status,
               });
             }
           });
@@ -1335,6 +1336,7 @@ export class UserService {
           const roles = roleData.map(role => ({
             roleId: role.roleid,
             roleName: role.title,
+            userRoleStatus: role.status,
           }));
 
           tenantMap.set(tenantId, {
