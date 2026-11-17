@@ -150,10 +150,14 @@ export class ConnectController {
   }
 
   // A5
-  @Get("profile/:userId")
+  @Get("profile/:connectUserId")
   @UseFilters(new AllExceptionsFilter(APIID.CONNECT_PROFILE_READ))
   @ApiOperation({ summary: "One member's full Connect profile" })
-  @ApiParam({ name: "userId", format: "uuid" })
+  @ApiParam({
+    name: "connectUserId",
+    format: "uuid",
+    description: "connectUserId from the member list",
+  })
   @ApiResponse({
     status: 200,
     description: API_RESPONSES.CONNECT_PROFILE_SUCCESS,
@@ -161,24 +165,28 @@ export class ConnectController {
   async getProfile(
     @Req() request: RequestWithUser,
     @Headers("tenantid") tenantId: string,
-    @Param("userId", ParseUUIDPipe) targetUserId: string,
+    @Param("connectUserId", ParseUUIDPipe) connectUserId: string,
     @Res() response: Response
   ) {
     return this.connectService.getProfile(
       this.getUserId(request),
       this.validTenant(tenantId),
-      targetUserId,
+      connectUserId,
       response
     );
   }
 
   // A6
-  @Post("profile/:userId/linkedin-click")
+  @Post("profile/:connectUserId/linkedin-click")
   @HttpCode(HttpStatus.CREATED)
   @UseFilters(new AllExceptionsFilter(APIID.CONNECT_LINKEDIN_CLICK))
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   @ApiOperation({ summary: "Track a 'Say hello on LinkedIn' click" })
-  @ApiParam({ name: "userId", format: "uuid" })
+  @ApiParam({
+    name: "connectUserId",
+    format: "uuid",
+    description: "connectUserId from the member list",
+  })
   @ApiBody({ type: LinkedinClickDto })
   @ApiResponse({
     status: 201,
@@ -187,14 +195,14 @@ export class ConnectController {
   async trackLinkedinClick(
     @Req() request: RequestWithUser,
     @Headers("tenantid") tenantId: string,
-    @Param("userId", ParseUUIDPipe) targetUserId: string,
+    @Param("connectUserId", ParseUUIDPipe) connectUserId: string,
     @Body() dto: LinkedinClickDto,
     @Res() response: Response
   ) {
     return this.connectService.trackLinkedinClick(
       this.getUserId(request),
       this.validTenant(tenantId),
-      targetUserId,
+      connectUserId,
       dto,
       response
     );

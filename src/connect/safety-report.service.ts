@@ -36,8 +36,8 @@ export class SafetyReportService {
 
   // ---------------------------------------------------------------------
   // A7. POST /connect/reports
-  //   reportedUserId set  → "Report this profile" (caller must be a member)
-  //   reportedUserId null → "Report a concern" (any user of the tenant, subject required)
+  //   reportedConnectUserId set  → "Report this profile" (caller must be a member)
+  //   reportedConnectUserId null → "Report a concern" (any user of the tenant, subject required)
   // ---------------------------------------------------------------------
   async createReport(
     reporterUserId: string,
@@ -48,13 +48,24 @@ export class SafetyReportService {
     const apiId = APIID.CONNECT_REPORT_CREATE;
     const cs = this.connectService;
     try {
-      const reportedUserId = dto.reportedUserId ?? null;
+      let reportedUserId: string | null = null;
 
-      if (reportedUserId) {
+      if (dto.reportedConnectUserId) {
         const denied = await cs.checkActiveMember(reporterUserId);
         if (denied) {
           return cs.fail(response, apiId, denied.error, denied.status);
         }
+        // connectUserId → real userId (stored on the report, never returned)
+        const reported = await cs.resolveConnectUser(dto.reportedConnectUserId);
+        if (!reported) {
+          return cs.fail(
+            response,
+            apiId,
+            CONNECT_ERRORS.PROFILE_NOT_FOUND,
+            HttpStatus.NOT_FOUND
+          );
+        }
+        reportedUserId = reported.userId;
         if (reportedUserId === reporterUserId) {
           return cs.fail(
             response,
@@ -63,15 +74,6 @@ export class SafetyReportService {
             HttpStatus.BAD_REQUEST
           );
         }
-        if ((await cs.getMemberStatus(reportedUserId)) === null) {
-          return cs.fail(
-            response,
-            apiId,
-            CONNECT_ERRORS.PROFILE_NOT_FOUND,
-            HttpStatus.NOT_FOUND
-          );
-        }
-
         // one open report per reporter/member pair
         const existing = await this.findOpenReport(
           reporterUserId,
