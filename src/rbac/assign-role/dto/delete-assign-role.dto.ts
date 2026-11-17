@@ -13,6 +13,14 @@ export class DeleteAssignRoleDto {
   userId: string;
 
   @ApiProperty({
+    type: String,
+    description: "Tenant Id",
+    default: "",
+  })
+  @IsNotEmpty()
+  tenantId: string;
+
+  @ApiProperty({
     type: [String], // Define roleId as an array of strings
     description: "Assigned Role Id",
     default: [],
