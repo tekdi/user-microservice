@@ -255,6 +255,7 @@ export class ConnectService {
       const result = {
         isMember: true,
         status: ConnectProfileStatus.ACTIVE,
+        connectUserId: rows[0].id,
         profile: this.toOwnProfile(rows[0], masters),
       };
       return APIResponse.success(
@@ -676,7 +677,10 @@ export class ConnectService {
       return APIResponse.success(
         response,
         apiId,
-        { profile: this.toOwnProfile(profile, masters) },
+        {
+          connectUserId: profile.id,
+          profile: this.toOwnProfile(profile, masters),
+        },
         HttpStatus.OK,
         API_RESPONSES.CONNECT_PROFILE_UPDATED
       );
