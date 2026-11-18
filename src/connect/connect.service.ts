@@ -169,7 +169,7 @@ export class ConnectService {
         openTo: masters.openTo
           .filter((o) => o.isActive)
           .map((o) => ({ id: o.id, label: o.label })),
-        // Country filter: only countries that have Connect members
+        // Country filter: every active country, with its member count
         countries,
         currentStatuses: CONNECT_CURRENT_STATUSES,
         // details is required for every reason (CreateConnectReportDto)
@@ -255,6 +255,7 @@ export class ConnectService {
       const result = {
         isMember: true,
         status: ConnectProfileStatus.ACTIVE,
+        connectUserId: rows[0].id,
         profile: this.toOwnProfile(rows[0], masters),
       };
       return APIResponse.success(
@@ -349,7 +350,9 @@ export class ConnectService {
       }
       if (filters.country) {
         params.push(filters.country);
-        where.push(`TRIM(u."currentCountry") = $${params.length}`);
+        where.push(
+          `LOWER(TRIM(u."currentCountry")) = LOWER($${params.length})`
+        );
       }
       if (filters.linkedinVisit === ConnectLinkedinVisit.VISITED) {
         where.push(
@@ -676,7 +679,10 @@ export class ConnectService {
       return APIResponse.success(
         response,
         apiId,
-        { profile: this.toOwnProfile(profile, masters) },
+        {
+          connectUserId: profile.id,
+          profile: this.toOwnProfile(profile, masters),
+        },
         HttpStatus.OK,
         API_RESPONSES.CONNECT_PROFILE_UPDATED
       );
@@ -943,7 +949,11 @@ export class ConnectService {
       .map((o) => ({ id: o.id, label: o.label }));
   }
 
-  /** Countries that have ACTIVE Connect members, for the Country filter (cached) */
+  /**
+   * Every active country with its ACTIVE member count (0 if none), for the
+   * Country filter (cached). A member country missing from the countries
+   * table is still returned, without a code.
+   */
   private async getMemberCountries(): Promise<
     { name: string; code: string | null; memberCount: number }[]
   > {
@@ -952,21 +962,32 @@ export class ConnectService {
     >(CONNECT_CACHE.COUNTRIES_KEY);
     if (cached) return cached;
 
-    const [rows, codes] = await Promise.all([
-      this.dataSource.query(
-        `SELECT TRIM(u."currentCountry") AS name, count(*)::int AS "memberCount"
-           FROM connect_profiles cp
-           JOIN "Users" u ON u."userId" = cp."userId"
-          WHERE cp."status" = 'ACTIVE' AND u."status" <> 'archived'
-            AND NULLIF(TRIM(u."currentCountry"), '') IS NOT NULL
-          GROUP BY 1
+    const rows: { name: string; code: string | null; memberCount: number }[] =
+      await this.dataSource.query(
+        `WITH m AS (
+           SELECT LOWER(TRIM(u."currentCountry")) AS k,
+                  MIN(TRIM(u."currentCountry"))   AS name,
+                  count(*)::int                   AS cnt
+             FROM connect_profiles cp
+             JOIN "Users" u ON u."userId" = cp."userId"
+            WHERE cp."status" = 'ACTIVE' AND u."status" <> 'archived'
+              AND NULLIF(TRIM(u."currentCountry"), '') IS NOT NULL
+            GROUP BY 1
+         ), c AS (
+           SELECT name, iso_code, LOWER(TRIM(name)) AS k
+             FROM countries
+            WHERE is_active
+         )
+         SELECT COALESCE(c.name, m.name) AS name,
+                c.iso_code               AS code,
+                COALESCE(m.cnt, 0)::int  AS "memberCount"
+           FROM c
+           FULL JOIN m ON m.k = c.k
           ORDER BY 1`
-      ),
-      this.enrichmentService.getCountryCodes(),
-    ]);
+      );
     const countries = rows.map((r) => ({
       name: r.name,
-      code: codes[r.name.toLowerCase()] ?? null,
+      code: r.code ?? null,
       memberCount: r.memberCount,
     }));
     await this.safeCacheSet(
