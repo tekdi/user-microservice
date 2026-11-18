@@ -4,6 +4,7 @@ export const APIID = {
   SUGGEST_USERNAME: "api.suggest.username",
   USER_UPDATE: "api.user.update",
   USER_LIST: "api.user.list",
+  USER_DISTRICT_COUNT: "api.user.districtCount",
   USER_HIERARCHY_VIEW: "api.user.hierarchyView",
   USER_RESET_PASSWORD: "api.user.resetPassword",
   USER_RESET_PASSWORD_LINK: "api.user.sendLinkForResetPassword",
