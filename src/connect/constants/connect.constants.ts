@@ -73,6 +73,25 @@ export const CONNECT_LIMITS = {
   ADMIN_LIST_MAX_LIMIT: 100,
 } as const;
 
+/**
+ * Limits the frontend needs for its forms and filters (GET /connect/options →
+ * limits), so they are defined only here. The DTOs use CONNECT_LIMITS too.
+ */
+export const CONNECT_CLIENT_LIMITS = {
+  headlineMax: CONNECT_LIMITS.HEADLINE_MAX,
+  aboutMaxWords: CONNECT_LIMITS.ABOUT_MAX_WORDS,
+  aboutMaxChars: CONNECT_LIMITS.ABOUT_MAX_CHARS,
+  openToMin: CONNECT_LIMITS.OPEN_TO_MIN,
+  openToMax: CONNECT_LIMITS.OPEN_TO_MAX,
+  careerDomainFilterMax: CONNECT_LIMITS.CAREER_DOMAIN_FILTER_MAX,
+  openToFilterMax: CONNECT_LIMITS.LIST_MAX_MULTI_FILTER,
+  listPageSize: CONNECT_LIMITS.LIST_DEFAULT_LIMIT,
+  listMaxPageSize: CONNECT_LIMITS.LIST_MAX_LIMIT,
+  searchMinChars: CONNECT_LIMITS.SEARCH_MIN_CHARS,
+  reportSubjectMax: CONNECT_LIMITS.REPORT_SUBJECT_MAX,
+  reportDetailsMax: CONNECT_LIMITS.REPORT_DETAILS_MAX,
+} as const;
+
 /** Roles (Roles.code, per tenant) allowed to call /connect/admin/* */
 export const CONNECT_ADMIN_ROLE_CODES = ["admin"];
 
