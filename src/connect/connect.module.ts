@@ -1,10 +1,13 @@
 import { Module } from "@nestjs/common";
+import { HttpModule } from "@nestjs/axios";
+import { NotificationRequest } from "@utils/notification.axios";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { CacheModule } from "src/cache/cache.module";
 import { ConnectController } from "./connect.controller";
 import { ConnectAdminController } from "./connect-admin.controller";
 import { ConnectService } from "./connect.service";
 import { SafetyReportService } from "./safety-report.service";
+import { ConnectSafetyEmailService } from "./connect-safety-email.service";
 import { ConnectAdminGuard } from "./guards/connect-admin.guard";
 import { ConnectAdminService } from "./connect-admin.service";
 import { ConnectEnrichmentService } from "./connect-enrichment.service";
@@ -33,11 +36,14 @@ import { SafetyReport } from "./entities/safety-report.entity";
       SafetyReport,
     ]),
     CacheModule,
+    HttpModule,
   ],
   controllers: [ConnectController, ConnectAdminController],
   providers: [
     ConnectService,
     SafetyReportService,
+    ConnectSafetyEmailService,
+    NotificationRequest,
     ConnectEnrichmentService,
     ConnectAdminService,
     ConnectAdminGuard,

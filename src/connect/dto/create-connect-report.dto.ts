@@ -1,13 +1,6 @@
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { ApiPropertyOptional } from "@nestjs/swagger";
 import { Transform } from "class-transformer";
-import {
-  IsIn,
-  IsNotEmpty,
-  IsOptional,
-  IsString,
-  IsUUID,
-  MaxLength,
-} from "class-validator";
+import { IsIn, IsOptional, IsString, IsUUID, MaxLength } from "class-validator";
 import {
   CONNECT_LIMITS,
   CONNECT_REPORT_REASON_KEYS,
@@ -33,16 +26,22 @@ export class CreateConnectReportDto {
   @MaxLength(CONNECT_LIMITS.REPORT_SUBJECT_MAX)
   subject?: string | null;
 
-  @ApiProperty({ enum: CONNECT_REPORT_REASON_KEYS })
+  @ApiPropertyOptional({
+    enum: CONNECT_REPORT_REASON_KEYS,
+    description:
+      "Required for a general concern. Member safety concern: defaults to safety_concern",
+  })
+  @IsOptional()
   @IsIn(CONNECT_REPORT_REASON_KEYS)
-  reason: string;
+  reason?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     example: "Sent the same promotional message to several members.",
+    description: "Required for a general concern. Optional for a member",
   })
   @Transform(trim)
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
   @MaxLength(CONNECT_LIMITS.REPORT_DETAILS_MAX)
-  details: string;
+  details?: string | null;
 }

@@ -11,9 +11,12 @@ import {
   CONNECT_CACHE,
   CONNECT_ERRORS,
   CONNECT_LIMITS,
+  CONNECT_SAFETY_CONCERN_DEFAULT_DETAILS,
+  CONNECT_SAFETY_CONCERN_REASON,
   ConnectReportStatus,
 } from "./constants/connect.constants";
 import { ConnectService } from "./connect.service";
+import { ConnectSafetyEmailService } from "./connect-safety-email.service";
 import { CreateConnectReportDto } from "./dto/create-connect-report.dto";
 import {
   SafetyReportListDto,
@@ -31,13 +34,17 @@ export class SafetyReportService {
     private readonly reportRepository: Repository<SafetyReport>,
     private readonly connectService: ConnectService,
     private readonly cacheService: CacheService,
-    private readonly dataSource: DataSource
+    private readonly dataSource: DataSource,
+    private readonly safetyEmailService: ConnectSafetyEmailService
   ) {}
 
   // ---------------------------------------------------------------------
   // A7. POST /connect/reports
-  //   reportedConnectUserId set  → "Report this profile" (caller must be a member)
-  //   reportedConnectUserId null → "Report a concern" (any user of the tenant, subject required)
+  //   reportedConnectUserId set  → "Safety concern" → "Email me the steps"
+  //     (caller must be a member; reason defaults to safety_concern, details optional)
+  //   reportedConnectUserId null → general concern (any user of the tenant;
+  //     subject, reason and details required)
+  //   Then emails the reporter (block steps) and the admins.
   // ---------------------------------------------------------------------
   async createReport(
     reporterUserId: string,
@@ -80,9 +87,14 @@ export class SafetyReportService {
           reportedUserId
         );
         if (existing) {
-          return this.sendExisting(response, existing);
+          // they asked for the steps again: resend them, not the admin alert
+          const emailSent = await this.safetyEmailService.sendForReport(
+            existing,
+            false
+          );
+          return this.sendExisting(response, existing, emailSent);
         }
-      } else if (!dto.subject) {
+      } else if (!dto.subject || !dto.reason || !dto.details) {
         return cs.fail(
           response,
           apiId,
@@ -111,8 +123,9 @@ export class SafetyReportService {
             reporterUserId,
             reportedUserId,
             subject: reportedUserId ? null : dto.subject,
-            reason: dto.reason,
-            details: dto.details,
+            reason: dto.reason ?? CONNECT_SAFETY_CONCERN_REASON,
+            // details is NOT NULL; the Safety concern flow sends none
+            details: dto.details || CONNECT_SAFETY_CONCERN_DEFAULT_DETAILS,
             // never taken from the request
             status: ConnectReportStatus.OPEN,
           })
@@ -124,7 +137,13 @@ export class SafetyReportService {
             reporterUserId,
             reportedUserId
           );
-          if (existing) return this.sendExisting(response, existing);
+          if (existing) {
+            const emailSent = await this.safetyEmailService.sendForReport(
+              existing,
+              false
+            );
+            return this.sendExisting(response, existing, emailSent);
+          }
         }
         throw error;
       }
@@ -135,6 +154,12 @@ export class SafetyReportService {
         CONNECT_CACHE.REPORT_DAY_TTL
       );
 
+      // reporter: block steps (member report); admins: new report alert
+      const emailSent = await this.safetyEmailService.sendForReport(
+        report,
+        true
+      );
+
       return APIResponse.success(
         response,
         apiId,
@@ -142,6 +167,7 @@ export class SafetyReportService {
           reportId: report.id,
           status: report.status,
           createdAt: report.createdAt,
+          emailSent,
         },
         HttpStatus.CREATED,
         API_RESPONSES.CONNECT_REPORT_CREATED
@@ -275,7 +301,11 @@ export class SafetyReportService {
     });
   }
 
-  private sendExisting(response: Response, report: SafetyReport) {
+  private sendExisting(
+    response: Response,
+    report: SafetyReport,
+    emailSent: boolean
+  ) {
     return APIResponse.success(
       response,
       APIID.CONNECT_REPORT_CREATE,
@@ -283,6 +313,7 @@ export class SafetyReportService {
         reportId: report.id,
         status: report.status,
         createdAt: report.createdAt,
+        emailSent,
       },
       HttpStatus.OK,
       API_RESPONSES.CONNECT_REPORT_ALREADY_OPEN

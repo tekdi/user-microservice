@@ -26,6 +26,7 @@ export class SafetyReport {
   @Column({ type: "varchar", length: 40 })
   reason: string;
 
+  /** Member safety concern without details: CONNECT_SAFETY_CONCERN_DEFAULT_DETAILS */
   @Column({ type: "varchar", length: 2000 })
   details: string;
 
