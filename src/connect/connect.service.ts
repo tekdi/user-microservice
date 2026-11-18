@@ -14,6 +14,7 @@ import { ConnectCareerDomainGroup } from "./entities/connect-career-domain-group
 import { SupportOfferingType } from "./entities/support-offering-type.entity";
 import {
   CONNECT_CACHE,
+  CONNECT_CLIENT_LIMITS,
   CONNECT_CURRENT_STATUSES,
   CONNECT_ERRORS,
   CONNECT_LIMITS,
@@ -171,7 +172,14 @@ export class ConnectService {
         // Country filter: only countries that have Connect members
         countries,
         currentStatuses: CONNECT_CURRENT_STATUSES,
-        reportReasons: CONNECT_REPORT_REASONS,
+        // details is required for every reason (CreateConnectReportDto)
+        reportReasons: CONNECT_REPORT_REASONS.map((r) => ({
+          ...r,
+          detailsRequired: true,
+        })),
+        limits: CONNECT_CLIENT_LIMITS,
+        // same rule the API applies to linkedinUrl; use as new RegExp(p, "i")
+        linkedinUrlPattern: LINKEDIN_PROFILE_REGEX.source,
       };
       return APIResponse.success(
         response,
