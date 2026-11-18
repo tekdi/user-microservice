@@ -2756,6 +2756,96 @@ export class UserService {
   }
 
   /**
+   * First-time password for SSO (ERP) users who have no password yet.
+   * Rejected if Keycloak already holds a password credential.
+   */
+  public async setUserPassword(newPassword: string, response: Response) {
+    const apiId = APIID.USER_SET_PASSWORD;
+    const request = requestContext.getStore() as any;
+    try {
+      const userData: any = await this.findUserDetails(
+        null,
+        request.user.username
+      );
+      if (!userData?.userId) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.NOT_FOUND,
+          API_RESPONSES.USER_NOT_FOUND,
+          HttpStatus.NOT_FOUND
+        );
+      }
+
+      const keycloakResponse = await getKeycloakAdminToken();
+      const resToken = keycloakResponse.data.access_token;
+      const { KEYCLOAK, KEYCLOAK_ADMIN } = process.env;
+
+      const creds = await this.axios.get(
+        `${KEYCLOAK}${KEYCLOAK_ADMIN}/${userData.userId}/credentials`,
+        { headers: { Authorization: `Bearer ${resToken}` } }
+      );
+      if (creds.data?.some((c: any) => c.type === "password")) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.FORBIDDEN,
+          API_RESPONSES.PASSWORD_ALREADY_SET,
+          HttpStatus.FORBIDDEN
+        );
+      }
+
+      const apiResponse: any = await this.resetKeycloakPassword(
+        userData,
+        resToken,
+        newPassword,
+        userData.userId
+      );
+      if (apiResponse?.statusCode !== 204) {
+        return APIResponse.error(
+          response,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          `Error : ${apiResponse?.errors}`,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+
+      // Without this, SSO users still can't log in with the new password
+      await this.enablePasswordAuthenticationIfNeeded(
+        userData.userId,
+        resToken
+      );
+      if (userData.temporaryPassword) {
+        await this.usersRepository.update(userData.userId, {
+          temporaryPassword: false,
+        });
+      }
+
+      return APIResponse.success(
+        response,
+        apiId,
+        {},
+        HttpStatus.OK,
+        API_RESPONSES.USER_PASSWORD_UPDATE
+      );
+    } catch (e) {
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}: ${request?.url}`,
+        `Error: ${e.message}`,
+        apiId
+      );
+      return APIResponse.error(
+        response,
+        apiId,
+        API_RESPONSES.INTERNAL_SERVER_ERROR,
+        `Error : ${e?.response?.data?.error ?? e.message}`,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  /**
    * Enable password authentication ONLY if it's currently disabled
    * Returns true if attribute was changed, false if already enabled
    */
