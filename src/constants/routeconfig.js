@@ -287,6 +287,32 @@
 			]
 		},
 		{
+              "sourceRoute": "/interface/v1/user/set-password",                                                
+              "type": "POST",
+              "priority": "MUST_HAVE",
+              "inSequence": false,
+              "orchestrated": false,
+              "targetPackages": [
+                  {
+                      "basePackageName": "user",
+                      "packageName": "shiksha-user"
+                  }
+              ]
+          },
+          {
+              "sourceRoute": "/interface/v1/user/district-user-count",
+              "type": "POST",
+              "priority": "MUST_HAVE",
+              "inSequence": false,
+              "orchestrated": false,
+              "targetPackages": [
+                  {
+                      "basePackageName": "user",
+                      "packageName": "shiksha-user"
+                  }
+              ]
+         },
+		{
 			"sourceRoute": "/interface/v1/user/forgot-password",
 			"type": "POST",
 			"priority": "MUST_HAVE",
