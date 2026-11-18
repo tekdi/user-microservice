@@ -24,7 +24,10 @@ import {
   ConnectProfileStatus,
   LINKEDIN_PROFILE_REGEX,
 } from "./constants/connect.constants";
-import { ConnectEnrichmentService } from "./connect-enrichment.service";
+import {
+  ConnectCohortRef,
+  ConnectEnrichmentService,
+} from "./connect-enrichment.service";
 import { JoinConnectDto } from "./dto/join-connect.dto";
 import { UpdateConnectProfileDto } from "./dto/update-connect-profile.dto";
 import { ConnectListDto } from "./dto/connect-list.dto";
@@ -56,7 +59,7 @@ interface ConnectProfileView {
   location: string | null;
   countryCode: string | null;
   pathway: { id: string; name: string } | null;
-  cohort: { id: string; name: string } | null;
+  cohort: ConnectCohortRef | null;
   headline: string;
   careerDomain: CareerDomainView | null;
   currentStatus: { key: string; label: string } | null;
@@ -456,7 +459,7 @@ export class ConnectService {
           initials: d?.initials ?? null,
           location: d?.location ?? null,
           countryCode: d?.countryCode ?? null,
-          cohort: d?.cohort ? { id: d.cohort.id, name: d.cohort.name } : null,
+          cohort: d?.cohort ?? null,
           pathway: d?.pathway ?? null,
           headline: r.headline,
           careerDomain: this.toCareerDomain(r.careerDomainId, masters),
@@ -1029,7 +1032,7 @@ export class ConnectService {
       location: d?.location ?? null,
       countryCode: d?.countryCode ?? null,
       pathway: d?.pathway ?? null,
-      cohort: d?.cohort ? { id: d.cohort.id, name: d.cohort.name } : null,
+      cohort: d?.cohort ?? null,
       headline: profile.headline,
       careerDomain: this.toCareerDomain(profile.careerDomainId, masters),
       currentStatus: this.toCurrentStatus(profile.currentStatus),

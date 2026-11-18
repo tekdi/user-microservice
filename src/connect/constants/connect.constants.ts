@@ -49,9 +49,30 @@ export const CONNECT_REPORT_REASONS = [
   { key: "privacy_concern", label: "Privacy concern" },
   { key: "other", label: "Other" },
 ] as const;
-export const CONNECT_REPORT_REASON_KEYS: string[] = CONNECT_REPORT_REASONS.map(
-  (r) => r.key
-);
+/**
+ * Reason stored for "Safety concern about {name}" → "Email me the steps",
+ * which sends no reason. Not in the A2 pick list.
+ */
+export const CONNECT_SAFETY_CONCERN_REASON = "safety_concern";
+/** Saved in safety_reports.details (NOT NULL) when a member sends no details */
+export const CONNECT_SAFETY_CONCERN_DEFAULT_DETAILS =
+  "Safety concern raised from the member's Connect profile (Email me the steps).";
+export const CONNECT_REPORT_REASON_KEYS: string[] = [
+  CONNECT_SAFETY_CONCERN_REASON,
+  ...CONNECT_REPORT_REASONS.map((r) => r.key),
+];
+
+/** Safety concern emails (notification service templates, context USER) */
+export const CONNECT_SAFETY_EMAIL = {
+  // same context as the other user-service emails (pathways, cohort members)
+  CONTEXT: "USER",
+  REPORTER_KEY: "OnConnectSafetyConcernReporter",
+  ADMIN_KEY: "OnConnectSafetyConcernAdmin",
+  LINKEDIN_BLOCK_HELP_URL:
+    "https://www.linkedin.com/help/linkedin/answer/a1338373",
+  /** Used when CONNECT_SUPPORT_EMAIL is not set */
+  DEFAULT_SUPPORT_EMAIL: "alumni@aspireleaders.org",
+} as const;
 
 export const CONNECT_LIMITS = {
   HEADLINE_MAX: 150,
@@ -105,8 +126,8 @@ export const CONNECT_CACHE = {
   OPTIONS_TTL: 3600,
   MEMBER_KEY: (userId: string) => `connect:member:${userId}`,
   MEMBER_TTL: 600,
-  // v2: the cached view carries connectUserId, not userId
-  PROFILE_KEY: (userId: string) => `connect:profile:v2:${userId}`,
+  // v3: cached view has connectUserId (v2) and cohort.year (v3)
+  PROFILE_KEY: (userId: string) => `connect:profile:v3:${userId}`,
   PROFILE_TTL: 600,
   // v2: every active country with its member count (was members only)
   COUNTRIES_KEY: "connect:countries-filter:v2",
