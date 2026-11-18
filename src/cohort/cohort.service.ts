@@ -763,12 +763,13 @@ export class CohortService {
             const cohortMembers = await this.cohortMembersRepository.find({
               where: {
                 cohortId,
+                status: MemberStatus.ACTIVE,
               },
             });
 
             if (cohortMembers.length > 0) {
               await this.cohortMembersRepository.update(
-                { cohortId },
+                { cohortId , status: MemberStatus.ACTIVE },
                 { status: memberStatus, updatedBy: cohortUpdateDto.updatedBy }
               );
 

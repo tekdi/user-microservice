@@ -50,3 +50,10 @@ export class SendPasswordResetOTPDto {
   @IsNotEmpty()
   username: string;
 }
+
+export class SetPasswordDto {
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  newPassword: string;
+}

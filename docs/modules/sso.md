@@ -9,33 +9,43 @@ The SSO (Single Sign-On) module handles authentication through external SSO prov
 **Key Entities**: None (uses User entity from UserModule)
 
 **Dependencies**:
-- `UserModule` - For user creation and management
-- `FieldsModule` - For custom field updates
-- External SSO provider (Newton API)
+- `UserModule` / `UserService` - User creation, tenant/role assignment, Kafka events
+- `RoleService` - Role name lookup
+- `FieldsModule` / `FieldsService` - Custom field updates
+- `UserTenantMappingModule`
+- `CacheService` - Invalidation after field/user writes (see [cache.md](./cache.md))
+- `KafkaModule` (via `UserService.publishUserEvent`, see [kafka.md](./kafka.md))
+- External SSO provider: the Newton login endpoint, `<KEYCLOAK>/realms/pratham/newton-login` (Keycloak SPI), called with `application/x-www-form-urlencoded`
+
+**Configuration**: `KEYCLOAK` (base URL), `NEWTON_API_TIMEOUT` (ms, default 30000). Defaults in `src/constants/sso.constants.ts`: `DEFAULT_TENANT_ID`, `DEFAULT_LEARNER_ROLE_ID`, `MANAGER_ROLE_ID`.
 
 ## API Endpoints
 
 ### SSO Authenticate - POST `/authenticate`
 
-**API ID**: `api.sso.authenticate`
+**API ID**: `api.sso.authenticate` is used for error responses. Success responses are built by the service and carry `"id": "api.login"`.
 
 **Route**: `POST /user/v1/sso/authenticate`
 
-**Authentication**: Not required
+**Authentication**: Not required. Not throttled (the login throttle applies only to `/auth/login`, see [auth.md](./auth.md#login-throttling)).
 
 **Request Body** (`SsoRequestDto`):
 ```typescript
 {
-  token: string; // SSO token from external provider
-  // Additional SSO-specific fields
+  accessToken: string;  // required - access token from the SSO provider
+  userId: string;       // required - user ID at the SSO provider
+  ssoProvider: string;  // required - e.g. "newton"
+  tenantId?: string;    // optional UUID - defaults to SSO_DEFAULTS.DEFAULT_TENANT_ID
+  roleId?: string;      // optional UUID - defaults to SSO_DEFAULTS.DEFAULT_LEARNER_ROLE_ID
+  roles?: string;       // internal, populated from roleId
 }
 ```
 
 **Response**:
-- **Success (200)**: Authentication successful with JWT tokens
+- **Success (200)**: Authentication successful with the tokens issued by the Newton/Keycloak SPI
   ```json
   {
-    "id": "api.sso.authenticate",
+    "id": "api.login",
     "ver": "1.0",
     "params": {
       "status": "successful",
@@ -51,37 +61,51 @@ The SSO (Single Sign-On) module handles authentication through external SSO prov
     }
   }
   ```
-- **Error (401)**: Unauthorized - SSO authentication failed
-- **Error (400)**: Bad Request - Invalid input data
-- **Error (500)**: Internal Server Error
+  `expires_in` and `refresh_expires_in` are hard-coded (24 h / 7 d) in `createStandardResponse`, not read from the token.
+- **Error (400)**: Invalid `tenantId` UUID; Newton returned HTTP error; no userId in provider response
+- **Error (401)**: Newton `success: false`, message `Email address is not registered in ERP for this user. Please contact your administrator.`
+- **Error (404)**: `roleId` does not exist (`Role name not found. Please enter a valid Role ID`)
+- **Error (503)**: No response from Newton (network error)
+- **Error (500)**: Other failures
 
 **Business Logic**:
-1. Validates SSO token with external provider (Newton API)
-2. Retrieves user information from SSO provider
-3. Checks if user exists in database:
-   - If exists: Updates user information if needed
-   - If not exists: Creates new user with SSO data
-4. Updates custom fields from SSO data (newtonData)
-5. Generates JWT tokens (access and refresh)
-6. Returns tokens in standard format
+1. Apply defaults: missing `tenantId` becomes the default tenant, missing `roleId` becomes the default learner role
+2. Resolve the role name from `Roles` by `roleId` (404 if absent) and store it in `dto.roles`
+3. POST `userId`, `access_token`, `roles` to the Newton login endpoint
+4. If Newton reports `success: false` -> 401
+5. If `isNewUser` is false (existing user): build the response immediately, then run `handleExistingUser` in the background (fire-and-forget):
+   - upsert custom fields from `newtonData` (label -> field ID per tenant); invalidates `user:{id}`, `ufields:{id}`, `userfilter`
+   - if `newtonData.IS_MANAGER` is `YES` and the user lacks the manager role in the tenant, assign it
+   - publish `USER_UPDATED`
+6. If new user: `handleNewUser` runs before the response:
+   - `createUserInDatabase` (username and email from Newton email, no password, tenant + role mapping from the request)
+   - upsert custom fields from `newtonData`, invalidate `ufields:{id}`, `userfilter`
+   - if `IS_MANAGER` is `YES`, assign the manager role in the tenant
+   - publish `USER_CREATED`
+7. Return the standard response with the tokens Newton supplied
 
 **Edge Cases**:
-- Invalid SSO token → 401 Unauthorized
-- SSO provider unavailable → 500 Internal Server Error
-- User creation fails → 500 Internal Server Error
-- Custom field update fails → Logged but doesn't fail authentication
+- Existing-user path: failures in the background update are logged and never change the 200 response
+- Custom field label not found for the tenant -> skipped with a warning
+- Custom field update failure -> logged, flow continues
+- User creation failure -> 500 `Failed to create user in database`
+- Newton HTTP error responses are wrapped into the 400 message, including the upstream body
 
 **Dependencies**:
 - `SsoService.authenticate()`
-- External SSO provider API (Newton)
-- `UserService` (for user creation/update)
-- `FieldsService` (for custom field updates)
+- Newton API
+- `UserService` (`createUserInDatabase`, `assignUserToTenantAndRoll`, `checkIfUserHasRoleInTenant`, `publishUserEvent`)
+- `FieldsService` (`getFieldIdByLabel`, `updateUserCustomFields`, `updateCustomFields`)
+- `CacheService.invalidate`
 
 **Side Effects**:
-- Creates user in database (if new)
-- Updates user information (if exists)
-- Updates custom fields from SSO data
-- Generates JWT tokens
+- Creates user, tenant/role mapping in database (if new)
+- Upserts custom fields from `newtonData`
+- May assign manager role
+- Cache namespace bumps: `ufields:{userId}`, `userfilter` (and `user:{userId}` for existing users)
+- Kafka: `USER_CREATED` (new) or `USER_UPDATED` (existing)
+
+**Example**: Newton user `E1001` posts `{accessToken, userId: "E1001", ssoProvider: "newton"}` with no tenant/role. The service uses the default tenant and learner role, Newton answers `isNewUser: true` with `newtonData.IS_MANAGER = "YES"`. The user row and learner mapping are created, the manager role is added, and the caller gets the Newton-issued tokens.
 
 ## Common Issues & Solutions
 

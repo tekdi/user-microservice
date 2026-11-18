@@ -434,7 +434,7 @@ export class RoleService {
     const userRoleData = await this.userRoleMappingRepository
       .createQueryBuilder("urp")
       .innerJoin(Role, "r", "r.roleId=urp.roleId")
-      .select(["urp.roleId as roleid", "r.title as title", "r.code as code"])
+      .select(["urp.roleId as roleid", "r.title as title", "r.code as code", "urp.status as status"])
       .where("urp.userId= :userId", { userId })
       .andWhere("urp.tenantId=:tenantId", { tenantId })
       .getRawMany();

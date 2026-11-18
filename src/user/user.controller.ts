@@ -45,6 +45,7 @@ import { AllExceptionsFilter } from "src/common/filters/exception.filter";
 import { APIID } from "src/common/utils/api-id.config";
 import {
   ForgotPasswordDto,
+  SetPasswordDto,
   ResetUserPasswordDto,
   SendPasswordResetLinkDto,
   SendPasswordResetOTPDto,
@@ -284,6 +285,24 @@ export class UserController {
         reqBody.newPassword,
         response
       );
+  }
+
+  @UseFilters(new AllExceptionsFilter(APIID.USER_SET_PASSWORD))
+  @Post("/set-password")
+  @UseGuards(JwtAuthGuard)
+  @ApiBasicAuth("access-token")
+  @ApiOkResponse({ description: "Password set successfully." })
+  @UsePipes(new ValidationPipe({ transform: true }))
+  @ApiForbiddenResponse({ description: "Password already set" })
+  @ApiBody({ type: SetPasswordDto })
+  public async setUserPassword(
+    @Res() response: Response,
+    @Body() reqBody: SetPasswordDto
+  ) {
+    return await this.userService.setUserPassword(
+      reqBody.newPassword,
+      response
+    );
   }
 
   // required for FTL
