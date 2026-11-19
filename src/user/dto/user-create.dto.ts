@@ -11,9 +11,13 @@ import {
   IsOptional,
   Length,
   IsEnum,
+  Matches,
 } from 'class-validator';
 import { User } from '../entities/user-entity';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+
+/** Allowed characters for employeeId and organisationCode (Task 20). */
+export const ORG_IDENTIFIER_PATTERN = /^[A-Za-z0-9_-]+$/;
 
 export class tenantRoleMappingDto {
   @ApiProperty({
@@ -200,6 +204,50 @@ export class UserCreateDto {
   })
   @Expose()
   address: string;
+
+  @ApiPropertyOptional({
+    type: String,
+    description:
+      'Employee ID, unique within the organisation (organisationCode) in this tenant',
+    example: 'E-101',
+    maxLength: 50,
+  })
+  @Expose()
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  @Matches(ORG_IDENTIFIER_PATTERN, {
+    message: 'employeeId may contain only letters, numbers, _ and -',
+  })
+  employeeId?: string;
+
+  @ApiPropertyOptional({
+    type: String,
+    description: 'Organisation code (stored upper-case, unique per tenant)',
+    example: 'SWADHAR1',
+    maxLength: 30,
+  })
+  @Expose()
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  @Matches(ORG_IDENTIFIER_PATTERN, {
+    message: 'organisationCode may contain only letters, numbers, _ and -',
+  })
+  organisationCode?: string;
+
+  @ApiPropertyOptional({
+    type: String,
+    description:
+      'Organisation name. Required when organisationCode is new; ignored (the stored name wins) when the code already exists',
+    example: 'Swadhaar FinAccess 1',
+    maxLength: 150,
+  })
+  @Expose()
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  organisationName?: string;
 
   @Expose()
   @IsOptional()
