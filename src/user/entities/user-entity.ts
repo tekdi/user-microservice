@@ -130,4 +130,18 @@ export class User {
 
   @Column('text', { array: true, nullable: true })
   auto_tags: string[];
+
+  // Swadhaar (Task 20): organisation identity. Employee ID is unique within an
+  // organisation (organisationCode) per tenant, checked in the service because
+  // Users link to tenants many-to-many. Schema: sql/020_user_organisation_fields.up.sql
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  employeeId: string;
+
+  // Stored upper-case; the stable key of the organisation.
+  @Column({ type: 'varchar', length: 30, nullable: true })
+  organisationCode: string;
+
+  // Denormalised copy of Organisations.name for the code, for list/filter speed.
+  @Column({ type: 'varchar', length: 150, nullable: true })
+  organisationName: string;
 }

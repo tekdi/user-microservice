@@ -101,6 +101,13 @@ export const API_RESPONSES = {
   USER_UPDATED_SUCCESSFULLY: "User updated successfully.",
   USER_NOT_EXISTS: "User does not exist.",
   USER_EXISTS: "User already exist.",
+  EMPLOYEE_ID_EXISTS: "EMPLOYEE_ID_EXISTS",
+  EMPLOYEE_ID_EXISTS_MESSAGE: (employeeId: string, organisationCode: string) =>
+    `Employee ID ${employeeId} already exists in organisation ${organisationCode}.`,
+  ORGANISATION_NAME_REQUIRED:
+    "organisationName is required when organisationCode is new.",
+  ORGANISATION_CODE_REQUIRED:
+    "organisationCode is required when employeeId is given.",
   DUPLICATE_DATA: "Duplicate data.",
   USER_ALREADY_EXISTS: "User already exists.",
   SERVER_ERROR: "Internal server error",

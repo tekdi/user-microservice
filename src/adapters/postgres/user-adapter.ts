@@ -608,24 +608,18 @@ export class PostgresUserService implements IServicelocator {
       (key) => key !== 'district' && key !== 'state'
     );
 
-    // Aspire Leaders: every user list screen and CSV export shows students
-    // only, so a request that names no role is read as a request for students.
-    // A caller that wants some other role - or deliberately wants every role -
-    // keeps sending `filters.role` and is untouched by this.
-    //
-    // The default is matched on `Roles.code` rather than `Roles.name` (see
-    // `roleFilterColumn` below), because a caller-supplied role is a display
-    // name while the constant is a code, and a per-tenant or renamed "Student"
-    // row would otherwise silently match nothing.
-    //
-    // `role: "all"` (any case) opts out of the default and of role filtering
-    // altogether, so every role in the tenant is listed.
-    const roleFilterIsDefault = !filters?.role;
-    const roleFilterColumn = roleFilterIsDefault ? 'code' : 'name';
+    // Swadhaar: no implicit role default. The earlier Aspire "Student" default
+    // hid every Swadhaar user (Trainer, District In-charge, ARM, admins) when a
+    // screen sent no role. With no role filter the list returns every role in
+    // the caller's tenant (tenant scoping below). `role: "all"` still works.
+    const roleFilterColumn = 'name';
     filters = { ...(filters ?? {}) };
-    if (roleFilterIsDefault) {
-      filters.role = STUDENT_ROLE_CODE;
-    } else if (String(filters.role).trim().toLowerCase() === 'all') {
+    if (
+      filters.role === undefined ||
+      filters.role === null ||
+      String(filters.role).trim() === '' ||
+      String(filters.role).trim().toLowerCase() === 'all'
+    ) {
       delete filters.role;
     }
 
@@ -658,6 +652,21 @@ export class PostgresUserService implements IServicelocator {
               whereCondition += ` AND `;
             }
             whereCondition += ` ${applicationCountryCondition}`;
+            index++;
+          }
+          continue;
+        }
+
+        // Task 21: organisation filters. Handled explicitly because the generic
+        // column branch below does an exact "=" on String(value), which breaks
+        // for arrays. Empty values add no condition.
+        if (key === 'organisationCode' || key === 'employeeId') {
+          const condition = this.buildOrganisationFilterCondition(key, value);
+          if (condition) {
+            if (index > 0) {
+              whereCondition += ` AND `;
+            }
+            whereCondition += ` ${condition}`;
             index++;
           }
           continue;
@@ -869,7 +878,7 @@ export class PostgresUserService implements IServicelocator {
     // Fix the SQL query construction - add proper WHERE clause
     const whereClause =
       whereCondition && whereCondition !== 'WHERE' ? whereCondition : '';
-    const query = `SELECT U."userId", U."username",U."email", U."firstName", U."middleName", U."lastName", U."gender", U."dob", R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", U.status,U.country,U."permanentCountry" , U."currentCountry" ,U.auto_tags, COUNT(*) OVER() AS total_count 
+    const query = `SELECT U."userId", U."username",U."email", U."firstName", U."middleName", U."lastName", U."gender", U."dob", R."name" AS role, U."mobile", U."createdBy",U."updatedBy", U."createdAt", U."updatedAt", U.status,U.country,U."permanentCountry" , U."currentCountry" ,U.auto_tags, U."employeeId", U."organisationCode", U."organisationName", COUNT(*) OVER() AS total_count
       FROM  public."Users" U
       LEFT JOIN public."UserRolesMapping" UR
       ON UR."userId" = U."userId"
@@ -1116,6 +1125,9 @@ export class PostgresUserService implements IServicelocator {
         'permanentCountry',
         'currentCountry',
         'auto_tags',
+        'employeeId',
+        'organisationCode',
+        'organisationName',
       ],
     });
     if (!userDetails) {
@@ -1435,7 +1447,31 @@ export class PostgresUserService implements IServicelocator {
       // docs/regional-admin-cohort-country-report.md §11.
       const previousCurrentCountry = user.currentCountry;
 
-      
+      // Task 20: employeeId / organisationCode / organisationName. Validated
+      // before Keycloak and the DB write so a 409 leaves nothing half-updated.
+      if (userDto?.userData) {
+        const headerTenantId = request?.headers?.tenantid;
+        const tenantIds =
+          headerTenantId && isUUID(headerTenantId)
+            ? [headerTenantId]
+            : await this.getUserTenantIds(userDto.userId);
+        const orgIssue = await this.applyOrganisationFields(
+          userDto.userData,
+          tenantIds,
+          loggedInUserId,
+          user
+        );
+        if (orgIssue) {
+          return APIResponse.error(
+            response,
+            apiId,
+            orgIssue.error,
+            orgIssue.message,
+            orgIssue.status
+          );
+        }
+      }
+
 
       //mutideviceId
       if (userDto?.userData?.deviceId) {
@@ -1825,6 +1861,183 @@ export class PostgresUserService implements IServicelocator {
     }
   }
 
+  /**
+   * Task 20 (Swadhaar): trims employeeId / organisationName and upper-cases
+   * organisationCode in place. Empty strings become null so "clear" works.
+   * Only touches keys the caller actually sent.
+   */
+  private normaliseOrganisationFields(data: Record<string, any>): void {
+    if (!data) return;
+    const clean = (v: unknown) =>
+      v === undefined || v === null ? v : String(v).trim() || null;
+    if ('employeeId' in data) data.employeeId = clean(data.employeeId);
+    if ('organisationName' in data) {
+      data.organisationName = clean(data.organisationName);
+    }
+    if ('organisationCode' in data) {
+      const code = clean(data.organisationCode);
+      data.organisationCode = code ? String(code).toUpperCase() : code;
+    }
+  }
+
+  /**
+   * Task 20: resolves the organisation for a code in a tenant. An existing code
+   * always keeps its stored name, so one code never ends up with two names. A
+   * new code needs a name and is inserted into "Organisations".
+   * Returns the name to store on the user, or an error message.
+   */
+  private async resolveOrganisation(
+    tenantId: string | null,
+    organisationCode: string,
+    organisationName: string | null | undefined,
+    actorId: string | null
+  ): Promise<{ name?: string; error?: string }> {
+    const existing = await this.usersRepository.query(
+      `SELECT "name" FROM public."Organisations"
+        WHERE "code" = $1 AND "tenantId" IS NOT DISTINCT FROM $2 LIMIT 1`,
+      [organisationCode, tenantId]
+    );
+    if (existing.length > 0) {
+      return { name: existing[0].name };
+    }
+    if (!organisationName) {
+      return { error: API_RESPONSES.ORGANISATION_NAME_REQUIRED };
+    }
+    // ON CONFLICT covers two concurrent creates with the same new code; the
+    // re-select below then returns whichever name won.
+    await this.usersRepository.query(
+      `INSERT INTO public."Organisations" ("tenantId", "code", "name", "createdBy")
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT DO NOTHING`,
+      [tenantId, organisationCode, organisationName, actorId]
+    );
+    const saved = await this.usersRepository.query(
+      `SELECT "name" FROM public."Organisations"
+        WHERE "code" = $1 AND "tenantId" IS NOT DISTINCT FROM $2 LIMIT 1`,
+      [organisationCode, tenantId]
+    );
+    return { name: saved[0]?.name ?? organisationName };
+  }
+
+  /**
+   * Task 20: true when another user in any of the given tenants already has
+   * this (organisationCode, employeeId). Case-insensitive on employeeId.
+   * Checked in the service, not by a DB unique index, because Users link to
+   * tenants many-to-many through UserTenantMapping.
+   */
+  private async employeeIdExists(
+    tenantIds: string[],
+    organisationCode: string,
+    employeeId: string,
+    excludeUserId?: string
+  ): Promise<boolean> {
+    const params: any[] = [organisationCode, employeeId];
+    let tenantClause = '';
+    const validTenantIds = (tenantIds ?? []).filter((t) => t && isUUID(t));
+    if (validTenantIds.length > 0) {
+      params.push(validTenantIds);
+      tenantClause = `AND EXISTS (SELECT 1 FROM public."UserTenantMapping" UTM
+        WHERE UTM."userId" = U."userId" AND UTM."tenantId" = ANY($${params.length}::uuid[]))`;
+    }
+    let excludeClause = '';
+    if (excludeUserId) {
+      params.push(excludeUserId);
+      excludeClause = `AND U."userId" <> $${params.length}`;
+    }
+    const rows = await this.usersRepository.query(
+      `SELECT 1 FROM public."Users" U
+        WHERE U."organisationCode" = $1
+          AND LOWER(U."employeeId") = LOWER($2)
+          ${tenantClause} ${excludeClause}
+        LIMIT 1`,
+      params
+    );
+    return rows.length > 0;
+  }
+
+  /**
+   * Task 20: validates and fills employeeId / organisationCode / organisationName
+   * on a create or update payload (mutates `data`). `current` is the stored
+   * user on update, so a partial update is checked against the merged values.
+   * Returns null when valid, or { status, message } to send back.
+   */
+  private async applyOrganisationFields(
+    data: Record<string, any>,
+    tenantIds: string[],
+    actorId: string | null,
+    current?: Partial<User>
+  ): Promise<{ status: HttpStatus; error: string; message: string } | null> {
+    const touched =
+      data &&
+      ('employeeId' in data ||
+        'organisationCode' in data ||
+        'organisationName' in data);
+    if (!touched) return null;
+
+    this.normaliseOrganisationFields(data);
+
+    const code =
+      'organisationCode' in data
+        ? data.organisationCode
+        : current?.organisationCode ?? null;
+    const employeeId =
+      'employeeId' in data ? data.employeeId : current?.employeeId ?? null;
+
+    if (employeeId && !code) {
+      return {
+        status: HttpStatus.BAD_REQUEST,
+        error: API_RESPONSES.BAD_REQUEST,
+        message: API_RESPONSES.ORGANISATION_CODE_REQUIRED,
+      };
+    }
+
+    if (code) {
+      const codeChanged = code !== current?.organisationCode;
+      const nameSent = 'organisationName' in data;
+      if (codeChanged || nameSent) {
+        const org = await this.resolveOrganisation(
+          tenantIds?.[0] ?? null,
+          code,
+          data.organisationName,
+          actorId
+        );
+        if (org.error) {
+          return {
+            status: HttpStatus.BAD_REQUEST,
+            error: API_RESPONSES.BAD_REQUEST,
+            message: org.error,
+          };
+        }
+        data.organisationName = org.name;
+      }
+    } else if ('organisationCode' in data) {
+      // Code cleared: the name goes with it.
+      data.organisationName = null;
+    }
+
+    if (
+      code &&
+      employeeId &&
+      (await this.employeeIdExists(tenantIds, code, employeeId, current?.userId))
+    ) {
+      return {
+        status: HttpStatus.CONFLICT,
+        error: API_RESPONSES.EMPLOYEE_ID_EXISTS,
+        message: API_RESPONSES.EMPLOYEE_ID_EXISTS_MESSAGE(employeeId, code),
+      };
+    }
+    return null;
+  }
+
+  /** Tenants a user belongs to (used when an update has no tenantid header). */
+  private async getUserTenantIds(userId: string): Promise<string[]> {
+    const rows = await this.userTenantMappingRepository.find({
+      where: { userId },
+      select: ['tenantId'],
+    });
+    return rows.map((r) => r.tenantId);
+  }
+
   async updateBasicUserDetails(
     userId: string,
     userData: Partial<User>
@@ -2167,6 +2380,31 @@ export class PostgresUserService implements IServicelocator {
         );
       }
 
+      // Task 20: organisation identity, checked before the Keycloak user is
+      // created so a duplicate Employee ID never leaves an orphan IdP account.
+      {
+        const tenantIds = (userCreateDto.tenantCohortRoleMapping ?? [])
+          .map((m) => m?.tenantId)
+          .filter(Boolean);
+        if (tenantIds.length === 0 && request?.headers?.tenantid) {
+          tenantIds.push(request.headers.tenantid);
+        }
+        const orgIssue = await this.applyOrganisationFields(
+          userCreateDto as any,
+          tenantIds,
+          userCreateDto.createdBy ?? null
+        );
+        if (orgIssue) {
+          return APIResponse.error(
+            response,
+            apiId,
+            orgIssue.error,
+            orgIssue.message,
+            orgIssue.status
+          );
+        }
+      }
+
       userCreateDto.username = userCreateDto.username.toLocaleLowerCase();
       const userSchema = new UserCreateDto(userCreateDto);
 
@@ -2443,6 +2681,10 @@ export class PostgresUserService implements IServicelocator {
     user.country = userDto?.country ?? null;
     user.permanentCountry = userDto?.permanentCountry ?? null;
     user.currentCountry = userDto?.currentCountry ?? null;
+    // Task 20 (already normalised and checked in createUser)
+    user.employeeId = (userDto as UserCreateDto)?.employeeId ?? null;
+    user.organisationCode = (userDto as UserCreateDto)?.organisationCode ?? null;
+    user.organisationName = (userDto as UserCreateDto)?.organisationName ?? null;
 
     // Handle SSO-specific fields
     if ('provider' in userDto) {
@@ -4687,5 +4929,44 @@ export class PostgresUserService implements IServicelocator {
     if (!value || typeof value !== 'string') return '';
     // Escape single quotes by doubling them (PostgreSQL standard)
     return value.replace(/'/g, "''");
+  }
+
+  /**
+   * Task 21: SQL condition for the organisationCode / employeeId list filters.
+   * - organisationCode: exact, case-insensitive (codes are stored upper-case);
+   *   a string or an array.
+   * - employeeId: a string is a partial ILIKE match; an array is an exact,
+   *   case-insensitive IN match.
+   * Returns '' when the value carries nothing usable, so no condition is added.
+   */
+  private buildOrganisationFilterCondition(
+    key: 'organisationCode' | 'employeeId',
+    value: unknown
+  ): string {
+    const values = (Array.isArray(value) ? value : [value])
+      .filter((v) => v !== undefined && v !== null)
+      .map((v) => String(v).trim())
+      .filter((v) => v.length > 0);
+    if (values.length === 0) return '';
+
+    if (key === 'organisationCode') {
+      const list = values
+        .map((v) => `'${this.escapeSqlLiteral(v.toUpperCase())}'`)
+        .join(',');
+      return `U."organisationCode" IN (${list})`;
+    }
+
+    if (!Array.isArray(value)) {
+      // Escape LIKE wildcards too, so "E_1" doesn't match "EX1".
+      const pattern = this.escapeSqlLiteral(values[0]).replace(
+        /[\\%_]/g,
+        (c) => `\\${c}`
+      );
+      return `U."employeeId" ILIKE '%${pattern}%'`;
+    }
+    const list = values
+      .map((v) => `'${this.escapeSqlLiteral(v.toLowerCase())}'`)
+      .join(',');
+    return `LOWER(U."employeeId") IN (${list})`;
   }
 }

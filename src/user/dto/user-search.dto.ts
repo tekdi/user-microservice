@@ -79,6 +79,23 @@ export class setFilters {
   })
   username: string;
 
+  // Task 21: organisation filters
+  @ApiPropertyOptional({
+    description:
+      'Organisation code: exact, case-insensitive match. A string or an array of codes.',
+    example: ['SWADHAR1', 'SWADHAR2'],
+  })
+  @IsOptional()
+  organisationCode?: string | string[];
+
+  @ApiPropertyOptional({
+    description:
+      'Employee ID: a string is a partial (ILIKE) match; an array is an exact IN match',
+    example: 'E-10',
+  })
+  @IsOptional()
+  employeeId?: string | string[];
+
   @ApiPropertyOptional({
     type: String,
     description: 'User Id',

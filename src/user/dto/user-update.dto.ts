@@ -8,9 +8,12 @@ import {
   ValidateIf,
   Length,
   IsDate,
+  MaxLength,
+  Matches,
 } from 'class-validator';
 import { Expose, Type } from 'class-transformer';
 import { UserStatus } from '../entities/user-entity';
+import { ORG_IDENTIFIER_PATTERN } from './user-create.dto';
 import { ApiProperty } from '@nestjs/swagger';
 
 export enum ActionType {
@@ -192,6 +195,31 @@ class UserDataDTO {
   @IsArray()
   @IsString({ each: true })
   auto_tags?: string[];
+
+  // Task 20: organisation identity. Send null to clear.
+  @ApiProperty({ type: () => String, required: false, example: 'E-101' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  @Matches(ORG_IDENTIFIER_PATTERN, {
+    message: 'employeeId may contain only letters, numbers, _ and -',
+  })
+  employeeId?: string | null;
+
+  @ApiProperty({ type: () => String, required: false, example: 'SWADHAR1' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  @Matches(ORG_IDENTIFIER_PATTERN, {
+    message: 'organisationCode may contain only letters, numbers, _ and -',
+  })
+  organisationCode?: string | null;
+
+  @ApiProperty({ type: () => String, required: false })
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  organisationName?: string | null;
 }
 class CustomFieldDTO {
   @ApiProperty({ type: () => String })
