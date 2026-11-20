@@ -12,6 +12,15 @@ import { Response } from 'express';
  */
 export interface IServicelocatorcohortMembers {
   /**
+   * Task 16a: the caller's active groups with their role in each (learner / reviewer)
+   * @param userId - The signed-in user (from the token)
+   * @param tenantId - Only groups of this tenant
+   * @param role - Optional group role filter
+   * @param response - Express response object
+   */
+  getMyGroups(userId: string, tenantId: string, role: string | undefined, response: Response);
+
+  /**
    * Creates a new cohort member
    * @param loginUser - The user ID of the person creating the cohort member
    * @param cohortMembersDto - Data transfer object containing cohort member information
