@@ -107,11 +107,13 @@ export class PostgresAssignroleService {
       }
 
       if (result.length == 0) {
+        // Nothing saved: say why (e.g. a group role, Task 8), not only "Invalid User ID"
+        const reasons = errors.map((e) => e.errorMessage).filter(Boolean);
         return APIResponse.error(
           response,
           apiId,
           `Please Enter Valid User ID`,
-          "Invalid User ID",
+          reasons.length ? reasons.join(" ") : "Invalid User ID",
           HttpStatus.BAD_REQUEST
         );
       }

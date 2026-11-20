@@ -183,8 +183,8 @@ export class PostgresRoleService {
           return APIResponse.error(
             response,
             apiId,
-            refusal,
             "Bad Request",
+            refusal,
             HttpStatus.BAD_REQUEST
           );
         }
@@ -194,8 +194,8 @@ export class PostgresRoleService {
         return APIResponse.error(
           response,
           apiId,
-          "Send at least one of title, displayName, roleType, description",
           "Bad Request",
+          "Send at least one of title, displayName, roleType, description",
           HttpStatus.BAD_REQUEST
         );
       }
