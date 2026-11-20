@@ -5,6 +5,10 @@ import { CohortMembersSearchDto } from 'src/cohortMembers/dto/cohortMembers-sear
 import {
   CohortMembers,
   MemberStatus,
+  COHORT_ROLE_CODES,
+  COHORT_ROLE_DISPLAY_NAMES,
+  CohortRoleCode,
+  DEFAULT_COHORT_ROLE,
 } from 'src/cohortMembers/entities/cohort-member.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
@@ -461,6 +465,7 @@ export class PostgresCohortMembersService {
         'permanentCountry',
         'currentCountry',
         'auto_tags',
+        'cohortRole',
         'createdAt',
         'updatedAt',
       ];
@@ -1393,6 +1398,16 @@ export class PostgresCohortMembersService {
               'COHORT_MEMBER_SEARCH'
             );
           }
+          case 'cohortRole': {
+            // Task 16a: group role (learner / reviewer) on the membership
+            const roles = this.toCohortRoleFilter(value);
+            if (roles.length === 0) {
+              return null;
+            }
+            const placeholders = roles.map(() => `$${paramIndex++}`).join(', ');
+            queryParams.push(...roles);
+            return `CM."cohortRoleCode" IN (${placeholders})`;
+          }
           case 'userId': {
             // FIXED: Handle userId as array (wrapped by searchCohortMembers logic) or single value
             if (Array.isArray(value)) {
@@ -1524,6 +1539,7 @@ export class PostgresCohortMembersService {
       R."name" AS role, U."district", U."state", U."mobile", U."deviceId", U."gender", 
       U."dob", U."country", U."permanentCountry", U."currentCountry", U."auto_tags",
       U."employeeId", U."organisationCode", U."organisationName",
+      CM."cohortRoleCode",
       CM."status", CM."statusReason", CM."cohortMembershipId", CM."cohortId", 
       CM."createdAt", CM."updatedAt", U."createdBy", U."updatedBy", 
       COUNT(*) OVER() AS total_count  
@@ -1581,7 +1597,7 @@ export class PostgresCohortMembersService {
     // FIXED: Use parameterized query to prevent SQL injection
     const result = await this.usersRepository.query(query, queryParams);
 
-    return result;
+    return this.withCohortRoleName(result);
   }
 
   // Generic helper method to build base query with common logic
@@ -1744,6 +1760,18 @@ export class PostgresCohortMembersService {
           case 'updatedAt': {
             return this.processDateFilterCondition('updatedAt', value);
           }
+          case 'cohortRole': {
+            // Task 16a: same as in getUsers()
+            const roles = this.toCohortRoleFilter(value);
+            if (roles.length === 0) {
+              return null;
+            }
+            const placeholders = roles
+              .map(() => `$${parameterIndex++}`)
+              .join(', ');
+            parameters.push(...roles);
+            return `CM."cohortRoleCode" IN (${placeholders})`;
+          }
           default: {
             parameters.push(value);
             return `CM."${key}"=$${parameterIndex++}`;
@@ -1788,7 +1816,7 @@ export class PostgresCohortMembersService {
       }
     }
 
-    let query = `SELECT U."userId", U."username",U."email", U."firstName", U."middleName", U."lastName", R."name" AS role, U."district", U."state",U."mobile",U."deviceId",U."gender",U."dob",U."country",U."permanentCountry", U."currentCountry",U."auto_tags", U."employeeId", U."organisationCode", U."organisationName",
+    let query = `SELECT U."userId", U."username",U."email", U."firstName", U."middleName", U."lastName", R."name" AS role, U."district", U."state",U."mobile",U."deviceId",U."gender",U."dob",U."country",U."permanentCountry", U."currentCountry",U."auto_tags", U."employeeId", U."organisationCode", U."organisationName", CM."cohortRoleCode",
       CM."status", CM."statusReason",CM."cohortMembershipId",CM."cohortId",CM."status",CM."createdAt", CM."updatedAt",U."createdBy",U."updatedBy", COUNT(*) OVER() AS total_count  
       FROM public."CohortMembers" CM
       INNER JOIN public."Users" U
@@ -1918,7 +1946,93 @@ export class PostgresCohortMembersService {
     );
 
     const result = await this.usersRepository.query(query, parameters);
-    return result;
+    return this.withCohortRoleName(result);
+  }
+
+  /**
+   * Task 16a: GET cohortmember/my-groups. The active groups of the signed-in user in this tenant,
+   * with the user's role in each (learner / reviewer). `role` narrows to one group role.
+   * The user's own role (UserRolesMapping) plays no part here.
+   */
+  public async getMyGroups(
+    userId: string,
+    tenantId: string,
+    role: string | undefined,
+    res: Response
+  ) {
+    const apiId = APIID.COHORT_MEMBER_MY_GROUPS;
+    try {
+      const roleFilter = role ? this.toCohortRoleFilter(role) : [];
+      if (role && roleFilter.length === 0) {
+        return APIResponse.error(
+          res,
+          apiId,
+          API_RESPONSES.BAD_REQUEST,
+          `role must be one of: ${COHORT_ROLE_CODES.join(', ')}`,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+      const params: any[] = [userId, tenantId];
+      let roleCondition = '';
+      if (roleFilter.length > 0) {
+        params.push(roleFilter);
+        roleCondition = ` AND CM."cohortRoleCode" = ANY($3::text[])`;
+      }
+      const rows = await this.cohortMembersRepository.query(
+        `SELECT CM."cohortMembershipId", CM."cohortId", C."name" AS "cohortName",
+                C."type" AS "cohortType", C."status" AS "cohortStatus",
+                C."cohort_startDate", C."cohort_endDate",
+                CM."cohortRoleCode", CM."status" AS "membershipStatus", CM."createdAt"
+         FROM public."CohortMembers" CM
+         INNER JOIN public."Cohort" C ON C."cohortId" = CM."cohortId"
+         WHERE CM."userId" = $1
+           AND C."tenantId" = $2
+           AND CM."status" = 'active'
+           AND COALESCE(C."status", 'active') = 'active'${roleCondition}
+         ORDER BY C."name"`,
+        params
+      );
+      const groups = this.withCohortRoleName(rows);
+      return APIResponse.success(
+        res,
+        apiId,
+        { count: groups.length, groups },
+        HttpStatus.OK,
+        API_RESPONSES.COHORT_MEMBER_GET_SUCCESSFULLY
+      );
+    } catch (e) {
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${e.message}`,
+        apiId
+      );
+      return APIResponse.error(
+        res,
+        apiId,
+        API_RESPONSES.INTERNAL_SERVER_ERROR,
+        e.message || API_RESPONSES.INTERNAL_SERVER_ERROR,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  /** Task 16a: adds the group role's display name (Learner / Reviewer) to each member row */
+  private withCohortRoleName(rows: any[]): any[] {
+    if (!Array.isArray(rows)) return rows;
+    return rows.map((row) => ({
+      ...row,
+      cohortRoleName: this.isCohortRoleCode(row?.cohortRoleCode)
+        ? COHORT_ROLE_DISPLAY_NAMES[row.cohortRoleCode]
+        : row?.cohortRoleCode ?? null,
+    }));
+  }
+
+  /** Task 16a: the `cohortRole` filter (a code or a list of codes) as known codes, lower-cased */
+  private toCohortRoleFilter(value: unknown): CohortRoleCode[] {
+    const values = Array.isArray(value) ? value : [value];
+    return values
+      .map((v) => (typeof v === 'string' ? v.trim().toLowerCase() : ''))
+      .filter((v): v is CohortRoleCode => this.isCohortRoleCode(v));
   }
 
   public async updateCohortMembers(
@@ -1940,6 +2054,21 @@ export class PostgresCohortMembersService {
           'Bad Request',
           'Invalid input: Please Enter a valid UUID for cohortMembershipId.',
           HttpStatus.BAD_REQUEST
+        );
+      }
+
+      // Task 18: only an admin may change a group role. This route is also open to learners
+      // (for their own application status), and a learner must not make themself a reviewer.
+      if (
+        cohortMembersUpdateDto.cohortRoleCode !== undefined &&
+        !(await this.isUserAdmin(loginUser, tenantId))
+      ) {
+        return APIResponse.error(
+          res,
+          apiId,
+          'Forbidden',
+          'Only an admin can change a member\'s role in a group.',
+          HttpStatus.FORBIDDEN
         );
       }
 
@@ -2069,6 +2198,10 @@ export class PostgresCohortMembersService {
       if (cohortMembersUpdateDto.statusReason !== undefined) {
         updateData.statusReason = cohortMembersUpdateDto.statusReason;
       }
+      // Task 16a: group role (learner / reviewer); the user's own role is not touched
+      if (cohortMembersUpdateDto.cohortRoleCode !== undefined) {
+        updateData.cohortRoleCode = cohortMembersUpdateDto.cohortRoleCode;
+      }
       if (cohortMembersUpdateDto.createdBy !== undefined) {
         updateData.createdBy = cohortMembersUpdateDto.createdBy;
       }
@@ -2132,8 +2265,11 @@ export class PostgresCohortMembersService {
         );
       }
 
-      // 2. Update Elasticsearch (non-blocking, fire-and-forget)
-      if (isElasticsearchEnabled()) {
+      // 2. Update Elasticsearch (non-blocking, fire-and-forget). A group-role-only change
+      // (Task 16a) has no status, and the status fallback below would write 'active'.
+      const groupRoleOnlyChange =
+        status === undefined && cohortMembersUpdateDto.cohortRoleCode !== undefined;
+      if (isElasticsearchEnabled() && !groupRoleOnlyChange) {
         parallelOperations.push(
           (async () => {
             try {
@@ -2768,11 +2904,14 @@ export class PostgresCohortMembersService {
   public async createBulkCohortMembers(
     loginUser: any,
     cohortMembersDto: {
-      userId: string[];
+      userId?: string[];
       cohortId: string[];
       removeCohortId?: string[];
       status?: string; // Allow status for bulk import
       statusReason?: string; // Allow statusReason for bulk import
+      // Task 16a: group role per member, or one role for every userId
+      members?: { userId: string; cohortRoleCode?: string }[];
+      cohortRoleCode?: string;
     },
     response: Response,
     tenantId: string,
@@ -2802,14 +2941,21 @@ export class PostgresCohortMembersService {
       );
     }
 
+    // Task 16a: `members` carries a group role per user; the older `userId` list takes the one
+    // top-level cohortRoleCode. No role given: new members are learners, existing ones keep theirs.
+    const memberEntries = this.toBulkMemberEntries(cohortMembersDto);
+    const roleByUserId = new Map(
+      memberEntries.map((entry) => [entry.userId, entry.cohortRoleCode])
+    );
+
     // Aspire Leaders-specific: resolve every userId's cohort-country in one
     // batched query up front, rather than once per user inside the loop below
     // (see resolveUserCohortCountryIds() - avoids an N+1 query per bulk import).
     const userCohortCountryIds = await this.resolveUserCohortCountryIds(
-      cohortMembersDto.userId
+      memberEntries.map((entry) => entry.userId)
     );
 
-    for (const userId of cohortMembersDto.userId) {
+    for (const { userId } of memberEntries) {
       // why checking from user table because it is possible to make first time part of any cohort
       const userExists = await this.checkUserExist(userId);
       if (!userExists) {
@@ -2918,6 +3064,10 @@ export class PostgresCohortMembersService {
                   '',
                 updatedBy: loginUser,
                 updatedAt: new Date(),
+                // Re-enrolling changes the group role only when one was sent
+                ...(roleByUserId.get(userId)
+                  ? { cohortRoleCode: roleByUserId.get(userId) }
+                  : {}),
               };
 
               await this.cohortMembersRepository.update(
@@ -2956,6 +3106,7 @@ export class PostgresCohortMembersService {
                   : MemberStatus.ACTIVE,
                 statusReason: cohortMembersDto.statusReason || '',
                 userCohortCountryId,
+                cohortRoleCode: roleByUserId.get(userId) || DEFAULT_COHORT_ROLE,
               };
 
               result = await this.cohortMembersRepository.save(
@@ -3015,6 +3166,37 @@ export class PostgresCohortMembersService {
       results,
       HttpStatus.CREATED,
       API_RESPONSES.COHORTMEMBER_SUCCESSFULLY
+    );
+  }
+
+  /**
+   * Task 16a: the members of a bulkCreate request as {userId, cohortRoleCode?}. `members` wins over
+   * `userId`; a user listed twice keeps the last role given. The DTO has already checked the codes.
+   */
+  private toBulkMemberEntries(dto: {
+    userId?: string[];
+    members?: { userId: string; cohortRoleCode?: string }[];
+    cohortRoleCode?: string;
+  }): { userId: string; cohortRoleCode?: CohortRoleCode }[] {
+    const entries = dto.members?.length
+      ? dto.members.map((m) => ({ userId: m.userId, cohortRoleCode: m.cohortRoleCode }))
+      : (dto.userId || []).map((userId) => ({ userId, cohortRoleCode: dto.cohortRoleCode }));
+    const byUser = new Map<string, { userId: string; cohortRoleCode?: CohortRoleCode }>();
+    for (const entry of entries) {
+      const code = entry.cohortRoleCode?.trim().toLowerCase();
+      byUser.set(entry.userId, {
+        userId: entry.userId,
+        cohortRoleCode: this.isCohortRoleCode(code) ? code : undefined,
+      });
+    }
+    return Array.from(byUser.values());
+  }
+
+  /** Task 16a: whether a value is a known group role code (learner / reviewer) */
+  private isCohortRoleCode(value: unknown): value is CohortRoleCode {
+    return (
+      typeof value === 'string' &&
+      (COHORT_ROLE_CODES as readonly string[]).includes(value)
     );
   }
 
@@ -3344,6 +3526,7 @@ export class PostgresCohortMembersService {
           'permanentCountry',
           'currentCountry',
           'auto_tags',
+          'cohortRole',
           'createdAt',
           'updatedAt',
         ];
@@ -3778,6 +3961,7 @@ export class PostgresCohortMembersService {
       'permanentCountry',
       'currentCountry',
       'auto_tags',
+      'cohortRole',
       'createdAt',
       'updatedAt',
     ];

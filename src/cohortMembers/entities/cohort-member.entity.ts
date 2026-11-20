@@ -19,6 +19,19 @@ export enum MemberStatus {
 }
 
 /**
+ * Task 16a (Swadhaar): the role a user has inside one group, separate from their own role
+ * (UserRolesMapping), which a group membership never changes. Until Task 8a seeds cohort-type
+ * roles in "Roles", the allowed codes are fixed here.
+ */
+export const COHORT_ROLE_CODES = ['learner', 'reviewer'] as const;
+export type CohortRoleCode = (typeof COHORT_ROLE_CODES)[number];
+export const DEFAULT_COHORT_ROLE: CohortRoleCode = 'learner';
+export const COHORT_ROLE_DISPLAY_NAMES: Record<CohortRoleCode, string> = {
+  learner: 'Learner',
+  reviewer: 'Reviewer',
+};
+
+/**
  * Serves the application-country EXISTS filter built by
  * buildAnyApplicationCountryCondition() (user-adapter) and
  * buildApplicationCountryCondition() (cohortMembers-adapter): "userId" seeks
@@ -88,4 +101,11 @@ export class CohortMembers {
    */
   @Column({ name: 'user_cohort_country_id', type: 'uuid', nullable: true })
   userCohortCountryId: string | null;
+
+  /**
+   * Task 16a: 'learner' or 'reviewer' in this group only (sql/022_cohort_member_role.up.sql).
+   * The user's own role in UserRolesMapping is not touched.
+   */
+  @Column({ type: 'varchar', length: 50, default: DEFAULT_COHORT_ROLE })
+  cohortRoleCode: string;
 }

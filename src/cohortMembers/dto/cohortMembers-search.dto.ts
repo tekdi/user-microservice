@@ -68,6 +68,15 @@ class FiltersDto {
   @IsArray()
   completionPercentage?: string[];
 
+  @ApiPropertyOptional({
+    type: [String],
+    description:
+      'Task 16a: group role on the membership, learner or reviewer (a code or a list of codes)',
+    example: ['reviewer'],
+  })
+  @IsOptional()
+  cohortRole?: string[] | string;
+
   /**
    * Search text to search across username, email, firstName, middleName, and lastName columns.
    * Supports space-separated terms (e.g., "john doe" will search for both "john" and "doe").

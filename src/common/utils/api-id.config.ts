@@ -66,6 +66,7 @@ export const APIID = {
   COHORT_MEMBER_UPDATE: "api.cohortmember.update",
   COHORT_MEMBER_MOVE: "api.cohortmember.move",
   COHORT_MEMBER_SEARCH: "api.cohortmember.list",
+  COHORT_MEMBER_MY_GROUPS: "api.cohortmember.myGroups",
   COHORT_MEMBER_DELETE: "api.cohortmember.delete",
   COHORT_MEMBER_EVALUATE_SHORTLISTING: "api.cohortmember.evaluateShortlisting",
   COHORT_MEMBER_SEND_REJECTION_EMAILS: "api.cohortmember.sendRejectionEmails",
