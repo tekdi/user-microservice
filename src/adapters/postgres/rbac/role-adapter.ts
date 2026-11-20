@@ -1,12 +1,19 @@
 import { HttpStatus, Injectable } from "@nestjs/common";
-import { Role } from "src/rbac/role/entities/role.entity";
+import {
+  COHORT_ROLE_TYPE,
+  DEFAULT_ROLE_TYPE,
+  Role,
+  ROLE_TYPES,
+} from "src/rbac/role/entities/role.entity";
 import { RolePrivilegeMapping } from "src/rbac/assign-privilege/entities/assign-privilege.entity";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { In, Repository } from "typeorm";
 import {
   CreateRolesDto,
+  ROLE_CODE_PATTERN,
   RoleDto,
   RolesResponseDto,
+  UpdateRoleDto,
 } from "../../../rbac/role/dto/role.dto";
 import { RoleSearchDto } from "../../../rbac/role/dto/role-search.dto";
 import { UserRoleMapping } from "src/rbac/assign-role/entities/assign-role.entity";
@@ -50,7 +57,14 @@ export class PostgresRoleService {
       // Convert role name to lowercase
       for (const roleDto of createRolesDto.roles) {
         const tenantId = createRolesDto.tenantId;
-        const code = roleDto.title.toLowerCase().replace(/\s+/g, "_");
+        // Task 8: an explicit code wins; otherwise it is made from the title as before
+        const code = roleDto.code || this.codeFromTitle(roleDto.title);
+        if (!ROLE_CODE_PATTERN.test(code)) {
+          errors.push({
+            errorMessage: `Role '${roleDto.title}': send a code made of lower-case letters, digits and _ (the title gives '${code}').`,
+          });
+          continue;
+        }
 
         // Check if role name already exists
         const existingRole = await this.roleRepository.findOne({
@@ -66,6 +80,8 @@ export class PostgresRoleService {
         const newRoleDto = new RoleDto({
           ...roleDto,
           code,
+          displayName: roleDto.displayName?.trim() || roleDto.title,
+          roleType: roleDto.roleType || DEFAULT_ROLE_TYPE,
           createdAt: new Date(),
           updatedAt: new Date(),
           createdBy: request.user.userId, // Assuming you have a user object in the request
@@ -124,17 +140,68 @@ export class PostgresRoleService {
     }
   }
 
+  /**
+   * Task 8: changes the title, display name, description and (with limits) the role type.
+   * The code is never changed: the middleware role checks and the apps use it.
+   */
   public async updateRole(
     roleId: string,
     request: any,
-    roleDto: RoleDto,
+    roleDto: UpdateRoleDto,
     response: Response
   ) {
     const apiId = APIID.ROLE_UPDATE;
     try {
-      const code = roleDto.title.toLowerCase().replace(/\s+/g, "_");
-      roleDto.code = code;
-      const result = await this.roleRepository.update(roleId, roleDto);
+      const role = await this.roleRepository.findOne({ where: { roleId } });
+      if (!role) {
+        return APIResponse.error(
+          response,
+          apiId,
+          "Role not found",
+          "Not found",
+          HttpStatus.NOT_FOUND
+        );
+      }
+
+      const update: Partial<Role> = {};
+      if (roleDto.title !== undefined) update.title = roleDto.title.trim();
+      if (roleDto.displayName !== undefined) {
+        update.displayName = roleDto.displayName.trim() || null;
+      }
+      if (roleDto.description !== undefined) {
+        update.description = roleDto.description;
+      }
+      if (
+        roleDto.roleType !== undefined &&
+        roleDto.roleType !== role.roleType
+      ) {
+        const refusal = await this.roleTypeChangeRefusal(
+          role,
+          roleDto.roleType
+        );
+        if (refusal) {
+          return APIResponse.error(
+            response,
+            apiId,
+            refusal,
+            "Bad Request",
+            HttpStatus.BAD_REQUEST
+          );
+        }
+        update.roleType = roleDto.roleType;
+      }
+      if (Object.keys(update).length === 0) {
+        return APIResponse.error(
+          response,
+          apiId,
+          "Send at least one of title, displayName, roleType, description",
+          "Bad Request",
+          HttpStatus.BAD_REQUEST
+        );
+      }
+      update.updatedBy = request?.user?.userId ?? role.updatedBy;
+
+      const result = await this.roleRepository.update(roleId, update);
       return APIResponse.success(
         response,
         apiId,
@@ -152,6 +219,51 @@ export class PostgresRoleService {
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
+  }
+
+  /** Why a role's type may not change, or null when it may */
+  private async roleTypeChangeRefusal(
+    role: Role,
+    roleType: string
+  ): Promise<string | null> {
+    if (role.isSystemRole) {
+      return "The role type of a system role cannot be changed.";
+    }
+    // A group role must never be held as a user's own role, and the reverse
+    if (role.roleType === COHORT_ROLE_TYPE || roleType === COHORT_ROLE_TYPE) {
+      const holders = await this.userRoleMappingRepository.count({
+        where: { roleId: role.roleId },
+      });
+      if (holders > 0) {
+        return `${holders} user(s) hold this role, so it cannot become or stop being a group role.`;
+      }
+    }
+    return null;
+  }
+
+  private codeFromTitle(title: string): string {
+    return (title || "").trim().toLowerCase().replace(/\s+/g, "_");
+  }
+
+  /**
+   * Task 8: filters.roleType (one type or a list). Left out: every type except cohort, so the
+   * existing role dropdowns (own role of a user) never offer a group role.
+   * Returns null when a value is not a role type.
+   */
+  private toRoleTypeFilter(value: unknown): string[] | null {
+    if (value === undefined || value === null || value === "") {
+      return ROLE_TYPES.filter((t) => t !== COHORT_ROLE_TYPE);
+    }
+    const list = (Array.isArray(value) ? value : String(value).split(","))
+      .map((v) => String(v).trim())
+      .filter(Boolean);
+    if (
+      list.length === 0 ||
+      list.some((v) => !(ROLE_TYPES as readonly string[]).includes(v))
+    ) {
+      return null;
+    }
+    return list;
   }
 
   public async searchRole(roleSearchDto: RoleSearchDto, response: Response) {
@@ -218,6 +330,16 @@ export class PostgresRoleService {
           );
         }
       }
+      const roleTypes = this.toRoleTypeFilter(whereClause.roleType);
+      if (!roleTypes) {
+        return APIResponse.error(
+          response,
+          APIID.ROLE_SEARCH,
+          `roleType must be one or more of: ${ROLE_TYPES.join(", ")}`,
+          "Invalid roleType value.",
+          HttpStatus.BAD_REQUEST
+        );
+      }
       if (
         whereClause.userId &&
         whereClause.tenantId &&
@@ -240,6 +362,8 @@ export class PostgresRoleService {
             roleId: data.roleid,
             title: data.title,
             code: data.code,
+            displayName: data.displayname || data.title,
+            roleType: data.roletype,
             privileges: roleResult ? roleResult : [],
           };
         });
@@ -270,7 +394,8 @@ export class PostgresRoleService {
       } else if (whereClause.tenantId && whereClause.field === "Privilege") {
         const userRoleData = await this.findRoleData(
           whereClause.tenantId,
-          isSystemRole
+          isSystemRole,
+          roleTypes
         );
         const result = await this.findPrivilegeByRoleId(
           userRoleData.map((data) => data.roleId)
@@ -283,6 +408,8 @@ export class PostgresRoleService {
             roleId: data.roleId,
             title: data.title,
             code: data.code,
+            displayName: data.displayName,
+            roleType: data.roleType,
             privileges: roleResult ? roleResult : [],
           };
         });
@@ -296,7 +423,8 @@ export class PostgresRoleService {
       } else if (whereClause.tenantId && !whereClause.field) {
         const data = await this.findRoleData(
           whereClause.tenantId,
-          isSystemRole
+          isSystemRole,
+          roleTypes
         );
         return APIResponse.success(
           response,
@@ -391,18 +519,33 @@ export class PostgresRoleService {
     }
   }
 
-  public async findRoleData(id: string, isSystemRole?: boolean) {
+  /**
+   * Roles of a tenant. Task 8: also returns displayName (the title when empty) and roleType;
+   * `roleTypes` limits the types (callers that pass none get every type).
+   */
+  public async findRoleData(
+    id: string,
+    isSystemRole?: boolean,
+    roleTypes?: string[]
+  ) {
     const where: any = {
       tenantId: id,
     };
     if (isSystemRole !== undefined) {
       where.isSystemRole = isSystemRole;
     }
+    if (roleTypes?.length) {
+      where.roleType = In(roleTypes);
+    }
     const data = await this.roleRepository.find({
       where,
-      select: ["roleId", "title", "code"],
+      select: ["roleId", "title", "code", "displayName", "roleType"],
+      order: { title: "ASC" },
     });
-    return data;
+    return data.map((role) => ({
+      ...role,
+      displayName: role.displayName || role.title,
+    }));
   }
 
   public async findUserRoleData(
@@ -413,7 +556,13 @@ export class PostgresRoleService {
     const query = this.userRoleMappingRepository
       .createQueryBuilder("urp")
       .innerJoin(Role, "r", "r.roleId=urp.roleId")
-      .select(["urp.roleId as roleid", "r.title as title", "r.code as code"])
+      .select([
+        "urp.roleId as roleid",
+        "r.title as title",
+        "r.code as code",
+        "r.displayName as displayname",
+        "r.roleType as roletype",
+      ])
       .where("urp.userId= :userId", { userId })
       .andWhere("urp.tenantId=:tenantId", { tenantId });
 
