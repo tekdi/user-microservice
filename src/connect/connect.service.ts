@@ -1299,7 +1299,9 @@ export class ConnectService {
               WHERE c1."cohortId" = cm."cohortId"
               LIMIT 1
            ) c
-          WHERE cm."userId" = cp."userId" AND cm.status = 'active'
+          -- completed cohorts only, same rule as the cards and profile
+          -- (CohortMembers.status is mostly submitted / shortlisted, rarely active)
+          WHERE cm."userId" = cp."userId" AND cm."cohortCoursesCompleted"
        ) co ON true
        LEFT JOIN LATERAL (
          SELECT p.name AS "currentPathway"

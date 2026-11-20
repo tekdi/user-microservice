@@ -69,16 +69,15 @@ export const CONNECT_REPORT_REASON_KEYS: string[] = [
   ...CONNECT_REPORT_REASONS.map((r) => r.key),
 ];
 
-/** Safety concern emails (notification service templates, context USER) */
+/**
+ * Safety concern email to the reporter (notification service template,
+ * context USER). Only the reporter is emailed; admins see reports in the
+ * Connect report export.
+ */
 export const CONNECT_SAFETY_EMAIL = {
   // same context as the other user-service emails (pathways, cohort members)
   CONTEXT: "USER",
   REPORTER_KEY: "OnConnectSafetyConcernReporter",
-  ADMIN_KEY: "OnConnectSafetyConcernAdmin",
-  LINKEDIN_BLOCK_HELP_URL:
-    "https://www.linkedin.com/help/linkedin/answer/a1338373",
-  /** Used when CONNECT_SUPPORT_EMAIL is not set */
-  DEFAULT_SUPPORT_EMAIL: "alumni@aspireleaders.org",
 } as const;
 
 export const CONNECT_LIMITS = {
