@@ -35,6 +35,7 @@ import {
 
 import { ExistUserDto, SuggestUserDto, UserSearchDto } from "./dto/user-search.dto";
 import { HierarchicalLocationFiltersDto } from "./dto/user-hierarchical-search.dto";
+import { DistrictUserCountDto } from "./dto/district-user-count.dto";
 import { UserHierarchyViewDto } from "./dto/user-hierarchy-view.dto";
 import { UserService } from "./user.service";
 import { UserCreateDto } from "./dto/user-create.dto";
@@ -398,6 +399,26 @@ export class UserController {
       foldername
     );
     return { url };
+  }
+
+  @UseFilters(new AllExceptionsFilter(APIID.USER_DISTRICT_COUNT))
+  @Post("district-user-count")
+  @UseGuards(JwtAuthGuard)
+  @ApiBasicAuth("access-token")
+  @ApiBody({ type: DistrictUserCountDto })
+  @ApiOkResponse({ description: "District-wise user count fetched successfully" })
+  @ApiBadRequestResponse({ description: API_RESPONSES.BAD_REQUEST })
+  @ApiInternalServerErrorResponse({
+    description: API_RESPONSES.INTERNAL_SERVER_ERROR,
+  })
+  @UsePipes(
+    new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true })
+  )
+  public async getDistrictWiseUserCount(
+    @Res() response: Response,
+    @Body() body: DistrictUserCountDto
+  ) {
+    return await this.userService.getDistrictWiseUserCount(body, response);
   }
 
   @UseFilters(new AllExceptionsFilter(APIID.USER_LIST))
