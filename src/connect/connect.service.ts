@@ -22,6 +22,7 @@ import {
   ConnectLinkedinVisit,
   ConnectListSort,
   ConnectProfileStatus,
+  ConnectReportType,
   LINKEDIN_PROFILE_REGEX,
 } from "./constants/connect.constants";
 import {
@@ -32,8 +33,43 @@ import { JoinConnectDto } from "./dto/join-connect.dto";
 import { UpdateConnectProfileDto } from "./dto/update-connect-profile.dto";
 import { ConnectListDto } from "./dto/connect-list.dto";
 import { LinkedinClickDto } from "./dto/linkedin-click.dto";
+import { ConnectReportDto } from "./dto/connect-report.dto";
 
 type ConnectError = { code: string; message: string };
+
+/** B9: current status key → label (report export) */
+const REPORT_STATUS_LABELS: Record<string, string> = Object.fromEntries(
+  CONNECT_CURRENT_STATUSES.map((s) => [s.key, s.label])
+);
+
+/** Builds positional SQL params ($1, $2, …) next to the WHERE parts. */
+class ReportSqlParams {
+  readonly values: unknown[] = [];
+  add(value: unknown): string {
+    this.values.push(value);
+    return `$${this.values.length}`;
+  }
+}
+
+/** "from" / "to" days (UTC, both included) on a timestamptz column */
+function addReportDayRange(
+  where: string[],
+  params: ReportSqlParams,
+  column: string,
+  from?: string,
+  to?: string
+) {
+  if (from) {
+    where.push(
+      `${column} >= (${params.add(from)}::date)::timestamp AT TIME ZONE 'UTC'`
+    );
+  }
+  if (to) {
+    where.push(
+      `${column} < (${params.add(to)}::date + 1)::timestamp AT TIME ZONE 'UTC'`
+    );
+  }
+}
 
 /** All career domain groups, domains and "Open to" options (active + inactive), cached together */
 interface ConnectMasters {
@@ -1118,6 +1154,243 @@ export class ConnectService {
       [viewerId, targetIds]
     );
     return new Set(rows.map((r) => r.targetUserId));
+  }
+
+  // ---------------------------------------------------------------------
+  // B9. POST /connect/admin/reports (admin role or connect.report.view)
+  // Report rows for the admin export (Connect Management → Connect Report).
+  // Same columns as R1 / R2 in CONNECT_REPORTING.md. The page of ids is
+  // picked first, then only that page is joined to the lookups.
+  // ---------------------------------------------------------------------
+  async getReportRows(dto: ConnectReportDto, response: Response) {
+    const apiId = APIID.CONNECT_ADMIN_REPORT_EXPORT;
+    try {
+      const limit = dto.limit ?? CONNECT_LIMITS.REPORT_EXPORT_DEFAULT_LIMIT;
+      const offset = dto.offset ?? 0;
+      // one extra row tells whether there is another page
+      const rows =
+        dto.reportType === ConnectReportType.REPORTED_MEMBERS
+          ? await this.reportedRows(dto, limit + 1, offset)
+          : await this.memberRows(dto, limit + 1, offset);
+      const hasMore = rows.length > limit;
+
+      return APIResponse.success(
+        response,
+        apiId,
+        {
+          reportType: dto.reportType,
+          data: hasMore ? rows.slice(0, limit) : rows,
+          limit,
+          offset,
+          hasMore,
+        },
+        HttpStatus.OK,
+        API_RESPONSES.CONNECT_REPORT_ROWS_SUCCESS
+      );
+    } catch (error) {
+      return this.internalError(response, apiId, "getReportRows", error);
+    }
+  }
+
+  // active_members / left_members (R1)
+  private async memberRows(dto: ConnectReportDto, take: number, skip: number) {
+    const left = dto.reportType === ConnectReportType.LEFT_MEMBERS;
+    // Fixed SQL, never from the request. Status is inlined (not a $param) so
+    // the partial indexes ix_connect_profiles_report_active / _left match:
+    // the page is then read in index order and stops after offset + limit,
+    // instead of sorting every member on each call.
+    const status = left
+      ? `'${ConnectProfileStatus.LEFT}'`
+      : `'${ConnectProfileStatus.ACTIVE}'`;
+    const sortColumn = left ? `cp."leftAt"` : `cp."joinedAt"`;
+    const params = new ReportSqlParams();
+    const where = [`cp."status" = ${status}`];
+    const countries = (dto.filters?.countries ?? []).map((c) =>
+      c.toLowerCase()
+    );
+    if (countries.length) {
+      // EXISTS (not a JOIN) keeps the ordered index scan on connect_profiles
+      where.push(
+        `EXISTS (SELECT 1 FROM "Users" u
+                  WHERE u."userId" = cp."userId"
+                    AND LOWER(TRIM(u."currentCountry")) = ANY(${params.add(
+                      countries
+                    )}::text[]))`
+      );
+    }
+    addReportDayRange(
+      where,
+      params,
+      sortColumn,
+      dto.filters?.from,
+      dto.filters?.to
+    );
+    const limitParam = params.add(take);
+    const offsetParam = params.add(skip);
+
+    const rows = await this.dataSource.query(
+      `WITH page AS (
+         SELECT cp."id"
+           FROM connect_profiles cp
+          WHERE ${where.join(" AND ")}
+          ORDER BY ${sortColumn} DESC NULLS LAST, cp."id"
+          LIMIT ${limitParam} OFFSET ${offsetParam}
+       )
+       SELECT
+         cp."id"                                      AS "connectUserId",
+         cp."userId",
+         u."firstName",
+         u."lastName",
+         u."email",
+         u."mobile",
+         u."status"                                   AS "accountStatus",
+         NULLIF(TRIM(u."currentCountry"), '')         AS "country",
+         loc."state",
+         loc."city",
+         cp."status"                                  AS "connectStatus",
+         cp."termsAcceptedAt",
+         cp."joinedAt",
+         cp."leftAt",
+         cp."suspendedAt",
+         cp."headline",
+         cp."linkedinUrl",
+         g."name"                                     AS "careerDomainGroup",
+         d."name"                                     AS "careerDomain",
+         cp."currentStatus",
+         ot."openTo",
+         cp."about",
+         co."cohorts",
+         pw."currentPathway",
+         cg."clicksGiven",
+         cr."clicksReceived",
+         rf."reportsFiled",
+         rr."reportsReceived",
+         rr."openReportsReceived",
+         cp."updatedAt"                               AS "profileUpdatedAt"
+       FROM page
+       JOIN connect_profiles cp ON cp."id" = page."id"
+       JOIN "Users" u ON u."userId" = cp."userId"
+       LEFT JOIN connect_career_domains d       ON d."id" = cp."careerDomainId"
+       LEFT JOIN connect_career_domain_groups g ON g."id" = d."groupId"
+       LEFT JOIN LATERAL (
+         SELECT string_agg(s."label", ', ' ORDER BY s."displayOrder") AS "openTo"
+           FROM support_offering_types s
+          WHERE s."id" = ANY (cp."openToIds")
+       ) ot ON true
+       LEFT JOIN LATERAL (
+         SELECT max(CASE WHEN f.name = 'current_residence_address_city'
+                         THEN NULLIF(TRIM(COALESCE(fv."textValue", fv."value")), '') END) AS "city",
+                max(CASE WHEN f.name = 'current_residence_address_state'
+                         THEN NULLIF(TRIM(COALESCE(fv."textValue", fv."value")), '') END) AS "state"
+           FROM "FieldValues" fv
+           JOIN "Fields" f ON f."fieldId" = fv."fieldId"
+          WHERE fv."itemId" = cp."userId"
+            AND f.context = 'USERS'
+            AND f.name IN ('current_residence_address_city', 'current_residence_address_state')
+       ) loc ON true
+       LEFT JOIN LATERAL (
+         SELECT string_agg(c.name, ', ' ORDER BY c."cohort_startDate" DESC) AS "cohorts"
+           FROM "CohortMembers" cm
+           -- LIMIT 1 keeps this a primary-key lookup per membership; a plain
+           -- JOIN was planned as a full "Cohort" scan for every member
+           CROSS JOIN LATERAL (
+             SELECT c1.name, c1."cohort_startDate"
+               FROM "Cohort" c1
+              WHERE c1."cohortId" = cm."cohortId"
+              LIMIT 1
+           ) c
+          WHERE cm."userId" = cp."userId" AND cm.status = 'active'
+       ) co ON true
+       LEFT JOIN LATERAL (
+         SELECT p.name AS "currentPathway"
+           FROM user_pathways up
+           JOIN pathways p ON p.id = up.pathway_id
+          WHERE up.user_id = cp."userId" AND up.status = 'ACTIVE' AND p.type = 'STANDARD'
+          ORDER BY up.activated_at DESC NULLS LAST
+          LIMIT 1
+       ) pw ON true
+       LEFT JOIN LATERAL (SELECT count(*)::int AS "clicksGiven"
+                            FROM connect_linkedin_clicks WHERE "viewerUserId" = cp."userId") cg ON true
+       LEFT JOIN LATERAL (SELECT count(*)::int AS "clicksReceived"
+                            FROM connect_linkedin_clicks WHERE "targetUserId" = cp."userId") cr ON true
+       LEFT JOIN LATERAL (SELECT count(*)::int AS "reportsFiled"
+                            FROM safety_reports WHERE "reporterUserId" = cp."userId") rf ON true
+       LEFT JOIN LATERAL (SELECT count(*)::int AS "reportsReceived",
+                                 (count(*) FILTER (WHERE "status" = 'OPEN'))::int AS "openReportsReceived"
+                            FROM safety_reports WHERE "reportedUserId" = cp."userId") rr ON true
+       ORDER BY ${sortColumn} DESC NULLS LAST, cp."id"`,
+      params.values
+    );
+
+    return rows.map((row) => ({
+      ...row,
+      currentStatus:
+        REPORT_STATUS_LABELS[row.currentStatus] ?? row.currentStatus,
+    }));
+  }
+
+  // reported_members (R2): one row per safety report
+  private reportedRows(dto: ConnectReportDto, take: number, skip: number) {
+    const params = new ReportSqlParams();
+    const where: string[] = [];
+    const statuses = dto.filters?.statuses ?? [];
+    if (statuses.length) {
+      where.push(`sr."status" = ANY(${params.add(statuses)}::text[])`);
+    }
+    addReportDayRange(
+      where,
+      params,
+      `sr."createdAt"`,
+      dto.filters?.from,
+      dto.filters?.to
+    );
+    const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
+    const limitParam = params.add(take);
+    const offsetParam = params.add(skip);
+
+    return this.dataSource.query(
+      `WITH page AS (
+         SELECT sr."id"
+           FROM safety_reports sr
+           ${whereSql}
+          ORDER BY sr."createdAt" DESC, sr."id"
+          LIMIT ${limitParam} OFFSET ${offsetParam}
+       )
+       SELECT
+         sr."id",
+         sr."createdAt",
+         sr."status",
+         sr."reason",
+         CASE WHEN sr."reportedUserId" IS NULL
+              THEN 'General concern' ELSE 'Member report' END   AS "type",
+         sr."subject",
+         sr."details",
+         sr."reporterUserId",
+         NULLIF(TRIM(CONCAT_WS(' ', rp."firstName", rp."lastName")), '') AS "reporterName",
+         rp."email"                                              AS "reporterEmail",
+         sr."reportedUserId",
+         NULLIF(TRIM(CONCAT_WS(' ', rd."firstName", rd."lastName")), '') AS "reportedName",
+         rd."email"                                              AS "reportedEmail",
+         cp."linkedinUrl"                                        AS "reportedLinkedinUrl",
+         cp."status"                                             AS "reportedConnectStatus",
+         ra."reportsAgainstMember",
+         NULLIF(TRIM(CONCAT_WS(' ', rv."firstName", rv."lastName")), '') AS "reviewedByName",
+         sr."reviewedAt",
+         sr."adminNote"
+       FROM page
+       JOIN safety_reports sr ON sr."id" = page."id"
+       LEFT JOIN "Users" rp ON rp."userId" = sr."reporterUserId"
+       LEFT JOIN "Users" rd ON rd."userId" = sr."reportedUserId"
+       LEFT JOIN "Users" rv ON rv."userId" = sr."reviewedBy"
+       LEFT JOIN connect_profiles cp ON cp."userId" = sr."reportedUserId"
+       LEFT JOIN LATERAL (
+         SELECT count(*)::int AS "reportsAgainstMember"
+           FROM safety_reports o
+          WHERE o."reportedUserId" = sr."reportedUserId"
+       ) ra ON sr."reportedUserId" IS NOT NULL
+       ORDER BY sr."createdAt" DESC, sr."id"`,
+      params.values
+    );
   }
 
   /**

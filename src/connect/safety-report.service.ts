@@ -297,7 +297,17 @@ export class SafetyReportService {
         reportedUserId,
         status: ConnectReportStatus.OPEN,
       },
-      select: ["id", "status", "createdAt"],
+      // the user ids and text are needed to resend the reporter email
+      select: [
+        "id",
+        "reporterUserId",
+        "reportedUserId",
+        "subject",
+        "reason",
+        "details",
+        "status",
+        "createdAt",
+      ],
     });
   }
 
