@@ -165,6 +165,41 @@ export class CohortMembersController {
       );
   }
 
+  /**
+   * Task 16a: the signed-in user's active groups in this tenant and their role in each group
+   * (learner / reviewer). The user comes from the verified token, never from the request.
+   */
+  @UseFilters(new AllExceptionsFilter(APIID.COHORT_MEMBER_MY_GROUPS))
+  @UseGuards(JwtAuthGuard)
+  @Get('/my-groups')
+  @ApiBasicAuth('access-token')
+  @ApiOkResponse({ description: "The caller's groups with their group role" })
+  @ApiBadRequestResponse({ description: 'Bad request' })
+  @ApiHeader({ name: 'tenantid', required: true })
+  @ApiQuery({
+    name: 'role',
+    required: false,
+    description: 'learner or reviewer',
+  })
+  public async getMyGroups(
+    @Headers() headers,
+    @Req() request: RequestWithUser,
+    @Res() response: Response,
+    @Query('role') role?: string
+  ) {
+    const userId = request.user?.userId;
+    if (!userId || !isUUID(userId)) {
+      throw new BadRequestException('unauthorized!');
+    }
+    const tenantId = headers['tenantid'];
+    if (!tenantId || !isUUID(tenantId)) {
+      throw new BadRequestException(API_RESPONSES.TENANTID_VALIDATION);
+    }
+    return this.cohortMemberAdapter
+      .buildCohortMembersAdapter()
+      .getMyGroups(userId, tenantId, role, response);
+  }
+
   // search;
   @UseFilters(new AllExceptionsFilter(APIID.COHORT_MEMBER_SEARCH))
   @Post('/list')

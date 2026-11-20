@@ -3,12 +3,13 @@ import { ApiProperty } from '@nestjs/swagger';
 import {
   IsBoolean,
   IsEnum,
+  IsIn,
   IsOptional,
   IsString,
   ValidateIf,
   ValidateNested,
 } from 'class-validator';
-import { MemberStatus } from '../entities/cohort-member.entity';
+import { COHORT_ROLE_CODES, MemberStatus } from '../entities/cohort-member.entity';
 import { FieldValuesOptionDto } from 'src/user/dto/user-create.dto';
 export class CohortMembersUpdateDto {
   @Expose()
@@ -80,6 +81,16 @@ export class CohortMembersUpdateDto {
       'Reason is mandatory while dropout, shortlisted, and rejected statuses',
   })
   statusReason?: string;
+  @ApiProperty({
+    enum: COHORT_ROLE_CODES,
+    description:
+      "Task 16a: the member's role in this group (learner or reviewer). Does not change the user's own role",
+    required: false,
+  })
+  @IsOptional()
+  @IsIn(COHORT_ROLE_CODES as unknown as string[])
+  cohortRoleCode?: string;
+
   @ApiProperty({
     type: Boolean,
     description: 'Whether to send notification on status change. Defaults to true if not provided.',
