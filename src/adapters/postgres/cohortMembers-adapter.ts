@@ -1523,6 +1523,7 @@ export class PostgresCohortMembersService {
       U."userId", U."username", U."email", U."firstName", U."middleName", U."lastName", 
       R."name" AS role, U."district", U."state", U."mobile", U."deviceId", U."gender", 
       U."dob", U."country", U."permanentCountry", U."currentCountry", U."auto_tags",
+      U."employeeId", U."organisationCode", U."organisationName",
       CM."status", CM."statusReason", CM."cohortMembershipId", CM."cohortId", 
       CM."createdAt", CM."updatedAt", U."createdBy", U."updatedBy", 
       COUNT(*) OVER() AS total_count  
@@ -1787,7 +1788,7 @@ export class PostgresCohortMembersService {
       }
     }
 
-    let query = `SELECT U."userId", U."username",U."email", U."firstName", U."middleName", U."lastName", R."name" AS role, U."district", U."state",U."mobile",U."deviceId",U."gender",U."dob",U."country",U."permanentCountry", U."currentCountry",U."auto_tags",
+    let query = `SELECT U."userId", U."username",U."email", U."firstName", U."middleName", U."lastName", R."name" AS role, U."district", U."state",U."mobile",U."deviceId",U."gender",U."dob",U."country",U."permanentCountry", U."currentCountry",U."auto_tags", U."employeeId", U."organisationCode", U."organisationName",
       CM."status", CM."statusReason",CM."cohortMembershipId",CM."cohortId",CM."status",CM."createdAt", CM."updatedAt",U."createdBy",U."updatedBy", COUNT(*) OVER() AS total_count  
       FROM public."CohortMembers" CM
       INNER JOIN public."Users" U
