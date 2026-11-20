@@ -20,6 +20,7 @@ import {
 import {
   ApiBasicAuth,
   ApiBody,
+  ApiForbiddenResponse,
   ApiHeader,
   ApiOperation,
   ApiParam,
@@ -39,6 +40,9 @@ import { UpdateConnectProfileDto } from "./dto/update-connect-profile.dto";
 import { ConnectListDto } from "./dto/connect-list.dto";
 import { LinkedinClickDto } from "./dto/linkedin-click.dto";
 import { CreateConnectReportDto } from "./dto/create-connect-report.dto";
+import { ConnectReportDto } from "./dto/connect-report.dto";
+import { ConnectReportGuard } from "./guards/connect-report.guard";
+import { CONNECT_ERRORS } from "./constants/connect.constants";
 
 interface RequestWithUser extends Request {
   user?: {
@@ -283,6 +287,37 @@ export class ConnectController {
       this.validTenant(tenantId),
       response
     );
+  }
+
+  // B9. Report rows for the admin export (Connect Management → Connect
+  // Report). Admin role OR the connect.report.view privilege, so it has its
+  // own guard here instead of the admin controller's ConnectAdminGuard.
+  @Post("admin/reports")
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(ConnectReportGuard)
+  @UseFilters(new AllExceptionsFilter(APIID.CONNECT_ADMIN_REPORT_EXPORT))
+  @UsePipes(
+    new ValidationPipe({
+      transform: true,
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    })
+  )
+  @ApiOperation({
+    summary:
+      "Active members, left members or reported members, paged (for the export job)",
+  })
+  @ApiBody({ type: ConnectReportDto })
+  @ApiResponse({
+    status: 200,
+    description: API_RESPONSES.CONNECT_REPORT_ROWS_SUCCESS,
+  })
+  @ApiForbiddenResponse({ description: CONNECT_ERRORS.REPORT_ACCESS.message })
+  async getReportRows(
+    @Body() dto: ConnectReportDto,
+    @Res() response: Response
+  ) {
+    return this.connectService.getReportRows(dto, response);
   }
 
   private getUserId(request: RequestWithUser): string {
