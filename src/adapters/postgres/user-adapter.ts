@@ -1,4 +1,4 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { BadRequestException, HttpStatus, Injectable } from '@nestjs/common';
 import { User, UserStatus } from '../../user/entities/user-entity';
 import { FieldValues } from 'src/fields/entities/fields-values.entity';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -32,7 +32,7 @@ import { UserTenantMapping } from 'src/userTenantMapping/entities/user-tenant-ma
 import { UserRoleMapping } from 'src/rbac/assign-role/entities/assign-role.entity';
 import { Tenants } from 'src/userTenantMapping/entities/tenant.entity';
 import { Cohort } from 'src/cohort/entities/cohort.entity';
-import { Role } from 'src/rbac/role/entities/role.entity';
+import { COHORT_ROLE_TYPE, Role } from 'src/rbac/role/entities/role.entity';
 import { UserData } from 'src/user/user.controller';
 import APIResponse from 'src/common/responses/response';
 import { Response, query } from 'express';
@@ -1842,6 +1842,7 @@ export class PostgresUserService implements IServicelocator {
     if (!userId || !tenantId || !roleId) {
       return;
     }
+    await this.assertNotGroupRole(roleId);
 
     const updatedBy = actorId ?? userId;
 
@@ -2891,6 +2892,11 @@ export class PostgresUserService implements IServicelocator {
           errorCollector.addError(
             `Role Id '${roleId}' does not exist for this tenant '${tenantId}'.`
           );
+        } else if (roleExists?.some((r) => r.roleType === COHORT_ROLE_TYPE)) {
+          // Task 8: a group role (Learner / Reviewer) is set on a group membership, not on the user
+          errorCollector.addError(
+            `Role Id '${roleId}' is a group role and cannot be a user's own role.`
+          );
         } else if (roleExists) {
           roleData = [...roleData, ...roleExists];
         }
@@ -2984,6 +2990,7 @@ export class PostgresUserService implements IServicelocator {
       const roleId = tenantsData?.tenantRoleMapping?.roleId;
 
       if (roleId) {
+        await this.assertNotGroupRole(roleId);
         const data = await this.userRoleMappingRepository.save({
           userId: userId,
           tenantId: tenantId,
@@ -3065,6 +3072,22 @@ export class PostgresUserService implements IServicelocator {
    * this question - the bulk import asks it too, to decide whether to generate
    * an application form submission.
    */
+  /**
+   * Task 8: a group role (Learner / Reviewer, roleType cohort) lives on "CohortMembers" and must
+   * never be stored as a user's own role in "UserRolesMapping".
+   */
+  private async assertNotGroupRole(roleId: string): Promise<void> {
+    const role = await this.roleRepository.findOne({
+      where: { roleId },
+      select: ["roleId", "roleType"],
+    });
+    if (role?.roleType === COHORT_ROLE_TYPE) {
+      throw new BadRequestException(
+        `Role Id '${roleId}' is a group role and cannot be a user's own role.`
+      );
+    }
+  }
+
   async isObserverRole(roleId?: string): Promise<boolean> {
     if (!roleId) {
       return false;

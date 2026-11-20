@@ -28,7 +28,7 @@ import {
   ApiNotFoundResponse,
 } from "@nestjs/swagger";
 import { Request } from "@nestjs/common";
-import { CreateRolesDto, RoleDto } from "./dto/role.dto";
+import { CreateRolesDto, UpdateRoleDto } from "./dto/role.dto";
 import { RoleSearchDto } from "./dto/role-search.dto";
 import { Response } from "express";
 import { JwtAuthGuard } from "src/common/guards/keycloak.guard";
@@ -81,15 +81,16 @@ export class RoleController {
   //Update Role
   @UseFilters(new AllExceptionsFilter(APIID.ROLE_UPDATE))
   @Put("update/:id")
+  @UsePipes(new ValidationPipe({ whitelist: true }))
   @ApiBasicAuth("access-token")
   @ApiCreatedResponse({ description: "Role updated successfully." })
-  @ApiBody({ type: RoleDto })
+  @ApiBody({ type: UpdateRoleDto })
   @ApiForbiddenResponse({ description: "Forbidden" })
   @ApiHeader({ name: "tenantid" })
   public async updateRole(
-    @Param("id") roleId: string,
+    @Param("id", ParseUUIDPipe) roleId: string,
     @Req() request: Request,
-    @Body() roleDto: RoleDto,
+    @Body() roleDto: UpdateRoleDto,
     @Res() response: Response
   ) {
     return await this.roleAdapter

@@ -13,7 +13,7 @@ import {
   ResponseAssignRoleDto,
 } from "src/rbac/assign-role/dto/create-assign-role.dto";
 import { UserRoleMapping } from "src/rbac/assign-role/entities/assign-role.entity";
-import { Role } from "src/rbac/role/entities/role.entity";
+import { COHORT_ROLE_TYPE, Role } from "src/rbac/role/entities/role.entity";
 import { IsAlpha, IsUUID, isUUID } from "class-validator";
 import { executionAsyncResource } from "async_hooks";
 import jwt_decode from "jwt-decode";
@@ -80,6 +80,13 @@ export class PostgresAssignroleService {
         if (!roleExistforTenant) {
           errors.push({
             errorMessage: `Role ${roleId} is not exist for this tenant.`,
+          });
+          continue;
+        }
+        // Task 8: a group role (Learner / Reviewer) belongs to a group membership, not to the user
+        if (roleExistforTenant.roleType === COHORT_ROLE_TYPE) {
+          errors.push({
+            errorMessage: `Role ${roleId} is a group role. Set it on the group membership instead.`,
           });
           continue;
         }
