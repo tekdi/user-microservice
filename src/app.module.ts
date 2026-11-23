@@ -37,7 +37,7 @@ import { CountriesModule } from './countries/countries.module';
 import { ContentModule } from './content/content.module';
 import { ReferralsModule } from './referrals/referrals.module';
 import { AspireLeadersSpecificModule } from './aspire-leaders-specific/aspire-leaders-specific.module';
-
+import { HierarchyModule } from './hierarchy/hierarchy.module';
 /**
  * Main Application Module
  *
@@ -97,6 +97,7 @@ import { AspireLeadersSpecificModule } from './aspire-leaders-specific/aspire-le
     ContentModule,
     ReferralsModule,
     AspireLeadersSpecificModule,
+    HierarchyModule,
   ],
   controllers: [AppController, HealthController],
   providers: [
