@@ -358,5 +358,6 @@ export const API_RESPONSES = {
   CONNECT_CAREER_DOMAIN_GROUPS_SAVED: "Career domain groups saved successfully",
   CONNECT_CAREER_DOMAIN_GROUP_UPDATED: "Career domain group updated successfully",
   CONNECT_SAFETY_REPORTS_LIST_SUCCESS: "Safety reports fetched successfully",
+  CONNECT_REPORT_ROWS_SUCCESS: "Connect report fetched successfully",
   CONNECT_SAFETY_REPORT_UPDATED: "Safety report updated successfully",
 };

@@ -16,6 +16,13 @@ export const CONNECT_REPORT_REVIEW_STATUSES = [
   ConnectReportStatus.DISMISSED,
 ] as const;
 
+/** B9 POST /connect/admin/reports → reportType (one per export file) */
+export enum ConnectReportType {
+  ACTIVE_MEMBERS = "active_members",
+  LEFT_MEMBERS = "left_members",
+  REPORTED_MEMBERS = "reported_members",
+}
+
 export enum ConnectListSort {
   SAME_COHORT = "same_cohort",
   NEWEST_COHORT = "newest_cohort",
@@ -62,16 +69,15 @@ export const CONNECT_REPORT_REASON_KEYS: string[] = [
   ...CONNECT_REPORT_REASONS.map((r) => r.key),
 ];
 
-/** Safety concern emails (notification service templates, context USER) */
+/**
+ * Safety concern email to the reporter (notification service template,
+ * context USER). Only the reporter is emailed; admins see reports in the
+ * Connect report export.
+ */
 export const CONNECT_SAFETY_EMAIL = {
   // same context as the other user-service emails (pathways, cohort members)
   CONTEXT: "USER",
   REPORTER_KEY: "OnConnectSafetyConcernReporter",
-  ADMIN_KEY: "OnConnectSafetyConcernAdmin",
-  LINKEDIN_BLOCK_HELP_URL:
-    "https://www.linkedin.com/help/linkedin/answer/a1338373",
-  /** Used when CONNECT_SUPPORT_EMAIL is not set */
-  DEFAULT_SUPPORT_EMAIL: "alumni@aspireleaders.org",
 } as const;
 
 export const CONNECT_LIMITS = {
@@ -94,6 +100,10 @@ export const CONNECT_LIMITS = {
   REPORTS_PER_DAY: 10,
   ADMIN_LIST_DEFAULT_LIMIT: 20,
   ADMIN_LIST_MAX_LIMIT: 100,
+  /** B9: the export worker asks for 1000 rows a page */
+  REPORT_EXPORT_DEFAULT_LIMIT: 100,
+  REPORT_EXPORT_MAX_LIMIT: 1000,
+  REPORT_EXPORT_MAX_COUNTRIES: 300,
 } as const;
 
 /**
@@ -118,6 +128,11 @@ export const CONNECT_CLIENT_LIMITS = {
 
 /** Roles (Roles.code, per tenant) allowed to call /connect/admin/* */
 export const CONNECT_ADMIN_ROLE_CODES = ["admin"];
+/**
+ * B9 reports: also open to any role mapped to this privilege
+ * (Privileges.code, ticked in the admin app's Privilege Management)
+ */
+export const CONNECT_REPORT_PRIVILEGE = "connect.report.view";
 
 /** linkedin.com/in/<handle>, with or without scheme / www / country subdomain */
 export const LINKEDIN_PROFILE_REGEX =
@@ -143,6 +158,8 @@ export const CONNECT_CACHE = {
   ADMIN_KEY: (tenantId: string, userId: string) =>
     `connect:admin:${tenantId}:${userId}`,
   ADMIN_TTL: 300,
+  REPORT_ACCESS_KEY: (tenantId: string, userId: string) =>
+    `connect:report-access:${tenantId}:${userId}`,
 } as const;
 
 /** Error codes (sent in params.err) and their messages (params.errmsg) */
@@ -208,6 +225,10 @@ export const CONNECT_ERRORS = {
   ADMIN_ONLY: {
     code: "CONNECT_ADMIN_ONLY",
     message: "Only an admin of this tenant can do this",
+  },
+  REPORT_ACCESS: {
+    code: "CONNECT_REPORT_ACCESS",
+    message: "You don't have access to Connect reports",
   },
   DUPLICATE_KEY: {
     code: "CONNECT_DUPLICATE_KEY",

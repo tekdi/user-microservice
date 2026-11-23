@@ -231,4 +231,5 @@ export const APIID = {
     "api.connect.admin.support-offering.update",
   CONNECT_ADMIN_SAFETY_REPORT_LIST: "api.connect.admin.safety-report.list",
   CONNECT_ADMIN_SAFETY_REPORT_UPDATE: "api.connect.admin.safety-report.update",
+  CONNECT_ADMIN_REPORT_EXPORT: "api.connect.admin.report.export",
 } as const;

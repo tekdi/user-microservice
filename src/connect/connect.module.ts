@@ -5,6 +5,7 @@ import { TypeOrmModule } from "@nestjs/typeorm";
 import { CacheModule } from "src/cache/cache.module";
 import { ConnectController } from "./connect.controller";
 import { ConnectAdminController } from "./connect-admin.controller";
+import { ConnectReportGuard } from "./guards/connect-report.guard";
 import { ConnectService } from "./connect.service";
 import { SafetyReportService } from "./safety-report.service";
 import { ConnectSafetyEmailService } from "./connect-safety-email.service";
@@ -47,6 +48,7 @@ import { SafetyReport } from "./entities/safety-report.entity";
     ConnectEnrichmentService,
     ConnectAdminService,
     ConnectAdminGuard,
+    ConnectReportGuard,
   ],
 })
 export class ConnectModule {}

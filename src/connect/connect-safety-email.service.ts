@@ -1,5 +1,4 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
 import { DataSource } from "typeorm";
 import { NotificationRequest } from "@utils/notification.axios";
 import { SafetyReport } from "./entities/safety-report.entity";
@@ -7,118 +6,97 @@ import { CONNECT_SAFETY_EMAIL } from "./constants/connect.constants";
 
 interface EmailUser {
   userId: string;
+  firstName: string;
+  lastName: string;
   name: string;
   email: string | null;
   linkedinUrl: string | null;
 }
 
-const EMPTY = "-";
-
 /**
- * Safety concern emails (A7), through the notification service:
- *  - reporter: how to block the member on LinkedIn
- *  - admins (CONNECT_SAFETY_ADMIN_EMAILS): a new report to review
+ * Safety concern email (A7) to the member who raised it: how to block the
+ * reported member on LinkedIn. Sent through the notification service
+ * (template CONNECT_SAFETY_EMAIL.REPORTER_KEY, context USER) every time the
+ * member asks for it, also when the report already exists.
+ *
+ * The template owns the wording, fixed links (LinkedIn help) and the support
+ * address. This service only sends what changes per report: the names and
+ * the reported member's LinkedIn URL (see replacements()). The template can
+ * use any of them, or none; unused ones are ignored by the notification
+ * service.
+ *
  * Errors are logged and never thrown, so a report is never lost because of
- * an email problem.
+ * an email problem; the caller gets false and the member can try again.
  */
 @Injectable()
 export class ConnectSafetyEmailService {
   private readonly logger = new Logger(ConnectSafetyEmailService.name);
 
   constructor(
-    private readonly configService: ConfigService,
     private readonly notificationRequest: NotificationRequest,
     private readonly dataSource: DataSource
   ) {}
 
-  /**
-   * Sends the reporter email (member reports only) and, for a new report,
-   * the admin email. Returns true when the reporter email was accepted.
-   */
-  async sendForReport(report: SafetyReport, isNew: boolean): Promise<boolean> {
+  /** true when the notification service accepted the reporter email */
+  async sendToReporter(report: SafetyReport): Promise<boolean> {
+    if (!report.reportedUserId) {
+      // general concern: there is no member to block
+      return false;
+    }
     try {
-      const users = await this.loadUsers(
-        [report.reporterUserId, report.reportedUserId].filter(Boolean)
-      );
-      const reporter = users.get(report.reporterUserId);
-      const reported = report.reportedUserId
-        ? users.get(report.reportedUserId)
-        : undefined;
-
-      const [reporterSent] = await Promise.all([
-        reported ? this.sendReporterSteps(report, reporter, reported) : false,
-        isNew ? this.sendAdminAlert(report, reporter, reported) : undefined,
+      const users = await this.loadUsers([
+        report.reporterUserId,
+        report.reportedUserId,
       ]);
-      return reporterSent;
+      const reporter = users.get(report.reporterUserId);
+      const reported = users.get(report.reportedUserId);
+      if (!reporter?.email) {
+        this.logger.warn(
+          `Safety concern ${report.id}: reporter has no email, steps not sent`
+        );
+        return false;
+      }
+      return await this.send(
+        report.id,
+        [reporter.email],
+        this.replacements(reporter, reported)
+      );
     } catch (error) {
       this.logger.error(
-        `Safety concern emails failed for report ${report.id}: ${error?.message}`
+        `Safety concern ${report.id}: email failed: ${error?.message}`
       );
       return false;
     }
   }
 
-  private async sendReporterSteps(
-    report: SafetyReport,
-    reporter: EmailUser | undefined,
-    reported: EmailUser
-  ): Promise<boolean> {
-    if (!reporter?.email) {
-      this.logger.warn(
-        `Safety concern ${report.id}: reporter has no email, steps not sent`
-      );
-      return false;
-    }
-    return this.send(
-      report.id,
-      CONNECT_SAFETY_EMAIL.REPORTER_KEY,
-      [reporter.email],
-      {
-        "{reporterName}": reporter.name || "there",
-        "{reportedName}": reported.name || "this member",
-        "{reportedLinkedinUrl}": reported.linkedinUrl || EMPTY,
-        "{linkedinBlockHelpUrl}": CONNECT_SAFETY_EMAIL.LINKEDIN_BLOCK_HELP_URL,
-        "{supportEmail}": this.supportEmail(),
-      }
-    );
-  }
-
-  private async sendAdminAlert(
-    report: SafetyReport,
-    reporter: EmailUser | undefined,
+  /**
+   * Placeholders for the template body and subject, e.g. "Hi {reporterName}"
+   * or <a href="{reportedLinkedinUrl}">. Missing values are sent as "" so a
+   * template using them still renders.
+   */
+  private replacements(
+    reporter: EmailUser,
     reported: EmailUser | undefined
-  ): Promise<void> {
-    const recipients = this.adminEmails();
-    if (!recipients.length) {
-      this.logger.warn(
-        `Safety concern ${report.id}: CONNECT_SAFETY_ADMIN_EMAILS is empty, admin email not sent`
-      );
-      return;
-    }
-    await this.send(report.id, CONNECT_SAFETY_EMAIL.ADMIN_KEY, recipients, {
-      "{reportId}": report.id,
-      "{reportType}": report.reportedUserId
-        ? "Member report"
-        : "General concern",
-      "{reporterName}": reporter?.name || EMPTY,
-      "{reporterEmail}": reporter?.email || EMPTY,
-      "{reportedName}": reported?.name || EMPTY,
-      "{reportedEmail}": reported?.email || EMPTY,
-      "{reportedLinkedinUrl}": reported?.linkedinUrl || EMPTY,
-      "{subject}": report.subject || EMPTY,
-      "{reason}": report.reason,
-      "{details}": report.details || EMPTY,
-      "{createdAt}": new Date(report.createdAt ?? Date.now()).toISOString(),
-    });
+  ): Record<string, string> {
+    return {
+      "{reporterName}": reporter.name || "there",
+      "{reporterFirstName}": reporter.firstName || reporter.name || "there",
+      "{reporterLastName}": reporter.lastName,
+      "{reportedName}": reported?.name || "this member",
+      "{reportedFirstName}":
+        reported?.firstName || reported?.name || "this member",
+      "{reportedLastName}": reported?.lastName ?? "",
+      "{reportedLinkedinUrl}": reported?.linkedinUrl ?? "",
+    };
   }
 
   /** true when the notification service accepted the email */
   private async send(
     reportId: string,
-    key: string,
     recipients: string[],
     replacements: Record<string, string>
   ): Promise<boolean> {
+    const key = CONNECT_SAFETY_EMAIL.REPORTER_KEY;
     try {
       const result = await this.notificationRequest.sendNotification({
         isQueue: false,
@@ -154,29 +132,21 @@ export class ConnectSafetyEmailService {
       [userIds]
     );
     return new Map(
-      rows.map((r) => [
-        r.userId,
-        {
-          userId: r.userId,
-          name: [r.firstName, r.lastName].filter(Boolean).join(" ").trim(),
-          email: r.email || null,
-          linkedinUrl: r.linkedinUrl || null,
-        },
-      ])
-    );
-  }
-
-  private adminEmails(): string[] {
-    return String(this.configService.get("CONNECT_SAFETY_ADMIN_EMAILS") ?? "")
-      .split(",")
-      .map((e) => e.trim())
-      .filter(Boolean);
-  }
-
-  private supportEmail(): string {
-    return (
-      this.configService.get<string>("CONNECT_SUPPORT_EMAIL")?.trim() ||
-      CONNECT_SAFETY_EMAIL.DEFAULT_SUPPORT_EMAIL
+      rows.map((r) => {
+        const firstName = (r.firstName ?? "").trim();
+        const lastName = (r.lastName ?? "").trim();
+        return [
+          r.userId,
+          {
+            userId: r.userId,
+            firstName,
+            lastName,
+            name: [firstName, lastName].filter(Boolean).join(" "),
+            email: r.email || null,
+            linkedinUrl: r.linkedinUrl || null,
+          },
+        ];
+      })
     );
   }
 }

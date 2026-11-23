@@ -87,10 +87,9 @@ export class SafetyReportService {
           reportedUserId
         );
         if (existing) {
-          // they asked for the steps again: resend them, not the admin alert
-          const emailSent = await this.safetyEmailService.sendForReport(
-            existing,
-            false
+          // asked for the steps again: send the email again every time
+          const emailSent = await this.safetyEmailService.sendToReporter(
+            existing
           );
           return this.sendExisting(response, existing, emailSent);
         }
@@ -138,9 +137,8 @@ export class SafetyReportService {
             reportedUserId
           );
           if (existing) {
-            const emailSent = await this.safetyEmailService.sendForReport(
-              existing,
-              false
+            const emailSent = await this.safetyEmailService.sendToReporter(
+              existing
             );
             return this.sendExisting(response, existing, emailSent);
           }
@@ -154,11 +152,8 @@ export class SafetyReportService {
         CONNECT_CACHE.REPORT_DAY_TTL
       );
 
-      // reporter: block steps (member report); admins: new report alert
-      const emailSent = await this.safetyEmailService.sendForReport(
-        report,
-        true
-      );
+      // reporter: how to block the member (member reports only)
+      const emailSent = await this.safetyEmailService.sendToReporter(report);
 
       return APIResponse.success(
         response,
@@ -297,7 +292,17 @@ export class SafetyReportService {
         reportedUserId,
         status: ConnectReportStatus.OPEN,
       },
-      select: ["id", "status", "createdAt"],
+      // the user ids and text are needed to resend the reporter email
+      select: [
+        "id",
+        "reporterUserId",
+        "reportedUserId",
+        "subject",
+        "reason",
+        "details",
+        "status",
+        "createdAt",
+      ],
     });
   }
 
