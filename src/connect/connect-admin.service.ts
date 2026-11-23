@@ -19,6 +19,7 @@ import {
   CONNECT_CACHE,
   CONNECT_ERRORS,
   toConnectKey,
+  CONNECT_KEY_MAX,
 } from "./constants/connect.constants";
 import { ConnectService } from "./connect.service";
 import {
@@ -100,7 +101,7 @@ export class ConnectAdminService {
     try {
       const items = dto.items.map((i) => ({
         ...i,
-        key: i.key || toConnectKey(i.name),
+        key: i.key || toConnectKey(i.name, CONNECT_KEY_MAX.CAREER),
       }));
       if (this.hasDuplicateKeys(items)) {
         return cs.fail(
@@ -198,7 +199,7 @@ export class ConnectAdminService {
     try {
       const items = dto.items.map((i) => ({
         ...i,
-        key: i.key || toConnectKey(i.name),
+        key: i.key || toConnectKey(i.name, CONNECT_KEY_MAX.CAREER),
       }));
       if (this.hasDuplicateKeys(items)) {
         return cs.fail(
@@ -366,7 +367,7 @@ export class ConnectAdminService {
     try {
       const items = dto.items.map((i) => ({
         ...i,
-        key: i.key || toConnectKey(i.label),
+        key: i.key || toConnectKey(i.label, CONNECT_KEY_MAX.OPEN_TO),
       }));
       if (this.hasDuplicateKeys(items)) {
         return cs.fail(

@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Injectable,
 } from "@nestjs/common";
+import { Reflector } from "@nestjs/core";
 import { DataSource } from "typeorm";
 import { isUUID } from "class-validator";
 import { CacheService } from "src/cache/cache.service";
@@ -12,18 +13,29 @@ import {
   CONNECT_CACHE,
   CONNECT_ERRORS,
 } from "../constants/connect.constants";
+import { CONNECT_ADMIN_PRIVILEGES_KEY } from "./connect-admin-privileges.decorator";
+
+interface AdminAccess {
+  isAdmin: boolean;
+  /** connect.* privilege codes held through any of the caller's roles */
+  privileges: string[];
+}
 
 /**
- * /connect/admin/* only: the caller must hold an admin role in the tenant
- * sent in the tenantid header. Roles are read from the DB (UserRolesMapping),
- * not from the token, so a learner token gets 403 even with a valid JWT.
- * Use after JwtAuthGuard.
+ * /connect/admin/* only. Passes when the caller has, in the tenant sent in
+ * the tenantid header:
+ *  - the admin role, or
+ *  - a privilege listed by @ConnectAdminPrivileges() on the route
+ *    (B4–B6 master data). Routes without it (B7) stay admin-role only.
+ * Roles and privileges are read from the DB (UserRolesMapping,
+ * RolePrivilegesMapping), not from the token. Use after JwtAuthGuard.
  */
 @Injectable()
 export class ConnectAdminGuard implements CanActivate {
   constructor(
     private readonly dataSource: DataSource,
-    private readonly cacheService: CacheService
+    private readonly cacheService: CacheService,
+    private readonly reflector: Reflector
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -34,35 +46,61 @@ export class ConnectAdminGuard implements CanActivate {
       throw new ForbiddenException(CONNECT_ERRORS.ADMIN_ONLY.message);
     }
 
+    const access = await this.loadAccess(tenantId, userId);
+    if (access.isAdmin) return true;
+
+    const allowed =
+      this.reflector.getAllAndOverride<string[]>(CONNECT_ADMIN_PRIVILEGES_KEY, [
+        context.getHandler(),
+        context.getClass(),
+      ]) ?? [];
+    if (allowed.some((code) => access.privileges.includes(code))) {
+      return true;
+    }
+    throw new ForbiddenException(CONNECT_ERRORS.ADMIN_ONLY.message);
+  }
+
+  private async loadAccess(
+    tenantId: string,
+    userId: string
+  ): Promise<AdminAccess> {
     const key = CONNECT_CACHE.ADMIN_KEY(tenantId, userId);
-    let cached: { isAdmin: boolean } | null = null;
     try {
-      cached = await this.cacheService.get<{ isAdmin: boolean }>(key);
+      const cached = await this.cacheService.get<AdminAccess>(key);
+      if (cached) return cached;
     } catch {
-      cached = null;
+      // cache is optional
     }
 
-    let isAdmin = cached?.isAdmin;
-    if (isAdmin === undefined) {
-      const rows = await this.dataSource.query(
-        `SELECT 1 FROM "UserRolesMapping" urm
+    const [row] = await this.dataSource.query(
+      `WITH my_roles AS (
+         SELECT urm."roleId", r."code"
+           FROM "UserRolesMapping" urm
            JOIN "Roles" r ON r."roleId" = urm."roleId"
           WHERE urm."userId" = $1 AND urm."tenantId" = $2
-            AND r."code" = ANY($3::text[])
-          LIMIT 1`,
-        [userId, tenantId, CONNECT_ADMIN_ROLE_CODES]
-      );
-      isAdmin = rows.length > 0;
-      try {
-        await this.cacheService.set(key, { isAdmin }, CONNECT_CACHE.ADMIN_TTL);
-      } catch {
-        // cache is optional
-      }
+       )
+       SELECT
+         EXISTS (SELECT 1 FROM my_roles WHERE "code" = ANY($3::text[])) AS "isAdmin",
+         COALESCE(
+           (SELECT array_agg(DISTINCT p."code")::text[]
+              FROM "RolePrivilegesMapping" rpm
+              JOIN "Privileges" p ON p."privilegeId" = rpm."privilegeId"
+             WHERE rpm."roleId" IN (SELECT "roleId" FROM my_roles)
+               AND (rpm."tenantId" = $2 OR rpm."tenantId" IS NULL)
+               AND p."code" LIKE 'connect.%'),
+           '{}'::text[]
+         ) AS "privileges"`,
+      [userId, tenantId, CONNECT_ADMIN_ROLE_CODES]
+    );
+    const access: AdminAccess = {
+      isAdmin: row?.isAdmin === true,
+      privileges: row?.privileges ?? [],
+    };
+    try {
+      await this.cacheService.set(key, access, CONNECT_CACHE.ADMIN_TTL);
+    } catch {
+      // cache is optional
     }
-
-    if (!isAdmin) {
-      throw new ForbiddenException(CONNECT_ERRORS.ADMIN_ONLY.message);
-    }
-    return true;
+    return access;
   }
 }
