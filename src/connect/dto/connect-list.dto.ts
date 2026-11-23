@@ -80,7 +80,10 @@ export class ConnectListFiltersDto {
   @MaxLength(100, { each: true })
   country?: string[] | null;
 
-  /** all | visited | not_visited | reported (members the viewer reported) */
+  /**
+   * all | visited | not_visited | reported (members the viewer reported).
+   * Members the viewer reported are left out of every option except "reported".
+   */
   @ApiPropertyOptional({
     enum: ConnectLinkedinVisit,
     default: ConnectLinkedinVisit.ALL,
