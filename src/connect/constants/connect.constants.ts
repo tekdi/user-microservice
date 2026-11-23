@@ -85,6 +85,8 @@ export const CONNECT_LIMITS = {
   LIST_MAX_MULTI_FILTER: 2,
   /** Career domain filter: up to 2 picks, groups and sub-domains together */
   CAREER_DOMAIN_FILTER_MAX: 2,
+  /** Country filter: multi-select, capped only to bound the query */
+  COUNTRY_FILTER_MAX: 50,
   SEARCH_MIN_CHARS: 2,
   SEARCH_MAX_WORDS: 5,
   REPORT_SUBJECT_MAX: 200,
@@ -106,6 +108,7 @@ export const CONNECT_CLIENT_LIMITS = {
   openToMax: CONNECT_LIMITS.OPEN_TO_MAX,
   careerDomainFilterMax: CONNECT_LIMITS.CAREER_DOMAIN_FILTER_MAX,
   openToFilterMax: CONNECT_LIMITS.LIST_MAX_MULTI_FILTER,
+  countryFilterMax: CONNECT_LIMITS.COUNTRY_FILTER_MAX,
   listPageSize: CONNECT_LIMITS.LIST_DEFAULT_LIMIT,
   listMaxPageSize: CONNECT_LIMITS.LIST_MAX_LIMIT,
   searchMinChars: CONNECT_LIMITS.SEARCH_MIN_CHARS,

@@ -351,10 +351,11 @@ export class ConnectService {
         params.push(filters.currentStatus);
         where.push(`cp."currentStatus" = $${params.length}`);
       }
-      if (filters.country) {
-        params.push(filters.country);
+      if (filters.country?.length) {
+        params.push([...new Set(filters.country.map((c) => c.toLowerCase()))]);
+        // any of the selected countries
         where.push(
-          `LOWER(TRIM(u."currentCountry")) = LOWER($${params.length})`
+          `LOWER(TRIM(u."currentCountry")) = ANY($${params.length}::text[])`
         );
       }
       if (filters.linkedinVisit === ConnectLinkedinVisit.VISITED) {
