@@ -4862,13 +4862,17 @@ export class PostgresUserService implements IServicelocator {
             U."username" ILIKE '%${escapedTerm}%'
           )`;
           } else {
-            // For non-email terms, search across all columns
+            // For non-email terms, search across all columns.
+            // Mobile and Employee ID are matched in part too, so typing the first digits of a
+            // mobile number or part of an Employee ID finds the user (Swadhaar admin search).
             return `(
             U."username" ILIKE '%${escapedTerm}%' OR
             U."email" ILIKE '%${escapedTerm}%' OR
             U."firstName" ILIKE '%${escapedTerm}%' OR
             U."middleName" ILIKE '%${escapedTerm}%' OR
-            U."lastName" ILIKE '%${escapedTerm}%'
+            U."lastName" ILIKE '%${escapedTerm}%' OR
+            U."mobile" ILIKE '%${escapedTerm}%' OR
+            U."employeeId" ILIKE '%${escapedTerm}%'
           )`;
           }
         })
