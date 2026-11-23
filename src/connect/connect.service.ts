@@ -387,11 +387,17 @@ export class ConnectService {
         params.push(filters.currentStatus);
         where.push(`cp."currentStatus" = $${params.length}`);
       }
-      if (filters.country) {
-        params.push(filters.country);
+      if (filters.country?.length) {
+        params.push([...new Set(filters.country.map((c) => c.toLowerCase()))]);
+        // any of the selected countries
         where.push(
-          `LOWER(TRIM(u."currentCountry")) = LOWER($${params.length})`
+          `LOWER(TRIM(u."currentCountry")) = ANY($${params.length}::text[])`
         );
+      }
+      // members the viewer reported show up only under the "reported" filter
+      const reportedByViewer = `EXISTS (SELECT 1 FROM safety_reports sr WHERE sr."reporterUserId" = $1 AND sr."reportedUserId" = cp."userId")`;
+      if (filters.linkedinVisit !== ConnectLinkedinVisit.REPORTED) {
+        where.push(`NOT ${reportedByViewer}`);
       }
       if (filters.linkedinVisit === ConnectLinkedinVisit.VISITED) {
         where.push(
@@ -402,9 +408,7 @@ export class ConnectService {
           `NOT EXISTS (SELECT 1 FROM connect_linkedin_clicks lc WHERE lc."viewerUserId" = $1 AND lc."targetUserId" = cp."userId")`
         );
       } else if (filters.linkedinVisit === ConnectLinkedinVisit.REPORTED) {
-        where.push(
-          `EXISTS (SELECT 1 FROM safety_reports sr WHERE sr."reporterUserId" = $1 AND sr."reportedUserId" = cp."userId")`
-        );
+        where.push(reportedByViewer);
       }
       if (searchWords.length) {
         const locationFieldIds =

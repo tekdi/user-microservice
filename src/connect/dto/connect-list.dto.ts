@@ -57,15 +57,33 @@ export class ConnectListFiltersDto {
   @IsIn(CONNECT_CURRENT_STATUS_KEYS)
   currentStatus?: string | null;
 
-  /** One country name, as returned in GET /connect/options → countries[].name */
-  @ApiPropertyOptional({ example: "India", nullable: true })
-  @Transform(trim)
+  /**
+   * Countries: members in any of these. Names as returned in
+   * GET /connect/options → countries[].name. A single string is still accepted.
+   */
+  @ApiPropertyOptional({
+    type: [String],
+    example: ["India", "Ghana"],
+    maxItems: CONNECT_LIMITS.COUNTRY_FILTER_MAX,
+    nullable: true,
+  })
+  @Transform(({ value }) => {
+    if (value === null || value === undefined) return value;
+    return (Array.isArray(value) ? value : [value])
+      .map((v) => (typeof v === "string" ? v.trim() : v))
+      .filter((v) => v !== "");
+  })
   @IsOptional()
-  @IsString()
-  @MaxLength(100)
-  country?: string | null;
+  @IsArray()
+  @ArrayMaxSize(CONNECT_LIMITS.COUNTRY_FILTER_MAX)
+  @IsString({ each: true })
+  @MaxLength(100, { each: true })
+  country?: string[] | null;
 
-  /** all | visited | not_visited | reported (members the viewer reported) */
+  /**
+   * all | visited | not_visited | reported (members the viewer reported).
+   * Members the viewer reported are left out of every option except "reported".
+   */
   @ApiPropertyOptional({
     enum: ConnectLinkedinVisit,
     default: ConnectLinkedinVisit.ALL,
