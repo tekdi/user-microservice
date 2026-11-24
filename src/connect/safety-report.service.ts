@@ -146,6 +146,9 @@ export class SafetyReportService {
         throw error;
       }
 
+      // the reported member leaves the reporter's list: refresh its totals
+      if (reportedUserId) await cs.clearViewerListCounts(reporterUserId);
+
       await cs.safeCacheSet(
         dayKey,
         sentToday + 1,
