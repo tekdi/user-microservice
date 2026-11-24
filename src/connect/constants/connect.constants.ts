@@ -150,7 +150,10 @@ export const CONNECT_CACHE = {
   // v2: every active country with its member count (was members only)
   COUNTRIES_KEY: "connect:countries-filter:v2",
   COUNTRIES_TTL: 600,
-  COUNT_KEY: (hash: string) => `connect:count:${hash}`,
+  // per viewer, so one viewer's totals can be cleared (report / LinkedIn visit)
+  COUNT_KEY: (viewerId: string, hash: string) =>
+    `connect:count:${viewerId}:${hash}`,
+  COUNT_VIEWER_PATTERN: (viewerId: string) => `connect:count:${viewerId}:*`,
   COUNT_TTL: 60,
   REPORT_DAY_KEY: (userId: string, day: string) =>
     `connect:reports:${userId}:${day}`,

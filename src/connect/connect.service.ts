@@ -426,6 +426,7 @@ export class ConnectService {
 
       // ---- total (cached briefly; depends on viewer through self + visited/reported) ----
       const countKey = CONNECT_CACHE.COUNT_KEY(
+        viewerId,
         crypto
           .createHash("sha256")
           .update(JSON.stringify({ viewerId, params }))
@@ -617,6 +618,9 @@ export class ConnectService {
         [viewerId, targetUserId]
       );
 
+      // first visit moves the member between visited / not visited totals
+      if (inserted.length > 0) await this.clearViewerListCounts(viewerId);
+
       LoggerUtil.log(
         `LinkedIn click ${viewerId} -> ${targetUserId} (${
           dto.source ?? "unknown"
@@ -775,6 +779,21 @@ export class ConnectService {
 
   // =====================================================================
   // Shared helpers (also used by SafetyReportService)
+
+  /**
+   * Drops the viewer's cached list totals (POST /connect/list), so the
+   * "Showing x–y of N" count is right straight after they report a member or
+   * first visit a LinkedIn profile. Best effort: a cache error is ignored.
+   */
+  async clearViewerListCounts(viewerId: string): Promise<void> {
+    try {
+      await this.cacheService.delByPattern(
+        CONNECT_CACHE.COUNT_VIEWER_PATTERN(viewerId)
+      );
+    } catch {
+      // counts expire after CONNECT_CACHE.COUNT_TTL anyway
+    }
+  }
   // =====================================================================
 
   /**
