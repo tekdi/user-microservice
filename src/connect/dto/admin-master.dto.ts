@@ -14,7 +14,9 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  IsUUID,
   Matches,
+  Max,
   MaxLength,
   Min,
   ValidateNested,
@@ -202,8 +204,11 @@ export class UpdateSupportOfferingDto extends PartialType(
 ) {}
 
 // ---------------------------------------------------------------------
-// List filter (GET ?isActive=true|false)
+// List query (GET ?isActive=&search=&limit=&offset=, B5 also groupId=)
 // ---------------------------------------------------------------------
+
+export const CONNECT_MASTER_LIST_LIMIT_MAX = 100;
+export const CONNECT_MASTER_SEARCH_MAX = 100;
 
 export class ListMasterQueryDto {
   @ApiPropertyOptional({ description: "Leave out to get active and inactive" })
@@ -211,4 +216,43 @@ export class ListMasterQueryDto {
   @Transform(toBoolean)
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiPropertyOptional({
+    description: "Case-insensitive “contains” on the name / label",
+    maxLength: CONNECT_MASTER_SEARCH_MAX,
+  })
+  @IsOptional()
+  @Transform(trim)
+  @IsString()
+  @MaxLength(CONNECT_MASTER_SEARCH_MAX)
+  search?: string;
+
+  @ApiPropertyOptional({
+    description: "Page size. Leave out to get every matching row",
+    minimum: 1,
+    maximum: CONNECT_MASTER_LIST_LIMIT_MAX,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(CONNECT_MASTER_LIST_LIMIT_MAX)
+  limit?: number;
+
+  @ApiPropertyOptional({ description: "Rows to skip", minimum: 0, default: 0 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  offset?: number;
+}
+
+export class ListCareerDomainsQueryDto extends ListMasterQueryDto {
+  @ApiPropertyOptional({
+    description: "Only domains of this group",
+    format: "uuid",
+  })
+  @IsOptional()
+  @IsUUID()
+  groupId?: string;
 }

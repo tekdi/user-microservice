@@ -23,6 +23,7 @@ import {
 } from "./constants/connect.constants";
 import { ConnectService } from "./connect.service";
 import {
+  ListCareerDomainsQueryDto,
   ListMasterQueryDto,
   SaveCareerDomainGroupsDto,
   SaveCareerDomainsDto,
@@ -65,19 +66,19 @@ export class ConnectAdminService {
   async listCareerDomainGroups(query: ListMasterQueryDto, response: Response) {
     const apiId = APIID.CONNECT_ADMIN_CAREER_DOMAIN_GROUP_LIST;
     try {
-      const items = await this.dataSource.query(
+      const { items, totalCount } = await this.pageMasterList(
         `SELECT g.*,
                 (SELECT count(*)::int FROM connect_career_domains d
                   WHERE d."groupId" = g."id") AS "domainCount"
-           FROM connect_career_domain_groups g
-          WHERE $1::boolean IS NULL OR g."isActive" = $1
-          ORDER BY g."displayOrder", g."name"`,
-        [query.isActive ?? null]
+           FROM connect_career_domain_groups g`,
+        { isActive: 'g."isActive"', text: 'g."name"' },
+        'g."displayOrder", g."name"',
+        query
       );
       return APIResponse.success(
         response,
         apiId,
-        { items, totalCount: items.length },
+        { items, totalCount },
         HttpStatus.OK,
         API_RESPONSES.CONNECT_CAREER_DOMAIN_GROUPS_LIST_SUCCESS
       );
@@ -156,21 +157,24 @@ export class ConnectAdminService {
   // Career domains (sub-domains)
   // ---------------------------------------------------------------------
 
-  async listCareerDomains(query: ListMasterQueryDto, response: Response) {
+  async listCareerDomains(
+    query: ListCareerDomainsQueryDto,
+    response: Response
+  ) {
     const apiId = APIID.CONNECT_ADMIN_CAREER_DOMAIN_LIST;
     try {
-      const items = await this.dataSource.query(
+      const { items, totalCount } = await this.pageMasterList(
         `SELECT d.*, g."key" AS "groupKey", g."name" AS "groupName"
            FROM connect_career_domains d
-           JOIN connect_career_domain_groups g ON g."id" = d."groupId"
-          WHERE $1::boolean IS NULL OR d."isActive" = $1
-          ORDER BY g."displayOrder", d."displayOrder", d."name"`,
-        [query.isActive ?? null]
+           JOIN connect_career_domain_groups g ON g."id" = d."groupId"`,
+        { isActive: 'd."isActive"', text: 'd."name"', groupId: 'd."groupId"' },
+        'g."displayOrder", d."displayOrder", d."name"',
+        query
       );
       return APIResponse.success(
         response,
         apiId,
-        { items, totalCount: items.length },
+        { items, totalCount },
         HttpStatus.OK,
         API_RESPONSES.CONNECT_CAREER_DOMAINS_LIST_SUCCESS
       );
@@ -336,14 +340,16 @@ export class ConnectAdminService {
   async listSupportOfferings(query: ListMasterQueryDto, response: Response) {
     const apiId = APIID.CONNECT_ADMIN_SUPPORT_OFFERING_LIST;
     try {
-      const items = await this.supportOfferingRepository.find({
-        where: query.isActive === undefined ? {} : { isActive: query.isActive },
-        order: { displayOrder: "ASC", label: "ASC" },
-      });
+      const { items, totalCount } = await this.pageMasterList(
+        `SELECT o.* FROM support_offering_types o`,
+        { isActive: 'o."isActive"', text: 'o."label"' },
+        'o."displayOrder", o."label"',
+        query
+      );
       return APIResponse.success(
         response,
         apiId,
-        { items, totalCount: items.length },
+        { items, totalCount },
         HttpStatus.OK,
         API_RESPONSES.CONNECT_SUPPORT_OFFERINGS_LIST_SUCCESS
       );
@@ -524,6 +530,61 @@ export class ConnectAdminService {
     } catch (error) {
       return cs.internalError(response, apiId, "updateMaster", error, adminId);
     }
+  }
+
+  /**
+   * B4–B6 lists: isActive / search / groupId filters plus optional paging,
+   * done in SQL. Without limit every matching row is returned (pickers).
+   * totalCount = rows matching the filters, before limit / offset.
+   * `from` must not contain a WHERE; column names are fixed by the caller.
+   */
+  private async pageMasterList(
+    from: string,
+    columns: { isActive: string; text: string; groupId?: string },
+    orderBy: string,
+    query: ListCareerDomainsQueryDto
+  ): Promise<{ items: any[]; totalCount: number }> {
+    const params: unknown[] = [];
+    const where: string[] = [];
+    if (query.isActive !== undefined) {
+      params.push(query.isActive);
+      where.push(`${columns.isActive} = $${params.length}`);
+    }
+    if (query.search) {
+      params.push(`%${query.search.replace(/[\\%_]/g, (c) => "\\" + c)}%`);
+      where.push(`${columns.text} ILIKE $${params.length}`);
+    }
+    if (columns.groupId && query.groupId) {
+      params.push(query.groupId);
+      where.push(`${columns.groupId} = $${params.length}`);
+    }
+    const filtered = where.length
+      ? `${from} WHERE ${where.join(" AND ")}`
+      : from;
+
+    if (query.limit === undefined) {
+      const items = await this.dataSource.query(
+        `${filtered} ORDER BY ${orderBy}`,
+        params
+      );
+      return { items, totalCount: items.length };
+    }
+
+    const offset = query.offset ?? 0;
+    const rows: any[] = await this.dataSource.query(
+      `${filtered} ORDER BY ${orderBy}
+       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+      [...params, query.limit, offset]
+    );
+    let totalCount = offset + rows.length;
+    if (rows.length === query.limit || (rows.length === 0 && offset > 0)) {
+      const [row] = await this.dataSource.query(
+        `SELECT count(*)::int AS n FROM (${filtered}) q`,
+        params
+      );
+      totalCount = row?.n ?? 0;
+    }
+    return { items: rows, totalCount };
   }
 
   private hasDuplicateKeys(items: { key: string }[]): boolean {

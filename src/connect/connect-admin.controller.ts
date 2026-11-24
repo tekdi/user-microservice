@@ -38,6 +38,7 @@ import { SafetyReportService } from "./safety-report.service";
 import { ConnectAdminGuard } from "./guards/connect-admin.guard";
 import { ConnectAdminPrivileges } from "./guards/connect-admin-privileges.decorator";
 import {
+  ListCareerDomainsQueryDto,
   ListMasterQueryDto,
   SaveCareerDomainGroupsDto,
   SaveCareerDomainsDto,
@@ -174,7 +175,7 @@ export class ConnectAdminController {
     description: API_RESPONSES.CONNECT_CAREER_DOMAINS_LIST_SUCCESS,
   })
   async listCareerDomains(
-    @Query() query: ListMasterQueryDto,
+    @Query() query: ListCareerDomainsQueryDto,
     @Res() response: Response
   ) {
     return this.connectAdminService.listCareerDomains(query, response);
