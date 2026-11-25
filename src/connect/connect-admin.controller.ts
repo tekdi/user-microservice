@@ -36,7 +36,9 @@ import { API_RESPONSES } from "@utils/response.messages";
 import { ConnectAdminService } from "./connect-admin.service";
 import { SafetyReportService } from "./safety-report.service";
 import { ConnectAdminGuard } from "./guards/connect-admin.guard";
+import { ConnectAdminPrivileges } from "./guards/connect-admin-privileges.decorator";
 import {
+  ListCareerDomainsQueryDto,
   ListMasterQueryDto,
   SaveCareerDomainGroupsDto,
   SaveCareerDomainsDto,
@@ -49,7 +51,12 @@ import {
   SafetyReportListDto,
   UpdateSafetyReportDto,
 } from "./dto/safety-report-admin.dto";
-import { CONNECT_ERRORS } from "./constants/connect.constants";
+import {
+  CONNECT_ERRORS,
+  CONNECT_MASTERDATA_PRIVILEGES,
+} from "./constants/connect.constants";
+
+const { VIEW: MASTER_VIEW, EDIT: MASTER_EDIT } = CONNECT_MASTERDATA_PRIVILEGES;
 
 interface RequestWithUser extends Request {
   user?: {
@@ -66,7 +73,10 @@ const validation = new ValidationPipe({
   forbidNonWhitelisted: true,
 });
 
-/** Every route: valid token + admin role in the tenantid tenant (else 403) */
+/**
+ * Every route: valid token + admin role in the tenantid tenant, or (B4–B6)
+ * a connect.masterdata.* privilege set with @ConnectAdminPrivileges (else 403)
+ */
 @ApiTags("Connect Admin")
 @Controller("connect/admin")
 @UseGuards(JwtAuthGuard, ConnectAdminGuard)
@@ -81,6 +91,7 @@ export class ConnectAdminController {
 
   // B4. Career domain groups
   @Get("career-domain-groups")
+  @ConnectAdminPrivileges(MASTER_VIEW, MASTER_EDIT)
   @UseFilters(
     new AllExceptionsFilter(APIID.CONNECT_ADMIN_CAREER_DOMAIN_GROUP_LIST)
   )
@@ -98,6 +109,7 @@ export class ConnectAdminController {
   }
 
   @Post("career-domain-groups")
+  @ConnectAdminPrivileges(MASTER_EDIT)
   @HttpCode(HttpStatus.CREATED)
   @UseFilters(
     new AllExceptionsFilter(APIID.CONNECT_ADMIN_CAREER_DOMAIN_GROUP_SAVE)
@@ -124,6 +136,7 @@ export class ConnectAdminController {
   }
 
   @Patch("career-domain-groups/:id")
+  @ConnectAdminPrivileges(MASTER_EDIT)
   @UseFilters(
     new AllExceptionsFilter(APIID.CONNECT_ADMIN_CAREER_DOMAIN_GROUP_UPDATE)
   )
@@ -153,6 +166,7 @@ export class ConnectAdminController {
 
   // B5. Career domains
   @Get("career-domains")
+  @ConnectAdminPrivileges(MASTER_VIEW, MASTER_EDIT)
   @UseFilters(new AllExceptionsFilter(APIID.CONNECT_ADMIN_CAREER_DOMAIN_LIST))
   @UsePipes(validation)
   @ApiOperation({ summary: "List career domains (active and inactive)" })
@@ -161,13 +175,14 @@ export class ConnectAdminController {
     description: API_RESPONSES.CONNECT_CAREER_DOMAINS_LIST_SUCCESS,
   })
   async listCareerDomains(
-    @Query() query: ListMasterQueryDto,
+    @Query() query: ListCareerDomainsQueryDto,
     @Res() response: Response
   ) {
     return this.connectAdminService.listCareerDomains(query, response);
   }
 
   @Post("career-domains")
+  @ConnectAdminPrivileges(MASTER_EDIT)
   @HttpCode(HttpStatus.CREATED)
   @UseFilters(new AllExceptionsFilter(APIID.CONNECT_ADMIN_CAREER_DOMAIN_SAVE))
   @UsePipes(validation)
@@ -194,6 +209,7 @@ export class ConnectAdminController {
   }
 
   @Patch("career-domains/:id")
+  @ConnectAdminPrivileges(MASTER_EDIT)
   @UseFilters(new AllExceptionsFilter(APIID.CONNECT_ADMIN_CAREER_DOMAIN_UPDATE))
   @UsePipes(validation)
   @ApiOperation({
@@ -221,6 +237,7 @@ export class ConnectAdminController {
 
   // B6. Support offerings ("Open to" options, support_offering_types)
   @Get("support-offerings")
+  @ConnectAdminPrivileges(MASTER_VIEW, MASTER_EDIT)
   @UseFilters(
     new AllExceptionsFilter(APIID.CONNECT_ADMIN_SUPPORT_OFFERING_LIST)
   )
@@ -238,6 +255,7 @@ export class ConnectAdminController {
   }
 
   @Post("support-offerings")
+  @ConnectAdminPrivileges(MASTER_EDIT)
   @HttpCode(HttpStatus.CREATED)
   @UseFilters(
     new AllExceptionsFilter(APIID.CONNECT_ADMIN_SUPPORT_OFFERING_SAVE)
@@ -266,6 +284,7 @@ export class ConnectAdminController {
   }
 
   @Patch("support-offerings/:id")
+  @ConnectAdminPrivileges(MASTER_EDIT)
   @UseFilters(
     new AllExceptionsFilter(APIID.CONNECT_ADMIN_SUPPORT_OFFERING_UPDATE)
   )

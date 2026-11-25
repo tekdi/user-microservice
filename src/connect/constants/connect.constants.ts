@@ -133,6 +133,14 @@ export const CONNECT_ADMIN_ROLE_CODES = ["admin"];
  * (Privileges.code, ticked in the admin app's Privilege Management)
  */
 export const CONNECT_REPORT_PRIVILEGE = "connect.report.view";
+/**
+ * B4–B6 master data (career domain groups, career domains, "Open to"):
+ * besides the admin role, a role with one of these privileges may call them.
+ */
+export const CONNECT_MASTERDATA_PRIVILEGES = {
+  VIEW: "connect.masterdata.view",
+  EDIT: "connect.masterdata.edit",
+} as const;
 
 /** linkedin.com/in/<handle>, with or without scheme / www / country subdomain */
 export const LINKEDIN_PROFILE_REGEX =
@@ -158,8 +166,9 @@ export const CONNECT_CACHE = {
   REPORT_DAY_KEY: (userId: string, day: string) =>
     `connect:reports:${userId}:${day}`,
   REPORT_DAY_TTL: 86400,
+  // v2: { isAdmin, privileges } (connect.* privilege codes of the caller)
   ADMIN_KEY: (tenantId: string, userId: string) =>
-    `connect:admin:${tenantId}:${userId}`,
+    `connect:admin:v2:${tenantId}:${userId}`,
   ADMIN_TTL: 300,
   REPORT_ACCESS_KEY: (tenantId: string, userId: string) =>
     `connect:report-access:${tenantId}:${userId}`,
@@ -256,9 +265,14 @@ export const CONNECT_MASTER_BULK_MAX = 100;
 
 /** Stable machine key, e.g. "Data & Analytics" → "data_analytics" */
 export const CONNECT_KEY_REGEX = /^[a-z0-9]+(_[a-z0-9]+)*$/;
-export const toConnectKey = (text: string): string =>
-  text
+/** Key column lengths: groups and domains varchar(60), "Open to" varchar(50) */
+export const CONNECT_KEY_MAX = { CAREER: 60, OPEN_TO: 50 } as const;
+export const toConnectKey = (text: string, maxLength?: number): string => {
+  const key = text
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "_")
     // runs are already collapsed to one "_", so trim at most one per end
     .replace(/^_|_$/g, "");
+  // a long name must not make a key longer than the column
+  return maxLength ? key.slice(0, maxLength).replace(/_$/, "") : key;
+};
