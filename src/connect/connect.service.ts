@@ -86,7 +86,19 @@ type CareerDomainView = {
   group: string;
 };
 
-/** Profile-modal data that is the same for every viewer (cached) */
+/** Profile-modal Connect fields, same for every viewer (cached) */
+type ConnectProfileFields = Pick<
+  ConnectProfileView,
+  | "connectUserId"
+  | "headline"
+  | "careerDomain"
+  | "currentStatus"
+  | "openTo"
+  | "about"
+  | "linkedinUrl"
+>;
+
+/** Profile-modal data that is the same for every viewer */
 interface ConnectProfileView {
   /** connect_profiles.id: the only member id Connect shows to other members */
   connectUserId: string;
@@ -483,6 +495,23 @@ export class ConnectService {
          LIMIT $${pageParams.length - 1} OFFSET $${pageParams.length}`,
         pageParams
       );
+
+      // The cached total must agree with the page. A short page gives the
+      // exact total; a full page past the cached total means it is stale.
+      const offset = (page - 1) * limit;
+      const pageTotal = offset + rows.length;
+      const exact = rows.length < limit && (rows.length > 0 || offset === 0);
+      if (exact && pageTotal !== totalCount) {
+        totalCount = pageTotal;
+        await this.safeCacheSet(countKey, totalCount, CONNECT_CACHE.COUNT_TTL);
+      } else if (rows.length === limit && totalCount < pageTotal) {
+        const [{ count }] = await this.dataSource.query(
+          `SELECT count(*)::int AS count ${fromWhere}`,
+          params
+        );
+        totalCount = count;
+        await this.safeCacheSet(countKey, totalCount, CONNECT_CACHE.COUNT_TTL);
+      }
 
       // ---- step 2: enrich only this page ----
       const ids = rows.map((r) => r.userId);
@@ -1065,13 +1094,39 @@ export class ConnectService {
     return s ? { key: s.key, label: s.label } : null;
   }
 
-  /** Modal data for an ACTIVE member, without viewer-specific flags (cached) */
+  /**
+   * Modal data for an ACTIVE member, without viewer-specific flags.
+   * Name, location, pathway and cohort belong to other modules and change
+   * without Connect knowing, so they are read live (same as the list);
+   * only the Connect fields are cached.
+   */
   private async getProfileView(
     userId: string,
     tenantId: string
   ): Promise<ConnectProfileView | null> {
+    const [fields, details] = await Promise.all([
+      this.getProfileFields(userId),
+      this.enrichmentService.getUserDetails([userId], tenantId),
+    ]);
+    if (!fields) return null;
+    const d = details.get(userId);
+    return {
+      ...fields,
+      name: d?.name ?? null,
+      initials: d?.initials ?? null,
+      location: d?.location ?? null,
+      countryCode: d?.countryCode ?? null,
+      pathway: d?.pathway ?? null,
+      cohort: d?.cohort ?? null,
+    };
+  }
+
+  /** Connect-owned part of the modal (cached; cleared on join / edit / leave) */
+  private async getProfileFields(
+    userId: string
+  ): Promise<ConnectProfileFields | null> {
     const key = CONNECT_CACHE.PROFILE_KEY(userId);
-    const cached = await this.cacheService.get<ConnectProfileView>(key);
+    const cached = await this.cacheService.get<ConnectProfileFields>(key);
     if (cached) return cached;
 
     const profile = await this.profileRepository.findOne({
@@ -1079,19 +1134,9 @@ export class ConnectService {
     });
     if (!profile) return null;
 
-    const [details, masters] = await Promise.all([
-      this.enrichmentService.getUserDetails([userId], tenantId),
-      this.getMasters(),
-    ]);
-    const d = details.get(userId);
-    const view: ConnectProfileView = {
+    const masters = await this.getMasters();
+    const fields: ConnectProfileFields = {
       connectUserId: profile.id,
-      name: d?.name ?? null,
-      initials: d?.initials ?? null,
-      location: d?.location ?? null,
-      countryCode: d?.countryCode ?? null,
-      pathway: d?.pathway ?? null,
-      cohort: d?.cohort ?? null,
       headline: profile.headline,
       careerDomain: this.toCareerDomain(profile.careerDomainId, masters),
       currentStatus: this.toCurrentStatus(profile.currentStatus),
@@ -1099,8 +1144,8 @@ export class ConnectService {
       about: profile.about,
       linkedinUrl: profile.linkedinUrl,
     };
-    await this.safeCacheSet(key, view, CONNECT_CACHE.PROFILE_TTL);
-    return view;
+    await this.safeCacheSet(key, fields, CONNECT_CACHE.PROFILE_TTL);
+    return fields;
   }
 
   /**
