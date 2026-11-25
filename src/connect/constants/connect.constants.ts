@@ -152,9 +152,9 @@ export const CONNECT_CACHE = {
   OPTIONS_TTL: 3600,
   MEMBER_KEY: (userId: string) => `connect:member:${userId}`,
   MEMBER_TTL: 600,
-  // v3: cached view has connectUserId (v2) and cohort.year (v3)
-  PROFILE_KEY: (userId: string) => `connect:profile:v3:${userId}`,
-  PROFILE_TTL: 600,
+  // v4: Connect fields only; name / location / pathway / cohort read live
+  PROFILE_KEY: (userId: string) => `connect:profile:v4:${userId}`,
+  PROFILE_TTL: 300,
   // v2: every active country with its member count (was members only)
   COUNTRIES_KEY: "connect:countries-filter:v2",
   COUNTRIES_TTL: 600,
