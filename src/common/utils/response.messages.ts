@@ -108,6 +108,30 @@ export const API_RESPONSES = {
     "organisationName is required when organisationCode is new.",
   ORGANISATION_CODE_REQUIRED:
     "organisationCode is required when employeeId is given.",
+    ORGANISATION_NOT_FOUND: (code: string) =>
+    `Organisation code ${code} does not exist. Add it in Org Management first.`,
+  // Org / Branch Management (src/masters)
+  MASTER_TENANT_REQUIRED: "A valid tenantid header is required.",
+  MASTER_NOTHING_TO_UPDATE: "Send name, isActive or both.",
+  ORGANISATION_CODE_EXISTS: (code: string) =>
+    `Organisation code ${code} already exists.`,
+  ORGANISATION_NAME_EXISTS: (name: string) =>
+    `An organisation named ${name} already exists.`,
+  ORGANISATION_ID_NOT_FOUND: "Organisation not found.",
+  ORGANISATION_LIST_SUCCESS: "Organisations fetched successfully.",
+  ORGANISATION_CREATE_SUCCESS: "Organisation created successfully.",
+  ORGANISATION_UPDATE_SUCCESS: "Organisation updated successfully.",
+  BRANCH_CODE_EXISTS: (code: string) => `Branch code ${code} already exists.`,
+  BRANCH_NAME_EXISTS: (name: string, district: string) =>
+    `Branch ${name} already exists in ${district}.`,
+  BRANCH_NOT_FOUND: "Branch not found.",
+  BRANCH_DISTRICT_NOT_FOUND: (district: string) =>
+    `District ${district} is not in the master list.`,
+  BRANCH_LIST_SUCCESS: "Branches fetched successfully.",
+  BRANCH_CREATE_SUCCESS: "Branch created successfully.",
+  BRANCH_UPDATE_SUCCESS: "Branch updated successfully.",
+  STATE_LIST_SUCCESS: "States fetched successfully.",
+  DISTRICT_LIST_SUCCESS: "Districts fetched successfully.",
   DUPLICATE_DATA: "Duplicate data.",
   USER_ALREADY_EXISTS: "User already exists.",
   SERVER_ERROR: "Internal server error",
