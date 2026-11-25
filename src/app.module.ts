@@ -38,6 +38,7 @@ import { ContentModule } from './content/content.module';
 import { ReferralsModule } from './referrals/referrals.module';
 import { AspireLeadersSpecificModule } from './aspire-leaders-specific/aspire-leaders-specific.module';
 import { HierarchyModule } from './hierarchy/hierarchy.module';
+import { MastersModule } from './masters/masters.module';
 /**
  * Main Application Module
  *

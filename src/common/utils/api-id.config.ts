@@ -203,6 +203,15 @@ export const APIID = {
   // Country Management APIs
   COUNTRY_LIST: "api.country.list",
   // Aspire Leaders Specific APIs
+    // Swadhaar admin masters: Org / Branch Management
+  ORGANISATION_LIST: "api.organisation.list",
+  ORGANISATION_CREATE: "api.organisation.create",
+  ORGANISATION_UPDATE: "api.organisation.update",
+  BRANCH_LIST: "api.branch.list",
+  BRANCH_CREATE: "api.branch.create",
+  BRANCH_UPDATE: "api.branch.update",
+  STATE_LIST: "api.state.list",
+  DISTRICT_LIST: "api.district.list",
   ASPIRE_LEADERS_COUNTRY_LIST: "api.aspire-leaders-specific.country.list",
   ASPIRE_LEADERS_REPORT_COUNTRY_FILTER: "api.aspire-leaders-specific.report.countryFilter",
 } as const;
