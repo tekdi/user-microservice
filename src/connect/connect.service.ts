@@ -1305,15 +1305,12 @@ export class ConnectService {
           LIMIT ${limitParam} OFFSET ${offsetParam}
        )
        SELECT
-         cp."id"                                      AS "connectUserId",
+         -- no Connect ID, mobile, account status or state (removed 2026-11-26)
          cp."userId",
          u."firstName",
          u."lastName",
          u."email",
-         u."mobile",
-         u."status"                                   AS "accountStatus",
          NULLIF(TRIM(u."currentCountry"), '')         AS "country",
-         loc."state",
          loc."city",
          cp."status"                                  AS "connectStatus",
          cp."termsAcceptedAt",
@@ -1326,14 +1323,12 @@ export class ConnectService {
          d."name"                                     AS "careerDomain",
          cp."currentStatus",
          ot."openTo",
-         cp."about",
          co."cohorts",
          pw."currentPathway",
          cg."clicksGiven",
          cr."clicksReceived",
          rf."reportsFiled",
          rr."reportsReceived",
-         rr."openReportsReceived",
          cp."updatedAt"                               AS "profileUpdatedAt"
        FROM page
        JOIN connect_profiles cp ON cp."id" = page."id"
@@ -1346,15 +1341,12 @@ export class ConnectService {
           WHERE s."id" = ANY (cp."openToIds")
        ) ot ON true
        LEFT JOIN LATERAL (
-         SELECT max(CASE WHEN f.name = 'current_residence_address_city'
-                         THEN NULLIF(TRIM(COALESCE(fv."textValue", fv."value")), '') END) AS "city",
-                max(CASE WHEN f.name = 'current_residence_address_state'
-                         THEN NULLIF(TRIM(COALESCE(fv."textValue", fv."value")), '') END) AS "state"
+         SELECT max(NULLIF(TRIM(COALESCE(fv."textValue", fv."value")), '')) AS "city"
            FROM "FieldValues" fv
            JOIN "Fields" f ON f."fieldId" = fv."fieldId"
           WHERE fv."itemId" = cp."userId"
             AND f.context = 'USERS'
-            AND f.name IN ('current_residence_address_city', 'current_residence_address_state')
+            AND f.name = 'current_residence_address_city'
        ) loc ON true
        LEFT JOIN LATERAL (
          SELECT string_agg(c.name, ', ' ORDER BY c."cohort_startDate" DESC) AS "cohorts"
@@ -1385,8 +1377,7 @@ export class ConnectService {
                             FROM connect_linkedin_clicks WHERE "targetUserId" = cp."userId") cr ON true
        LEFT JOIN LATERAL (SELECT count(*)::int AS "reportsFiled"
                             FROM safety_reports WHERE "reporterUserId" = cp."userId") rf ON true
-       LEFT JOIN LATERAL (SELECT count(*)::int AS "reportsReceived",
-                                 (count(*) FILTER (WHERE "status" = 'OPEN'))::int AS "openReportsReceived"
+       LEFT JOIN LATERAL (SELECT count(*)::int AS "reportsReceived"
                             FROM safety_reports WHERE "reportedUserId" = cp."userId") rr ON true
        ORDER BY ${sortColumn} DESC NULLS LAST, cp."id"`,
       params.values
