@@ -99,6 +99,7 @@ import { MastersModule } from './masters/masters.module';
     ReferralsModule,
     AspireLeadersSpecificModule,
     HierarchyModule,
+    MastersModule, // Admin portal: Org and Branch Management
   ],
   controllers: [AppController, HealthController],
   providers: [
