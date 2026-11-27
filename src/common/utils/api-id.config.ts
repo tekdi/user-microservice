@@ -22,6 +22,7 @@ export const APIID = {
   // User Management APIs
   USER_GET: "api.user.get",
   USER_CREATE: "api.user.create",
+  USER_ADMIN_CREATE: "api.user.admin.create",
   USER_UPDATE: "api.user.update",
   USER_LIST: "api.user.list",
   USER_RESET_PASSWORD: "api.user.resetPassword",

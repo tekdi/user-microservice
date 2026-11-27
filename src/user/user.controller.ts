@@ -18,7 +18,10 @@ import {
   UseFilters,
   BadRequestException,
   UnauthorizedException,
+  ForbiddenException,
 } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 
 import {
   ApiTags,
@@ -56,6 +59,8 @@ import { OtpVerifyDTO } from './dto/otpVerify.dto';
 import { UserCreateSsoDto } from './dto/user-create-sso.dto';
 import { UserAnonymizeDto } from './dto/user-anonymize.dto';
 import { RecaptchaService } from './recaptcha.service';
+import { Role } from 'src/rbac/role/entities/role.entity';
+import { STUDENT_ROLE_CODE } from '@utils/roles.constants';
 
 export interface UserData {
   context: string;
@@ -69,8 +74,44 @@ export interface UserData {
 export class UserController {
   constructor(
     private userAdapter: UserAdapter,
-    private readonly recaptchaService: RecaptchaService
+    private readonly recaptchaService: RecaptchaService,
+    @InjectRepository(Role)
+    private readonly roleRepository: Repository<Role>
   ) {}
+
+  /**
+   * Loads the roles requested in tenantCohortRoleMapping from `Roles`, each
+   * scoped to its own mapping's tenant. Role type is decided from `Roles.code`
+   * here, never from a role name sent in the body, so the caller cannot pick
+   * which create endpoint accepts it.
+   */
+  private async getRequestedRoles(userCreateDto: UserCreateDto): Promise<Role[]> {
+    const mappings = userCreateDto.tenantCohortRoleMapping ?? [];
+    if (mappings.length === 0) {
+      return [];
+    }
+    // Both ids are needed: an undefined tenantId would drop out of the
+    // where clause below and match the role in any tenant.
+    if (mappings.some((mapping) => !mapping?.tenantId || !mapping?.roleId)) {
+      throw new BadRequestException(API_RESPONSES.USER_CREATE_ROLE_REQUIRED);
+    }
+
+    const roles = await this.roleRepository.find({
+      select: ['roleId', 'tenantId', 'code'],
+      where: mappings.map(({ tenantId, roleId }) => ({ tenantId, roleId })),
+    });
+    const requested = new Set(
+      mappings.map(({ tenantId, roleId }) => `${tenantId}:${roleId}`)
+    );
+    if (roles.length !== requested.size) {
+      throw new BadRequestException(API_RESPONSES.USER_CREATE_ROLE_NOT_FOUND);
+    }
+    return roles;
+  }
+
+  private isStudentRole(role: Role): boolean {
+    return role.code?.trim().toLowerCase() === STUDENT_ROLE_CODE;
+  }
 
   @UseFilters(new AllExceptionsFilter(APIID.USER_GET))
   @Get('read/:userId')
@@ -143,12 +184,16 @@ export class UserController {
     @Res() response: Response
   ) {
     const academicYearId = headers['academicyearid'];
-    // Only validate reCAPTCHA if any tenantCohortRoleMapping has the student role
-    const isStudent =
-      Array.isArray(userCreateDto.tenantCohortRoleMapping) &&
-      userCreateDto.tenantCohortRoleMapping.some(
-        (mapping) => mapping.roleId === '493c04e2-a9db-47f2-b304-503da358d5f4'
+    // This public endpoint may only create students; admin-type roles go
+    // through POST admin/create, which requires an authenticated admin.
+    const roles = await this.getRequestedRoles(userCreateDto);
+    if (roles.some((role) => !this.isStudentRole(role))) {
+      throw new ForbiddenException(
+        API_RESPONSES.USER_CREATE_ADMIN_ROLE_FORBIDDEN
       );
+    }
+    // Only validate reCAPTCHA when a student role is being assigned
+    const isStudent = roles.length > 0;
     // If the user is a student, validate the reCAPTCHA token
     if (isStudent) {
       // Check if the reCAPTCHA token is provided
@@ -172,6 +217,48 @@ export class UserController {
       }
     }
     // Proceed with user creation
+    return await this.userAdapter
+      .buildUserAdapter()
+      .createUser(request, userCreateDto, academicYearId, response);
+  }
+
+  // Creates admin-type users (Regional Admin, ALP Program Admin, etc.). Student
+  // roles are rejected here and must use POST create. Who may call this is
+  // enforced by JwtAuthGuard plus the middleware role/privilege check.
+  @UseFilters(new AllExceptionsFilter(APIID.USER_ADMIN_CREATE))
+  @Post('/admin/create')
+  // @UseGuards(JwtAuthGuard)
+  @UsePipes(new ValidationPipe())
+  // @ApiBasicAuth('access-token')
+  @ApiCreatedResponse({ description: API_RESPONSES.USER_CREATE_SUCCESSFULLY })
+  @ApiBody({ type: UserCreateDto })
+  @ApiForbiddenResponse({ description: API_RESPONSES.USER_EXISTS })
+  @ApiBadRequestResponse({
+    description: API_RESPONSES.USER_ADMIN_CREATE_STUDENT_ROLE_FORBIDDEN,
+  })
+  @ApiInternalServerErrorResponse({
+    description: API_RESPONSES.INTERNAL_SERVER_ERROR,
+  })
+  @ApiConflictResponse({ description: API_RESPONSES.DUPLICATE_DATA })
+  @ApiHeader({
+    name: 'academicyearid',
+  })
+  async createAdminUser(
+    @Headers() headers,
+    @Req() request: Request,
+    @Body() userCreateDto: UserCreateDto,
+    @Res() response: Response
+  ) {
+    const academicYearId = headers['academicyearid'];
+    const roles = await this.getRequestedRoles(userCreateDto);
+    if (roles.length === 0) {
+      throw new BadRequestException(API_RESPONSES.USER_CREATE_ROLE_REQUIRED);
+    }
+    if (roles.some((role) => this.isStudentRole(role))) {
+      throw new BadRequestException(
+        API_RESPONSES.USER_ADMIN_CREATE_STUDENT_ROLE_FORBIDDEN
+      );
+    }
     return await this.userAdapter
       .buildUserAdapter()
       .createUser(request, userCreateDto, academicYearId, response);
