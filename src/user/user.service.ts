@@ -62,6 +62,8 @@ import { KafkaService } from "src/kafka/kafka.service";
 import { PasswordEncryptionService } from "src/common/services/password-encryption.service";
 import { CaptchaService } from "src/common/services/captcha.service";
 import { KeycloakService } from "src/common/utils/keycloak.service";
+import { DistrictUserCountDto } from "./dto/district-user-count.dto";
+import { USER_FIELD_IDS } from "./user.constants";
 
 interface UpdateField {
   userId: string; // Required
@@ -3771,6 +3773,73 @@ export class UserService {
       );
     }
   }
+  async getDistrictWiseUserCount(filters: DistrictUserCountDto, response: Response) {
+    const apiId = APIID.USER_DISTRICT_COUNT;
+    try {
+      const query = `
+        WITH matched_users AS (
+          SELECT DISTINCT
+            fv."itemId",
+            CASE WHEN raw_val ~ '^[0-9]+$' THEN raw_val::int END AS district_id
+          FROM public."FieldValues" fv
+          CROSS JOIN LATERAL unnest(fv.value) AS raw_val
+          JOIN "UserRolesMapping" urm ON urm."userId" = fv."itemId"
+          JOIN "Roles" r ON r."roleId" = urm."roleId"
+          JOIN "UserTenantMapping" utm ON utm."userId" = fv."itemId"
+          JOIN public."FieldValues" sfv
+            ON sfv."itemId" = fv."itemId" AND sfv."fieldId" = $6::uuid
+          JOIN public."FieldValues" ifv
+            ON ifv."itemId" = fv."itemId" AND ifv."fieldId" = $7::uuid
+          WHERE fv."fieldId" = $5::uuid
+            AND sfv.value && $1::text[]
+            AND r."name" = $2
+            AND urm."tenantId" = $3::uuid
+            AND utm.status = 'pending'
+        ),
+        district_counts AS (
+          SELECT
+            'district' AS level,
+            di.district_name AS name,
+            COUNT(mu."itemId")::int AS user_count
+          FROM public."district" di
+          LEFT JOIN matched_users mu ON mu.district_id = di.district_id
+          WHERE di.state_id = ANY($4::int[])
+          GROUP BY di.district_id, di.district_name
+        )
+        SELECT * FROM district_counts
+        ORDER BY level, user_count DESC, name`;
+      const data = await this.usersRepository.query(query, [
+        filters.stateId,
+        filters.role,
+        filters.tenantId,
+        filters.stateId.map(Number),
+        USER_FIELD_IDS.DISTRICT,
+        USER_FIELD_IDS.STATE,
+        USER_FIELD_IDS.INTEREST,
+      ]);
+      return APIResponse.success(
+        response,
+        apiId,
+        data,
+        HttpStatus.OK,
+        "District-wise user count fetched successfully"
+      );
+    } catch (e) {
+      LoggerUtil.error(
+        `${API_RESPONSES.SERVER_ERROR}`,
+        `Error: ${e.message}`,
+        apiId
+      );
+      return APIResponse.error(
+        response,
+        apiId,
+        API_RESPONSES.SERVER_ERROR,
+        e.message || API_RESPONSES.SERVER_ERROR,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
   sanitizeInput(value) {
     if (typeof value === 'string') {
       // Escape special characters for SQL
